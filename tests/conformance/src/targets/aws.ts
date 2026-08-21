@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { nextDotenv } from "../env";
 import { repoRoot } from "../examples";
 import { successful } from "../process";
@@ -62,7 +63,11 @@ function aws(args: string[]) {
   }).trim();
 }
 
-function functionName(result: Result, example: Example) {
+function resourceArns(
+  result: Result,
+  example: Example,
+  resourceType: string,
+) {
   const environment =
     result.environment.class === "preview"
       ? `preview-${result.environment.identity ?? ""}`
@@ -76,20 +81,48 @@ function functionName(result: Result, example: Example) {
       `Key=ocel:app,Values=${example.appName}`,
       `Key=ocel:env,Values=${environment}`,
       "--resource-type-filters",
-      "lambda:function",
+      resourceType,
       "--output",
       "json",
     ]),
   ) as { ResourceTagMappingList?: Array<{ ResourceARN?: string }> };
-  const names = (response.ResourceTagMappingList ?? []).flatMap((entry) => {
+  return {
+    arns: (response.ResourceTagMappingList ?? []).flatMap((entry) =>
+      entry.ResourceARN ? [entry.ResourceARN] : [],
+    ),
+    environment,
+  };
+}
+
+function functionName(result: Result, example: Example) {
+  const { arns, environment } = resourceArns(
+    result,
+    example,
+    "lambda:function",
+  );
+  const names = arns.flatMap((arn) => {
     const match = /^arn:aws:lambda:[^:]*:[^:]*:function:([^:]+)/.exec(
-      entry.ResourceARN ?? "",
+      arn,
     );
     return match?.[1] ? [match[1]] : [];
   });
   if (names.length !== 1) {
     throw new Error(
       `expected one Lambda for ${result.slug}/${example.appName}/${environment}, found ${names.length}: ${names.join(", ")}`,
+    );
+  }
+  return names[0]!;
+}
+
+function bucketName(result: Result, example: Example) {
+  const { arns, environment } = resourceArns(result, example, "s3:bucket");
+  const names = arns.flatMap((arn) => {
+    const match = /^arn:aws:s3:::([^/]+)$/.exec(arn);
+    return match?.[1] ? [match[1]] : [];
+  });
+  if (names.length !== 1) {
+    throw new Error(
+      `expected one bucket for ${result.slug}/${example.appName}/${environment}, found ${names.length}: ${names.join(", ")}`,
     );
   }
   return names[0]!;
@@ -215,9 +248,23 @@ export function createAwsTarget(token: string): Target {
         const baseUrl = result.appUrls[0];
         await assertWorkerPath(result, example, baseUrl);
         await bootstrapFixture(baseUrl);
+        const objectStore = new S3Client({
+          maxAttempts: 4,
+          retryMode: "standard",
+        });
         return {
           baseUrl,
+          headObject: async (key) => {
+            const metadata = await objectStore.send(
+              new HeadObjectCommand({
+                Bucket: bucketName(result, example),
+                Key: key,
+              }),
+            );
+            return { contentType: metadata.ContentType };
+          },
           teardown: async () => {
+            objectStore.destroy();
             try {
               await runOcel(
                 "ocel preview rm",

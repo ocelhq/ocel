@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { findDocument, uploadDocument } from "../http";
 import type { Check } from "../types";
 
-export const checkNative: Check = ({ example, baseUrl, runId }) => {
+export const checkNative: Check = ({ example, baseUrl, headObject, runId }) => {
   it("runs the native thumbnail transform", async () => {
     const { key } = await uploadDocument(
       baseUrl(),
@@ -13,6 +13,9 @@ export const checkNative: Check = ({ example, baseUrl, runId }) => {
       key,
       (candidate) => candidate.thumbnail_key !== null,
     );
-    expect(document?.thumbnail_key).toBe(`thumbnails/${key}.webp`);
+    const thumbnailKey = `thumbnails/${key}.webp`;
+    expect(document?.thumbnail_key).toBe(thumbnailKey);
+    const metadata = await headObject(thumbnailKey);
+    expect(metadata.contentType).toBe("image/webp");
   }, 60_000);
 };

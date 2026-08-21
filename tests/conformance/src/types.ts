@@ -23,6 +23,7 @@ export type Example = {
 export type TargetHandle = {
   baseUrl: string;
   teardown: () => Promise<void>;
+  headObject: (key: string) => Promise<{ contentType?: string }>;
   output?: () => string;
 };
 
@@ -34,6 +35,7 @@ export type Target = {
 export type CheckContext = {
   example: Example;
   baseUrl: () => string;
+  headObject: (key: string) => Promise<{ contentType?: string }>;
   runId: string;
 };
 

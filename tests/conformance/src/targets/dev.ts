@@ -2,7 +2,8 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { apiUrl, nextDotenv } from "../env";
+import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { apiUrl, devBlobConfig, nextDotenv } from "../env";
 import { repoRoot } from "../examples";
 import { successful } from "../process";
 import type { Example, Target } from "../types";
@@ -73,6 +74,24 @@ async function waitForHealth(
   throw new Error(`health check never became ready at ${url}`);
 }
 
+async function headObject(key: string) {
+  const { bucket, ...blobConfig } = devBlobConfig();
+  const objectStore = new S3Client({
+    ...blobConfig,
+    forcePathStyle: true,
+    maxAttempts: 3,
+    retryMode: "standard",
+  });
+  try {
+    const metadata = await objectStore.send(
+      new HeadObjectCommand({ Bucket: bucket, Key: key }),
+    );
+    return { contentType: metadata.ContentType };
+  } finally {
+    objectStore.destroy();
+  }
+}
+
 export function createDevTarget(token: string): Target {
   return {
     name: "dev",
@@ -115,6 +134,7 @@ export function createDevTarget(token: string): Target {
         return {
           baseUrl: `http://localhost:${ports[example.name]}`,
           output: () => captured,
+          headObject,
           teardown: async () => {
             await stop(child!);
             await rm(path.join(example.dir, ".ocel", "console.json"), {

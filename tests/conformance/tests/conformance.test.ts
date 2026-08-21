@@ -32,6 +32,10 @@ for (const example of examples) {
         if (!handle) throw new Error(`${example.name} target is not up`);
         return handle.baseUrl;
       },
+      headObject: (key: string) => {
+        if (!handle) throw new Error(`${example.name} target is not up`);
+        return handle.headObject(key);
+      },
     };
     for (const capability of example.capabilities) {
       checks[capability](context);

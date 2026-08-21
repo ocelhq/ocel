@@ -1220,6 +1220,9 @@ importers:
 
   tests/conformance:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1083.0
+        version: 3.1083.0
       '@console/auth':
         specifier: workspace:*
         version: link:../../console/auth
