@@ -374,7 +374,7 @@ func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv
 	})
 }
 
-func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req *contractv1.PlanRemoveSubstrateRequest) (*contractv1.PlanRemoveSubstrateResponse, error) {
+func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req *contractv1.PlanRemoveSubstrateRequest) (*contractv1.RemovalPlan, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -383,8 +383,9 @@ func (s *deployFakeProviderServer) PlanRemoveSubstrate(ctx context.Context, req 
 		return nil, err
 	}
 	class := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
-	return &contractv1.PlanRemoveSubstrateResponse{
+	return &contractv1.RemovalPlan{
 		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
+		Subject:  class,
 		Items: []*contractv1.RemovalItem{
 			{
 				Kind:   "edge bootstrap",
@@ -649,13 +650,13 @@ func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *
 
 const fakeServedPreviewsEnvVar = "OCEL_TEST_FAKE_SERVED_PREVIEWS"
 
-func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.PlanRemovePreviewWildcardResponse, error) {
+func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.RemovalPlan, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
 	base := os.Getenv(fakeGlobalDomainEnvVar)
 	if base == "" {
-		return &contractv1.PlanRemovePreviewWildcardResponse{}, nil
+		return &contractv1.RemovalPlan{}, nil
 	}
 	if served := os.Getenv(fakeServedPreviewsEnvVar); served != "" {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
@@ -663,23 +664,21 @@ func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context
 			base, served,
 		))
 	}
-	return &contractv1.PlanRemovePreviewWildcardResponse{
-		BaseDomain: base,
-		EdgeStack: &contractv1.EdgeStackPlan{
-			EdgeKind: "cloudflare",
-			Items: []*contractv1.RemovalItem{
-				{
-					Kind:   "preview entry worker",
-					Name:   "*." + base,
-					Action: contractv1.RemovalItem_ACTION_DELETE,
-					Reason: "the shared entry worker holding this wildcard",
-				},
-				{
-					Kind:   "DNS record",
-					Name:   "*." + base + " CNAME you.example.com",
-					Action: contractv1.RemovalItem_ACTION_KEEP,
-					Reason: "you created it yourself; ocel never wrote it",
-				},
+	return &contractv1.RemovalPlan{
+		EdgeKind: "cloudflare",
+		Subject:  base,
+		Items: []*contractv1.RemovalItem{
+			{
+				Kind:   "preview entry worker",
+				Name:   "*." + base,
+				Action: contractv1.RemovalItem_ACTION_DELETE,
+				Reason: "the shared entry worker holding this wildcard",
+			},
+			{
+				Kind:   "DNS record",
+				Name:   "*." + base + " CNAME you.example.com",
+				Action: contractv1.RemovalItem_ACTION_KEEP,
+				Reason: "you created it yourself; ocel never wrote it",
 			},
 		},
 	}, nil
@@ -868,60 +867,76 @@ func (s *deployFakeProviderServer) RemovePreview(ctx context.Context, req *contr
 	})
 }
 
-func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *contractv1.PlanRemoveProjectRequest) (*contractv1.PlanRemoveProjectResponse, error) {
+func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *contractv1.PlanRemoveProjectRequest) (*contractv1.RemovalPlan, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	slug := req.GetSlug()
 	if req.GetEnvironment().GetTier() == environmentv1.Tier_TIER_PREVIEW {
-		return &contractv1.PlanRemoveProjectResponse{
-			EdgeStack: &contractv1.EdgeStackPlan{
-				EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
-				Items: []*contractv1.RemovalItem{
-					{
-						Kind:   "edge workers",
-						Name:   slug,
-						Action: contractv1.RemovalItem_ACTION_DELETE,
-					},
-					{
-						Kind:   "preview wildcard",
-						Name:   "*.preview.acme.com",
-						Action: contractv1.RemovalItem_ACTION_KEEP,
-						Reason: "substrate-scoped: every project's previews are served on it",
-					},
-				},
-			},
-			InfraStacks: []string{slug + "--pr-1--infra", slug + "--pr-2--infra"},
-			AppStacks:   []string{slug + "--pr-1--web--b1"},
-		}, nil
-	}
-	return &contractv1.PlanRemoveProjectResponse{
-		EdgeStack: &contractv1.EdgeStackPlan{
+		return &contractv1.RemovalPlan{
 			EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
+			Subject:  slug,
 			Items: []*contractv1.RemovalItem{
 				{
-					Kind:   "edge stack",
+					Kind:   "edge workers",
 					Name:   slug,
 					Action: contractv1.RemovalItem_ACTION_DELETE,
 				},
 				{
-					Kind:   "distribution",
-					Name:   "E1" + slug,
-					Action: contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE,
-					Slow:   true,
-				},
-				{
-					Kind:   "certificate",
-					Name:   slug + ".example.com",
+					Kind:   "preview wildcard",
+					Name:   "*.preview.acme.com",
 					Action: contractv1.RemovalItem_ACTION_KEEP,
-					Reason: "you pinned this certificate; Ocel never deletes one it did not request",
+					Reason: "substrate-scoped: every project's previews are served on it",
 				},
+				fakeInfraStackItem(slug + "--pr-1--infra"),
+				fakeInfraStackItem(slug + "--pr-2--infra"),
+				fakeAppStackItem(slug + "--pr-1--web--b1"),
 			},
+		}, nil
+	}
+	return &contractv1.RemovalPlan{
+		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
+		Subject:  slug,
+		Items: []*contractv1.RemovalItem{
+			{
+				Kind:   "edge stack",
+				Name:   slug,
+				Action: contractv1.RemovalItem_ACTION_DELETE,
+			},
+			{
+				Kind:   "distribution",
+				Name:   "E1" + slug,
+				Action: contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE,
+				Slow:   true,
+			},
+			{
+				Kind:   "certificate",
+				Name:   slug + ".example.com",
+				Action: contractv1.RemovalItem_ACTION_KEEP,
+				Reason: "you pinned this certificate; Ocel never deletes one it did not request",
+			},
+			fakeInfraStackItem(slug + "--infra"),
+			fakeAppStackItem(slug + "--web--b1"),
 		},
-		InfraStacks: []string{slug + "--infra"},
-		AppStacks:   []string{slug + "--web--b1"},
 	}, nil
+}
+
+func fakeInfraStackItem(name string) *contractv1.RemovalItem {
+	return &contractv1.RemovalItem{
+		Kind:   "infra stack",
+		Name:   name,
+		Action: contractv1.RemovalItem_ACTION_DELETE,
+		Reason: "databases and buckets, INCLUDING ALL DATA",
+	}
+}
+
+func fakeAppStackItem(name string) *contractv1.RemovalItem {
+	return &contractv1.RemovalItem{
+		Kind:   "app stack",
+		Name:   name,
+		Action: contractv1.RemovalItem_ACTION_DELETE,
+	}
 }
 
 func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *contractv1.RemoveProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {

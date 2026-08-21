@@ -41,17 +41,17 @@ func productionRecord(recorded domains.Settlement) bootstrap.StackRecord {
 	return bootstrap.StackRecord{Edge: edge.StackState{Slug: "shop"}, Production: recorded}
 }
 
-func TestEdgeStackPlan(t *testing.T) {
+func TestProjectRemovalPlan(t *testing.T) {
 	t.Parallel()
 
-	planFor := func(t *testing.T, state edge.StackState) *contractv1.EdgeStackPlan {
+	planFor := func(t *testing.T, state edge.StackState) *contractv1.RemovalPlan {
 		t.Helper()
 		s := &Server{}
 		edgeFront, err := s.edge(cloudflare.Kind, "eu-west-1")
 		if err != nil {
 			t.Fatalf("edge() error = %v", err)
 		}
-		plan, err := s.edgeStackPlan(edgeFront, projectPlanScope{
+		plan, err := s.projectRemovalPlan(edgeFront, projectPlanScope{
 			class:      bootstrap.ClassProduction,
 			slug:       "shop",
 			stateTable: "ocel-state",
@@ -59,7 +59,7 @@ func TestEdgeStackPlan(t *testing.T) {
 			record:     bootstrap.StackRecord{Edge: state},
 		})
 		if err != nil {
-			t.Fatalf("edgeStackPlan() error = %v", err)
+			t.Fatalf("projectRemovalPlan() error = %v", err)
 		}
 		return plan
 	}
@@ -274,14 +274,14 @@ func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
 
 	state := boundTo(edge.StackState{}, "shop.example.com")
 
-	planFor := func(t *testing.T, kind edge.Kind) *contractv1.EdgeStackPlan {
+	planFor := func(t *testing.T, kind edge.Kind) *contractv1.RemovalPlan {
 		t.Helper()
 		s := &Server{}
 		edgeFront, err := s.edge(kind, "eu-west-1")
 		if err != nil {
 			t.Fatalf("edge(%q) error = %v", kind, err)
 		}
-		plan, err := s.edgeStackPlan(edgeFront, projectPlanScope{
+		plan, err := s.projectRemovalPlan(edgeFront, projectPlanScope{
 			class:      bootstrap.ClassProduction,
 			slug:       "shop",
 			stateTable: "ocel-state",
@@ -289,7 +289,7 @@ func TestDestroyPlanFollowsTheEdgeTheRequestNames(t *testing.T) {
 			record:     bootstrap.StackRecord{Edge: state},
 		})
 		if err != nil {
-			t.Fatalf("edgeStackPlan() error = %v", err)
+			t.Fatalf("projectRemovalPlan() error = %v", err)
 		}
 		return plan
 	}

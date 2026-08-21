@@ -235,7 +235,7 @@ func bucketItem(name, reason string) *contractv1.RemovalItem {
 	}
 }
 
-func (s *Server) PlanRemoveSubstrate(ctx context.Context, req *contractv1.PlanRemoveSubstrateRequest) (*contractv1.PlanRemoveSubstrateResponse, error) {
+func (s *Server) PlanRemoveSubstrate(ctx context.Context, req *contractv1.PlanRemoveSubstrateRequest) (*contractv1.RemovalPlan, error) {
 	opts := s.config.get()
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {
@@ -252,7 +252,7 @@ func (s *Server) PlanRemoveSubstrate(ctx context.Context, req *contractv1.PlanRe
 	return planTeardown(ctx, deps, class)
 }
 
-func planTeardown(ctx context.Context, deps teardownDeps, class string) (*contractv1.PlanRemoveSubstrateResponse, error) {
+func planTeardown(ctx context.Context, deps teardownDeps, class string) (*contractv1.RemovalPlan, error) {
 	occupancy, err := readSubstrateOccupancy(ctx, deps, class)
 	if err != nil {
 		return nil, err
@@ -268,7 +268,7 @@ func planTeardown(ctx context.Context, deps teardownDeps, class string) (*contra
 	if err != nil {
 		return nil, err
 	}
-	return &contractv1.PlanRemoveSubstrateResponse{EdgeKind: string(deps.edge.Kind()), Items: items}, nil
+	return &contractv1.RemovalPlan{EdgeKind: string(deps.edge.Kind()), Items: items, Subject: class}, nil
 }
 
 func (s *Server) RemoveSubstrate(ctx context.Context, req *contractv1.RemoveSubstrateRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {

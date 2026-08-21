@@ -101,5 +101,5 @@ func confirmPhrase(ctx context.Context, label, phrase string, stdout io.Writer, 
 		}
 		return false, err
 	}
-	return strings.TrimSpace(line) == phrase, nil
+	return phrase != "" && strings.TrimSpace(line) == phrase, nil
 }

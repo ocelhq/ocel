@@ -132,14 +132,14 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		if err != nil {
 			return err
 		}
-		if plan.GetNothingToRemove() {
+		if len(plan.GetItems()) == 0 {
 			ui.Finish("Nothing to destroy")
 			return nil
 		}
 
 		printDestroyPlan(stdout, cfg.Slug, false, plan)
 		if !bypass {
-			confirmed, err := confirmPhrase(ctx, "project name", cfg.Slug, stdout, stdin)
+			confirmed, err := confirmPhrase(ctx, "project name", plan.GetSubject(), stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -213,7 +213,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		if err != nil {
 			return err
 		}
-		if plan.GetNothingToRemove() {
+		if len(plan.GetItems()) == 0 {
 			ui.Finish("Nothing to destroy")
 			return nil
 		}
@@ -221,7 +221,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		printDestroyPlan(stdout, cfg.Slug, true, plan)
 
 		if !yes {
-			confirmed, err := confirmPhrase(ctx, "project name", cfg.Slug, stdout, stdin)
+			confirmed, err := confirmPhrase(ctx, "project name", plan.GetSubject(), stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -248,31 +248,29 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 	return nil
 }
 
-func printDestroyPlan(out io.Writer, slug string, preview bool, plan *contractv1.PlanRemoveProjectResponse) {
-	header := fmt.Sprintf("This will permanently destroy production project %q", slug)
+func printDestroyPlan(out io.Writer, slug string, preview bool, plan *contractv1.RemovalPlan) {
 	if preview {
-		header = fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug)
+		printRemovalPlan(out, fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
+			"  • all stored preview assets belonging to this project",
+			"  • every preview variable value this project holds, including each preview's own overrides",
+			"The account-level preview bootstrap is left intact. This cannot be undone.")
+		return
 	}
-	if kind := plan.GetEdgeStack().GetEdgeKind(); kind != "" {
+	printRemovalPlan(out, fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
+		"  • all stored assets belonging to this project",
+		"  • every production variable value this project holds, and their history",
+		"This cannot be undone.")
+}
+
+func printRemovalPlan(out io.Writer, header string, plan *contractv1.RemovalPlan, footer ...string) {
+	if kind := plan.GetEdgeKind(); kind != "" {
 		header += fmt.Sprintf(", fronted by the %s edge", kind)
 	}
 	fmt.Fprintf(out, "%s:\n", header)
 
-	kept := printPlanItems(out, plan.GetEdgeStack().GetItems())
-	for _, s := range plan.GetInfraStacks() {
-		fmt.Fprintf(out, "  • infra stack %s — databases and buckets, INCLUDING ALL DATA\n", s)
-	}
-	for _, s := range plan.GetAppStacks() {
-		fmt.Fprintf(out, "  • app stack %s\n", s)
-	}
-	if preview {
-		fmt.Fprintln(out, "  • all stored preview assets belonging to this project")
-		fmt.Fprintln(out, "  • every preview variable value this project holds, including each preview's own overrides")
-		fmt.Fprintln(out, "The account-level preview bootstrap is left intact. This cannot be undone.")
-	} else {
-		fmt.Fprintln(out, "  • all stored assets belonging to this project")
-		fmt.Fprintln(out, "  • every production variable value this project holds, and their history")
-		fmt.Fprintln(out, "This cannot be undone.")
+	kept := printPlanItems(out, plan.GetItems())
+	for _, line := range footer {
+		fmt.Fprintln(out, line)
 	}
 	printKeptItems(out, kept)
 }

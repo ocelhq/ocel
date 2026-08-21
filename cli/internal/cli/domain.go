@@ -277,13 +277,14 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		if err != nil {
 			return err
 		}
-		base := plan.GetBaseDomain()
+		base := plan.GetSubject()
 		if base == "" {
 			ui.Finish("No global preview domain is configured")
 			return nil
 		}
 
-		printReleasePlan(stdout, base, plan)
+		printRemovalPlan(stdout, fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
+			"This cannot be undone.")
 
 		if !opts.yes {
 			confirmed, err := confirmPhrase(ctx, "domain", base, stdout, stdin)
@@ -307,17 +308,6 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		return failSession(ctx, ui, err)
 	}
 	return nil
-}
-
-func printReleasePlan(out io.Writer, base string, plan *contractv1.PlanRemovePreviewWildcardResponse) {
-	header := fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base))
-	if kind := plan.GetEdgeStack().GetEdgeKind(); kind != "" {
-		header += fmt.Sprintf(", fronted by the %s edge", kind)
-	}
-	fmt.Fprintf(out, "%s:\n", header)
-	kept := printPlanItems(out, plan.GetEdgeStack().GetItems())
-	fmt.Fprintln(out, "This cannot be undone.")
-	printKeptItems(out, kept)
 }
 
 func runAddDomain(ctx context.Context, d deps, cwd, host string, stdout, stderr io.Writer) error {

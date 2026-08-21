@@ -169,7 +169,7 @@ func usePreviewWildcard(ctx context.Context, engine domains.Engine, edgeFront ed
 	return err
 }
 
-func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.PlanRemovePreviewWildcardResponse, error) {
+func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.RemovalPlan, error) {
 	opts := s.config.get()
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
@@ -186,7 +186,7 @@ func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.
 		return nil, err
 	}
 	if recorded.BaseDomain == "" {
-		return &contractv1.PlanRemovePreviewWildcardResponse{}, nil
+		return &contractv1.RemovalPlan{}, nil
 	}
 	edgeFront, err := previewWildcardEdge(recorded, func(kind edge.Kind) (edge.Edge, error) {
 		return s.edge(kind, clients.region)
@@ -194,14 +194,11 @@ func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
-	plan := releaseEdgeStackPlan(edgeFront, recorded)
+	plan := releasePlan(edgeFront, recorded)
 	if err := refusePreviewReleaseWhileServed(ctx, ssmClient, recorded.BaseDomain, s.livePreviewStacks(awscfg)); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
-	return &contractv1.PlanRemovePreviewWildcardResponse{
-		BaseDomain: recorded.BaseDomain,
-		EdgeStack:  plan,
-	}, nil
+	return plan, nil
 }
 
 func (s *Server) livePreviewStacks(awscfg aws.Config) func(context.Context, string) (int, error) {
