@@ -643,12 +643,12 @@ func formatIdentityBanner(id *contractv1.Identity) string {
 	var b strings.Builder
 	b.WriteString("Running with:\n")
 	wrote := false
-	if line := awsIdentityLine(id); line != "" {
-		fmt.Fprintf(&b, "  AWS         %s\n", line)
+	if line := originIdentityLine(id); line != "" {
+		fmt.Fprintf(&b, "  %-11s %s\n", id.GetProvider(), line)
 		wrote = true
 	}
 	if scope := id.GetEdgeScope(); scope != "" {
-		fmt.Fprintf(&b, "  Edge        account=%s\n", scope)
+		fmt.Fprintf(&b, "  %-11s account=%s\n", "Edge", scope)
 		wrote = true
 	}
 	if !wrote {
@@ -657,31 +657,21 @@ func formatIdentityBanner(id *contractv1.Identity) string {
 	return b.String()
 }
 
-func awsIdentityLine(id *contractv1.Identity) string {
-	if id.GetAwsAccount() == "" {
+func originIdentityLine(id *contractv1.Identity) string {
+	if id.GetAccount() == "" {
 		return ""
 	}
 	var parts []string
-	if p := id.GetAwsProfile(); p != "" {
+	if p := id.GetProfile(); p != "" {
 		parts = append(parts, "profile="+p)
-	} else if arn := id.GetAwsArn(); arn != "" {
-		parts = append(parts, "identity="+arnPrincipal(arn))
+	} else if principal := id.GetPrincipal(); principal != "" {
+		parts = append(parts, "identity="+principal)
 	}
-	parts = append(parts, "account="+id.GetAwsAccount())
-	if r := id.GetAwsRegion(); r != "" {
+	parts = append(parts, "account="+id.GetAccount())
+	if r := id.GetRegion(); r != "" {
 		parts = append(parts, "region="+r)
 	}
 	return strings.Join(parts, "  ")
-}
-
-func arnPrincipal(arn string) string {
-	if i := strings.LastIndex(arn, "/"); i >= 0 {
-		return arn[i+1:]
-	}
-	if i := strings.LastIndex(arn, ":"); i >= 0 {
-		return arn[i+1:]
-	}
-	return arn
 }
 
 func credentialProblems(problems []*contractv1.CredentialProblem) error {

@@ -518,10 +518,11 @@ export default {
 		stubAppFunctions(&d, nil)
 		pretendStdoutIsTerminal(&d)
 		root, sockPath := setUpDeployFixture(t)
-		t.Setenv(fakeIDAwsAccountEnvVar, "123456789012")
-		t.Setenv(fakeIDAwsProfileEnvVar, "default")
-		t.Setenv(fakeIDAwsRegionEnvVar, "us-east-1")
-		t.Setenv(fakeIDCfAccountEnvVar, "abcd1234")
+		t.Setenv(fakeIDProviderEnvVar, "Origin")
+		t.Setenv(fakeIDAccountEnvVar, "123456789012")
+		t.Setenv(fakeIDProfileEnvVar, "default")
+		t.Setenv(fakeIDRegionEnvVar, "us-east-1")
+		t.Setenv(fakeIDEdgeScopeEnvVar, "abcd1234")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -529,7 +530,7 @@ export default {
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"Running with:", "profile=default", "account=123456789012", "region=us-east-1", "Edge        account=abcd1234"} {
+		for _, want := range []string{"Running with:", "Origin      profile=default", "account=123456789012", "region=us-east-1", "Edge        account=abcd1234"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q:\n%s", want, out)
 			}
@@ -552,10 +553,10 @@ export default {
 		setLoggedIn(&d)
 		stubAppFunctions(&d, nil)
 		root, sockPath := setUpDeployFixture(t)
-		t.Setenv(fakeIDAwsAccountEnvVar, "123456789012")
-		t.Setenv(fakeIDAwsProfileEnvVar, "default")
-		t.Setenv(fakeIDAwsRegionEnvVar, "us-east-1")
-		t.Setenv(fakeIDCfAccountEnvVar, "abcd1234")
+		t.Setenv(fakeIDAccountEnvVar, "123456789012")
+		t.Setenv(fakeIDProfileEnvVar, "default")
+		t.Setenv(fakeIDRegionEnvVar, "us-east-1")
+		t.Setenv(fakeIDEdgeScopeEnvVar, "abcd1234")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -581,8 +582,8 @@ export default {
 		stubAppFunctions(&d, nil)
 		pretendStdoutIsTerminal(&d)
 		root, _ := setUpDeployFixture(t)
-		t.Setenv(fakeIDAwsAccountEnvVar, "123456789012")
-		t.Setenv(fakeIDAwsProfileEnvVar, "default")
+		t.Setenv(fakeIDAccountEnvVar, "123456789012")
+		t.Setenv(fakeIDProfileEnvVar, "default")
 		t.Setenv(fakeCredProblemEnvVar, "Cloudflare")
 
 		var stdout, stderr bytes.Buffer
@@ -593,7 +594,7 @@ export default {
 
 		out := stdout.String()
 		if !strings.Contains(out, "account=123456789012") {
-			t.Errorf("stdout = %q, want the resolved AWS identity still shown", out)
+			t.Errorf("stdout = %q, want the resolved identity still shown", out)
 		}
 		if !strings.Contains(out, "Cloudflare") {
 			t.Errorf("stdout = %q, want the Cloudflare credential problem surfaced", out)

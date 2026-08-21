@@ -51,10 +51,11 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 			Hint:     "configure AWS credentials (set AWS_PROFILE, run `aws sso login`, or export access keys)",
 		})
 	} else {
-		resp.Identity.AwsAccount = id.account
-		resp.Identity.AwsArn = id.arn
-		resp.Identity.AwsRegion = awscfg.Region
-		resp.Identity.AwsProfile = os.Getenv("AWS_PROFILE")
+		resp.Identity.Provider = "AWS"
+		resp.Identity.Account = id.account
+		resp.Identity.Principal = id.principal()
+		resp.Identity.Region = awscfg.Region
+		resp.Identity.Profile = os.Getenv("AWS_PROFILE")
 	}
 
 	resp.DomainClaims = domainClaims(ctx, s.edgeRouteOwner(requestedEdge(req), awscfg.Region), req.GetSlug(), req.GetDomains())

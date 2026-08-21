@@ -599,6 +599,16 @@ type callerIdentity struct {
 	arn     string
 }
 
+func (id callerIdentity) principal() string {
+	if i := strings.LastIndex(id.arn, "/"); i >= 0 {
+		return id.arn[i+1:]
+	}
+	if i := strings.LastIndex(id.arn, ":"); i >= 0 {
+		return id.arn[i+1:]
+	}
+	return id.arn
+}
+
 func getCallerIdentity(ctx context.Context, api STSAPI) (callerIdentity, error) {
 	out, err := api.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
