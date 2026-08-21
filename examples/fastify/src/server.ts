@@ -1,12 +1,44 @@
 import Fastify from "fastify";
 import { createRouteHandler } from "ocel/blob";
-import { pg, uploads } from "../ocel/index";
+import { fixtureEnv, migrate, pg, uploads } from "../ocel/index";
 
 const app = Fastify({ logger: true });
 const PORT = Number(process.env.PORT ?? 3104);
 const uploadHandlers = createRouteHandler(uploads);
 
 app.get("/api/health", async () => ({ ok: true }));
+
+app.get<{ Params: { code: string } }>(
+  "/api/status/:code",
+  async (request, reply) =>
+    reply.status(Number(request.params.code)).send({ framework: "fastify" }),
+);
+
+app.all<{ Params: { "*": string } }>(
+  "/api/echo/*",
+  async (request, reply) => {
+    const url = new URL(request.raw.url ?? "", "http://localhost");
+    return reply.send({
+      framework: "fastify",
+      method: request.method,
+      path: url.pathname,
+      query: Object.fromEntries(url.searchParams),
+      probeHeader: request.headers["x-ocel-probe"] ?? null,
+      body: request.body ?? null,
+    });
+  },
+);
+
+app.post("/api/bootstrap", async (request, reply) => {
+  if (
+    request.headers.authorization !==
+    `Bearer ${fixtureEnv.FIXTURE_BOOTSTRAP_TOKEN}`
+  ) {
+    return reply.status(404).send();
+  }
+  await migrate();
+  return reply.status(204).send();
+});
 
 app.post<{ Body: { title?: unknown } }>("/api/todos", async (request, reply) => {
   const { title } = request.body ?? {};

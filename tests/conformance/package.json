@@ -1,0 +1,29 @@
+{
+  "name": "@ocel-tests/conformance",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "tsx src/seed-cli.ts",
+    "test": "pnpm test:dev",
+    "test:dev": "OCEL_CONFORMANCE_TARGET=dev vitest run",
+    "test:aws": "OCEL_CONFORMANCE_TARGET=aws vitest run tests/conformance.test.ts",
+    "test:registry": "OCEL_CONFORMANCE_TARGET=registry vitest run tests/completeness.test.ts",
+    "sweep:aws": "tsx src/aws-admin.ts sweep",
+    "teardown:aws": "tsx src/aws-admin.ts teardown",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1083.0",
+    "@console/auth": "workspace:*",
+    "@console/db": "workspace:*",
+    "ocel": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.19.2",
+    "typescript": "^5",
+    "vite": "^8.1.3",
+    "vitest": "^4.1.9"
+  }
+}

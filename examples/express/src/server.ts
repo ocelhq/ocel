@@ -1,6 +1,6 @@
 import express from "express";
 import { createRouteHandler } from "ocel/blob/express";
-import { pg, uploads } from "../ocel/index";
+import { fixtureEnv, migrate, pg, uploads } from "../ocel/index";
 
 const app = express();
 app.use(express.json());
@@ -9,6 +9,33 @@ const PORT = Number(process.env.PORT ?? 3102);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/api/status/:code", (req, res) => {
+  res.status(Number(req.params.code)).json({ framework: "express" });
+});
+
+app.all("/api/echo/{*rest}", (req, res) => {
+  res.json({
+    framework: "express",
+    method: req.method,
+    path: req.path,
+    query: req.query,
+    probeHeader: req.get("x-ocel-probe") ?? null,
+    body: req.body ?? null,
+  });
+});
+
+app.post("/api/bootstrap", async (req, res) => {
+  if (
+    req.get("authorization") !==
+    `Bearer ${fixtureEnv.FIXTURE_BOOTSTRAP_TOKEN}`
+  ) {
+    res.status(404).end();
+    return;
+  }
+  await migrate();
+  res.status(204).end();
 });
 
 app.post("/api/todos", async (req, res) => {

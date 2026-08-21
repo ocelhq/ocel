@@ -4,11 +4,40 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { bucket, uploader } from "ocel/blob/express";
+import { defineEnv } from "ocel/env";
 import { postgres } from "ocel/postgres";
 import sharp from "sharp";
 import { z } from "zod";
 
 export const pg = postgres("main");
+export const fixtureEnv = defineEnv({
+  FIXTURE_BOOTSTRAP_TOKEN: { class: "secret" },
+});
+
+export async function migrate() {
+  await pg.query(`
+    CREATE TABLE IF NOT EXISTS todos (
+      id    SERIAL PRIMARY KEY,
+      title TEXT    NOT NULL,
+      done  BOOLEAN NOT NULL DEFAULT false
+    )
+  `);
+  await pg.query(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id         SERIAL      PRIMARY KEY,
+      key        TEXT        NOT NULL,
+      name       TEXT        NOT NULL,
+      mime_type  TEXT        NOT NULL,
+      size       BIGINT      NOT NULL,
+      owner_id   TEXT,
+      thumbnail_key TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await pg.query(
+    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS thumbnail_key TEXT",
+  );
+}
 
 const blobEndpoint = process.env.OCEL_BLOB_ENDPOINT;
 const objectStore = new S3Client(
