@@ -45,6 +45,7 @@ type Provider interface {
 	Values() ValueStore
 	Credentials() Credentials
 	Edges() EdgeRegistry
+	DNS() DNSRegistry
 }
 
 // Vendor names whose infrastructure a provider targets. It is vocabulary, not a

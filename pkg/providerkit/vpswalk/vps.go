@@ -12,6 +12,7 @@ import (
 	"io"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -23,17 +24,18 @@ func (Provider) Vendor() providerkit.Vendor { return "vps" }
 
 func (Provider) Accept(context.Context, providerkit.Options) error { return nil }
 
-// Serves: a host's membrane can answer for whatever it can run next to the app.
-// A blob store is a directory; a queue is not there unless something installs one.
-func (Provider) Serves() []providerkit.LinkType { return nil }
+// Serves is derived, not declared: the walk asks its own resource set which
+// primitives it implements, so this provider cannot claim one it cannot make.
+func (Provider) Serves() []providerkit.LinkType { return resources.Serves(made{}) }
 
 func (Provider) Bootstrap() providerkit.Bootstrapper  { return bootstrapper{} }
-func (Provider) Releases() providerkit.Releaser       { return releaser{} }
+func (Provider) Releases() providerkit.Releaser       { return resources.Releaser(made{}) }
 func (Provider) Artifacts() providerkit.ArtifactStore { return artifacts{} }
 func (Provider) Records() providerkit.RecordStore     { return records{} }
 func (Provider) Values() providerkit.ValueStore       { return values{} }
 func (Provider) Credentials() providerkit.Credentials { return credentials{} }
 func (Provider) Edges() providerkit.EdgeRegistry      { return edges{} }
+func (Provider) DNS() providerkit.DNSRegistry         { return zones{} }
 
 // bootstrapper: /srv/ocel/<class>, a system user, a systemd slice, an age
 // keyfile. Present is whether the directory is there; Schema is a number in a
@@ -57,22 +59,41 @@ func (bootstrapper) Remove(context.Context, providerkit.Class, providerkit.Repor
 	return nil
 }
 
-// releaser: a release is a directory of unit files and a socket. Provision
-// writes them and reloads; Destroy stops and removes them; Sweep is the same
-// walk over releases the records no longer name. No Pulumi, which is the point.
-type releaser struct{}
+// made is the per-primitive set, composed into a Releaser above. A host has no
+// managed Postgres and no object store worth the name, so it implements Bucket
+// (a directory), Container (a unit with an image) and Function (a unit with a
+// handler) — and simply does not implement Postgres. The kit then refuses a
+// manifest asking for one, by name, rather than failing halfway through a deploy.
+//
+// Which is also the extension point: someone who wants Postgres here embeds made,
+// defines the one method against Neon, and changes nothing else.
+type made struct{}
 
-func (releaser) Provision(context.Context, providerkit.ReleasePlan, providerkit.Reporter) (providerkit.ReleaseResult, error) {
-	return providerkit.ReleaseResult{}, nil
+func (made) Bucket(context.Context, resources.Scope, resources.BucketSpec, providerkit.Reporter) (resources.Outputs, error) {
+	return nil, nil
 }
 
-func (releaser) Destroy(context.Context, providerkit.ReleaseScope, providerkit.Reporter) error {
+func (made) Function(context.Context, resources.Scope, resources.FunctionSpec, providerkit.Reporter) (resources.Outputs, error) {
+	return nil, nil
+}
+
+func (made) Container(context.Context, resources.Scope, resources.ContainerSpec, providerkit.Reporter) (resources.Outputs, error) {
+	return nil, nil
+}
+
+func (made) Remove(context.Context, resources.Scope, resources.Ref, providerkit.Reporter) error {
 	return nil
 }
 
-func (releaser) Sweep(context.Context, providerkit.SweepScope, providerkit.Reporter) error {
-	return nil
+// Neon is the override the model has to support: one method, over a base that
+// knew nothing about it, with no fork of the provider and no change to the kit.
+type Neon struct{ made }
+
+func (Neon) Postgres(context.Context, resources.Scope, resources.PostgresSpec, providerkit.Reporter) (resources.Outputs, error) {
+	return nil, nil
 }
+
+var _ providerkit.Releaser = resources.Releaser(Neon{})
 
 // Warmer and CodeEmbedder are absent, which is the test: a host has no cold
 // start worth warming and swaps code by writing a directory, so the optional
@@ -89,20 +110,27 @@ func (artifacts) Open(context.Context, providerkit.ArtifactRef) (io.ReadCloser, 
 
 func (artifacts) RemovePrefix(context.Context, string, providerkit.Reporter) error { return nil }
 
-// records: one SQLite file, or a directory of JSON with an flock. Swap is the
-// reason it cannot be plain files: the promotion pointer needs compare-and-set,
-// and a host gets that from a transaction rather than a conditional write.
+// records: one SQLite file, or a directory of JSON with an flock. A RecordName
+// becomes a path and a Revision becomes the row version; on DynamoDB the same
+// name becomes two key columns and the revision an attribute, and neither store
+// had to tell the kit which it was.
 type records struct{}
 
-func (records) Get(context.Context, providerkit.RecordKey) ([]byte, error) { return nil, nil }
+func (records) Read(context.Context, providerkit.RecordName) (providerkit.Record, error) {
+	return providerkit.Record{}, nil
+}
 
-func (records) Put(context.Context, providerkit.RecordKey, []byte) error { return nil }
+func (records) Write(context.Context, providerkit.Record) (providerkit.Revision, error) {
+	return "", nil
+}
 
-func (records) Swap(context.Context, providerkit.RecordKey, []byte, []byte) error { return nil }
+func (records) Remove(context.Context, providerkit.RecordName, providerkit.Revision) error {
+	return nil
+}
 
-func (records) Delete(context.Context, providerkit.RecordKey) error { return nil }
-
-func (records) List(context.Context, string) ([]providerkit.RecordKey, error) { return nil, nil }
+func (records) List(context.Context, providerkit.RecordName) ([]providerkit.RecordName, error) {
+	return nil, nil
+}
 
 // values: age-encrypted files under a keyfile only the service user can read.
 // The separation from records earns itself here — the key is the whole port.
@@ -153,3 +181,12 @@ func (edges) Supported() []edge.Kind { return []edge.Kind{"none"} }
 func (edges) Default() edge.Kind { return "none" }
 
 func (edges) Open(edge.Kind) (edge.Edge, error) { return nil, nil }
+
+// zones: a host writes no DNS. Supported is empty and Open answers with no writer
+// and no error, which is the kit's signal to print the records owed and wait —
+// the same path a Route 53 account takes when the zone lives somewhere else.
+type zones struct{}
+
+func (zones) Supported() []providerkit.DNSKind { return nil }
+
+func (zones) Open(providerkit.DNSKind, string) (edge.DNSWriter, error) { return nil, nil }

@@ -1,38 +1,61 @@
 package providerkit
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 // RecordStore is the durable memory of everything Ocel has done in this account:
 // which projects exist, which stacks each one owns, which release each hostname
-// is settled on, and which promotion the edge is currently pointing at.
+// is settled on, which promotion the edge points at.
 //
-// The hypothesis this stub takes, for [#508] to confirm or overturn: a vendor
-// supplies a table and nothing more. Every record's shape, every key, every
-// migration and every read is kit logic, so two vendors cannot drift into
-// remembering different things. What a vendor cannot supply generically is
-// atomicity, so Swap is the one verb with a precondition — a promotion pointer
-// flip is a compare-and-set or it is a race.
+// It describes what the kit needs remembered, not how anything stores it. A name
+// is a path, a revision is a token the store minted and the kit hands back
+// unread, and that is the whole vocabulary — a DynamoDB table, a Durable Object,
+// a SQLite file and a directory each satisfy it without the kit learning which
+// one it is talking to.
+//
+// The hypothesis for [#508] to confirm or overturn: a vendor supplies durable
+// bytes and nothing more, and every record's shape, key and migration is kit
+// logic, so two vendors cannot drift into remembering different things.
 //
 // [#508]: https://github.com/ocelhq/ocel/issues/508
 type RecordStore interface {
-	Get(ctx context.Context, key RecordKey) ([]byte, error)
+	// Read returns the record at a name. A name that was never written is not an
+	// error: it is a zero Record, and its zero Revision is what Write then treats
+	// as "this must not exist yet".
+	Read(ctx context.Context, name RecordName) (Record, error)
 
-	Put(ctx context.Context, key RecordKey, value []byte) error
+	// Write stores bytes at a name if the record's Revision still matches what is
+	// stored. A mismatch is a Refusal with CodeOccupied — someone else got there
+	// first, and the kit decides whether to re-read and retry or to tell the user.
+	// This is not a nicety: a promotion pointer flip is a compare-and-set or it is
+	// a race, and rollback is that same flip.
+	Write(ctx context.Context, record Record) (Revision, error)
 
-	// Swap writes next only if the stored value is still prior. A mismatch is a
-	// Refusal with CodeOccupied, never a failure: someone else got there first
-	// and the kit decides whether to retry or to tell the user.
-	Swap(ctx context.Context, key RecordKey, prior, next []byte) error
+	Remove(ctx context.Context, name RecordName, expected Revision) error
 
-	Delete(ctx context.Context, key RecordKey) error
-
-	List(ctx context.Context, partition string) ([]RecordKey, error)
+	// List returns the names beneath a name. Depth is the store's problem, not the
+	// kit's: everything under the prefix, in any order.
+	List(ctx context.Context, under RecordName) ([]RecordName, error)
 }
 
-// RecordKey is a partition and a sort key, which is the smallest shape that maps
-// onto a document store, a relational table and a directory of files alike. The
-// kit builds every one of them.
-type RecordKey struct {
-	Partition string
-	Sort      string
+// RecordName is a path, built entirely by the kit. A store maps it to whatever it
+// has — two key columns, one string, a row id, a filename — and the kit never
+// learns which.
+type RecordName []string
+
+func (n RecordName) String() string { return strings.Join(n, "/") }
+
+// Revision is the store's own word for "this version". It is opaque: the kit
+// reads one, carries it, and hands it back as a precondition. An ETag, a version
+// attribute, a row id and a modification time are all valid, and the kit cannot
+// tell them apart.
+type Revision string
+
+// Record is bytes at a name, with the revision they were read at.
+type Record struct {
+	Name     RecordName
+	Bytes    []byte
+	Revision Revision
 }
