@@ -156,7 +156,7 @@ message Manifest {
 
   string slug = 4 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  map<string, DomainList> domains = 5;
+  repeated TierDomains domains = 5;
 
   repeated ManifestApp apps = 6;
 
@@ -169,14 +169,16 @@ message ManifestUsage {
   repeated string files = 3;
 }
 
-message DomainList {
-  repeated string hostnames = 1;
+message TierDomains {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+
+  repeated string hostnames = 2;
 }
 
 message ManifestApp {
   string name = 1;
   string framework = 2;
-  map<string, DomainList> domains = 3;
+  repeated TierDomains domains = 3;
 
   repeated ManifestVariable variables = 4;
 

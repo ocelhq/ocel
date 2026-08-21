@@ -181,7 +181,7 @@ func TestMarkGlobalPreview(t *testing.T) {
 	t.Run("a project on its own preview domain records nothing", func(t *testing.T) {
 		t.Parallel()
 		m := manifest()
-		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.proj.com"}}}
 
 		marked := MarkGlobalPreview(state(), preview, m)
 		if marked.ServedOnGlobalPreview("preview.acme.com") {
@@ -192,7 +192,7 @@ func TestMarkGlobalPreview(t *testing.T) {
 	t.Run("declaring a domain later clears the mark", func(t *testing.T) {
 		t.Parallel()
 		m := manifest()
-		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.proj.com"}}}
 		prior := state()
 		prior.GlobalPreview = "preview.acme.com"
 
@@ -269,7 +269,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 
 	t.Run("a declared preview domain beats the substrate's", func(t *testing.T) {
 		m := manifest()
-		m.Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.proj.com"}}}
 		cfg := Config{
 			Edge:                &recordingEdge{kind: cloudflare.Kind},
 			Slug:                "proj",
@@ -293,7 +293,7 @@ func TestEdgeStackSpecsGlobalPreview(t *testing.T) {
 
 	t.Run("an app-level preview domain beats the substrate's", func(t *testing.T) {
 		m := manifest()
-		m.Apps[0].Domains = map[string]*contractv1.DomainList{"preview": {Hostnames: []string{"*.preview.proj.com"}}}
+		m.Apps[0].Domains = []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PREVIEW, Hostnames: []string{"*.preview.proj.com"}}}
 		cfg := Config{
 			Edge:                &recordingEdge{kind: cloudflare.Kind},
 			Slug:                "proj",

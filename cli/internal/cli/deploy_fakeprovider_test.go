@@ -1036,13 +1036,22 @@ func describeDelivery(m *contractv1.Manifest, app string) string {
 	return fmt.Sprintf("app=%s resources=%s", app, strings.Join(delivered, ","))
 }
 
+func productionHostnames(domains []*contractv1.TierDomains) []string {
+	for _, d := range domains {
+		if d.GetTier() == environmentv1.Tier_TIER_PRODUCTION {
+			return d.GetHostnames()
+		}
+	}
+	return nil
+}
+
 func describeApp(a *contractv1.ManifestApp) string {
 	keys := make([]string, 0, len(a.GetVariables()))
 	for _, v := range a.GetVariables() {
 		keys = append(keys, v.GetKey())
 	}
 	return fmt.Sprintf("name=%s framework=%s production_domain=%s vars=%s deployment=%s",
-		a.GetName(), a.GetFramework(), strings.Join(a.GetDomains()["production"].GetHostnames(), ","), strings.Join(keys, ","), a.GetDeploymentId())
+		a.GetName(), a.GetFramework(), strings.Join(productionHostnames(a.GetDomains()), ","), strings.Join(keys, ","), a.GetDeploymentId())
 }
 
 func parseInfraTier(s string) environmentv1.Tier {

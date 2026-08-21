@@ -1,12 +1,14 @@
 package manifestbuilder
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -243,13 +245,23 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		return nil, err
 	}
 
+	projectDomains, err := tierDomains(domains)
+	if err != nil {
+		return nil, err
+	}
+
+	manifestApps, err := buildApps(apps, functions, variables)
+	if err != nil {
+		return nil, err
+	}
+
 	return &contractv1.Manifest{
 		SchemaVersion: SchemaVersion,
 		Slug:          slug,
 		Resources:     resources,
 		Functions:     manifestFunctions,
-		Domains:       domainLists(domains),
-		Apps:          buildApps(apps, functions, variables),
+		Domains:       projectDomains,
+		Apps:          manifestApps,
 		Usages:        usages,
 	}, nil
 }
@@ -318,24 +330,31 @@ func buildUsages(apps []App, declared map[identity]Declaration) ([]*contractv1.M
 	return out, nil
 }
 
-func domainLists(domains map[string][]string) map[string]*contractv1.DomainList {
-	if len(domains) == 0 {
-		return nil
-	}
-	out := make(map[string]*contractv1.DomainList, len(domains))
+var domainClassTiers = map[string]environmentv1.Tier{
+	"production": environmentv1.Tier_TIER_PRODUCTION,
+	"preview":    environmentv1.Tier_TIER_PREVIEW,
+}
+
+func tierDomains(domains map[string][]string) ([]*contractv1.TierDomains, error) {
+	out := make([]*contractv1.TierDomains, 0, len(domains))
 	for class, hostnames := range domains {
+		tier, ok := domainClassTiers[class]
+		if !ok {
+			return nil, fmt.Errorf("manifestbuilder: %q is not a domain class — `domains` accepts \"production\" and \"preview\"", class)
+		}
 		if len(hostnames) == 0 {
 			continue
 		}
-		out[class] = &contractv1.DomainList{Hostnames: hostnames}
+		out = append(out, &contractv1.TierDomains{Tier: tier, Hostnames: hostnames})
 	}
 	if len(out) == 0 {
-		return nil
+		return nil, nil
 	}
-	return out
+	slices.SortFunc(out, func(a, b *contractv1.TierDomains) int { return cmp.Compare(a.GetTier(), b.GetTier()) })
+	return out, nil
 }
 
-func buildApps(apps []App, functions []Function, variables map[string][]Variable) []*contractv1.ManifestApp {
+func buildApps(apps []App, functions []Function, variables map[string][]Variable) ([]*contractv1.ManifestApp, error) {
 	frameworkByApp := make(map[string]string, len(functions))
 	for _, f := range functions {
 		if f.App != "" && f.Framework != "" {
@@ -353,10 +372,14 @@ func buildApps(apps []App, functions []Function, variables map[string][]Variable
 		if framework == "" {
 			framework = frameworkByApp[a.Name]
 		}
+		appDomains, err := tierDomains(a.Domains)
+		if err != nil {
+			return nil, err
+		}
 		manifestApps = append(manifestApps, &contractv1.ManifestApp{
 			Name:      a.Name,
 			Framework: framework,
-			Domains:   domainLists(a.Domains),
+			Domains:   appDomains,
 			Variables: manifestVariables(variables[a.Name]),
 			Folder:    a.Folder,
 		})
@@ -375,7 +398,7 @@ func buildApps(apps []App, functions []Function, variables map[string][]Variable
 	}
 
 	slices.SortFunc(manifestApps, func(a, b *contractv1.ManifestApp) int { return strings.Compare(a.Name, b.Name) })
-	return manifestApps
+	return manifestApps, nil
 }
 
 func manifestVariables(variables []Variable) []*contractv1.ManifestVariable {
