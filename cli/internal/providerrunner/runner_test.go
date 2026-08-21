@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -127,6 +128,37 @@ func TestReady(t *testing.T) {
 		}
 		if elapsed >= 10*time.Second {
 			t.Errorf("Ready() took %s, want it to fail as soon as stdout became unreadable", elapsed)
+		}
+	})
+}
+
+func TestConfigure(t *testing.T) {
+	t.Parallel()
+
+	t.Run("options the provider refuses are rendered against the config file, not the connect code", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, _ := spawnFake(t, ctx, "reject-config", Config{
+			Provider:        &contractv1.ProviderConfig{},
+			ProviderPackage: "@ocel/provider-aws",
+			ReadyTimeout:    5 * time.Second,
+		})
+
+		err := r.Ready(ctx)
+		if err == nil {
+			t.Fatal("Ready() error = nil, want the provider's refusal")
+		}
+		for _, want := range []string{
+			projectconfig.ConfigFileName + " configures @ocel/provider-aws with options it does not accept",
+			`"regionn"`,
+		} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("Ready() error = %q, want it to contain %q", err, want)
+			}
+		}
+		if strings.Contains(err.Error(), "invalid_argument:") {
+			t.Errorf("Ready() error = %q, want no raw connect code prefix", err)
 		}
 	})
 }

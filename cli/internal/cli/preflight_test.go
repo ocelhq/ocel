@@ -10,38 +10,37 @@ import (
 func TestFormatIdentityBanner(t *testing.T) {
 	t.Parallel()
 
-	t.Run("names the provider, profile, account and region alongside the edge", func(t *testing.T) {
+	t.Run("names the provider, account and principal alongside the edge", func(t *testing.T) {
 		t.Parallel()
 
 		got := formatIdentityBanner(&contractv1.Identity{
 			Provider:  "AWS",
-			Profile:   "default",
 			Account:   "123456789012",
-			Region:    "us-east-1",
 			Principal: "deploy",
 			EdgeScope: "abcd1234",
 		})
-		for _, want := range []string{"Running with:", "AWS", "profile=default", "account=123456789012", "region=us-east-1", "Edge", "abcd1234"} {
+		for _, want := range []string{"Running with:", "AWS", "account=123456789012", "identity=deploy", "Edge", "abcd1234"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("banner missing %q:\n%s", want, got)
 			}
 		}
 	})
 
-	t.Run("profile falls back to the principal", func(t *testing.T) {
+	t.Run("prints every detail the provider reports, in the order it reports them", func(t *testing.T) {
 		t.Parallel()
 
 		got := formatIdentityBanner(&contractv1.Identity{
 			Provider:  "AWS",
 			Account:   "123456789012",
-			Region:    "eu-west-1",
 			Principal: "session",
+			Details: []*contractv1.Detail{
+				{Label: "region", Value: "eu-west-1"},
+				{Label: "profile", Value: "default"},
+			},
 		})
-		if strings.Contains(got, "profile=") {
-			t.Errorf("expected no profile= when the provider reports none:\n%s", got)
-		}
-		if !strings.Contains(got, "identity=session") {
-			t.Errorf("expected identity to fall back to the principal:\n%s", got)
+		want := "account=123456789012  identity=session  region=eu-west-1  profile=default"
+		if !strings.Contains(got, want) {
+			t.Errorf("banner = %q, want it to contain %q", got, want)
 		}
 	})
 

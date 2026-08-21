@@ -1,19 +1,22 @@
 package server
 
 import (
+	"bytes"
 	"context"
-	"errors"
+	"encoding/json"
 	"sync"
 
 	connect "connectrpc.com/connect"
+
+	"google.golang.org/protobuf/encoding/protojson"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type providerConfig struct {
-	Region       string
-	Transforms   []string
-	Certificates map[string]string
+	Region       string            `json:"region"`
+	Transforms   []string          `json:"transforms"`
+	Certificates map[string]string `json:"certificates"`
 }
 
 type sessionConfig struct {
@@ -36,20 +39,31 @@ func (c *sessionConfig) set(value providerConfig) {
 	c.value = value
 }
 
-var errForeignProvider = errors.New("this provider deploys into AWS, and the session was configured for another")
+// TODO(#514): lift Options into providerkit unchanged once the kit exists.
+func Options[T any](config *contractv1.ProviderConfig) (T, error) {
+	var options T
+	fields := config.GetOptions()
+	if len(fields.GetFields()) == 0 {
+		return options, nil
+	}
+	raw, err := protojson.Marshal(fields)
+	if err != nil {
+		return options, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&options); err != nil {
+		var zero T
+		return zero, err
+	}
+	return options, nil
+}
 
 func (s *Server) Configure(_ context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
-	switch provider := req.GetConfig().GetProvider().(type) {
-	case nil:
-		s.config.set(providerConfig{})
-	case *contractv1.ProviderConfig_Aws:
-		s.config.set(providerConfig{
-			Region:       provider.Aws.GetRegion(),
-			Transforms:   provider.Aws.GetTransforms(),
-			Certificates: provider.Aws.GetCertificates(),
-		})
-	default:
-		return nil, connect.NewError(connect.CodeInvalidArgument, errForeignProvider)
+	options, err := Options[providerConfig](req.GetConfig())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	s.config.set(options)
 	return &contractv1.ConfigureResponse{}, nil
 }

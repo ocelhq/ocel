@@ -38,7 +38,7 @@ export default {
 }
 
 func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
-	root, journal, d := setUpProviderFixture(t, `{ aws: { region: "eu-west-2", transforms: ["./infra/net.transform.ts"], certificates: { "app.acme.com": "arn:aws:acm:eu-west-2:1:certificate/x" } } }`)
+	root, journal, d := setUpProviderFixture(t, `{ region: "eu-west-2", transforms: ["./infra/net.transform.ts"], certificates: { "app.acme.com": "arn:aws:acm:eu-west-2:1:certificate/x" } }`)
 
 	var stdout, stderr bytes.Buffer
 	if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -55,34 +55,55 @@ func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
 	}
 }
 
-func TestDeployRefusesProviderOptionsTheContractDoesNotCarry(t *testing.T) {
-	root, _, d := setUpProviderFixture(t, `{ region: "eu-west-2" }`)
+func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
+	root, _, d := setUpProviderFixture(t, `{ regionn: "eu-west-2" }`)
 
 	var stdout, stderr bytes.Buffer
 	err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
-		t.Fatalf("runDeploy err = nil, want options the provider contract cannot carry refused; stdout=%s", stdout.String())
+		t.Fatalf("runDeploy err = nil, want options the provider refuses reported; stdout=%s", stdout.String())
 	}
 	rendered := stdout.String() + stderr.String()
-	if !strings.Contains(rendered, projectconfig.ConfigFileName) {
-		t.Errorf("rendered output = %q, want it to name the file that configured the provider", rendered)
+	for _, want := range []string{
+		projectconfig.ConfigFileName + " configures @ocel/provider-aws with options it does not accept",
+		`"regionn"`,
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("rendered output = %q, want it to contain %q", rendered, want)
+		}
+	}
+	if strings.Contains(rendered, "invalid_argument:") {
+		t.Errorf("rendered output = %q, want no raw connect code prefix", rendered)
 	}
 }
 
-func TestProviderConfigReadsTheDescriptorTheProviderPackageWrote(t *testing.T) {
+func TestProviderConfigCarriesTheDescriptorOptionsOpaquely(t *testing.T) {
 	config, err := providerConfig(&projectconfig.ProviderDescriptor{
 		Package: "@ocel/provider-aws",
-		Options: json.RawMessage(`{"aws":{"region":"us-east-1"}}`),
+		Options: json.RawMessage(`{"region":"us-east-1"}`),
 	})
 	if err != nil {
 		t.Fatalf("providerConfig: %v", err)
 	}
-	if got := config.GetAws().GetRegion(); got != "us-east-1" {
+	if got := config.GetOptions().GetFields()["region"].GetStringValue(); got != "us-east-1" {
 		t.Errorf("region = %q, want us-east-1", got)
 	}
 }
 
-func TestProviderConfigLeavesAnUnconfiguredProviderUnnamed(t *testing.T) {
+func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
+	_, err := providerConfig(&projectconfig.ProviderDescriptor{
+		Package: "@ocel/provider-aws",
+		Options: json.RawMessage(`["us-east-1"]`),
+	})
+	if err == nil {
+		t.Fatal("providerConfig err = nil, want a non-object options value refused")
+	}
+	if !strings.Contains(err.Error(), "not a JSON object") {
+		t.Errorf("err = %v, want it to say the options are not a JSON object", err)
+	}
+}
+
+func TestProviderConfigLeavesAnUnconfiguredProviderWithoutOptions(t *testing.T) {
 	config, err := providerConfig(&projectconfig.ProviderDescriptor{
 		Package: "@ocel/provider-aws",
 		Options: json.RawMessage(`{}`),
@@ -90,7 +111,7 @@ func TestProviderConfigLeavesAnUnconfiguredProviderUnnamed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("providerConfig: %v", err)
 	}
-	if config.GetProvider() != nil {
-		t.Errorf("provider = %v, want no arm set for a descriptor carrying no options", config.GetProvider())
+	if len(config.GetOptions().GetFields()) != 0 {
+		t.Errorf("options = %v, want none for a descriptor carrying no options", config.GetOptions())
 	}
 }
