@@ -3,7 +3,7 @@ import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { nextDotenv } from "./env";
+import { devBlobConfig, nextDotenv } from "./env";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(here, "..", "..", "..");
@@ -30,15 +30,18 @@ const ports: Record<ExampleSpec["framework"], number> = {
 
 export const portFor = (spec: ExampleSpec) => ports[spec.framework];
 
-export const blobEndpoint =
-  process.env.OCEL_BLOB_ENDPOINT ?? "http://localhost:9000";
-
-export async function minioReachable(): Promise<boolean> {
+export async function requireMinio(): Promise<void> {
+  const { endpoint } = devBlobConfig();
+  let response: Response;
   try {
-    const res = await fetch(`${blobEndpoint}/minio/health/live`);
-    return res.ok;
-  } catch {
-    return false;
+    response = await fetch(`${endpoint}/minio/health/live`);
+  } catch (cause) {
+    throw new Error(`MinIO is required at ${endpoint}`, { cause });
+  }
+  if (!response.ok) {
+    throw new Error(
+      `MinIO health check at ${endpoint} returned ${response.status}`,
+    );
   }
 }
 

@@ -41,6 +41,29 @@ app.get("/api/todos/:id", async (c) => {
   return c.json(rows[0]);
 });
 
+app.put("/api/todos/:id", async (c) => {
+  const body = (await c.req.json().catch(() => null)) as {
+    title?: unknown;
+    done?: unknown;
+  } | null;
+  if (
+    !body ||
+    typeof body.title !== "string" ||
+    body.title.length === 0 ||
+    typeof body.done !== "boolean"
+  ) {
+    return c.json({ error: "title and done are required" }, 400);
+  }
+  const { rows } = await pg.query(
+    "UPDATE todos SET title = $1, done = $2 WHERE id = $3 RETURNING id, title, done",
+    [body.title, body.done, Number(c.req.param("id"))],
+  );
+  if (rows.length === 0) {
+    return c.json({ error: "not found" }, 404);
+  }
+  return c.json(rows[0]);
+});
+
 app.delete("/api/todos/:id", async (c) => {
   const { rowCount } = await pg.query("DELETE FROM todos WHERE id = $1", [
     Number(c.req.param("id")),

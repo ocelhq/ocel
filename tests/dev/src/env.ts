@@ -21,6 +21,30 @@ const nextEnvironmentKeys = [
   "SUPER_SECRET_VALUE",
 ] as const;
 
+const localBlobDefaults = {
+  endpoint: "http://localhost:9000",
+  bucket: "ocel-dev",
+  region: "us-east-1",
+} as const;
+
+function required(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required by the dev suite`);
+  return value;
+}
+
+export function devBlobConfig() {
+  return {
+    endpoint: required("OCEL_BLOB_ENDPOINT"),
+    bucket: required("OCEL_BLOB_BUCKET"),
+    region: required("OCEL_BLOB_REGION"),
+    credentials: {
+      accessKeyId: required("OCEL_BLOB_ACCESS_KEY_ID"),
+      secretAccessKey: required("OCEL_BLOB_SECRET_ACCESS_KEY"),
+    },
+  };
+}
+
 export function nextDotenv(): string {
   return `${nextEnvironmentKeys
     .map((key) => `${key}=${process.env[key] ?? ""}`)
@@ -38,11 +62,9 @@ export function applyDevEnvDefaults() {
   process.env.OCEL_CLOUD_ADMIN_URL ??=
     "postgres://postgres:postgres@localhost:5433/postgres";
 
-  process.env.OCEL_BLOB_ENDPOINT ??= "http://localhost:9000";
-  process.env.OCEL_BLOB_BUCKET ??= "ocel-dev";
-  process.env.OCEL_BLOB_REGION ??= "us-east-1";
-  process.env.OCEL_BLOB_ACCESS_KEY_ID ??= "minioadmin";
-  process.env.OCEL_BLOB_SECRET_ACCESS_KEY ??= "minioadmin";
+  process.env.OCEL_BLOB_ENDPOINT ??= localBlobDefaults.endpoint;
+  process.env.OCEL_BLOB_BUCKET ??= localBlobDefaults.bucket;
+  process.env.OCEL_BLOB_REGION ??= localBlobDefaults.region;
 
   process.env.STRIPE_API_KEY ??= "e2e-stripe-key";
   process.env.POSTHOG_PROJECT_ID ??= "e2e-posthog-project";

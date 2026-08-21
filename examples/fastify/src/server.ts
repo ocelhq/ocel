@@ -38,6 +38,28 @@ app.get<{ Params: { id: string } }>("/api/todos/:id", async (request, reply) => 
   return rows[0];
 });
 
+app.put<{
+  Params: { id: string };
+  Body: { title?: unknown; done?: unknown };
+}>("/api/todos/:id", async (request, reply) => {
+  const { title, done } = request.body ?? {};
+  if (
+    typeof title !== "string" ||
+    title.length === 0 ||
+    typeof done !== "boolean"
+  ) {
+    return reply.status(400).send({ error: "title and done are required" });
+  }
+  const { rows } = await pg.query(
+    "UPDATE todos SET title = $1, done = $2 WHERE id = $3 RETURNING id, title, done",
+    [title, done, Number(request.params.id)],
+  );
+  if (rows.length === 0) {
+    return reply.status(404).send({ error: "not found" });
+  }
+  return rows[0];
+});
+
 app.delete<{ Params: { id: string } }>(
   "/api/todos/:id",
   async (request, reply) => {

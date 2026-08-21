@@ -67,6 +67,13 @@ jobs:
         working-directory: cli
         run: go build -o bin/ocel ./ocel
 
+      - name: Generate object-store credentials
+        run: |
+          secret=$(openssl rand -hex 32)
+          echo "::add-mask::$secret"
+          echo "OCEL_BLOB_ACCESS_KEY_ID=e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "OCEL_BLOB_SECRET_ACCESS_KEY=$secret" >> "$GITHUB_ENV"
+
       - name: Start Postgres services
         run: docker compose up -d
 

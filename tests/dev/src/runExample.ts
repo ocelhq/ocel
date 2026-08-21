@@ -2,14 +2,15 @@ import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { AnyUploader, Bucket } from "ocel/blob";
 import { createUploadClient } from "ocel/blob/client";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
+import { devBlobConfig } from "./env";
 import {
   base,
   clearExampleEnv,
   clearLink,
   type DevHandle,
   type ExampleSpec,
-  minioReachable,
   prepareExample,
+  requireMinio,
   runLink,
   runMigrate,
   startDev,
@@ -58,7 +59,44 @@ export function describeExample(spec: ExampleSpec) {
       expect(await response.json()).toEqual({ ok: true });
     });
 
-    it("creates, lists, gets, and deletes a todo", async () => {
+    if (spec.framework === "next") {
+      it("serves client and folder-scoped environment values", async () => {
+        const page = await fetch(`${base(spec)}/environment`);
+        expect(page.status).toBe(200);
+        const html = await page.text();
+        expect(html).toContain(process.env.NEXT_PUBLIC_APP_ID!);
+        expect(html).toContain(process.env.NEXT_PUBLIC_GA4_ID!);
+        expect(html).not.toContain(process.env.SUPER_SECRET_VALUE!);
+
+        const scoped = await fetch(`${base(spec)}/api/environment`);
+        expect(scoped.status).toBe(200);
+        expect(await scoped.json()).toEqual({
+          scoped: process.env.SOME_FOLDER_VALUE,
+        });
+      });
+
+      it("serves the ISR probe", async () => {
+        const readToken = async () => {
+          const response = await fetch(`${base(spec)}/isr`);
+          expect(response.status).toBe(200);
+          return /isr-token:(?:<!--.*?-->)?(\d+)/.exec(
+            await response.text(),
+          )?.[1];
+        };
+
+        const first = await readToken();
+        expect(first).toBeDefined();
+        expect(await readToken()).toBe(first);
+
+        const refreshed = await poll(async () => {
+          const current = await readToken();
+          return current !== first ? current : undefined;
+        });
+        expect(refreshed).toBeDefined();
+      });
+    }
+
+    it("creates, lists, gets, updates, and deletes a todo", async () => {
       const todos = `${base(spec)}/api/todos`;
 
       const created = await fetch(todos, {
@@ -91,6 +129,23 @@ export function describeExample(spec: ExampleSpec) {
       expect(got.status).toBe(200);
       expect(await got.json()).toEqual(todo);
 
+      const updated = await fetch(`${todos}/${todo.id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "ship e2e tests", done: true }),
+      });
+      expect(updated.status).toBe(200);
+      const updatedTodo = {
+        id: todo.id,
+        title: "ship e2e tests",
+        done: true,
+      };
+      expect(await updated.json()).toEqual(updatedTodo);
+
+      const gotUpdated = await fetch(`${todos}/${todo.id}`);
+      expect(gotUpdated.status).toBe(200);
+      expect(await gotUpdated.json()).toEqual(updatedTodo);
+
       const deleted = await fetch(`${todos}/${todo.id}`, {
         method: "DELETE",
       });
@@ -100,11 +155,8 @@ export function describeExample(spec: ExampleSpec) {
       expect(gone.status).toBe(404);
     });
 
-    it("uploads a file and records it in documents via onUploadComplete", async (ctx) => {
-      if (!(await minioReachable())) {
-        ctx.skip();
-        return;
-      }
+    it("uploads a file and records it in documents via onUploadComplete", async () => {
+      await requireMinio();
 
       const client = createUploadClient<Bucket<Record<string, AnyUploader>>>({
         url: `${base(spec)}/api/upload`,
@@ -176,21 +228,16 @@ export function describeExample(spec: ExampleSpec) {
 
       if (spec.capabilities.includes("thumbnail")) {
         expect(row!.thumbnail_key).toBe(`thumbnails/${key}.webp`);
-        const endpoint = process.env.OCEL_BLOB_ENDPOINT;
+        const blob = devBlobConfig();
         const s3 = new S3Client({
-          endpoint,
-          forcePathStyle: Boolean(endpoint),
-          region: process.env.OCEL_BLOB_REGION ?? "us-east-1",
-          credentials: {
-            accessKeyId:
-              process.env.OCEL_BLOB_ACCESS_KEY_ID ?? "minioadmin",
-            secretAccessKey:
-              process.env.OCEL_BLOB_SECRET_ACCESS_KEY ?? "minioadmin",
-          },
+          endpoint: blob.endpoint,
+          forcePathStyle: true,
+          region: blob.region,
+          credentials: blob.credentials,
         });
         const thumbnail = await s3.send(
           new HeadObjectCommand({
-            Bucket: process.env.OCEL_BLOB_BUCKET ?? "ocel-dev",
+            Bucket: blob.bucket,
             Key: row!.thumbnail_key!,
           }),
         );
