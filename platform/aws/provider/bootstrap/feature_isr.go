@@ -6,10 +6,11 @@ import (
 )
 
 var isrFeature = feature{
-	name:     FeatureISR,
-	summary:  "Incremental static regeneration: the shared revalidation queue, the revalidator that drains it, and the invalidator that carries each tag raise out to the fronts.",
-	template: isrTemplate,
-	payloads: isrPayloads,
+	name:       FeatureISR,
+	summary:    "Incremental static regeneration: the shared revalidation queue, the revalidator that drains it, and the invalidator that carries each tag raise out to the fronts.",
+	template:   isrTemplate,
+	payloads:   isrPayloads,
+	placements: isrPlacements,
 }
 
 func isrPayloads(ctx context.Context, store ObjectStore, bucket string) (stackPayloads, error) {
@@ -20,6 +21,13 @@ func isrPayloads(ctx context.Context, store ObjectStore, bucket string) (stackPa
 	}
 	code.invalidator, err = ensureTagInvalidatorPayload(ctx, store, bucket)
 	return code, err
+}
+
+func isrPlacements(bucket string) stackPayloads {
+	return stackPayloads{
+		revalidator: revalidatorPlacement(bucket),
+		invalidator: tagInvalidatorPlacement(bucket),
+	}
 }
 
 func isrTemplate(in featureInputs) featureStack {
@@ -36,11 +44,11 @@ func isrTemplate(in featureInputs) featureStack {
 Description: "Ocel bootstrap feature (%s, %s) - incremental static regeneration for every app in this substrate: the queue a front sends an admitted refresh to, the revalidator that turns it into one signed render at the app's own origin, and the invalidator that reads each tag raise off the state table stream and invalidates the fronts holding the stale copy. Created and updated by ocel bootstrap --features. Deleting this stack leaves apps serving stale pages until they are redeployed without it."
 %sResources:
 %s%s%sOutputs:
-%s%s`,
+%s`,
 			FeatureISR, in.class, params,
 			revalidateQueueResources(in.class),
 			revalidatorResources(in.code.revalidator),
 			tagInvalidatorResources(in.code.invalidator, in.class),
-			revalidateQueueOutputs(), bootstrapVersionOutput(in.version)),
+			revalidateQueueOutputs()),
 	}
 }

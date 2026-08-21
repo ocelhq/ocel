@@ -35,7 +35,7 @@ func run() error {
 
 	fmt.Fprintf(os.Stderr, "ocel aws provider %s: bound %s\n", version, addr)
 
-	httpSrv := &http.Server{Handler: server.NewMux(token)}
+	httpSrv := &http.Server{Handler: server.NewMux(token, version)}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

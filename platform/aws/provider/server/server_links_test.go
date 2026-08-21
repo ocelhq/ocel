@@ -32,7 +32,7 @@ func (c outputCFN) DescribeStacks(context.Context, *cloudformation.DescribeStack
 	for key, value := range c.outputs {
 		out = append(out, cfntypes.Output{OutputKey: aws.String(key), OutputValue: aws.String(value)})
 	}
-	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{Outputs: out}}}, nil
+	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{Outputs: out, Tags: currentSchemaTags}}}, nil
 }
 
 func linksServer(t *testing.T) *VarsServer {
@@ -293,8 +293,7 @@ func TestLinkHandlersNameAnAbsentSubstrate(t *testing.T) {
 
 	t.Run("a bootstrap without a variable store", func(t *testing.T) {
 		_, err := serverOn(&outputCFN{outputs: map[string]string{
-			"BootstrapVersion": bootstrapVersionOutput,
-			"VarsKeyArn":       "arn:aws:kms:eu-west-1:123456789012:key/abcd",
+			"VarsKeyArn": "arn:aws:kms:eu-west-1:123456789012:key/abcd",
 		}}).SetLink(ctx, &envvarsv1.SetLinkRequest{
 			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst", Link: ordersLink(),
 		})

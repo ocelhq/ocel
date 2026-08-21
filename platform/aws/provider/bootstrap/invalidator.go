@@ -28,6 +28,10 @@ const (
 	tagInvalidatorClassEnvVar      = "OCEL_INFRA_CLASS"
 )
 
+func tagInvalidatorPlacement(bucket string) payloads.Placement {
+	return payloads.At(bucket, tagInvalidatorKeyPrefix, payloads.TagInvalidator())
+}
+
 func ensureTagInvalidatorPayload(ctx context.Context, store ObjectStore, bucket string) (payloads.Placement, error) {
 	return payloads.Place(ctx, store, bucket, tagInvalidatorKeyPrefix, tagInvalidatorLabel, payloads.TagInvalidator())
 }

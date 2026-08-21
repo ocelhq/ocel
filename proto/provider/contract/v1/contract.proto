@@ -18,6 +18,8 @@ service ProviderService {
 
     rpc DescribeBootstrap(DescribeBootstrapRequest) returns (DescribeBootstrapResponse);
 
+    rpc GetCredentialPolicy(CredentialPolicyRequest) returns (CredentialPolicyResponse);
+
     rpc RemoveSubstrate(SubstrateRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc PlanRemoveSubstrate(SubstrateRequest) returns (RemovalPlan);
@@ -238,14 +240,72 @@ message BootstrapRequest {
   repeated string features = 2;
 
   bool force = 3;
+
+  optional bool auto_heal = 4;
+
+  bool accept_replacements = 5;
 }
 
 message DescribeBootstrapRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  bool with_dependents = 2;
 }
 
 message DescribeBootstrapResponse {
   repeated Feature features = 1;
+
+  SubstrateStatus substrate = 2;
+}
+
+message SubstrateStack {
+  string name = 1;
+
+  string feature = 2;
+
+  bool present = 3;
+
+  uint32 schema = 4;
+
+  bool digest_current = 5;
+
+  string written_by = 6;
+
+  bool required = 7;
+}
+
+message SubstrateStatus {
+  common.environment.v1.Tier tier = 1;
+
+  bool present = 2;
+
+  uint32 schema = 3;
+
+  uint32 required_schema = 4;
+
+  bool auto_heal = 5;
+
+  repeated SubstrateStack stacks = 6;
+
+  string writer = 7;
+
+  bool downgrade = 8;
+}
+
+enum CredentialTier {
+  CREDENTIAL_TIER_UNSPECIFIED = 0;
+
+  CREDENTIAL_TIER_BOOTSTRAP = 1;
+
+  CREDENTIAL_TIER_DEPLOY = 2;
+}
+
+message CredentialPolicyRequest {
+  CredentialTier tier = 1 [(buf.validate.field).enum.defined_only = true];
+}
+
+message CredentialPolicyResponse {
+  string document = 1;
 }
 
 message Feature {
@@ -363,6 +423,8 @@ message PreflightResponse {
   repeated DomainClaim domain_claims = 6;
 
   PreviewWildcard preview_wildcard = 7;
+
+  SubstrateStatus substrate = 8;
 }
 
 message PreviewWildcard {

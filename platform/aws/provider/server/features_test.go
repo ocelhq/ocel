@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
@@ -91,7 +92,7 @@ func TestDescribedBootstrap(t *testing.T) {
 	t.Run("it offers the whole catalogue, enabled by what is standing", func(t *testing.T) {
 		t.Parallel()
 		deployed := bootstrap.Deployed{Present: true, Features: bootstrap.FeatureSet{bootstrap.FeatureISR: true}}
-		resp := describedBootstrap(deployed, nil)
+		resp := (&Server{}).describedBootstrap(deployed, environmentv1.Tier_TIER_PRODUCTION, nil)
 
 		if len(resp.GetFeatures()) != len(bootstrap.Catalogue()) {
 			t.Fatalf("described %d features, want the whole catalogue", len(resp.GetFeatures()))
@@ -117,7 +118,7 @@ func TestDescribedBootstrap(t *testing.T) {
 			"billing": {bootstrap.FeatureISR},
 			"wiki":    nil,
 		}
-		resp := describedBootstrap(bootstrap.Deployed{Present: true, Features: bootstrap.FeatureSet{}}, recorded)
+		resp := (&Server{}).describedBootstrap(bootstrap.Deployed{Present: true, Features: bootstrap.FeatureSet{}}, environmentv1.Tier_TIER_PRODUCTION, recorded)
 
 		if got, want := find(t, resp, bootstrap.FeatureISR).GetDependents(), []string{"billing", "shop"}; !slices.Equal(got, want) {
 			t.Errorf("isr dependents = %v, want %v", got, want)
@@ -132,7 +133,7 @@ func TestDescribedBootstrap(t *testing.T) {
 
 	t.Run("an unbootstrapped account still offers the catalogue", func(t *testing.T) {
 		t.Parallel()
-		resp := describedBootstrap(bootstrap.Deployed{Features: bootstrap.FeatureSet{}}, nil)
+		resp := (&Server{}).describedBootstrap(bootstrap.Deployed{Features: bootstrap.FeatureSet{}}, environmentv1.Tier_TIER_PRODUCTION, nil)
 		if len(resp.GetFeatures()) != len(bootstrap.Catalogue()) {
 			t.Errorf("described %d features, want the whole catalogue: the picker has to show them", len(resp.GetFeatures()))
 		}

@@ -22,7 +22,7 @@ import (
 
 func newTestVarsClient(t *testing.T, token string) envvarsv1connect.EnvVarsServiceClient {
 	t.Helper()
-	srv := httptest.NewServer(NewMux(testToken))
+	srv := httptest.NewServer(NewMux(testToken, "1.0.0"))
 	t.Cleanup(srv.Close)
 
 	var opts []connect.ClientOption

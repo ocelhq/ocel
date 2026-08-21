@@ -30,6 +30,10 @@ const (
 
 const optimizerLabel = "image optimizer"
 
+func optimizerPlacement(bucket string) payloads.Placement {
+	return payloads.At(bucket, optimizerKeyPrefix, payloads.ImageOptimizer())
+}
+
 func ensureOptimizerPayload(ctx context.Context, store ObjectStore, bucket string) (payloads.Placement, error) {
 	return payloads.Place(ctx, store, bucket, optimizerKeyPrefix, optimizerLabel, payloads.ImageOptimizer())
 }

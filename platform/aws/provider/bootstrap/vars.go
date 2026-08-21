@@ -11,6 +11,9 @@ const (
 
 	outputVarsTable  = "VarsTableName"
 	outputVarsKeyARN = "VarsKeyArn"
+
+	varsKeyComponentTagKey   = "ocel:component"
+	varsKeyComponentTagValue = "vars-key"
 )
 
 func varsKeyAliasFor(class string) string {
@@ -23,6 +26,9 @@ func varsResources(class string) string {
     Properties:
       Description: "Ocel: the key every encrypted variable of the %s class is encrypted under. Ocel encrypts a value here when it is set, a deploy decrypts the ones it bakes into an app, and a running function decrypts the ones it reads live. Nothing else in this account uses it. Scheduling its deletion does not remove the values, it strands them: every encrypted variable of this class becomes unreadable to Ocel and to the apps holding live references, and each has to be set again against a new key."
       EnableKeyRotation: true
+      Tags:
+        - Key: %s
+          Value: %s
       KeyPolicy:
         Version: '2012-10-17'
         Statement:
@@ -67,7 +73,7 @@ func varsResources(class string) string {
               KeyType: RANGE
           Projection:
             ProjectionType: KEYS_ONLY
-`, class, class, varsKeyAliasFor(class), class, VarsTableIndexName)
+`, class, varsKeyComponentTagKey, varsKeyComponentTagValue, class, varsKeyAliasFor(class), class, VarsTableIndexName)
 }
 
 func varsOutputs() string {

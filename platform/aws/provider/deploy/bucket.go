@@ -98,7 +98,7 @@ func resourceCoordinate(project, env, logicalName string, kind naming.Kind) nami
 	return naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: kind, Name: name}
 }
 
-func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName string, sessions sessionScope, completerCode payloads.Placement) error {
+func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName, boundaryARN string, sessions sessionScope, completerCode payloads.Placement) error {
 	at := resourceCoordinate(project, env, logicalName, naming.KindBucket)
 
 	bucket, err := s3.NewBucketV2(ctx, naming.ResourceID(at.Kind, at.Name), &s3.BucketV2Args{
@@ -139,6 +139,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		naming.ResourceID(at.Kind, at.Name, "upload-completer-role"),
 		at.Description("execution role for the "+at.Name+" bucket's upload completer"),
 		"lambda.amazonaws.com",
+		boundaryARN,
 		args.Tags,
 		map[string]policyStatement{
 			"s3":       {Actions: args.UploadCompleterS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
@@ -220,11 +221,12 @@ func sessionStatement(actions []string, sessions sessionScope) policyStatement {
 	}
 }
 
-func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal string, tags map[string]string, statements map[string]policyStatement) (*iam.Role, error) {
+func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal, boundaryARN string, tags map[string]string, statements map[string]policyStatement) (*iam.Role, error) {
 	role, err := iam.NewRole(ctx, name, &iam.RoleArgs{
-		AssumeRolePolicy: pulumi.String(assumeRolePolicy(servicePrincipal)),
-		Description:      pulumi.String(description),
-		Tags:             resourceTags(naming.KindRole, "", tags),
+		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(servicePrincipal)),
+		Description:         pulumi.String(description),
+		PermissionsBoundary: permissionsBoundary(boundaryARN),
+		Tags:                resourceTags(naming.KindRole, "", tags),
 	})
 	if err != nil {
 		return nil, err
@@ -251,6 +253,13 @@ func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal str
 		}
 	}
 	return role, nil
+}
+
+func permissionsBoundary(arn string) pulumi.StringPtrInput {
+	if arn == "" {
+		return nil
+	}
+	return pulumi.StringPtr(arn)
 }
 
 func assumeRolePolicy(servicePrincipal string) string {

@@ -35,7 +35,6 @@ func featureStackFor(name, class string, alongside FeatureSet) featureStack {
 	}
 	return f.template(featureInputs{
 		class:     class,
-		version:   RequiredBootstrapVersion,
 		code:      fixturePayloads(),
 		refs:      fixtureRefs(),
 		alongside: alongside,

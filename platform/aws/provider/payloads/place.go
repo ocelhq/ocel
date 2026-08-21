@@ -28,6 +28,10 @@ func Key(prefix, digest string) string {
 	return fmt.Sprintf("%s/%s.zip", prefix, digest)
 }
 
+func At(bucket, prefix string, p Payload) Placement {
+	return Placement{Bucket: bucket, Key: Key(prefix, p.SHA256), SHA256: p.SHA256}
+}
+
 func Place(ctx context.Context, store ObjectStore, bucket, prefix, label string, p Payload) (Placement, error) {
 	if bucket == "" {
 		return Placement{}, fmt.Errorf("no artifact bucket to place the %s into", label)
@@ -35,7 +39,7 @@ func Place(ctx context.Context, store ObjectStore, bucket, prefix, label string,
 	if store == nil {
 		return Placement{}, fmt.Errorf("no artifact store configured for the %s", label)
 	}
-	at := Placement{Bucket: bucket, Key: Key(prefix, p.SHA256), SHA256: p.SHA256}
+	at := At(bucket, prefix, p)
 
 	head, err := store.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket:       aws.String(at.Bucket),

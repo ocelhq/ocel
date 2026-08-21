@@ -52,6 +52,8 @@ type Server struct {
 
 	config sessionConfig
 
+	writer bootstrap.Writer
+
 	memo memo
 }
 
@@ -224,12 +226,25 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 	if err != nil {
 		return deploy.Result{}, finishPreparing(err)
 	}
-	compat := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion)
-	if err := compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCmd); err != nil {
+	compat := bootstrap.CheckCompat(deployed.Schema, deployed.Present, bootstrap.RequiredSchema)
+	if err := compat.Explain(deployed.Schema, bootstrap.RequiredSchema, bootstrapCmd); err != nil {
 		return deploy.Result{}, finishPreparing(err)
 	}
 	if err := missingFeatures(deployed, req.GetRequiredFeatures(), preview); err != nil {
 		return deploy.Result{}, finishPreparing(err)
+	}
+	healed, err := s.healSubstrate(ctx, awscfg, deployed, req.GetRequiredFeatures(), preview, logf)
+	if err != nil {
+		logf(fmt.Sprintf("could not refresh this account's bootstrap, and this deploy runs against it as it stands: %v", err))
+	}
+	if healed {
+		s.memo.forgetDeployed()
+		if deployed, err = s.deployed(ctx, cfn, opts.Region, preview); err != nil {
+			return deploy.Result{}, finishPreparing(err)
+		}
+	}
+	if drift := driftReport(deployed, req.GetRequiredFeatures(), bootstrapCmd); drift != "" {
+		logf(drift)
 	}
 	if deployed.StateBucket == "" {
 		return deploy.Result{}, finishPreparing(fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd))
@@ -344,6 +359,7 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		StateTableARN:    stateTableARN,
 
 		VarsKeyARN:         deployed.VarsKeyARN,
+		AppBoundaryARN:     deployed.AppBoundaryARN,
 		VarsTable:          deployed.VarsTable,
 		VarsTableARN:       fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.VarsTable),
 		VarsClass:          substrateClass,
@@ -465,8 +481,8 @@ func (s *Server) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest
 	if err != nil {
 		return failStream(stream, err)
 	}
-	if compat := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion); compat == bootstrap.NeedsCLIUpgrade {
-		return failStream(stream, compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCommand(preview)))
+	if compat := bootstrap.CheckCompat(deployed.Schema, deployed.Present, bootstrap.RequiredSchema); compat == bootstrap.NeedsCLIUpgrade {
+		return stream.Send(failureResult(schemaAheadRefusal(deployed.Schema, preview)))
 	}
 
 	defaultEdge, err := s.edge(edges.DefaultKind, opts.Region)
@@ -483,7 +499,13 @@ func (s *Server) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest
 	if deployed.StateTable != "" {
 		apis.Users = &stackindex.Index{Dynamo: dynamodb.NewFromConfig(awscfg), Table: deployed.StateTable}
 	}
-	request := bootstrap.Request{Features: req.GetFeatures(), Force: req.GetForce()}
+	request := bootstrap.Request{
+		Features:           req.GetFeatures(),
+		Force:              req.GetForce(),
+		Writer:             s.writer,
+		AutoHeal:           req.AutoHeal,
+		AcceptReplacements: req.GetAcceptReplacements(),
+	}
 	if err := s.runBootstrap(ctx, bootstrapRunner(preview), apis, request, progress, logf); err != nil {
 		return failStream(stream, err)
 	}
@@ -518,18 +540,37 @@ func (s *Server) DescribeBootstrap(ctx context.Context, req *contractv1.Describe
 		return nil, err
 	}
 	recorded := map[string][]string{}
-	if deployed.StateTable != "" {
+	if req.GetWithDependents() && deployed.StateTable != "" {
 		index := &stackindex.Index{Dynamo: dynamodb.NewFromConfig(awscfg), Table: deployed.StateTable}
 		if recorded, err = index.ProjectFeatures(ctx); err != nil {
 			return nil, err
 		}
 	}
 
-	return describedBootstrap(deployed, recorded), nil
+	return s.describedBootstrap(deployed, req.GetTier(), recorded), nil
 }
 
-func describedBootstrap(deployed bootstrap.Deployed, recorded map[string][]string) *contractv1.DescribeBootstrapResponse {
-	resp := &contractv1.DescribeBootstrapResponse{}
+func (s *Server) GetCredentialPolicy(_ context.Context, req *contractv1.CredentialPolicyRequest) (*contractv1.CredentialPolicyResponse, error) {
+	var (
+		document string
+		err      error
+	)
+	switch req.GetTier() {
+	case contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP:
+		document, err = bootstrap.BootstrapCredentialPolicy()
+	case contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY:
+		document, err = bootstrap.DeployCredentialPolicy()
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a credential policy is rendered for the bootstrap tier or the deploy tier; this request named neither"))
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &contractv1.CredentialPolicyResponse{Document: document}, nil
+}
+
+func (s *Server) describedBootstrap(deployed bootstrap.Deployed, tier environmentv1.Tier, recorded map[string][]string) *contractv1.DescribeBootstrapResponse {
+	resp := &contractv1.DescribeBootstrapResponse{Substrate: s.substrateStatus(deployed, tier, deployed.Features.Names())}
 	for _, f := range bootstrap.Catalogue() {
 		resp.Features = append(resp.Features, &contractv1.Feature{
 			Name:       f.Name,

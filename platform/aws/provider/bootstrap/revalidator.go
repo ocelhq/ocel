@@ -44,6 +44,10 @@ func revalidateQueueNames(class string) (queue, dlq string) {
 	return "ocel-revalidate.fifo", "ocel-revalidate-dlq.fifo"
 }
 
+func revalidatorPlacement(bucket string) payloads.Placement {
+	return payloads.At(bucket, revalidatorKeyPrefix, payloads.Revalidator())
+}
+
 func ensureRevalidatorPayload(ctx context.Context, store ObjectStore, bucket string) (payloads.Placement, error) {
 	return payloads.Place(ctx, store, bucket, revalidatorKeyPrefix, revalidatorLabel, payloads.Revalidator())
 }

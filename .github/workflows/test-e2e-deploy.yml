@@ -95,7 +95,7 @@ jobs:
         working-directory: adapter
         run: |
           node scripts/build-native.mjs --host --target cli
-          node scripts/build-native.mjs --host --target provider
+          node scripts/build-native.mjs --host --target provider --version "0.0.0-e2e.${{ github.run_number }}"
 
       - name: Build the ocel sidecar
         working-directory: adapter
@@ -409,9 +409,140 @@ jobs:
           path: ${{ env.BASELINE_FRAGMENT }}
           if-no-files-found: warn
 
+  tiers:
+    name: Credential tier (${{ matrix.tier }})
+    needs: [smoke, test]
+    if: ${{ !cancelled() && needs.smoke.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        tier: [bootstrap, deploy]
+    env:
+      ADAPTER_DIR: ${{ github.workspace }}/adapter
+      NEXTJS_DIR: ${{ github.workspace }}/nextjs
+      OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
+      OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
+      OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
+      AWS_REGION: ${{ vars.E2E_AWS_REGION }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            nextjs
+            adapter
+            sidecar
+            ~/.cache/ms-playwright
+          key: build-${{ github.sha }}-${{ github.run_id }}
+          fail-on-cache-miss: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Ask the provider what this tier may do
+        run: |
+          set -euo pipefail
+          node adapter/scripts/e2e-next/credential-tier.mjs \
+            policy-parts ${{ matrix.tier }} "$RUNNER_TEMP/tier-policy" \
+            > "$RUNNER_TEMP/tier-policy-parts"
+
+      - name: Assume the session that installs this tier's policy
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-session-name: ocel-e2e-tier-policy-${{ matrix.tier }}-${{ github.run_id }}
+
+      - name: Install the document as the policies this tier's session carries
+        id: tier-policy
+        env:
+          TIER_POLICY_PREFIX: ocel-e2e-tier-${{ matrix.tier }}-${{ github.run_id }}-
+        run: |
+          set -uo pipefail
+          created="$RUNNER_TEMP/tier-policy-arns"
+          : > "$created"
+          publish() {
+            {
+              echo "arns<<TIER_POLICY_ARNS"
+              cat "$created"
+              echo "TIER_POLICY_ARNS"
+            } >> "$GITHUB_OUTPUT"
+          }
+          trap publish EXIT
+          set -e
+          index=0
+          while IFS= read -r part; do
+            aws iam create-policy \
+              --policy-name "$TIER_POLICY_PREFIX$index" \
+              --policy-document "file://$part" \
+              --query Policy.Arn --output text >> "$created"
+            index=$((index + 1))
+          done < "$RUNNER_TEMP/tier-policy-parts"
+          if [ "$index" -eq 0 ]; then
+            echo "the ${{ matrix.tier }} tier rendered no policy, so its session would carry everything the role has" >&2
+            exit 1
+          fi
+
+      - uses: ./adapter/.github/actions/e2e-session
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          role-session-name: ocel-e2e-tier-${{ matrix.tier }}-${{ github.run_id }}
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+          managed-session-policies: ${{ steps.tier-policy.outputs.arns }}
+
+      - name: Warm the Pulumi runtime the provider installs on first deploy
+        if: ${{ matrix.tier == 'deploy' }}
+        run: |
+          set -euo pipefail
+          root="$HOME/.ocel/pulumi/$PULUMI_VERSION"
+          curl -fsSL https://get.pulumi.com/install.sh | sh -s -- \
+            --no-edit-path --install-root "$root" --version "$PULUMI_VERSION"
+          "$root/bin/pulumi" version
+
+      - name: Run what this tier's credentials must cover
+        run: node adapter/scripts/e2e-next/credential-tier.mjs run ${{ matrix.tier }}
+
+      - name: Assume a session that can take the policies back down
+        if: ${{ always() }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-session-name: ocel-e2e-tier-sweep-${{ matrix.tier }}-${{ github.run_id }}
+
+      - name: Remove the policies this tier's session carried
+        if: ${{ always() }}
+        env:
+          TIER_POLICY_ARNS: ${{ steps.tier-policy.outputs.arns }}
+          TIER_POLICY_PREFIX: ocel-e2e-tier-${{ matrix.tier }}-${{ github.run_id }}-
+        run: |
+          set -uo pipefail
+          drop() {
+            [ -n "$1" ] || return 0
+            aws iam delete-policy --policy-arn "$1" || echo "could not remove $1" >&2
+          }
+          while IFS= read -r arn; do
+            drop "$arn"
+          done <<< "$TIER_POLICY_ARNS"
+          for arn in $(aws iam list-policies --scope Local \
+            --query "Policies[?starts_with(PolicyName, '$TIER_POLICY_PREFIX')].Arn" --output text); do
+            drop "$arn"
+          done
+
   destroy:
     name: Destroy this run's project
-    needs: [smoke, test]
+    needs: [smoke, test, tiers]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 60

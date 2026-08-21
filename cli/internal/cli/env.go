@@ -194,7 +194,7 @@ func envSession(ctx context.Context, d deps, cwd string, opts envOptions, stdout
 	}
 
 	return runProviderSession(ctx, d, cfg, provider, stderr, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightTier(ctx, d, runner, cfg, tier, hint, stderr); err != nil {
+		if err := preflightSchema(ctx, d, runner, cfg, tier, hint, stderr); err != nil {
 			return err
 		}
 		return drive(runner, cfg, provider)

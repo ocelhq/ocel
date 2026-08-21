@@ -61,6 +61,10 @@ const fakeConfigureJournalEnvVar = "OCEL_TEST_FAKE_CONFIGURE_JOURNAL"
 
 const fakeEnabledFeaturesEnvVar = "OCEL_TEST_FAKE_ENABLED_FEATURES"
 
+const fakeSubstrateEnvVar = "OCEL_TEST_FAKE_SUBSTRATE"
+
+const fakeDescribeJournalEnvVar = "OCEL_TEST_FAKE_DESCRIBE_JOURNAL"
+
 const fakeEdgeRefusalEnvVar = "OCEL_TEST_FAKE_EDGE_REFUSAL"
 
 const fakeNeedsRefusalEnvVar = "OCEL_TEST_FAKE_NEEDS_REFUSAL"
@@ -343,7 +347,7 @@ func fakeLinks(m *contractv1.Manifest) []*linksv1.Link {
 	return out
 }
 
-func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, _ *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
+func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -356,12 +360,70 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, _ *con
 			Enabled:   slices.Contains(enabled, name),
 		}
 	}
+	journalDescribeBootstrap(req)
 	return &contractv1.DescribeBootstrapResponse{
 		Features: []*contractv1.Feature{
 			feature("isr", "incremental static regeneration"),
 			feature("image-optimization", "on-demand image optimization"),
 			feature("cloudflare-edge", "a Cloudflare front", "isr"),
 		},
+		Substrate: fakeSubstrate(req.GetTier()),
+	}, nil
+}
+
+func journalDescribeBootstrap(req *contractv1.DescribeBootstrapRequest) {
+	path := os.Getenv(fakeDescribeJournalEnvVar)
+	if path == "" {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider: describe journal:", err)
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "tier=%s withDependents=%t\n", req.GetTier(), req.GetWithDependents())
+}
+
+func fakeSubstrate(tier environmentv1.Tier) *contractv1.SubstrateStatus {
+	shape := os.Getenv(fakeSubstrateEnvVar)
+	if shape == "" || tier == environmentv1.Tier_TIER_PREVIEW {
+		return &contractv1.SubstrateStatus{Tier: tier, RequiredSchema: 1, Writer: "1.4.0"}
+	}
+	status := &contractv1.SubstrateStatus{
+		Tier:           tier,
+		Present:        true,
+		Schema:         1,
+		RequiredSchema: 1,
+		Writer:         "1.4.0",
+		Stacks: []*contractv1.SubstrateStack{
+			{Name: "ocel-bootstrap", Present: true, Schema: 1, DigestCurrent: true, WrittenBy: "1.4.0", Required: true},
+			{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Schema: 1, DigestCurrent: true, WrittenBy: "1.4.0", Required: true},
+			{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization"},
+		},
+	}
+	switch shape {
+	case "stale":
+		status.Stacks[1].DigestCurrent = false
+	case "missing":
+		status.Stacks[2].Required = true
+	case "ahead":
+		status.Schema = 2
+		status.Stacks[0].Schema = 2
+		status.Stacks[1].Schema = 2
+	case "downgrade":
+		status.Downgrade = true
+		status.Stacks[0].WrittenBy = "1.9.0"
+	}
+	return status
+}
+
+func (s *deployFakeProviderServer) GetCredentialPolicy(ctx context.Context, req *contractv1.CredentialPolicyRequest) (*contractv1.CredentialPolicyResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	return &contractv1.CredentialPolicyResponse{
+		Document: fmt.Sprintf(`{"Version":"2012-10-17","Statement":[{"Sid":%q}]}`, req.GetTier().String()),
 	}, nil
 }
 
@@ -369,7 +431,7 @@ func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
-	journalBootstrap(req.GetFeatures(), req.GetForce())
+	journalBootstrap(req)
 	return stream.Send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	})
@@ -461,6 +523,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 		}
 		resp.DomainClaims = append(resp.DomainClaims, claim)
 	}
+	resp.Substrate = fakeSubstrate(req.GetRequiredTier())
 	resp.PreviewWildcard = fakeGlobalDomain()
 	if p := os.Getenv(fakeCredProblemEnvVar); p != "" {
 		resp.CredentialProblems = append(resp.CredentialProblems, &contractv1.CredentialProblem{
@@ -525,7 +588,7 @@ func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv
 	return &contractv1.ConfigureResponse{}, nil
 }
 
-func journalBootstrap(features []string, force bool) {
+func journalBootstrap(req *contractv1.BootstrapRequest) {
 	path := os.Getenv(fakeEdgeJournalEnvVar)
 	if path == "" {
 		return
@@ -536,7 +599,11 @@ func journalBootstrap(features []string, force bool) {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "features=%s force=%t\n", strings.Join(features, ","), force)
+	line := fmt.Sprintf("features=%s force=%t", strings.Join(req.GetFeatures(), ","), req.GetForce())
+	if req.AutoHeal != nil {
+		line += fmt.Sprintf(" autoHeal=%t", req.GetAutoHeal())
+	}
+	fmt.Fprintln(f, line)
 }
 
 func fakeDegradedEvents() []*progressv1.OperationEvent {
