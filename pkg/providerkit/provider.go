@@ -71,6 +71,15 @@ type CodeEmbedder interface {
 	EmbedCode(ctx context.Context, function string, artifact ArtifactRef, report Reporter) error
 }
 
+// StackInspector is optional: a vendor whose engine holds prior state can say
+// what a stack currently is without changing it. The kit uses it to refuse
+// adopting resources an infra stack already holds, and to show what a destroy
+// would touch; a vendor without it — a bare host has nothing to inspect — skips
+// that check and is not deficient.
+type StackInspector interface {
+	Inspect(ctx context.Context, ref StackRef) (StackState, error)
+}
+
 // Vendor names whose infrastructure a provider targets. It is vocabulary, not a
 // switch: the kit prints it and matches the runtime half against it, and branches
 // on nothing.

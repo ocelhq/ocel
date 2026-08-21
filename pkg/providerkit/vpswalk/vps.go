@@ -69,16 +69,16 @@ func (bootstrapper) Remove(context.Context, providerkit.Class, providerkit.Repor
 // defines the one method against Neon, and changes nothing else.
 type made struct{}
 
-func (made) Bucket(context.Context, resources.Scope, resources.BucketSpec, providerkit.Reporter) (resources.Outputs, error) {
-	return nil, nil
+func (made) Bucket(context.Context, resources.Scope, string, providerkit.BucketSpec, providerkit.Reporter) (providerkit.Link, error) {
+	return providerkit.Link{}, nil
 }
 
-func (made) Function(context.Context, resources.Scope, resources.FunctionSpec, providerkit.Reporter) (resources.Outputs, error) {
-	return nil, nil
+func (made) Function(context.Context, resources.Scope, providerkit.FunctionSpec, []providerkit.Link, providerkit.Reporter) (providerkit.Function, error) {
+	return providerkit.Function{}, nil
 }
 
-func (made) Container(context.Context, resources.Scope, resources.ContainerSpec, providerkit.Reporter) (resources.Outputs, error) {
-	return nil, nil
+func (made) Container(context.Context, resources.Scope, string, providerkit.ContainerSpec, providerkit.Reporter) (providerkit.Link, error) {
+	return providerkit.Link{}, nil
 }
 
 func (made) Remove(context.Context, resources.Scope, resources.Ref, providerkit.Reporter) error {
@@ -89,8 +89,8 @@ func (made) Remove(context.Context, resources.Scope, resources.Ref, providerkit.
 // knew nothing about it, with no fork of the provider and no change to the kit.
 type Neon struct{ made }
 
-func (Neon) Postgres(context.Context, resources.Scope, resources.PostgresSpec, providerkit.Reporter) (resources.Outputs, error) {
-	return nil, nil
+func (Neon) Postgres(context.Context, resources.Scope, string, providerkit.PostgresSpec, providerkit.Reporter) (providerkit.Link, error) {
+	return providerkit.Link{}, nil
 }
 
 var _ providerkit.Releaser = resources.Releaser(Neon{})

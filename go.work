@@ -6,6 +6,7 @@ use (
 	./pkg/naming
 	./pkg/proto
 	./pkg/providerkit
+	./pkg/providerkit/pulumi
 	./platform/aws/provider
 	./platform/edge/cloudflare/deploy
 	./platform/edge/contract

@@ -103,7 +103,9 @@ func (h *handlers) Rollback(context.Context, *contractv1.RollbackRequest) (*cont
 	return nil, notLifted("Rollback")
 }
 
-// RemoveStalePromotions: keep-N is the kit's; Releaser.Sweep does what it decided.
+// RemoveStalePromotions: keep-N is the kit's, and so is the sweep — the stale
+// releases come from the records, each app stack goes through Releaser.Destroy
+// and each artifact prefix through ArtifactStore.RemovePrefix.
 func (h *handlers) RemoveStalePromotions(context.Context, *contractv1.RemoveStalePromotionsRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
 	return notLifted("RemoveStalePromotions")
 }
