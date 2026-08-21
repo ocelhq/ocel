@@ -318,9 +318,9 @@ func (r *Runner) RemoveSubstrate(ctx context.Context, req *contractv1.SubstrateR
 	})
 }
 
-func (r *Runner) RemovePreview(ctx context.Context, req *contractv1.RemovePreviewRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "RemovePreview", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.RemovePreview(ctx, req)
+func (r *Runner) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, onEvent func(*progressv1.OperationEvent)) error {
+	return r.stream(ctx, "RemoveEnvironment", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
+		return client.RemoveEnvironment(ctx, req)
 	})
 }
 

@@ -51,9 +51,9 @@ const (
 	// ProviderServicePlanRemoveSubstrateProcedure is the fully-qualified name of the ProviderService's
 	// PlanRemoveSubstrate RPC.
 	ProviderServicePlanRemoveSubstrateProcedure = "/provider.contract.v1.ProviderService/PlanRemoveSubstrate"
-	// ProviderServiceRemovePreviewProcedure is the fully-qualified name of the ProviderService's
-	// RemovePreview RPC.
-	ProviderServiceRemovePreviewProcedure = "/provider.contract.v1.ProviderService/RemovePreview"
+	// ProviderServiceRemoveEnvironmentProcedure is the fully-qualified name of the ProviderService's
+	// RemoveEnvironment RPC.
+	ProviderServiceRemoveEnvironmentProcedure = "/provider.contract.v1.ProviderService/RemoveEnvironment"
 	// ProviderServiceRemoveProjectProcedure is the fully-qualified name of the ProviderService's
 	// RemoveProject RPC.
 	ProviderServiceRemoveProjectProcedure = "/provider.contract.v1.ProviderService/RemoveProject"
@@ -106,7 +106,7 @@ type ProviderServiceClient interface {
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
 	RemoveSubstrate(context.Context, *v1.SubstrateRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	PlanRemoveSubstrate(context.Context, *v1.SubstrateRequest) (*v1.RemovalPlan, error)
-	RemovePreview(context.Context, *v1.RemovePreviewRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	RemoveEnvironment(context.Context, *v1.RemoveEnvironmentRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	RemoveProject(context.Context, *v1.ProjectRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v1.RemovalPlan, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
@@ -170,10 +170,10 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("PlanRemoveSubstrate")),
 			connect.WithClientOptions(opts...),
 		),
-		removePreview: connect.NewClient[v1.RemovePreviewRequest, v11.OperationEvent](
+		removeEnvironment: connect.NewClient[v1.RemoveEnvironmentRequest, v11.OperationEvent](
 			httpClient,
-			baseURL+ProviderServiceRemovePreviewProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("RemovePreview")),
+			baseURL+ProviderServiceRemoveEnvironmentProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("RemoveEnvironment")),
 			connect.WithClientOptions(opts...),
 		),
 		removeProject: connect.NewClient[v1.ProjectRequest, v11.OperationEvent](
@@ -271,7 +271,7 @@ type providerServiceClient struct {
 	describeBootstrap         *connect.Client[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse]
 	removeSubstrate           *connect.Client[v1.SubstrateRequest, v11.OperationEvent]
 	planRemoveSubstrate       *connect.Client[v1.SubstrateRequest, v1.RemovalPlan]
-	removePreview             *connect.Client[v1.RemovePreviewRequest, v11.OperationEvent]
+	removeEnvironment         *connect.Client[v1.RemoveEnvironmentRequest, v11.OperationEvent]
 	removeProject             *connect.Client[v1.ProjectRequest, v11.OperationEvent]
 	planRemoveProject         *connect.Client[v1.ProjectRequest, v1.RemovalPlan]
 	listEnvironments          *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
@@ -330,9 +330,9 @@ func (c *providerServiceClient) PlanRemoveSubstrate(ctx context.Context, req *v1
 	return nil, err
 }
 
-// RemovePreview calls provider.contract.v1.ProviderService.RemovePreview.
-func (c *providerServiceClient) RemovePreview(ctx context.Context, req *v1.RemovePreviewRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
-	return c.removePreview.CallServerStream(ctx, connect.NewRequest(req))
+// RemoveEnvironment calls provider.contract.v1.ProviderService.RemoveEnvironment.
+func (c *providerServiceClient) RemoveEnvironment(ctx context.Context, req *v1.RemoveEnvironmentRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.removeEnvironment.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // RemoveProject calls provider.contract.v1.ProviderService.RemoveProject.
@@ -445,7 +445,7 @@ type ProviderServiceHandler interface {
 	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
 	RemoveSubstrate(context.Context, *v1.SubstrateRequest, *connect.ServerStream[v11.OperationEvent]) error
 	PlanRemoveSubstrate(context.Context, *v1.SubstrateRequest) (*v1.RemovalPlan, error)
-	RemovePreview(context.Context, *v1.RemovePreviewRequest, *connect.ServerStream[v11.OperationEvent]) error
+	RemoveEnvironment(context.Context, *v1.RemoveEnvironmentRequest, *connect.ServerStream[v11.OperationEvent]) error
 	RemoveProject(context.Context, *v1.ProjectRequest, *connect.ServerStream[v11.OperationEvent]) error
 	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v1.RemovalPlan, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
@@ -505,10 +505,10 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("PlanRemoveSubstrate")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceRemovePreviewHandler := connect.NewServerStreamHandlerSimple(
-		ProviderServiceRemovePreviewProcedure,
-		svc.RemovePreview,
-		connect.WithSchema(providerServiceMethods.ByName("RemovePreview")),
+	providerServiceRemoveEnvironmentHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceRemoveEnvironmentProcedure,
+		svc.RemoveEnvironment,
+		connect.WithSchema(providerServiceMethods.ByName("RemoveEnvironment")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServiceRemoveProjectHandler := connect.NewServerStreamHandlerSimple(
@@ -609,8 +609,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceRemoveSubstrateHandler.ServeHTTP(w, r)
 		case ProviderServicePlanRemoveSubstrateProcedure:
 			providerServicePlanRemoveSubstrateHandler.ServeHTTP(w, r)
-		case ProviderServiceRemovePreviewProcedure:
-			providerServiceRemovePreviewHandler.ServeHTTP(w, r)
+		case ProviderServiceRemoveEnvironmentProcedure:
+			providerServiceRemoveEnvironmentHandler.ServeHTTP(w, r)
 		case ProviderServiceRemoveProjectProcedure:
 			providerServiceRemoveProjectHandler.ServeHTTP(w, r)
 		case ProviderServicePlanRemoveProjectProcedure:
@@ -672,8 +672,8 @@ func (UnimplementedProviderServiceHandler) PlanRemoveSubstrate(context.Context, 
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.PlanRemoveSubstrate is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) RemovePreview(context.Context, *v1.RemovePreviewRequest, *connect.ServerStream[v11.OperationEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RemovePreview is not implemented"))
+func (UnimplementedProviderServiceHandler) RemoveEnvironment(context.Context, *v1.RemoveEnvironmentRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RemoveEnvironment is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) RemoveProject(context.Context, *v1.ProjectRequest, *connect.ServerStream[v11.OperationEvent]) error {

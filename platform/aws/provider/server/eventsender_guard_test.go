@@ -11,7 +11,7 @@ var streamingHandlers = map[string]string{
 	"server.go":         "Deploy",
 	"server_destroy.go": "RemoveProject",
 	"server_prune.go":   "RemoveStalePromotions",
-	"server_preview.go": "RemovePreview",
+	"server_preview.go": "RemoveEnvironment",
 }
 
 func TestStreamingHandlersNeverCallStreamSendDirectly(t *testing.T) {

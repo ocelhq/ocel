@@ -855,7 +855,7 @@ func (s *deployFakeProviderServer) GetPreviewWildcard(ctx context.Context, req *
 	return resp, nil
 }
 
-func (s *deployFakeProviderServer) RemovePreview(ctx context.Context, req *contractv1.RemovePreviewRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *deployFakeProviderServer) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}

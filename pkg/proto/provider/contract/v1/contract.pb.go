@@ -1858,7 +1858,7 @@ func (x *SubstrateRequest) GetEdge() *EdgeSelection {
 	return nil
 }
 
-type RemovePreviewRequest struct {
+type RemoveEnvironmentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Environment   *v1.Environment        `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"`
 	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
@@ -1867,20 +1867,20 @@ type RemovePreviewRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RemovePreviewRequest) Reset() {
-	*x = RemovePreviewRequest{}
+func (x *RemoveEnvironmentRequest) Reset() {
+	*x = RemoveEnvironmentRequest{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RemovePreviewRequest) String() string {
+func (x *RemoveEnvironmentRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RemovePreviewRequest) ProtoMessage() {}
+func (*RemoveEnvironmentRequest) ProtoMessage() {}
 
-func (x *RemovePreviewRequest) ProtoReflect() protoreflect.Message {
+func (x *RemoveEnvironmentRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1892,26 +1892,26 @@ func (x *RemovePreviewRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemovePreviewRequest.ProtoReflect.Descriptor instead.
-func (*RemovePreviewRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use RemoveEnvironmentRequest.ProtoReflect.Descriptor instead.
+func (*RemoveEnvironmentRequest) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{26}
 }
 
-func (x *RemovePreviewRequest) GetEnvironment() *v1.Environment {
+func (x *RemoveEnvironmentRequest) GetEnvironment() *v1.Environment {
 	if x != nil {
 		return x.Environment
 	}
 	return nil
 }
 
-func (x *RemovePreviewRequest) GetSlug() string {
+func (x *RemoveEnvironmentRequest) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *RemovePreviewRequest) GetEdge() *EdgeSelection {
+func (x *RemoveEnvironmentRequest) GetEdge() *EdgeSelection {
 	if x != nil {
 		return x.Edge
 	}
@@ -3277,8 +3277,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0eallow_degraded\x18\x03 \x03(\tR\rallowDegraded\"\x86\x01\n" +
 	"\x10SubstrateRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x127\n" +
-	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xcc\x01\n" +
-	"\x14RemovePreviewRequest\x12D\n" +
+	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xd0\x01\n" +
+	"\x18RemoveEnvironmentRequest\x12D\n" +
 	"\venvironment\x18\x01 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x125\n" +
 	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x127\n" +
 	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xc6\x01\n" +
@@ -3391,15 +3391,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x1e\n" +
 	"\x06keep_n\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x05keepN\x12D\n" +
 	"\venvironment\x18\x03 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x127\n" +
-	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge2\xe8\x10\n" +
+	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge2\xf0\x10\n" +
 	"\x0fProviderService\x12\\\n" +
 	"\tConfigure\x12&.provider.contract.v1.ConfigureRequest\x1a'.provider.contract.v1.ConfigureResponse\x12S\n" +
 	"\x06Deploy\x12#.provider.contract.v1.DeployRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12Y\n" +
 	"\tBootstrap\x12&.provider.contract.v1.BootstrapRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12t\n" +
 	"\x11DescribeBootstrap\x12..provider.contract.v1.DescribeBootstrapRequest\x1a/.provider.contract.v1.DescribeBootstrapResponse\x12_\n" +
 	"\x0fRemoveSubstrate\x12&.provider.contract.v1.SubstrateRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12`\n" +
-	"\x13PlanRemoveSubstrate\x12&.provider.contract.v1.SubstrateRequest\x1a!.provider.contract.v1.RemovalPlan\x12a\n" +
-	"\rRemovePreview\x12*.provider.contract.v1.RemovePreviewRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12[\n" +
+	"\x13PlanRemoveSubstrate\x12&.provider.contract.v1.SubstrateRequest\x1a!.provider.contract.v1.RemovalPlan\x12i\n" +
+	"\x11RemoveEnvironment\x12..provider.contract.v1.RemoveEnvironmentRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12[\n" +
 	"\rRemoveProject\x12$.provider.contract.v1.ProjectRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12\\\n" +
 	"\x11PlanRemoveProject\x12$.provider.contract.v1.ProjectRequest\x1a!.provider.contract.v1.RemovalPlan\x12q\n" +
 	"\x10ListEnvironments\x12-.provider.contract.v1.ListEnvironmentsRequest\x1a..provider.contract.v1.ListEnvironmentsResponse\x12\\\n" +
@@ -3458,7 +3458,7 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*Dns)(nil),                          // 25: provider.contract.v1.Dns
 	(*EdgeSelection)(nil),                // 26: provider.contract.v1.EdgeSelection
 	(*SubstrateRequest)(nil),             // 27: provider.contract.v1.SubstrateRequest
-	(*RemovePreviewRequest)(nil),         // 28: provider.contract.v1.RemovePreviewRequest
+	(*RemoveEnvironmentRequest)(nil),     // 28: provider.contract.v1.RemoveEnvironmentRequest
 	(*ProjectRequest)(nil),               // 29: provider.contract.v1.ProjectRequest
 	(*RemovalPlan)(nil),                  // 30: provider.contract.v1.RemovalPlan
 	(*RemovalItem)(nil),                  // 31: provider.contract.v1.RemovalItem
@@ -3523,8 +3523,8 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	25, // 29: provider.contract.v1.EdgeSelection.dns:type_name -> provider.contract.v1.Dns
 	50, // 30: provider.contract.v1.SubstrateRequest.tier:type_name -> common.environment.v1.Tier
 	26, // 31: provider.contract.v1.SubstrateRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	55, // 32: provider.contract.v1.RemovePreviewRequest.environment:type_name -> common.environment.v1.Environment
-	26, // 33: provider.contract.v1.RemovePreviewRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	55, // 32: provider.contract.v1.RemoveEnvironmentRequest.environment:type_name -> common.environment.v1.Environment
+	26, // 33: provider.contract.v1.RemoveEnvironmentRequest.edge:type_name -> provider.contract.v1.EdgeSelection
 	55, // 34: provider.contract.v1.ProjectRequest.environment:type_name -> common.environment.v1.Environment
 	26, // 35: provider.contract.v1.ProjectRequest.edge:type_name -> provider.contract.v1.EdgeSelection
 	31, // 36: provider.contract.v1.RemovalPlan.items:type_name -> provider.contract.v1.RemovalItem
@@ -3555,7 +3555,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	22, // 61: provider.contract.v1.ProviderService.DescribeBootstrap:input_type -> provider.contract.v1.DescribeBootstrapRequest
 	27, // 62: provider.contract.v1.ProviderService.RemoveSubstrate:input_type -> provider.contract.v1.SubstrateRequest
 	27, // 63: provider.contract.v1.ProviderService.PlanRemoveSubstrate:input_type -> provider.contract.v1.SubstrateRequest
-	28, // 64: provider.contract.v1.ProviderService.RemovePreview:input_type -> provider.contract.v1.RemovePreviewRequest
+	28, // 64: provider.contract.v1.ProviderService.RemoveEnvironment:input_type -> provider.contract.v1.RemoveEnvironmentRequest
 	29, // 65: provider.contract.v1.ProviderService.RemoveProject:input_type -> provider.contract.v1.ProjectRequest
 	29, // 66: provider.contract.v1.ProviderService.PlanRemoveProject:input_type -> provider.contract.v1.ProjectRequest
 	32, // 67: provider.contract.v1.ProviderService.ListEnvironments:input_type -> provider.contract.v1.ListEnvironmentsRequest
@@ -3576,7 +3576,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	23, // 82: provider.contract.v1.ProviderService.DescribeBootstrap:output_type -> provider.contract.v1.DescribeBootstrapResponse
 	58, // 83: provider.contract.v1.ProviderService.RemoveSubstrate:output_type -> common.progress.v1.OperationEvent
 	30, // 84: provider.contract.v1.ProviderService.PlanRemoveSubstrate:output_type -> provider.contract.v1.RemovalPlan
-	58, // 85: provider.contract.v1.ProviderService.RemovePreview:output_type -> common.progress.v1.OperationEvent
+	58, // 85: provider.contract.v1.ProviderService.RemoveEnvironment:output_type -> common.progress.v1.OperationEvent
 	58, // 86: provider.contract.v1.ProviderService.RemoveProject:output_type -> common.progress.v1.OperationEvent
 	30, // 87: provider.contract.v1.ProviderService.PlanRemoveProject:output_type -> provider.contract.v1.RemovalPlan
 	33, // 88: provider.contract.v1.ProviderService.ListEnvironments:output_type -> provider.contract.v1.ListEnvironmentsResponse

@@ -22,7 +22,7 @@ service ProviderService {
 
     rpc PlanRemoveSubstrate(SubstrateRequest) returns (RemovalPlan);
 
-    rpc RemovePreview(RemovePreviewRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc RemoveEnvironment(RemoveEnvironmentRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc RemoveProject(ProjectRequest) returns (stream common.progress.v1.OperationEvent);
 
@@ -280,7 +280,7 @@ message SubstrateRequest {
   EdgeSelection edge = 2;
 }
 
-message RemovePreviewRequest {
+message RemoveEnvironmentRequest {
   common.environment.v1.Environment environment = 1;
 
   string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
