@@ -49,8 +49,14 @@ export function describeExample(spec: ExampleSpec) {
 
     afterAll(async () => {
       await dev?.stop();
+      const output = dev?.output() ?? "";
       await clearLink(spec);
       await clearExampleEnv(spec, createdEnv);
+      if (spec.framework === "next") {
+        expect(output).not.toMatch(
+          /Uncached data[\s\S]*accessed outside[\s\S]*Suspense/,
+        );
+      }
     });
 
     it("reports health", async () => {

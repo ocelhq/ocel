@@ -1,4 +1,5 @@
 import { cacheLife } from "next/cache";
+import { Suspense } from "react";
 
 async function token() {
   "use cache";
@@ -6,6 +7,14 @@ async function token() {
   return Date.now();
 }
 
-export default async function IsrPage() {
+async function IsrToken() {
   return <p id="isr-token">isr-token:{await token()}</p>;
+}
+
+export default function IsrPage() {
+  return (
+    <Suspense fallback={<p>loading</p>}>
+      <IsrToken />
+    </Suspense>
+  );
 }
