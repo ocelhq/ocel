@@ -229,6 +229,3 @@ export function createAwsTarget(token: string): Target {
     },
   };
 }
-
-export const awsTargetEnv = childEnv;
-export const runAwsOcel = runOcel;

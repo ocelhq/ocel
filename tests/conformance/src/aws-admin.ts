@@ -14,7 +14,7 @@ function aws(args: string[]) {
   }).trim();
 }
 
-function ocel(slug: string) {
+function destroy(slug: string) {
   const example = examples[0];
   const command = process.env.OCEL_BIN ?? process.execPath;
   const args = process.env.OCEL_BIN
@@ -38,7 +38,7 @@ function ocel(slug: string) {
 }
 
 export function destroyProject(slug = projectSlugForRun()) {
-  ocel(slug);
+  destroy(slug);
 }
 
 export function sweepProjects(keep = projectSlugForRun()) {
@@ -47,7 +47,7 @@ export function sweepProjects(keep = projectSlugForRun()) {
       "ssm",
       "describe-parameters",
       "--parameter-filters",
-      `Key=Name,Option=BeginsWith,Values=${prefix}`,
+      `Key=Name,Option=BeginsWith,Values=${prefix}${suitePrefix}`,
       "--output",
       "json",
     ]),
@@ -56,7 +56,6 @@ export function sweepProjects(keep = projectSlugForRun()) {
     ...new Set(
       (response.Parameters ?? [])
         .map((parameter) => parameter.Name ?? "")
-        .filter((name) => name.startsWith(`${prefix}${suitePrefix}`))
         .map((name) => name.slice(prefix.length))
         .filter((slug) => slug !== keep),
     ),
