@@ -29,4 +29,20 @@ describe("conformance registry", () => {
       );
     }
   });
+
+  it("runs each external link tool only against AWS", () => {
+    const fixtures = examples.filter((example) =>
+      example.capabilities.some((capability) => capability === "links"),
+    );
+    expect(
+      fixtures.map((example) => ({
+        name: example.name,
+        targets: "targets" in example ? example.targets : [],
+        tool: "linkTool" in example ? example.linkTool : undefined,
+      })),
+    ).toEqual([
+      { name: "with-sst", targets: ["aws"], tool: "sst" },
+      { name: "with-pulumi", targets: ["aws"], tool: "pulumi" },
+    ]);
+  });
 });

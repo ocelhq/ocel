@@ -2,6 +2,7 @@ import { output, type Resource } from "@pulumi/pulumi";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { link } from "./index.js";
 import {
   custom,
   customProvider,
@@ -156,6 +157,62 @@ describe("declaring a postgres link", () => {
 });
 
 describe("publishing a postgres link", () => {
+  it("refuses a dynamic wildcard before publishing", async () => {
+    link.postgres(
+      "orders",
+      {
+        ...properties,
+        grants: [
+          {
+            actions: ["rds-db:connect"],
+            resources: [output("*")],
+          },
+        ],
+      },
+      { project: root },
+    );
+
+    const resource = (latest().props.grants as Array<{ resources: unknown[] }>)[0]!
+      .resources[0] as {
+      promise: () => Promise<unknown>;
+      isKnown: Promise<boolean>;
+      isSecret: Promise<boolean>;
+    };
+    const [value] = await Promise.allSettled([
+      resource.promise(),
+      resource.isKnown,
+      resource.isSecret,
+    ]);
+    expect(value).toMatchObject({
+      status: "rejected",
+      reason: expect.objectContaining({ message: expect.stringMatching(/nothing else/) }),
+    });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("publishes a dynamic scoped resource after it resolves", async () => {
+    const arn = "arn:aws:rds-db:us-east-1:1:dbuser:cluster/operator";
+    link.postgres(
+      "orders",
+      {
+        ...properties,
+        grants: [
+          {
+            actions: ["rds-db:connect"],
+            resources: [output(arn)],
+          },
+        ],
+      },
+      { project: root },
+    );
+
+    await postgresProvider.create(await inputs(latest()));
+
+    expect(JSON.parse(String(argv().options?.input)).grants).toEqual([
+      { actions: ["rds-db:connect"], resources: [arn] },
+    ]);
+  });
+
   it("runs ocel link set in the project, owned by this resource", async () => {
     const created = await postgresProvider.create(
       await inputs(declare()),

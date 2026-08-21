@@ -1,7 +1,9 @@
+import { output, type Input } from "@pulumi/pulumi";
+
 /** A provider-native permission an app receives along with the link's properties. */
 export interface Grant {
   actions: string[];
-  resources: string[];
+  resources: Input<string>[];
   label?: string;
 }
 
@@ -18,13 +20,34 @@ export function scoped(
         `link ${name} carries a grant over ${grant.actions.join(", ") || "no action"}: an action naming a whole service reaches past the resource the link names`,
       );
     }
-    if (grant.resources.length === 0 || grant.resources.includes(wildcard)) {
+    if (
+      grant.resources.length === 0 ||
+      grant.resources.some((resource) => resource === wildcard)
+    ) {
       throw new Error(
         `link ${name} carries a grant over ${grant.resources.join(", ") || "no resource"}: an app receives permissions for the resource it links and nothing else`,
       );
     }
   }
   return grants;
+}
+
+/** Grants whose resource inputs reject wildcards when Pulumi resolves them. */
+export function scopedInputs(
+  name: string,
+  grants: Grant[] | undefined,
+): Grant[] | undefined {
+  const checked = scoped(name, grants);
+  return checked?.map((grant) => ({
+    ...grant,
+    resources: grant.resources.map((resource) =>
+      typeof resource === "string"
+        ? scopedResource(name, resource)
+        : resource instanceof Promise
+          ? resource.then((value) => scopedResource(name, value))
+          : output(resource).apply((value) => scopedResource(name, value)),
+    ),
+  }));
 }
 
 const wildcard = "*";
@@ -38,4 +61,13 @@ function unscopedAction(action: string): boolean {
     action.slice(0, separator) === wildcard ||
     action.slice(separator + 1) === wildcard
   );
+}
+
+function scopedResource(name: string, resource: string): string {
+  if (resource === wildcard) {
+    throw new Error(
+      `link ${name} carries a grant over ${wildcard}: an app receives permissions for the resource it links and nothing else`,
+    );
+  }
+  return resource;
 }

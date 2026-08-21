@@ -2,6 +2,7 @@ import { checkBlob } from "./blob";
 import { checkEnv } from "./env";
 import { checkHttp } from "./http";
 import { checkIsr } from "./isr";
+import { checkLinks } from "./links";
 import { checkNative } from "./native";
 import { checkPostgres } from "./postgres";
 import { checkRevalidate } from "./revalidate";
@@ -17,4 +18,5 @@ export const checks = {
   native: checkNative,
   isr: checkIsr,
   revalidate: checkRevalidate,
+  links: checkLinks,
 } satisfies Record<Capability, Check>;

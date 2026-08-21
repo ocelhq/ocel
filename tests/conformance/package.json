@@ -8,7 +8,8 @@
     "test": "pnpm test:dev",
     "test:dev": "OCEL_CONFORMANCE_TARGET=dev vitest run",
     "test:aws": "OCEL_CONFORMANCE_TARGET=aws vitest run tests/conformance.test.ts",
-    "test:registry": "OCEL_CONFORMANCE_TARGET=registry vitest run tests/completeness.test.ts",
+    "test:registry": "vitest run --config vitest.unit.config.ts tests/completeness.test.ts",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
     "sweep:aws": "tsx src/aws-admin.ts sweep",
     "teardown:aws": "tsx src/aws-admin.ts teardown",
     "typecheck": "tsc --noEmit"

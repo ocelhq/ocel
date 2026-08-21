@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { examples, repoRoot } from "./examples";
+import { teardownExternalLinks } from "./aws-links";
 import { projectSlugForRun } from "./targets/aws";
 
 const prefix = "/ocel/rootstack-preview/";
@@ -62,7 +63,24 @@ export function sweepProject(slug = projectSlugForRun()) {
   if (projectExists(slug)) destroyProject(slug);
 }
 
+async function teardownRun() {
+  const failures: unknown[] = [];
+  try {
+    await teardownExternalLinks(projectSlugForRun());
+  } catch (error) {
+    failures.push(error);
+  }
+  try {
+    destroyProject();
+  } catch (error) {
+    failures.push(error);
+  }
+  if (failures.length) {
+    throw new AggregateError(failures, "AWS conformance teardown failed");
+  }
+}
+
 const operation = process.argv[2];
 if (operation === "sweep") sweepProject();
-else if (operation === "teardown") destroyProject();
+else if (operation === "teardown") await teardownRun();
 else throw new Error(`expected sweep or teardown, got ${operation ?? "nothing"}`);
