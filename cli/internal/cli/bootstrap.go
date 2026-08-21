@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/node"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 type bootstrapOptions struct {
@@ -167,7 +168,7 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 			Features: requested,
 			Force:    force,
 		}
-		if err := runner.Bootstrap(ctx, req, ui.Event); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish("Bootstrapped")
@@ -273,7 +274,7 @@ func runBootstrapDestroy(ctx context.Context, d deps, cfg *projectconfig.Config,
 			Tier: tier,
 			Edge: edgeSelection(cfg),
 		}
-		if err := runner.RemoveSubstrate(ctx, req, ui.Event); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "RemoveSubstrate", req, contractv1connect.ProviderServiceClient.RemoveSubstrate, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Removed the %s substrate", substrate))

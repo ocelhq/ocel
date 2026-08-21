@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/node"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 var destroyCmd = &cobra.Command{
@@ -153,7 +154,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 			Slug: cfg.Slug,
 			Edge: edgeSelection(cfg),
 		}
-		if err := runner.RemoveProject(ctx, req, ui.Event); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Destroyed project %s", cfg.Slug))
@@ -236,7 +237,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
 			Edge:        edgeSelection(cfg),
 		}
-		if err := runner.RemoveProject(ctx, req, ui.Event); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.Slug))

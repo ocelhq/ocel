@@ -33,6 +33,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
@@ -173,7 +174,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		}
 
 		var out deployOutcome
-		if err := runner.Deploy(ctx, req, out.render(ui)); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.render(ui)); err != nil {
 			return err
 		}
 

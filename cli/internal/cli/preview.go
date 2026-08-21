@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/node"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -219,7 +220,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 		}
 
 		var out deployOutcome
-		if err := runner.Deploy(ctx, req, out.render(ui)); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.render(ui)); err != nil {
 			return err
 		}
 
@@ -362,7 +363,7 @@ func runPreviewRm(ctx context.Context, d deps, cwd string, opts previewRmOptions
 			Slug:        cfg.Slug,
 			Edge:        edgeSelection(cfg),
 		}
-		if err := runner.RemoveEnvironment(ctx, req, ui.Event); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Preview %s torn down", env.GetIdentity()))
@@ -440,12 +441,13 @@ func runPreviewPrune(ctx context.Context, d deps, cwd string, opts previewPruneO
 		if err := preflightPreview(ctx, d, runner, cfg, stdout); err != nil {
 			return err
 		}
-		if err := runner.RemoveStalePromotions(ctx, &contractv1.RemoveStalePromotionsRequest{
+		req := &contractv1.RemoveStalePromotionsRequest{
 			Slug:        cfg.Slug,
 			KeepN:       int32(opts.keep),
 			Environment: env,
 			Edge:        edgeSelection(cfg),
-		}, ui.Event); err != nil {
+		}
+		if err := providerrunner.Stream(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Pruned preview %q", opts.name))

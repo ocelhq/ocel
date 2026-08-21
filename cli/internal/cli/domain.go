@@ -205,7 +205,7 @@ func runDomainUse(ctx context.Context, d deps, cwd, wildcard string, opts domain
 			BaseDomain: base,
 			Edge:       edgeSelection(cfg),
 		}
-		if err := runner.UsePreviewWildcard(ctx, req, ui.Event); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "UsePreviewWildcard", req, contractv1connect.ProviderServiceClient.UsePreviewWildcard, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Previews are served on %s", wildcardOf(base)))
@@ -298,7 +298,7 @@ func runDomainRelease(ctx context.Context, d deps, cwd string, opts domainOption
 		}
 
 		req := &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: edgeSelection(cfg)}
-		if err := runner.RemovePreviewWildcard(ctx, req, ui.Event); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "RemovePreviewWildcard", req, contractv1connect.ProviderServiceClient.RemovePreviewWildcard, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Released %s", wildcardOf(base)))
@@ -326,7 +326,7 @@ func runAddDomain(ctx context.Context, d deps, cwd, host string, stdout, stderr 
 			Host:       host,
 			Edge:       edgeSelection(cfg),
 		}
-		if err := runner.AddHostname(ctx, req, ui.Event); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "AddHostname", req, contractv1connect.ProviderServiceClient.AddHostname, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Serving %s", strings.Join(addedHosts(configured, host), ", ")))
@@ -354,7 +354,7 @@ func runDomainRm(ctx context.Context, d deps, cwd, host string, stdout, stderr i
 			Host:       host,
 			Edge:       edgeSelection(cfg),
 		}
-		if err := runner.RemoveHostname(ctx, req, ui.Event); err != nil {
+		if err := providerrunner.Stream(ctx, runner, "RemoveHostname", req, contractv1connect.ProviderServiceClient.RemoveHostname, ui.Event); err != nil {
 			return err
 		}
 		if host != "" {
