@@ -10,7 +10,7 @@
 // drop the replace) once proto is tagged. The root go.work wires this for dev.
 module github.com/ocelhq/ocel/platform/aws/provider
 
-go 1.25.11
+go 1.26.6
 
 require (
 	connectrpc.com/connect v1.20.0

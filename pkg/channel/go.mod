@@ -4,4 +4,4 @@
 // speak. Stdlib-only; no plane owns it.
 module github.com/ocelhq/ocel/pkg/channel
 
-go 1.25.11
+go 1.26.6
