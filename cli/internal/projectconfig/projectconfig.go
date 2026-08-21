@@ -216,6 +216,14 @@ func ResolveOptional(ctx context.Context, startDir, explicitPath string) (*Confi
 }
 
 func resolve(ctx context.Context, startDir, explicitPath string, optional bool) (*Config, error) {
+	cfg, err := resolveConfig(ctx, startDir, explicitPath, optional)
+	if err != nil {
+		return nil, err
+	}
+	return applyTestSlugOverride(cfg)
+}
+
+func resolveConfig(ctx context.Context, startDir, explicitPath string, optional bool) (*Config, error) {
 	if explicitPath != "" {
 		configPath, err := explicitConfigFile(startDir, explicitPath)
 		if err != nil {
@@ -241,6 +249,18 @@ func resolve(ctx context.Context, startDir, explicitPath string, optional bool) 
 		return nil, fmt.Errorf("no %s found in %s or any parent directory — %s", ConfigFileName, startDir, initHint)
 	}
 	return load(ctx, configPath)
+}
+
+func applyTestSlugOverride(cfg *Config) (*Config, error) {
+	slug := os.Getenv("OCEL_TEST_PROJECT_SLUG")
+	if slug == "" {
+		return cfg, nil
+	}
+	if err := ValidateSlug(slug); err != nil {
+		return nil, fmt.Errorf("OCEL_TEST_PROJECT_SLUG has an invalid slug: %w", err)
+	}
+	cfg.Slug = slug
+	return cfg, nil
 }
 
 func explicitConfigFile(startDir, explicitPath string) (string, error) {
