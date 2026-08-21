@@ -77,7 +77,7 @@ message SetValueRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   Coordinate coordinate = 2 [(buf.validate.field).required = true];
-  string value = 3;
+  string value = 3 [debug_redact = true];
 
   optional int64 expected_version = 4;
 }
@@ -107,7 +107,7 @@ message GetValueResponse {
   bool found = 1;
   ValueMetadata metadata = 2;
 
-  string value = 3;
+  string value = 3 [debug_redact = true];
 }
 
 message RevealValuesRequest {
@@ -123,7 +123,7 @@ message RevealValuesResponse {
 
 message RevealedValue {
   ValueMetadata metadata = 1;
-  string value = 2;
+  string value = 2 [debug_redact = true];
 }
 
 message DeleteValueRequest {
