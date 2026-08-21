@@ -300,72 +300,19 @@ var ErrVarsUnavailable = errors.New("providerrunner: the variable store was reac
 
 var ErrDeploymentsUnavailable = errors.New("providerrunner: the provider was reached before a successful Ready")
 
-func (r *Runner) Deploy(ctx context.Context, req *contractv1.DeployRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "Deploy", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.Deploy(ctx, req)
-	})
-}
-
-func (r *Runner) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "Bootstrap", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.Bootstrap(ctx, req)
-	})
-}
-
-func (r *Runner) RemoveSubstrate(ctx context.Context, req *contractv1.SubstrateRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "RemoveSubstrate", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.RemoveSubstrate(ctx, req)
-	})
-}
-
-func (r *Runner) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "RemoveEnvironment", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.RemoveEnvironment(ctx, req)
-	})
-}
-
-func (r *Runner) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "RemoveProject", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.RemoveProject(ctx, req)
-	})
-}
-
-func (r *Runner) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "UsePreviewWildcard", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.UsePreviewWildcard(ctx, req)
-	})
-}
-
-func (r *Runner) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "RemovePreviewWildcard", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.RemovePreviewWildcard(ctx, req)
-	})
-}
-
-func (r *Runner) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "AddHostname", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.AddHostname(ctx, req)
-	})
-}
-
-func (r *Runner) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "RemoveHostname", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.RemoveHostname(ctx, req)
-	})
-}
-
-func (r *Runner) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, onEvent func(*progressv1.OperationEvent)) error {
-	return r.stream(ctx, "RemoveStalePromotions", onEvent, func(client contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
-		return client.RemoveStalePromotions(ctx, req)
-	})
-}
-
-func (r *Runner) stream(ctx context.Context, rpc string, onEvent func(*progressv1.OperationEvent), call func(contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error)) error {
+func Stream[Req any](
+	ctx context.Context,
+	r *Runner,
+	rpc string,
+	req *Req,
+	call func(contractv1connect.ProviderServiceClient, context.Context, *Req) (*connect.ServerStreamForClient[progressv1.OperationEvent], error),
+	onEvent func(*progressv1.OperationEvent),
+) error {
 	client, err := r.Deployments()
 	if err != nil {
 		return err
 	}
-	stream, callErr := call(client)
+	stream, callErr := call(client, ctx, req)
 	return r.driveStream(rpc, stream, callErr, onEvent)
 }
 

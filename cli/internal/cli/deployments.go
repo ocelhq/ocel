@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/node"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 var deploymentsCmd = &cobra.Command{
@@ -130,11 +131,12 @@ func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, std
 			return err
 		}
 
-		if err := runner.RemoveStalePromotions(ctx, &contractv1.RemoveStalePromotionsRequest{
+		req := &contractv1.RemoveStalePromotionsRequest{
 			Slug:  cfg.Slug,
 			KeepN: int32(keepN),
 			Edge:  edgeSelection(cfg),
-		}, ui.Event); err != nil {
+		}
+		if err := providerrunner.Stream(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish("Pruned")

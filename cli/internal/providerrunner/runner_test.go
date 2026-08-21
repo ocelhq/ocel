@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 func spawnFake(t *testing.T, ctx context.Context, mode string, cfg Config) (*Runner, string) {
@@ -144,9 +145,9 @@ func TestDeploy(t *testing.T) {
 		}
 
 		var events []*progressv1.OperationEvent
-		err := r.Deploy(ctx, &contractv1.DeployRequest{
+		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{
 			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
-		}, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
+		}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
 		if err != nil {
 			t.Fatalf("Deploy() error = %v, want nil", err)
 		}
@@ -180,9 +181,9 @@ func TestDeploy(t *testing.T) {
 		var gotFirstEvent atomic.Bool
 		deployErrCh := make(chan error, 1)
 		go func() {
-			deployErrCh <- r.Deploy(ctx, &contractv1.DeployRequest{
+			deployErrCh <- Stream(ctx, r, "Deploy", &contractv1.DeployRequest{
 				Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
-			}, func(ev *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
+			}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
 		}()
 
 		deadline := time.Now().Add(2 * time.Second)
@@ -219,7 +220,7 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := r.Deploy(ctx, &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, nil)
+		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
 
 		var deployErr *DeployFailedError
 		if !errors.As(err, &deployErr) {
@@ -239,7 +240,7 @@ func TestDeploy(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "never-ready", Config{ReadyTimeout: 50 * time.Millisecond})
 
-		err := r.Deploy(ctx, &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, nil)
+		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
 		if !errors.Is(err, ErrDeploymentsUnavailable) {
 			t.Fatalf("Deploy() error = %v, want ErrDeploymentsUnavailable", err)
 		}
@@ -273,7 +274,7 @@ func TestBootstrap(t *testing.T) {
 		}
 
 		var events []*progressv1.OperationEvent
-		err := r.Bootstrap(ctx, &contractv1.BootstrapRequest{}, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
+		err := Stream(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
 		if err != nil {
 			t.Fatalf("Bootstrap() error = %v, want nil", err)
 		}
@@ -299,7 +300,7 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := r.Bootstrap(ctx, &contractv1.BootstrapRequest{}, nil)
+		err := Stream(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
 
 		var failErr *DeployFailedError
 		if !errors.As(err, &failErr) {
