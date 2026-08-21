@@ -652,6 +652,8 @@ func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *
 
 const fakeServedPreviewsEnvVar = "OCEL_TEST_FAKE_SERVED_PREVIEWS"
 
+const fakeEmptyRemovalPlanEnvVar = "OCEL_TEST_FAKE_EMPTY_REMOVAL_PLAN"
+
 func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.RemovalPlan, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
@@ -875,6 +877,12 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *c
 	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	slug := req.GetSlug()
+	if os.Getenv(fakeEmptyRemovalPlanEnvVar) != "" {
+		return &contractv1.RemovalPlan{
+			EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
+			Subject:  slug,
+		}, nil
+	}
 	if req.GetEnvironment().GetTier() == environmentv1.Tier_TIER_PREVIEW {
 		return &contractv1.RemovalPlan{
 			EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
