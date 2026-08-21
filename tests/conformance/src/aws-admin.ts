@@ -3,7 +3,6 @@ import { examples, repoRoot } from "./examples";
 import { projectSlugForRun } from "./targets/aws";
 
 const prefix = "/ocel/rootstack-preview/";
-const suitePrefix = "e2ec-";
 
 function aws(args: string[]) {
   return execFileSync("aws", args, {
@@ -41,29 +40,29 @@ export function destroyProject(slug = projectSlugForRun()) {
   destroy(slug);
 }
 
-export function sweepProjects(keep = projectSlugForRun()) {
-  const response = JSON.parse(
+function projectExists(slug: string) {
+  try {
     aws([
       "ssm",
-      "describe-parameters",
-      "--parameter-filters",
-      `Key=Name,Option=BeginsWith,Values=${prefix}${suitePrefix}`,
+      "get-parameter",
+      "--name",
+      `${prefix}${slug}`,
       "--output",
       "json",
-    ]),
-  ) as { Parameters?: Array<{ Name?: string }> };
-  const stranded = [
-    ...new Set(
-      (response.Parameters ?? [])
-        .map((parameter) => parameter.Name ?? "")
-        .map((name) => name.slice(prefix.length))
-        .filter((slug) => slug !== keep),
-    ),
-  ].sort();
-  for (const slug of stranded) destroyProject(slug);
+    ]);
+    return true;
+  } catch (error) {
+    const stderr = String((error as { stderr?: unknown }).stderr ?? "");
+    if (stderr.includes("ParameterNotFound")) return false;
+    throw error;
+  }
+}
+
+export function sweepProject(slug = projectSlugForRun()) {
+  if (projectExists(slug)) destroyProject(slug);
 }
 
 const operation = process.argv[2];
-if (operation === "sweep") sweepProjects();
+if (operation === "sweep") sweepProject();
 else if (operation === "teardown") destroyProject();
 else throw new Error(`expected sweep or teardown, got ${operation ?? "nothing"}`);
