@@ -20,6 +20,6 @@ and so is what Ocel asks of you. Ocel never gives away deploying the app itself 
 the one thing it always provisions, and transforms are how you shape it even here, which is
 why a shared-VPC setup needs both rungs at once.
 
-At the repository root, run `make services`. In [Express](./express),
-[Fastify](./fastify), [Hono](./hono), and [Next.js](./next), run
-`ocel run -- pnpm migrate`, then `ocel dev -- pnpm start`.
+In [Express](./express), [Fastify](./fastify), [Hono](./hono), and
+[Next.js](./next), run `ocel run -- pnpm migrate`, then
+`ocel dev -- pnpm start`.

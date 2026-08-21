@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
 
-.PHONY: all generate cli provider proto services clean
+.PHONY: all generate cli provider proto clean
 
 all: cli provider lib
 
@@ -17,9 +17,6 @@ provider:
 
 proto:
 	pnpm gen
-
-services:
-	node scripts/dev-services.mjs
 
 clean:
 	rm -rf platform/aws/provider/payloads/dist cli/node/dist
