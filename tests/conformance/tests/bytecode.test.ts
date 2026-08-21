@@ -79,6 +79,21 @@ describe("bytecode AWS reads", () => {
     expect(clock.waits).toEqual([]);
   });
 
+  it("does not treat a generic AWS NotFound as cache propagation", async () => {
+    const clock = fakeClock();
+    const command = vi.fn<(args: string[]) => string>(() => {
+      throw awsError("NotFound");
+    });
+    await expect(
+      findCacheKey("bucket", "prefix/", "x86_64", {
+        command,
+        ...clock.dependencies,
+      }),
+    ).rejects.toThrow(/NotFound/);
+    expect(command).toHaveBeenCalledOnce();
+    expect(clock.waits).toEqual([]);
+  });
+
   it("retries a cache object that is briefly unavailable", async () => {
     const clock = fakeClock();
     const commandBytes = vi
@@ -94,6 +109,38 @@ describe("bytecode AWS reads", () => {
       }),
     ).resolves.toEqual(Buffer.from("cache"));
     expect(clock.waits).toEqual([125]);
+  });
+
+  it("does not retry a missing cache bucket", async () => {
+    const clock = fakeClock();
+    const commandBytes = vi.fn<(args: string[]) => Buffer>(() => {
+      throw awsError("NoSuchBucket");
+    });
+    await expect(
+      readCacheObject("bucket", "cache.tar.gz", {
+        commandBytes,
+        ...clock.dependencies,
+      }),
+    ).rejects.toThrow(/NoSuchBucket/);
+    expect(commandBytes).toHaveBeenCalledOnce();
+    expect(clock.waits).toEqual([]);
+  });
+
+  it("retries a fetch failure with a transient network cause", async () => {
+    const clock = fakeClock();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(fetchError("ECONNRESET"))
+      .mockResolvedValueOnce(new Response("package"));
+    await expect(
+      downloadPackage("https://example.test/package", "fn", {
+        fetch: fetcher,
+        timeoutSignal: AbortSignal.timeout,
+        ...clock.dependencies,
+      }),
+    ).resolves.toEqual(Buffer.from("package"));
+    expect(clock.waits).toEqual([125]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("honors Retry-After and bounds each package request", async () => {
@@ -137,6 +184,44 @@ describe("bytecode AWS reads", () => {
     expect(fetcher).toHaveBeenCalledOnce();
     expect(clock.waits).toEqual([]);
   });
+
+  it("does not retry an invalid package URL", async () => {
+    const clock = fakeClock();
+    const invalidUrl = Object.assign(
+      new TypeError("Failed to parse URL from not-a-url"),
+      {
+        cause: Object.assign(new TypeError("Invalid URL"), {
+          code: "ERR_INVALID_URL",
+        }),
+      },
+    );
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(invalidUrl);
+    await expect(
+      downloadPackage("not-a-url", "fn", {
+        fetch: fetcher,
+        timeoutSignal: AbortSignal.timeout,
+        ...clock.dependencies,
+      }),
+    ).rejects.toThrow(/Failed to parse URL/);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(clock.waits).toEqual([]);
+  });
+
+  it("does not retry an unrelated TypeError", async () => {
+    const clock = fakeClock();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new TypeError("invalid response state"));
+    await expect(
+      downloadPackage("https://example.test/package", "fn", {
+        fetch: fetcher,
+        timeoutSignal: AbortSignal.timeout,
+        ...clock.dependencies,
+      }),
+    ).rejects.toThrow(/invalid response state/);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(clock.waits).toEqual([]);
+  });
 });
 
 function fakeClock() {
@@ -157,4 +242,10 @@ function fakeClock() {
 
 function awsError(detail: string) {
   return Object.assign(new Error(detail), { stderr: detail });
+}
+
+function fetchError(code: string) {
+  return Object.assign(new TypeError("fetch failed"), {
+    cause: Object.assign(new Error(code), { code }),
+  });
 }

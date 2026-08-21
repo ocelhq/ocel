@@ -333,7 +333,7 @@ export async function findCacheKey(
         `no ${architecture} compile cache under s3://${bucket}/${prefix}`,
       );
     } catch (error) {
-      if (!isTransientAwsRead(error)) throw error;
+      if (!isTransientAwsRead(error, false)) throw error;
       await backoff(error, attempt++, deadline, dependencies);
     }
   }
@@ -414,7 +414,7 @@ export async function readCacheObject(
         "-",
       ]);
     } catch (error) {
-      if (!isTransientAwsRead(error)) throw error;
+      if (!isTransientAwsRead(error, true)) throw error;
       await backoff(error, attempt++, deadline, dependencies);
     }
   }
@@ -422,26 +422,51 @@ export async function readCacheObject(
 
 class CacheNotReadyError extends Error {}
 
-function isTransientAwsRead(error: unknown) {
+const transientNetworkCodes = new Set([
+  "EAI_AGAIN",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ENETUNREACH",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_SOCKET",
+]);
+
+function isTransientAwsRead(error: unknown, allowNoSuchKey: boolean) {
   if (error instanceof CacheNotReadyError) return true;
   const detail = `${String((error as { message?: unknown }).message ?? "")} ${String(
     (error as { stderr?: unknown }).stderr ?? "",
   )}`;
-  return /(?:SlowDown|RequestTimeout|Throttl|TooManyRequests|ServiceUnavailable|InternalError|ECONNRESET|ETIMEDOUT|EAI_AGAIN|NoSuchKey|\bNotFound\b)/i.test(
-    detail,
-  );
+  if (
+    /\b(?:SlowDown|RequestTimeout(?:Exception)?|Throttling(?:Exception)?|TooManyRequestsException|ServiceUnavailable(?:Exception)?|InternalError|InternalFailure)\b/.test(
+      detail,
+    )
+  ) {
+    return true;
+  }
+  if (allowNoSuchKey && /\bNoSuchKey\b/.test(detail)) return true;
+  return transientNetworkCodes.has(errorCode(error));
 }
 
 function isTransientFetchError(error: unknown) {
   const candidate = error as {
     name?: unknown;
     message?: unknown;
-    cause?: unknown;
   };
-  const detail = `${String(candidate.name ?? "")} ${String(candidate.message ?? "")} ${String(candidate.cause ?? "")}`;
-  return /(?:AbortError|TimeoutError|TypeError|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|fetch failed)/i.test(
-    detail,
-  );
+  const name = String(candidate.name ?? "");
+  if (name === "AbortError" || name === "TimeoutError") return true;
+  const code = errorCode(error);
+  if (!transientNetworkCodes.has(code)) return false;
+  if (name !== "TypeError") return true;
+  return String(candidate.message ?? "").toLowerCase() === "fetch failed";
+}
+
+function errorCode(error: unknown) {
+  const candidate = error as {
+    code?: unknown;
+    cause?: { code?: unknown };
+  };
+  return String(candidate.cause?.code ?? candidate.code ?? "");
 }
 
 function isTransientHttpStatus(status: number) {
