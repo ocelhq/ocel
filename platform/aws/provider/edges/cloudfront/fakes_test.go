@@ -248,11 +248,24 @@ func (f *fakeCloudFront) named(comment string) *fakeDistribution {
 	return nil
 }
 
+const cloudFrontCommentCeiling = 128
+
+func overlongComment(field, value string) error {
+	if len(value) <= cloudFrontCommentCeiling {
+		return nil
+	}
+	return &cftypes.InvalidArgument{Message: aws.String(fmt.Sprintf(
+		"%s is %d characters; CloudFront allows %d", field, len(value), cloudFrontCommentCeiling))}
+}
+
 func (f *fakeCloudFront) CreateKeyValueStore(_ context.Context, in *cloudfront.CreateKeyValueStoreInput, _ ...func(*cloudfront.Options)) (*cloudfront.CreateKeyValueStoreOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	name := aws.ToString(in.Name)
 	f.record("CreateKeyValueStore " + name)
+	if err := overlongComment("key value store comment", aws.ToString(in.Comment)); err != nil {
+		return nil, err
+	}
 	arn := "arn:aws:cloudfront::123456789012:key-value-store/" + name
 	f.stores[name] = &fakeStore{arn: arn, etag: "kvs-1"}
 	return &cloudfront.CreateKeyValueStoreOutput{
@@ -293,6 +306,9 @@ func (f *fakeCloudFront) CreateFunction(_ context.Context, in *cloudfront.Create
 	defer f.mu.Unlock()
 	name := aws.ToString(in.Name)
 	f.record("CreateFunction " + name)
+	if err := overlongComment("function comment", aws.ToString(in.FunctionConfig.Comment)); err != nil {
+		return nil, err
+	}
 	f.functions[name] = &fakeFunction{code: slices.Clone(in.FunctionCode), etag: "fn-1", config: in.FunctionConfig}
 	return &cloudfront.CreateFunctionOutput{ETag: aws.String("fn-1")}, nil
 }
@@ -336,6 +352,9 @@ func (f *fakeCloudFront) UpdateFunction(_ context.Context, in *cloudfront.Update
 	defer f.mu.Unlock()
 	name := aws.ToString(in.Name)
 	f.record("UpdateFunction " + name)
+	if err := overlongComment("function comment", aws.ToString(in.FunctionConfig.Comment)); err != nil {
+		return nil, err
+	}
 	held, ok := f.functions[name]
 	if !ok {
 		return nil, &cftypes.NoSuchFunctionExists{Message: aws.String("no function " + name)}
@@ -416,6 +435,9 @@ func (f *fakeCloudFront) CreateCachePolicy(_ context.Context, in *cloudfront.Cre
 	defer f.mu.Unlock()
 	name := aws.ToString(in.CachePolicyConfig.Name)
 	f.record("CreateCachePolicy " + name)
+	if err := overlongComment("cache policy comment", aws.ToString(in.CachePolicyConfig.Comment)); err != nil {
+		return nil, err
+	}
 	id := f.id("cache-")
 	f.cachePolicies[id] = name
 	return &cloudfront.CreateCachePolicyOutput{CachePolicy: &cftypes.CachePolicy{
@@ -457,6 +479,9 @@ func (f *fakeCloudFront) CreateResponseHeadersPolicy(_ context.Context, in *clou
 	defer f.mu.Unlock()
 	name := aws.ToString(in.ResponseHeadersPolicyConfig.Name)
 	f.record("CreateResponseHeadersPolicy " + name)
+	if err := overlongComment("response headers policy comment", aws.ToString(in.ResponseHeadersPolicyConfig.Comment)); err != nil {
+		return nil, err
+	}
 	id := f.id("headers-")
 	f.headerPolicy[id] = in.ResponseHeadersPolicyConfig
 	return &cloudfront.CreateResponseHeadersPolicyOutput{ResponseHeadersPolicy: &cftypes.ResponseHeadersPolicy{
