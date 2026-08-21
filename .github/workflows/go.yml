@@ -23,6 +23,7 @@ jobs:
           - sdk
           - pkg/channel
           - pkg/proto
+          - pkg/providerkit
           - platform/edge/contract
           - platform/aws/provider
           - platform/edge/cloudflare/deploy
