@@ -30,6 +30,16 @@ inputs:
   expected-cloudflare-account-id:
     description: The only Cloudflare account this workflow may deploy into.
     required: true
+  cloudflare-account-id:
+    description: Cloudflare account to guard before deployment.
+    required: false
+  cloudflare-api-token:
+    description: Cloudflare token to verify before deployment.
+    required: false
+  guard-script:
+    description: Account guard to run after assuming the deploy role.
+    required: false
+    default: adapter/scripts/e2e-next/guard-accounts.sh
 
 runs:
   using: composite
@@ -53,6 +63,9 @@ runs:
     - name: Guard the target accounts
       shell: bash
       env:
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id || env.CLOUDFLARE_ACCOUNT_ID }}
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token || env.CLOUDFLARE_API_TOKEN }}
         EXPECTED_AWS_ACCOUNT_ID: ${{ inputs.expected-aws-account-id }}
         EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ inputs.expected-cloudflare-account-id }}
-      run: adapter/scripts/e2e-next/guard-accounts.sh
+        GUARD_SCRIPT: ${{ inputs.guard-script }}
+      run: bash "$GUARD_SCRIPT"
