@@ -35,6 +35,13 @@ function serve(handler: http.RequestListener): Promise<Served> {
   });
 }
 
+function serveJpeg(): Promise<Served> {
+  return serve((_req, res) => {
+    res.writeHead(200, { "content-type": "image/jpeg" });
+    res.end(Buffer.from([0xff, 0xd8, 0xff, 0x00]));
+  });
+}
+
 const allowLoopback = (address: string) =>
   address === "127.0.0.1" || isReachableAddress(address);
 
@@ -94,6 +101,66 @@ describe("the happy path", () => {
 });
 
 describe("the address policy at connect time", () => {
+  test("a literal loopback target never opens a socket", async () => {
+    const { port, requests } = await serveJpeg();
+    await expect(
+      fetchUpstream(
+        `http://127.0.0.1:${port}/x.jpg`,
+        config({
+          remotePatterns: [
+            { protocol: "http", hostname: "^127\\.0\\.0\\.1$", pathname: "^\\/.*$" },
+          ],
+        }),
+      ),
+    ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
+    expect(requests).toEqual([]);
+  });
+
+  for (const [literal, normalized] of [
+    ["127.0.0.1", "127.0.0.1"],
+    ["[::1]", "[::1]"],
+    ["[::ffff:127.0.0.1]", "[::ffff:7f00:1]"],
+    ["0x7f000001", "127.0.0.1"],
+    ["2130706433", "127.0.0.1"],
+    ["0177.0.0.1", "127.0.0.1"],
+  ]) {
+    test(`${literal} is checked as ${normalized} before connecting`, async () => {
+      const checked: string[] = [];
+      await expect(
+        fetchUpstream(`http://${literal}/x.jpg`, config(), {
+          isReachable: (address) => {
+            checked.push(address);
+            return false;
+          },
+        }),
+      ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
+      expect(checked).toEqual([normalized]);
+    });
+  }
+
+  test("dangerouslyAllowLocalIP permits a literal loopback target", async () => {
+    const { port, requests } = await serveJpeg();
+    await expect(
+      fetchUpstream(
+        `http://127.0.0.1:${port}/x.jpg`,
+        config({ dangerouslyAllowLocalIP: true }),
+      ),
+    ).resolves.toBeTruthy();
+    expect(requests).toHaveLength(1);
+  });
+
+  test("dangerouslyAllowLocalIP permits a name that resolves to loopback", async () => {
+    const { port, requests } = await serveJpeg();
+    await expect(
+      fetchUpstream(
+        `http://cdn.test:${port}/x.jpg`,
+        config({ dangerouslyAllowLocalIP: true }),
+        { lookup: resolvesTo("127.0.0.1") },
+      ),
+    ).resolves.toBeTruthy();
+    expect(requests).toHaveLength(1);
+  });
+
   test("the real policy refuses a name that resolves to loopback", async () => {
     const { port, requests } = await serve((_req, res) => {
       res.writeHead(200, { "content-type": "image/jpeg" });
@@ -202,6 +269,31 @@ describe("the lookup's all contract", () => {
 });
 
 describe("redirects", () => {
+  test("a hop to a literal loopback target never opens a second socket", async () => {
+    let checks = 0;
+    const { port, requests } = await serve((req, res) => {
+      if (req.url === "/start") {
+        res.writeHead(302, { location: `http://127.0.0.1:${port}/final` });
+        res.end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "image/jpeg" });
+      res.end(Buffer.from([0xff, 0xd8, 0xff, 0x00]));
+    });
+    await expect(
+      fetchUpstream(
+        `http://127.0.0.1:${port}/start`,
+        config({
+          remotePatterns: [
+            { protocol: "http", hostname: "^127\\.0\\.0\\.1$", pathname: "^\\/.*$" },
+          ],
+        }),
+        { isReachable: () => checks++ === 0 },
+      ),
+    ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
+    expect(requests.map((request) => request.url)).toEqual(["/start"]);
+  });
+
   test("are followed by hand, and the body of every hop is drained", async () => {
     const image = await solid("jpeg");
     const { port, requests } = await serve((req, res) => {
