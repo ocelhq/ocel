@@ -33,20 +33,23 @@ func TestCheckCompat(t *testing.T) {
 		}
 	})
 
-	t.Run("stale bootstrap trips", func(t *testing.T) {
+	t.Run("the schema gate swings both ways", func(t *testing.T) {
 		t.Parallel()
 
-		if got := CheckCompat(1, true, RequiredBootstrapVersion); got != NeedsBootstrapUpgrade {
-			t.Fatalf("CheckCompat(1, true, %d) = %v, want NeedsBootstrapUpgrade", RequiredBootstrapVersion, got)
+		if got := CheckCompat(RequiredSchema-1, true, RequiredSchema); got != NeedsBootstrapUpgrade {
+			t.Fatalf("CheckCompat(%d, true, %d) = %v, want NeedsBootstrapUpgrade", RequiredSchema-1, RequiredSchema, got)
+		}
+		if got := CheckCompat(RequiredSchema+1, true, RequiredSchema); got != NeedsCLIUpgrade {
+			t.Fatalf("CheckCompat(%d, true, %d) = %v, want NeedsCLIUpgrade", RequiredSchema+1, RequiredSchema, got)
 		}
 	})
 }
 
-func TestRequiredBootstrapVersion(t *testing.T) {
+func TestRequiredSchema(t *testing.T) {
 	t.Parallel()
 
-	if RequiredBootstrapVersion != 12 {
-		t.Fatalf("RequiredBootstrapVersion = %d, want 12", RequiredBootstrapVersion)
+	if RequiredSchema < 1 {
+		t.Fatalf("RequiredSchema = %d, want the numbering to start at 1", RequiredSchema)
 	}
 }
 
@@ -85,8 +88,8 @@ func TestCompatibility(t *testing.T) {
 			deployed int
 			want     []string
 		}{
-			{"outdated names deployed and required", NeedsBootstrapUpgrade, 4, []string{"version 4", "version 6"}},
-			{"newer names deployed and required", NeedsCLIUpgrade, 7, []string{"version 7", "version 6"}},
+			{"outdated names deployed and required", NeedsBootstrapUpgrade, 4, []string{"schema 4", "schema 6"}},
+			{"newer names deployed and required", NeedsCLIUpgrade, 7, []string{"schema 7", "schema 6"}},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
@@ -104,11 +107,11 @@ func TestCompatibility(t *testing.T) {
 		t.Parallel()
 
 		msg := NeedsBootstrapUpgrade.Explain(0, 6, "ocel bootstrap").Error()
-		if strings.Contains(msg, "version 0") {
-			t.Errorf("Explain() = %q, must not report a fabricated version 0", msg)
+		if strings.Contains(msg, "schema 0") {
+			t.Errorf("Explain() = %q, must not report a fabricated schema 0", msg)
 		}
-		if !strings.Contains(msg, "version 6") {
-			t.Errorf("Explain() = %q, want it to name the required version", msg)
+		if !strings.Contains(msg, "schema 6") {
+			t.Errorf("Explain() = %q, want it to name the required schema", msg)
 		}
 	})
 

@@ -175,3 +175,40 @@ export default {
 		}
 	})
 }
+
+func TestRunBootstrapPrintPolicy(t *testing.T) {
+	t.Run("it writes the document the provider renders for the tier", func(t *testing.T) {
+		root, _ := setUpDeployFixture(t)
+		d := defaultDeps()
+		setLoggedIn(&d)
+		stubAppFunctions(&d, nil)
+
+		var stdout, stderr bytes.Buffer
+		opts := bootstrapOptions{printPolicy: "deploy"}
+		if err := runBootstrap(context.Background(), d, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "CREDENTIAL_TIER_DEPLOY") {
+			t.Errorf("stdout = %q, want the deploy tier's document", stdout.String())
+		}
+	})
+
+	t.Run("a tier that is neither names the two that are", func(t *testing.T) {
+		err := runBootstrap(context.Background(), defaultDeps(), t.TempDir(), bootstrapOptions{printPolicy: "admin"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		if err == nil {
+			t.Fatal("runBootstrap err = nil, want error")
+		}
+		for _, want := range []string{"bootstrap", "deploy", `"admin"`} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to name %s", err, want)
+			}
+		}
+	})
+
+	t.Run("it refuses to print and destroy in one run", func(t *testing.T) {
+		err := runBootstrap(context.Background(), defaultDeps(), t.TempDir(), bootstrapOptions{printPolicy: "deploy", destroy: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		if err == nil || !strings.Contains(err.Error(), "one or the other") {
+			t.Fatalf("runBootstrap err = %v, want it to refuse both at once", err)
+		}
+	})
+}

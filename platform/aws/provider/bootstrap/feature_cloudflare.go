@@ -9,14 +9,15 @@ import (
 )
 
 var cloudflareEdgeFeature = feature{
-	name:      FeatureCloudflareEdge,
-	summary:   "Cloudflare as the front: the workers Ocel runs there, the credential they read this account with, and the publisher that pushes each tag snapshot to them.",
-	dependsOn: []string{FeatureISR},
-	template:  cloudflareEdgeTemplate,
-	payloads:  cloudflareEdgePayloads,
-	before:    adoptCloudflareEdge,
-	after:     mintEdgeCredentials,
-	drop:      severCloudflareEdge,
+	name:       FeatureCloudflareEdge,
+	summary:    "Cloudflare as the front: the workers Ocel runs there, the credential they read this account with, and the publisher that pushes each tag snapshot to them.",
+	dependsOn:  []string{FeatureISR},
+	template:   cloudflareEdgeTemplate,
+	payloads:   cloudflareEdgePayloads,
+	placements: cloudflareEdgePlacements,
+	before:     adoptCloudflareEdge,
+	after:      mintEdgeCredentials,
+	drop:       severCloudflareEdge,
 }
 
 var cloudflareEdge = func() edge.Edge { return cloudflare.New() }
@@ -26,6 +27,10 @@ func cloudflareEdgePayloads(ctx context.Context, store ObjectStore, bucket strin
 	var err error
 	code.publisher, err = ensureTagPublisherPayload(ctx, store, bucket)
 	return code, err
+}
+
+func cloudflareEdgePlacements(bucket string) stackPayloads {
+	return stackPayloads{publisher: tagPublisherPlacement(bucket)}
 }
 
 func cloudflareEdgeTemplate(in featureInputs) featureStack {
@@ -51,12 +56,10 @@ func cloudflareEdgeTemplate(in featureInputs) featureStack {
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to the assets, tag items, app functions and revalidation queue of this substrate alone, and the publisher that carries each build's tag snapshot from the state table stream out to the edge's ISR writer. Created and updated by ocel bootstrap --features. Deleting this stack severs the Cloudflare front from this account."
 %sResources:
-%s%sOutputs:
-%s`,
+%s%s`,
 			FeatureCloudflareEdge, in.class, params,
 			edgeUserResource(userName, in.class, optimizer),
-			tagPublisherResources(in.code.publisher, in.class),
-			bootstrapVersionOutput(in.version)),
+			tagPublisherResources(in.code.publisher, in.class)),
 	}
 }
 

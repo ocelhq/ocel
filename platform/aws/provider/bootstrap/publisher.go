@@ -31,6 +31,10 @@ const (
 
 const tagRecordStreamFilter = `{"dynamodb":{"Keys":{"pk":{"S":[{"prefix":"PROJECT#"}]},"sk":{"S":["#META"]}}}}`
 
+func tagPublisherPlacement(bucket string) payloads.Placement {
+	return payloads.At(bucket, tagPublisherKeyPrefix, payloads.TagPublisher())
+}
+
 func ensureTagPublisherPayload(ctx context.Context, store ObjectStore, bucket string) (payloads.Placement, error) {
 	return payloads.Place(ctx, store, bucket, tagPublisherKeyPrefix, tagPublisherLabel, payloads.TagPublisher())
 }

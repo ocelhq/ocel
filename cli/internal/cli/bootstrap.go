@@ -21,12 +21,15 @@ import (
 )
 
 type bootstrapOptions struct {
-	yes      bool
-	preview  bool
-	destroy  bool
-	force    bool
-	features string
-	declared bool
+	yes         bool
+	preview     bool
+	destroy     bool
+	force       bool
+	features    string
+	printPolicy string
+	declared    bool
+	autoHeal    bool
+	healing     bool
 }
 
 var bootstrapOpts bootstrapOptions
@@ -39,6 +42,12 @@ var bootstrapCmd = &cobra.Command{
 		"`all` and `none`; anything already there and left out of the set is removed. " +
 		"Without the flag a terminal picks from a list and everything else keeps what is " +
 		"already there. Removing a feature other projects deploy against needs --force.\n\n" +
+		"--auto-heal lets a later deploy refresh this class's stale feature stacks by itself, core " +
+		"excluded. It is remembered on the account rather than in this project, and --auto-heal=false " +
+		"takes it back.\n\n" +
+		"--print-policy writes out the permissions one credential tier needs and does nothing else: " +
+		"`bootstrap` for the credentials this command runs under, `deploy` for the smaller set a deploy " +
+		"and a preview run under.\n\n" +
 		"With --destroy it removes them instead: the whole bootstrap set of that class, and the " +
 		"account state, buckets, credentials and stored parameters that were built on it. It " +
 		"refuses while any project or the preview wildcard is still deployed into the class, and " +
@@ -54,6 +63,7 @@ var bootstrapCmd = &cobra.Command{
 
 		opts := bootstrapOpts
 		opts.declared = cmd.Flags().Changed("features")
+		opts.healing = cmd.Flags().Changed("auto-heal")
 
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
@@ -68,11 +78,19 @@ func init() {
 	bootstrapCmd.Flags().BoolVar(&bootstrapOpts.destroy, "destroy", false, "Remove this class's infrastructure instead of provisioning it, once nothing is deployed into it")
 	bootstrapCmd.Flags().StringVar(&bootstrapOpts.features, "features", "", "The whole `set` of features this class carries, comma separated; all or none for the extremes")
 	bootstrapCmd.Flags().BoolVar(&bootstrapOpts.force, "force", false, "Remove a feature other projects still deploy against")
+	bootstrapCmd.Flags().StringVar(&bootstrapOpts.printPolicy, "print-policy", "", "Print the permissions a credential `tier` needs, bootstrap or deploy, and do nothing else")
+	bootstrapCmd.Flags().BoolVar(&bootstrapOpts.autoHeal, "auto-heal", false, "Let a deploy refresh this account's stale feature stacks by itself; --auto-heal=false takes it back")
 }
 
 func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	if opts.declared && opts.destroy {
 		return errors.New("--features chooses what a bootstrap carries and --destroy removes the whole substrate; pass one or the other")
+	}
+	if opts.printPolicy != "" && opts.destroy {
+		return errors.New("--print-policy writes out the permissions a tier needs and --destroy removes the whole substrate; pass one or the other")
+	}
+	if opts.printPolicy != "" {
+		return runPrintPolicy(ctx, d, cwd, opts.printPolicy, stdout, stderr)
 	}
 
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
@@ -114,7 +132,8 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 			return err
 		}
 		described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
-			Tier: tier,
+			Tier:           tier,
+			WithDependents: true,
 		})
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
@@ -152,6 +171,20 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 			force = true
 		}
 
+		if substrate := described.GetSubstrate(); substrate.GetDowngrade() {
+			fmt.Fprintln(stdout, downgradeWarning(tier, substrate))
+			if interactive {
+				proceed, err := confirmYN(ctx, "Write the older content anyway?", stdout, stdin)
+				if err != nil {
+					return err
+				}
+				if !proceed {
+					fmt.Fprintln(stdout, "Aborted.")
+					return nil
+				}
+			}
+		}
+
 		if interactive {
 			proceed, err := confirmBootstrap(ctx, tier, provider.Package, stdout, stdin)
 			if err != nil {
@@ -164,9 +197,13 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 		}
 
 		req := &contractv1.BootstrapRequest{
-			Tier:     tier,
-			Features: requested,
-			Force:    force,
+			Tier:               tier,
+			Features:           requested,
+			Force:              force,
+			AcceptReplacements: opts.yes,
+		}
+		if opts.healing {
+			req.AutoHeal = &opts.autoHeal
 		}
 		if err := providerrunner.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
 			return err
@@ -178,6 +215,55 @@ func runBootstrap(ctx context.Context, d deps, cwd string, opts bootstrapOptions
 		return failSession(ctx, ui, err)
 	}
 	return nil
+}
+
+func runPrintPolicy(ctx context.Context, d deps, cwd, requested string, stdout, stderr io.Writer) error {
+	tier, err := credentialTier(requested)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	if err != nil {
+		return err
+	}
+
+	if err := node.Ensure(cfg.Dir); err != nil {
+		return err
+	}
+
+	provider, err := cfg.RequireProvider()
+	if err != nil {
+		return err
+	}
+
+	return runProviderSession(ctx, d, cfg, provider, stderr, stderr, func(runner *providerrunner.Runner) error {
+		client, err := runner.Deployments()
+		if err != nil {
+			return err
+		}
+		policy, err := client.GetCredentialPolicy(ctx, &contractv1.CredentialPolicyRequest{Tier: tier})
+		if err != nil {
+			if connect.CodeOf(err) == connect.CodeUnimplemented {
+				return fmt.Errorf("%s cannot say what permissions a credential tier needs; it predates them. Upgrade the provider pinned in this project and try again", provider.Package)
+			}
+			return err
+		}
+		fmt.Fprintln(stdout, policy.GetDocument())
+		return nil
+	})
+}
+
+func credentialTier(requested string) (contractv1.CredentialTier, error) {
+	switch requested {
+	case "bootstrap":
+		return contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP, nil
+	case "deploy":
+		return contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, nil
+	default:
+		return contractv1.CredentialTier_CREDENTIAL_TIER_UNSPECIFIED,
+			fmt.Errorf("--print-policy names the credential tier to print, bootstrap or deploy, not %q", requested)
+	}
 }
 
 func chooseFeatures(ctx context.Context, opts bootstrapOptions, catalogue []*contractv1.Feature, interactive bool, stdout io.Writer, stdin io.Reader) ([]string, bool, error) {
@@ -199,6 +285,19 @@ func confirmDrop(ctx context.Context, tier environmentv1.Tier, dropped, dependen
 		fmt.Fprintln(stdout, "No project deployed here has recorded needing it, but anything relying on it breaks.")
 	}
 	return confirmYN(ctx, "Remove it anyway?", stdout, stdin)
+}
+
+func downgradeWarning(tier environmentv1.Tier, substrate *contractv1.SubstrateStatus) string {
+	var wroteIt string
+	for _, stack := range substrate.GetStacks() {
+		if stack.GetFeature() == "" {
+			wroteIt = stack.GetWrittenBy()
+		}
+	}
+	return fmt.Sprintf(
+		"The %s substrate was last written by %s and this one is %s: the same shape, older content.\nEvery stack it writes goes back to what this build carries.",
+		substrateName(tier), wroteIt, substrate.GetWriter(),
+	)
 }
 
 func confirmBootstrap(ctx context.Context, tier environmentv1.Tier, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {

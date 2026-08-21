@@ -83,7 +83,7 @@ func testUploadCompleter() payloads.Placement {
 
 func TestBucketComponentTags(t *testing.T) {
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&resourcesv1.BucketConfig{}), "ocel-state", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&resourcesv1.BucketConfig{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 		return err
 	})
 

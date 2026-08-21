@@ -47,6 +47,7 @@ type Config struct {
 	StateTable         string
 	StateTableARN      string
 	VarsKeyARN         string
+	AppBoundaryARN     string
 	VarsTable          string
 	VarsTableARN       string
 	VarsClass          string

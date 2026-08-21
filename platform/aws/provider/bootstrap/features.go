@@ -28,7 +28,6 @@ type stackRefs struct {
 
 type featureInputs struct {
 	class     string
-	version   int
 	code      stackPayloads
 	refs      stackRefs
 	alongside FeatureSet
@@ -52,11 +51,21 @@ type feature struct {
 	summary   string
 	dependsOn []string
 
-	template func(featureInputs) featureStack
-	payloads func(context.Context, ObjectStore, string) (stackPayloads, error)
-	before   func(context.Context, stepDeps) error
-	after    func(context.Context, stepDeps) error
-	drop     func(context.Context, stepDeps) error
+	template   func(featureInputs) featureStack
+	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
+	placements func(string) stackPayloads
+	before     func(context.Context, stepDeps) error
+	after      func(context.Context, stepDeps) error
+	drop       func(context.Context, stepDeps) error
+}
+
+func (f feature) render(class, artifactBucket string, refs stackRefs, alongside FeatureSet) featureStack {
+	return f.template(featureInputs{
+		class:     class,
+		code:      f.placements(artifactBucket),
+		refs:      refs,
+		alongside: alongside,
+	})
 }
 
 func (f feature) stackName(class string) string {
@@ -272,11 +281,4 @@ func crossStack(specs []crossStackParam) (string, []cfntypes.Parameter) {
 		})
 	}
 	return b.String(), values
-}
-
-func bootstrapVersionOutput(version int) string {
-	return fmt.Sprintf(`  %s:
-    Description: "Schema version of the bootstrap this stack belongs to. The CLI refuses to act while its required version and this one disagree, and points at the side that has to move."
-    Value: '%d'
-`, outputVersion, version)
 }

@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -96,9 +95,9 @@ func TestFeatureTemplates(t *testing.T) {
 					}
 				})
 
-				t.Run("stamps the bootstrap version", func(t *testing.T) {
-					if got := tmpl.Outputs[outputVersion].Value; got != strconv.Itoa(RequiredBootstrapVersion) {
-						t.Errorf("%s output = %q, want %d", outputVersion, got, RequiredBootstrapVersion)
+				t.Run("no version output", func(t *testing.T) {
+					if _, ok := tmpl.Outputs["BootstrapVersion"]; ok {
+						t.Error("the substrate's shape is carried by the ocel:schema tag; no stack Output restates it")
 					}
 				})
 			})

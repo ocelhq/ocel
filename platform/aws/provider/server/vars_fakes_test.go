@@ -32,8 +32,8 @@ func (c *countingCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 	c.mu.Unlock()
 
 	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{
+		Tags: currentSchemaTags,
 		Outputs: []cfntypes.Output{
-			{OutputKey: aws.String("BootstrapVersion"), OutputValue: aws.String(bootstrapVersionOutput)},
 			{OutputKey: aws.String("VarsTableName"), OutputValue: aws.String("ocel-vars")},
 			{OutputKey: aws.String("VarsKeyArn"), OutputValue: aws.String("arn:aws:kms:eu-west-1:123456789012:key/abcd")},
 		},
@@ -234,4 +234,6 @@ func testStores(cfn *countingCFN, ddb *fakeDynamo, crypto *fakeKMS) *stores {
 	}}
 }
 
-var bootstrapVersionOutput = strconv.Itoa(bootstrap.RequiredBootstrapVersion)
+var currentSchemaTags = []cfntypes.Tag{
+	{Key: aws.String(bootstrap.TagSchema), Value: aws.String(strconv.Itoa(bootstrap.RequiredSchema))},
+}

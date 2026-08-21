@@ -95,8 +95,8 @@ func (s *stores) open(ctx context.Context, key storeKey) (*vars.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	compat := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion)
-	if err := compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCmd); err != nil {
+	compat := bootstrap.CheckCompat(deployed.Schema, deployed.Present, bootstrap.RequiredSchema)
+	if err := compat.Explain(deployed.Schema, bootstrap.RequiredSchema, bootstrapCmd); err != nil {
 		return nil, err
 	}
 	if deployed.VarsTable == "" || deployed.VarsKeyARN == "" {

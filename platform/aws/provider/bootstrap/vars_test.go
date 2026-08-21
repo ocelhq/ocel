@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -41,7 +40,11 @@ type varsTemplate struct {
 			EnableKeyRotation bool   `yaml:"EnableKeyRotation"`
 			AliasName         string `yaml:"AliasName"`
 			TargetKeyId       string `yaml:"TargetKeyId"`
-			KeyPolicy         struct {
+			Tags              []struct {
+				Key   string `yaml:"Key"`
+				Value string `yaml:"Value"`
+			} `yaml:"Tags"`
+			KeyPolicy struct {
 				Statement []struct {
 					Effect    string `yaml:"Effect"`
 					Principal struct {
@@ -78,8 +81,8 @@ func varsSubstrates() []struct {
 		class    string
 		template string
 	}{
-		{"production", ClassProduction, stackTemplate(RequiredBootstrapVersion)},
-		{"preview", ClassPreview, previewStackTemplate(RequiredBootstrapVersion)},
+		{"production", ClassProduction, stackTemplate()},
+		{"preview", ClassPreview, previewStackTemplate()},
 	}
 }
 
@@ -168,6 +171,14 @@ func TestVarsKey(t *testing.T) {
 			}
 			if !hasAction(st.Action, "kms:*") {
 				t.Errorf("KeyPolicy Action = %v, want kms:*", st.Action)
+			}
+
+			tagged := false
+			for _, tag := range key.Properties.Tags {
+				tagged = tagged || tag.Key == varsKeyComponentTagKey && tag.Value == varsKeyComponentTagValue
+			}
+			if !tagged {
+				t.Errorf("VarsKey Tags = %+v, want %s=%s, which is what the bootstrap credential policy scopes key lifecycle to", key.Properties.Tags, varsKeyComponentTagKey, varsKeyComponentTagValue)
 			}
 
 			alias, ok := tmpl.Resources["VarsKeyAlias"]
@@ -314,10 +325,6 @@ func TestRunVars(t *testing.T) {
 				t.Errorf("the upgrade did not add the %s output", name)
 			}
 		}
-		if got, want := after.Outputs[outputVersion].Value, strconv.Itoa(RequiredBootstrapVersion); got != want {
-			t.Errorf("upgraded stack reports version %q, want %q", got, want)
-		}
-
 		if _, ok := after.Resources["StateBucket"]; !ok {
 			t.Error("the upgrade dropped the state bucket")
 		}
@@ -326,7 +333,7 @@ func TestRunVars(t *testing.T) {
 
 func preStoreTemplate(t *testing.T) string {
 	t.Helper()
-	tmpl := stackTemplate(RequiredBootstrapVersion)
+	tmpl := stackTemplate()
 	for _, block := range []string{varsResources(ClassProduction), varsOutputs()} {
 		if block == "" || !strings.Contains(tmpl, block) {
 			t.Fatalf("cannot derive a pre-store template: the current one has no\n%s", block)

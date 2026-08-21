@@ -181,7 +181,7 @@ func runPreviewUp(ctx context.Context, d deps, cwd string, opts previewUpOptions
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreviewUp(ctx, d, runner, cfg, env.GetIdentity(), stdout); err != nil {
+		if err := preflightPreviewUp(ctx, d, runner, cfg, env.GetIdentity(), stdout, stdin); err != nil {
 			return err
 		}
 
@@ -532,28 +532,34 @@ func preflightPreview(ctx context.Context, d deps, runner *providerrunner.Runner
 	return preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap --preview", out)
 }
 
-func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, pointer string, out io.Writer) error {
-	resp, err := preflight(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), "ocel bootstrap --preview", out)
+func preflightPreviewUp(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, stdin io.Reader) error {
+	resp, err := preflight(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), configuredFeatures(cfg), "ocel bootstrap --preview", out)
 	if err != nil {
 		return err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
+		return err
+	}
+	if err := offerBootstrap(ctx, runner, resp.GetSubstrate(), environmentv1.Tier_TIER_PREVIEW, d.stdinIsTerminal(stdin), out, stdin); err != nil {
 		return err
 	}
 	return requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, out)
 }
 
-func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, wantKnownSlugs bool, out io.Writer) ([]string, error) {
+func preflightDeploy(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, interactive bool, out io.Writer, stdin io.Reader) ([]string, error) {
 	domains := declaredHostnames(cfg, "production")
 	var slug string
-	if wantKnownSlugs || len(domains) > 0 {
+	if interactive || len(domains) > 0 {
 		slug = cfg.Slug
 	}
-	resp, err := preflight(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slug, domains, "ocel bootstrap", out)
+	resp, err := preflight(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slug, domains, configuredFeatures(cfg), "ocel bootstrap", out)
 	if err != nil {
 		return nil, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
+		return nil, err
+	}
+	if err := offerBootstrap(ctx, runner, resp.GetSubstrate(), environmentv1.Tier_TIER_PRODUCTION, interactive, out, stdin); err != nil {
 		return nil, err
 	}
 	return resp.GetKnownSlugs(), nil
@@ -601,11 +607,19 @@ func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string) e
 }
 
 func preflightTier(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
-	_, err := preflight(ctx, d, runner, cfg, required, "", nil, bootstrapHint, out)
+	resp, err := preflight(ctx, d, runner, cfg, required, "", nil, configuredFeatures(cfg), bootstrapHint, out)
+	if err != nil {
+		return err
+	}
+	return planSubstrate(resp.GetSubstrate()).refusal(required)
+}
+
+func preflightSchema(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
+	_, err := preflight(ctx, d, runner, cfg, required, "", nil, nil, bootstrapHint, out)
 	return err
 }
 
-func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, bootstrapHint string, out io.Writer) (*contractv1.PreflightResponse, error) {
+func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, features []string, bootstrapHint string, out io.Writer) (*contractv1.PreflightResponse, error) {
 	client, err := runner.Deployments()
 	if err != nil {
 		return nil, err
@@ -616,7 +630,7 @@ func preflight(ctx context.Context, d deps, runner *providerrunner.Runner, cfg *
 		RequiredTier:     required,
 		Slug:             slug,
 		Domains:          domains,
-		RequiredFeatures: configuredFeatures(cfg),
+		RequiredFeatures: features,
 		Edge:             edgeSelection(cfg),
 	})
 	spinner.Stop()

@@ -45,7 +45,7 @@ func runInfraStack(ctx context.Context, cfg Config, in stackInputs, manifest *co
 			case r.GetPostgres() != nil:
 				err = registerPostgres(pctx, project, env, r.GetLogicalName(), in.transformed.forPostgres(r.GetLogicalName(), r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
 			case r.GetBucket() != nil:
-				err = registerBucket(pctx, project, env, r.GetLogicalName(), in.transformed.forBucket(r.GetLogicalName(), r.GetBucket()), cfg.StateTable, in.sessions, in.completer)
+				err = registerBucket(pctx, project, env, r.GetLogicalName(), in.transformed.forBucket(r.GetLogicalName(), r.GetBucket()), cfg.StateTable, cfg.AppBoundaryARN, in.sessions, in.completer)
 			default:
 				continue
 			}

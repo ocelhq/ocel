@@ -380,6 +380,7 @@ type executionRole struct {
 	Cache      *isrConfig
 	Bytecode   *bytecodeConfig
 	VarsKeyARN string
+	Boundary   string
 	VPCAccess  bool
 	Router     *routerHost
 
@@ -393,7 +394,7 @@ type executionRole struct {
 }
 
 func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []linkPolicy, vpcAccess bool, router *routerHost) executionRole {
-	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Tags: tags, LinkPolicies: policies, VPCAccess: vpcAccess, Router: router}
+	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Boundary: cfg.AppBoundaryARN, Tags: tags, LinkPolicies: policies, VPCAccess: vpcAccess, Router: router}
 	if bundle.hasLive() {
 		role.VarsTableARN = cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
@@ -411,10 +412,11 @@ func rolePrefix(coord naming.Coordinate) string {
 func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRole) (*iam.Role, error) {
 	id := naming.ResourceID(naming.KindRole, roleLocalName)
 	role, err := iam.NewRole(ctx, id, &iam.RoleArgs{
-		NamePrefix:       pulumi.String(rolePrefix(coord)),
-		Description:      describe(coord, "execution role for this app's functions"),
-		AssumeRolePolicy: pulumi.String(assumeRolePolicy(lambdaServicePrincipal)),
-		Tags:             resourceTags(coord.Kind, "", r.Tags),
+		NamePrefix:          pulumi.String(rolePrefix(coord)),
+		Description:         describe(coord, "execution role for this app's functions"),
+		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(lambdaServicePrincipal)),
+		PermissionsBoundary: permissionsBoundary(r.Boundary),
+		Tags:                resourceTags(coord.Kind, "", r.Tags),
 	})
 	if err != nil {
 		return nil, err

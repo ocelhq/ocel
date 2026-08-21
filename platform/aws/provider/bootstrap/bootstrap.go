@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	mathrand "math/rand/v2"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,7 +43,6 @@ const (
 	outputArtifactBucket      = "ArtifactBucketName"
 	outputAssetBucket         = "AssetBucketName"
 	outputAssetBucketARN      = "AssetBucketArn"
-	outputVersion             = "BootstrapVersion"
 	outputInfraClass          = "InfrastructureClass"
 
 	artifactExpirationDays     = 30
@@ -61,7 +59,9 @@ const (
 
 type Deployed struct {
 	Present            bool
-	Version            int
+	Schema             int
+	AutoHeal           bool
+	Stacks             []StackStamp
 	Features           FeatureSet
 	StateBucket        string
 	StateTable         string
@@ -71,6 +71,7 @@ type Deployed struct {
 	VarsKeyARN         string
 	ImageOptimizerURL  string
 	RevalidateQueueURL string
+	AppBoundaryARN     string
 	Class              string
 }
 
@@ -84,6 +85,10 @@ type CFNAPI interface {
 	UpdateStack(ctx context.Context, in *cloudformation.UpdateStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.UpdateStackOutput, error)
 	DeleteStack(ctx context.Context, in *cloudformation.DeleteStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error)
 	DescribeStackEvents(ctx context.Context, in *cloudformation.DescribeStackEventsInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStackEventsOutput, error)
+	CreateChangeSet(ctx context.Context, in *cloudformation.CreateChangeSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error)
+	DescribeChangeSet(ctx context.Context, in *cloudformation.DescribeChangeSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeChangeSetOutput, error)
+	ExecuteChangeSet(ctx context.Context, in *cloudformation.ExecuteChangeSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.ExecuteChangeSetOutput, error)
+	DeleteChangeSet(ctx context.Context, in *cloudformation.DeleteChangeSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error)
 }
 
 type SSMAPI interface {
@@ -106,8 +111,11 @@ type APIs struct {
 }
 
 type Request struct {
-	Features []string
-	Force    bool
+	Features           []string
+	Force              bool
+	Writer             Writer
+	AutoHeal           *bool
+	AcceptReplacements bool
 }
 
 func CheckDeployed(ctx context.Context, api CFNDescriber) (Deployed, error) {
@@ -138,6 +146,10 @@ func readSubstrate(ctx context.Context, api CFNDescriber, class string) (Deploye
 	if err := absorb(&d, &refs, outputsOf(core)); err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
+	coreStamp := readStamp(core.Tags)
+	d.AutoHeal, d.Schema = coreStamp.AutoHeal, coreStamp.Schema
+
+	stamps := make(map[string]Stamp, len(featureRegistry))
 	for _, f := range featureRegistry {
 		stack, err := describeStack(ctx, api, f.stackName(class))
 		if err != nil {
@@ -147,11 +159,50 @@ func readSubstrate(ctx context.Context, api CFNDescriber, class string) (Deploye
 			continue
 		}
 		d.Features[f.name] = true
+		stamps[f.name] = readStamp(stack.Tags)
 		if err := absorb(&d, &refs, outputsOf(stack)); err != nil {
 			return Deployed{}, stackRefs{}, err
 		}
 	}
+
+	sub, err := substrateFor(class)
+	if err != nil {
+		return Deployed{}, stackRefs{}, err
+	}
+	d.Stacks = append(d.Stacks, StackStamp{
+		Name:      sub.stackName,
+		Present:   true,
+		Schema:    coreStamp.Schema,
+		Digest:    coreStamp.Digest,
+		Intended:  TemplateDigest(sub.template()),
+		WrittenBy: coreStamp.WrittenBy,
+	})
+	for _, f := range featureRegistry {
+		if !d.Features.Has(f.name) {
+			d.Stacks = append(d.Stacks, StackStamp{Name: f.stackName(class), Feature: f.name})
+			continue
+		}
+		stamp := stamps[f.name]
+		d.Schema = min(d.Schema, stamp.Schema)
+		d.Stacks = append(d.Stacks, StackStamp{
+			Name:      f.stackName(class),
+			Feature:   f.name,
+			Present:   true,
+			Schema:    stamp.Schema,
+			Digest:    stamp.Digest,
+			Intended:  TemplateDigest(f.render(class, d.ArtifactBucket, refs, d.Features).body),
+			WrittenBy: stamp.WrittenBy,
+		})
+	}
 	return d, refs, nil
+}
+
+func standingAutoHeal(ctx context.Context, api CFNDescriber, stackName string) (bool, error) {
+	stack, err := describeStack(ctx, api, stackName)
+	if err != nil || stack == nil {
+		return false, err
+	}
+	return readStamp(stack.Tags).AutoHeal, nil
 }
 
 func standingFeatures(ctx context.Context, api CFNDescriber, class string) (FeatureSet, error) {
@@ -206,16 +257,10 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 			d.RevalidateQueueURL = value
 		case outputRevalidateQueueARN:
 			refs.revalidateQueueARN = value
+		case outputAppBoundaryARN:
+			d.AppBoundaryARN = value
 		case outputInfraClass:
 			d.Class = value
-		case outputVersion:
-			version, err := strconv.Atoi(value)
-			if err != nil {
-				return fmt.Errorf("invalid bootstrap version %q: %w", value, err)
-			}
-			if d.Version == 0 || version < d.Version {
-				d.Version = version
-			}
 		}
 	}
 	return nil
@@ -262,7 +307,7 @@ type substrate struct {
 	class     string
 	stackName string
 	stackStep string
-	template  func(int) string
+	template  func() string
 }
 
 func productionSubstrate() substrate {
@@ -280,6 +325,17 @@ func previewSubstrate() substrate {
 		stackName: PreviewStackName,
 		stackStep: "Ensuring preview infrastructure (CloudFormation)",
 		template:  previewStackTemplate,
+	}
+}
+
+func substrateFor(class string) (substrate, error) {
+	switch class {
+	case ClassProduction:
+		return productionSubstrate(), nil
+	case ClassPreview:
+		return previewSubstrate(), nil
+	default:
+		return substrate{}, fmt.Errorf("bootstrap: unknown substrate class %q", class)
 	}
 }
 
@@ -330,7 +386,17 @@ func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, l
 
 	progressf(sub.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
-	if err := upsertCFNStack(ctx, apis.CFN, sub.stackName, sub.template(RequiredBootstrapVersion), nil, namedIAM); err != nil {
+	autoHeal, err := standingAutoHeal(ctx, apis.CFN, sub.stackName)
+	if err != nil {
+		return err
+	}
+	if req.AutoHeal != nil {
+		autoHeal = *req.AutoHeal
+	}
+	review := admitReplacements(req.AcceptReplacements, logf)
+	coreBody := sub.template()
+	coreTags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(coreBody), WrittenBy: req.Writer.String(), AutoHeal: autoHeal})
+	if err := upsertCFNStack(ctx, apis.CFN, sub.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
 	deployed, refs, err := readSubstrate(ctx, apis.CFN, sub.class)
@@ -351,6 +417,10 @@ func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, l
 		logf("generated a new Pulumi passphrase")
 	} else {
 		logf("reused the existing Pulumi passphrase")
+	}
+
+	if err := dropFeatures(ctx, apis.CFN, steps, sub.class, drop, progressf, logf); err != nil {
+		return err
 	}
 
 	alongside := FeatureSet{}
@@ -382,12 +452,12 @@ func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, l
 				}
 				stack := f.template(featureInputs{
 					class:     sub.class,
-					version:   RequiredBootstrapVersion,
 					code:      code,
 					refs:      refs,
 					alongside: alongside,
 				})
-				if err := upsertCFNStack(gctx, apis.CFN, stackName, stack.body, stack.params, namedIAM); err != nil {
+				tags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
+				if err := upsertCFNStack(gctx, apis.CFN, stackName, stack.body, stack.params, namedIAM, tags, review); err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}
 				if produced[i], err = stackOutputs(gctx, apis.CFN, stackName); err != nil {
@@ -417,6 +487,10 @@ func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, l
 		}
 	}
 
+	return nil
+}
+
+func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, class string, drop []string, progressf, logf func(string)) error {
 	if len(drop) == 0 {
 		return nil
 	}
@@ -424,7 +498,7 @@ func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, l
 	if err != nil {
 		return err
 	}
-	progressf(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(featureStackNames(dropOrder, sub.class), ", ")))
+	progressf(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(featureStackNames(dropOrder, class), ", ")))
 	for _, name := range dropOrder {
 		f, _ := featureNamed(name)
 		if f.drop == nil {
@@ -434,7 +508,7 @@ func run(ctx context.Context, apis APIs, sub substrate, req Request, progress, l
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	return deleteFeatureStacks(ctx, apis.CFN, sub.class, drop, logf)
+	return deleteFeatureStacks(ctx, cfn, class, drop, logf)
 }
 
 func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
@@ -505,7 +579,9 @@ func admitDrops(ctx context.Context, users FeatureUsers, drop []string, force bo
 	)
 }
 
-func upsertCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability) error {
+type changeReview func(stackName string, changes []cfntypes.ResourceChange) error
+
+func upsertCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review changeReview) error {
 	stack, err := describeStack(ctx, cfn, stackName)
 	if err != nil {
 		return err
@@ -517,25 +593,194 @@ func upsertCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string,
 		stack = nil
 	}
 	if stack == nil {
-		return createCFNStack(ctx, cfn, stackName, template, params, capabilities)
+		return createCFNStack(ctx, cfn, stackName, template, params, capabilities, tags)
+	}
+	return updateCFNStack(ctx, cfn, stackName, template, params, capabilities, tags, review)
+}
+
+func updateCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review changeReview) error {
+	id, changes, err := planCFNStack(ctx, cfn, stackName, template, params, capabilities, tags)
+	if err != nil {
+		return err
+	}
+	if id == "" {
+		return restampCFNStack(ctx, cfn, stackName, params, capabilities, tags)
 	}
 
-	if _, err := cfn.UpdateStack(ctx, &cloudformation.UpdateStackInput{
-		StackName:    aws.String(stackName),
-		TemplateBody: aws.String(template),
-		Parameters:   params,
-		Capabilities: capabilities,
-	}); err != nil {
-		if isNoUpdates(err) {
-			return nil
+	executed := false
+	defer func() {
+		if !executed {
+			discardChangeSet(ctx, cfn, id)
 		}
+	}()
+
+	if review != nil {
+		if err := review(stackName, changes); err != nil {
+			return err
+		}
+	}
+	if _, err := cfn.ExecuteChangeSet(ctx, &cloudformation.ExecuteChangeSetInput{ChangeSetName: aws.String(id)}); err != nil {
 		return fmt.Errorf("update %s stack: %w", stackName, err)
 	}
+	executed = true
+
 	w := cloudformation.NewStackUpdateCompleteWaiter(cfn)
 	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, stackWaitTimeout); err != nil {
 		return fmt.Errorf("wait for %s update: %w", stackName, err)
 	}
 	return nil
+}
+
+func restampCFNStack(ctx context.Context, cfn CFNAPI, stackName string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) error {
+	stack, err := describeStack(ctx, cfn, stackName)
+	if err != nil || stack == nil {
+		return err
+	}
+	if sameStackTags(stack.Tags, tags) {
+		return nil
+	}
+	if _, err := cfn.UpdateStack(ctx, &cloudformation.UpdateStackInput{
+		StackName:           aws.String(stackName),
+		UsePreviousTemplate: aws.Bool(true),
+		Parameters:          params,
+		Capabilities:        capabilities,
+		Tags:                tags,
+	}); err != nil {
+		if changeSetEmpty(err.Error()) {
+			return nil
+		}
+		return fmt.Errorf("restamp %s: %w", stackName, err)
+	}
+	w := cloudformation.NewStackUpdateCompleteWaiter(cfn)
+	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, stackWaitTimeout); err != nil {
+		return fmt.Errorf("wait for the %s restamp: %w", stackName, err)
+	}
+	return nil
+}
+
+func sameStackTags(have, want []cfntypes.Tag) bool {
+	if len(have) != len(want) {
+		return false
+	}
+	standing := make(map[string]string, len(have))
+	for _, tag := range have {
+		standing[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+	}
+	for _, tag := range want {
+		value, ok := standing[aws.ToString(tag.Key)]
+		if !ok || value != aws.ToString(tag.Value) {
+			return false
+		}
+	}
+	return true
+}
+
+const (
+	changeSetAttempts = 40
+	changeSetBase     = 2 * time.Second
+	changeSetCeiling  = 15 * time.Second
+	changeSetJitter   = 0.2
+)
+
+func planCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) (string, []cfntypes.ResourceChange, error) {
+	out, err := cfn.CreateChangeSet(ctx, &cloudformation.CreateChangeSetInput{
+		StackName:     aws.String(stackName),
+		ChangeSetName: aws.String(changeSetName()),
+		ChangeSetType: cfntypes.ChangeSetTypeUpdate,
+		TemplateBody:  aws.String(template),
+		Parameters:    params,
+		Capabilities:  capabilities,
+		Tags:          tags,
+	})
+	if err != nil {
+		return "", nil, fmt.Errorf("plan the %s update: %w", stackName, err)
+	}
+	id := aws.ToString(out.Id)
+
+	changes, reason, err := awaitChangeSet(ctx, cfn, id)
+	if err != nil {
+		discardChangeSet(ctx, cfn, id)
+		return "", nil, fmt.Errorf("plan the %s update: %w", stackName, err)
+	}
+	if reason != "" {
+		discardChangeSet(ctx, cfn, id)
+		if changeSetEmpty(reason) {
+			return "", nil, nil
+		}
+		return "", nil, fmt.Errorf("plan the %s update: %s", stackName, reason)
+	}
+	return id, changes, nil
+}
+
+func awaitChangeSet(ctx context.Context, cfn CFNAPI, id string) ([]cfntypes.ResourceChange, string, error) {
+	for attempt := 0; ; attempt++ {
+		var changes []cfntypes.ResourceChange
+		var token *string
+		for {
+			out, err := cfn.DescribeChangeSet(ctx, &cloudformation.DescribeChangeSetInput{
+				ChangeSetName: aws.String(id),
+				NextToken:     token,
+			})
+			if err != nil {
+				return nil, "", err
+			}
+			for _, c := range out.Changes {
+				if c.ResourceChange != nil {
+					changes = append(changes, *c.ResourceChange)
+				}
+			}
+			if out.NextToken == nil {
+				switch out.Status {
+				case cfntypes.ChangeSetStatusFailed:
+					return nil, changeSetReason(out), nil
+				case cfntypes.ChangeSetStatusCreateComplete:
+					return changes, "", nil
+				case cfntypes.ChangeSetStatusDeletePending,
+					cfntypes.ChangeSetStatusDeleteInProgress,
+					cfntypes.ChangeSetStatusDeleteComplete,
+					cfntypes.ChangeSetStatusDeleteFailed:
+					return nil, "", fmt.Errorf("change set %s is %s: something else took it away while this run was planning against it", id, out.Status)
+				}
+				break
+			}
+			token = out.NextToken
+		}
+		if attempt+1 >= changeSetAttempts {
+			return nil, "", fmt.Errorf("change set %s was still being built after %d looks", id, changeSetAttempts)
+		}
+		if err := holdBefore(ctx, changeSetDelay(attempt)); err != nil {
+			return nil, "", err
+		}
+	}
+}
+
+func changeSetReason(out *cloudformation.DescribeChangeSetOutput) string {
+	if reason := aws.ToString(out.StatusReason); reason != "" {
+		return reason
+	}
+	return string(cfntypes.ChangeSetStatusFailed)
+}
+
+func changeSetEmpty(reason string) bool {
+	return strings.Contains(reason, "didn't contain changes") ||
+		strings.Contains(reason, "No updates are to be performed")
+}
+
+func changeSetDelay(attempt int) time.Duration {
+	step := min(changeSetBase<<min(attempt, 3), changeSetCeiling)
+	return step + time.Duration(mathrand.Float64()*changeSetJitter*float64(step))
+}
+
+func changeSetName() string {
+	return fmt.Sprintf("ocel-%d", time.Now().UnixNano())
+}
+
+const discardGrace = 20 * time.Second
+
+func discardChangeSet(ctx context.Context, cfn CFNAPI, id string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), discardGrace)
+	defer cancel()
+	_, _ = cfn.DeleteChangeSet(ctx, &cloudformation.DeleteChangeSetInput{ChangeSetName: aws.String(id)})
 }
 
 const (
@@ -558,9 +803,9 @@ var holdBefore = func(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func createCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability) error {
+func createCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) error {
 	for attempt := 0; ; attempt++ {
-		err := createOnce(ctx, cfn, stackName, template, params, capabilities)
+		err := createOnce(ctx, cfn, stackName, template, params, capabilities, tags)
 		if err == nil {
 			return nil
 		}
@@ -576,12 +821,13 @@ func createCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string,
 	}
 }
 
-func createOnce(ctx context.Context, cfn CFNAPI, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability) error {
+func createOnce(ctx context.Context, cfn CFNAPI, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) error {
 	if _, err := cfn.CreateStack(ctx, &cloudformation.CreateStackInput{
 		StackName:    aws.String(stackName),
 		TemplateBody: aws.String(template),
 		Parameters:   params,
 		Capabilities: capabilities,
+		Tags:         tags,
 	}); err != nil {
 		return fmt.Errorf("create %s stack: %w", stackName, err)
 	}
@@ -658,38 +904,32 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func stackTemplate(version int) string {
+func stackTemplate() string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap (production) - the account-global core every production app Ocel deploys into this AWS account is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store. Created and updated by ocel bootstrap; each optional feature it can carry is a stack of its own beside this one. It holds no app of its own. Deleting this stack orphans every app deployed from it: the Pulumi state describing them goes with its bucket, and no deploy or teardown can run until it is recreated."
 Resources:
-%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket holding the Pulumi state Ocel plans every production deploy and teardown from. One versioned object per app stack."
     Value: !Ref StateBucket
-%s%s%s%s  %s:
-    Description: "Schema version of this bootstrap stack. The CLI refuses to act while its required version and this one disagree, and points at the side that has to move."
-    Value: '%d'
-  %s:
+%s%s%s%s%s  %s:
     Description: "Class this substrate is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
     Value: '%s'
-`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), outputVersion, version, outputInfraClass, ClassProduction)
+`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), appBoundaryResource(ClassProduction), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassProduction)
 }
 
-func previewStackTemplate(version int) string {
+func previewStackTemplate() string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap (preview) - the account-global core every preview environment Ocel deploys into this AWS account is carved from, deliberately separate from the production bootstrap so a per-PR preview can never reach production state, variables or caches. Created and updated by ocel bootstrap --preview; each optional feature it can carry is a stack of its own beside this one. Deleting this stack orphans every live preview: the Pulumi state describing them goes with its bucket, and no preview deploy or teardown can run until it is recreated."
 Resources:
-%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket holding the Pulumi state Ocel plans every preview deploy and teardown from. One versioned object per preview stack."
     Value: !Ref StateBucket
-%s%s%s%s  %s:
-    Description: "Schema version of this bootstrap stack. The CLI refuses to act while its required version and this one disagree, and points at the side that has to move."
-    Value: '%d'
-  %s:
+%s%s%s%s%s  %s:
     Description: "Class this substrate is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
     Value: '%s'
-`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), outputVersion, version, outputInfraClass, ClassPreview)
+`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), appBoundaryResource(ClassPreview), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassPreview)
 }
 
 func stateBucketResource(class string) string {
@@ -872,10 +1112,6 @@ func assetBucketOutputs() string {
 
 func isStackNotFound(err error) bool {
 	return isValidationErrorContaining(err, "does not exist")
-}
-
-func isNoUpdates(err error) bool {
-	return isValidationErrorContaining(err, "No updates are to be performed")
 }
 
 func isValidationErrorContaining(err error, substr string) bool {

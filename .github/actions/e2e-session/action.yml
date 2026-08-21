@@ -30,6 +30,13 @@ inputs:
   expected-cloudflare-account-id:
     description: The only Cloudflare account this workflow may deploy into.
     required: true
+  managed-session-policies:
+    description: >-
+      ARNs, one per line, of the managed policies the session is bounded by on
+      top of the role's own permissions. Empty means the session carries
+      everything the role has.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -49,6 +56,7 @@ runs:
         aws-region: ${{ inputs.aws-region }}
         role-session-name: ${{ inputs.role-session-name }}
         role-duration-seconds: ${{ inputs.role-duration-seconds }}
+        managed-session-policies: ${{ inputs.managed-session-policies }}
 
     - name: Guard the target accounts
       shell: bash

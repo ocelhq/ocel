@@ -88,8 +88,10 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 		resp.InfrastructurePresent = pf.GetInfrastructurePresent()
 
 		wanted, _ := requiredSubstrate(req.GetRequiredTier(), preview, production)
+		resp.Substrate = s.substrateStatus(wanted, req.GetRequiredTier(), req.GetRequiredFeatures())
 		if wanted.Present {
-			if err := missingFeatures(wanted, req.GetRequiredFeatures(), previewTier); err != nil {
+			compat := bootstrap.CheckCompat(wanted.Schema, true, bootstrap.RequiredSchema)
+			if err := compat.Explain(wanted.Schema, bootstrap.RequiredSchema, bootstrapCommand(previewTier)); err != nil {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
 		}

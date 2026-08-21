@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -21,29 +22,42 @@ import (
 )
 
 type fakeCFN struct {
-	mu        sync.Mutex
-	templates map[string]string
-	params    map[string][]cfntypes.Parameter
-	statuses  map[string]cfntypes.StackStatus
-	outputs   map[string]map[string]string
-	reasons   map[string]string
-	holding   map[string]int
-	users     *fakeIAM
-	applied   []string
-	deleted   []string
-	creates   int
-	updates   int
-	noops     int
+	mu         sync.Mutex
+	templates  map[string]string
+	params     map[string][]cfntypes.Parameter
+	statuses   map[string]cfntypes.StackStatus
+	outputs    map[string]map[string]string
+	tags       map[string][]cfntypes.Tag
+	reasons    map[string]string
+	holding    map[string]int
+	settling   map[string]int
+	planned    map[string][]cfntypes.ResourceChange
+	changeSets map[string]*fakeChangeSet
+	users      *fakeIAM
+	applied    []string
+	deleted    []string
+	events     []string
+	planning   []string
+	executed   []string
+	discarded  []string
+	creates    int
+	updates    int
+	restamps   int
+	noops      int
 }
 
 func newFakeCFN() *fakeCFN {
 	return &fakeCFN{
-		templates: map[string]string{},
-		params:    map[string][]cfntypes.Parameter{},
-		statuses:  map[string]cfntypes.StackStatus{},
-		outputs:   map[string]map[string]string{},
-		reasons:   map[string]string{},
-		holding:   map[string]int{},
+		templates:  map[string]string{},
+		params:     map[string][]cfntypes.Parameter{},
+		statuses:   map[string]cfntypes.StackStatus{},
+		outputs:    map[string]map[string]string{},
+		tags:       map[string][]cfntypes.Tag{},
+		reasons:    map[string]string{},
+		holding:    map[string]int{},
+		settling:   map[string]int{},
+		planned:    map[string][]cfntypes.ResourceChange{},
+		changeSets: map[string]*fakeChangeSet{},
 	}
 }
 
@@ -80,6 +94,11 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if _, ok := f.templates[name]; !ok {
 		return nil, validationError{msg: "Stack with id " + name + " does not exist"}
 	}
+	if looks := f.settling[name]; looks > 0 {
+		if f.settling[name] = looks - 1; f.settling[name] == 0 {
+			f.statuses[name] = cfntypes.StackStatusUpdateComplete
+		}
+	}
 	var out []cfntypes.Output
 	for k, v := range f.outputs[name] {
 		out = append(out, cfntypes.Output{OutputKey: aws.String(k), OutputValue: aws.String(v)})
@@ -88,6 +107,7 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 		StackName:   aws.String(name),
 		StackStatus: f.statuses[name],
 		Outputs:     out,
+		Tags:        f.tags[name],
 	}}}, nil
 }
 
@@ -96,7 +116,7 @@ func (f *fakeCFN) CreateStack(_ context.Context, in *cloudformation.CreateStackI
 	defer f.mu.Unlock()
 	f.creates++
 	name := aws.ToString(in.StackName)
-	f.record(name, aws.ToString(in.TemplateBody), in.Parameters)
+	f.record(name, aws.ToString(in.TemplateBody), in.Parameters, in.Tags)
 	if f.holding[name] > 0 {
 		f.holding[name]--
 		f.statuses[name] = cfntypes.StackStatusRollbackComplete
@@ -108,6 +128,26 @@ func (f *fakeCFN) CreateStack(_ context.Context, in *cloudformation.CreateStackI
 	}
 	f.statuses[name] = cfntypes.StackStatusCreateComplete
 	return &cloudformation.CreateStackOutput{}, nil
+}
+
+func (f *fakeCFN) UpdateStack(ctx context.Context, in *cloudformation.UpdateStackInput, _ ...func(*cloudformation.Options)) (*cloudformation.UpdateStackOutput, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	name := aws.ToString(in.StackName)
+	if _, ok := f.templates[name]; !ok {
+		return nil, validationError{msg: "Stack with id " + name + " does not exist"}
+	}
+	if sameStackTags(f.tags[name], in.Tags) {
+		return nil, validationError{msg: "No updates are to be performed."}
+	}
+	f.restamps++
+	f.tags[name] = in.Tags
+	f.params[name] = in.Parameters
+	f.statuses[name] = cfntypes.StackStatusUpdateComplete
+	return &cloudformation.UpdateStackOutput{}, nil
 }
 
 func (f *fakeCFN) DescribeStackEvents(_ context.Context, in *cloudformation.DescribeStackEventsInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStackEventsOutput, error) {
@@ -122,18 +162,113 @@ func (f *fakeCFN) DescribeStackEvents(_ context.Context, in *cloudformation.Desc
 	}}}, nil
 }
 
-func (f *fakeCFN) UpdateStack(_ context.Context, in *cloudformation.UpdateStackInput, _ ...func(*cloudformation.Options)) (*cloudformation.UpdateStackOutput, error) {
+type fakeChangeSet struct {
+	stack   string
+	body    string
+	params  []cfntypes.Parameter
+	tags    []cfntypes.Tag
+	changes []cfntypes.ResourceChange
+	empty   bool
+}
+
+func (f *fakeCFN) plan(stackName string, changes ...cfntypes.ResourceChange) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.updates++
+	f.planned[stackName] = changes
+}
+
+func (f *fakeCFN) busy(stackName string, looks int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.statuses[stackName] = cfntypes.StackStatusUpdateInProgress
+	f.settling[stackName] = looks
+}
+
+const behindTemplate = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n"
+
+func (f *fakeCFN) fallBehind(stackName string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.templates[stackName] = behindTemplate
+	f.tags[stackName] = stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(behindTemplate), WrittenBy: "1.0.0"})
+}
+
+func (f *fakeCFN) CreateChangeSet(_ context.Context, in *cloudformation.CreateChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	name, body := aws.ToString(in.StackName), aws.ToString(in.TemplateBody)
+	id := fmt.Sprintf("%s/%s", name, aws.ToString(in.ChangeSetName))
+	set := &fakeChangeSet{stack: name, body: body, params: in.Parameters, tags: in.Tags, changes: f.planned[name]}
 	if f.templates[name] == body && sameParams(f.params[name], in.Parameters) {
+		set.empty = true
 		f.noops++
-		return nil, validationError{msg: "No updates are to be performed."}
 	}
-	f.record(name, body, in.Parameters)
-	f.statuses[name] = cfntypes.StackStatusUpdateComplete
-	return &cloudformation.UpdateStackOutput{}, nil
+	f.changeSets[id] = set
+	f.planning = append(f.planning, id)
+	return &cloudformation.CreateChangeSetOutput{Id: aws.String(id)}, nil
+}
+
+func (f *fakeCFN) DescribeChangeSet(_ context.Context, in *cloudformation.DescribeChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeChangeSetOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	set, ok := f.changeSets[aws.ToString(in.ChangeSetName)]
+	if !ok {
+		return nil, validationError{msg: "ChangeSet " + aws.ToString(in.ChangeSetName) + " does not exist"}
+	}
+	if set.empty {
+		return &cloudformation.DescribeChangeSetOutput{
+			Status:       cfntypes.ChangeSetStatusFailed,
+			StatusReason: aws.String("The submitted information didn't contain changes."),
+		}, nil
+	}
+	out := &cloudformation.DescribeChangeSetOutput{Status: cfntypes.ChangeSetStatusCreateComplete}
+	for i := range set.changes {
+		out.Changes = append(out.Changes, cfntypes.Change{ResourceChange: &set.changes[i]})
+	}
+	return out, nil
+}
+
+func (f *fakeCFN) ExecuteChangeSet(ctx context.Context, in *cloudformation.ExecuteChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.ExecuteChangeSetOutput, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	id := aws.ToString(in.ChangeSetName)
+	set, ok := f.changeSets[id]
+	if !ok {
+		return nil, validationError{msg: "ChangeSet " + id + " does not exist"}
+	}
+	f.updates++
+	f.executed = append(f.executed, id)
+	delete(f.changeSets, id)
+	f.record(set.stack, set.body, set.params, set.tags)
+	f.statuses[set.stack] = cfntypes.StackStatusUpdateComplete
+	return &cloudformation.ExecuteChangeSetOutput{}, nil
+}
+
+func (f *fakeCFN) DeleteChangeSet(ctx context.Context, in *cloudformation.DeleteChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	id := aws.ToString(in.ChangeSetName)
+	delete(f.changeSets, id)
+	f.discarded = append(f.discarded, id)
+	return &cloudformation.DeleteChangeSetOutput{}, nil
+}
+
+func (f *fakeCFN) leftBehind() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for _, id := range f.planning {
+		if !slices.Contains(f.executed, id) && !slices.Contains(f.discarded, id) {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func (f *fakeCFN) DeleteStack(_ context.Context, in *cloudformation.DeleteStackInput, _ ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error) {
@@ -144,12 +279,20 @@ func (f *fakeCFN) DeleteStack(_ context.Context, in *cloudformation.DeleteStackI
 		return nil, validationError{msg: "Stack " + name + " is DELETE_FAILED: cannot delete IAM user " + user + " while it holds an access key created outside CloudFormation"}
 	}
 	f.deleted = append(f.deleted, name)
+	f.events = append(f.events, "removed "+name)
 	delete(f.templates, name)
 	delete(f.outputs, name)
+	delete(f.tags, name)
 	delete(f.params, name)
 	delete(f.statuses, name)
 	delete(f.reasons, name)
 	return &cloudformation.DeleteStackOutput{}, nil
+}
+
+func (f *fakeCFN) stampOf(stackName string) Stamp {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return readStamp(f.tags[stackName])
 }
 
 func declaredUser(template string) (string, bool) {
@@ -172,10 +315,12 @@ func declaredUser(template string) (string, bool) {
 	return "", false
 }
 
-func (f *fakeCFN) record(stackName, body string, params []cfntypes.Parameter) {
+func (f *fakeCFN) record(stackName, body string, params []cfntypes.Parameter, tags []cfntypes.Tag) {
 	f.templates[stackName] = body
 	f.params[stackName] = params
+	f.tags[stackName] = tags
 	f.applied = append(f.applied, stackName)
+	f.events = append(f.events, "wrote "+stackName)
 
 	var tmpl struct {
 		Outputs map[string]struct {
@@ -197,7 +342,7 @@ func (f *fakeCFN) record(stackName, body string, params []cfntypes.Parameter) {
 
 func syntheticOutput(stackName, key, declared string) string {
 	switch key {
-	case outputVersion, outputInfraClass:
+	case outputInfraClass:
 		return declared
 	case outputStateBucket:
 		return "ocel-state-test"
@@ -230,7 +375,7 @@ func sameParams(a, b []cfntypes.Parameter) bool {
 func (f *fakeCFN) seed(stackName, body string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.record(stackName, body, nil)
+	f.record(stackName, body, nil, nil)
 	f.applied = f.applied[:len(f.applied)-1]
 	f.statuses[stackName] = cfntypes.StackStatusCreateComplete
 }
@@ -267,6 +412,17 @@ func (f *fakeCFN) stacks() []string {
 	}
 	slices.Sort(names)
 	return names
+}
+
+func (f *fakeCFN) lastEvent(event string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := len(f.events) - 1; i >= 0; i-- {
+		if f.events[i] == event {
+			return i
+		}
+	}
+	return -1
 }
 
 func (f *fakeCFN) firstApplied(stackName string) int {
