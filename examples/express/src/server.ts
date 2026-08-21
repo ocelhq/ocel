@@ -1,6 +1,6 @@
 import express from "express";
 import { createRouteHandler } from "ocel/blob/express";
-import { pg, uploads } from "../ocel/index";
+import { migrate, pg, uploads } from "../ocel/index";
 
 const app = express();
 app.use(express.json());
@@ -11,7 +11,23 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/api/status/:code", (req, res) => {
+  res.status(Number(req.params.code)).json({ framework: "express" });
+});
+
+app.all("/api/echo/{*rest}", (req, res) => {
+  res.json({
+    framework: "express",
+    method: req.method,
+    path: req.path,
+    query: req.query,
+    probeHeader: req.get("x-ocel-probe") ?? null,
+    body: req.body ?? null,
+  });
+});
+
 app.post("/api/todos", async (req, res) => {
+  await migrate();
   const { title } = req.body ?? {};
   if (typeof title !== "string" || title.length === 0) {
     res.status(400).json({ error: "title is required" });

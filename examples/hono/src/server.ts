@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { createRouteHandler } from "ocel/blob/hono";
-import { pg, uploads } from "../ocel/index";
+import { migrate, pg, uploads } from "../ocel/index";
 
 const app = new Hono();
 
@@ -9,7 +9,26 @@ const PORT = Number(process.env.PORT ?? 3103);
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
+app.get("/api/status/:code", (c) =>
+  c.json({ framework: "hono" }, Number(c.req.param("code")) as 200),
+);
+
+app.all("/api/echo/*", async (c) => {
+  const url = new URL(c.req.url);
+  return c.json({
+    framework: "hono",
+    method: c.req.method,
+    path: url.pathname,
+    query: Object.fromEntries(url.searchParams),
+    probeHeader: c.req.header("x-ocel-probe") ?? null,
+    body: c.req.header("content-type")?.includes("application/json")
+      ? await c.req.json()
+      : null,
+  });
+});
+
 app.post("/api/todos", async (c) => {
+  await migrate();
   const body = (await c.req.json().catch(() => null)) as {
     title?: unknown;
   } | null;

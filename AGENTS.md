@@ -59,9 +59,9 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`pkg/`** — small shared Go modules any module may depend on.
 - **`proto/`** — source of truth for the wire format. Bindings are **generated** — never
   hand-edit generated output.
-- **`scripts/`** — development and release tooling, and the e2e harnesses.
-- **`examples/`, `tests/`** — sample apps used as fixtures, and the dev-server suites
-  that drive them. Suites that deploy live in `scripts/`, never here.
+- **`scripts/`** — development and release tooling.
+- **`examples/`, `tests/`** — sample apps used as fixtures, and every suite that drives
+  them, whether against a development server or a deployed target.
 - **`docs/agents/`** — configuration the agent skills read. Not product documentation;
   nothing that explains the code belongs here.
 - **`.github/`** — CI. **`.changeset/`** — the release mechanism; the workflow runs the

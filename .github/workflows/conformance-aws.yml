@@ -1,0 +1,90 @@
+name: Conformance AWS
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+concurrency:
+  group: conformance-aws
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "11.10.0"
+  AWS_REGION: ${{ vars.E2E_AWS_REGION }}
+  OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
+  OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+  EXPECTED_AWS_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+  EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: adapter
+
+      - uses: ./adapter/.github/actions/e2e-session
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          role-session-name: ocel-conformance-${{ github.run_id }}
+          role-duration-seconds: "10800"
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Guard the target accounts
+        run: bash adapter/tests/conformance/guard-accounts.sh
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: adapter/cli/go.mod
+          cache-dependency-path: |
+            adapter/cli/go.sum
+            adapter/platform/aws/provider/go.sum
+            adapter/pkg/proto/go.sum
+            adapter/sdk/go.sum
+
+      - name: Install dependencies
+        working-directory: adapter
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the deploy toolchain
+        working-directory: adapter
+        run: |
+          pnpm --filter ocel build
+          node scripts/build-native.mjs --host --target cli
+          node scripts/build-native.mjs --host --target provider
+
+      - name: Warm the Pulumi runtime
+        working-directory: adapter
+        run: |
+          root="$HOME/.ocel/pulumi/3.146.0"
+          curl -fsSL https://get.pulumi.com/install.sh | sh -s -- \
+            --no-edit-path --install-root "$root" --version 3.146.0
+          "$root/bin/pulumi" version
+
+      - name: Reclaim stranded conformance projects
+        working-directory: adapter
+        run: pnpm --filter @ocel-tests/conformance sweep:aws
+
+      - name: Run AWS conformance
+        working-directory: adapter
+        run: pnpm --filter @ocel-tests/conformance test:aws
+
+      - name: Tear down the conformance project
+        if: always()
+        working-directory: adapter
+        run: pnpm --filter @ocel-tests/conformance teardown:aws

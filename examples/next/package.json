@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ocel/provider-aws": "workspace:^",
     "next": "16.2.10",
     "ocel": "workspace:^",
     "pg": "^8.22.0",

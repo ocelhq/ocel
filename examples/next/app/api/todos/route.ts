@@ -1,10 +1,12 @@
 import { createTodo, listTodos } from "../../../lib/todos";
+import { migrate } from "../../../ocel/index";
 
 export async function GET() {
   return Response.json(await listTodos());
 }
 
 export async function POST(request: Request) {
+  await migrate();
   const body = (await request.json().catch(() => null)) as {
     title?: unknown;
   } | null;
