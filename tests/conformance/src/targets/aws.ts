@@ -29,9 +29,14 @@ function ocelCommand() {
   ] as const;
 }
 
-function childEnv(token: string, slug: string): NodeJS.ProcessEnv {
+function childEnv(
+  token: string,
+  slug: string,
+  bootstrapToken: string,
+): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    FIXTURE_BOOTSTRAP_TOKEN: bootstrapToken,
     OCEL_ACCESS_TOKEN: token,
     OCEL_CONFIG: config,
     OCEL_EDGE_OBSERVABILITY: "off",
@@ -192,8 +197,11 @@ async function assertWorkerPath(
   }
 }
 
-async function bootstrapFixture(baseUrl: string) {
-  const response = await fetch(`${baseUrl}/api/bootstrap`, { method: "POST" });
+async function bootstrapFixture(baseUrl: string, token: string) {
+  const response = await fetch(`${baseUrl}/api/bootstrap`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+  });
   if (!response.ok) {
     throw new Error(
       `${baseUrl}/api/bootstrap answered ${response.status}: ${await response.text()}`,
@@ -216,7 +224,8 @@ export function createAwsTarget(token: string): Target {
   return {
     name: "aws",
     async up(example) {
-      const env = childEnv(token, slug);
+      const bootstrapToken = crypto.randomUUID();
+      const env = childEnv(token, slug, bootstrapToken);
       const ref = `conformance-${example.name}`;
       let createdEnv = false;
       if (example.capabilities.includes("env")) {
@@ -247,7 +256,7 @@ export function createAwsTarget(token: string): Target {
         }
         const baseUrl = result.appUrls[0];
         await assertWorkerPath(result, example, baseUrl);
-        await bootstrapFixture(baseUrl);
+        await bootstrapFixture(baseUrl, bootstrapToken);
         const objectStore = new S3Client({
           maxAttempts: 4,
           retryMode: "standard",

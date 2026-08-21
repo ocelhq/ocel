@@ -18,9 +18,14 @@ const ports: Record<Example["name"], number> = {
   "with-transforms": 3106,
 };
 
-function env(token: string, example: Example): NodeJS.ProcessEnv {
+function env(
+  token: string,
+  example: Example,
+  bootstrapToken: string,
+): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    FIXTURE_BOOTSTRAP_TOKEN: bootstrapToken,
     OCEL_ACCESS_TOKEN: token,
     OCEL_API_URL: apiUrl,
     PORT: String(ports[example.name]),
@@ -96,7 +101,7 @@ export function createDevTarget(token: string): Target {
   return {
     name: "dev",
     async up(example) {
-      const childEnv = env(token, example);
+      const childEnv = env(token, example, crypto.randomUUID());
       const createdEnv = await prepare(example);
       let child: ChildProcess | undefined;
       try {

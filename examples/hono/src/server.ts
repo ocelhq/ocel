@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { createRouteHandler } from "ocel/blob/hono";
-import { migrate, pg, uploads } from "../ocel/index";
+import { fixtureEnv, migrate, pg, uploads } from "../ocel/index";
 
 const app = new Hono();
 
@@ -28,6 +28,12 @@ app.all("/api/echo/*", async (c) => {
 });
 
 app.post("/api/bootstrap", async (c) => {
+  if (
+    c.req.header("authorization") !==
+    `Bearer ${fixtureEnv.FIXTURE_BOOTSTRAP_TOKEN}`
+  ) {
+    return c.body(null, 404);
+  }
   await migrate();
   return c.body(null, 204);
 });

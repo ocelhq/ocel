@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import { createRouteHandler } from "ocel/blob";
-import { migrate, pg, uploads } from "../ocel/index";
+import { fixtureEnv, migrate, pg, uploads } from "../ocel/index";
 
 const app = Fastify({ logger: true });
 const PORT = Number(process.env.PORT ?? 3104);
@@ -29,7 +29,13 @@ app.all<{ Params: { "*": string } }>(
   },
 );
 
-app.post("/api/bootstrap", async (_request, reply) => {
+app.post("/api/bootstrap", async (request, reply) => {
+  if (
+    request.headers.authorization !==
+    `Bearer ${fixtureEnv.FIXTURE_BOOTSTRAP_TOKEN}`
+  ) {
+    return reply.status(404).send();
+  }
   await migrate();
   return reply.status(204).send();
 });

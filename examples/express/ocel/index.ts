@@ -4,11 +4,15 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { bucket, uploader } from "ocel/blob/express";
+import { defineEnv } from "ocel/env";
 import { postgres } from "ocel/postgres";
 import sharp from "sharp";
 import { z } from "zod";
 
 export const pg = postgres("main");
+export const fixtureEnv = defineEnv({
+  FIXTURE_BOOTSTRAP_TOKEN: { class: "secret" },
+});
 
 export async function migrate() {
   await pg.query(`

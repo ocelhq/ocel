@@ -1,6 +1,6 @@
 import express from "express";
 import { createRouteHandler } from "ocel/blob/express";
-import { migrate, pg, uploads } from "../ocel/index";
+import { fixtureEnv, migrate, pg, uploads } from "../ocel/index";
 
 const app = express();
 app.use(express.json());
@@ -26,7 +26,14 @@ app.all("/api/echo/{*rest}", (req, res) => {
   });
 });
 
-app.post("/api/bootstrap", async (_req, res) => {
+app.post("/api/bootstrap", async (req, res) => {
+  if (
+    req.get("authorization") !==
+    `Bearer ${fixtureEnv.FIXTURE_BOOTSTRAP_TOKEN}`
+  ) {
+    res.status(404).end();
+    return;
+  }
   await migrate();
   res.status(204).end();
 });
