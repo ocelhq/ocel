@@ -85,18 +85,3 @@ type SweepScope struct {
 	Class   Class
 	Stale   []naming.StackName
 }
-
-// Warmer is optional: a vendor whose compute has a cold start may implement it,
-// and the kit calls it after a release is promoted. A vendor that does not is not
-// deficient, and conformance asserts nothing about it.
-type Warmer interface {
-	Warm(ctx context.Context, targets []string, report Reporter) error
-}
-
-// CodeEmbedder is optional: updating a deployed function's code in place, which
-// is how a build's own artifacts reach a function that was provisioned before
-// they existed. A vendor without in-place code update omits it, and the kit falls
-// back to provisioning the artifact in.
-type CodeEmbedder interface {
-	EmbedCode(ctx context.Context, function string, artifact ArtifactRef, report Reporter) error
-}
