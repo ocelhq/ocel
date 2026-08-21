@@ -9,6 +9,9 @@ const s3Marker = "rehydrated compile cache from ";
 const maxPackageBytes = 250 * 1024 * 1024;
 const logPageLimit = 1000;
 const logPollIntervalMs = 5_000;
+const retryCeilingMs = 30_000;
+const requestTimeoutMs = 10_000;
+const maximumBackoffMs = 8_000;
 
 type Environment = { class: string; identity?: string };
 
@@ -24,6 +27,19 @@ type FunctionDescription = {
 };
 
 type LogEvent = { eventId?: string; message?: string };
+
+type RetryDependencies = {
+  now: () => number;
+  random: () => number;
+  sleep: (milliseconds: number) => Promise<void>;
+};
+
+export type BytecodeDependencies = RetryDependencies & {
+  command: (args: string[]) => string;
+  commandBytes: (args: string[]) => Buffer;
+  fetch: typeof fetch;
+  timeoutSignal: (milliseconds: number) => AbortSignal;
+};
 
 type BytecodeDeployment = {
   assetBucket: string;
@@ -41,19 +57,36 @@ export type BytecodeAssertions = {
   coldStart: () => Promise<void>;
 };
 
+const runtimeDependencies: BytecodeDependencies = {
+  command: aws,
+  commandBytes: awsBytes,
+  fetch,
+  now: Date.now,
+  random: Math.random,
+  sleep: delay,
+  timeoutSignal: AbortSignal.timeout,
+};
+
 export function createBytecodeAssertions(
   result: Deployment,
   appName: string,
   functionName: string,
   baseUrl: string,
+  dependencies: BytecodeDependencies = runtimeDependencies,
 ): BytecodeAssertions {
   let deployment: Promise<BytecodeDeployment> | undefined;
   const resolve = () =>
-    (deployment ??= resolveBytecodeDeployment(result, appName, functionName));
+    (deployment ??= resolveBytecodeDeployment(
+      result,
+      appName,
+      functionName,
+      dependencies,
+    ));
   return {
     archive: async () => assertCacheArchive(await resolve()),
     artifact: async () => assertEmbeddedArtifact(await resolve()),
-    coldStart: async () => assertEmbeddedColdStart(await resolve(), baseUrl),
+    coldStart: async () =>
+      assertEmbeddedColdStart(await resolve(), baseUrl, dependencies),
   };
 }
 
@@ -61,6 +94,7 @@ async function resolveBytecodeDeployment(
   result: Deployment,
   appName: string,
   functionName: string,
+  dependencies: BytecodeDependencies,
 ): Promise<BytecodeDeployment> {
   const app = result.apps?.find((candidate) => candidate.name === appName);
   if (!app?.buildId) {
@@ -68,36 +102,40 @@ async function resolveBytecodeDeployment(
       `deploy result has no build id for ${appName}: ${JSON.stringify(result.apps ?? [])}`,
     );
   }
-  const assetBucket = resolveBootstrapBucket("AssetBucket");
+  const assetBucket = resolveBootstrapBucket(
+    "AssetBucket",
+    dependencies.command,
+  );
   const environment =
     result.environment.class === "preview"
       ? `preview-${result.environment.identity ?? ""}`
       : "prod";
   const keyPrefix = `${environment}/${result.slug}/${appName}/${app.buildId}/bytecode/${functionName}/`;
   const description = JSON.parse(
-    aws(["lambda", "get-function", "--function-name", functionName, "--output", "json"]),
+    dependencies.command([
+      "lambda",
+      "get-function",
+      "--function-name",
+      functionName,
+      "--output",
+      "json",
+    ]),
   ) as FunctionDescription;
   const architecture = description.Configuration?.Architectures?.[0];
   if (!architecture) {
     throw new Error(`${functionName} has no reported architecture`);
   }
-  const keys = await listCacheKeys(assetBucket, keyPrefix);
-  const candidates = keys.filter((key) => {
-    const match = archiveName.exec(key.slice(keyPrefix.length));
-    return match?.[2] === architecture;
-  });
-  if (candidates.length !== 1) {
-    throw new Error(
-      `expected one ${architecture} compile cache under s3://${assetBucket}/${keyPrefix}, found ${candidates.length}: ${candidates.join(", ")}`,
-    );
-  }
-  const cacheKey = candidates[0]!;
-  const cacheBytes = awsBytes([
-    "s3",
-    "cp",
-    `s3://${assetBucket}/${cacheKey}`,
-    "-",
-  ]);
+  const cacheKey = await findCacheKey(
+    assetBucket,
+    keyPrefix,
+    architecture,
+    dependencies,
+  );
+  const cacheBytes = await readCacheObject(
+    assetBucket,
+    cacheKey,
+    dependencies,
+  );
   const name = cacheKey.slice(keyPrefix.length);
   const embeddedPath = `.ocel/bytecode/${name.slice(0, -".gz".length)}`;
   const location = description.Code?.Location;
@@ -105,13 +143,11 @@ async function resolveBytecodeDeployment(
   if (!location || !packageSha) {
     throw new Error(`${functionName} has no downloadable code location or sha`);
   }
-  const response = await fetch(location);
-  if (!response.ok) {
-    throw new Error(
-      `could not download ${functionName}'s deployment package: HTTP ${response.status}`,
-    );
-  }
-  const packageBytes = Buffer.from(await response.arrayBuffer());
+  const packageBytes = await downloadPackage(
+    location,
+    functionName,
+    dependencies,
+  );
   if (packageBytes.length > maxPackageBytes) {
     throw new Error(
       `${functionName}'s deployment package is ${packageBytes.length} bytes`,
@@ -170,8 +206,9 @@ export function assertEmbeddedArtifact(deployment: BytecodeDeployment) {
 export async function assertEmbeddedColdStart(
   deployment: BytecodeDeployment,
   baseUrl: string,
+  dependencies: BytecodeDependencies = runtimeDependencies,
 ) {
-  const startedAt = Date.now();
+  const startedAt = dependencies.now();
   const requests = await Promise.all(
     Array.from({ length: 20 }, (_, index) => {
       const url = new URL("/api/revalidate", baseUrl);
@@ -179,7 +216,7 @@ export async function assertEmbeddedColdStart(
         "tag",
         `ocel-conformance-bytecode-${startedAt}-${process.pid}-${index}`,
       );
-      return fetch(url, { method: "POST" })
+      return dependencies.fetch(url, { method: "POST" })
         .then((response) => response.ok)
         .catch(() => false);
     }),
@@ -187,33 +224,45 @@ export async function assertEmbeddedColdStart(
   if (!requests.some(Boolean)) {
     throw new Error("all cold-start probe requests failed");
   }
-  const deadline = Date.now() + 60_000;
+  const deadline = dependencies.now() + 60_000;
   const seen = new Map<string, string>();
   let finalCount = 0;
   let lastError: Error | undefined;
   do {
     try {
-      const events = filterLogs(deployment.functionName, startedAt);
+      const events = filterLogs(
+        deployment.functionName,
+        startedAt,
+        dependencies.command,
+      );
       finalCount = events.length;
       ingest(events, seen);
     } catch (error) {
       lastError = error as Error;
     }
-    if (Date.now() < deadline) await delay(logPollIntervalMs);
-  } while (Date.now() < deadline);
-  const confirmationDeadline = Date.now() + 30_000;
+    if (dependencies.now() < deadline) {
+      await dependencies.sleep(logPollIntervalMs);
+    }
+  } while (dependencies.now() < deadline);
+  const confirmationDeadline = dependencies.now() + 30_000;
   let confirmed = false;
   do {
     try {
-      const events = filterLogs(deployment.functionName, startedAt);
+      const events = filterLogs(
+        deployment.functionName,
+        startedAt,
+        dependencies.command,
+      );
       finalCount = events.length;
       ingest(events, seen);
       confirmed = true;
     } catch (error) {
       lastError = error as Error;
-      if (Date.now() < confirmationDeadline) await delay(logPollIntervalMs);
+      if (dependencies.now() < confirmationDeadline) {
+        await dependencies.sleep(logPollIntervalMs);
+      }
     }
-  } while (!confirmed && Date.now() < confirmationDeadline);
+  } while (!confirmed && dependencies.now() < confirmationDeadline);
   if (!confirmed) {
     throw new Error(
       `could not read ${deployment.functionName}'s cold-start log window to its end: ${lastError?.message}`,
@@ -242,12 +291,21 @@ export async function assertEmbeddedColdStart(
   }
 }
 
-async function listCacheKeys(bucket: string, prefix: string) {
-  const deadline = Date.now() + 30_000;
+export async function findCacheKey(
+  bucket: string,
+  prefix: string,
+  architecture: string,
+  dependencies: Pick<
+    BytecodeDependencies,
+    "command" | "now" | "random" | "sleep"
+  >,
+) {
+  const deadline = dependencies.now() + retryCeilingMs;
+  let attempt = 0;
   for (;;) {
     try {
       const listed = JSON.parse(
-        aws([
+        dependencies.command([
           "s3api",
           "list-objects-v2",
           "--bucket",
@@ -258,14 +316,163 @@ async function listCacheKeys(bucket: string, prefix: string) {
           "json",
         ]),
       ) as { Contents?: Array<{ Key?: string }> };
-      return (listed.Contents ?? []).flatMap((entry) =>
+      const keys = (listed.Contents ?? []).flatMap((entry) =>
         entry.Key ? [entry.Key] : [],
       );
+      const candidates = keys.filter((key) => {
+        const match = archiveName.exec(key.slice(prefix.length));
+        return match?.[2] === architecture;
+      });
+      if (candidates.length === 1) return candidates[0]!;
+      if (candidates.length > 1) {
+        throw new Error(
+          `expected one ${architecture} compile cache under s3://${bucket}/${prefix}, found ${candidates.length}: ${candidates.join(", ")}`,
+        );
+      }
+      throw new CacheNotReadyError(
+        `no ${architecture} compile cache under s3://${bucket}/${prefix}`,
+      );
     } catch (error) {
-      if (Date.now() >= deadline) throw error;
-      await delay(3_000);
+      if (!isTransientAwsRead(error)) throw error;
+      await backoff(error, attempt++, deadline, dependencies);
     }
   }
+}
+
+export async function downloadPackage(
+  location: string,
+  functionName: string,
+  dependencies: Pick<
+    BytecodeDependencies,
+    "fetch" | "now" | "random" | "sleep" | "timeoutSignal"
+  >,
+) {
+  const deadline = dependencies.now() + retryCeilingMs;
+  let attempt = 0;
+  for (;;) {
+    const remaining = deadline - dependencies.now();
+    if (remaining <= 0) {
+      throw new Error(
+        `could not download ${functionName}'s deployment package within ${retryCeilingMs / 1000}s`,
+      );
+    }
+    let response: Response;
+    try {
+      response = await dependencies.fetch(location, {
+        signal: dependencies.timeoutSignal(
+          Math.min(requestTimeoutMs, remaining),
+        ),
+      });
+      if (response.ok) {
+        return Buffer.from(await response.arrayBuffer());
+      }
+    } catch (error) {
+      if (!isTransientFetchError(error)) {
+        throw new Error(
+          `could not download ${functionName}'s deployment package: ${(error as Error).message}`,
+        );
+      }
+      await backoff(error, attempt++, deadline, dependencies);
+      continue;
+    }
+    const retryAfter = retryAfterMilliseconds(
+      response.headers.get("retry-after"),
+      dependencies.now(),
+    );
+    if (!isTransientHttpStatus(response.status)) {
+      throw new Error(
+        `could not download ${functionName}'s deployment package: HTTP ${response.status}`,
+      );
+    }
+    await response.body?.cancel().catch(() => {});
+    await backoff(
+      new Error(`HTTP ${response.status}`),
+      attempt++,
+      deadline,
+      dependencies,
+      retryAfter,
+    );
+  }
+}
+
+export async function readCacheObject(
+  bucket: string,
+  key: string,
+  dependencies: Pick<
+    BytecodeDependencies,
+    "commandBytes" | "now" | "random" | "sleep"
+  >,
+) {
+  const deadline = dependencies.now() + retryCeilingMs;
+  let attempt = 0;
+  for (;;) {
+    try {
+      return dependencies.commandBytes([
+        "s3",
+        "cp",
+        `s3://${bucket}/${key}`,
+        "-",
+      ]);
+    } catch (error) {
+      if (!isTransientAwsRead(error)) throw error;
+      await backoff(error, attempt++, deadline, dependencies);
+    }
+  }
+}
+
+class CacheNotReadyError extends Error {}
+
+function isTransientAwsRead(error: unknown) {
+  if (error instanceof CacheNotReadyError) return true;
+  const detail = `${String((error as { message?: unknown }).message ?? "")} ${String(
+    (error as { stderr?: unknown }).stderr ?? "",
+  )}`;
+  return /(?:SlowDown|RequestTimeout|Throttl|TooManyRequests|ServiceUnavailable|InternalError|ECONNRESET|ETIMEDOUT|EAI_AGAIN|NoSuchKey|\bNotFound\b)/i.test(
+    detail,
+  );
+}
+
+function isTransientFetchError(error: unknown) {
+  const candidate = error as {
+    name?: unknown;
+    message?: unknown;
+    cause?: unknown;
+  };
+  const detail = `${String(candidate.name ?? "")} ${String(candidate.message ?? "")} ${String(candidate.cause ?? "")}`;
+  return /(?:AbortError|TimeoutError|TypeError|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|fetch failed)/i.test(
+    detail,
+  );
+}
+
+function isTransientHttpStatus(status: number) {
+  return (
+    status === 408 ||
+    status === 425 ||
+    status === 429 ||
+    (status >= 500 && status <= 599)
+  );
+}
+
+function retryAfterMilliseconds(value: string | null, now: number) {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - now) : undefined;
+}
+
+async function backoff(
+  error: unknown,
+  attempt: number,
+  deadline: number,
+  dependencies: RetryDependencies,
+  retryAfter?: number,
+) {
+  const exponential = Math.min(maximumBackoffMs, 250 * 2 ** attempt);
+  const jittered = exponential * (0.5 + dependencies.random() * 0.5);
+  const wait = Math.ceil(Math.max(jittered, retryAfter ?? 0));
+  if (dependencies.now() + wait >= deadline) throw error;
+  await dependencies.sleep(wait);
 }
 
 function ingest(events: LogEvent[], seen: Map<string, string>) {
@@ -275,8 +482,11 @@ function ingest(events: LogEvent[], seen: Map<string, string>) {
   }
 }
 
-function resolveBootstrapBucket(logicalId: string) {
-  const bucket = aws([
+function resolveBootstrapBucket(
+  logicalId: string,
+  command: (args: string[]) => string,
+) {
+  const bucket = command([
     "cloudformation",
     "describe-stack-resources",
     "--stack-name",
@@ -292,10 +502,14 @@ function resolveBootstrapBucket(logicalId: string) {
   return bucket;
 }
 
-function filterLogs(functionName: string, startTime: number) {
+function filterLogs(
+  functionName: string,
+  startTime: number,
+  command: (args: string[]) => string,
+) {
   const pattern = `?"embedded compile cache" ?"${s3Marker.trim()}"`;
   const response = JSON.parse(
-    aws([
+    command([
       "logs",
       "filter-log-events",
       "--log-group-name",

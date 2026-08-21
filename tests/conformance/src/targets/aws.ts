@@ -143,9 +143,8 @@ function bucketName(result: Result, example: Example) {
 }
 
 async function assertWorkerPath(
-  result: Result,
-  example: Example,
   baseUrl: string,
+  name: string,
 ) {
   const host = new URL(baseUrl).hostname.toLowerCase();
   if (/\.lambda-url\.[a-z0-9-]+\.on\.aws$/.test(host)) {
@@ -171,7 +170,6 @@ async function assertWorkerPath(
     throw new Error(`${baseUrl} answered without a cf-ray header`);
   }
 
-  const name = functionName(result, example);
   let raw: string;
   try {
     raw = aws([
@@ -331,13 +329,11 @@ export function createAwsTarget(token: string): Target {
           );
         }
         const baseUrl = result.appUrls[0];
-        await assertWorkerPath(result, example, baseUrl);
-        const bytecode = createBytecodeAssertions(
-          result,
-          example.appName,
-          functionName(result, example),
-          baseUrl,
-        );
+        const name = functionName(result, example);
+        await assertWorkerPath(baseUrl, name);
+        const bytecode = example.capabilities.includes("bytecode")
+          ? createBytecodeAssertions(result, example.appName, name, baseUrl)
+          : undefined;
         if (!example.capabilities.includes("links")) {
           await bootstrapFixture(baseUrl, bootstrapToken);
         }
@@ -362,9 +358,12 @@ export function createAwsTarget(token: string): Target {
             );
             return { contentType: metadata.ContentType };
           },
-          assertBytecodeArchive: bytecode.archive,
-          assertBytecodeEmbeddedArtifact: bytecode.artifact,
-          assertBytecodeColdStart: bytecode.coldStart,
+          assertBytecodeArchive:
+            bytecode?.archive ?? unsupportedBytecodeAssertion,
+          assertBytecodeEmbeddedArtifact:
+            bytecode?.artifact ?? unsupportedBytecodeAssertion,
+          assertBytecodeColdStart:
+            bytecode?.coldStart ?? unsupportedBytecodeAssertion,
           teardown: async () => {
             objectStore.destroy();
             try {
@@ -413,4 +412,8 @@ export function createAwsTarget(token: string): Target {
       }
     },
   };
+}
+
+async function unsupportedBytecodeAssertion() {
+  throw new Error("example does not declare bytecode conformance");
 }

@@ -39,8 +39,9 @@ beside `status`, `staged.txt` and `run.log`.
 
 ## Step 0 — Preflight
 
-Once, before wave 1. Work `run-suite-prompt.md`'s preflight list, hard-stopping on each —
-a bad preflight makes every wave that follows meaningless. Two things it does not cover:
+Once, before wave 1. Work `tests/e2e-next.js/run-suite-prompt.md`'s preflight list,
+hard-stopping on each — a bad preflight makes every wave that follows meaningless. Two
+things it does not cover:
 
 - The next.js checkout's ref must match the adapter's `next` pin, and installing there
   takes `--frozen-lockfile --config.confirmModulesPurge=false` or it silently keeps the
@@ -51,10 +52,10 @@ a bad preflight makes every wave that follows meaningless. Two things it does no
 ## Step 1 — Work list
 
 Derive the failing suites from the **run's job logs**, not from the committed manifest —
-`report-prompt.md` steps 1–5. The manifest carries hand-edited graduations no run has
-verified yet, and the notes may name more. Finish on a table: suite → failing cases →
-suspected cluster, with every disagreement between logs and manifest flagged rather than
-quietly resolved.
+`tests/e2e-next.js/report-prompt.md` steps 1–5. The manifest carries hand-edited
+graduations no run has verified yet, and the notes may name more. Finish on a table: suite
+→ failing cases → suspected cluster, with every disagreement between logs and manifest
+flagged rather than quietly resolved.
 
 ## Step 2 — Waves
 
@@ -64,14 +65,15 @@ they share a cause.
 1. **Run them staged** (`STAGE=1`), in parallel, as above.
 2. **A green suite is done.** An earlier wave's fix reached it — promote its manifest
    entry, tear its preview down, drop it. No debugger.
-3. **Debug: one Opus agent per still-failing suite.** Hand it the suite path, `run.log`,
-   `fragment.json`, the preview URL from `staged.txt`, and the wave's other suites with
-   their symptoms. It reads code, curls the preview, queries AWS; it does not edit and does
-   not deploy. It returns root cause, file and line, the fix to make, which other failing
-   suites that same fix should close, and the check that would prove it.
-4. **Cluster the diagnoses yourself**, then dispatch **one Sonnet fixer per cluster** —
-   never per suite — each in its own worktree (`isolation: "worktree"`) on its own branch
-   in the stack. Invoke the `gh-stack` skill for the stack mechanics.
+3. **Debug: one diagnosis subagent per still-failing suite.** Hand it the suite path,
+   `run.log`, `fragment.json`, the preview URL from `staged.txt`, and the wave's other
+   suites with their symptoms. It reads code, curls the preview, queries AWS; it does not
+   edit and does not deploy. It returns root cause, file and line, the fix to make, which
+   other failing suites that same fix should close, and the check that would prove it.
+4. **Cluster the diagnoses yourself.** For each cluster, create an explicit isolated path
+   with `git worktree add <absolute-worktree-path> -b <branch> <stack-base>`, then dispatch
+   one fixer subagent — never one per suite — and pass that path as its working directory.
+   Invoke the `gh-stack` skill for branch and stack mechanics.
 5. **Verify in the shell**: re-run every suite the cluster claims, from the fixer's
    worktree (`ADAPTER_DIR=<worktree>`, no `STAGE`). `fragment.json` is the verdict.
 6. **Promote**: delete the now-passing cases from `tests/e2e-next.js/baseline-manifest.json`
@@ -81,9 +83,9 @@ they share a cause.
 
 ## Step 3 — Close
 
-Run `project-teardown.mjs e2e-$RUN_ID`, prove it with the tag query in
-`run-suite-prompt.md`, submit the stack, and report per cluster: root cause, PR, cases
-promoted, cases still red.
+Run `tests/e2e-next.js/project-teardown.mjs e2e-$RUN_ID`, prove it with the tag query in
+`tests/e2e-next.js/run-suite-prompt.md`, submit the stack, and report per cluster: root
+cause, PR, cases promoted, cases still red.
 
 ## Making a fix visible
 
@@ -110,5 +112,5 @@ path:
   staged, each recorded in a `staged.txt`. `preview rm` reporting success proves nothing;
   the tag query does.
 - Judge every failure against `baseline-manifest.json` first — exact full Jest name.
-- Infrastructure is not a bug. `run-suite-prompt.md`'s throttle and infra tests decide
-  whether a failure deserves an agent at all.
+- Infrastructure is not a bug. `tests/e2e-next.js/run-suite-prompt.md`'s throttle and
+  infra tests decide whether a failure deserves an agent at all.
