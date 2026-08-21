@@ -8,6 +8,7 @@ import "app/resources/v1/variables.proto";
 import "buf/validate/validate.proto";
 import "common/environment/v1/environment.proto";
 import "common/progress/v1/progress.proto";
+import "google/protobuf/struct.proto";
 
 service ProviderService {
     rpc Configure(ConfigureRequest) returns (ConfigureResponse);
@@ -55,18 +56,8 @@ service ProviderService {
     rpc GetHostnameStatus(HostnameRequest) returns (GetHostnameStatusResponse);
 }
 
-message AwsProviderConfig {
-  string region = 1;
-
-  repeated string transforms = 2;
-
-  map<string, string> certificates = 3;
-}
-
 message ProviderConfig {
-  oneof provider {
-    AwsProviderConfig aws = 1;
-  }
+  google.protobuf.Struct options = 1;
 }
 
 message ConfigureRequest {
@@ -462,11 +453,15 @@ message Identity {
 
   string principal = 3;
 
-  string region = 4;
-
-  string profile = 5;
-
   string edge_scope = 6;
+
+  repeated Detail details = 7;
+}
+
+message Detail {
+  string label = 1;
+
+  string value = 2;
 }
 
 message CredentialProblem {

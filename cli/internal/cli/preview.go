@@ -677,15 +677,12 @@ func originIdentityLine(id *contractv1.Identity) string {
 	if id.GetAccount() == "" {
 		return ""
 	}
-	var parts []string
-	if p := id.GetProfile(); p != "" {
-		parts = append(parts, "profile="+p)
-	} else if principal := id.GetPrincipal(); principal != "" {
+	parts := []string{"account=" + id.GetAccount()}
+	if principal := id.GetPrincipal(); principal != "" {
 		parts = append(parts, "identity="+principal)
 	}
-	parts = append(parts, "account="+id.GetAccount())
-	if r := id.GetRegion(); r != "" {
-		parts = append(parts, "region="+r)
+	for _, detail := range id.GetDetails() {
+		parts = append(parts, detail.GetLabel()+"="+detail.GetValue())
 	}
 	return strings.Join(parts, "  ")
 }

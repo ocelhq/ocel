@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -15,6 +17,8 @@ import (
 	"sync"
 
 	"connectrpc.com/connect"
+
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -503,9 +507,11 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 		Identity: &contractv1.Identity{
 			Provider:  os.Getenv(fakeIDProviderEnvVar),
 			Account:   os.Getenv(fakeIDAccountEnvVar),
-			Profile:   os.Getenv(fakeIDProfileEnvVar),
-			Region:    os.Getenv(fakeIDRegionEnvVar),
 			EdgeScope: os.Getenv(fakeIDEdgeScopeEnvVar),
+			Details: []*contractv1.Detail{
+				{Label: "region", Value: os.Getenv(fakeIDRegionEnvVar)},
+				{Label: "profile", Value: os.Getenv(fakeIDProfileEnvVar)},
+			},
 		},
 	}
 	if req.GetSlug() != "" && req.GetRequiredTier() == environmentv1.Tier_TIER_PRODUCTION {
@@ -574,6 +580,10 @@ func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
+	aws, err := decodeFakeProviderOptions(req.GetConfig())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	path := os.Getenv(fakeConfigureJournalEnvVar)
 	if path == "" {
 		return &contractv1.ConfigureResponse{}, nil
@@ -583,9 +593,32 @@ func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv
 		return nil, err
 	}
 	defer f.Close()
-	aws := req.GetConfig().GetAws()
-	fmt.Fprintf(f, "region=%s transforms=%s certificates=%v\n", aws.GetRegion(), strings.Join(aws.GetTransforms(), ","), aws.GetCertificates())
+	fmt.Fprintf(f, "region=%s transforms=%s certificates=%v\n", aws.Region, strings.Join(aws.Transforms, ","), aws.Certificates)
 	return &contractv1.ConfigureResponse{}, nil
+}
+
+type fakeProviderOptions struct {
+	Region       string            `json:"region"`
+	Transforms   []string          `json:"transforms"`
+	Certificates map[string]string `json:"certificates"`
+}
+
+func decodeFakeProviderOptions(config *contractv1.ProviderConfig) (fakeProviderOptions, error) {
+	var options fakeProviderOptions
+	fields := config.GetOptions()
+	if len(fields.GetFields()) == 0 {
+		return options, nil
+	}
+	raw, err := protojson.Marshal(fields)
+	if err != nil {
+		return options, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&options); err != nil {
+		return fakeProviderOptions{}, err
+	}
+	return options, nil
 }
 
 func journalBootstrap(req *contractv1.BootstrapRequest) {

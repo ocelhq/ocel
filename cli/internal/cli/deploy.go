@@ -595,12 +595,13 @@ func runProviderSession(ctx context.Context, d deps, cfg *projectconfig.Config, 
 	}
 
 	runner, err := providerrunner.Spawn(ctx, providerrunner.Config{
-		BinaryPath:   binPath,
-		Stdout:       stdout,
-		Stderr:       stderr,
-		Env:          env,
-		Provider:     sessionConfig,
-		ReadyTimeout: deployReadyTimeout,
+		BinaryPath:      binPath,
+		Stdout:          stdout,
+		Stderr:          stderr,
+		Env:             env,
+		Provider:        sessionConfig,
+		ProviderPackage: provider.Package,
+		ReadyTimeout:    deployReadyTimeout,
 	})
 	if err != nil {
 		return fmt.Errorf("spawn provider: %w", err)

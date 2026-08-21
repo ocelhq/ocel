@@ -54,8 +54,7 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 		resp.Identity.Provider = "AWS"
 		resp.Identity.Account = id.account
 		resp.Identity.Principal = id.principal()
-		resp.Identity.Region = awscfg.Region
-		resp.Identity.Profile = os.Getenv("AWS_PROFILE")
+		resp.Identity.Details = identityDetails(awscfg.Region, os.Getenv("AWS_PROFILE"))
 	}
 
 	resp.DomainClaims = domainClaims(ctx, s.edgeRouteOwner(requestedEdge(req), awscfg.Region), req.GetSlug(), req.GetDomains())
@@ -116,6 +115,16 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 	}
 
 	return resp, nil
+}
+
+func identityDetails(region, profile string) []*contractv1.Detail {
+	var details []*contractv1.Detail
+	for _, detail := range []*contractv1.Detail{{Label: "region", Value: region}, {Label: "profile", Value: profile}} {
+		if detail.GetValue() != "" {
+			details = append(details, detail)
+		}
+	}
+	return details
 }
 
 func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *contractv1.PreflightRequest, edgeFront edge.Edge) error {

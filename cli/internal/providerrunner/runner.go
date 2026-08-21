@@ -21,6 +21,7 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/channel"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -37,15 +38,16 @@ const DefaultGracePeriod = 2 * time.Second
 const DefaultReapTimeout = 2 * time.Second
 
 type Config struct {
-	BinaryPath   string
-	Args         []string
-	Env          []string
-	Provider     *contractv1.ProviderConfig
-	Stdout       io.Writer
-	Stderr       io.Writer
-	ReadyTimeout time.Duration
-	GracePeriod  time.Duration
-	ReapTimeout  time.Duration
+	BinaryPath      string
+	Args            []string
+	Env             []string
+	Provider        *contractv1.ProviderConfig
+	ProviderPackage string
+	Stdout          io.Writer
+	Stderr          io.Writer
+	ReadyTimeout    time.Duration
+	GracePeriod     time.Duration
+	ReapTimeout     time.Duration
 }
 
 type EarlyExitError struct {
@@ -86,14 +88,15 @@ func (e *DeployFailedError) Error() string {
 }
 
 type Runner struct {
-	cmd          *exec.Cmd
-	token        string
-	provider     *contractv1.ProviderConfig
-	stdout       io.Writer
-	stderr       io.Writer
-	readyTimeout time.Duration
-	gracePeriod  time.Duration
-	reapTimeout  time.Duration
+	cmd             *exec.Cmd
+	token           string
+	provider        *contractv1.ProviderConfig
+	providerPackage string
+	stdout          io.Writer
+	stderr          io.Writer
+	readyTimeout    time.Duration
+	gracePeriod     time.Duration
+	reapTimeout     time.Duration
 
 	readyCh chan string
 	scanErr chan error
@@ -149,17 +152,18 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	}
 
 	r := &Runner{
-		cmd:          cmd,
-		token:        token,
-		provider:     cfg.Provider,
-		stdout:       cfg.Stdout,
-		stderr:       cfg.Stderr,
-		readyTimeout: resolveReadyTimeout(cfg.ReadyTimeout),
-		gracePeriod:  resolveDuration(cfg.GracePeriod, DefaultGracePeriod),
-		reapTimeout:  resolveDuration(cfg.ReapTimeout, DefaultReapTimeout),
-		readyCh:      make(chan string, 1),
-		scanErr:      make(chan error, 1),
-		done:         make(chan struct{}),
+		cmd:             cmd,
+		token:           token,
+		provider:        cfg.Provider,
+		providerPackage: cfg.ProviderPackage,
+		stdout:          cfg.Stdout,
+		stderr:          cfg.Stderr,
+		readyTimeout:    resolveReadyTimeout(cfg.ReadyTimeout),
+		gracePeriod:     resolveDuration(cfg.GracePeriod, DefaultGracePeriod),
+		reapTimeout:     resolveDuration(cfg.ReapTimeout, DefaultReapTimeout),
+		readyCh:         make(chan string, 1),
+		scanErr:         make(chan error, 1),
+		done:            make(chan struct{}),
 	}
 
 	registerLive(r)
@@ -248,6 +252,10 @@ func (r *Runner) configure(ctx context.Context) error {
 		return err
 	}
 	if _, err := client.Configure(ctx, &contractv1.ConfigureRequest{Config: r.provider}); err != nil {
+		var rejected *connect.Error
+		if errors.As(err, &rejected) && rejected.Code() == connect.CodeInvalidArgument {
+			return fmt.Errorf("%s configures %s with options it does not accept: %s", projectconfig.ConfigFileName, r.providerPackage, rejected.Message())
+		}
 		return fmt.Errorf("providerrunner: configure the provider session: %w", err)
 	}
 	return nil
