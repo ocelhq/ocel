@@ -9,10 +9,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1083.0",
     "@ocel/provider-aws": "workspace:^",
     "express": "~5.0.0",
     "ocel": "workspace:^",
     "pg": "^8.22.0",
+    "sharp": "^0.34.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {

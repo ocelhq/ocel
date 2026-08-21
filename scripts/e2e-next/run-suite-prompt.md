@@ -21,8 +21,8 @@ If the Next.js repo is not in your context, stop and tell the user to run
 `e2e-<GITHUB_RUN_ID>` (`e2e-local` when unset), and each temp app is a preview
 **ref** inside it. The ref is *derived from* the app directory but is **not** the
 directory path: `previewRef` (`lib.mjs`) hashes `NEXT_TEST_DIR || appDir` into
-`<basename hint>-<sha256 prefix>`, e.g. `/tmp/next-test-1786560435077-458` becomes
-`next-test-17-b775867b`. Consequences:
+`<basename hint>-<sha256 prefix>`, e.g. `/tmp/next-1786560435077-458` becomes
+`next-178656-b775867b`. Consequences:
 
 - **Pass the recorded ref, never the directory.** `--ref` is taken literally, so
   `--ref <appDir>` names a ref that does not exist. `preview rm` then reports

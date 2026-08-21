@@ -1,8 +1,9 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { rm } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { nextDotenv } from "./env";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(here, "..", "..", "..");
@@ -13,26 +14,21 @@ export const ocelBin =
 
 export const apiUrl = process.env.OCEL_API_URL ?? "http://localhost:3000";
 
-export type BlobSpec = {
-  uploadPath: string;
-  documentsPath: string;
-  uploaderName: string;
-  input: Record<string, unknown>;
-  file: { name: string; type: string };
-  expectedKeyIncludes: string[];
-  expectedOwnerId: string;
+export type ExampleSpec = {
+  framework: "next" | "express" | "hono" | "fastify";
+  dir: string;
+  startCmd: string[];
+  capabilities: Array<"environment" | "thumbnail">;
 };
 
-export type ExampleSpec = {
-  framework: "next" | "express" | "hono";
-  dir: string;
-  port: number;
-  healthPath: string;
-  todosPath: string;
-  migrateCmd: string[];
-  startCmd: string[];
-  blob: BlobSpec;
+const ports: Record<ExampleSpec["framework"], number> = {
+  next: 3101,
+  express: 3102,
+  hono: 3103,
+  fastify: 3104,
 };
+
+export const portFor = (spec: ExampleSpec) => ports[spec.framework];
 
 export const blobEndpoint =
   process.env.OCEL_BLOB_ENDPOINT ?? "http://localhost:9000";
@@ -50,56 +46,26 @@ export const examples: Record<ExampleSpec["framework"], ExampleSpec> = {
   next: {
     framework: "next",
     dir: path.join(examplesDir, "next"),
-    port: 3101,
-    healthPath: "/api/health",
-    todosPath: "/api/todos",
-    migrateCmd: ["pnpm", "migrate"],
     startCmd: ["pnpm", "start"],
-    blob: {
-      uploadPath: "/api/upload",
-      documentsPath: "/api/documents",
-      uploaderName: "avatar",
-      input: { userId: "user-1" },
-      file: { name: "me.png", type: "image/png" },
-      expectedKeyIncludes: ["avatars/", "me.png"],
-      expectedOwnerId: "user-1",
-    },
+    capabilities: ["environment"],
   },
   express: {
     framework: "express",
     dir: path.join(examplesDir, "express"),
-    port: 3102,
-    healthPath: "/health",
-    todosPath: "/todos",
-    migrateCmd: ["pnpm", "migrate"],
     startCmd: ["pnpm", "start"],
-    blob: {
-      uploadPath: "/api/upload",
-      documentsPath: "/documents",
-      uploaderName: "document",
-      input: { ownerId: "owner-1" },
-      file: { name: "report.pdf", type: "application/pdf" },
-      expectedKeyIncludes: ["documents/", "report.pdf"],
-      expectedOwnerId: "owner-1",
-    },
+    capabilities: ["thumbnail"],
   },
   hono: {
     framework: "hono",
     dir: path.join(examplesDir, "hono"),
-    port: 3103,
-    healthPath: "/health",
-    todosPath: "/todos",
-    migrateCmd: ["pnpm", "migrate"],
     startCmd: ["pnpm", "start"],
-    blob: {
-      uploadPath: "/api/upload",
-      documentsPath: "/documents",
-      uploaderName: "attachment",
-      input: { threadId: "thread-1" },
-      file: { name: "note.png", type: "image/png" },
-      expectedKeyIncludes: ["threads/thread-1/", "note.png"],
-      expectedOwnerId: "thread-1",
-    },
+    capabilities: [],
+  },
+  fastify: {
+    framework: "fastify",
+    dir: path.join(examplesDir, "fastify"),
+    startCmd: ["pnpm", "start"],
+    capabilities: [],
   },
 };
 
@@ -122,7 +88,7 @@ function runOcel(
   return new Promise((resolve, reject) => {
     const child = spawn(ocelBin, args, {
       cwd: spec.dir,
-      env: ocelEnv(token, spec.port),
+      env: ocelEnv(token, portFor(spec)),
     });
     let stdout = "";
     let stderr = "";
@@ -156,12 +122,27 @@ export async function clearLink(spec: ExampleSpec) {
   await rm(path.join(spec.dir, ".ocel", "console.json"), { force: true });
 }
 
+export async function prepareExample(spec: ExampleSpec): Promise<boolean> {
+  if (!spec.capabilities.includes("environment")) return false;
+  try {
+    await writeFile(path.join(spec.dir, ".env"), nextDotenv(), { flag: "wx" });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw error;
+  }
+}
+
+export async function clearExampleEnv(spec: ExampleSpec, created: boolean) {
+  if (created) await rm(path.join(spec.dir, ".env"), { force: true });
+}
+
 export async function runMigrate(
   spec: ExampleSpec,
   token: string,
 ): Promise<RunResult> {
   const result = await runOcel(
-    ["run", "--", ...spec.migrateCmd],
+    ["run", "--", "pnpm", "migrate"],
     spec,
     token,
   );
@@ -180,9 +161,10 @@ export type DevHandle = {
 };
 
 export function startDev(spec: ExampleSpec, token: string): DevHandle {
+  const port = portFor(spec);
   const child = spawn(ocelBin, ["dev", "--", ...spec.startCmd], {
     cwd: spec.dir,
-    env: ocelEnv(token, spec.port),
+    env: ocelEnv(token, port),
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -216,7 +198,7 @@ export async function waitForHealth(
   dev: DevHandle,
   timeoutMs = 90_000,
 ): Promise<void> {
-  const url = `http://localhost:${spec.port}${spec.healthPath}`;
+  const url = `http://localhost:${portFor(spec)}/api/health`;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (dev.child.exitCode !== null || dev.child.signalCode !== null) {
@@ -240,4 +222,5 @@ export async function waitForHealth(
   throw new Error(`health check never became ready at ${url}`);
 }
 
-export const base = (spec: ExampleSpec) => `http://localhost:${spec.port}`;
+export const base = (spec: ExampleSpec) =>
+  `http://localhost:${portFor(spec)}`;

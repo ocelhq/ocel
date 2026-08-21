@@ -19,3 +19,10 @@ that is decides nothing: the app consuming the infrastructure is the same app ei
 and so is what Ocel asks of you. Ocel never gives away deploying the app itself — that is
 the one thing it always provisions, and transforms are how you shape it even here, which is
 why a shared-VPC setup needs both rungs at once.
+
+The [Express](./express), [Fastify](./fastify), [Hono](./hono), and
+[Next.js](./next) directories are equivalent framework fixtures. Run
+`ocel run -- pnpm migrate`, then `ocel dev -- pnpm start`, and use the `/api` routes to
+compare the same Postgres and blob workflow across frameworks. The Next.js fixture also
+carries the static-asset, environment, image-host, and cache scenarios used to exercise
+its adapter. The Express fixture creates a WebP thumbnail after an image upload.

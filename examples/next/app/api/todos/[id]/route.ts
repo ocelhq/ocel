@@ -1,7 +1,5 @@
 import { deleteTodo, getTodo } from "../../../../lib/todos";
 
-export const runtime = "nodejs";
-
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
