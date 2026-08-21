@@ -21,7 +21,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (s *Server) PlanRemoveProject(ctx context.Context, req *contractv1.PlanRemoveProjectRequest) (*contractv1.RemovalPlan, error) {
+func (s *Server) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*contractv1.RemovalPlan, error) {
 	opts := s.config.get()
 
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
@@ -132,7 +132,7 @@ func (s *Server) projectRemovalPlan(edgeFront edge.Edge, scope projectPlanScope)
 	return plan, nil
 }
 
-func (s *Server) RemoveProject(ctx context.Context, req *contractv1.RemoveProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
+func (s *Server) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
 	sender := newEventSender(ctx, stream.Send)
 	defer func() { err = sender.close() }()
 	tracer := newEventTracer(sender)
@@ -172,7 +172,7 @@ func newDestroyPreviewProjectStages() deploy.ProjectTeardownStages {
 	}
 }
 
-func (s *Server) runDestroyProject(ctx context.Context, req *contractv1.RemoveProjectRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+func (s *Server) runDestroyProject(ctx context.Context, req *contractv1.ProjectRequest, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
 	if env := req.GetEnvironment(); env.GetTier() == environmentv1.Tier_TIER_PREVIEW {
 		return s.runDestroyPreviewProject(ctx, req, env, tracer, stageReport, logf)
 	}
@@ -231,7 +231,7 @@ func forgetStackRecord(ctx context.Context, ssmClient bootstrap.SSMAPI, class, s
 	return bootstrap.DeleteStackRecordFor(ctx, ssmClient, class, slug)
 }
 
-func (s *Server) runDestroyPreviewProject(ctx context.Context, req *contractv1.RemoveProjectRequest, env *environmentv1.Environment, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
+func (s *Server) runDestroyPreviewProject(ctx context.Context, req *contractv1.ProjectRequest, env *environmentv1.Environment, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
 	slug := req.GetSlug()
 
 	stages := newDestroyPreviewProjectStages()

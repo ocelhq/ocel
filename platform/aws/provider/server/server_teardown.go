@@ -235,7 +235,7 @@ func bucketItem(name, reason string) *contractv1.RemovalItem {
 	}
 }
 
-func (s *Server) PlanRemoveSubstrate(ctx context.Context, req *contractv1.PlanRemoveSubstrateRequest) (*contractv1.RemovalPlan, error) {
+func (s *Server) PlanRemoveSubstrate(ctx context.Context, req *contractv1.SubstrateRequest) (*contractv1.RemovalPlan, error) {
 	opts := s.config.get()
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {
@@ -271,7 +271,7 @@ func planTeardown(ctx context.Context, deps teardownDeps, class string) (*contra
 	return &contractv1.RemovalPlan{EdgeKind: string(deps.edge.Kind()), Items: items, Subject: class}, nil
 }
 
-func (s *Server) RemoveSubstrate(ctx context.Context, req *contractv1.RemoveSubstrateRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) RemoveSubstrate(ctx context.Context, req *contractv1.SubstrateRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	opts := s.config.get()
 	edgeFront, err := s.edge(requestedEdge(req), opts.Region)
 	if err != nil {

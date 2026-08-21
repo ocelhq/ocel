@@ -241,7 +241,7 @@ func refusePreviewReleaseWhileServed(ctx context.Context, ssmClient substrateSSM
 	return refusePreviewRelease(baseDomain, served)
 }
 
-func (s *Server) RemovePreviewWildcard(ctx context.Context, req *contractv1.RemovePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+func (s *Server) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 
 	if err := s.runRemovePreviewWildcard(ctx, req, progress); err != nil {
@@ -250,7 +250,7 @@ func (s *Server) RemovePreviewWildcard(ctx context.Context, req *contractv1.Remo
 	return stream.Send(okResult())
 }
 
-func (s *Server) runRemovePreviewWildcard(ctx context.Context, req *contractv1.RemovePreviewWildcardRequest, progress func(string)) error {
+func (s *Server) runRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, progress func(string)) error {
 	opts := s.config.get()
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {

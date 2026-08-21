@@ -124,7 +124,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
-		plan, err := client.PlanRemoveProject(ctx, &contractv1.PlanRemoveProjectRequest{
+		plan, err := client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
 			Slug: cfg.Slug,
 			Edge: edgeSelection(cfg),
 		})
@@ -149,7 +149,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 			}
 		}
 
-		req := &contractv1.RemoveProjectRequest{
+		req := &contractv1.ProjectRequest{
 			Slug: cfg.Slug,
 			Edge: edgeSelection(cfg),
 		}
@@ -204,7 +204,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		}
 
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
-		plan, err := client.PlanRemoveProject(ctx, &contractv1.PlanRemoveProjectRequest{
+		plan, err := client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
 			Edge:        edgeSelection(cfg),
@@ -231,7 +231,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 			}
 		}
 
-		req := &contractv1.RemoveProjectRequest{
+		req := &contractv1.ProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
 			Edge:        edgeSelection(cfg),
