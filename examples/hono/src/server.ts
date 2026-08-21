@@ -27,8 +27,12 @@ app.all("/api/echo/*", async (c) => {
   });
 });
 
-app.post("/api/todos", async (c) => {
+app.post("/api/bootstrap", async (c) => {
   await migrate();
+  return c.body(null, 204);
+});
+
+app.post("/api/todos", async (c) => {
   const body = (await c.req.json().catch(() => null)) as {
     title?: unknown;
   } | null;

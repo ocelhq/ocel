@@ -26,8 +26,12 @@ app.all("/api/echo/{*rest}", (req, res) => {
   });
 });
 
-app.post("/api/todos", async (req, res) => {
+app.post("/api/bootstrap", async (_req, res) => {
   await migrate();
+  res.status(204).end();
+});
+
+app.post("/api/todos", async (req, res) => {
   const { title } = req.body ?? {};
   if (typeof title !== "string" || title.length === 0) {
     res.status(400).json({ error: "title is required" });

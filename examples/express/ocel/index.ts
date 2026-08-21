@@ -70,7 +70,6 @@ export const uploads = bucket("uploads", {
           `documents/${metadata.ownerId}/${file.name}`,
         contentDisposition: "inline",
         onUploadComplete: async ({ metadata, file }) => {
-          await migrate();
           const { rows } = await pg.query<{ id: number }>(
             `INSERT INTO documents (key, name, mime_type, size, owner_id)
              VALUES ($1, $2, $3, $4, $5)

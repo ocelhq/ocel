@@ -29,8 +29,12 @@ app.all<{ Params: { "*": string } }>(
   },
 );
 
-app.post<{ Body: { title?: unknown } }>("/api/todos", async (request, reply) => {
+app.post("/api/bootstrap", async (_request, reply) => {
   await migrate();
+  return reply.status(204).send();
+});
+
+app.post<{ Body: { title?: unknown } }>("/api/todos", async (request, reply) => {
   const { title } = request.body ?? {};
   if (typeof title !== "string" || title.length === 0) {
     return reply.status(400).send({ error: "title is required" });

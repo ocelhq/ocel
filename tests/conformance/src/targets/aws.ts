@@ -159,6 +159,15 @@ async function assertWorkerPath(
   }
 }
 
+async function bootstrapFixture(baseUrl: string) {
+  const response = await fetch(`${baseUrl}/api/bootstrap`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(
+      `${baseUrl}/api/bootstrap answered ${response.status}: ${await response.text()}`,
+    );
+  }
+}
+
 export function projectSlugForRun() {
   const raw = process.env.GITHUB_RUN_ID ?? "local";
   const run = raw
@@ -205,6 +214,7 @@ export function createAwsTarget(token: string): Target {
         }
         const baseUrl = result.appUrls[0];
         await assertWorkerPath(result, example, baseUrl);
+        await bootstrapFixture(baseUrl);
         return {
           baseUrl,
           teardown: async () => {
