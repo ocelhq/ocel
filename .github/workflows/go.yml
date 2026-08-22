@@ -26,6 +26,7 @@ jobs:
           - pkg/providerkit
           - platform/edge/contract
           - platform/aws/provider
+          - platform/vps/provider
           - platform/edge/cloudflare/deploy
     defaults:
       run:
