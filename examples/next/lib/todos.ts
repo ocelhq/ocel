@@ -25,6 +25,18 @@ export async function getTodo(id: number): Promise<Todo | undefined> {
   return rows[0];
 }
 
+export async function updateTodo(
+  id: number,
+  title: string,
+  done: boolean,
+): Promise<Todo | undefined> {
+  const { rows } = await pg.query<Todo>(
+    "UPDATE todos SET title = $1, done = $2 WHERE id = $3 RETURNING id, title, done",
+    [title, done, id],
+  );
+  return rows[0];
+}
+
 export async function deleteTodo(id: number): Promise<boolean> {
   const { rowCount } = await pg.query("DELETE FROM todos WHERE id = $1", [id]);
   return (rowCount ?? 0) > 0;

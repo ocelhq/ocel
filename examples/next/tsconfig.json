@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "paths": { "ocel/env/client": ["./.ocel/env-client.ts"] },
+
     "target": "ES2022",
     "lib": [
       "dom",
@@ -21,6 +23,10 @@
       {
         "name": "next"
       }
+    ],
+    "types": [
+      "node",
+      "next/image-types/global"
     ]
   },
   "include": [

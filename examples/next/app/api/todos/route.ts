@@ -1,7 +1,5 @@
 import { createTodo, listTodos } from "../../../lib/todos";
 
-export const runtime = "nodejs";
-
 export async function GET() {
   return Response.json(await listTodos());
 }

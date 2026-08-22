@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const opts = parseArgs(process.argv.slice(2));
-const appDir = resolve(repoRoot, opts.app ?? "examples/next-test");
+const appDir = resolve(repoRoot, opts.app ?? "examples/next");
 const appName = opts["app-name"] ?? basename(appDir);
 const outRoot = resolve(repoRoot, opts.out ?? join(appDir, ".ocel/verify-output"));
 const appOut = join(outRoot, "apps", appName);

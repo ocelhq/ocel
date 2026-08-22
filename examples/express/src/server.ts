@@ -7,11 +7,11 @@ app.use(express.json());
 
 const PORT = Number(process.env.PORT ?? 3102);
 
-app.get("/health", (_req, res) => {
+app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/todos", async (req, res) => {
+app.post("/api/todos", async (req, res) => {
   const { title } = req.body ?? {};
   if (typeof title !== "string" || title.length === 0) {
     res.status(400).json({ error: "title is required" });
@@ -24,14 +24,14 @@ app.post("/todos", async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-app.get("/todos", async (_req, res) => {
+app.get("/api/todos", async (_req, res) => {
   const { rows } = await pg.query(
     "SELECT id, title, done FROM todos ORDER BY id",
   );
   res.json(rows);
 });
 
-app.get("/todos/:id", async (req, res) => {
+app.get("/api/todos/:id", async (req, res) => {
   const { rows } = await pg.query(
     "SELECT id, title, done FROM todos WHERE id = $1",
     [Number(req.params.id)],
@@ -43,7 +43,28 @@ app.get("/todos/:id", async (req, res) => {
   res.json(rows[0]);
 });
 
-app.delete("/todos/:id", async (req, res) => {
+app.put("/api/todos/:id", async (req, res) => {
+  const { title, done } = req.body ?? {};
+  if (
+    typeof title !== "string" ||
+    title.length === 0 ||
+    typeof done !== "boolean"
+  ) {
+    res.status(400).json({ error: "title and done are required" });
+    return;
+  }
+  const { rows } = await pg.query(
+    "UPDATE todos SET title = $1, done = $2 WHERE id = $3 RETURNING id, title, done",
+    [title, done, Number(req.params.id)],
+  );
+  if (rows.length === 0) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+  res.json(rows[0]);
+});
+
+app.delete("/api/todos/:id", async (req, res) => {
   const { rowCount } = await pg.query("DELETE FROM todos WHERE id = $1", [
     Number(req.params.id),
   ]);
@@ -56,9 +77,9 @@ app.delete("/todos/:id", async (req, res) => {
 
 app.all("/api/upload", createRouteHandler(uploads));
 
-app.get("/documents", async (_req, res) => {
+app.get("/api/documents", async (_req, res) => {
   const { rows } = await pg.query(
-    "SELECT id, key, name, mime_type, size, owner_id FROM documents ORDER BY id",
+    "SELECT id, key, name, mime_type, size, owner_id, thumbnail_key FROM documents ORDER BY id",
   );
   res.json(rows);
 });

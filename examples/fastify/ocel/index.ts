@@ -1,4 +1,4 @@
-import { bucket, uploader } from "ocel/blob/next";
+import { bucket, uploader } from "ocel/blob";
 import { postgres } from "ocel/postgres";
 import { z } from "zod";
 

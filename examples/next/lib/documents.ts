@@ -7,11 +7,12 @@ export type Document = {
   mime_type: string;
   size: string;
   owner_id: string | null;
+  thumbnail_key: string | null;
 };
 
 export async function listDocuments(): Promise<Document[]> {
   const { rows } = await pg.query<Document>(
-    "SELECT id, key, name, mime_type, size, owner_id FROM documents ORDER BY id",
+    "SELECT id, key, name, mime_type, size, owner_id, thumbnail_key FROM documents ORDER BY id",
   );
   return rows;
 }
