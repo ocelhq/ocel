@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
 func TestExplicitConfigPath(t *testing.T) {
@@ -68,4 +71,45 @@ export default { slug: "test-app" };
 	if !strings.Contains(err.Error(), filepath.Join(root, "nope.ts")) {
 		t.Fatalf("runBuild err = %v, want it to name the path --config asked for", err)
 	}
+}
+
+func TestProjectSlugTestOverride(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "from-config" };
+`)
+
+	resolve := func(t *testing.T) string {
+		t.Helper()
+
+		var resolved *projectconfig.Config
+		d := defaultDeps()
+		d.buildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ io.Writer) error {
+			resolved = cfg
+			return nil
+		}
+		d.collectAppFunctions = func(string) ([]manifestbuilder.Function, error) { return nil, nil }
+
+		if err := runBuild(context.Background(), d, root, io.Discard, io.Discard); err != nil {
+			t.Fatalf("runBuild: %v", err)
+		}
+		if resolved == nil {
+			t.Fatal("runBuild did not resolve the project config")
+		}
+		return resolved.Slug
+	}
+
+	t.Run("set value wins over the config", func(t *testing.T) {
+		t.Setenv("OCEL_TEST_PROJECT_SLUG", "from-test")
+		if got := resolve(t); got != "from-test" {
+			t.Errorf("resolved slug = %q, want the test override", got)
+		}
+	})
+
+	t.Run("empty value leaves the config unchanged", func(t *testing.T) {
+		t.Setenv("OCEL_TEST_PROJECT_SLUG", "")
+		if got := resolve(t); got != "from-config" {
+			t.Errorf("resolved slug = %q, want the config value", got)
+		}
+	})
 }
