@@ -284,13 +284,7 @@ func removalEdge(provider Provider, requested string) edge.Kind {
 func removalItems(surfaces []Removal) []*contractv1.RemovalItem {
 	items := make([]*contractv1.RemovalItem, 0, len(surfaces))
 	for _, surface := range surfaces {
-		items = append(items, &contractv1.RemovalItem{
-			Kind:   surface.Kind,
-			Name:   surface.Name,
-			Action: removalAction(surface.Action),
-			Reason: surface.Reason,
-			Slow:   surface.Slow,
-		})
+		items = append(items, surfaceItem(surface))
 	}
 	return items
 }

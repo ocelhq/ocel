@@ -27,6 +27,8 @@ func runPorts(t *testing.T, suite Suite) {
 	t.Run("Sealer", func(t *testing.T) { runSealer(t, provider.Sealer()) })
 	t.Run("Bootstrapper", func(t *testing.T) { runBootstrapper(t, provider.Bootstrap()) })
 	t.Run("Credentials", func(t *testing.T) { runCredentials(t, provider.Credentials()) })
+	t.Run("EdgeRegistry", func(t *testing.T) { runEdgeRegistry(t, provider.Edges()) })
+	t.Run("DNSRegistry", func(t *testing.T) { runDNSRegistry(t, provider.DNS()) })
 }
 
 func under(t *testing.T, rest ...string) providerkit.RecordName {

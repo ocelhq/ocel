@@ -19,6 +19,10 @@ func refusalError(err error) error {
 	}
 	var refusal Refusal
 	if !errors.As(err, &refusal) {
+		var already *connect.Error
+		if errors.As(err, &already) {
+			return err
+		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
 	code, ok := refusalCodes[refusal.Code]
