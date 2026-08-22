@@ -19,6 +19,7 @@ type Provider struct {
 	sealer    *Sealer
 	bootstrap *Bootstrapper
 	releases  *Releaser
+	creds     *Credentials
 }
 
 func New(_ context.Context, options providerkit.Options) (providerkit.Provider, error) {
@@ -37,6 +38,7 @@ func NewProvider(options Options) *Provider {
 		sealer:    NewSealer(),
 		bootstrap: NewBootstrapper(),
 		releases:  NewReleaser(),
+		creds:     NewCredentials(options.Region),
 	}
 }
 
@@ -58,7 +60,7 @@ func (p *Provider) Records() providerkit.RecordStore { return p.records }
 
 func (p *Provider) Sealer() providerkit.Sealer { return p.sealer }
 
-func (p *Provider) Credentials() providerkit.Credentials { return credentials{} }
+func (p *Provider) Credentials() providerkit.Credentials { return p.creds }
 
 func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{} }
 

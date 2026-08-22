@@ -9,7 +9,11 @@ import (
 
 func SchemaRecord() RecordName { return RecordName{"schema"} }
 
+func ProjectsRecord() RecordName { return RecordName{"projects"} }
+
 func ProjectRecord(slug string) RecordName { return RecordName{"projects", slug} }
+
+func BootstrapRecord(class Class) RecordName { return RecordName{"bootstrap", string(class)} }
 
 func StackRecord(slug string, stack naming.StackName) RecordName {
 	return RecordName{"projects", slug, "stacks", stack.String()}
@@ -33,6 +37,14 @@ func LedgerRecord(scope string, rest ...string) RecordName {
 
 type Project struct {
 	Features []string `json:"features,omitempty"`
+}
+
+type BootstrapState struct {
+	AutoHeal bool `json:"auto_heal,omitempty"`
+}
+
+type Wildcard struct {
+	BaseDomain string `json:"base_domain,omitempty"`
 }
 
 type EdgeStackState struct {
