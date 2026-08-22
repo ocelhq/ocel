@@ -9,6 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -56,6 +57,17 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		return sender.fail(refusalError(err))
 	}
 	if err := session.checkpoint(ctx); err != nil {
+		return sender.fail(refusalError(err))
+	}
+	targets, err := ReclaimTargets(req.GetSlug(), pointer,
+		removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
+	if err != nil {
+		return sender.fail(refusalError(err))
+	}
+	if err := reclaim(ctx, session.provider, req.GetSlug(), ClassPreview, targets, report); err != nil {
+		return sender.fail(refusalError(err))
+	}
+	if err := removePreviewInfra(ctx, session.provider, req.GetSlug(), pointer, report); err != nil {
 		return sender.fail(refusalError(err))
 	}
 	for _, line := range pruneLines(removed) {
@@ -174,6 +186,18 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 	if err := session.checkpoint(ctx); err != nil {
 		return sender.fail(refusalError(err))
 	}
+	env := pointer
+	if class == ClassProduction {
+		env = ProductionEnv
+	}
+	targets, err := ReclaimTargets(req.GetSlug(), env,
+		pruned.RemovedRecordKeys, pruned.SurvivingRecordKeys, pruned.SurvivingPointerRecordKeys)
+	if err != nil {
+		return sender.fail(refusalError(err))
+	}
+	if err := reclaim(ctx, session.provider, req.GetSlug(), class, targets, report); err != nil {
+		return sender.fail(refusalError(err))
+	}
 	for _, line := range pruneLines(pruned) {
 		report.Say(line)
 	}
@@ -222,4 +246,17 @@ func flipBoundProto(flip *edge.FlipBound) *progressv1.FlipBound {
 		return nil
 	}
 	return &progressv1.FlipBound{TypicalMs: flip.Typical.Milliseconds(), Published: flip.Published}
+}
+
+func removePreviewInfra(ctx context.Context, provider Provider, slug, pointer string, report Reporter) error {
+	stack := naming.InfraStack(pointer)
+	_, standing, err := ReadStack(ctx, provider.Records(), slug, stack)
+	if err != nil || !standing {
+		return err
+	}
+	report.Say("Destroying " + stack.String())
+	if err := provider.Releases().Destroy(ctx, StackRef{Project: slug, Class: ClassPreview, Name: stack}, report); err != nil {
+		return fmt.Errorf("destroy %s: %w", stack, err)
+	}
+	return ForgetStack(ctx, provider.Records(), slug, stack)
 }

@@ -299,14 +299,7 @@ func (l *Ledger) Prune(ctx context.Context, keepN int, pointer string) (edge.Pru
 	if err != nil {
 		return edge.PruneResult{}, err
 	}
-	var kept, removed []promotionRecord
-	for i, row := range rows {
-		if i < keepN || row.PromotionID == active {
-			kept = append(kept, row)
-			continue
-		}
-		removed = append(removed, row)
-	}
+	kept, removed := Retain(rows, keepN, active, func(row promotionRecord) string { return row.PromotionID })
 	if err := l.drop(ctx, name, removed); err != nil {
 		return edge.PruneResult{}, err
 	}
@@ -321,6 +314,17 @@ func (l *Ledger) Prune(ctx context.Context, keepN int, pointer string) (edge.Pru
 		SurvivingRecordKeys:        surviving,
 		SurvivingPointerRecordKeys: recordKeysOf(kept),
 	}, nil
+}
+
+func Retain[T any](rows []T, keepN int, active string, id func(T) string) (kept, removed []T) {
+	for i, row := range rows {
+		if i < keepN || id(row) == active {
+			kept = append(kept, row)
+			continue
+		}
+		removed = append(removed, row)
+	}
+	return kept, removed
 }
 
 func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error) {

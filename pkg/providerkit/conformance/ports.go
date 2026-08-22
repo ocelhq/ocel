@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -26,6 +28,8 @@ func runPorts(t *testing.T, suite Suite) {
 	t.Run("RecordStore", func(t *testing.T) { runRecordStore(t, provider.Records()) })
 	t.Run("Sealer", func(t *testing.T) { runSealer(t, provider.Sealer()) })
 	t.Run("Bootstrapper", func(t *testing.T) { runBootstrapper(t, provider.Bootstrap()) })
+	t.Run("ArtifactStore", func(t *testing.T) { runArtifactStore(t, provider.Artifacts()) })
+	t.Run("Releaser", func(t *testing.T) { runReleaser(t, provider) })
 	t.Run("Credentials", func(t *testing.T) { runCredentials(t, provider.Credentials()) })
 	t.Run("EdgeRegistry", func(t *testing.T) { runEdgeRegistry(t, provider.Edges()) })
 	t.Run("DNSRegistry", func(t *testing.T) { runDNSRegistry(t, provider.DNS()) })
@@ -341,6 +345,128 @@ func runCredentials(t *testing.T, credentials providerkit.Credentials) {
 			if _, err := credentials.Policy(tier); err != nil {
 				t.Errorf("Policy(%s) = %v, want the permissions that tier needs", tier, err)
 			}
+		}
+	})
+}
+
+func runArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
+	ctx := context.Background()
+	ref := providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
+	body := []byte("a build artifact")
+
+	t.Run("what Put stores, Open reads back", func(t *testing.T) {
+		if err := artifacts.Put(ctx, ref, bytes.NewReader(body)); err != nil {
+			t.Fatalf("Put() = %v, want the artifact stored", err)
+		}
+		opened, err := artifacts.Open(ctx, ref)
+		if err != nil {
+			t.Fatalf("Open() of an artifact just put = %v", err)
+		}
+		defer opened.Close()
+		read, err := io.ReadAll(opened)
+		if err != nil || !bytes.Equal(read, body) {
+			t.Fatalf("Open() read %q, %v, want %q", read, err, body)
+		}
+	})
+
+	t.Run("Open of a key nothing wrote refuses rather than answering empty", func(t *testing.T) {
+		absent := providerkit.ArtifactRef{Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
+		opened, err := artifacts.Open(ctx, absent)
+		if err == nil {
+			opened.Close()
+			t.Fatal("Open() of a key nothing wrote succeeded, so a missing artifact reads as an empty one")
+		}
+	})
+
+	t.Run("RemovePrefix takes the prefix and nothing beside it", func(t *testing.T) {
+		kept := providerkit.ArtifactRef{Bucket: ref.Bucket, Key: "conformance/" + t.Name() + "-sibling/bundle.zip"}
+		if err := artifacts.Put(ctx, kept, bytes.NewReader(body)); err != nil {
+			t.Fatal(err)
+		}
+		if err := artifacts.RemovePrefix(ctx, "conformance/"+t.Name()+"/", nil); err != nil {
+			t.Fatalf("RemovePrefix() = %v", err)
+		}
+		opened, err := artifacts.Open(ctx, kept)
+		if err != nil {
+			t.Fatalf("Open() of a key outside the prefix removed = %v, want it still stored", err)
+		}
+		opened.Close()
+	})
+
+	t.Run("RemovePrefix of a prefix holding nothing is not an error", func(t *testing.T) {
+		if err := artifacts.RemovePrefix(ctx, "conformance/"+t.Name()+"/nothing-here/", nil); err != nil {
+			t.Fatalf("RemovePrefix() of a prefix nothing was written under = %v, want nil", err)
+		}
+	})
+}
+
+func runReleaser(t *testing.T, provider providerkit.Provider) {
+	ctx := context.Background()
+	releaser := provider.Releases()
+	ref := providerkit.StackRef{
+		Project: "conformance",
+		Class:   providerkit.ClassPreview,
+		Name:    naming.InfraStack("conformance"),
+	}
+
+	t.Run("Destroy of a stack that was never provisioned is a no-op", func(t *testing.T) {
+		absent := ref
+		absent.Name = naming.InfraStack("never-provisioned")
+		if err := releaser.Destroy(ctx, absent, nil); err != nil {
+			t.Fatalf("Destroy() of an absent stack = %v, want nil so a rerun of a teardown is safe", err)
+		}
+	})
+
+	t.Run("every link a plan asks for comes back carrying the properties its type promises", func(t *testing.T) {
+		var resources []providerkit.Resource
+		for _, kind := range provider.Serves() {
+			resources = append(resources, providerkit.Resource{Name: "c-" + string(kind), Type: kind})
+		}
+		if len(resources) == 0 {
+			t.Skip("this provider serves no resource primitive, so a plan can ask for nothing")
+		}
+		result, err := releaser.Provision(ctx, providerkit.StackPlan{
+			Ref:       ref,
+			Kind:      providerkit.StackInfra,
+			Resources: resources,
+		}, nil)
+		if err != nil {
+			t.Fatalf("Provision() of every primitive this provider serves = %v", err)
+		}
+		if len(result.Links) != len(resources) {
+			t.Fatalf("Provision() returned %d links for %d resources, and an app binds to each by name", len(result.Links), len(resources))
+		}
+		for _, link := range result.Links {
+			if err := providerkit.VerifyProperties(link); err != nil {
+				t.Errorf("Provision() returned a link the kit refuses to record: %v", err)
+			}
+		}
+		if err := releaser.Destroy(ctx, ref, nil); err != nil {
+			t.Fatalf("Destroy() of the stack just provisioned = %v", err)
+		}
+	})
+
+	t.Run("a refusal names a code the CLI can render", func(t *testing.T) {
+		_, err := releaser.Provision(ctx, providerkit.StackPlan{
+			Ref:       ref,
+			Kind:      providerkit.StackInfra,
+			Resources: []providerkit.Resource{{Name: "unserved", Type: "no-such-primitive"}},
+		}, nil)
+		if err == nil {
+			if derr := releaser.Destroy(ctx, ref, nil); derr != nil {
+				t.Fatal(derr)
+			}
+			t.Skip("this provider stands up a resource of any type, so there is no unserved primitive to refuse")
+		}
+		var refusal providerkit.Refusal
+		if !errors.As(err, &refusal) {
+			t.Fatalf("Provision() of a primitive this provider does not serve failed with %v, want a Refusal the CLI can render", err)
+		}
+		if !slices.Contains(
+			[]providerkit.Code{providerkit.CodeInvalid, providerkit.CodeNotReady, providerkit.CodeDenied, providerkit.CodeBusy},
+			refusal.Code,
+		) {
+			t.Errorf("Provision() refused with code %q, which is none the kit maps", refusal.Code)
 		}
 	})
 }

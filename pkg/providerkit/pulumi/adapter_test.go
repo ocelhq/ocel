@@ -1,0 +1,180 @@
+package pulumi_test
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/pulumi"
+)
+
+type program struct{ config auto.ConfigMap }
+
+func (program) Run(*sdk.Context, providerkit.StackPlan) error { return nil }
+
+type configuring struct{ program }
+
+func (c configuring) Configure(context.Context, providerkit.StackPlan) (auto.ConfigMap, error) {
+	return c.config, nil
+}
+
+func access() pulumi.Access {
+	return pulumi.Access{
+		BackendURL: "s3://ocel-state/shop",
+		Passphrase: "a-passphrase",
+		Env:        map[string]string{"VENDOR_REGION": "nowhere"},
+	}
+}
+
+func plan() providerkit.StackPlan {
+	return providerkit.StackPlan{
+		Ref: providerkit.StackRef{
+			Project: "shop",
+			Class:   providerkit.ClassProduction,
+			Name:    naming.InfraStack("prod"),
+		},
+		Kind: providerkit.StackInfra,
+	}
+}
+
+func TestWorkspaceCarriesTheBackendTheProviderNamed(t *testing.T) {
+	t.Parallel()
+
+	setup, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}}).Workspace(plan())
+	if err != nil {
+		t.Fatalf("Workspace() = %v", err)
+	}
+	if setup.Project.Backend == nil || setup.Project.Backend.URL != access().BackendURL {
+		t.Fatalf("the workspace points at %+v, want the backend the provider named", setup.Project.Backend)
+	}
+	if setup.Project.Runtime.Name() != "go" {
+		t.Errorf("the workspace runs %q, want the go runtime a kit provider's program is written in", setup.Project.Runtime.Name())
+	}
+	if string(setup.Project.Name) != naming.PulumiProject("shop") {
+		t.Errorf("the workspace's project is %q, want %q", setup.Project.Name, naming.PulumiProject("shop"))
+	}
+	if len(setup.Options) == 0 {
+		t.Error("the workspace carries no options, so nothing configures a local workspace from it")
+	}
+}
+
+func TestWorkspaceCarriesThePassphraseAndTheVendorsOwnEnvironment(t *testing.T) {
+	t.Parallel()
+
+	setup, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}}).Workspace(plan())
+	if err != nil {
+		t.Fatalf("Workspace() = %v", err)
+	}
+	if setup.EnvVars["PULUMI_CONFIG_PASSPHRASE"] != "a-passphrase" {
+		t.Error("the workspace does not carry the passphrase, so the state it writes would be unsealed")
+	}
+	if setup.EnvVars["VENDOR_REGION"] != "nowhere" {
+		t.Errorf("the workspace's environment is %v, want the vendor's own variables carried through", setup.EnvVars)
+	}
+}
+
+func TestWorkspaceTakesTheProjectNameTheProviderPins(t *testing.T) {
+	t.Parallel()
+
+	pinned := access()
+	pinned.Project = "ocel-shop-pinned"
+	setup, err := pulumi.New(pulumi.Config{Access: pinned, Program: program{}}).Workspace(plan())
+	if err != nil {
+		t.Fatalf("Workspace() = %v", err)
+	}
+	if string(setup.Project.Name) != pinned.Project {
+		t.Errorf("the workspace's project is %q, want the %q the provider pinned", setup.Project.Name, pinned.Project)
+	}
+}
+
+func TestWorkspaceRefusesAnAccessThatWouldWriteStateUnsealed(t *testing.T) {
+	t.Parallel()
+
+	for name, broken := range map[string]pulumi.Access{
+		"no backend":    {Passphrase: "a-passphrase"},
+		"no passphrase": {BackendURL: "s3://ocel-state/shop"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := pulumi.New(pulumi.Config{Access: broken, Program: program{}}).Workspace(plan())
+			var refusal providerkit.Refusal
+			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+				t.Fatalf("Workspace() with %s = %v, want a not-ready refusal", name, err)
+			}
+		})
+	}
+}
+
+func TestWorkspaceRefusesAnAdapterCarryingNoProgram(t *testing.T) {
+	t.Parallel()
+
+	if _, err := pulumi.New(pulumi.Config{Access: access()}).Workspace(plan()); err == nil {
+		t.Fatal("Workspace() with no program succeeded, want a refusal: the engine would have nothing to run")
+	}
+}
+
+func TestStackTakesTheConfigTheProgramAsksFor(t *testing.T) {
+	t.Parallel()
+
+	wanted := auto.ConfigMap{"aws:region": auto.ConfigValue{Value: "nowhere"}}
+	config, err := pulumi.New(pulumi.Config{
+		Access:  access(),
+		Program: configuring{program{config: wanted}},
+	}).Stack(context.Background(), plan())
+	if err != nil {
+		t.Fatalf("Stack() = %v", err)
+	}
+	if config["aws:region"].Value != "nowhere" {
+		t.Errorf("the stack's config is %v, want what the program's Configurer asked for", config)
+	}
+}
+
+func TestStackOfAProgramThatConfiguresNothingIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	config, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}}).Stack(context.Background(), plan())
+	if err != nil {
+		t.Fatalf("Stack() = %v", err)
+	}
+	if len(config) != 0 {
+		t.Errorf("the stack's config is %v, want none for a program that configures nothing", config)
+	}
+}
+
+func TestRunSaysTheEngineIsNotWiredUpYet(t *testing.T) {
+	t.Parallel()
+
+	_, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}}).
+		Run(context.Background(), plan(), nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+		t.Fatalf("Run() = %v, want a not-ready refusal while the adapter runs no engine", err)
+	}
+	if !strings.Contains(refusal.Message, plan().Ref.Name.String()) {
+		t.Errorf("the refusal reads %q, want it to name the stack that was not stood up", refusal.Message)
+	}
+}
+
+func TestDecodeReadsAStacksOutputsIntoTheVendorsOwnType(t *testing.T) {
+	t.Parallel()
+
+	type outputs struct {
+		Bucket string `json:"bucket"`
+		Port   int    `json:"port"`
+	}
+	decoded, err := pulumi.Decode[outputs](auto.OutputMap{
+		"bucket": auto.OutputValue{Value: "shop-uploads"},
+		"port":   auto.OutputValue{Value: 5432},
+	})
+	if err != nil {
+		t.Fatalf("Decode() = %v", err)
+	}
+	if decoded.Bucket != "shop-uploads" || decoded.Port != 5432 {
+		t.Errorf("Decode() = %+v, want the outputs the stack answered with", decoded)
+	}
+}

@@ -164,10 +164,17 @@ func (b *Bootstrapper) Remove(_ context.Context, class providerkit.Class, report
 type Releaser struct {
 	mu     sync.Mutex
 	stacks map[string]providerkit.StackResult
+	plans  []providerkit.StackPlan
 }
 
 func NewReleaser() *Releaser {
 	return &Releaser{stacks: map[string]providerkit.StackResult{}}
+}
+
+func (r *Releaser) Plans() []providerkit.StackPlan {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.plans)
 }
 
 func (r *Releaser) Provision(_ context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
@@ -176,19 +183,22 @@ func (r *Releaser) Provision(_ context.Context, plan providerkit.StackPlan, repo
 		result.Links = append(result.Links, providerkit.Link{
 			Type:       resource.Type,
 			Name:       resource.Name,
-			Properties: propertiesFor(resource.Type),
+			Properties: propertiesFor(resource.Type, resource.Name),
 		})
 	}
 	if plan.App != nil {
 		for _, function := range plan.App.Functions {
+			physical := plan.Ref.Name.String() + "-" + function.Name
 			result.Functions = append(result.Functions, providerkit.Function{
 				Name:     function.Name,
-				Physical: plan.Ref.Name.String() + "/" + function.Name,
+				Physical: physical,
+				URL:      "https://" + physical + ".fn.fake.invalid",
 			})
 		}
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.plans = append(r.plans, plan)
 	r.stacks[stackKey(plan.Ref)] = result
 	if report != nil {
 		report.Say("provisioned " + plan.Ref.Name.String())
@@ -217,10 +227,17 @@ func stackKey(ref providerkit.StackRef) string {
 	return ref.Project + "/" + string(ref.Class) + "/" + ref.Name.String()
 }
 
-func propertiesFor(t providerkit.LinkType) map[string]string {
+func propertiesFor(t providerkit.LinkType, name string) map[string]string {
 	properties := map[string]string{}
-	for _, name := range providerkit.RequiredProperties(t) {
-		properties[name] = "fake"
+	for _, property := range providerkit.RequiredProperties(t) {
+		switch property {
+		case providerkit.PropertyPort:
+			properties[property] = "5432"
+		case providerkit.PropertyBucket:
+			properties[property] = name + "-fake"
+		default:
+			properties[property] = "fake-" + property
+		}
 	}
 	return properties
 }
