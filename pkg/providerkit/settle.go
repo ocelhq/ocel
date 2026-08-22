@@ -1,0 +1,150 @@
+package providerkit
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+)
+
+type Resolver interface {
+	Serving(ctx context.Context, hostname string) (edge.Kind, error)
+}
+
+const (
+	settleAttempts = 12
+	settleWait     = 5 * time.Second
+)
+
+type settler struct {
+	kind     edge.Kind
+	unbound  bool
+	writer   edge.DNSWriter
+	zone     string
+	resolve  Resolver
+	attempts int
+	wait     time.Duration
+	sleep    func(context.Context, time.Duration) error
+	now      func() time.Time
+	ask      func(headline string, records []edge.Record, notes ...string)
+}
+
+func newSettler(front edge.Edge, writer edge.DNSWriter, zone string, state func() edge.StackState) settler {
+	unbound := front.Facts().ServesUnbound
+	return settler{
+		kind:     front.Kind(),
+		unbound:  unbound,
+		writer:   writer,
+		zone:     zone,
+		resolve:  boundResolver{kind: front.Kind(), unbound: unbound, state: state},
+		attempts: settleAttempts,
+		wait:     settleWait,
+		sleep:    sleep,
+		now:      time.Now,
+	}
+}
+
+// TODO(#390): stands in for the prober the edge lands, which asks the hostname itself
+// which edge answers on it. Until then the kit can only answer from what it just bound.
+type boundResolver struct {
+	kind    edge.Kind
+	unbound bool
+	state   func() edge.StackState
+}
+
+func (r boundResolver) Serving(_ context.Context, hostname string) (edge.Kind, error) {
+	held := r.state()
+	if edge.Pointable(edge.TargetOf(r.kind, r.unbound, held), held.Bound, hostname) {
+		return r.kind, nil
+	}
+	return "", nil
+}
+
+func sleep(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func (s settler) recordsFor(state edge.StackState, hostname string) ([]edge.Record, error) {
+	target := edge.TargetOf(s.kind, s.unbound, state)
+	if !edge.Pointable(target, state.Bound, hostname) {
+		return nil, nil
+	}
+	return edge.RecordsFor(target, []string{hostname})
+}
+
+func (s settler) write(ctx context.Context, records []edge.Record, headline string, say func(string), notes ...string) (Settled, error) {
+	var settled Settled
+	if len(records) == 0 {
+		return settled, nil
+	}
+	for _, rec := range records {
+		if note := rec.ApexNote(s.zone); note != "" {
+			say(note)
+		}
+	}
+	if s.writer == nil {
+		settled.Owed = records
+		if s.ask != nil {
+			s.ask(headline, records, notes...)
+		}
+		return settled, nil
+	}
+	for _, rec := range records {
+		say("Writing " + rec.String())
+	}
+	written, err := s.writer.EnsureRecords(ctx, records, say)
+	settled.Written, settled.Owed = written, edge.Unwritten(records, written)
+	return settled, err
+}
+
+func (s settler) release(ctx context.Context, written []edge.Record, say func(string)) error {
+	if s.writer == nil || len(written) == 0 {
+		return nil
+	}
+	for _, rec := range written {
+		say("Removing " + rec.String())
+	}
+	return s.writer.DeleteRecords(ctx, written)
+}
+
+func (s settler) await(ctx context.Context, hostname string, say func(string)) (Probe, error) {
+	attempts := max(s.attempts, 1)
+	var serving edge.Kind
+	for attempt := range attempts {
+		var err error
+		if serving, err = s.resolve.Serving(ctx, hostname); err != nil {
+			return Probe{At: s.now().Unix(), Edge: serving}, err
+		}
+		if serving == s.kind {
+			return Probe{At: s.now().Unix(), OK: true, Edge: serving}, nil
+		}
+		if attempt == attempts-1 {
+			break
+		}
+		say(fmt.Sprintf("Waiting for %s to answer as the %s edge", hostname, s.kind))
+		if err := s.sleep(ctx, s.wait); err != nil {
+			return Probe{At: s.now().Unix(), Edge: serving}, err
+		}
+	}
+	return Probe{At: s.now().Unix(), Edge: serving}, s.unresolved(hostname, serving)
+}
+
+func (s settler) unresolved(hostname string, serving edge.Kind) error {
+	waited := time.Duration(max(s.attempts, 1)-1) * s.wait
+	if serving == "" {
+		return Refuse(CodeNotReady,
+			"%s does not answer as the %s edge yet — this run gave up after about %s, and re-running it picks up where this one stopped",
+			hostname, s.kind, waited)
+	}
+	return Refuse(CodeNotReady,
+		"%s answers as the %s edge, not the %s one this project deploys to — this run gave up after about %s",
+		hostname, serving, s.kind, waited)
+}

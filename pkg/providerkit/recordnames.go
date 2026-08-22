@@ -1,8 +1,6 @@
 package providerkit
 
 import (
-	"encoding/json"
-
 	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -41,19 +39,4 @@ type Project struct {
 
 type BootstrapState struct {
 	AutoHeal bool `json:"auto_heal,omitempty"`
-}
-
-type Wildcard struct {
-	BaseDomain string `json:"base_domain,omitempty"`
-}
-
-type EdgeStackState struct {
-	Edge  edge.StackState    `json:"edge"`
-	Hosts map[string]Settled `json:"hosts,omitempty"`
-}
-
-type Settled struct {
-	Certificate string          `json:"certificate,omitempty"`
-	Owed        json.RawMessage `json:"owed,omitempty"`
-	Bound       bool            `json:"bound,omitempty"`
 }

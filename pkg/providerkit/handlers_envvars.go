@@ -68,14 +68,13 @@ func (h *handlers) namedEnvironments(ctx context.Context, slug string) ([]string
 	if err != nil {
 		return nil, err
 	}
-	held, err := provider.Records().List(ctx, StacksRecord(slug))
+	stacks, err := stackNames(ctx, provider.Records(), slug)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read %s's environments: %w", slug, err))
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	var named []string
-	for _, record := range held {
-		stack, err := naming.ParseStackName(record.Name[len(record.Name)-1])
-		if err != nil || stack.Env == "" || slices.Contains(named, stack.Env) {
+	for _, stack := range stacks {
+		if stack.Env == "" || slices.Contains(named, stack.Env) {
 			continue
 		}
 		named = append(named, stack.Env)

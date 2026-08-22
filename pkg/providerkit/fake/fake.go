@@ -20,6 +20,8 @@ type Provider struct {
 	bootstrap *Bootstrapper
 	releases  *Releaser
 	creds     *Credentials
+	edges     *Edges
+	dns       *DNS
 }
 
 func New(_ context.Context, options providerkit.Options) (providerkit.Provider, error) {
@@ -31,14 +33,17 @@ func New(_ context.Context, options providerkit.Options) (providerkit.Provider, 
 }
 
 func NewProvider(options Options) *Provider {
+	records := NewRecords()
 	return &Provider{
 		options:   options,
-		records:   NewRecords(),
+		records:   records,
 		artifacts: NewArtifacts(),
 		sealer:    NewSealer(),
 		bootstrap: NewBootstrapper(),
 		releases:  NewReleaser(),
 		creds:     NewCredentials(options.Region),
+		edges:     NewEdges(records),
+		dns:       NewDNS(),
 	}
 }
 
@@ -62,9 +67,9 @@ func (p *Provider) Sealer() providerkit.Sealer { return p.sealer }
 
 func (p *Provider) Credentials() providerkit.Credentials { return p.creds }
 
-func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{} }
+func (p *Provider) Edges() providerkit.EdgeRegistry { return p.edges }
 
-func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
+func (p *Provider) DNS() providerkit.DNSRegistry { return p.dns }
 
 type Warmer struct{ *Provider }
 

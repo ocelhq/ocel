@@ -28,58 +28,10 @@ func (h *handlers) Deploy(context.Context, *contractv1.DeployRequest, *connect.S
 	return h.unlifted("Deploy")
 }
 
-func (h *handlers) RemoveEnvironment(context.Context, *contractv1.RemoveEnvironmentRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
-	return h.unlifted("RemoveEnvironment")
-}
-
 func (h *handlers) RemoveProject(context.Context, *contractv1.ProjectRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
 	return h.unlifted("RemoveProject")
 }
 
 func (h *handlers) PlanRemoveProject(context.Context, *contractv1.ProjectRequest) (*contractv1.RemovalPlan, error) {
 	return nil, h.unlifted("PlanRemoveProject")
-}
-
-func (h *handlers) ListEnvironments(context.Context, *contractv1.ListEnvironmentsRequest) (*contractv1.ListEnvironmentsResponse, error) {
-	return nil, h.unlifted("ListEnvironments")
-}
-
-func (h *handlers) ListPromotions(context.Context, *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
-	return nil, h.unlifted("ListPromotions")
-}
-
-func (h *handlers) Rollback(context.Context, *contractv1.RollbackRequest) (*contractv1.RollbackResponse, error) {
-	return nil, h.unlifted("Rollback")
-}
-
-func (h *handlers) RemoveStalePromotions(context.Context, *contractv1.RemoveStalePromotionsRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
-	return h.unlifted("RemoveStalePromotions")
-}
-
-func (h *handlers) UsePreviewWildcard(context.Context, *contractv1.UsePreviewWildcardRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
-	return h.unlifted("UsePreviewWildcard")
-}
-
-func (h *handlers) GetPreviewWildcard(context.Context, *contractv1.PreviewWildcardRequest) (*contractv1.GetPreviewWildcardResponse, error) {
-	return nil, h.unlifted("GetPreviewWildcard")
-}
-
-func (h *handlers) PlanRemovePreviewWildcard(context.Context, *contractv1.PreviewWildcardRequest) (*contractv1.RemovalPlan, error) {
-	return nil, h.unlifted("PlanRemovePreviewWildcard")
-}
-
-func (h *handlers) RemovePreviewWildcard(context.Context, *contractv1.PreviewWildcardRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
-	return h.unlifted("RemovePreviewWildcard")
-}
-
-func (h *handlers) AddHostname(context.Context, *contractv1.HostnameRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
-	return h.unlifted("AddHostname")
-}
-
-func (h *handlers) RemoveHostname(context.Context, *contractv1.HostnameRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
-	return h.unlifted("RemoveHostname")
-}
-
-func (h *handlers) GetHostnameStatus(context.Context, *contractv1.HostnameRequest) (*contractv1.GetHostnameStatusResponse, error) {
-	return nil, h.unlifted("GetHostnameStatus")
 }

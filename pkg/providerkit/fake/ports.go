@@ -262,23 +262,3 @@ func (c *Credentials) Whoami(context.Context) (providerkit.Identity, error) {
 func (c *Credentials) Policy(tier providerkit.CredentialTier) (string, error) {
 	return "fake policy for " + string(tier), nil
 }
-
-type edges struct{}
-
-func (edges) Supported() []edge.Kind { return nil }
-
-func (edges) Default() edge.Kind { return "" }
-
-func (edges) Open(kind edge.Kind) (edge.Edge, error) {
-	return nil, providerkit.Refuse(providerkit.CodeInvalid, "the reference provider serves no edge %q", kind)
-}
-
-type dns struct{}
-
-func (dns) Supported() []providerkit.DNSKind { return nil }
-
-func (dns) Default() providerkit.DNSKind { return "" }
-
-func (dns) Open(kind providerkit.DNSKind, _ string) (edge.DNSWriter, error) {
-	return nil, providerkit.Refuse(providerkit.CodeInvalid, "the reference provider writes no dns %q", kind)
-}
