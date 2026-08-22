@@ -83,15 +83,15 @@ type StackResult struct {
 }
 
 type Link struct {
-	Type       LinkType
-	Name       string
-	Properties map[string]string
+	Type       LinkType          `json:"type"`
+	Name       string            `json:"name"`
+	Properties map[string]string `json:"properties,omitempty"`
 }
 
 type Function struct {
-	Name     string
-	Physical string
-	URL      string
+	Name     string `json:"name"`
+	Physical string `json:"physical,omitempty"`
+	URL      string `json:"url,omitempty"`
 }
 
 type StackState struct {
