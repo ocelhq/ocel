@@ -20,6 +20,7 @@ type Suite struct {
 func Run(t *testing.T, suite Suite) {
 	t.Helper()
 
+	t.Run("ports", func(t *testing.T) { runPorts(t, suite) })
 	t.Run("optional sets", func(t *testing.T) { runOptionalSets(t, suite) })
 	t.Run("wire", func(t *testing.T) { runWire(t, suite) })
 }

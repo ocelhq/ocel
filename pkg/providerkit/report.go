@@ -1,8 +1,9 @@
 package providerkit
 
 import (
-	"fmt"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/ports"
 )
 
 type Reporter interface {
@@ -13,22 +14,15 @@ type Reporter interface {
 	Span(name string, start, end time.Time, err error, attrs ...Attr)
 }
 
-type Code string
+type Code = ports.Code
 
 const (
-	CodeInvalid  Code = "invalid"
-	CodeNotReady Code = "not-ready"
-	CodeDenied   Code = "denied"
-	CodeBusy     Code = "busy"
+	CodeInvalid  = ports.CodeInvalid
+	CodeNotReady = ports.CodeNotReady
+	CodeDenied   = ports.CodeDenied
+	CodeBusy     = ports.CodeBusy
 )
 
-type Refusal struct {
-	Code    Code
-	Message string
-}
+type Refusal = ports.Refusal
 
-func (r Refusal) Error() string { return r.Message }
-
-func Refuse(code Code, format string, args ...any) error {
-	return Refusal{Code: code, Message: fmt.Sprintf(format, args...)}
-}
+var Refuse = ports.Refuse
