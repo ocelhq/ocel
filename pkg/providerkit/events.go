@@ -83,6 +83,10 @@ func newReporter(sender *eventSender, stage Stage, phase progressv1.Phase) Repor
 }
 
 func (r *reporter) Say(message string) {
+	if r.stage.ID == (StageID{}) {
+		r.sender.send(progressEvent(sanitizeMessage(message)))
+		return
+	}
 	r.sender.send(stageProgressEvent(r.stage.ID, r.phase, sanitizeMessage(message)))
 }
 

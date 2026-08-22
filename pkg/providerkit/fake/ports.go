@@ -9,17 +9,76 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+const (
+	FeatureCache  = "cache"
+	FeatureImages = "images"
+)
+
 type Bootstrapper struct {
-	mu      sync.Mutex
-	applied map[providerkit.Class][]string
+	mu       sync.Mutex
+	applied  map[providerkit.Class][]string
+	behind   map[string]bool
+	writer   string
+	schema   uint32
+	refusal  error
+	requests []providerkit.BootstrapRequest
 }
 
 func NewBootstrapper() *Bootstrapper {
-	return &Bootstrapper{applied: map[providerkit.Class][]string{}}
+	return &Bootstrapper{
+		applied: map[providerkit.Class][]string{},
+		behind:  map[string]bool{},
+		writer:  "1.0.0",
+		schema:  providerkit.BootstrapSchema,
+	}
 }
 
 func (b *Bootstrapper) Catalogue() []providerkit.Feature {
-	return []providerkit.Feature{{Name: "core", Summary: "the reference provider's only feature"}}
+	return []providerkit.Feature{
+		{
+			Name:    FeatureCache,
+			Summary: "the reference provider's response cache",
+			Needs:   []string{providerkit.NeedsFrameworkPrefix + "next"},
+		},
+		{
+			Name:      FeatureImages,
+			Summary:   "the reference provider's image optimizer",
+			DependsOn: []string{FeatureCache},
+			Needs:     []string{providerkit.NeedsFrameworkPrefix + "next", providerkit.NeedsEdgePrefix + "relay"},
+		},
+	}
+}
+
+func (b *Bootstrapper) Behind(features ...string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, feature := range features {
+		b.behind[feature] = true
+	}
+}
+
+func (b *Bootstrapper) WrittenBy(writer string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.writer = writer
+}
+
+func (b *Bootstrapper) AtSchema(schema uint32) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.schema = schema
+}
+
+func (b *Bootstrapper) RefuseApply(err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.refusal = err
+}
+
+func (b *Bootstrapper) Applied() []providerkit.BootstrapRequest {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return slices.Clone(b.requests)
 }
 
 func (b *Bootstrapper) Describe(_ context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
@@ -27,22 +86,40 @@ func (b *Bootstrapper) Describe(_ context.Context, class providerkit.Class) (pro
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
 	described := providerkit.Bootstrap{Class: class, Present: present}
+	if !present {
+		return described, nil
+	}
+	described.Stacks = append(described.Stacks, b.stack(class, ""))
 	for _, feature := range features {
-		described.Stacks = append(described.Stacks, providerkit.BootstrapStack{
-			Name:          feature,
-			Feature:       feature,
-			Present:       true,
-			DigestCurrent: true,
-			Writer:        string(Vendor),
-		})
+		described.Stacks = append(described.Stacks, b.stack(class, feature))
 	}
 	return described, nil
+}
+
+func (b *Bootstrapper) stack(class providerkit.Class, feature string) providerkit.BootstrapStack {
+	name := "fake-" + string(class)
+	if feature != "" {
+		name += "-" + feature
+	}
+	return providerkit.BootstrapStack{
+		Name:          name,
+		Feature:       feature,
+		Present:       true,
+		Schema:        b.schema,
+		DigestCurrent: !b.behind[feature],
+		Writer:        b.writer,
+	}
 }
 
 func (b *Bootstrapper) Apply(_ context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.refusal != nil {
+		return b.refusal
+	}
+	b.requests = append(b.requests, req)
 	b.applied[req.Class] = slices.Clone(req.Features)
+	b.behind = map[string]bool{}
 	if report != nil {
 		report.Say("bootstrapped " + string(req.Class))
 	}
@@ -52,14 +129,26 @@ func (b *Bootstrapper) Apply(_ context.Context, req providerkit.BootstrapRequest
 func (b *Bootstrapper) Removals(_ context.Context, class providerkit.Class) ([]providerkit.Removal, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if _, present := b.applied[class]; !present {
+	features, present := b.applied[class]
+	if !present {
 		return nil, nil
 	}
-	return []providerkit.Removal{{
+	removals := make([]providerkit.Removal, 0, len(features)+1)
+	for _, feature := range features {
+		removals = append(removals, providerkit.Removal{
+			Kind:   "feature stack",
+			Name:   b.stack(class, feature).Name,
+			Action: edge.SurfaceDelete,
+			Reason: "the stack carrying the " + feature + " feature of this bootstrap",
+		})
+	}
+	return append(removals, providerkit.Removal{
 		Kind:   "bootstrap",
-		Name:   string(class),
+		Name:   b.stack(class, "").Name,
 		Action: edge.SurfaceDelete,
-	}}, nil
+		Reason: "the core every feature above was built on",
+		Slow:   true,
+	}), nil
 }
 
 func (b *Bootstrapper) Remove(_ context.Context, class providerkit.Class, report providerkit.Reporter) error {
@@ -136,17 +225,41 @@ func propertiesFor(t providerkit.LinkType) map[string]string {
 	return properties
 }
 
-type credentials struct{}
+type Credentials struct {
+	mu      sync.Mutex
+	region  string
+	refusal error
+}
 
-func (credentials) Whoami(context.Context) (providerkit.Identity, error) {
+func NewCredentials(region string) *Credentials { return &Credentials{region: region} }
+
+func (c *Credentials) Deny(hint string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refusal = providerkit.Refuse(providerkit.CodeDenied, "%s", hint)
+}
+
+func (c *Credentials) Admit() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refusal = nil
+}
+
+func (c *Credentials) Whoami(context.Context) (providerkit.Identity, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.refusal != nil {
+		return providerkit.Identity{}, c.refusal
+	}
 	return providerkit.Identity{
 		Provider:  Vendor,
 		Account:   "000000000000",
 		Principal: "fake/reference",
+		Details:   []providerkit.Detail{{Label: "region", Value: c.region}},
 	}, nil
 }
 
-func (credentials) Policy(tier providerkit.CredentialTier) (string, error) {
+func (c *Credentials) Policy(tier providerkit.CredentialTier) (string, error) {
 	return "fake policy for " + string(tier), nil
 }
 

@@ -28,26 +28,6 @@ func (h *handlers) Deploy(context.Context, *contractv1.DeployRequest, *connect.S
 	return h.unlifted("Deploy")
 }
 
-func (h *handlers) Bootstrap(context.Context, *contractv1.BootstrapRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
-	return h.unlifted("Bootstrap")
-}
-
-func (h *handlers) DescribeBootstrap(context.Context, *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
-	return nil, h.unlifted("DescribeBootstrap")
-}
-
-func (h *handlers) GetCredentialPolicy(context.Context, *contractv1.CredentialPolicyRequest) (*contractv1.CredentialPolicyResponse, error) {
-	return nil, h.unlifted("GetCredentialPolicy")
-}
-
-func (h *handlers) RemoveBootstrap(context.Context, *contractv1.BootstrapScope, *connect.ServerStream[progressv1.OperationEvent]) error {
-	return h.unlifted("RemoveBootstrap")
-}
-
-func (h *handlers) PlanRemoveBootstrap(context.Context, *contractv1.BootstrapScope) (*contractv1.RemovalPlan, error) {
-	return nil, h.unlifted("PlanRemoveBootstrap")
-}
-
 func (h *handlers) RemoveEnvironment(context.Context, *contractv1.RemoveEnvironmentRequest, *connect.ServerStream[progressv1.OperationEvent]) error {
 	return h.unlifted("RemoveEnvironment")
 }
@@ -62,10 +42,6 @@ func (h *handlers) PlanRemoveProject(context.Context, *contractv1.ProjectRequest
 
 func (h *handlers) ListEnvironments(context.Context, *contractv1.ListEnvironmentsRequest) (*contractv1.ListEnvironmentsResponse, error) {
 	return nil, h.unlifted("ListEnvironments")
-}
-
-func (h *handlers) Preflight(context.Context, *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
-	return nil, h.unlifted("Preflight")
 }
 
 func (h *handlers) ListPromotions(context.Context, *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {

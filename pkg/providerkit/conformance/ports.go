@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func runPorts(t *testing.T, suite Suite) {
@@ -22,6 +25,8 @@ func runPorts(t *testing.T, suite Suite) {
 
 	t.Run("RecordStore", func(t *testing.T) { runRecordStore(t, provider.Records()) })
 	t.Run("Sealer", func(t *testing.T) { runSealer(t, provider.Sealer()) })
+	t.Run("Bootstrapper", func(t *testing.T) { runBootstrapper(t, provider.Bootstrap()) })
+	t.Run("Credentials", func(t *testing.T) { runCredentials(t, provider.Credentials()) })
 }
 
 func under(t *testing.T, rest ...string) providerkit.RecordName {
@@ -180,4 +185,160 @@ func runSealer(t *testing.T, sealer providerkit.Sealer) {
 			}
 		})
 	}
+}
+
+func runBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
+	ctx := context.Background()
+	catalogue := bootstrapper.Catalogue()
+
+	t.Run("every feature is one the catalogue can stand up", func(t *testing.T) {
+		named := make([]string, 0, len(catalogue))
+		for _, f := range catalogue {
+			if f.Name == "" {
+				t.Error("the catalogue carries a feature with no name, and nothing can ask for it")
+			}
+			named = append(named, f.Name)
+		}
+		for _, f := range catalogue {
+			for _, dep := range f.DependsOn {
+				if !slices.Contains(named, dep) {
+					t.Errorf("%s depends on %q, which this provider does not offer", f.Name, dep)
+				}
+			}
+			for _, need := range f.Needs {
+				if !strings.HasPrefix(need, providerkit.NeedsFrameworkPrefix) && !strings.HasPrefix(need, providerkit.NeedsEdgePrefix) {
+					t.Errorf("%s needs %q, which is neither a %s nor an %s token", f.Name, need, providerkit.NeedsFrameworkPrefix, providerkit.NeedsEdgePrefix)
+				}
+			}
+		}
+		if _, err := providerkit.FeatureLevels(catalogue, named); err != nil {
+			t.Fatalf("FeatureLevels() over the whole catalogue = %v, want an order that stands every feature up", err)
+		}
+	})
+
+	t.Run("Describe answers for the class it was asked about", func(t *testing.T) {
+		for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+			described, err := bootstrapper.Describe(ctx, class)
+			if err != nil {
+				t.Fatalf("Describe(%s) = %v", class, err)
+			}
+			if described.Class != class {
+				t.Errorf("Describe(%s) answered for %s", class, described.Class)
+			}
+			for _, stack := range described.Stacks {
+				if stack.Name == "" {
+					t.Errorf("Describe(%s) returned a stack with no name, and no plan can name it", class)
+				}
+			}
+		}
+	})
+
+	t.Run("what Apply stands up, Describe reports and Remove takes down", func(t *testing.T) {
+		class := providerkit.ClassPreview
+		levels, err := providerkit.FeatureLevels(catalogue, featureNames(catalogue))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wanted []string
+		for _, level := range levels {
+			wanted = append(wanted, level...)
+		}
+		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Features: wanted}, nil); err != nil {
+			t.Fatalf("Apply() of the whole catalogue = %v", err)
+		}
+
+		described, err := bootstrapper.Describe(ctx, class)
+		if err != nil {
+			t.Fatalf("Describe() after Apply() = %v", err)
+		}
+		for _, stack := range described.Stacks {
+			if stack.Feature != "" && !slices.Contains(wanted, stack.Feature) {
+				t.Errorf("Describe() reports a stack for %q, which Apply() was never asked for", stack.Feature)
+			}
+		}
+
+		removals, err := bootstrapper.Removals(ctx, class)
+		if err != nil {
+			t.Fatalf("Removals() = %v", err)
+		}
+		for _, removal := range removals {
+			if removal.Kind == "" || removal.Name == "" {
+				t.Errorf("Removals() returned %+v, and a removal plan cannot render a nameless item", removal)
+			}
+			if !edge.ValidSurfaceAction(removal.Action) {
+				t.Errorf("Removals() returned action %q, which is none the plan knows", removal.Action)
+			}
+		}
+
+		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+			t.Fatalf("Remove() = %v", err)
+		}
+		gone, err := bootstrapper.Describe(ctx, class)
+		if err != nil {
+			t.Fatalf("Describe() after Remove() = %v", err)
+		}
+		if gone.Present {
+			t.Error("Describe() still reports the bootstrap present after Remove()")
+		}
+	})
+
+	t.Run("Apply takes a drop in delete order", func(t *testing.T) {
+		class := providerkit.ClassPreview
+		drop, err := providerkit.FeatureLevels(catalogue, featureNames(catalogue))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ordered []string
+		for i := len(drop) - 1; i >= 0; i-- {
+			ordered = append(ordered, drop[i]...)
+		}
+		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Drop: ordered}, nil); err != nil {
+			t.Fatalf("Apply() dropping every feature = %v", err)
+		}
+		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+			t.Fatalf("Remove() = %v", err)
+		}
+	})
+}
+
+func featureNames(catalogue []providerkit.Feature) []string {
+	out := make([]string, 0, len(catalogue))
+	for _, f := range catalogue {
+		out = append(out, f.Name)
+	}
+	return out
+}
+
+func runCredentials(t *testing.T, credentials providerkit.Credentials) {
+	ctx := context.Background()
+
+	t.Run("Whoami either says who this is or refuses as denied", func(t *testing.T) {
+		identity, err := credentials.Whoami(ctx)
+		if err != nil {
+			var refusal providerkit.Refusal
+			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeDenied {
+				t.Fatalf("Whoami() failed with %v, want a Refusal carrying %s so the CLI can render a credential problem", err, providerkit.CodeDenied)
+			}
+			if refusal.Message == "" {
+				t.Error("Whoami() refused with no message, so the CLI has nothing to tell the user")
+			}
+			return
+		}
+		if identity.Provider == "" {
+			t.Error("Whoami() answered an identity naming no provider")
+		}
+		for _, detail := range identity.Details {
+			if detail.Label == "" {
+				t.Errorf("Whoami() returned a detail with no label: %+v", detail)
+			}
+		}
+	})
+
+	t.Run("a policy is rendered for either tier", func(t *testing.T) {
+		for _, tier := range []providerkit.CredentialTier{providerkit.TierBootstrap, providerkit.TierDeploy} {
+			if _, err := credentials.Policy(tier); err != nil {
+				t.Errorf("Policy(%s) = %v, want the permissions that tier needs", tier, err)
+			}
+		}
+	})
 }
