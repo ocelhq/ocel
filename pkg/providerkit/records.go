@@ -1,33 +1,23 @@
 package providerkit
 
 import (
-	"context"
-	"errors"
-	"strings"
+	"github.com/ocelhq/ocel/pkg/providerkit/ports"
 )
 
-type RecordStore interface {
-	Read(ctx context.Context, name RecordName) (Record, error)
+type RecordStore = ports.RecordStore
 
-	Write(ctx context.Context, record Record) (Revision, error)
+type RecordName = ports.RecordName
 
-	Remove(ctx context.Context, name RecordName, expected Revision) error
+type Revision = ports.Revision
 
-	List(ctx context.Context, under RecordName) ([]Record, error)
-}
+type Record = ports.Record
 
-var ErrStale = errors.New("the record moved since it was read")
+var (
+	ErrStale    = ports.ErrStale
+	ErrNoRecord = ports.ErrNoRecord
+)
 
-var ErrNoRecord = errors.New("no such record")
-
-type RecordName []string
-
-func (n RecordName) String() string { return strings.Join(n, "/") }
-
-type Revision string
-
-type Record struct {
-	Name     RecordName
-	Bytes    []byte
-	Revision Revision
-}
+var (
+	Held   = ports.Held
+	Forget = ports.Forget
+)

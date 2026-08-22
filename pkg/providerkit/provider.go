@@ -3,6 +3,7 @@ package providerkit
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -41,11 +42,11 @@ type Vendor string
 
 type LinkType string
 
-type Class = edge.Class
+type Class = ports.Class
 
 const (
-	ClassProduction = edge.ClassProduction
-	ClassPreview    = edge.ClassPreview
+	ClassProduction = ports.ClassProduction
+	ClassPreview    = ports.ClassPreview
 )
 
 type Removal = edge.Surface

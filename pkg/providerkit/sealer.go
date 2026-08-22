@@ -1,18 +1,9 @@
 package providerkit
 
-import "context"
+import (
+	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+)
 
-type Sealer interface {
-	Seal(ctx context.Context, at Coordinate, plaintext []byte) ([]byte, error)
+type Sealer = ports.Sealer
 
-	Open(ctx context.Context, at Coordinate, sealed []byte) ([]byte, error)
-}
-
-type Coordinate struct {
-	Project string
-	Class   Class
-	Env     string
-	Folder  string
-	Link    string
-	Name    string
-}
+type Coordinate = ports.Coordinate
