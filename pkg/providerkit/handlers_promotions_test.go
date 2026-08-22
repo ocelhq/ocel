@@ -2,6 +2,7 @@ package providerkit_test
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"testing"
@@ -24,12 +25,16 @@ func seedPromotions(t *testing.T, provider *fake.Provider, class providerkit.Cla
 		t.Fatal(err)
 	}
 	for i, id := range ids {
-		promotion := edge.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": id}}
+		promotion := edge.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": buildIdentity(i)}}
 		if err := held.Promote(context.Background(), promotion, pointer); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return held
+}
+
+func buildIdentity(seq int) string {
+	return fmt.Sprintf("%032x~%012x", seq+1, seq+1)
 }
 
 func seedEnvironment(t *testing.T, provider *fake.Provider, slug string, stacks ...naming.StackName) {

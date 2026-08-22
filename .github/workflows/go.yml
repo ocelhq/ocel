@@ -24,6 +24,7 @@ jobs:
           - pkg/channel
           - pkg/proto
           - pkg/providerkit
+          - pkg/providerkit/pulumi
           - platform/edge/contract
           - platform/aws/provider
           - platform/vps/provider
