@@ -18,8 +18,8 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	awscontrol "github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -43,11 +43,11 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 	resp := &contractv1.PreflightResponse{Identity: &contractv1.Identity{}}
 
 	awsOK := true
-	if identity, err := awsports.CredentialsFor(awscfg).Whoami(ctx); err != nil {
+	if identity, err := awscontrol.CredentialsFor(awscfg).Whoami(ctx); err != nil {
 		awsOK = false
-		resp.CredentialProblems = append(resp.CredentialProblems, providerkit.CredentialProblemProto(awsports.Vendor, err))
+		resp.CredentialProblems = append(resp.CredentialProblems, providerkit.CredentialProblemProto(awscontrol.Vendor, err))
 	} else {
-		resp.Identity = providerkit.IdentityProto(awsports.Vendor, identity)
+		resp.Identity = providerkit.IdentityProto(awscontrol.Vendor, identity)
 	}
 
 	resp.DomainClaims = domainClaims(ctx, s.edgeRouteOwner(requestedEdge(req), awscfg.Region), req.GetSlug(), req.GetDomains())
