@@ -46,6 +46,18 @@ func (r *deployRun) upload(ctx context.Context, report Reporter) error {
 			r.artifacts[fn.GetLogicalName()] = ref
 		}
 	}
+	if len(r.artifacts) == 0 {
+		return nil
+	}
+	source, carries := r.provider.(MembraneSource)
+	if !carries {
+		return nil
+	}
+	ref, err := PlaceMembrane(ctx, source, r.provider.Artifacts(), report)
+	if err != nil {
+		return err
+	}
+	r.membrane = ref
 	return nil
 }
 

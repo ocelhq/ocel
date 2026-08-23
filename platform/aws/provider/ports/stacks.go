@@ -23,6 +23,19 @@ type Stacks struct {
 	Tags    TagClock
 }
 
+func (s Stacks) SweepTagClock(ctx context.Context, project string, stack naming.StackName) error {
+	if s.Tags == nil {
+		return nil
+	}
+	if err := readable(project, stack); err != nil {
+		return fmt.Errorf("sweep a stack's tag clock: %w", err)
+	}
+	if err := s.Tags.SweepTagClock(ctx, project, stack); err != nil {
+		return fmt.Errorf("sweep %s/%s's tag clock: %w", project, stack, err)
+	}
+	return nil
+}
+
 func (s Stacks) AddProject(ctx context.Context, project string, features []string) error {
 	if err := naming.Validate("project", project); err != nil {
 		return fmt.Errorf("index a project: %w", err)
@@ -75,11 +88,6 @@ func (s Stacks) AddStack(ctx context.Context, project string, stack naming.Stack
 func (s Stacks) RemoveStack(ctx context.Context, project string, stack naming.StackName) error {
 	if err := readable(project, stack); err != nil {
 		return fmt.Errorf("drop a stack from the index: %w", err)
-	}
-	if s.Tags != nil {
-		if err := s.Tags.SweepTagClock(ctx, project, stack); err != nil {
-			return fmt.Errorf("drop stack %s/%s from the index: %w", project, stack, err)
-		}
 	}
 	if err := providerkit.ForgetStack(ctx, s.Records, project, stack); err != nil {
 		return fmt.Errorf("drop stack %s/%s from the index: %w", project, stack, err)

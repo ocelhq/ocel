@@ -88,7 +88,7 @@ func TestStacksRecordTheFeaturesAProjectNeeds(t *testing.T) {
 	}
 }
 
-func TestStacksSweepsTheTagClockBeforeForgettingAStack(t *testing.T) {
+func TestStacksSweepsTheTagClockWhenATeardownAsksItTo(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -103,6 +103,12 @@ func TestStacksSweepsTheTagClockBeforeForgettingAStack(t *testing.T) {
 	}
 	if err := stacks.RemoveStack(ctx, "shop", web); err != nil {
 		t.Fatalf("RemoveStack: %v", err)
+	}
+	if len(clock.swept) != 0 {
+		t.Errorf("swept = %v from the index alone, want the teardown to be what asks for the sweep", clock.swept)
+	}
+	if err := stacks.SweepTagClock(ctx, "shop", web); err != nil {
+		t.Fatalf("SweepTagClock: %v", err)
 	}
 
 	if !reflect.DeepEqual(clock.swept, []string{"shop/" + web.String()}) {

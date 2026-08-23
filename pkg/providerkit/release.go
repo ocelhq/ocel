@@ -56,6 +56,28 @@ type AppPlan struct {
 	Values AppValues
 
 	Grants []Link
+
+	Routing  *RoutingPlan
+	ISR      *ISRPlan
+	Bytecode *BytecodePlan
+
+	AssetPrefix string
+
+	Membrane ArtifactRef
+}
+
+type RoutingPlan struct {
+	Entry    string
+	Manifest []byte
+}
+
+type ISRPlan struct {
+	Prefix       string
+	TagNamespace string
+}
+
+type BytecodePlan struct {
+	Prefix string
 }
 
 type AppValues struct {

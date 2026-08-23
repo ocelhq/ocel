@@ -73,6 +73,7 @@ type deployRun struct {
 	scope  values.Scope
 
 	artifacts map[string]ArtifactRef
+	membrane  ArtifactRef
 	needs     NeedRecords
 	links     []Link
 	functions map[string][]Function
@@ -293,18 +294,27 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 		if err != nil {
 			return err
 		}
+		facts, err := r.serving(entry)
+		if err != nil {
+			return err
+		}
 		plan := StackPlan{
 			Ref:   r.ref(entry.Stack),
 			Kind:  StackApp,
 			Tags:  r.plan.tags(entry),
 			Links: r.reader(),
 			App: &AppPlan{
-				App:       entry.App,
-				Framework: entry.Manifest.GetFramework(),
-				Entry:     entryFunction(r.manifest, entry.App),
-				Functions: r.functionSpecs(entry),
-				Values:    r.appValues(entry, grants),
-				Grants:    grants,
+				App:         entry.App,
+				Framework:   entry.Manifest.GetFramework(),
+				Entry:       entryFunction(r.manifest, entry.App),
+				Functions:   r.functionSpecs(entry),
+				Values:      r.appValues(entry, grants),
+				Grants:      grants,
+				Routing:     facts.Routing,
+				ISR:         facts.ISR,
+				Bytecode:    facts.Bytecode,
+				AssetPrefix: facts.AssetPrefix,
+				Membrane:    r.membrane,
 			},
 		}
 		result, err := r.provider.Releases().Provision(ctx, plan, report)
@@ -352,6 +362,18 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 		"%s is already standing and this project has no record of it: ocel deploys over what it stood up itself, never over what it finds. "+
 			"Remove it, or deploy this project under another name",
 		stack)
+}
+
+func (r *deployRun) serving(entry AppEntry) (ServingFacts, error) {
+	return ServingFactsFor(ServingQuery{
+		Root:         ArtifactRoot(),
+		Project:      naming.Sanitize(r.plan.Slug),
+		App:          entry.App,
+		Framework:    entry.Manifest.GetFramework(),
+		Stack:        entry.Stack,
+		Coordinate:   r.plan.coordinate(entry.App, entry.Build.Release()),
+		EdgeRunsCode: r.front.Facts().RunsCode,
+	})
 }
 
 func (r *deployRun) ref(stack naming.StackName) StackRef {

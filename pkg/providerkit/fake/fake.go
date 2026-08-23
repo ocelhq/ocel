@@ -81,6 +81,10 @@ func (CodeEmbedder) EmbedCode(context.Context, string, providerkit.ArtifactRef, 
 	return nil
 }
 
+type MembraneSource struct{ *Provider }
+
+func (MembraneSource) Membrane(context.Context) ([]byte, error) { return []byte(Membrane), nil }
+
 type StackInspector struct{ *Provider }
 
 func (s StackInspector) Inspect(_ context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
@@ -105,10 +109,15 @@ func (f Full) Inspect(_ context.Context, ref providerkit.StackRef) (providerkit.
 
 func (Full) VerifyGrants(context.Context, providerkit.Link) error { return nil }
 
+func (Full) Membrane(context.Context) ([]byte, error) { return []byte(Membrane), nil }
+
 var (
 	_ providerkit.Provider       = (*Provider)(nil)
 	_ providerkit.Warmer         = Warmer{}
 	_ providerkit.CodeEmbedder   = CodeEmbedder{}
 	_ providerkit.StackInspector = StackInspector{}
 	_ providerkit.GrantVerifier  = GrantVerifier{}
+	_ providerkit.MembraneSource = MembraneSource{}
 )
+
+const Membrane = "fake-membrane"

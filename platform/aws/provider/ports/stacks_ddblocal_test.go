@@ -112,8 +112,17 @@ func TestStacksAgainstDynamoDBLocal(t *testing.T) {
 		if err := stacks.RemoveStack(ctx, "billing", clocked); err != nil {
 			t.Fatalf("RemoveStack: %v", err)
 		}
+		if left := tagClockRows(t, ctx, ddb, table, "billing", clocked); len(left) != 2 {
+			t.Fatalf("tag clock rows = %v after dropping the index entry alone, want the teardown's own sweep to be what clears them", left)
+		}
+		if err := stacks.SweepTagClock(ctx, "billing", clocked); err != nil {
+			t.Fatalf("SweepTagClock: %v", err)
+		}
 		if left := tagClockRows(t, ctx, ddb, table, "billing", clocked); len(left) != 0 {
 			t.Fatalf("tag clock rows %v survived the stack that wrote them", left)
+		}
+		if err := stacks.SweepTagClock(ctx, "billing", clocked); err != nil {
+			t.Fatalf("repeated SweepTagClock = %v, want a re-run of a finished teardown to pass", err)
 		}
 
 		if err := stacks.RemoveStack(ctx, "billing", naming.InfraStack("prod")); err != nil {
