@@ -10,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	smithy "github.com/aws/smithy-go"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 var healPrincipals = map[string]bool{
@@ -99,12 +101,12 @@ func admitReplacements(accept bool, log func(string)) changeReview {
 
 type HealRequest struct {
 	Features []string
-	Writer   Writer
+	Writer   providerkit.Writer
 }
 
 var ErrHealNotPermitted = errors.New("these credentials may not write this account's bootstrap stacks")
 
-func healRefused(err error) bool {
+func RefusedWrite(err error) bool {
 	var api smithy.APIError
 	if !errors.As(err, &api) {
 		return false
@@ -117,12 +119,12 @@ func healRefused(err error) bool {
 	}
 }
 
-func Heal(ctx context.Context, apis APIs, req HealRequest, log func(string)) (bool, error) {
-	return heal(ctx, apis, productionBootstrap(), req, log)
-}
-
-func HealPreview(ctx context.Context, apis APIs, req HealRequest, log func(string)) (bool, error) {
-	return heal(ctx, apis, previewBootstrap(), req, log)
+func Heal(ctx context.Context, apis APIs, class string, req HealRequest, log func(string)) (bool, error) {
+	target, err := specFor(class)
+	if err != nil {
+		return false, err
+	}
+	return heal(ctx, apis, target, req, log)
 }
 
 func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func(string)) (bool, error) {
@@ -157,7 +159,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func
 			}
 			done, err := healStack(ctx, apis, target.class, stale[i], deployed, refs, req.Writer, log)
 			if err != nil {
-				if healRefused(err) {
+				if RefusedWrite(err) {
 					return healed, ErrHealNotPermitted
 				}
 				log(fmt.Sprintf("could not refresh %s, and this deploy runs against it as it stands: %v", stale[i].Name, err))
@@ -169,7 +171,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func
 	return healed, nil
 }
 
-func healStack(ctx context.Context, apis APIs, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer Writer, log func(string)) (bool, error) {
+func healStack(ctx context.Context, apis APIs, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer providerkit.Writer, log func(string)) (bool, error) {
 	f, ok := featureNamed(stale.Feature)
 	if !ok {
 		return false, fmt.Errorf("this provider has no feature named %q", stale.Feature)

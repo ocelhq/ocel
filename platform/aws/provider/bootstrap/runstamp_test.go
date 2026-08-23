@@ -4,8 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func TestRunStamps(t *testing.T) {
@@ -15,7 +14,7 @@ func TestRunStamps(t *testing.T) {
 
 		req := everything()
 		req.Writer = "1.9.0"
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), req, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		for _, name := range cfn.stacks() {
@@ -43,39 +42,16 @@ func TestRunStamps(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		standInCloudflare(t, &fakeEdge{})
 
-		req := Request{Writer: writerFor("dev", "cafebabe")}
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), req, nil, nil); err != nil {
+		req := Request{Writer: "dev+cafebabe"}
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		stamp := cfn.stampOf(StackName)
 		if stamp.WrittenBy != "dev+cafebabe" {
 			t.Errorf("written by %q, want dev+cafebabe", stamp.WrittenBy)
 		}
-		if Writer(stamp.WrittenBy).Release() {
+		if providerkit.Writer(stamp.WrittenBy).Release() {
 			t.Errorf("%q must never read as a release", stamp.WrittenBy)
-		}
-	})
-
-	t.Run("an update keeps the auto-heal the account opted into", func(t *testing.T) {
-		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{})
-
-		apis := apisOf(cfn, ssmc, iamc, preloadedStore())
-		if err := Run(context.Background(), apis, Request{Writer: "1.0.0"}, nil, nil); err != nil {
-			t.Fatalf("first Run: %v", err)
-		}
-		cfn.tags[StackName] = append(cfn.tags[StackName], cfntypes.Tag{
-			Key: aws.String(TagAutoHeal), Value: aws.String("true"),
-		})
-		if err := Run(context.Background(), apis, Request{Writer: "1.1.0"}, nil, nil); err != nil {
-			t.Fatalf("second Run: %v", err)
-		}
-		stamp := cfn.stampOf(StackName)
-		if stamp.WrittenBy != "1.1.0" {
-			t.Errorf("written by %q, want the second run's version", stamp.WrittenBy)
-		}
-		if !stamp.AutoHeal {
-			t.Error("an update wiped the auto-heal the account had opted into")
 		}
 	})
 }

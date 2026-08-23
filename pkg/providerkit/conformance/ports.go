@@ -27,10 +27,10 @@ func runPorts(t *testing.T, suite Suite) {
 
 	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, provider.Records()) })
 	t.Run("Sealer", func(t *testing.T) { RunSealer(t, provider.Sealer()) })
-	t.Run("Bootstrapper", func(t *testing.T) { runBootstrapper(t, provider.Bootstrap()) })
+	t.Run("Bootstrapper", func(t *testing.T) { RunBootstrapper(t, provider.Bootstrap()) })
 	t.Run("ArtifactStore", func(t *testing.T) { runArtifactStore(t, provider.Artifacts()) })
 	t.Run("Releaser", func(t *testing.T) { runReleaser(t, provider) })
-	t.Run("Credentials", func(t *testing.T) { runCredentials(t, provider.Credentials()) })
+	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, provider.Credentials()) })
 	t.Run("EdgeRegistry", func(t *testing.T) { runEdgeRegistry(t, provider.Edges()) })
 	t.Run("DNSRegistry", func(t *testing.T) { runDNSRegistry(t, provider.DNS()) })
 }
@@ -197,7 +197,9 @@ func RunSealer(t *testing.T, sealer providerkit.Sealer) {
 	}
 }
 
-func runBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
+func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
+	t.Helper()
+
 	ctx := context.Background()
 	catalogue := bootstrapper.Catalogue()
 
@@ -319,7 +321,9 @@ func featureNames(catalogue []providerkit.Feature) []string {
 	return out
 }
 
-func runCredentials(t *testing.T, credentials providerkit.Credentials) {
+func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
+	t.Helper()
+
 	ctx := context.Background()
 
 	t.Run("Whoami either says who this is or refuses as denied", func(t *testing.T) {

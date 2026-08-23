@@ -23,7 +23,7 @@ func TestCoreRefusesReplacementWhateverTheCallerAccepts(t *testing.T) {
 
 			req := everything()
 			req.AcceptReplacements = accept
-			err := Run(context.Background(), apis, req, nil, nil)
+			err := Run(context.Background(), apis, ClassProduction, req, nil, nil)
 			if err == nil {
 				t.Fatal("a bootstrap that would replace the core's state table was allowed through")
 			}
@@ -44,18 +44,17 @@ func TestCoreRefusesReplacementWhateverTheCallerAccepts(t *testing.T) {
 }
 
 func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
-	t.Run("opting into auto-heal writes the tag through a bootstrap that has not otherwise moved", func(t *testing.T) {
+	t.Run("a new writer writes the tag through a bootstrap that has not otherwise moved", func(t *testing.T) {
 		cfn, apis := standingBootstrap(t)
 		before := cfn.updates
 
-		on := true
 		req := everything()
-		req.AutoHeal = &on
-		if err := Run(context.Background(), apis, req, nil, nil); err != nil {
+		req.Writer = "9.9.9"
+		if err := Run(context.Background(), apis, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		if !cfn.stampOf(StackName).AutoHeal {
-			t.Error("the account opted into auto-heal and the core still reads as opted out")
+		if got := cfn.stampOf(StackName).WrittenBy; got != "9.9.9" {
+			t.Errorf("written by %q, want the writer this run carries", got)
 		}
 		if cfn.updates != before {
 			t.Errorf("a tag-only delta went through %d change sets; CloudFormation reports one as empty", cfn.updates-before)
@@ -69,7 +68,7 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 		cfn, apis := standingBootstrap(t)
 		before := cfn.restamps
 
-		if err := Run(context.Background(), apis, everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apis, ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if cfn.restamps != before {
@@ -147,7 +146,7 @@ func TestHealRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
 	apis.CFN = deniedChangeSets{cfn}
 	var log healLog
 
-	healed, err := Heal(context.Background(), apis, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
+	healed, err := Heal(context.Background(), apis, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
 	if !errors.Is(err, ErrHealNotPermitted) {
 		t.Fatalf("Heal err = %v, want ErrHealNotPermitted", err)
 	}
@@ -167,7 +166,7 @@ func TestSettlingIsBoundedAndReported(t *testing.T) {
 	cfn.busy(stack, settleAttempts*4)
 	var log healLog
 
-	if _, err := Heal(context.Background(), apis, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write); err != nil {
+	if _, err := Heal(context.Background(), apis, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write); err != nil {
 		t.Fatalf("Heal: %v", err)
 	}
 	if len(*waits) >= changeSetAttempts {
@@ -193,7 +192,7 @@ func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
 	)
 	var log healLog
 
-	healed, err := Heal(context.Background(), apis, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
+	healed, err := Heal(context.Background(), apis, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
 	if err != nil {
 		t.Fatalf("Heal: %v", err)
 	}
@@ -217,7 +216,7 @@ func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
 	})
 	var log healLog
 
-	healed, _ := Heal(context.Background(), apis, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
+	healed, _ := Heal(context.Background(), apis, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
 	if healed {
 		t.Error("a heal rewrote the policy of the identity the edge signs its calls with")
 	}

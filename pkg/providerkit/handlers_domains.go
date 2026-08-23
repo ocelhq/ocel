@@ -43,13 +43,13 @@ func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequ
 
 	session, err := h.hostnames(ctx, req)
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	session.settle.ask = func(headline string, records []edge.Record, notes ...string) {
 		sender.send(dnsOwedEvent(headline, records, notes...))
 	}
 	if err := session.add(ctx, report); err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	sender.send(okResult())
 	return nil
@@ -155,10 +155,10 @@ func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameR
 
 	session, err := h.hostnames(ctx, req)
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	if err := session.remove(ctx, report); err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	sender.send(okResult())
 	return nil
@@ -213,11 +213,11 @@ func (d *hostnames) removeTargets() ([]string, error) {
 func (h *handlers) GetHostnameStatus(ctx context.Context, req *contractv1.HostnameRequest) (*contractv1.GetHostnameStatusResponse, error) {
 	session, err := h.hostnames(ctx, req)
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	resp, err := session.status(ctx)
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	return resp, nil
 }

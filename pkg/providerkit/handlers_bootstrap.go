@@ -2,7 +2,6 @@ package providerkit
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -46,7 +45,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	if err != nil {
 		return err
 	}
-	provider, gate, err := h.gate()
+	_, gate, err := h.gate()
 	if err != nil {
 		return err
 	}
@@ -55,102 +54,20 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	defer func() { err = errors.Join(err, sender.close()) }()
 	report := newReporter(sender, Stage{}, progressv1.Phase_PHASE_UNSPECIFIED)
 
-	if err := applyBootstrap(ctx, provider, gate, class, req, report); err != nil {
-		return sender.fail(refusalError(err))
+	if err := gate.Apply(ctx, class, applyRequestOf(req), report); err != nil {
+		return sender.fail(RefusalError(err))
 	}
 	sender.send(okResult())
 	return nil
 }
 
-func applyBootstrap(ctx context.Context, provider Provider, gate Gate, class Class, req *contractv1.BootstrapRequest, report Reporter) error {
-	catalogue := provider.Bootstrap().Catalogue()
-	standing, err := gate.Standing(ctx, class)
-	if err != nil {
-		return err
+func applyRequestOf(req *contractv1.BootstrapRequest) ApplyRequest {
+	return ApplyRequest{
+		Features:           req.GetFeatures(),
+		Force:              req.GetForce(),
+		AutoHeal:           req.AutoHeal,
+		AcceptReplacements: req.GetAcceptReplacements(),
 	}
-	if checkCompat(standing.Schema, standing.Present, BootstrapSchema) == needsCLIUpgrade {
-		return schemaAhead(standing.Schema, class)
-	}
-
-	requested, err := featureClosure(catalogue, req.GetFeatures())
-	if err != nil {
-		return err
-	}
-	drop := featureDrop(catalogue, standing.Features, requested)
-	if err := admitDrops(ctx, provider.Records(), drop, req.GetForce()); err != nil {
-		return err
-	}
-	ordered, err := featureDeleteOrder(catalogue, drop)
-	if err != nil {
-		return err
-	}
-
-	autoHeal := standing.AutoHeal
-	if req.AutoHeal != nil {
-		autoHeal = req.GetAutoHeal()
-	}
-	if err := provider.Bootstrap().Apply(ctx, BootstrapRequest{
-		Class:      class,
-		Features:   requested,
-		Drop:       ordered,
-		Unattended: !req.GetAcceptReplacements(),
-	}, report); err != nil {
-		return err
-	}
-	if err := gate.RecordBootstrap(ctx, class, BootstrapState{AutoHeal: autoHeal}); err != nil {
-		return err
-	}
-	return EnsureRecordSchema(ctx, provider.Records())
-}
-
-func admitDrops(ctx context.Context, records RecordStore, drop []string, force bool) error {
-	if len(drop) == 0 || force {
-		return nil
-	}
-	recorded, err := recordedFeatures(ctx, records)
-	if err != nil {
-		return err
-	}
-	dependents := projectsDependingOn(recorded, drop)
-	if len(dependents) == 0 {
-		return nil
-	}
-	return Refuse(CodeNotReady,
-		"dropping %s would break %d project(s) already deployed here: %s — re-run with --force to drop it anyway, or leave the feature in the set",
-		strings.Join(drop, ", "), len(dependents), strings.Join(dependents, ", "))
-}
-
-func recordedFeatures(ctx context.Context, records RecordStore) (map[string][]string, error) {
-	held, err := records.List(ctx, ProjectsRecord())
-	if err != nil {
-		return nil, fmt.Errorf("read the projects deployed here: %w", err)
-	}
-	recorded := map[string][]string{}
-	for _, record := range held {
-		if len(record.Name) != 2 || len(record.Bytes) == 0 {
-			continue
-		}
-		var project Project
-		if err := json.Unmarshal(record.Bytes, &project); err != nil {
-			return nil, fmt.Errorf("read %s's record: %w", record.Name, err)
-		}
-		recorded[record.Name[1]] = project.Features
-	}
-	return recorded, nil
-}
-
-func projectsDependingOn(recorded map[string][]string, dropped []string) []string {
-	var out []string
-	for project, features := range recorded {
-		for _, name := range features {
-			if slices.Contains(dropped, name) {
-				out = append(out, project)
-				break
-			}
-		}
-	}
-	slices.Sort(out)
-	return out
 }
 
 func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
@@ -164,17 +81,17 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	}
 	standing, err := gate.Standing(ctx, class)
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	recorded := map[string][]string{}
 	if req.GetWithDependents() {
-		if recorded, err = recordedFeatures(ctx, provider.Records()); err != nil {
-			return nil, refusalError(err)
+		if recorded, err = gate.RecordedFeatures(ctx); err != nil {
+			return nil, RefusalError(err)
 		}
 	}
 
 	resp := &contractv1.DescribeBootstrapResponse{
-		Bootstrap: bootstrapStatusProto(standing, h.session.writer, req.GetTier(), standing.Features),
+		Bootstrap: BootstrapStatusProto(standing, h.session.writer, req.GetTier(), standing.Features),
 	}
 	for _, f := range provider.Bootstrap().Catalogue() {
 		resp.Features = append(resp.Features, &contractv1.Feature{
@@ -182,13 +99,13 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 			Summary:    f.Summary,
 			DependsOn:  f.DependsOn,
 			Enabled:    slices.Contains(standing.Features, f.Name),
-			Dependents: projectsDependingOn(recorded, []string{f.Name}),
+			Dependents: ProjectsDependingOn(recorded, []string{f.Name}),
 		})
 	}
 	return resp, nil
 }
 
-func bootstrapStatusProto(standing Standing, writing Writer, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
+func BootstrapStatusProto(standing Standing, writing Writer, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
 	status := &contractv1.BootstrapStatus{
 		Tier:           tier,
 		Present:        standing.Present,
@@ -221,16 +138,16 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	if err != nil {
 		return nil, err
 	}
-	if err := vacant(ctx, gate, class); err != nil {
-		return nil, refusalError(err)
+	if err := gate.Vacant(ctx, class); err != nil {
+		return nil, RefusalError(err)
 	}
 	surfaces, err := provider.Bootstrap().Removals(ctx, class)
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	return &contractv1.RemovalPlan{
 		EdgeKind: string(removalEdge(provider, req.GetEdge().GetKind())),
-		Items:    removalItems(surfaces),
+		Items:    RemovalItems(surfaces),
 		Subject:  string(class),
 	}, nil
 }
@@ -240,7 +157,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	if err != nil {
 		return err
 	}
-	provider, gate, err := h.gate()
+	_, gate, err := h.gate()
 	if err != nil {
 		return err
 	}
@@ -249,29 +166,11 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	defer func() { err = errors.Join(err, sender.close()) }()
 	report := newReporter(sender, Stage{}, progressv1.Phase_PHASE_UNSPECIFIED)
 
-	if err := removeBootstrap(ctx, provider, gate, class, report); err != nil {
-		return sender.fail(refusalError(err))
+	if err := gate.Remove(ctx, class, report); err != nil {
+		return sender.fail(RefusalError(err))
 	}
 	sender.send(okResult())
 	return nil
-}
-
-func removeBootstrap(ctx context.Context, provider Provider, gate Gate, class Class, report Reporter) error {
-	if err := vacant(ctx, gate, class); err != nil {
-		return err
-	}
-	if err := provider.Bootstrap().Remove(ctx, class, report); err != nil {
-		return err
-	}
-	return Forget(ctx, provider.Records(), BootstrapRecord(class))
-}
-
-func vacant(ctx context.Context, gate Gate, class Class) error {
-	occupancy, err := gate.Occupancy(ctx, class)
-	if err != nil {
-		return err
-	}
-	return occupancy.Refuse(class)
 }
 
 func removalEdge(provider Provider, requested string) edge.Kind {
@@ -281,7 +180,7 @@ func removalEdge(provider Provider, requested string) edge.Kind {
 	return provider.Edges().Default()
 }
 
-func removalItems(surfaces []Removal) []*contractv1.RemovalItem {
+func RemovalItems(surfaces []Removal) []*contractv1.RemovalItem {
 	items := make([]*contractv1.RemovalItem, 0, len(surfaces))
 	for _, surface := range surfaces {
 		items = append(items, surfaceItem(surface))
@@ -307,18 +206,18 @@ func (h *handlers) GetCredentialPolicy(_ context.Context, req *contractv1.Creden
 	if err != nil {
 		return nil, err
 	}
-	tier, err := credentialTierOf(req.GetTier())
+	tier, err := CredentialTierOf(req.GetTier())
 	if err != nil {
 		return nil, err
 	}
 	document, err := provider.Credentials().Policy(tier)
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	return &contractv1.CredentialPolicyResponse{Document: document}, nil
 }
 
-func credentialTierOf(tier contractv1.CredentialTier) (CredentialTier, error) {
+func CredentialTierOf(tier contractv1.CredentialTier) (CredentialTier, error) {
 	switch tier {
 	case contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP:
 		return TierBootstrap, nil

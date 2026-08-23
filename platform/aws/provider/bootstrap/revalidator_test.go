@@ -446,18 +446,17 @@ func soleResource(t *testing.T, statements []policyStatement, action string) str
 func TestRunRevalidator(t *testing.T) {
 	t.Run("this build bootstraps a consumer", func(t *testing.T) {
 		for _, tc := range []struct {
-			name      string
-			run       func(context.Context, APIs, Request, func(string), func(string)) error
+			class     string
 			stackName string
 		}{
-			{"production", Run, isrStack(ClassProduction)},
-			{"preview", RunPreview, isrStack(ClassPreview)},
+			{ClassProduction, isrStack(ClassProduction)},
+			{ClassPreview, isrStack(ClassPreview)},
 		} {
-			t.Run(tc.name, func(t *testing.T) {
+			t.Run(tc.class, func(t *testing.T) {
 				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 				standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-				if err := tc.run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
+				if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), tc.class, everything(), nil, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
 				template := cfn.template(tc.stackName)

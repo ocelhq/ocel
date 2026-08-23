@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -20,7 +19,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -32,12 +30,14 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
@@ -52,7 +52,7 @@ type Server struct {
 
 	config sessionConfig
 
-	writer bootstrap.Writer
+	writer providerkit.Writer
 
 	memo memo
 }
@@ -221,35 +221,28 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 	preview := env.GetTier() == environmentv1.Tier_TIER_PREVIEW
 	bootstrapCmd := bootstrapCommand(preview)
 
-	required, err := bootstrap.RequiredFeatures(manifestFrameworks(manifest), req.GetEdge().GetKind())
+	class := bootstrap.ClassProduction
+	if preview {
+		class = bootstrap.ClassPreview
+	}
+
+	gate, err := s.gatedOn(ctx, awscfg, class, edgeFront)
 	if err != nil {
-		return deploy.Result{}, finishPreparing(connect.NewError(connect.CodeInvalidArgument, err))
+		return deploy.Result{}, finishPreparing(err)
+	}
+	required, err := providerkit.RequiredFeatures(gate.bootstrapper.Catalogue(), manifestFrameworks(manifest), req.GetEdge().GetKind())
+	if err != nil {
+		return deploy.Result{}, finishPreparing(providerkit.RefusalError(err))
 	}
 
 	progress(progressv1.Phase_PHASE_UNSPECIFIED, "Checking account bootstrap", 0, 0)
+	if _, err := gate.Admit(ctx, providerkit.Class(class), required, reportTo{detail: logf}); err != nil {
+		return deploy.Result{}, finishPreparing(providerkit.RefusalError(err))
+	}
+	s.memo.forgetDeployed()
 	deployed, err := s.deployed(ctx, cfn, opts.Region, preview)
 	if err != nil {
 		return deploy.Result{}, finishPreparing(err)
-	}
-	compat := bootstrap.CheckCompat(deployed.Schema, deployed.Present, bootstrap.RequiredSchema)
-	if err := compat.Explain(deployed.Schema, bootstrap.RequiredSchema, bootstrapCmd); err != nil {
-		return deploy.Result{}, finishPreparing(err)
-	}
-	if err := missingFeatures(deployed, required, preview); err != nil {
-		return deploy.Result{}, finishPreparing(err)
-	}
-	healed, err := s.healBootstrap(ctx, awscfg, deployed, required, preview, logf)
-	if err != nil {
-		logf(fmt.Sprintf("could not refresh this account's bootstrap, and this deploy runs against it as it stands: %v", err))
-	}
-	if healed {
-		s.memo.forgetDeployed()
-		if deployed, err = s.deployed(ctx, cfn, opts.Region, preview); err != nil {
-			return deploy.Result{}, finishPreparing(err)
-		}
-	}
-	if drift := driftReport(deployed, required, bootstrapCmd); drift != "" {
-		logf(drift)
 	}
 	if deployed.StateBucket == "" {
 		return deploy.Result{}, finishPreparing(fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd))
@@ -265,11 +258,6 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 	}
 	if deployed.VarsTable == "" || deployed.VarsKeyARN == "" {
 		return deploy.Result{}, finishPreparing(fmt.Errorf("account bootstrap is present but its variable store is missing (a partial rollback?); re-run `%s`", bootstrapCmd))
-	}
-
-	class := bootstrap.ClassProduction
-	if preview {
-		class = bootstrap.ClassPreview
 	}
 
 	var (
@@ -472,118 +460,82 @@ func (s *Server) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
 	opts := s.config.get()
-	awscfg, err := loadAWS(ctx, opts.Region)
+	class, err := classOf(req.GetTier())
 	if err != nil {
-		return failStream(stream, err)
+		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	cfn := cloudformation.NewFromConfig(awscfg)
-
-	preview := req.GetTier() == environmentv1.Tier_TIER_PREVIEW
-
-	deployed, err := checkBootstrap(ctx, cfn, preview)
-	if err != nil {
-		return failStream(stream, err)
-	}
-	if compat := bootstrap.CheckCompat(deployed.Schema, deployed.Present, bootstrap.RequiredSchema); compat == bootstrap.NeedsCLIUpgrade {
-		return stream.Send(failureResult(schemaAheadRefusal(deployed.Schema, preview)))
-	}
-
 	defaultEdge, err := s.edge(edges.DefaultKind, opts.Region)
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	apis := bootstrap.APIs{
-		CFN:   cfn,
-		SSM:   ssm.NewFromConfig(awscfg),
-		IAM:   iam.NewFromConfig(awscfg),
-		Store: s3.NewFromConfig(awscfg),
-		Edge:  defaultEdge,
-	}
-	if deployed.StateTable != "" {
-		apis.Users = &stackindex.Index{Dynamo: dynamodb.NewFromConfig(awscfg), Table: deployed.StateTable}
-	}
-	request := bootstrap.Request{
-		Features:           req.GetFeatures(),
-		Force:              req.GetForce(),
-		Writer:             s.writer,
-		AutoHeal:           req.AutoHeal,
-		AcceptReplacements: req.GetAcceptReplacements(),
-	}
-	if err := s.runBootstrap(ctx, bootstrapRunner(preview), apis, request, progress, logf); err != nil {
+	gate, err := s.gated(ctx, class, defaultEdge)
+	if err != nil {
 		return failStream(stream, err)
+	}
+
+	applied := s.applying(func() error {
+		return gate.Apply(ctx, providerkit.Class(class), providerkit.ApplyRequest{
+			Features:           req.GetFeatures(),
+			Force:              req.GetForce(),
+			AutoHeal:           req.AutoHeal,
+			AcceptReplacements: req.GetAcceptReplacements(),
+		}, reportTo{say: progress, detail: logf})
+	})
+	if applied != nil {
+		return failStream(stream, providerkit.RefusalError(applied))
 	}
 	return stream.Send(okResult())
 }
 
-type bootstrapRun func(ctx context.Context, apis bootstrap.APIs, req bootstrap.Request, progress, log func(string)) error
-
-func bootstrapRunner(preview bool) bootstrapRun {
-	if preview {
-		return bootstrap.RunPreview
-	}
-	return bootstrap.Run
-}
-
-func (s *Server) runBootstrap(ctx context.Context, run bootstrapRun, apis bootstrap.APIs, req bootstrap.Request, progress, logf func(string)) error {
-	if err := run(ctx, apis, req, progress, logf); err != nil {
-		return err
-	}
-	s.memo.forgetDeployed()
-	return nil
-}
-
 func (s *Server) DescribeBootstrap(ctx context.Context, req *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
-	opts := s.config.get()
-	awscfg, err := loadAWS(ctx, opts.Region)
+	class, err := classOf(req.GetTier())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	front, err := s.edge(edges.DefaultKind, s.config.get().Region)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	gate, err := s.gated(ctx, class, front)
 	if err != nil {
 		return nil, err
 	}
-	deployed, err := s.deployed(ctx, cloudformation.NewFromConfig(awscfg), opts.Region, req.GetTier() == environmentv1.Tier_TIER_PREVIEW)
+	standing, err := gate.Standing(ctx, providerkit.Class(class))
 	if err != nil {
-		return nil, err
+		return nil, providerkit.RefusalError(err)
 	}
 	recorded := map[string][]string{}
-	if req.GetWithDependents() && deployed.StateTable != "" {
-		index := &stackindex.Index{Dynamo: dynamodb.NewFromConfig(awscfg), Table: deployed.StateTable}
-		if recorded, err = index.ProjectFeatures(ctx); err != nil {
-			return nil, err
+	if req.GetWithDependents() {
+		if recorded, err = gate.RecordedFeatures(ctx); err != nil {
+			return nil, providerkit.RefusalError(err)
 		}
 	}
 
-	return s.describedBootstrap(deployed, req.GetTier(), recorded), nil
-}
-
-func (s *Server) GetCredentialPolicy(_ context.Context, req *contractv1.CredentialPolicyRequest) (*contractv1.CredentialPolicyResponse, error) {
-	var (
-		document string
-		err      error
-	)
-	switch req.GetTier() {
-	case contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP:
-		document, err = bootstrap.BootstrapCredentialPolicy()
-	case contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY:
-		document, err = bootstrap.DeployCredentialPolicy()
-	default:
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a credential policy is rendered for the bootstrap tier or the deploy tier; this request named neither"))
+	resp := &contractv1.DescribeBootstrapResponse{
+		Bootstrap: providerkit.BootstrapStatusProto(standing, s.writer, req.GetTier(), standing.Features),
 	}
-	if err != nil {
-		return nil, err
-	}
-	return &contractv1.CredentialPolicyResponse{Document: document}, nil
-}
-
-func (s *Server) describedBootstrap(deployed bootstrap.Deployed, tier environmentv1.Tier, recorded map[string][]string) *contractv1.DescribeBootstrapResponse {
-	resp := &contractv1.DescribeBootstrapResponse{Bootstrap: s.bootstrapStatus(deployed, tier, deployed.Features.Names())}
-	for _, f := range bootstrap.Catalogue() {
+	for _, f := range gate.bootstrapper.Catalogue() {
 		resp.Features = append(resp.Features, &contractv1.Feature{
 			Name:       f.Name,
 			Summary:    f.Summary,
 			DependsOn:  f.DependsOn,
-			Enabled:    deployed.Features.Has(f.Name),
-			Dependents: bootstrap.ProjectsNeeding(recorded, f.Name),
+			Enabled:    slices.Contains(standing.Features, f.Name),
+			Dependents: providerkit.ProjectsDependingOn(recorded, []string{f.Name}),
 		})
 	}
-	return resp
+	return resp, nil
+}
+
+func (s *Server) GetCredentialPolicy(_ context.Context, req *contractv1.CredentialPolicyRequest) (*contractv1.CredentialPolicyResponse, error) {
+	tier, err := providerkit.CredentialTierOf(req.GetTier())
+	if err != nil {
+		return nil, err
+	}
+	document, err := awsports.Credentials{}.Policy(tier)
+	if err != nil {
+		return nil, providerkit.RefusalError(err)
+	}
+	return &contractv1.CredentialPolicyResponse{Document: document}, nil
 }
 
 func bootstrapCommand(preview bool) string {
@@ -607,19 +559,6 @@ func manifestFrameworks(manifest *contractv1.Manifest) []string {
 	}
 	slices.Sort(frameworks)
 	return slices.Compact(frameworks)
-}
-
-func missingFeatures(deployed bootstrap.Deployed, required []string, preview bool) error {
-	missing := deployed.Features.Missing(required)
-	if len(missing) == 0 {
-		return nil
-	}
-	full := append(deployed.Features.Names(), missing...)
-	slices.Sort(full)
-	return fmt.Errorf(
-		"this AWS account's Ocel bootstrap lacks the features this project needs: %s.\nRun `%s --features %s` and try again",
-		strings.Join(missing, ", "), bootstrapCommand(preview), strings.Join(slices.Compact(full), ","),
-	)
 }
 
 func checkBootstrap(ctx context.Context, api bootstrap.CFNDescriber, preview bool) (bootstrap.Deployed, error) {
@@ -657,16 +596,6 @@ type STSAPI interface {
 type callerIdentity struct {
 	account string
 	arn     string
-}
-
-func (id callerIdentity) principal() string {
-	if i := strings.LastIndex(id.arn, "/"); i >= 0 {
-		return id.arn[i+1:]
-	}
-	if i := strings.LastIndex(id.arn, ":"); i >= 0 {
-		return id.arn[i+1:]
-	}
-	return id.arn
 }
 
 func getCallerIdentity(ctx context.Context, api STSAPI) (callerIdentity, error) {

@@ -107,7 +107,7 @@ func (s *session) configure(ctx context.Context, options Options) error {
 	}
 	provider, err := s.spec.New(ctx, options)
 	if err != nil {
-		return refusalError(err)
+		return RefusalError(err)
 	}
 	if provider == nil {
 		return connect.NewError(connect.CodeInternal, errors.New("the provider constructor returned nothing"))

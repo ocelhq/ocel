@@ -46,7 +46,18 @@ func Partition(name kit.RecordName) (string, error) {
 	return pk, err
 }
 
+func (r Records) standing() error {
+	if r.Table != "" {
+		return nil
+	}
+	return kit.Refuse(kit.CodeNotReady,
+		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `ocel bootstrap` to create it, then try again")
+}
+
 func (r Records) Read(ctx context.Context, name kit.RecordName) (kit.Record, error) {
+	if r.Table == "" {
+		return kit.Record{}, kit.ErrNoRecord
+	}
 	pk, sk, err := keyOf(name)
 	if err != nil {
 		return kit.Record{}, err
@@ -66,6 +77,9 @@ func (r Records) Read(ctx context.Context, name kit.RecordName) (kit.Record, err
 }
 
 func (r Records) Write(ctx context.Context, record kit.Record) (kit.Revision, error) {
+	if err := r.standing(); err != nil {
+		return "", err
+	}
 	pk, sk, err := keyOf(record.Name)
 	if err != nil {
 		return "", err
@@ -106,6 +120,9 @@ func (r Records) Write(ctx context.Context, record kit.Record) (kit.Revision, er
 }
 
 func (r Records) Remove(ctx context.Context, name kit.RecordName, expected kit.Revision) error {
+	if r.Table == "" {
+		return kit.ErrNoRecord
+	}
 	pk, sk, err := keyOf(name)
 	if err != nil {
 		return err
@@ -132,6 +149,9 @@ func (r Records) Remove(ctx context.Context, name kit.RecordName, expected kit.R
 }
 
 func (r Records) List(ctx context.Context, under kit.RecordName) ([]kit.Record, error) {
+	if r.Table == "" {
+		return nil, nil
+	}
 	pk, sk, err := keyOf(under)
 	if err != nil {
 		return nil, err

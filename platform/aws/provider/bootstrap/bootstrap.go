@@ -19,6 +19,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -60,7 +61,6 @@ const (
 type Deployed struct {
 	Present            bool
 	Schema             int
-	AutoHeal           bool
 	Stacks             []StackStamp
 	Features           FeatureSet
 	StateBucket        string
@@ -97,34 +97,31 @@ type SSMAPI interface {
 	DeleteParameter(ctx context.Context, in *ssm.DeleteParameterInput, optFns ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error)
 }
 
-type FeatureUsers interface {
-	ProjectFeatures(ctx context.Context) (map[string][]string, error)
-}
-
 type APIs struct {
 	CFN   CFNAPI
 	SSM   SSMAPI
 	IAM   IAMAPI
 	Store ObjectStore
-	Users FeatureUsers
 	Edge  edge.Edge
 }
 
 type Request struct {
 	Features           []string
-	Force              bool
-	Writer             Writer
-	AutoHeal           *bool
+	Drop               []string
+	Writer             providerkit.Writer
 	AcceptReplacements bool
 }
 
 func CheckDeployed(ctx context.Context, api CFNDescriber) (Deployed, error) {
-	deployed, _, err := readBootstrap(ctx, api, ClassProduction)
-	return deployed, err
+	return CheckDeployedFor(ctx, api, ClassProduction)
 }
 
 func CheckDeployedPreview(ctx context.Context, api CFNDescriber) (Deployed, error) {
-	deployed, _, err := readBootstrap(ctx, api, ClassPreview)
+	return CheckDeployedFor(ctx, api, ClassPreview)
+}
+
+func CheckDeployedFor(ctx context.Context, api CFNDescriber, class string) (Deployed, error) {
+	deployed, _, err := readBootstrap(ctx, api, class)
 	return deployed, err
 }
 
@@ -147,7 +144,7 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deploye
 		return Deployed{}, stackRefs{}, err
 	}
 	coreStamp := readStamp(core.Tags)
-	d.AutoHeal, d.Schema = coreStamp.AutoHeal, coreStamp.Schema
+	d.Schema = coreStamp.Schema
 
 	stamps := make(map[string]Stamp, len(featureRegistry))
 	for _, f := range featureRegistry {
@@ -195,14 +192,6 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deploye
 		})
 	}
 	return d, refs, nil
-}
-
-func standingAutoHeal(ctx context.Context, api CFNDescriber, stackName string) (bool, error) {
-	stack, err := describeStack(ctx, api, stackName)
-	if err != nil || stack == nil {
-		return false, err
-	}
-	return readStamp(stack.Tags).AutoHeal, nil
 }
 
 func standingFeatures(ctx context.Context, api CFNDescriber, class string) (FeatureSet, error) {
@@ -339,12 +328,23 @@ func bootstrapFor(class string) (spec, error) {
 	}
 }
 
-func Run(ctx context.Context, apis APIs, req Request, progress, log func(string)) error {
-	return run(ctx, apis, productionBootstrap(), req, progress, log)
+func Run(ctx context.Context, apis APIs, class string, req Request, progress, log func(string)) error {
+	target, err := specFor(class)
+	if err != nil {
+		return err
+	}
+	return run(ctx, apis, target, req, progress, log)
 }
 
-func RunPreview(ctx context.Context, apis APIs, req Request, progress, log func(string)) error {
-	return run(ctx, apis, previewBootstrap(), req, progress, log)
+func specFor(class string) (spec, error) {
+	switch class {
+	case ClassProduction:
+		return productionBootstrap(), nil
+	case ClassPreview:
+		return previewBootstrap(), nil
+	default:
+		return spec{}, fmt.Errorf("there is no %s bootstrap; a bootstrap is either production or preview", class)
+	}
 }
 
 func run(ctx context.Context, apis APIs, target spec, req Request, progress, log func(string)) error {
@@ -360,22 +360,9 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	progressf := func(msg string) { report(progress, msg) }
 	logf := func(msg string) { report(log, msg) }
 
-	requested, err := resolveFeatures(req.Features)
-	if err != nil {
-		return err
-	}
+	requested := req.Features
 	levels, err := featureLevels(requested)
 	if err != nil {
-		return err
-	}
-
-	standing, err := standingFeatures(ctx, apis.CFN, target.class)
-	if err != nil {
-		return err
-	}
-	_, drop := featureDiff(standing, requested)
-	drop = dropClosure(drop, standing)
-	if err := admitDrops(ctx, apis.Users, drop, req.Force); err != nil {
 		return err
 	}
 
@@ -386,16 +373,9 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 
 	progressf(target.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
-	autoHeal, err := standingAutoHeal(ctx, apis.CFN, target.stackName)
-	if err != nil {
-		return err
-	}
-	if req.AutoHeal != nil {
-		autoHeal = *req.AutoHeal
-	}
 	review := admitReplacements(req.AcceptReplacements, logf)
 	coreBody := target.template()
-	coreTags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(coreBody), WrittenBy: req.Writer.String(), AutoHeal: autoHeal})
+	coreTags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
 	if err := upsertCFNStack(ctx, apis.CFN, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
@@ -419,7 +399,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 		logf("reused the existing Pulumi passphrase")
 	}
 
-	if err := dropFeatures(ctx, apis.CFN, steps, target.class, drop, progressf, logf); err != nil {
+	if err := dropFeatures(ctx, apis.CFN, steps, target.class, req.Drop, progressf, logf); err != nil {
 		return err
 	}
 
@@ -490,13 +470,9 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	return nil
 }
 
-func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, class string, drop []string, progressf, logf func(string)) error {
-	if len(drop) == 0 {
+func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, class string, dropOrder []string, progressf, logf func(string)) error {
+	if len(dropOrder) == 0 {
 		return nil
-	}
-	dropOrder, err := FeatureDeleteOrder(drop)
-	if err != nil {
-		return err
 	}
 	progressf(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(featureStackNames(dropOrder, class), ", ")))
 	for _, name := range dropOrder {
@@ -508,7 +484,7 @@ func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, class string,
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	return deleteFeatureStacks(ctx, cfn, class, drop, logf)
+	return deleteFeatureStacks(ctx, cfn, class, dropOrder, logf)
 }
 
 func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
@@ -559,24 +535,6 @@ func FeatureStackName(name, class string) string {
 func absorbRefs(refs *stackRefs, out map[string]string) error {
 	var ignored Deployed
 	return absorb(&ignored, refs, out)
-}
-
-func admitDrops(ctx context.Context, users FeatureUsers, drop []string, force bool) error {
-	if len(drop) == 0 || force || users == nil {
-		return nil
-	}
-	recorded, err := users.ProjectFeatures(ctx)
-	if err != nil {
-		return err
-	}
-	dependents := projectsDependingOn(recorded, drop)
-	if len(dependents) == 0 {
-		return nil
-	}
-	return fmt.Errorf(
-		"dropping %s would break %d project(s) already deployed here: %s — re-run with --force to drop it anyway, or leave the feature in the set",
-		strings.Join(drop, ", "), len(dependents), strings.Join(dependents, ", "),
-	)
 }
 
 type changeReview func(stackName string, changes []cfntypes.ResourceChange) error

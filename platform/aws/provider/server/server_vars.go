@@ -17,6 +17,7 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -114,9 +115,8 @@ func (s *stores) open(ctx context.Context, key storeKey) (values.Store, error) {
 	if err != nil {
 		return values.Store{}, err
 	}
-	compat := bootstrap.CheckCompat(deployed.Schema, deployed.Present, bootstrap.RequiredSchema)
-	if err := compat.Explain(deployed.Schema, bootstrap.RequiredSchema, bootstrapCmd); err != nil {
-		return values.Store{}, err
+	if err := providerkit.CheckSchema(deployed.Schema, deployed.Present, valueClass(key.preview)); err != nil {
+		return values.Store{}, providerkit.RefusalError(err)
 	}
 	if deployed.StateTable == "" || deployed.VarsKeyARN == "" {
 		return values.Store{}, fmt.Errorf("account bootstrap is present but its variable store is missing (a partial rollback?); re-run `%s`", bootstrapCmd)

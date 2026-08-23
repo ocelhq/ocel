@@ -98,21 +98,21 @@ func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePr
 
 	base, err := previewBaseDomain(req.GetBaseDomain())
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	w, err := h.wildcard(ctx, req.GetEdge())
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	w.ask = func(headline string, records []edge.Record, notes ...string) {
 		sender.send(dnsOwedEvent(headline, records, notes...))
 	}
 	front, err := h.edgeFor(w.provider, req.GetEdge())
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	if err := w.use(ctx, front, base, report); err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	sender.send(okResult())
 	return nil
@@ -194,14 +194,14 @@ func (w *wildcards) claimable(front edge.Edge, base string) error {
 func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.GetPreviewWildcardResponse, error) {
 	w, err := h.wildcard(ctx, req.GetEdge())
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	if w.held.BaseDomain == "" {
 		return &contractv1.GetPreviewWildcardResponse{}, nil
 	}
 	served, err := w.served(ctx)
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	return &contractv1.GetPreviewWildcardResponse{
 		Wildcard: &contractv1.PreviewWildcard{
@@ -298,17 +298,17 @@ func (w *wildcards) holding() (edge.Edge, error) {
 func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.RemovalPlan, error) {
 	w, err := h.wildcard(ctx, req.GetEdge())
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	if w.held.BaseDomain == "" {
 		return &contractv1.RemovalPlan{}, nil
 	}
 	front, err := w.holding()
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	if err := w.releasable(ctx); err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	return &contractv1.RemovalPlan{
 		EdgeKind: string(front.Kind()),
@@ -356,10 +356,10 @@ func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.Pr
 
 	w, err := h.wildcard(ctx, req.GetEdge())
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	if err := w.release(ctx, report); err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	sender.send(okResult())
 	return nil

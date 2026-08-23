@@ -223,7 +223,7 @@ func standingBootstrap(t *testing.T) (*fakeCFN, APIs) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(cfn, ssmc, iamc, preloadedStore())
-	if err := Run(context.Background(), apis, everything(), nil, nil); err != nil {
+	if err := Run(context.Background(), apis, ClassProduction, everything(), nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	return cfn, apis
@@ -234,7 +234,7 @@ func TestChangeSets(t *testing.T) {
 		cfn, apis := standingBootstrap(t)
 		before := cfn.updates
 
-		if err := Run(context.Background(), apis, everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apis, ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if cfn.updates != before {
@@ -251,7 +251,7 @@ func TestChangeSets(t *testing.T) {
 		cfn.fallBehind(stack)
 		cfn.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
 
-		err := Run(context.Background(), apis, everything(), nil, nil)
+		err := Run(context.Background(), apis, ClassProduction, everything(), nil, nil)
 		if err == nil {
 			t.Fatal("a bootstrap that would replace a live queue was allowed through")
 		}
@@ -271,7 +271,7 @@ func TestChangeSets(t *testing.T) {
 
 		req := everything()
 		req.AcceptReplacements = true
-		if err := Run(context.Background(), apis, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if cfn.template(stack) == behindTemplate {
@@ -289,7 +289,7 @@ func TestHeal(t *testing.T) {
 		cfn.fallBehind(stack)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, all, log.write)
+		healed, err := Heal(context.Background(), apis, ClassProduction, all, log.write)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -309,7 +309,7 @@ func TestHeal(t *testing.T) {
 		cfn.fallBehind(StackName)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, all, log.write)
+		healed, err := Heal(context.Background(), apis, ClassProduction, all, log.write)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -324,7 +324,7 @@ func TestHeal(t *testing.T) {
 		cfn.fallBehind(stack)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, HealRequest{Features: []string{FeatureISR}, Writer: "1.4.0"}, log.write)
+		healed, err := Heal(context.Background(), apis, ClassProduction, HealRequest{Features: []string{FeatureISR}, Writer: "1.4.0"}, log.write)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -340,7 +340,7 @@ func TestHeal(t *testing.T) {
 		cfn.plan(stack, change(cfntypes.ChangeActionRemove, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse))
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, all, log.write)
+		healed, err := Heal(context.Background(), apis, ClassProduction, all, log.write)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -363,7 +363,7 @@ func TestHeal(t *testing.T) {
 		cfn.busy(stack, changeSetAttempts*2)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, all, log.write)
+		healed, err := Heal(context.Background(), apis, ClassProduction, all, log.write)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -383,7 +383,7 @@ func TestHeal(t *testing.T) {
 		cfn.busy(stack, 3)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, all, log.write)
+		healed, err := Heal(context.Background(), apis, ClassProduction, all, log.write)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}

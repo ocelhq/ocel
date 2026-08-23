@@ -269,7 +269,7 @@ func TestRunVars(t *testing.T) {
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
 		for i := range 2 {
-			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
+			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 				t.Fatalf("Run %d: %v", i+1, err)
 			}
 		}
@@ -303,7 +303,7 @@ func TestRunVars(t *testing.T) {
 		}
 
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), Request{}, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 

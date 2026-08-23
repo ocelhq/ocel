@@ -84,13 +84,132 @@ func (s Standing) healable(required []string) []string {
 	return out
 }
 
+type ApplyRequest struct {
+	Features []string
+
+	Force bool
+
+	AutoHeal *bool
+
+	AcceptReplacements bool
+}
+
+func (g Gate) Apply(ctx context.Context, class Class, req ApplyRequest, report Reporter) error {
+	catalogue := g.Bootstrapper.Catalogue()
+	standing, err := g.Standing(ctx, class)
+	if err != nil {
+		return err
+	}
+	if err := RefuseSchemaAhead(standing.Schema, standing.Present, class); err != nil {
+		return err
+	}
+
+	requested, err := featureClosure(catalogue, req.Features)
+	if err != nil {
+		return err
+	}
+	drop := featureDrop(catalogue, standing.Features, requested)
+	if err := g.admitDrops(ctx, drop, req.Force); err != nil {
+		return err
+	}
+	ordered, err := featureDeleteOrder(catalogue, drop)
+	if err != nil {
+		return err
+	}
+
+	autoHeal := standing.AutoHeal
+	if req.AutoHeal != nil {
+		autoHeal = *req.AutoHeal
+	}
+	if err := g.Bootstrapper.Apply(ctx, BootstrapRequest{
+		Class:      class,
+		Features:   requested,
+		Drop:       ordered,
+		Unattended: !req.AcceptReplacements,
+	}, report); err != nil {
+		return err
+	}
+	if err := g.RecordBootstrap(ctx, class, BootstrapState{AutoHeal: autoHeal}); err != nil {
+		return err
+	}
+	return EnsureRecordSchema(ctx, g.Records)
+}
+
+func (g Gate) Remove(ctx context.Context, class Class, report Reporter) error {
+	if err := g.Vacant(ctx, class); err != nil {
+		return err
+	}
+	if err := g.Bootstrapper.Remove(ctx, class, report); err != nil {
+		return err
+	}
+	return Forget(ctx, g.Records, BootstrapRecord(class))
+}
+
+func (g Gate) Vacant(ctx context.Context, class Class) error {
+	occupancy, err := g.Occupancy(ctx, class)
+	if err != nil {
+		return err
+	}
+	return occupancy.Refuse(class)
+}
+
+func (g Gate) admitDrops(ctx context.Context, drop []string, force bool) error {
+	if len(drop) == 0 || force {
+		return nil
+	}
+	recorded, err := g.RecordedFeatures(ctx)
+	if err != nil {
+		return err
+	}
+	dependents := ProjectsDependingOn(recorded, drop)
+	if len(dependents) == 0 {
+		return nil
+	}
+	return Refuse(CodeNotReady,
+		"dropping %s would break %d project(s) already deployed here: %s — re-run with --force to drop it anyway, or leave the feature in the set",
+		strings.Join(drop, ", "), len(dependents), strings.Join(dependents, ", "))
+}
+
+func (g Gate) RecordedFeatures(ctx context.Context) (map[string][]string, error) {
+	held, err := g.Records.List(ctx, ProjectsRecord())
+	if err != nil {
+		return nil, fmt.Errorf("read the projects deployed here: %w", err)
+	}
+	recorded := map[string][]string{}
+	for _, record := range held {
+		if len(record.Name) != 2 || len(record.Bytes) == 0 {
+			continue
+		}
+		var project Project
+		if err := json.Unmarshal(record.Bytes, &project); err != nil {
+			return nil, fmt.Errorf("read %s's record: %w", record.Name, err)
+		}
+		recorded[record.Name[1]] = project.Features
+	}
+	return recorded, nil
+}
+
+func ProjectsDependingOn(recorded map[string][]string, dropped []string) []string {
+	var out []string
+	for project, features := range recorded {
+		for _, name := range features {
+			if slices.Contains(dropped, name) {
+				out = append(out, project)
+				break
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 func (g Gate) Admit(ctx context.Context, class Class, required []string, report Reporter) (Standing, error) {
 	standing, err := g.Standing(ctx, class)
 	if err != nil {
 		return Standing{}, err
 	}
 	command := bootstrapCommand(class)
-	if err := checkCompat(standing.Schema, standing.Present, BootstrapSchema).explain(standing.Schema, BootstrapSchema, command); err != nil {
+	if err := CheckSchema(standing.Schema, standing.Present, class); err != nil {
 		return standing, err
 	}
 	if err := standing.lacking(required, command); err != nil {
@@ -139,6 +258,7 @@ func (g Gate) heal(ctx context.Context, standing Standing, required []string, re
 		Class:      standing.Class,
 		Features:   standing.Features,
 		Unattended: true,
+		Heal:       true,
 	}, report)
 	var refusal Refusal
 	if errors.As(err, &refusal) && refusal.Code == CodeDenied {
@@ -271,6 +391,17 @@ func (c compatibility) explain(deployed, required int, command string) error {
 	default:
 		return nil
 	}
+}
+
+func CheckSchema(deployed int, present bool, class Class) error {
+	return checkCompat(deployed, present, BootstrapSchema).explain(deployed, BootstrapSchema, bootstrapCommand(class))
+}
+
+func RefuseSchemaAhead(deployed int, present bool, class Class) error {
+	if checkCompat(deployed, present, BootstrapSchema) != needsCLIUpgrade {
+		return nil
+	}
+	return schemaAhead(deployed, class)
 }
 
 func schemaAhead(deployed int, class Class) error {

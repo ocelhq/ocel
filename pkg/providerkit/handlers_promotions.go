@@ -22,7 +22,7 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 	}
 	environments, err := previewEnvironments(ctx, provider.Records(), req.GetSlug())
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	resp := &contractv1.ListEnvironmentsResponse{Environments: make([]*contractv1.PreviewEnvironment, 0, len(environments))}
 	for _, environment := range environments {
@@ -41,34 +41,34 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 
 	pointer, err := envName(req.GetEnvironment())
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	if pointer == ProductionEnv {
-		return sender.fail(refusalError(Refuse(CodeInvalid,
+		return sender.fail(RefusalError(Refuse(CodeInvalid,
 			"production is not an environment to remove; `ocel destroy` removes the project's production footprint")))
 	}
 	session, err := h.openStack(ctx, ClassPreview, req.GetSlug(), req.GetEdge())
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	report.Say(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
 	removed, err := session.stack.RemovePointer(ctx, pointer)
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	if err := session.checkpoint(ctx); err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	targets, err := ReclaimTargets(req.GetSlug(), pointer,
 		removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	if err := reclaim(ctx, session.provider, req.GetSlug(), ClassPreview, targets, report); err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	if err := removePreviewInfra(ctx, session.provider, req.GetSlug(), pointer, report); err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	for _, line := range pruneLines(removed) {
 		report.Say(line)
@@ -83,11 +83,11 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 		return &contractv1.ListPromotionsResponse{}, nil
 	}
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	history, err := session.stack.Ledger().History(ctx, "")
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	return &contractv1.ListPromotionsResponse{Promotions: promotionHistoryProto(history)}, nil
 }
@@ -95,15 +95,15 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest) (*contractv1.RollbackResponse, error) {
 	session, err := h.openStack(ctx, ClassProduction, req.GetSlug(), req.GetEdge())
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	history, err := session.stack.Ledger().History(ctx, "")
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	target, err := rollbackTarget(history, req.GetTo(), req.GetTag())
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 
 	flip := session.front.FlipBound()
@@ -115,10 +115,10 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Flip:        &flip,
 	}
 	if err := session.stack.Promote(ctx, promoted, ""); err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	if err := session.checkpoint(ctx); err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	return &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}, nil
 }
@@ -159,11 +159,11 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 
 	class, err := classOf(req.GetEnvironment().GetTier())
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	pointer, err := envName(req.GetEnvironment())
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	if class == ClassProduction {
 		pointer = ""
@@ -176,15 +176,15 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		return nil
 	}
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	report.Say("Diffing deployments to reclaim")
 	pruned, err := session.stack.Ledger().Prune(ctx, int(req.GetKeepN()), pointer)
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	if err := session.checkpoint(ctx); err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	env := pointer
 	if class == ClassProduction {
@@ -193,10 +193,10 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 	targets, err := ReclaimTargets(req.GetSlug(), env,
 		pruned.RemovedRecordKeys, pruned.SurvivingRecordKeys, pruned.SurvivingPointerRecordKeys)
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	if err := reclaim(ctx, session.provider, req.GetSlug(), class, targets, report); err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	for _, line := range pruneLines(pruned) {
 		report.Say(line)

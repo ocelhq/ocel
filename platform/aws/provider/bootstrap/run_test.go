@@ -493,12 +493,6 @@ func (f *fakeEdge) DomainOwner(context.Context, string) (string, error) {
 	return "", errors.New("bootstrap never reads a domain owner")
 }
 
-type fakeFeatureUsers map[string][]string
-
-func (f fakeFeatureUsers) ProjectFeatures(context.Context) (map[string][]string, error) {
-	return f, nil
-}
-
 func standInCloudflare(t *testing.T, ed edge.Edge) {
 	t.Helper()
 	previous := cloudflareEdge
@@ -565,7 +559,7 @@ func TestRun(t *testing.T) {
 		ed := &fakeEdge{}
 		standInCloudflare(t, ed)
 
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), Request{}, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if got := cfn.stacks(); !slices.Equal(got, []string{StackName}) {
@@ -583,8 +577,8 @@ func TestRun(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()),
-			Request{Features: []string{FeatureCloudflareEdge}}, nil, nil)
+		err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction,
+			Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}, nil, nil)
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
@@ -599,7 +593,7 @@ func TestRun(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		core := cfn.firstApplied(StackName)
@@ -617,7 +611,7 @@ func TestRun(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		front := edgeStack(ClassProduction)
@@ -639,7 +633,7 @@ func TestRun(t *testing.T) {
 		ed := &fakeEdge{kind: "cloudflare"}
 		standInCloudflare(t, ed)
 
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if ed.bootstraps != 1 {
@@ -666,28 +660,22 @@ func TestRun(t *testing.T) {
 			out:  edge.BootstrapOutput{Offers: []edge.Offer{{Kind: edge.OfferISRWriter, Values: offeredISRWriter("", "cred-prod")}}},
 		})
 
-		if err := Run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		assertMintedSecrets(t, ssmc, OriginSecretParamName, ISRWriterSeedParamName)
 	})
 
 	t.Run("bootstraps the edge for its own class", func(t *testing.T) {
-		for _, tc := range []struct {
-			run  func(context.Context, APIs, Request, func(string), func(string)) error
-			want edge.Class
-		}{
-			{Run, edge.ClassProduction},
-			{RunPreview, edge.ClassPreview},
-		} {
-			t.Run(string(tc.want), func(t *testing.T) {
+		for _, want := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
+			t.Run(string(want), func(t *testing.T) {
 				ed := &fakeEdge{kind: "cloudflare"}
 				standInCloudflare(t, ed)
-				if err := tc.run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), everything(), nil, nil); err != nil {
+				if err := Run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), string(want), everything(), nil, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
-				if ed.class != tc.want {
-					t.Errorf("edge bootstrapped for class %q, want %q", ed.class, tc.want)
+				if ed.class != want {
+					t.Errorf("edge bootstrapped for class %q, want %q", ed.class, want)
 				}
 			})
 		}
@@ -695,19 +683,18 @@ func TestRun(t *testing.T) {
 
 	t.Run("no cloudflare edge leaves no credential", func(t *testing.T) {
 		for _, tc := range []struct {
-			name      string
-			run       func(context.Context, APIs, Request, func(string), func(string)) error
+			class     string
 			credParam string
 		}{
-			{"production", Run, EdgeCredentialsParamName},
-			{"preview", RunPreview, EdgeCredentialsPreviewParamName},
+			{ClassProduction, EdgeCredentialsParamName},
+			{ClassPreview, EdgeCredentialsPreviewParamName},
 		} {
-			t.Run(tc.name, func(t *testing.T) {
+			t.Run(tc.class, func(t *testing.T) {
 				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 				standInCloudflare(t, &fakeEdge{})
 
 				req := Request{Features: []string{FeatureISR, FeatureImageOptimization}}
-				if err := tc.run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), req, nil, nil); err != nil {
+				if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), tc.class, req, nil, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
 				for _, name := range cfn.stacks() {
@@ -730,7 +717,7 @@ func TestRun(t *testing.T) {
 		values := map[string]string{"bucketName": "edge-cache-7f3", "namespaceId": "ns-42"}
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{Values: values}})
 
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		got, err := ReadEdgeValues(context.Background(), ssmc, ClassProduction)
@@ -751,7 +738,7 @@ func TestRun(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if _, ok := ssmc.params[EdgeValuesParamName]; ok {
@@ -775,7 +762,7 @@ func TestRun(t *testing.T) {
 			},
 		}})
 
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if !hasEdgeUser(t, cfn.template(edgeStack(ClassProduction))) {
@@ -793,7 +780,7 @@ func TestRun(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if _, ok := ssmc.params[CacheStoreParamName]; ok {
@@ -804,12 +791,11 @@ func TestRun(t *testing.T) {
 	t.Run("adopts cache store per class", func(t *testing.T) {
 		for _, tc := range []struct {
 			name  string
-			run   func(context.Context, APIs, Request, func(string), func(string)) error
 			class string
 			param string
 		}{
-			{"production", Run, ClassProduction, CacheStoreParamName},
-			{"preview", RunPreview, ClassPreview, CacheStorePreviewParamName},
+			{"production", ClassProduction, CacheStoreParamName},
+			{"preview", ClassPreview, CacheStorePreviewParamName},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				ssmc := newFakeSSM()
@@ -817,7 +803,7 @@ func TestRun(t *testing.T) {
 					Offers: []edge.Offer{{Kind: edge.OfferCacheStore, Values: offeredStore()}},
 				}})
 
-				if err := tc.run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), everything(), nil, nil); err != nil {
+				if err := Run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), tc.class, everything(), nil, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
 				if _, ok := ssmc.params[tc.param]; !ok {
@@ -842,7 +828,7 @@ func TestRun(t *testing.T) {
 			Offers: []edge.Offer{{Kind: edge.OfferCacheStore, Values: offer}},
 		}})
 
-		err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil)
+		err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil)
 		if err == nil {
 			t.Fatal("expected Run to fail on an unrecoverable cache-store credential")
 		}
@@ -861,7 +847,7 @@ func TestRun(t *testing.T) {
 		}})
 
 		for i := range 2 {
-			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
+			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 				t.Fatalf("Run %d: %v", i+1, err)
 			}
 		}
@@ -887,7 +873,7 @@ func TestRun(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare", err: errors.New("edge API unreachable")})
 
-		err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil)
+		err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil)
 		if err == nil {
 			t.Fatal("expected Run to fail when the edge bootstrap fails")
 		}
@@ -899,15 +885,19 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("a name left out of the set takes its stack with it", func(t *testing.T) {
+	t.Run("a dropped name takes its stack with it, in the order it was handed", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 		apis := apisOf(cfn, ssmc, iamc, preloadedStore())
 
-		if err := Run(context.Background(), apis, everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apis, ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		if err := Run(context.Background(), apis, Request{Features: []string{FeatureImageOptimization}}, nil, nil); err != nil {
+		dropped := Request{
+			Features: []string{FeatureImageOptimization},
+			Drop:     []string{FeatureCloudflareEdge, FeatureISR},
+		}
+		if err := Run(context.Background(), apis, ClassProduction, dropped, nil, nil); err != nil {
 			t.Fatalf("Run without the edge: %v", err)
 		}
 		want := []string{edgeStack(ClassProduction), isrStack(ClassProduction)}
@@ -919,34 +909,6 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("dropping a feature a project records refuses until forced", func(t *testing.T) {
-		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
-		apis := apisOf(cfn, ssmc, iamc, preloadedStore())
-		apis.Users = fakeFeatureUsers{"shop": {FeatureImageOptimization}}
-
-		if err := Run(context.Background(), apis, everything(), nil, nil); err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		err := Run(context.Background(), apis, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}, nil, nil)
-		if err == nil {
-			t.Fatal("dropped a feature a deployed project depends on without being forced")
-		}
-		if !strings.Contains(err.Error(), "shop") {
-			t.Errorf("refusal %q does not name the project that would break", err)
-		}
-		if len(cfn.deleted) != 0 {
-			t.Errorf("deleted %v while refusing the drop", cfn.deleted)
-		}
-
-		forced := Request{Features: []string{FeatureISR, FeatureCloudflareEdge}, Force: true}
-		if err := Run(context.Background(), apis, forced, nil, nil); err != nil {
-			t.Fatalf("forced Run: %v", err)
-		}
-		if !slices.Contains(cfn.deleted, optStack(ClassProduction)) {
-			t.Errorf("deleted %v, want the forced drop to remove the image-optimization stack", cfn.deleted)
-		}
-	})
 }
 
 func TestRunPreview(t *testing.T) {
@@ -956,7 +918,7 @@ func TestRunPreview(t *testing.T) {
 			Offers: []edge.Offer{{Kind: edge.OfferISRWriter, Values: offeredISRWriter("-preview", "cred-preview")}},
 		}})
 
-		if err := RunPreview(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), ClassPreview, everything(), nil, nil); err != nil {
 			t.Fatalf("RunPreview: %v", err)
 		}
 		assertMintedSecrets(t, ssmc, OriginSecretPreviewParamName, ISRWriterSeedPreviewParamName)
@@ -974,7 +936,7 @@ func TestRunPreview(t *testing.T) {
 
 		var passphrase string
 		for i := range 2 {
-			if err := RunPreview(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), everything(), nil, nil); err != nil {
+			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassPreview, everything(), nil, nil); err != nil {
 				t.Fatalf("RunPreview %d: %v", i+1, err)
 			}
 			if i == 0 {
@@ -1035,7 +997,7 @@ func TestRunDefaultEdge(t *testing.T) {
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
 		apis := apisFronting(cfn, ssmc, iamc, preloadedStore(), front)
-		if err := Run(context.Background(), apis, Request{}, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, ClassProduction, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if front.bootstraps != 1 {
@@ -1058,7 +1020,7 @@ func TestRunDefaultEdge(t *testing.T) {
 		}}
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := Run(context.Background(), apisFronting(cfn, ssmc, iamc, preloadedStore(), front), Request{}, nil, nil); err != nil {
+		if err := Run(context.Background(), apisFronting(cfn, ssmc, iamc, preloadedStore(), front), ClassProduction, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if !sawCore {
@@ -1071,8 +1033,8 @@ func TestRunDefaultEdge(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := RunPreview(context.Background(), apisFronting(cfn, ssmc, iamc, preloadedStore(), front), Request{}, nil, nil); err != nil {
-			t.Fatalf("RunPreview: %v", err)
+		if err := Run(context.Background(), apisFronting(cfn, ssmc, iamc, preloadedStore(), front), ClassPreview, Request{}, nil, nil); err != nil {
+			t.Fatalf("Run: %v", err)
 		}
 		if front.class != edge.ClassPreview {
 			t.Errorf("the default edge was bootstrapped for class %q, want %q", front.class, edge.ClassPreview)
@@ -1084,7 +1046,7 @@ func TestRunDefaultEdge(t *testing.T) {
 		front := &fakeEdge{kind: "cloudfront", err: errors.New("edge API unreachable")}
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 
-		err := Run(context.Background(), apisFronting(cfn, ssmc, iamc, preloadedStore(), front), everything(), nil, nil)
+		err := Run(context.Background(), apisFronting(cfn, ssmc, iamc, preloadedStore(), front), ClassProduction, everything(), nil, nil)
 		if err == nil {
 			t.Fatal("expected Run to fail when the default edge cannot be bootstrapped")
 		}
@@ -1098,11 +1060,10 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 	t.Run("the edge's key and stored handles go before its stack", func(t *testing.T) {
 		for _, tc := range []struct {
 			name  string
-			run   func(context.Context, APIs, Request, func(string), func(string)) error
 			class string
 		}{
-			{"production", Run, ClassProduction},
-			{"preview", RunPreview, ClassPreview},
+			{"production", ClassProduction},
+			{"preview", ClassPreview},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
@@ -1116,7 +1077,7 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 				}})
 				apis := apisOf(cfn, ssmc, iamc, preloadedStore())
 
-				if err := tc.run(context.Background(), apis, everything(), nil, nil); err != nil {
+				if err := Run(context.Background(), apis, tc.class, everything(), nil, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
 				names, err := edgeNamesFor(tc.class)
@@ -1129,8 +1090,11 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 					}
 				}
 
-				req := Request{Features: []string{FeatureISR, FeatureImageOptimization}}
-				if err := tc.run(context.Background(), apis, req, nil, nil); err != nil {
+				req := Request{
+					Features: []string{FeatureISR, FeatureImageOptimization},
+					Drop:     []string{FeatureCloudflareEdge},
+				}
+				if err := Run(context.Background(), apis, tc.class, req, nil, nil); err != nil {
 					t.Fatalf("dropping the cloudflare edge: %v", err)
 				}
 				if len(iamc.keys) != 0 {
@@ -1156,11 +1120,14 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
 		apis := apisOf(cfn, ssmc, iamc, preloadedStore())
 
-		if err := Run(context.Background(), apis, everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apis, ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		req := Request{Features: []string{FeatureImageOptimization}}
-		if err := Run(context.Background(), apis, req, nil, nil); err != nil {
+		req := Request{
+			Features: []string{FeatureImageOptimization},
+			Drop:     []string{FeatureCloudflareEdge, FeatureISR},
+		}
+		if err := Run(context.Background(), apis, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("dropping isr: %v", err)
 		}
 		if len(iamc.keys) != 0 {
@@ -1192,7 +1159,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 
 		cfn.holdName(isrStack(ClassProduction), 1)
 		holdNothing(t)
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()),
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction,
 			Request{Features: []string{FeatureISR}}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
@@ -1214,12 +1181,12 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		holdNothing(t)
 
 		req := Request{Features: []string{FeatureISR}}
-		if err := Run(context.Background(), apis, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		cfn.wedge(isrStack(ClassProduction))
 
-		if err := Run(context.Background(), apis, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("re-run over a wedged stack: %v", err)
 		}
 		if !slices.Contains(cfn.deleted, isrStack(ClassProduction)) {
@@ -1240,12 +1207,12 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		apis := apisOf(cfn, ssmc, iamc, preloadedStore())
 		holdNothing(t)
 
-		if err := Run(context.Background(), apis, Request{Features: []string{FeatureISR}}, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, ClassProduction, Request{Features: []string{FeatureISR}}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		cfn.wedge(isrStack(ClassProduction))
 
-		if err := Run(context.Background(), apis, Request{}, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, ClassProduction, Request{Drop: []string{FeatureISR}}, nil, nil); err != nil {
 			t.Fatalf("dropping a wedged stack: %v", err)
 		}
 		if slices.Contains(cfn.stacks(), isrStack(ClassProduction)) {
@@ -1259,7 +1226,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		held := holdNothing(t)
 		cfn.holdName(isrStack(ClassProduction), 2)
 
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()),
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction,
 			Request{Features: []string{FeatureISR}}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
@@ -1280,7 +1247,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		cfn.holdName(isrStack(ClassProduction), 1)
 		cfn.reason(isrStack(ClassProduction), "Resource handler returned message: Access denied")
 
-		err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()),
+		err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction,
 			Request{Features: []string{FeatureISR}}, nil, nil)
 		if err == nil {
 			t.Fatal("retried a failure that will never succeed on retry")

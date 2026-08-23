@@ -24,37 +24,37 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 
 	identity, err := provider.Credentials().Whoami(ctx)
 	if err != nil {
-		resp.CredentialProblems = append(resp.CredentialProblems, credentialProblem(provider.Vendor(), err))
+		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(provider.Vendor(), err))
 		return resp, nil
 	}
-	resp.Identity = identityProto(provider.Vendor(), identity)
+	resp.Identity = IdentityProto(provider.Vendor(), identity)
 
 	required, err := RequiredFeatures(provider.Bootstrap().Catalogue(), req.GetFrameworks(), req.GetEdge().GetKind())
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 
 	standing, err := gate.Standing(ctx, class)
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
-	resp.Bootstrap = bootstrapStatusProto(standing, h.session.writer, req.GetRequiredTier(), required)
+	resp.Bootstrap = BootstrapStatusProto(standing, h.session.writer, req.GetRequiredTier(), required)
 
 	if standing.Present {
 		resp.InfraTier, resp.InfrastructurePresent = tierOf(class), true
 		if err := checkCompat(standing.Schema, true, BootstrapSchema).explain(standing.Schema, BootstrapSchema, bootstrapCommand(class)); err != nil {
-			return nil, refusalError(err)
+			return nil, RefusalError(err)
 		}
-		resp.KnownSlugs, err = slugsBesides(ctx, provider.Records(), req.GetSlug())
+		resp.KnownSlugs, err = slugsBesides(ctx, gate, req.GetSlug())
 		if err != nil {
-			return nil, refusalError(err)
+			return nil, RefusalError(err)
 		}
 		return resp, nil
 	}
 
 	sibling, err := gate.Standing(ctx, siblingOf(class))
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	if sibling.Present {
 		resp.InfraTier, resp.InfrastructurePresent = tierOf(sibling.Class), true
@@ -62,11 +62,11 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	return resp, nil
 }
 
-func slugsBesides(ctx context.Context, records RecordStore, slug string) ([]string, error) {
+func slugsBesides(ctx context.Context, gate Gate, slug string) ([]string, error) {
 	if slug == "" {
 		return nil, nil
 	}
-	recorded, err := recordedFeatures(ctx, records)
+	recorded, err := gate.RecordedFeatures(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func tierOf(class Class) environmentv1.Tier {
 	return environmentv1.Tier_TIER_PRODUCTION
 }
 
-func identityProto(vendor Vendor, id Identity) *contractv1.Identity {
+func IdentityProto(vendor Vendor, id Identity) *contractv1.Identity {
 	named := id.Provider
 	if named == "" {
 		named = vendor
@@ -111,7 +111,7 @@ func identityProto(vendor Vendor, id Identity) *contractv1.Identity {
 	return out
 }
 
-func credentialProblem(vendor Vendor, err error) *contractv1.CredentialProblem {
+func CredentialProblemProto(vendor Vendor, err error) *contractv1.CredentialProblem {
 	problem := &contractv1.CredentialProblem{Provider: string(vendor)}
 	var refusal Refusal
 	if errors.As(err, &refusal) && refusal.Code == CodeDenied {

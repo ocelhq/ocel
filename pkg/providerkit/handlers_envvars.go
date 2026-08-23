@@ -364,7 +364,7 @@ func valuesError(err error) error {
 	case errors.Is(err, values.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
 	default:
-		return refusalError(err)
+		return RefusalError(err)
 	}
 }
 
