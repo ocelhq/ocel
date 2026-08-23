@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	awscontrol "github.com/ocelhq/ocel/platform/aws/provider/control"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -16,7 +17,7 @@ import (
 type gated struct {
 	providerkit.Gate
 
-	bootstrapper awsports.Bootstrapper
+	bootstrapper awscontrol.Bootstrapper
 	deployed     bootstrap.Deployed
 }
 
@@ -30,7 +31,7 @@ func (s *Server) gated(ctx context.Context, class string, front edge.Edge) (gate
 }
 
 func (s *Server) gatedOn(ctx context.Context, awscfg aws.Config, class string, front edge.Edge) (gated, error) {
-	bootstrapper := awsports.BootstrapperFor(awscfg, front, s.writer)
+	bootstrapper := awscontrol.BootstrapperFor(awscfg, front, s.writer)
 	deployed, err := s.deployed(ctx, bootstrapper.CFN, awscfg.Region, class == bootstrap.ClassPreview)
 	if err != nil {
 		return gated{}, err

@@ -34,10 +34,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	awscontrol "github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
@@ -531,7 +531,7 @@ func (s *Server) GetCredentialPolicy(_ context.Context, req *contractv1.Credenti
 	if err != nil {
 		return nil, err
 	}
-	document, err := awsports.Credentials{}.Policy(tier)
+	document, err := awscontrol.Credentials{}.Policy(tier)
 	if err != nil {
 		return nil, providerkit.RefusalError(err)
 	}
