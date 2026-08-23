@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
-	"github.com/ocelhq/ocel/platform/aws/provider/edgeledger"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -88,7 +88,7 @@ type SSMAPI interface {
 type Clients struct {
 	CloudFront    CloudFrontAPI
 	KeyValueStore KeyValueStoreAPI
-	Dynamo        edgeledger.DynamoAPI
+	Dynamo        awsports.DynamoAPI
 	SSM           SSMAPI
 	CFN           bootstrap.CFNDescriber
 	Region        string

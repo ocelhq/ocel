@@ -5,30 +5,24 @@ import (
 	"errors"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
-
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var errNoProductionDeploy = errors.New("this project has no production deploys yet; run `ocel deploy` first")
 
 func (s *Server) openStack(ctx context.Context, kind edge.Kind, opts providerConfig, slug string) (edge.EdgeStack, error) {
-	awscfg, err := loadAWS(ctx, opts.Region)
+	record, err := s.stackRecord(ctx, opts.Region, edge.ClassProduction, slug)
 	if err != nil {
 		return nil, err
 	}
-	record, err := bootstrap.ReadStackRecord(ctx, ssm.NewFromConfig(awscfg), slug)
-	if err != nil {
-		return nil, err
-	}
-	return s.openStackFor(kind, record, awscfg.Region)
+	return s.openStackFor(kind, record, opts.Region)
 }
 
-func (s *Server) openStackFor(kind edge.Kind, record bootstrap.StackRecord, region string) (edge.EdgeStack, error) {
+func (s *Server) openStackFor(kind edge.Kind, record domains.StackRecord, region string) (edge.EdgeStack, error) {
 	edgeFront, err := s.edge(kind, region)
 	if err != nil {
 		return nil, err
@@ -36,7 +30,7 @@ func (s *Server) openStackFor(kind edge.Kind, record bootstrap.StackRecord, regi
 	return openStackOn(edgeFront, record)
 }
 
-func openStackOn(edgeFront edge.Edge, record bootstrap.StackRecord) (edge.EdgeStack, error) {
+func openStackOn(edgeFront edge.Edge, record domains.StackRecord) (edge.EdgeStack, error) {
 	if record.Empty() {
 		return nil, errNoProductionDeploy
 	}

@@ -21,7 +21,8 @@ import (
 func TestGlobalPreviewProblem(t *testing.T) {
 	t.Parallel()
 
-	recorded := bootstrap.PreviewDomain{BaseDomain: "previews.ocel.dev", Edge: cloudflare.Kind, Scope: "cf-owner"}
+	recorded := previewWildcardOn("previews.ocel.dev", cloudflare.Kind)
+	recorded.Scope = "cf-owner"
 
 	cases := []struct {
 		name    string
@@ -59,7 +60,7 @@ func TestGlobalPreviewProblem(t *testing.T) {
 func TestGlobalPreviewProblemRefusesAProjectOnAnotherEdge(t *testing.T) {
 	t.Parallel()
 
-	recorded := bootstrap.PreviewDomain{BaseDomain: "previews.ocel.dev", Edge: cloudflare.Kind}
+	recorded := previewWildcardOn("previews.ocel.dev", cloudflare.Kind)
 
 	err := globalPreviewProblem(recorded, &contractv1.PreflightRequest{Slug: "acme", Edge: &contractv1.EdgeSelection{Kind: string(apigateway.Kind)}}, &scopedEdge{})
 	if err == nil {
@@ -75,7 +76,7 @@ func TestGlobalPreviewProblemRefusesAProjectOnAnotherEdge(t *testing.T) {
 		t.Fatalf("globalPreviewProblem = %v, want a project on the holding edge admitted", err)
 	}
 
-	legacy := bootstrap.PreviewDomain{BaseDomain: "previews.ocel.dev"}
+	legacy := previewWildcardOn("previews.ocel.dev", "")
 	if err := globalPreviewProblem(legacy, &contractv1.PreflightRequest{Slug: "acme", Edge: &contractv1.EdgeSelection{Kind: string(apigateway.Kind)}}, &scopedEdge{}); err != nil {
 		t.Fatalf("globalPreviewProblem = %v, want a record naming no edge to accuse nobody", err)
 	}

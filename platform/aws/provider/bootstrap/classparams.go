@@ -29,8 +29,6 @@ type ClassParams struct {
 	ISRWriter        ISRWriter
 	ISRWriterSeed    string
 	OriginSecret     string
-	Stack            StackRecord
-	PreviewDomain    PreviewDomain
 }
 
 func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (ClassParams, error) {
@@ -38,12 +36,6 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (
 	if err != nil {
 		return ClassParams{}, err
 	}
-	prefix, err := stackStateParamPrefixFor(class)
-	if err != nil {
-		return ClassParams{}, err
-	}
-	stackParam := stackStateParamName(prefix, slug)
-
 	wanted := []string{
 		PassphraseParamName,
 		names.credentialsParam,
@@ -53,10 +45,6 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (
 		names.isrWriterParam,
 		names.isrWriterSeedParam,
 		names.originSecretParam,
-		stackParam,
-	}
-	if class == ClassPreview {
-		wanted = append(wanted, PreviewDomainParamName)
 	}
 
 	found, err := getParameters(ctx, api, wanted)
@@ -105,16 +93,6 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (
 	}
 	p.ISRWriterSeed = found[names.isrWriterSeedParam]
 	p.OriginSecret = found[names.originSecretParam]
-	if raw, ok := found[PreviewDomainParamName]; ok {
-		if err := json.Unmarshal([]byte(raw), &p.PreviewDomain); err != nil {
-			return ClassParams{}, fmt.Errorf("parse preview domain: %w", err)
-		}
-	}
-	if raw, ok := found[stackParam]; ok {
-		if err := json.Unmarshal([]byte(raw), &p.Stack); err != nil {
-			return ClassParams{}, fmt.Errorf("parse edge-stack state: %w", err)
-		}
-	}
 	return p, nil
 }
 
@@ -124,7 +102,6 @@ type TeardownParams struct {
 
 	CacheStore CacheStore
 	ISRWriter  ISRWriter
-	Stack      StackRecord
 }
 
 func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, class, slug string) (TeardownParams, error) {
@@ -132,17 +109,10 @@ func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, class, slug string
 	if err != nil {
 		return TeardownParams{}, err
 	}
-	prefix, err := stackStateParamPrefixFor(class)
-	if err != nil {
-		return TeardownParams{}, err
-	}
-	stackParam := stackStateParamName(prefix, slug)
-
 	found, err := getParameters(ctx, api, []string{
 		PassphraseParamName,
 		names.cacheStoreParam,
 		names.isrWriterParam,
-		stackParam,
 	})
 	if err != nil {
 		return TeardownParams{}, err
@@ -164,11 +134,6 @@ func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, class, slug string
 	if raw, ok := found[names.isrWriterParam]; ok {
 		if err := json.Unmarshal([]byte(raw), &p.ISRWriter); err != nil {
 			p.ISRWriter = ISRWriter{}
-		}
-	}
-	if raw, ok := found[stackParam]; ok {
-		if err := json.Unmarshal([]byte(raw), &p.Stack); err != nil {
-			return TeardownParams{}, fmt.Errorf("parse edge-stack state: %w", err)
 		}
 	}
 	return p, nil

@@ -19,7 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/edgeledger"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -82,7 +82,7 @@ type IAMAPI interface {
 type Clients struct {
 	APIGateway APIGatewayAPI
 	Routing    RoutingAPI
-	Dynamo     edgeledger.DynamoAPI
+	Dynamo     awsports.DynamoAPI
 	IAM        IAMAPI
 	CFN        bootstrap.CFNDescriber
 	Region     string

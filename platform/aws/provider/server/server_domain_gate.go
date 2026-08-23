@@ -25,43 +25,35 @@ const (
 )
 
 type certLookup struct {
-	issuer   certs.Issuer
-	recorded domains.Settlement
-	pins     map[string]string
-	seen     map[string]certs.Certificate
+	certifier certs.Certifier
+	recorded  domains.Settlement
+	seen      map[string]certs.Certificate
 }
 
-func newCertLookup(issuer certs.Issuer, recorded domains.Settlement, pins map[string]string) *certLookup {
-	return &certLookup{issuer: issuer, recorded: recorded, pins: pins, seen: map[string]certs.Certificate{}}
-}
-
-func (l *certLookup) ignoredPin(host string) bool {
-	return l.issuer.API == nil && l.pins[host] != ""
+func newCertLookup(certifier certs.Certifier, recorded domains.Settlement) *certLookup {
+	return &certLookup{certifier: certifier, recorded: recorded, seen: map[string]certs.Certificate{}}
 }
 
 func (l *certLookup) of(ctx context.Context, host string) (certs.Certificate, error) {
-	if l.issuer.API == nil {
+	if !l.certifier.Issues() {
 		return certs.Certificate{}, nil
 	}
-	arn := l.recorded.Host(host).Certificate
-	if pinned := l.pins[host]; pinned != "" {
-		arn = pinned
-	}
+	arn := l.certifier.Wants(certs.Certificate{ARN: l.recorded.Host(host).Certificate}, host)
 	if arn == "" {
 		return certs.Certificate{}, nil
 	}
-	if region := certs.RegionOfARN(arn); region != "" && region != l.issuer.Region {
-		return certs.Certificate{}, fmt.Errorf("the certificate for %s lives in %s, but this edge terminates TLS in %s: run `ocel domain add` to settle one there", host, region, l.issuer.Region)
+	if region := certs.RegionOfARN(arn); region != "" && region != l.certifier.Issuer.Region {
+		return certs.Certificate{}, fmt.Errorf("the certificate for %s lives in %s, but this edge terminates TLS in %s: run `ocel domain add` to settle one there", host, region, l.certifier.Issuer.Region)
 	}
 	if cert, ok := l.seen[arn]; ok {
 		return cert, nil
 	}
-	cert, err := l.issuer.Describe(ctx, certs.Certificate{ARN: arn, Region: l.issuer.Region})
+	cert, err := l.certifier.Issuer.Describe(ctx, certs.Certificate{ARN: arn, Region: l.certifier.Issuer.Region})
 	if err != nil {
-		return certs.Certificate{}, fmt.Errorf("could not read the certificate %s bound to %s from ACM in %s: %w — check it still exists and that these credentials may describe it", arn, host, l.issuer.Region, err)
+		return certs.Certificate{}, fmt.Errorf("could not read the certificate %s bound to %s from ACM in %s: %w — check it still exists and that these credentials may describe it", arn, host, l.certifier.Issuer.Region, err)
 	}
 	if cert.Region == "" {
-		cert.Region = l.issuer.Region
+		cert.Region = l.certifier.Issuer.Region
 	}
 	l.seen[arn] = cert
 	return cert, nil
@@ -73,9 +65,8 @@ type domainGate struct {
 
 	state     edge.StackState
 	recorded  domains.Settlement
-	issuer    certs.Issuer
+	certifier certs.Certifier
 	prober    certs.Prober
-	pins      map[string]string
 	previewOn string
 	now       func() time.Time
 }
@@ -114,7 +105,7 @@ func (g domainGate) admitProduction(ctx context.Context, manifest *contractv1.Ma
 		)}, nil
 	}
 	bound := g.state.Bound
-	lookup := newCertLookup(g.issuer, g.recorded, g.pins)
+	lookup := newCertLookup(g.certifier, g.recorded)
 	for _, host := range hosts {
 		cert, err := lookup.of(ctx, host)
 		if err != nil {
@@ -122,12 +113,6 @@ func (g domainGate) admitProduction(ctx context.Context, manifest *contractv1.Ma
 		}
 		if err := g.admitHost(host, cert, bound); err != nil {
 			return admission{}, err
-		}
-		if lookup.ignoredPin(host) {
-			warn(fmt.Sprintf(
-				"the certificate pinned for %s is ignored: the %s edge terminates TLS with a certificate of its own, so ocel neither requests nor uses one here",
-				host, g.kind,
-			))
 		}
 		if cert.ExpiringSoon(g.clock()) {
 			warn(fmt.Sprintf(
@@ -140,7 +125,7 @@ func (g domainGate) admitProduction(ctx context.Context, manifest *contractv1.Ma
 }
 
 func (g domainGate) admitHost(host string, cert certs.Certificate, bound []string) error {
-	if g.issuer.API != nil {
+	if g.certifier.Issues() {
 		switch {
 		case cert.ARN == "":
 			return fmt.Errorf("no certificate covers %s: run `ocel domain add` to request one before deploying to it", host)

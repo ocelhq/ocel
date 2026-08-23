@@ -12,9 +12,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
-	"github.com/ocelhq/ocel/platform/aws/provider/edgeledger"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -81,12 +82,8 @@ func reconcileWildcardDistribution(ctx context.Context, c Clients, plan distribu
 	return held, nil
 }
 
-func bootstrapLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *edgeledger.Ledger {
-	return &edgeledger.Ledger{
-		Dynamo: c.Dynamo,
-		Table:  deployed.StateTable,
-		Scope:  edgeledger.Scope(class, ""),
-	}
+func bootstrapLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *kitledger.Ledger {
+	return awsports.Ledger(c.Dynamo, deployed.StateTable, class, "")
 }
 
 func cloudFrontCertificate(wildcard, certificate string) error {

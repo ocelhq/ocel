@@ -11,8 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
+	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/edgeledger"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -60,12 +61,8 @@ func (s *stack) plan() distributionPlan {
 	}
 }
 
-func (s *stack) ledger(c Clients) *edgeledger.Ledger {
-	return &edgeledger.Ledger{
-		Dynamo: c.Dynamo,
-		Table:  s.own.StateTable,
-		Scope:  edgeledger.Scope(s.class(), s.slug()),
-	}
+func (s *stack) ledger(c Clients) *kitledger.Ledger {
+	return awsports.Ledger(c.Dynamo, s.own.StateTable, s.class(), s.slug())
 }
 
 func (s *stack) routes(c Clients) routeWriter {
@@ -76,7 +73,7 @@ type lazyLedger struct{ s *stack }
 
 var _ edge.Ledger = (*lazyLedger)(nil)
 
-func (l *lazyLedger) resolve(ctx context.Context) (*edgeledger.Ledger, error) {
+func (l *lazyLedger) resolve(ctx context.Context) (*kitledger.Ledger, error) {
 	c, err := l.s.p.clientsFor(ctx)
 	if err != nil {
 		return nil, err

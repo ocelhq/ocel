@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -12,6 +13,7 @@ import (
 
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -43,7 +45,10 @@ func (s *Server) runUsePreviewWildcard(ctx context.Context, req *contractv1.UseP
 	if err != nil {
 		return err
 	}
-	ssmClient := clients.ssm
+	state, err := s.domainState(ctx, opts.Region, true)
+	if err != nil {
+		return err
+	}
 
 	deployed, err := s.deployed(ctx, clients.cfn, opts.Region, true)
 	if err != nil {
@@ -53,7 +58,7 @@ func (s *Server) runUsePreviewWildcard(ctx context.Context, req *contractv1.UseP
 		return errPreviewInfraMissing
 	}
 
-	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)
+	recorded, err := state.ReadWildcard(ctx, edge.ClassPreview)
 	if err != nil {
 		return err
 	}
@@ -64,19 +69,19 @@ func (s *Server) runUsePreviewWildcard(ctx context.Context, req *contractv1.UseP
 		)
 	}
 
-	creds, err := bootstrap.ReadEdgeCredentials(ctx, ssmClient, bootstrap.ClassPreview)
+	creds, err := bootstrap.ReadEdgeCredentials(ctx, clients.ssm, bootstrap.ClassPreview)
 	if err != nil {
 		return err
 	}
-	store, err := bootstrap.ReadDeploymentsStoreFor(ctx, ssmClient, bootstrap.ClassPreview)
+	store, err := bootstrap.ReadDeploymentsStoreFor(ctx, clients.ssm, bootstrap.ClassPreview)
 	if err != nil {
 		return err
 	}
-	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, ssmClient, bootstrap.ClassPreview)
+	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, clients.ssm, bootstrap.ClassPreview)
 	if err != nil {
 		return err
 	}
-	edgeValues, err := bootstrap.ReadEdgeValues(ctx, ssmClient, bootstrap.ClassPreview)
+	edgeValues, err := bootstrap.ReadEdgeValues(ctx, clients.ssm, bootstrap.ClassPreview)
 	if err != nil {
 		return err
 	}
@@ -116,37 +121,26 @@ func (s *Server) runUsePreviewWildcard(ctx context.Context, req *contractv1.UseP
 	engine := domains.Engine{
 		Kind:          edgeFront.Kind(),
 		ServesUnbound: edgeFront.Facts().ServesUnbound,
-		Issuer:        clients.issuerFor(edgeFront),
+		Issuer:        clients.certifierFor(edgeFront).Issuer,
 		Writer:        writer,
 		Poller:        clients.poller,
 		Prober:        clients.prober,
-		Store: previewStore{
-			ssm: ssmClient,
-			domain: bootstrap.PreviewDomain{
-				BaseDomain: baseDomain,
-				Edge:       edgeFront.Kind(),
-				Scope:      edgeFront.Facts().CredentialScope,
-				GrammarMin: edge.PreviewGrammarMin,
-				GrammarMax: edge.PreviewGrammarMax,
-			},
-		},
-		ProveNotes: []string{fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard)},
-		Ask:        domains.Ask(ask),
+		Store:         previewStore{state: state, domain: newPreviewWildcard(baseDomain, edgeFront)},
+		ProveNotes:    []string{fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard)},
+		Ask:           domains.Ask(ask),
 	}
-	return usePreviewWildcard(ctx, engine, edgeFront, spec, recorded.Settlement, wildcard, progress)
+	return usePreviewWildcard(ctx, engine, edgeFront, spec, recorded.Settlement(), wildcard, progress)
 }
 
 type askDNS func(headline string, records []edge.Record, notes ...string)
 
 type previewStore struct {
-	ssm    bootstrap.SSMAPI
-	domain bootstrap.PreviewDomain
+	state  domains.State
+	domain domains.PreviewWildcard
 }
 
 func (s previewStore) Save(ctx context.Context, settled domains.Settlement) error {
-	next := s.domain
-	next.Settlement = settled
-	return bootstrap.WritePreviewDomain(ctx, s.ssm, bootstrap.ClassPreview, next)
+	return s.state.WriteWildcard(ctx, edge.ClassPreview, s.domain.With(settled))
 }
 
 func usePreviewWildcard(ctx context.Context, engine domains.Engine, edgeFront edge.Edge, spec edge.PreviewWildcardSpec, recorded domains.Settlement, wildcard string, progress func(string)) error {
@@ -179,9 +173,12 @@ func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.
 	if err != nil {
 		return nil, err
 	}
-	ssmClient := clients.ssm
+	state, err := s.domainState(ctx, opts.Region, true)
+	if err != nil {
+		return nil, err
+	}
 
-	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)
+	recorded, err := state.ReadWildcard(ctx, edge.ClassPreview)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +192,7 @@ func (s *Server) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	plan := releasePlan(edgeFront, recorded)
-	if err := refusePreviewReleaseWhileServed(ctx, ssmClient, recorded.BaseDomain, s.livePreviewStacks(awscfg)); err != nil {
+	if err := refusePreviewReleaseWhileServed(ctx, state, recorded.BaseDomain, s.livePreviewStacks(awscfg)); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return plan, nil
@@ -219,12 +216,8 @@ func (s *Server) livePreviewStacks(awscfg aws.Config) func(context.Context, stri
 	}
 }
 
-func refusePreviewReleaseWhileServed(ctx context.Context, ssmClient bootstrapSSMAPI, baseDomain string, live func(context.Context, string) (int, error)) error {
-	slugs, err := bootstrap.StackSlugsFor(ctx, ssmClient, bootstrap.ClassPreview)
-	if err != nil {
-		return err
-	}
-	recorded, err := globalPreviewProjects(ctx, ssmClient, slugs, baseDomain)
+func refusePreviewReleaseWhileServed(ctx context.Context, state domains.State, baseDomain string, live func(context.Context, string) (int, error)) error {
+	recorded, err := globalPreviewProjects(ctx, state, baseDomain)
 	if err != nil {
 		return err
 	}
@@ -260,9 +253,12 @@ func (s *Server) runRemovePreviewWildcard(ctx context.Context, req *contractv1.P
 	if err != nil {
 		return err
 	}
-	ssmClient := clients.ssm
+	state, err := s.domainState(ctx, opts.Region, true)
+	if err != nil {
+		return err
+	}
 
-	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)
+	recorded, err := state.ReadWildcard(ctx, edge.ClassPreview)
 	if err != nil {
 		return err
 	}
@@ -271,7 +267,7 @@ func (s *Server) runRemovePreviewWildcard(ctx context.Context, req *contractv1.P
 		return nil
 	}
 
-	if err := refusePreviewReleaseWhileServed(ctx, ssmClient, recorded.BaseDomain, s.livePreviewStacks(awscfg)); err != nil {
+	if err := refusePreviewReleaseWhileServed(ctx, state, recorded.BaseDomain, s.livePreviewStacks(awscfg)); err != nil {
 		return err
 	}
 
@@ -288,32 +284,32 @@ func (s *Server) runRemovePreviewWildcard(ctx context.Context, req *contractv1.P
 	}
 
 	return removePreviewWildcard(ctx, removalDeps{
-		ssm:    ssmClient,
+		state:  state,
 		edge:   edgeFront,
 		writer: writer,
-		issuer: clients.discarderFor(recorded.Settlement.Certificate),
+		issuer: clients.discarderFor(recorded.Certificate),
 	}, recorded, progress)
 }
 
 type removalDeps struct {
-	ssm    bootstrap.SSMAPI
+	state  domains.State
 	edge   edge.Edge
 	writer edge.DNSWriter
 	issuer certs.Issuer
 }
 
-func removePreviewWildcard(ctx context.Context, deps removalDeps, recorded bootstrap.PreviewDomain, progress func(string)) error {
+func removePreviewWildcard(ctx context.Context, deps removalDeps, recorded domains.PreviewWildcard, progress func(string)) error {
 	progress(fmt.Sprintf("Removing the shared preview entry on %s", edge.PreviewWildcard(recorded.BaseDomain)))
 	if err := deps.edge.DestroyPreviewWildcard(ctx, recorded.BaseDomain); err != nil {
 		return err
 	}
-	if err := dns.Release(ctx, deps.writer, recorded.Settlement.WrittenRecords(), progress); err != nil {
+	if err := dns.Release(ctx, deps.writer, recorded.Settlement().WrittenRecords(), progress); err != nil {
 		return err
 	}
-	if err := deps.issuer.Discard(ctx, recorded.Settlement.Certificate, progress); err != nil {
+	if err := deps.issuer.Discard(ctx, recorded.Certificate, progress); err != nil {
 		return err
 	}
-	return bootstrap.DeletePreviewDomain(ctx, deps.ssm, bootstrap.ClassPreview)
+	return deps.state.ForgetWildcard(ctx, edge.ClassPreview)
 }
 
 func (s *Server) GetPreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.GetPreviewWildcardResponse, error) {
@@ -322,20 +318,19 @@ func (s *Server) GetPreviewWildcard(ctx context.Context, req *contractv1.Preview
 	if err != nil {
 		return nil, err
 	}
-	ssmClient := clients.ssm
+	state, err := s.domainState(ctx, opts.Region, true)
+	if err != nil {
+		return nil, err
+	}
 
-	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmClient, bootstrap.ClassPreview)
+	recorded, err := state.ReadWildcard(ctx, edge.ClassPreview)
 	if err != nil {
 		return nil, err
 	}
 	if recorded.BaseDomain == "" {
 		return &contractv1.GetPreviewWildcardResponse{}, nil
 	}
-	slugs, err := bootstrap.StackSlugsFor(ctx, ssmClient, bootstrap.ClassPreview)
-	if err != nil {
-		return nil, err
-	}
-	served, err := globalPreviewProjects(ctx, ssmClient, slugs, recorded.BaseDomain)
+	served, err := globalPreviewProjects(ctx, state, recorded.BaseDomain)
 	if err != nil {
 		return nil, err
 	}
@@ -345,10 +340,14 @@ func (s *Server) GetPreviewWildcard(ctx context.Context, req *contractv1.Preview
 	}, nil
 }
 
-func globalPreviewProjects(ctx context.Context, ssmClient bootstrap.SSMAPI, slugs []string, baseDomain string) ([]string, error) {
+func globalPreviewProjects(ctx context.Context, state domains.State, baseDomain string) ([]string, error) {
+	slugs, err := state.StackSlugs(ctx, edge.ClassPreview)
+	if err != nil {
+		return nil, err
+	}
 	var served []string
 	for _, slug := range slugs {
-		record, err := bootstrap.ReadStackRecordFor(ctx, ssmClient, bootstrap.ClassPreview, slug)
+		record, err := state.ReadStack(ctx, edge.ClassPreview, slug)
 		if err != nil {
 			return nil, err
 		}
@@ -357,6 +356,24 @@ func globalPreviewProjects(ctx context.Context, ssmClient bootstrap.SSMAPI, slug
 		}
 	}
 	return served, nil
+}
+
+func newPreviewWildcard(baseDomain string, edgeFront edge.Edge) domains.PreviewWildcard {
+	return domains.PreviewWildcard{Wildcard: providerkit.Wildcard{
+		BaseDomain: baseDomain,
+		Edge:       edgeFront.Kind(),
+		Scope:      edgeFront.Facts().CredentialScope,
+		GrammarMin: edge.PreviewGrammarMin,
+		GrammarMax: edge.PreviewGrammarMax,
+	}}
+}
+
+func probeOf(settled providerkit.Settled) certs.Probe {
+	held := certs.Probe{OK: settled.Probe.OK, Edge: settled.Probe.Edge}
+	if settled.Probe.At != 0 {
+		held.At = time.Unix(settled.Probe.At, 0).UTC()
+	}
+	return held
 }
 
 func previewBaseDomainArg(domain string) (string, error) {
@@ -373,20 +390,20 @@ func previewBaseDomainArg(domain string) (string, error) {
 	return base, nil
 }
 
-func previewWildcard(ctx context.Context, owner routeOwnerFunc, recorded bootstrap.PreviewDomain) *contractv1.PreviewWildcard {
+func previewWildcard(ctx context.Context, owner routeOwnerFunc, recorded domains.PreviewWildcard) *contractv1.PreviewWildcard {
 	if recorded.BaseDomain == "" {
 		return nil
 	}
-	wildcard := recorded.Wildcard()
+	settled := recorded.Settlement()
 	return &contractv1.PreviewWildcard{
 		BaseDomain:     recorded.BaseDomain,
 		EdgeScope:      recorded.Scope,
 		GrammarMin:     recorded.GrammarMin,
 		GrammarMax:     recorded.GrammarMax,
 		RouteInstalled: sharedEntryRouteInstalled(ctx, owner, recorded.BaseDomain),
-		Certificate: certificateState(recorded.Settlement.Certificate, wildcard.Probe,
-			recordLines(recorded.Settlement.WrittenRecords()),
-			recordLines(recorded.Settlement.OwedRecords())),
+		Certificate: certificateState(recorded.Certificate, probeOf(recorded.Settled),
+			recordLines(settled.WrittenRecords()),
+			recordLines(settled.OwedRecords())),
 	}
 }
 
@@ -428,7 +445,7 @@ func sharedEntryRouteInstalled(ctx context.Context, owner routeOwnerFunc, baseDo
 	return script == edge.PreviewEntryOwner
 }
 
-func previewWildcardOwner(recorded bootstrap.PreviewDomain, ownerFor func(edge.Kind) routeOwnerFunc) routeOwnerFunc {
+func previewWildcardOwner(recorded domains.PreviewWildcard, ownerFor func(edge.Kind) routeOwnerFunc) routeOwnerFunc {
 	kind, ok := recorded.Holder()
 	if !ok {
 		return nil
@@ -436,13 +453,13 @@ func previewWildcardOwner(recorded bootstrap.PreviewDomain, ownerFor func(edge.K
 	return ownerFor(kind)
 }
 
-func (s *Server) globalPreviewOwner(recorded bootstrap.PreviewDomain, region string) routeOwnerFunc {
+func (s *Server) globalPreviewOwner(recorded domains.PreviewWildcard, region string) routeOwnerFunc {
 	return previewWildcardOwner(recorded, func(kind edge.Kind) routeOwnerFunc {
 		return s.edgeRouteOwner(kind, region)
 	})
 }
 
-func previewWildcardHolder(recorded bootstrap.PreviewDomain) (edge.Kind, error) {
+func previewWildcardHolder(recorded domains.PreviewWildcard) (edge.Kind, error) {
 	kind, ok := recorded.Holder()
 	if !ok {
 		return "", fmt.Errorf(
@@ -453,7 +470,7 @@ func previewWildcardHolder(recorded bootstrap.PreviewDomain) (edge.Kind, error) 
 	return kind, nil
 }
 
-func previewWildcardEdge(recorded bootstrap.PreviewDomain, edgeFor func(edge.Kind) (edge.Edge, error)) (edge.Edge, error) {
+func previewWildcardEdge(recorded domains.PreviewWildcard, edgeFor func(edge.Kind) (edge.Edge, error)) (edge.Edge, error) {
 	kind, err := previewWildcardHolder(recorded)
 	if err != nil {
 		return nil, err
@@ -461,7 +478,7 @@ func previewWildcardEdge(recorded bootstrap.PreviewDomain, edgeFor func(edge.Kin
 	return edgeFor(kind)
 }
 
-func refuseRehomingPreviewWildcard(recorded bootstrap.PreviewDomain, kind edge.Kind) error {
+func refuseRehomingPreviewWildcard(recorded domains.PreviewWildcard, kind edge.Kind) error {
 	holder, ok := recorded.Holder()
 	if !ok || kind == "" || holder == kind {
 		return nil
@@ -472,7 +489,7 @@ func refuseRehomingPreviewWildcard(recorded bootstrap.PreviewDomain, kind edge.K
 	)
 }
 
-func globalPreviewScopeMismatch(recorded bootstrap.PreviewDomain, edgeFront edge.Edge) error {
+func globalPreviewScopeMismatch(recorded domains.PreviewWildcard, edgeFront edge.Edge) error {
 	ambient := edgeFront.Facts().CredentialScope
 	if recorded.BaseDomain == "" || recorded.Scope == "" || ambient == "" || recorded.Scope == ambient {
 		return nil

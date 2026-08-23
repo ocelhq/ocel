@@ -42,15 +42,14 @@ func (f *fakeBatchSSM) GetParameters(_ context.Context, in *ssm.GetParametersInp
 
 func fullProductionParams() map[string]string {
 	return map[string]string{
-		PassphraseParamName:              "pass-1",
-		EdgeCredentialsParamName:         `{"accessKeyId":"AKIA1","secretAccessKey":"sec-1"}`,
-		EdgeValuesParamName:              `{"bucketName":"edge-cache-7f3"}`,
-		CacheStoreParamName:              `{"bucket":"cache-1","endpoint":"https://r2","region":"auto","accessKeyId":"AKIA2","secretAccessKey":"sec-2"}`,
-		DeploymentsStoreParamName:        `{"endpoint":"https://store","scriptName":"store","bootstrapCred":"cred"}`,
-		ISRWriterParamName:               `{"endpoint":"https://isr","scriptName":"isr","bootstrapCred":"isr-cred"}`,
-		ISRWriterSeedParamName:           "seed-1",
-		OriginSecretParamName:            "origin-1",
-		StackStateParamPrefix + "proj-1": `{"edge":{"endpoint":"https://z1"}}`,
+		PassphraseParamName:       "pass-1",
+		EdgeCredentialsParamName:  `{"accessKeyId":"AKIA1","secretAccessKey":"sec-1"}`,
+		EdgeValuesParamName:       `{"bucketName":"edge-cache-7f3"}`,
+		CacheStoreParamName:       `{"bucket":"cache-1","endpoint":"https://r2","region":"auto","accessKeyId":"AKIA2","secretAccessKey":"sec-2"}`,
+		DeploymentsStoreParamName: `{"endpoint":"https://store","scriptName":"store","bootstrapCred":"cred"}`,
+		ISRWriterParamName:        `{"endpoint":"https://isr","scriptName":"isr","bootstrapCred":"isr-cred"}`,
+		ISRWriterSeedParamName:    "seed-1",
+		OriginSecretParamName:     "origin-1",
 	}
 }
 
@@ -73,7 +72,6 @@ func TestReadClassParamsBatches(t *testing.T) {
 		ISRWriterParamName,
 		ISRWriterSeedParamName,
 		OriginSecretParamName,
-		StackStateParamPrefix + "proj-1",
 	}
 	slices.Sort(want)
 	requested := slices.Clone(ssmc.requested)
@@ -111,17 +109,13 @@ func TestReadClassParamsBatches(t *testing.T) {
 	if got.ISRWriterSeed != "seed-1" {
 		t.Errorf("ISRWriterSeed = %q, want seed-1", got.ISRWriterSeed)
 	}
-	if got.Stack.Edge.Endpoint != "https://z1" {
-		t.Errorf("Stack = %+v", got.Stack)
-	}
 }
 
 func TestReadClassParamsPreviewNames(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: map[string]string{
-		PassphraseParamName:                    "pass-1",
-		EdgeCredentialsPreviewParamName:        `{"accessKeyId":"AKIA-prev"}`,
-		ISRWriterSeedPreviewParamName:          "seed-prev",
-		PreviewStackStateParamPrefix + "proj1": `{"edge":{"endpoint":"https://zp"}}`,
+		PassphraseParamName:             "pass-1",
+		EdgeCredentialsPreviewParamName: `{"accessKeyId":"AKIA-prev"}`,
+		ISRWriterSeedPreviewParamName:   "seed-prev",
 	}}
 
 	got, err := ReadClassParams(context.Background(), ssmc, ClassPreview, "proj1")
@@ -134,11 +128,8 @@ func TestReadClassParamsPreviewNames(t *testing.T) {
 	if got.ISRWriterSeed != "seed-prev" {
 		t.Errorf("ISRWriterSeed = %q, want seed-prev", got.ISRWriterSeed)
 	}
-	if got.Stack.Edge.Endpoint != "https://zp" {
-		t.Errorf("Stack = %+v, want the preview state", got.Stack)
-	}
 	for _, name := range ssmc.requested {
-		if name == EdgeCredentialsParamName || name == StackStateParamPrefix+"proj1" {
+		if name == EdgeCredentialsParamName {
 			t.Errorf("preview read requested production parameter %q", name)
 		}
 	}
@@ -262,9 +253,6 @@ func TestReadClassParamsAbsentOptional(t *testing.T) {
 	if got.ISRWriterSeed != "" {
 		t.Errorf("ISRWriterSeed = %q, want empty", got.ISRWriterSeed)
 	}
-	if !got.Stack.Empty() {
-		t.Errorf("Stack = %+v, want nothing recorded", got.Stack)
-	}
 }
 
 func TestReadClassParamsUnparsableStores(t *testing.T) {
@@ -272,7 +260,6 @@ func TestReadClassParamsUnparsableStores(t *testing.T) {
 		CacheStoreParamName,
 		DeploymentsStoreParamName,
 		ISRWriterParamName,
-		StackStateParamPrefix + "proj-1",
 	} {
 		t.Run(name, func(t *testing.T) {
 			params := fullProductionParams()
@@ -309,10 +296,9 @@ func TestGetParametersChunks(t *testing.T) {
 
 func teardownProductionParams() map[string]string {
 	return map[string]string{
-		PassphraseParamName:              "pass-1",
-		CacheStoreParamName:              `{"bucket":"cache-1","secretAccessKey":"sec-2"}`,
-		ISRWriterParamName:               `{"endpoint":"https://isr","bootstrapCred":"isr-cred"}`,
-		StackStateParamPrefix + "proj-1": `{"edge":{"endpoint":"https://z1"}}`,
+		PassphraseParamName: "pass-1",
+		CacheStoreParamName: `{"bucket":"cache-1","secretAccessKey":"sec-2"}`,
+		ISRWriterParamName:  `{"endpoint":"https://isr","bootstrapCred":"isr-cred"}`,
 	}
 }
 
@@ -330,7 +316,6 @@ func TestReadTeardownParamsBatches(t *testing.T) {
 		PassphraseParamName,
 		CacheStoreParamName,
 		ISRWriterParamName,
-		StackStateParamPrefix + "proj-1",
 	}
 	slices.Sort(want)
 	requested := slices.Clone(ssmc.requested)
@@ -353,16 +338,12 @@ func TestReadTeardownParamsBatches(t *testing.T) {
 	if got.ISRWriter.Endpoint != "https://isr" || got.ISRWriter.BootstrapCred != "isr-cred" {
 		t.Errorf("ISRWriter = %+v", got.ISRWriter)
 	}
-	if got.Stack.Edge.Endpoint != "https://z1" {
-		t.Errorf("Stack = %+v", got.Stack)
-	}
 }
 
 func TestReadTeardownParamsPreviewNames(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: map[string]string{
-		PassphraseParamName:                    "pass-1",
-		CacheStorePreviewParamName:             `{"bucket":"cache-prev"}`,
-		PreviewStackStateParamPrefix + "proj1": `{"edge":{"endpoint":"https://zp"}}`,
+		PassphraseParamName:        "pass-1",
+		CacheStorePreviewParamName: `{"bucket":"cache-prev"}`,
 	}}
 
 	got, err := ReadTeardownParams(context.Background(), ssmc, ClassPreview, "proj1")
@@ -372,11 +353,8 @@ func TestReadTeardownParamsPreviewNames(t *testing.T) {
 	if got.CacheStore.Bucket != "cache-prev" {
 		t.Errorf("CacheStore = %+v, want the preview store", got.CacheStore)
 	}
-	if got.Stack.Edge.Endpoint != "https://zp" {
-		t.Errorf("Stack = %+v, want the preview state", got.Stack)
-	}
 	for _, name := range ssmc.requested {
-		if name == CacheStoreParamName || name == StackStateParamPrefix+"proj1" {
+		if name == CacheStoreParamName {
 			t.Errorf("preview read requested production parameter %q", name)
 		}
 	}
@@ -431,9 +409,6 @@ func TestReadTeardownParamsAbsentOptional(t *testing.T) {
 	if got.ISRWriter != (ISRWriter{}) {
 		t.Errorf("ISRWriter = %+v, want the zero writer", got.ISRWriter)
 	}
-	if !got.Stack.Empty() {
-		t.Errorf("Stack = %+v, want nothing recorded", got.Stack)
-	}
 }
 
 func TestReadTeardownParamsUnparsable(t *testing.T) {
@@ -463,12 +438,4 @@ func TestReadTeardownParamsUnparsable(t *testing.T) {
 		}
 	})
 
-	t.Run("a root-stack state is fatal", func(t *testing.T) {
-		params := teardownProductionParams()
-		params[StackStateParamPrefix+"proj-1"] = "{not json"
-
-		if _, err := ReadTeardownParams(context.Background(), &fakeBatchSSM{params: params}, ClassProduction, "proj-1"); err == nil {
-			t.Fatal("ReadTeardownParams with an unparsable root-stack state = nil error, want an error")
-		}
-	})
 }

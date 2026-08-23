@@ -11,7 +11,6 @@ import (
 
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
@@ -75,11 +74,11 @@ type hostnameSession struct {
 	recorded   domains.Settlement
 	configured []string
 	host       string
-	pins       map[string]string
+	certifier  certs.Certifier
 }
 
 type stackWriter struct {
-	ssm     bootstrap.SSMAPI
+	state   domains.State
 	slug    string
 	stack   edge.EdgeStack
 	settled domains.Settlement
@@ -91,10 +90,9 @@ func (w *stackWriter) Save(ctx context.Context, settled domains.Settlement) erro
 }
 
 func (w *stackWriter) write(ctx context.Context) error {
-	return bootstrap.WriteStackRecordFor(ctx, w.ssm, bootstrap.ClassProduction, w.slug, bootstrap.StackRecord{
-		Edge:       w.stack.State(),
-		Production: w.settled,
-	})
+	held := domains.StackRecord{}.With(w.settled)
+	held.Edge = w.stack.State()
+	return w.state.WriteStack(ctx, edge.ClassProduction, w.slug, held)
 }
 
 type persistingStack struct {
@@ -147,7 +145,11 @@ func (s *Server) hostnameSession(ctx context.Context, req hostnameRequest) (*hos
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	record, err := bootstrap.ReadStackRecord(ctx, clients.ssm, req.slug)
+	state, err := s.domainState(ctx, opts.Region, false)
+	if err != nil {
+		return nil, err
+	}
+	record, err := state.ReadStack(ctx, edge.ClassProduction, req.slug)
 	if err != nil {
 		return nil, err
 	}
@@ -158,13 +160,13 @@ func (s *Server) hostnameSession(ctx context.Context, req hostnameRequest) (*hos
 	if err != nil {
 		return nil, err
 	}
-	recorded := record.Production
+	recorded := record.Settlement()
 	writer, err := clients.writerFor(req.dns.GetKind(), req.dns.GetZone())
 	if err != nil {
 		return nil, err
 	}
 
-	held := &stackWriter{ssm: clients.ssm, slug: req.slug, stack: opened, settled: recorded}
+	held := &stackWriter{state: state, slug: req.slug, stack: opened, settled: recorded}
 	stack := persisting(opened, held.write)
 	engine := domains.Engine{
 		Kind:          edgeFront.Kind(),
@@ -186,8 +188,9 @@ func (s *Server) hostnameSession(ctx context.Context, req hostnameRequest) (*hos
 			return stack.UnbindDomain(ctx, hostname)
 		},
 	}
+	certifier := clients.certifierFor(edgeFront)
 	if req.certificate {
-		engine.Issuer = clients.issuerFor(edgeFront)
+		engine.Issuer = certifier.Issuer
 	}
 	return &hostnameSession{
 		engine:     engine,
@@ -195,7 +198,7 @@ func (s *Server) hostnameSession(ctx context.Context, req hostnameRequest) (*hos
 		recorded:   recorded,
 		configured: configured,
 		host:       host,
-		pins:       normalizePins(opts.Certificates),
+		certifier:  certifier,
 	}, nil
 }
 
@@ -239,7 +242,7 @@ func (d *hostnameSession) addTargets(settled domains.Settlement) []domains.Targe
 func (d *hostnameSession) target(host string) domains.Target {
 	return domains.Target{
 		Hostname: host,
-		Pinned:   d.pins[host],
+		Pinned:   d.certifier.PinFor(host),
 		Surface: func(ctx context.Context, certificate string, say func(string)) (edge.DNSTarget, error) {
 			say(fmt.Sprintf("Binding %s to the %s edge", host, d.engine.Kind))
 			return d.bind(ctx, host, certificate)
@@ -255,20 +258,11 @@ func (d *hostnameSession) bind(ctx context.Context, host, certificate string) (e
 }
 
 func (d *hostnameSession) wantedARN(settled domains.Settlement, host string) string {
-	if pinned := d.pins[host]; pinned != "" {
-		return pinned
-	}
-	return settled.Certificate.ARN
+	return d.certifier.Wants(settled.Certificate, host)
 }
 
 func (d *hostnameSession) unpinned() []string {
-	var wanted []string
-	for _, host := range d.configured {
-		if d.pins[host] == "" {
-			wanted = append(wanted, host)
-		}
-	}
-	return wanted
+	return d.certifier.Unpinned(d.configured)
 }
 
 func (d *hostnameSession) remove(ctx context.Context, progress func(string)) error {
@@ -354,17 +348,4 @@ func productionHost(raw string) (string, error) {
 		return "", fmt.Errorf("%q is not a production hostname: pass a name like app.acme.com — a wildcard belongs to domains.preview", raw)
 	}
 	return host, nil
-}
-
-func normalizePins(pins map[string]string) map[string]string {
-	if len(pins) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(pins))
-	for host, arn := range pins {
-		if arn = strings.TrimSpace(arn); arn != "" {
-			out[strings.ToLower(strings.TrimSpace(host))] = arn
-		}
-	}
-	return out
 }

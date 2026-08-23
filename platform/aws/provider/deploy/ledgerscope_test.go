@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/platform/aws/provider/edgeledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -17,7 +17,7 @@ func TestLedgerScopeNamesTheProjectTheISRPrefixDoes(t *testing.T) {
 		project := strings.Split(isrPrefixOf(coord), naming.PathSeparator)[1]
 		want := string(edge.ClassProduction) + naming.PathSeparator + project
 
-		if got := edgeledger.Scope(edge.ClassProduction, slug); got != want {
+		if got := ledger.Scope(edge.ClassProduction, slug); got != want {
 			t.Errorf("Scope(%q) = %q, want %q; the invalidator reads the ledger under the project the ISR prefix names, so a scope that differs makes every raise miss", slug, got, want)
 		}
 	}

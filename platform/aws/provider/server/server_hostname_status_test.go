@@ -194,8 +194,8 @@ func TestGetHostnameStatus(t *testing.T) {
 		if _, err := f.session.status(t.Context()); err != nil {
 			t.Fatalf("status: %v", err)
 		}
-		if len(f.ssm.params) != 0 {
-			t.Errorf("ssm params = %v, want status to persist nothing it observed", f.ssm.params)
+		if f.records.writes != 0 {
+			t.Errorf("record writes = %d, want status to persist nothing it observed", f.records.writes)
 		}
 	})
 
@@ -221,8 +221,8 @@ func TestGetHostnameStatus(t *testing.T) {
 		if !strings.Contains(host.GetPending(), "does not answer") {
 			t.Errorf("pending = %q, want it to name the probe", host.GetPending())
 		}
-		if len(f.ssm.params) != 0 {
-			t.Errorf("ssm params = %v, want a failed probe never written back over what add recorded", f.ssm.params)
+		if f.records.writes != 0 {
+			t.Errorf("record writes = %d, want a failed probe never written back over what add recorded", f.records.writes)
 		}
 	})
 
@@ -458,9 +458,9 @@ func liveGate(t *testing.T, kind edge.Kind, api *domainACM, answering bool, prio
 		kind:          kind,
 		servesUnbound: registeredEdge(kind).Facts().ServesUnbound,
 
-		state:    state,
-		recorded: prior,
-		issuer:   fakeIssuer(kind, api),
+		state:     state,
+		recorded:  prior,
+		certifier: certs.Certifier{Issuer: fakeIssuer(kind, api)},
 		prober: certs.Prober{
 			Get: func(context.Context, string) (http.Header, error) {
 				header := http.Header{}
@@ -706,15 +706,6 @@ func TestAdmitDomains(t *testing.T) {
 			t.Error("admitDomains err = nil, want a fresh probe still demanded on cloudflare")
 		}
 
-		pinned := liveGate(t, cloudflare.Kind, api, true, domains.Settlement{}, "shop.app.com")
-		pinned.pins = map[string]string{"shop.app.com": domainCertARN}
-		var warned []string
-		if _, err := admitDomains(t.Context(), pinned, environmentv1.Tier_TIER_PRODUCTION, productionManifest("shop.app.com"), func(m string) { warned = append(warned, m) }); err != nil {
-			t.Fatalf("admitDomains err = %v", err)
-		}
-		if len(warned) != 1 || !strings.Contains(warned[0], "ignored") {
-			t.Errorf("warnings = %v, want the ignored certificate pin said out loud", warned)
-		}
 	})
 
 	t.Run("a hostname with no edge surface is refused, naming the surface", func(t *testing.T) {

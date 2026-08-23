@@ -25,8 +25,10 @@ const (
 )
 
 var partitionSegments = map[string]int{
-	"values":    3,
-	"valuerefs": 3,
+	"values":     3,
+	"valuerefs":  3,
+	"ledger":     2,
+	"edgestacks": 2,
 }
 
 type DynamoAPI interface {
@@ -152,27 +154,30 @@ func (r Records) List(ctx context.Context, under kit.RecordName) ([]kit.Record, 
 	if r.Table == "" {
 		return nil, nil
 	}
-	pk, sk, err := keyOf(under)
+	pk, prefix, err := prefixOf(under)
 	if err != nil {
 		return nil, err
+	}
+
+	condition := "#pk = :pk"
+	names := map[string]string{"#pk": partitionAttribute}
+	values := map[string]ddbtypes.AttributeValue{":pk": &ddbtypes.AttributeValueMemberS{Value: pk}}
+	if prefix != "" {
+		condition += " AND begins_with(#sk, :prefix)"
+		names["#sk"] = sortAttribute
+		values[":prefix"] = &ddbtypes.AttributeValueMemberS{Value: prefix}
 	}
 
 	var out []kit.Record
 	var start map[string]ddbtypes.AttributeValue
 	for {
 		page, err := r.Dynamo.Query(ctx, &dynamodb.QueryInput{
-			TableName:              aws.String(r.Table),
-			KeyConditionExpression: aws.String("#pk = :pk AND begins_with(#sk, :prefix)"),
-			ExpressionAttributeNames: map[string]string{
-				"#pk": partitionAttribute,
-				"#sk": sortAttribute,
-			},
-			ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
-				":pk":     &ddbtypes.AttributeValueMemberS{Value: pk},
-				":prefix": &ddbtypes.AttributeValueMemberS{Value: sk},
-			},
-			ConsistentRead:    aws.Bool(true),
-			ExclusiveStartKey: start,
+			TableName:                 aws.String(r.Table),
+			KeyConditionExpression:    aws.String(condition),
+			ExpressionAttributeNames:  names,
+			ExpressionAttributeValues: values,
+			ConsistentRead:            aws.Bool(true),
+			ExclusiveStartKey:         start,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("read everything under %s: %w", under, err)
@@ -191,14 +196,29 @@ func (r Records) List(ctx context.Context, under kit.RecordName) ([]kit.Record, 
 	}
 }
 
+func depthOf(name kit.RecordName) int {
+	if depth := partitionSegments[name[0]]; depth != 0 {
+		return depth
+	}
+	return 1
+}
+
+func prefixOf(under kit.RecordName) (string, string, error) {
+	pk, sk, err := keyOf(under)
+	if err != nil {
+		return "", "", err
+	}
+	if len(under) == depthOf(under) {
+		return pk, "", nil
+	}
+	return pk, sk, nil
+}
+
 func keyOf(name kit.RecordName) (string, string, error) {
 	if len(name) == 0 {
 		return "", "", fmt.Errorf("a record name with no segments names nothing")
 	}
-	depth := partitionSegments[name[0]]
-	if depth == 0 {
-		depth = 1
-	}
+	depth := depthOf(name)
 	if len(name) < depth {
 		return "", "", fmt.Errorf(
 			"%s names %d segments and a %s record partitions on %d: reaching under half a partition would have to walk the whole table",

@@ -3,11 +3,11 @@ package bootstrap
 import (
 	"fmt"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
+	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 )
 
 const (
-	VarsTableIndexName = stackindex.IndexName
+	VarsTableIndexName = tagclock.IndexName
 
 	outputVarsTable  = "VarsTableName"
 	outputVarsKeyARN = "VarsKeyArn"

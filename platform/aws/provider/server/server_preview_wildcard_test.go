@@ -15,7 +15,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
@@ -62,12 +61,13 @@ func TestPreviewBaseDomainArg(t *testing.T) {
 func TestPreviewWildcard(t *testing.T) {
 	t.Parallel()
 
-	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", Scope: "acct", GrammarMin: 1, GrammarMax: 1}
+	recorded := previewWildcardOn("preview.acme.com", "")
+	recorded.Scope, recorded.GrammarMin, recorded.GrammarMax = "acct", 1, 1
 
 	t.Run("is nil when nothing is recorded", func(t *testing.T) {
 		t.Parallel()
 		owner := func(context.Context, string) (string, error) { return "", nil }
-		if got := previewWildcard(context.Background(), owner, bootstrap.PreviewDomain{}); got != nil {
+		if got := previewWildcard(context.Background(), owner, domains.PreviewWildcard{}); got != nil {
 			t.Errorf("got %+v, want nil", got)
 		}
 	})
@@ -94,8 +94,7 @@ func TestPreviewWildcard(t *testing.T) {
 	t.Run("carries the certificate, the records and the last probe", func(t *testing.T) {
 		t.Parallel()
 		owner := func(context.Context, string) (string, error) { return edge.PreviewEntryOwner, nil }
-		full := recorded
-		full.Settlement = domains.Settlement{
+		full := recorded.With(domains.Settlement{
 			Certificate: certs.Certificate{ARN: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", Status: certs.StatusIssued},
 			Validation:  domains.Records{Owed: []edge.Record{{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}}},
 			Hosts: []domains.Host{{
@@ -103,10 +102,10 @@ func TestPreviewWildcard(t *testing.T) {
 				Records:  domains.Records{Written: []edge.Record{{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}}},
 				Probe:    certs.Probe{At: time.Unix(1755500000, 0).UTC(), Edge: cloudflare.Kind, OK: true},
 			}},
-		}
+		})
 
 		got := previewWildcard(context.Background(), owner, full)
-		if got.GetCertificate().GetCertificateId() != full.Settlement.Certificate.ARN || got.GetCertificate().GetCertificateStatus() != certs.StatusIssued {
+		if got.GetCertificate().GetCertificateId() != full.Certificate.ARN || got.GetCertificate().GetCertificateStatus() != certs.StatusIssued {
 			t.Errorf("certificate = %q %q", got.GetCertificate().GetCertificateId(), got.GetCertificate().GetCertificateStatus())
 		}
 		if len(got.GetCertificate().GetRecordsWritten()) != 1 || !strings.Contains(got.GetCertificate().GetRecordsWritten()[0], "*.preview.acme.com") {
@@ -139,7 +138,6 @@ func TestPreviewWildcard(t *testing.T) {
 
 type stateSSM struct {
 	params map[string]string
-	puts   int
 }
 
 func (s *stateSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {
@@ -151,19 +149,8 @@ func (s *stateSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ 
 }
 
 func (s *stateSSM) PutParameter(_ context.Context, in *ssm.PutParameterInput, _ ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
-	s.puts++
 	s.params[aws.ToString(in.Name)] = aws.ToString(in.Value)
 	return &ssm.PutParameterOutput{}, nil
-}
-
-func (s *stateSSM) GetParametersByPath(_ context.Context, in *ssm.GetParametersByPathInput, _ ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error) {
-	out := &ssm.GetParametersByPathOutput{}
-	for name := range s.params {
-		if strings.HasPrefix(name, aws.ToString(in.Path)) {
-			out.Parameters = append(out.Parameters, ssmtypes.Parameter{Name: aws.String(name)})
-		}
-	}
-	return out, nil
 }
 
 func (s *stateSSM) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInput, _ ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error) {
@@ -223,28 +210,25 @@ func TestRemovePreviewWildcard(t *testing.T) {
 	ctx := context.Background()
 	validation := edge.Record{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}
 	front := edge.Record{Name: "*.preview.acme.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
-	recorded := bootstrap.PreviewDomain{
-		BaseDomain: "preview.acme.com",
-		Settlement: domains.Settlement{
-			Certificate: certs.Certificate{ARN: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", Region: "us-east-1", Status: certs.StatusIssued, Validation: []edge.Record{validation}},
-			Validation:  domains.Records{Written: []edge.Record{validation}},
-			Hosts:       []domains.Host{{Hostname: "*.preview.acme.com", Records: domains.Records{Written: []edge.Record{front}}}},
-		},
-	}
+	recorded := previewWildcardOn("preview.acme.com", "").With(domains.Settlement{
+		Certificate: certs.Certificate{ARN: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", Region: "us-east-1", Status: certs.StatusIssued, Validation: []edge.Record{validation}},
+		Validation:  domains.Records{Written: []edge.Record{validation}},
+		Hosts:       []domains.Host{{Hostname: "*.preview.acme.com", Records: domains.Records{Written: []edge.Record{front}}}},
+	})
 
-	ssmc := &stateSSM{params: map[string]string{}}
-	if err := bootstrap.WritePreviewDomain(ctx, ssmc, bootstrap.ClassPreview, recorded); err != nil {
-		t.Fatalf("WritePreviewDomain: %v", err)
+	state := newRecordState()
+	if err := state.WriteWildcard(ctx, edge.ClassPreview, recorded); err != nil {
+		t.Fatalf("WriteWildcard: %v", err)
 	}
 	front1 := &releaseEdge{}
 	writer := &releaseWriter{}
 	api := &releaseACM{}
 
 	if err := removePreviewWildcard(ctx, removalDeps{
-		ssm:    ssmc,
+		state:  state,
 		edge:   front1,
 		writer: writer,
-		issuer: certs.Issuer{API: api, Region: recorded.Settlement.Certificate.Region},
+		issuer: certs.Issuer{API: api, Region: recorded.Certificate.Region},
 	}, recorded, func(string) {}); err != nil {
 		t.Fatalf("removePreviewWildcard: %v", err)
 	}
@@ -255,12 +239,12 @@ func TestRemovePreviewWildcard(t *testing.T) {
 	if len(writer.deleted) != 2 {
 		t.Errorf("deleted = %+v, want every record ocel wrote removed, the validation record included", writer.deleted)
 	}
-	if len(api.deleted) != 1 || api.deleted[0] != recorded.Settlement.Certificate.ARN {
-		t.Errorf("deleted certificates = %v, want %q discarded in the region it was issued in", api.deleted, recorded.Settlement.Certificate.ARN)
+	if len(api.deleted) != 1 || api.deleted[0] != recorded.Certificate.ARN {
+		t.Errorf("deleted certificates = %v, want %q discarded in the region it was issued in", api.deleted, recorded.Certificate.ARN)
 	}
-	got, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
+	got, err := state.ReadWildcard(ctx, edge.ClassPreview)
 	if err != nil {
-		t.Fatalf("ReadPreviewDomain: %v", err)
+		t.Fatalf("ReadWildcard: %v", err)
 	}
 	if got.BaseDomain != "" {
 		t.Errorf("recorded domain = %+v, want it deleted", got)
@@ -271,18 +255,18 @@ func TestGlobalPreviewProjects(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	ssmc := &stateSSM{params: map[string]string{}}
-	for slug, state := range map[string]edge.StackState{
+	state := newRecordState()
+	for slug, held := range map[string]edge.StackState{
 		"ambient":     {Slug: "ambient", GlobalPreview: "preview.acme.com"},
 		"own-domain":  {Slug: "own-domain"},
 		"other-usage": {Slug: "other-usage", GlobalPreview: "preview.old.com"},
 	} {
-		if err := bootstrap.WriteStackRecordFor(ctx, ssmc, bootstrap.ClassPreview, slug, bootstrap.StackRecord{Edge: state}); err != nil {
-			t.Fatalf("WriteStackRecordFor(%s): %v", slug, err)
+		if err := state.WriteStack(ctx, edge.ClassPreview, slug, stackRecordOn(held)); err != nil {
+			t.Fatalf("WriteStack(%s): %v", slug, err)
 		}
 	}
 
-	served, err := globalPreviewProjects(ctx, ssmc, []string{"ambient", "own-domain", "other-usage", "never-deployed"}, "preview.acme.com")
+	served, err := globalPreviewProjects(ctx, state, "preview.acme.com")
 	if err != nil {
 		t.Fatalf("globalPreviewProjects: %v", err)
 	}
@@ -299,7 +283,7 @@ func TestPreviewWildcardOwner(t *testing.T) {
 	t.Run("a project on another edge still sees the wildcard the recording edge holds", func(t *testing.T) {
 		t.Parallel()
 
-		recorded := bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: cloudflare.Kind}
+		recorded := previewWildcardOn(baseDomain, cloudflare.Kind)
 		var asked []edge.Kind
 		owner := previewWildcardOwner(recorded, func(kind edge.Kind) routeOwnerFunc {
 			asked = append(asked, kind)
@@ -321,7 +305,7 @@ func TestPreviewWildcardOwner(t *testing.T) {
 	t.Run("a record nothing names an edge for probes no edge and reads as not installed", func(t *testing.T) {
 		t.Parallel()
 
-		owner := previewWildcardOwner(bootstrap.PreviewDomain{BaseDomain: baseDomain}, func(edge.Kind) routeOwnerFunc {
+		owner := previewWildcardOwner(previewWildcardOn(baseDomain, ""), func(edge.Kind) routeOwnerFunc {
 			t.Error("an edge was probed for a wildcard whose owner is unknown")
 			return nil
 		})
@@ -342,7 +326,7 @@ func TestPreviewWildcardHolder(t *testing.T) {
 	t.Run("the recorded edge holds it, whoever is asking", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := previewWildcardHolder(bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: cloudflare.Kind})
+		got, err := previewWildcardHolder(previewWildcardOn(baseDomain, cloudflare.Kind))
 		if err != nil {
 			t.Fatalf("previewWildcardHolder: %v", err)
 		}
@@ -354,7 +338,7 @@ func TestPreviewWildcardHolder(t *testing.T) {
 	t.Run("an unknown holder is refused with a remedy that runs", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := previewWildcardHolder(bootstrap.PreviewDomain{BaseDomain: baseDomain})
+		_, err := previewWildcardHolder(previewWildcardOn(baseDomain, ""))
 		if err == nil {
 			t.Fatal("previewWildcardHolder err = nil, want a refusal rather than a teardown through a guessed edge")
 		}
@@ -369,7 +353,7 @@ func TestPreviewWildcardHolder(t *testing.T) {
 func TestPreviewWildcardEdge(t *testing.T) {
 	t.Parallel()
 
-	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", Edge: cloudflare.Kind}
+	recorded := previewWildcardOn("preview.acme.com", cloudflare.Kind)
 	held := &releaseEdge{}
 	var asked []edge.Kind
 	got, err := previewWildcardEdge(recorded, func(kind edge.Kind) (edge.Edge, error) {
@@ -386,7 +370,7 @@ func TestPreviewWildcardEdge(t *testing.T) {
 		t.Error("previewWildcardEdge returned an edge other than the one it resolved")
 	}
 
-	if _, err := previewWildcardEdge(bootstrap.PreviewDomain{BaseDomain: "preview.acme.com"}, func(edge.Kind) (edge.Edge, error) {
+	if _, err := previewWildcardEdge(previewWildcardOn("preview.acme.com", ""), func(edge.Kind) (edge.Edge, error) {
 		t.Error("an edge was opened for a wildcard whose holder is unknown")
 		return nil, nil
 	}); err == nil {
@@ -402,7 +386,7 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 	t.Run("another edge's wildcard is not re-homed", func(t *testing.T) {
 		t.Parallel()
 
-		err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: cloudflare.Kind}, apigateway.Kind)
+		err := refuseRehomingPreviewWildcard(previewWildcardOn(baseDomain, cloudflare.Kind), apigateway.Kind)
 		if err == nil {
 			t.Fatal("refuseRehomingPreviewWildcard = nil, want the Cloudflare entry protected from a project on another edge")
 		}
@@ -416,7 +400,7 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 	t.Run("the holding edge reconciles its own wildcard", func(t *testing.T) {
 		t.Parallel()
 
-		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain, Edge: cloudflare.Kind}, cloudflare.Kind); err != nil {
+		if err := refuseRehomingPreviewWildcard(previewWildcardOn(baseDomain, cloudflare.Kind), cloudflare.Kind); err != nil {
 			t.Fatalf("refuseRehomingPreviewWildcard = %v, want a rerun from the holding edge allowed", err)
 		}
 	})
@@ -424,7 +408,7 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 	t.Run("an unknown holder is recorded rather than refused", func(t *testing.T) {
 		t.Parallel()
 
-		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{BaseDomain: baseDomain}, apigateway.Kind); err != nil {
+		if err := refuseRehomingPreviewWildcard(previewWildcardOn(baseDomain, ""), apigateway.Kind); err != nil {
 			t.Fatalf("refuseRehomingPreviewWildcard = %v, want the one command that can write the edge down allowed to run", err)
 		}
 	})
@@ -432,29 +416,20 @@ func TestRefuseRehomingPreviewWildcard(t *testing.T) {
 	t.Run("nothing recorded is nothing to re-home", func(t *testing.T) {
 		t.Parallel()
 
-		if err := refuseRehomingPreviewWildcard(bootstrap.PreviewDomain{}, apigateway.Kind); err != nil {
+		if err := refuseRehomingPreviewWildcard(domains.PreviewWildcard{}, apigateway.Kind); err != nil {
 			t.Fatalf("refuseRehomingPreviewWildcard = %v, want a first use allowed", err)
 		}
 	})
 }
 
-func previewTestEngine(edgeFront edge.Edge, issuer certs.Issuer, writer edge.DNSWriter, prober certs.Prober, ssmc *stateSSM, baseDomain string) domains.Engine {
+func previewTestEngine(edgeFront edge.Edge, issuer certs.Issuer, writer edge.DNSWriter, prober certs.Prober, state domains.State, baseDomain string) domains.Engine {
 	return domains.Engine{
 		Kind:          edgeFront.Kind(),
 		ServesUnbound: edgeFront.Facts().ServesUnbound,
 		Issuer:        issuer,
 		Writer:        writer,
 		Prober:        prober,
-		Store: previewStore{
-			ssm: ssmc,
-			domain: bootstrap.PreviewDomain{
-				BaseDomain: baseDomain,
-				Edge:       edgeFront.Kind(),
-				Scope:      edgeFront.Facts().CredentialScope,
-				GrammarMin: edge.PreviewGrammarMin,
-				GrammarMax: edge.PreviewGrammarMax,
-			},
-		},
+		Store:         previewStore{state: state, domain: newPreviewWildcard(baseDomain, edgeFront)},
 	}
 }
 
@@ -467,21 +442,21 @@ func TestUsePreviewWildcardRecordsTheEdgeHoldingIt(t *testing.T) {
 	validation := edge.Record{Name: "_ocel.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.acm-validations.aws"}
 	api := &issuingACM{arn: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", domain: edge.PreviewWildcard(baseDomain), validation: validation}
 	writer := &releaseWriter{}
-	ssmc := &stateSSM{params: map[string]string{}}
+	state := newRecordState()
 	front := &wildcardEdge{front: "d-wild.execute-api.us-east-1.amazonaws.com"}
 	prober := certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
 		answer := http.Header{}
 		answer.Set(edge.HeaderEdge, string(cloudfront.Kind))
 		return answer, nil
 	}}
-	engine := previewTestEngine(front, certs.Issuer{API: api, Region: "us-east-1", Attempts: 1}, writer, prober, ssmc, baseDomain)
+	engine := previewTestEngine(front, certs.Issuer{API: api, Region: "us-east-1", Attempts: 1}, writer, prober, state, baseDomain)
 
 	if err := usePreviewWildcard(ctx, engine, front, edge.PreviewWildcardSpec{BaseDomain: baseDomain}, domains.Settlement{}, string(edge.PreviewWildcard(baseDomain)), func(string) {}); err != nil {
 		t.Fatalf("usePreviewWildcard: %v", err)
 	}
-	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
+	recorded, err := state.ReadWildcard(ctx, edge.ClassPreview)
 	if err != nil {
-		t.Fatalf("ReadPreviewDomain: %v", err)
+		t.Fatalf("ReadWildcard: %v", err)
 	}
 	if recorded.Edge != cloudfront.Kind {
 		t.Errorf("Edge = %q, want %q: every later lookup of this account-global wildcard asks the edge that raised it", recorded.Edge, cloudfront.Kind)
@@ -498,14 +473,14 @@ func TestUsePreviewWildcardPointsAnUnboundEdgeAtItsProxy(t *testing.T) {
 
 	ctx := context.Background()
 	writer := &fakeDNSWriter{}
-	ssmc := &stateSSM{params: map[string]string{}}
+	state := newRecordState()
 	front := &unboundWildcardEdge{}
 	prober := certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
 		answer := http.Header{}
 		answer.Set(edge.HeaderEdge, string(cloudflare.Kind))
 		return answer, nil
 	}}
-	engine := previewTestEngine(front, certs.Issuer{}, writer, prober, ssmc, baseDomain)
+	engine := previewTestEngine(front, certs.Issuer{}, writer, prober, state, baseDomain)
 
 	if err := usePreviewWildcard(ctx, engine, front, edge.PreviewWildcardSpec{BaseDomain: baseDomain}, domains.Settlement{}, string(edge.PreviewWildcard(baseDomain)), func(string) {}); err != nil {
 		t.Fatalf("usePreviewWildcard: %v", err)
@@ -514,9 +489,9 @@ func TestUsePreviewWildcardPointsAnUnboundEdgeAtItsProxy(t *testing.T) {
 	if len(writer.written) != 1 || writer.written[0] != want {
 		t.Fatalf("written = %v, want %v: an edge that serves every hostname publishes no front to CNAME to", writer.written, want)
 	}
-	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
+	recorded, err := state.ReadWildcard(ctx, edge.ClassPreview)
 	if err != nil {
-		t.Fatalf("ReadPreviewDomain: %v", err)
+		t.Fatalf("ReadWildcard: %v", err)
 	}
 	if recorded.Scope != "cf-ambient" {
 		t.Errorf("Scope = %q, want the scope the holding edge answered for itself", recorded.Scope)
@@ -526,7 +501,7 @@ func TestUsePreviewWildcardPointsAnUnboundEdgeAtItsProxy(t *testing.T) {
 func TestGlobalPreviewScopeMismatch(t *testing.T) {
 	t.Parallel()
 
-	recorded := bootstrap.PreviewDomain{BaseDomain: "preview.acme.com", Edge: cloudflare.Kind, Scope: "recorded-acct"}
+	recorded := previewWildcardWithScope("preview.acme.com", cloudflare.Kind, "recorded-acct")
 
 	t.Run("a match passes", func(t *testing.T) {
 		t.Parallel()
@@ -557,7 +532,7 @@ func TestGlobalPreviewScopeMismatch(t *testing.T) {
 
 	t.Run("nothing recorded is nothing to compare", func(t *testing.T) {
 		t.Parallel()
-		if err := globalPreviewScopeMismatch(bootstrap.PreviewDomain{}, &scopedEdge{scope: "ambient-acct"}); err != nil {
+		if err := globalPreviewScopeMismatch(domains.PreviewWildcard{}, &scopedEdge{scope: "ambient-acct"}); err != nil {
 			t.Fatalf("globalPreviewScopeMismatch: %v", err)
 		}
 	})
@@ -645,34 +620,34 @@ func TestUsePreviewWildcardResumed(t *testing.T) {
 	api := &issuingACM{arn: "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234", domain: edge.PreviewWildcard(baseDomain), validation: validation}
 	front := &wildcardEdge{front: "d-wild.execute-api.us-east-1.amazonaws.com"}
 	writer := &releaseWriter{}
-	ssmc := &stateSSM{params: map[string]string{}}
+	state := newRecordState()
 	prober := certs.Prober{Attempts: 1, Now: time.Now, Get: func(context.Context, string) (http.Header, error) {
 		answer := http.Header{}
 		answer.Set(edge.HeaderEdge, string(cloudfront.Kind))
 		return answer, nil
 	}}
-	engine := previewTestEngine(front, certs.Issuer{API: api, Region: "us-east-1", Attempts: 1}, writer, prober, ssmc, baseDomain)
+	engine := previewTestEngine(front, certs.Issuer{API: api, Region: "us-east-1", Attempts: 1}, writer, prober, state, baseDomain)
 
 	if err := usePreviewWildcard(ctx, engine, front, edge.PreviewWildcardSpec{BaseDomain: baseDomain}, domains.Settlement{}, string(edge.PreviewWildcard(baseDomain)), func(string) {}); err != nil {
 		t.Fatalf("usePreviewWildcard: %v", err)
 	}
-	first, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
+	first, err := state.ReadWildcard(ctx, edge.ClassPreview)
 	if err != nil {
-		t.Fatalf("ReadPreviewDomain: %v", err)
+		t.Fatalf("ReadWildcard: %v", err)
 	}
-	if !slices.Contains(first.Settlement.WrittenRecords(), validation) {
-		t.Fatalf("records = %+v, want the validation record among them", first.Settlement.WrittenRecords())
+	if !slices.Contains(first.Settlement().WrittenRecords(), validation) {
+		t.Fatalf("records = %+v, want the validation record among them", first.Settlement().WrittenRecords())
 	}
 
-	if err := usePreviewWildcard(ctx, engine, front, edge.PreviewWildcardSpec{BaseDomain: baseDomain}, first.Settlement, string(edge.PreviewWildcard(baseDomain)), func(string) {}); err != nil {
+	if err := usePreviewWildcard(ctx, engine, front, edge.PreviewWildcardSpec{BaseDomain: baseDomain}, first.Settlement(), string(edge.PreviewWildcard(baseDomain)), func(string) {}); err != nil {
 		t.Fatalf("usePreviewWildcard again: %v", err)
 	}
-	second, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
+	second, err := state.ReadWildcard(ctx, edge.ClassPreview)
 	if err != nil {
-		t.Fatalf("ReadPreviewDomain again: %v", err)
+		t.Fatalf("ReadWildcard again: %v", err)
 	}
-	if !slices.Contains(second.Settlement.WrittenRecords(), validation) {
-		t.Errorf("records = %+v, want the validation record to survive a resumed run: `ocel domain release` deletes only what is recorded here, and ACM renews the certificate through it", second.Settlement.WrittenRecords())
+	if !slices.Contains(second.Settlement().WrittenRecords(), validation) {
+		t.Errorf("records = %+v, want the validation record to survive a resumed run: `ocel domain release` deletes only what is recorded here, and ACM renews the certificate through it", second.Settlement().WrittenRecords())
 	}
 	if api.requested != 1 {
 		t.Errorf("requested = %d, want the certificate already issued to be reused", api.requested)

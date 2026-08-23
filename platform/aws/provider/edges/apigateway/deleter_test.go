@@ -153,7 +153,7 @@ func TestDestroyStopsAtItsBudgetNamingTheRestAPIsStillStanding(t *testing.T) {
 		}
 	}
 	if !slices.ContainsFunc(slices.Collect(maps.Keys(w.dynamo.items)), func(key string) bool {
-		return strings.HasPrefix(key, "EDGELEDGER#")
+		return strings.HasPrefix(key, "ledger#")
 	}) {
 		t.Error("the deployments ledger was erased while REST APIs it names are still standing; a re-run would never find them")
 	}

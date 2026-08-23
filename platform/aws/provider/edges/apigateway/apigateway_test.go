@@ -562,7 +562,7 @@ func TestDestroyErasesTheDeploymentsLedger(t *testing.T) {
 	staged(t, stack, "arn:aws:lambda:eu-west-1:123456789012:function:entry", "assets/")
 
 	if !slices.ContainsFunc(slices.Collect(maps.Keys(w.dynamo.items)), func(key string) bool {
-		return strings.HasPrefix(key, "EDGELEDGER#")
+		return strings.HasPrefix(key, "ledger#")
 	}) {
 		t.Fatal("nothing was staged into the ledger, so its erasure proves nothing")
 	}
@@ -572,7 +572,7 @@ func TestDestroyErasesTheDeploymentsLedger(t *testing.T) {
 	}
 
 	for key := range w.dynamo.items {
-		if strings.HasPrefix(key, "EDGELEDGER#") {
+		if strings.HasPrefix(key, "ledger#") {
 			t.Errorf("ledger row %q survived the destroy", key)
 		}
 	}

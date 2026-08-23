@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/edgeledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -271,11 +271,11 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 		}
 
 		raised := w.front.named(previewWildcardName(previewBase))
-		held := w.invalidationTargets(edgeledger.Scope(edge.ClassPreview, ""))
+		held := w.invalidationTargets(ledger.Scope(edge.ClassPreview, ""))
 		if !slices.Equal(held, []string{raised.id}) {
 			t.Errorf("bootstrap invalidation targets = %v, want the wildcard every preview is served from (%q)", held, raised.id)
 		}
-		if perProject := w.invalidationTargets(edgeledger.Scope(edge.ClassPreview, conformanceSlug)); perProject != nil {
+		if perProject := w.invalidationTargets(ledger.Scope(edge.ClassPreview, conformanceSlug)); perProject != nil {
 			t.Errorf("project invalidation targets = %v, want a shared front named once rather than per project", perProject)
 		}
 	})
@@ -290,7 +290,7 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 		if err := e.DestroyPreviewWildcard(ctx, previewBase); err != nil {
 			t.Fatalf("DestroyPreviewWildcard: %v", err)
 		}
-		if held := w.invalidationTargets(edgeledger.Scope(edge.ClassPreview, "")); len(held) != 0 {
+		if held := w.invalidationTargets(ledger.Scope(edge.ClassPreview, "")); len(held) != 0 {
 			t.Errorf("bootstrap invalidation targets = %v, want a torn-down wildcard invalidated by nobody", held)
 		}
 	})
