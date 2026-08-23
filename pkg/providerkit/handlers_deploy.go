@@ -555,7 +555,7 @@ func (r *deployRun) publish(ctx context.Context, links []Link) error {
 		if err != nil {
 			return err
 		}
-		pair, err := linkPair(values.OwnerOcel, message)
+		pair, err := LinkPair(values.OwnerOcel, message)
 		if err != nil {
 			return err
 		}

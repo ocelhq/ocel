@@ -16,7 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 type stubSecrets struct{ secretString string }
@@ -101,7 +101,7 @@ func assertMatchesFixture(t *testing.T, got *linksv1.Link, typ linksv1.LinkType)
 		t.Errorf("producer emitted %v, want the checked-in record %v — the consumer suite parses that fixture, so a divergence here is cross-language drift", got, want)
 	}
 
-	payload, err := vars.EncodeLink(got)
+	payload, err := providerkit.EncodeLink(got)
 	if err != nil {
 		t.Fatalf("encode the produced link as the store and the app payload do: %v", err)
 	}

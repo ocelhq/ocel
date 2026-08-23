@@ -32,8 +32,8 @@ func (h *handlers) scoped(tier environmentv1.Tier, slug string) (values.Store, v
 	if err != nil {
 		return values.Store{}, values.Scope{}, err
 	}
-	if slug == "" {
-		return values.Store{}, values.Scope{}, connect.NewError(connect.CodeInvalidArgument, errors.New("a project slug is required"))
+	if err := values.ValidateProject(slug); err != nil {
+		return values.Store{}, values.Scope{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	return store, values.Scope{Project: slug, Class: class}, nil
 }
@@ -245,7 +245,7 @@ func (h *handlers) SetLink(ctx context.Context, req *envvarsv1.SetLinkRequest) (
 	if err := VerifyLink(link); err != nil {
 		return nil, linksError(err)
 	}
-	pair, err := linkPair(req.GetOwner(), link)
+	pair, err := LinkPair(req.GetOwner(), link)
 	if err != nil {
 		return nil, linksError(err)
 	}
@@ -297,7 +297,7 @@ func (h *handlers) ListLinks(ctx context.Context, req *envvarsv1.ListLinksReques
 		if err != nil {
 			return nil, linksError(fmt.Errorf("read link %s's record: %v: %w", published.Name, err, ErrUnreadableRecord))
 		}
-		shapes, err := decodeShapes(published.Shapes)
+		shapes, err := DecodeShapes(published.Shapes)
 		if err != nil {
 			return nil, linksError(fmt.Errorf("read link %s's shape: %v: %w", published.Name, err, ErrUnreadableRecord))
 		}

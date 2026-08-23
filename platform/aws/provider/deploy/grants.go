@@ -10,7 +10,7 @@ import (
 
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const (
@@ -82,10 +82,10 @@ func checkGrant(link string, grant *linksv1.Grant) error {
 	if label == "" {
 		label = "unlabelled"
 	}
-	if len(grant.GetActions()) == 0 || slices.ContainsFunc(grant.GetActions(), vars.UnscopedAction) {
+	if len(grant.GetActions()) == 0 || slices.ContainsFunc(grant.GetActions(), providerkit.UnscopedAction) {
 		return &UnscopedGrantError{Link: link, Label: label, Field: "action set"}
 	}
-	if len(grant.GetResources()) == 0 || slices.ContainsFunc(grant.GetResources(), vars.UnscopedResource) {
+	if len(grant.GetResources()) == 0 || slices.ContainsFunc(grant.GetResources(), providerkit.UnscopedResource) {
 		return &UnscopedGrantError{Link: link, Label: label, Field: "resource set"}
 	}
 	return nil

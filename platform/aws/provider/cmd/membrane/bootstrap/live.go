@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,9 +17,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const liveStalenessBound = 60 * time.Second
@@ -30,32 +33,30 @@ type liveFetcher interface {
 }
 
 type storeFetcher struct {
-	store       *vars.Store
-	slug        string
-	environment string
-	cells       []vars.Coordinate
-	links       []live.Link
+	reader values.Reader
+	cells  []values.Cell
+	links  []live.Link
 
 	mu       sync.Mutex
 	reported map[string]int64
 }
 
 func (f *storeFetcher) fetchLive(ctx context.Context) (map[string]string, error) {
-	values, err := f.store.Reveal(ctx, f.slug, f.cells)
+	resolved, err := f.reader.Values(ctx, f.cells)
 	if err != nil {
 		return nil, err
 	}
-	records, err := f.store.ResolveRecords(ctx, f.slug, f.environment, linkNames(f.links))
+	records, err := f.reader.Links(ctx, linkNames(f.links))
 	if err != nil {
 		return nil, err
 	}
 	for _, lag := range f.unreportedGrantLag(records) {
 		fmt.Fprintln(os.Stderr, "ocel: "+lag)
 	}
-	return merged(values, f.links, records)
+	return merged(resolved, f.links, records), nil
 }
 
-func (f *storeFetcher) unreportedGrantLag(records []vars.PublishedRecord) []string {
+func (f *storeFetcher) unreportedGrantLag(records []values.Published) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.reported == nil {
@@ -79,17 +80,17 @@ type lagged struct {
 	Message string
 }
 
-func grantLag(links []live.Link, records []vars.PublishedRecord) []lagged {
+func grantLag(links []live.Link, records []values.Published) []lagged {
 	var out []lagged
 	for i, record := range records {
 		granted := links[i].Granted
 		if granted == 0 || record.Version <= granted {
 			continue
 		}
-		out = append(out, lagged{Name: record.Name(), Version: record.Version, Message: fmt.Sprintf(
+		out = append(out, lagged{Name: record.Name, Version: record.Version, Message: fmt.Sprintf(
 			"link %s has been published %s since this deployment's IAM grants were rendered, from version %d. "+
 				"Its values are live and current; its permissions are not, and ocel widens no permission on its own — deploy again to move them to version %d",
-			record.Name(), republished(record.Version-granted), granted, record.Version,
+			record.Name, republished(record.Version-granted), granted, record.Version,
 		)})
 	}
 	return out
@@ -110,29 +111,11 @@ func linkNames(links []live.Link) []string {
 	return names
 }
 
-func merged(values []vars.Value, links []live.Link, records []vars.PublishedRecord) (map[string]string, error) {
-	out := resolved(values)
+func merged(resolved map[string]string, links []live.Link, records []values.Published) map[string]string {
+	out := make(map[string]string, len(resolved)+len(records))
+	maps.Copy(out, resolved)
 	for i, record := range records {
-		encoded, err := vars.EncodeLink(record.Link)
-		if err != nil {
-			return nil, fmt.Errorf("render link %s: %w", record.Name(), err)
-		}
-		out[links[i].Key] = string(encoded)
-	}
-	return out, nil
-}
-
-func resolved(values []vars.Value) map[string]string {
-	out := make(map[string]string, len(values))
-	for _, v := range values {
-		if v.Coordinate.Environment == "" {
-			out[v.Coordinate.Key] = v.Plaintext
-		}
-	}
-	for _, v := range values {
-		if v.Coordinate.Environment != "" {
-			out[v.Coordinate.Key] = v.Plaintext
-		}
+		out[links[i].Key] = string(record.Value)
 	}
 	return out
 }
@@ -335,17 +318,14 @@ func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 	return newLiveValues(&storeFetcher{
-		store: &vars.Store{
-			Dynamo: dynamodb.NewFromConfig(cfg),
-			KMS:    kms.NewFromConfig(cfg),
-			Table:  manifest.Table,
-			KeyARN: manifest.KeyARN,
-			Class:  manifest.Class,
+		reader: values.Reader{
+			Records:     awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Table: manifest.Table},
+			Sealer:      awsports.Sealer{KMS: kms.NewFromConfig(cfg), KeyARN: manifest.KeyARN},
+			Scope:       values.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
+			Environment: manifest.Environment,
 		},
-		slug:        manifest.Slug,
-		environment: manifest.Environment,
-		cells:       manifestCells(manifest),
-		links:       manifest.Links,
+		cells: manifestCells(manifest),
+		links: manifest.Links,
 	}, manifestKeys(manifest), manifest.Links, nil), nil
 }
 
@@ -360,13 +340,10 @@ func manifestKeys(m live.Manifest) []string {
 	return keys
 }
 
-func manifestCells(m live.Manifest) []vars.Coordinate {
-	cells := make([]vars.Coordinate, 0, len(m.Keys))
+func manifestCells(m live.Manifest) []values.Cell {
+	cells := make([]values.Cell, 0, len(m.Keys))
 	for _, k := range m.Keys {
-		cells = append(cells, vars.Coordinate{Slug: m.Slug, Folder: k.Folder, Key: k.Key})
-		if m.Environment != "" {
-			cells = append(cells, vars.Coordinate{Slug: m.Slug, Folder: k.Folder, Key: k.Key, Environment: m.Environment})
-		}
+		cells = append(cells, values.Cell{Folder: k.Folder, Key: k.Key})
 	}
 	return cells
 }

@@ -11,12 +11,11 @@ import (
 
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 )
 
 type Consumed struct {
 	Resource string
-	Record   vars.PublishedRecord
+	Record   PublishedRecord
 }
 
 type UnpublishedLinkError struct {
@@ -121,7 +120,7 @@ func (e *CustomLinkBoundError) Error() string {
 		e.Link, e.Link, e.Link)
 }
 
-func readableAs(record vars.PublishedRecord, declared linksv1.LinkType) error {
+func readableAs(record PublishedRecord, declared linksv1.LinkType) error {
 	if record.Type() == linksv1.LinkType_LINK_TYPE_CUSTOM {
 		return &CustomLinkBoundError{Link: record.Name()}
 	}

@@ -1,4 +1,4 @@
-package server
+package ports_test
 
 import (
 	"context"
@@ -7,71 +7,30 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
-	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
-
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
-type countingCFN struct {
-	mu        sync.Mutex
-	describes int
-	stacks    []string
-}
-
-func (c *countingCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
-	c.mu.Lock()
-	c.describes++
-	c.stacks = append(c.stacks, aws.ToString(in.StackName))
-	c.mu.Unlock()
-
-	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{
-		Tags: currentSchemaTags,
-		Outputs: []cfntypes.Output{
-			{OutputKey: aws.String("StateTableName"), OutputValue: aws.String("ocel-state")},
-			{OutputKey: aws.String("VarsKeyArn"), OutputValue: aws.String("arn:aws:kms:eu-west-1:123456789012:key/abcd")},
-		},
-	}}}, nil
-}
-
-func (c *countingCFN) bootstraps() []string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return bootstrapDescribes(c.stacks)
-}
+const fakePageSize = 2
 
 type fakeDynamo struct {
-	mu      sync.Mutex
-	items   map[string]map[string]map[string]ddbtypes.AttributeValue
-	queries int
-	gets    int
+	mu    sync.Mutex
+	items map[string]map[string]map[string]ddbtypes.AttributeValue
 }
 
 func newFakeDynamo() *fakeDynamo {
 	return &fakeDynamo{items: map[string]map[string]map[string]ddbtypes.AttributeValue{}}
 }
 
-func keyOf(item map[string]ddbtypes.AttributeValue, name string) string {
-	v, _ := item[name].(*ddbtypes.AttributeValueMemberS)
-	if v == nil {
-		return ""
-	}
-	return v.Value
-}
-
 func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.gets++
-	item, ok := f.items[keyOf(in.Key, "pk")][keyOf(in.Key, "sk")]
+	item, ok := f.items[stringAttr(in.Key, "pk")][stringAttr(in.Key, "sk")]
 	if !ok {
 		return &dynamodb.GetItemOutput{}, nil
 	}
@@ -81,9 +40,9 @@ func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...
 func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	pk, sk := keyOf(in.Item, "pk"), keyOf(in.Item, "sk")
+	pk, sk := stringAttr(in.Item, "pk"), stringAttr(in.Item, "sk")
 	held, exists := f.items[pk][sk]
-	if !holds(aws.ToString(in.ConditionExpression), held, exists, in.ExpressionAttributeValues) {
+	if !f.holds(aws.ToString(in.ConditionExpression), held, exists, in.ExpressionAttributeValues) {
 		return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("fakeDynamo: the condition did not hold")}
 	}
 	if f.items[pk] == nil {
@@ -96,11 +55,11 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	pk, sk := keyOf(in.Key, "pk"), keyOf(in.Key, "sk")
+	pk, sk := stringAttr(in.Key, "pk"), stringAttr(in.Key, "sk")
 	held, exists := f.items[pk][sk]
-	if !holds(aws.ToString(in.ConditionExpression), held, exists, in.ExpressionAttributeValues) {
+	if !f.holds(aws.ToString(in.ConditionExpression), held, exists, in.ExpressionAttributeValues) {
 		failed := &ddbtypes.ConditionalCheckFailedException{Message: aws.String("fakeDynamo: the condition did not hold")}
-		if exists {
+		if exists && in.ReturnValuesOnConditionCheckFailure == ddbtypes.ReturnValuesOnConditionCheckFailureAllOld {
 			failed.Item = maps.Clone(held)
 		}
 		return nil, failed
@@ -109,14 +68,14 @@ func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput,
 	return &dynamodb.DeleteItemOutput{}, nil
 }
 
-func holds(expression string, held map[string]ddbtypes.AttributeValue, exists bool, values map[string]ddbtypes.AttributeValue) bool {
+func (f *fakeDynamo) holds(expression string, held map[string]ddbtypes.AttributeValue, exists bool, values map[string]ddbtypes.AttributeValue) bool {
 	switch expression {
 	case "":
 		return true
 	case "attribute_not_exists(#pk)":
 		return !exists
 	case "#rev = :rev":
-		return exists && keyOf(held, "rev") == keyOf(values, ":rev")
+		return exists && stringAttr(held, "rev") == stringAttr(values, ":rev")
 	}
 	panic("fakeDynamo: unrecognized condition " + expression)
 }
@@ -124,10 +83,10 @@ func holds(expression string, held map[string]ddbtypes.AttributeValue, exists bo
 func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.queries++
-
-	pk := keyOf(in.ExpressionAttributeValues, ":pk")
-	prefix := keyOf(in.ExpressionAttributeValues, ":prefix")
+	if got := aws.ToString(in.KeyConditionExpression); got != "#pk = :pk AND begins_with(#sk, :prefix)" {
+		return nil, fmt.Errorf("fakeDynamo: unrecognized key condition %q", got)
+	}
+	pk, prefix := stringAttr(in.ExpressionAttributeValues, ":pk"), stringAttr(in.ExpressionAttributeValues, ":prefix")
 
 	var sks []string
 	for sk := range f.items[pk] {
@@ -136,40 +95,63 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 		}
 	}
 	slices.Sort(sks)
+	if after := stringAttr(in.ExclusiveStartKey, "sk"); after != "" {
+		sks = sks[min(len(sks), slices.Index(sks, after)+1):]
+	}
 
 	out := &dynamodb.QueryOutput{}
-	for _, sk := range sks {
+	for i, sk := range sks {
+		if i == fakePageSize {
+			out.LastEvaluatedKey = map[string]ddbtypes.AttributeValue{
+				"pk": &ddbtypes.AttributeValueMemberS{Value: pk},
+				"sk": &ddbtypes.AttributeValueMemberS{Value: sks[i-1]},
+			}
+			break
+		}
 		out.Items = append(out.Items, maps.Clone(f.items[pk][sk]))
 	}
 	return out, nil
 }
 
-func (f *fakeDynamo) counts() (queries, gets int) {
+func (f *fakeDynamo) partitions() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.queries, f.gets
+	return slices.Sorted(maps.Keys(f.items))
 }
 
-type fakeKMS struct {
-	mu       sync.Mutex
-	decrypts int
+func stringAttr(item map[string]ddbtypes.AttributeValue, name string) string {
+	value, ok := item[name].(*ddbtypes.AttributeValueMemberS)
+	if !ok {
+		return ""
+	}
+	return value.Value
 }
 
 const fakeCipherMarker = "enc:"
 
+type fakeKMS struct {
+	mu       sync.Mutex
+	keyIDs   []string
+	contexts []map[string]string
+}
+
 func (f *fakeKMS) Encrypt(_ context.Context, in *kms.EncryptInput, _ ...func(*kms.Options)) (*kms.EncryptOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.keyIDs = append(f.keyIDs, aws.ToString(in.KeyId))
+	f.contexts = append(f.contexts, in.EncryptionContext)
 	blob := fakeCipherMarker + sealedContext(in.EncryptionContext) + "|" + base64.StdEncoding.EncodeToString(in.Plaintext)
 	return &kms.EncryptOutput{CiphertextBlob: []byte(blob)}, nil
 }
 
 func (f *fakeKMS) Decrypt(_ context.Context, in *kms.DecryptInput, _ ...func(*kms.Options)) (*kms.DecryptOutput, error) {
-	f.mu.Lock()
-	f.decrypts++
-	f.mu.Unlock()
-
-	sealed, plaintext, ok := strings.Cut(strings.TrimPrefix(string(in.CiphertextBlob), fakeCipherMarker), "|")
-	if !ok {
+	blob := string(in.CiphertextBlob)
+	if !strings.HasPrefix(blob, fakeCipherMarker) {
 		return nil, errors.New("fakeKMS: not ciphertext this key produced")
+	}
+	sealed, plaintext, ok := strings.Cut(strings.TrimPrefix(blob, fakeCipherMarker), "|")
+	if !ok {
+		return nil, errors.New("fakeKMS: malformed ciphertext")
 	}
 	if presented := sealedContext(in.EncryptionContext); presented != sealed {
 		return nil, fmt.Errorf("fakeKMS: encryption context %q does not match the one this blob was sealed under (%q)", presented, sealed)
@@ -188,24 +170,4 @@ func sealedContext(bound map[string]string) string {
 	}
 	slices.Sort(pairs)
 	return strings.Join(pairs, ",")
-}
-
-func (f *fakeKMS) count() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.decrypts
-}
-
-func testAccount(cfn *countingCFN, ddb *fakeDynamo, crypto *fakeKMS) *VarsServer {
-	return &VarsServer{stores: testStores(cfn, ddb, crypto)}
-}
-
-func testStores(cfn *countingCFN, ddb *fakeDynamo, crypto *fakeKMS) *stores {
-	return &stores{openAccount: func(context.Context, string) (account, error) {
-		return account{CFN: cfn, Dynamo: ddb, KMS: crypto}, nil
-	}}
-}
-
-var currentSchemaTags = []cfntypes.Tag{
-	{Key: aws.String(bootstrap.TagSchema), Value: aws.String(strconv.Itoa(bootstrap.RequiredSchema))},
 }

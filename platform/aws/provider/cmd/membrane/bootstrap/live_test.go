@@ -20,7 +20,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/channel"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
@@ -371,9 +371,9 @@ func TestLiveValues(t *testing.T) {
 
 func record(t *testing.T, link *linksv1.Link) string {
 	t.Helper()
-	encoded, err := vars.EncodeLink(link)
+	encoded, err := protojson.Marshal(link)
 	if err != nil {
-		t.Fatalf("EncodeLink: %v", err)
+		t.Fatalf("render the link: %v", err)
 	}
 	return string(encoded)
 }
@@ -677,13 +677,10 @@ func TestResolveLiveValues(t *testing.T) {
 			}
 		}
 
-		values, err := merged(nil, manifest.Links, []vars.PublishedRecord{
-			{Link: &linksv1.Link{Name: "db--main", Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}}}},
-			{Link: &linksv1.Link{Name: "bucket--uploads", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "shop-uploads"}}}},
+		values := merged(nil, manifest.Links, []values.Published{
+			publishedRecord(t, &linksv1.Link{Name: "db--main", Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}}}, 1),
+			publishedRecord(t, &linksv1.Link{Name: "bucket--uploads", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "shop-uploads"}}}, 1),
 		})
-		if err != nil {
-			t.Fatalf("merged: %v", err)
-		}
 		for _, l := range manifest.Links {
 			if values[l.Key] == "" {
 				t.Errorf("%s reached the child under no key; the record is filed under the key the app reads", l.Name)
@@ -709,14 +706,6 @@ func TestResolveLiveValues(t *testing.T) {
 		if len(cells) != 2 {
 			t.Fatalf("cells = %+v, want one per pinned key", cells)
 		}
-		for _, c := range cells {
-			if c.Slug != "shop" {
-				t.Errorf("cell %+v does not carry the manifest's slug", c)
-			}
-			if c.Environment != "" {
-				t.Errorf("cell %+v names an environment; the class-wide case is the store's own spelling, not one to pass in", c)
-			}
-		}
 		if cells[0].Folder != "" {
 			t.Errorf("root key folder = %q, want empty: the store owns the root sentinel", cells[0].Folder)
 		}
@@ -725,21 +714,16 @@ func TestResolveLiveValues(t *testing.T) {
 		}
 	})
 
-	t.Run("a preview reads its own override beside the class wide value", func(t *testing.T) {
-		cells := manifestCells(live.Manifest{
+	t.Run("a preview names each cell once and reads its environment through the reader", func(t *testing.T) {
+		manifest := live.Manifest{
 			Slug:        "shop",
 			Environment: "pr-42",
 			Keys:        []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
-		})
-
-		want := []vars.Coordinate{
-			{Slug: "shop", Key: "DB_PASSWORD"},
-			{Slug: "shop", Key: "DB_PASSWORD", Environment: "pr-42"},
-			{Slug: "shop", Key: "SESSION_SECRET", Folder: "/web"},
-			{Slug: "shop", Key: "SESSION_SECRET", Folder: "/web", Environment: "pr-42"},
 		}
-		if !reflect.DeepEqual(cells, want) {
-			t.Errorf("cells = %+v, want %+v", cells, want)
+
+		want := []values.Cell{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
+		if cells := manifestCells(manifest); !reflect.DeepEqual(cells, want) {
+			t.Errorf("cells = %+v, want %+v: the override is the reader's environment, not a cell of its own", cells, want)
 		}
 	})
 
@@ -751,11 +735,6 @@ func TestResolveLiveValues(t *testing.T) {
 
 		if len(cells) != 2 {
 			t.Fatalf("cells = %+v, want one per pinned key", cells)
-		}
-		for _, c := range cells {
-			if c.Environment != "" {
-				t.Errorf("cell %+v names an environment production cannot have", c)
-			}
 		}
 	})
 
@@ -859,33 +838,17 @@ func TestMerged(t *testing.T) {
 		Name:       "db--main",
 		Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "ocel", Port: 5432}},
 	}
-	records := []vars.PublishedRecord{{Link: published}}
+	records := []values.Published{publishedRecord(t, published, 1)}
 
 	t.Run("a link is never shadowed by a secret that shares its name", func(t *testing.T) {
-		secret := vars.Value{
-			Metadata:  vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Key: "OCEL_RESOURCE_POSTGRES_main"}},
-			Plaintext: "postgres://mine",
-		}
-
-		got, err := merged([]vars.Value{secret}, links, records)
-		if err != nil {
-			t.Fatalf("merged: %v", err)
-		}
+		got := merged(map[string]string{"OCEL_RESOURCE_POSTGRES_main": "postgres://mine"}, links, records)
 		if handed := decodeLink(t, got["OCEL_RESOURCE_POSTGRES_main"]); !proto.Equal(handed, published) {
 			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the record ocel published for the link; a secret the user named the same way must not stand in for a resource's own credential", got["OCEL_RESOURCE_POSTGRES_main"])
 		}
 	})
 
 	t.Run("carries both when they name different keys", func(t *testing.T) {
-		secret := vars.Value{
-			Metadata:  vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY"}},
-			Plaintext: "sk_live",
-		}
-
-		got, err := merged([]vars.Value{secret}, links, records)
-		if err != nil {
-			t.Fatalf("merged: %v", err)
-		}
+		got := merged(map[string]string{"STRIPE_API_KEY": "sk_live"}, links, records)
 		if got["STRIPE_API_KEY"] != "sk_live" || len(got) != 2 {
 			t.Errorf("merged = %v, want the secret beside the link and nothing else", got)
 		}
@@ -895,28 +858,13 @@ func TestMerged(t *testing.T) {
 	})
 }
 
-func TestResolved(t *testing.T) {
-	t.Run("an override wins for its own environment and nothing else changes", func(t *testing.T) {
-		classWide := func(key, value string) vars.Value {
-			return vars.Value{Metadata: vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Key: key}}, Plaintext: value}
-		}
-		override := func(key, value string) vars.Value {
-			return vars.Value{Metadata: vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Key: key, Environment: "pr-42"}}, Plaintext: value}
-		}
-
-		for name, values := range map[string][]vars.Value{
-			"class-wide answered first": {classWide("DB_PASSWORD", "shared"), override("DB_PASSWORD", "mine"), classWide("SESSION_SECRET", "shared")},
-			"override answered first":   {override("DB_PASSWORD", "mine"), classWide("DB_PASSWORD", "shared"), classWide("SESSION_SECRET", "shared")},
-		} {
-			t.Run(name, func(t *testing.T) {
-				got := resolved(values)
-				want := map[string]string{"DB_PASSWORD": "mine", "SESSION_SECRET": "shared"}
-				if !reflect.DeepEqual(got, want) {
-					t.Errorf("resolved = %v, want %v", got, want)
-				}
-			})
-		}
-	})
+func publishedRecord(t *testing.T, link *linksv1.Link, version int64) values.Published {
+	t.Helper()
+	encoded, err := protojson.Marshal(link)
+	if err != nil {
+		t.Fatalf("render the link: %v", err)
+	}
+	return values.Published{Name: link.GetName(), Value: encoded, Version: version}
 }
 
 func TestChildEnv(t *testing.T) {
@@ -1013,8 +961,8 @@ func TestGrantLag(t *testing.T) {
 		link.Granted = granted
 		return link
 	}
-	published := func(version int64) []vars.PublishedRecord {
-		return []vars.PublishedRecord{{Link: &linksv1.Link{Name: "main", Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{}}}, Version: version}}
+	published := func(version int64) []values.Published {
+		return []values.Published{{Name: "main", Version: version}}
 	}
 
 	t.Run("names the publishes an app's grants are behind", func(t *testing.T) {
