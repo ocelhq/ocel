@@ -124,7 +124,7 @@ func (e *Edge) Kind() edge.Kind { return e.kind }
 
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
-		RunsCode:            true,
+		RunsCode:            e.kind == KindRelay,
 		SignsOriginForwards: true,
 		CredentialScope:     "fake-account",
 	}

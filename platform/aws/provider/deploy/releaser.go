@@ -213,7 +213,18 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 	if err := r.index(ctx, plan.Ref); err != nil {
 		return providerkit.StackResult{}, err
 	}
+	if plan.Options == nil {
+		transformed, err := transformStackPlan(ctx, r.cfg.Transform, plan)
+		if err != nil {
+			return providerkit.StackResult{}, err
+		}
+		plan.Options = transformed
+	}
 	return r.adapter.Run(ctx, plan, report)
+}
+
+type TagSweeper interface {
+	SweepTagClock(ctx context.Context, project string, stack naming.StackName) error
 }
 
 func (r *Releaser) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
@@ -224,7 +235,13 @@ func (r *Releaser) Destroy(ctx context.Context, ref providerkit.StackRef, report
 	if err := r.adapter.Destroy(ctx, ref, report); err != nil {
 		return err
 	}
-	return index.RemoveStack(ctx, naming.Sanitize(ref.Project), ref.Name)
+	project := naming.Sanitize(ref.Project)
+	if sweeper, sweeps := index.(TagSweeper); sweeps {
+		if err := sweeper.SweepTagClock(ctx, project, ref.Name); err != nil {
+			return err
+		}
+	}
+	return index.RemoveStack(ctx, project, ref.Name)
 }
 
 func (r *Releaser) index(ctx context.Context, ref providerkit.StackRef) error {
