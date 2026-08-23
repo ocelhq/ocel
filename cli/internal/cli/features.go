@@ -13,45 +13,19 @@ import (
 )
 
 const (
-	featureISR               = "isr"
-	featureImageOptimization = "image-optimization"
-	featureCloudflareEdge    = "cloudflare-edge"
-
-	allFeatures        = "all"
-	noFeatures         = "none"
-	nextFramework      = "next"
-	cloudflareEdgeKind = "cloudflare"
+	allFeatures = "all"
+	noFeatures  = "none"
 )
 
-func configuredFeatures(cfg *projectconfig.Config) []string {
-	var required []string
-	if string(cfg.EdgeKind()) == cloudflareEdgeKind {
-		required = append(required, featureCloudflareEdge, featureISR)
-	}
+func projectFrameworks(cfg *projectconfig.Config) []string {
+	var frameworks []string
 	for _, app := range cfg.Apps {
-		required = append(required, frameworkFeatures(app.Framework)...)
+		if app.Framework != "" {
+			frameworks = append(frameworks, app.Framework)
+		}
 	}
-	slices.Sort(required)
-	return slices.Compact(required)
-}
-
-func requiredFeatures(cfg *projectconfig.Config, manifest *contractv1.Manifest) []string {
-	required := configuredFeatures(cfg)
-	for _, app := range manifest.GetApps() {
-		required = append(required, frameworkFeatures(app.GetFramework())...)
-	}
-	for _, fn := range manifest.GetFunctions() {
-		required = append(required, frameworkFeatures(fn.GetFramework())...)
-	}
-	slices.Sort(required)
-	return slices.Compact(required)
-}
-
-func frameworkFeatures(framework string) []string {
-	if framework != nextFramework {
-		return nil
-	}
-	return []string{featureISR, featureImageOptimization}
+	slices.Sort(frameworks)
+	return slices.Compact(frameworks)
 }
 
 func catalogueNames(catalogue []*contractv1.Feature) []string {

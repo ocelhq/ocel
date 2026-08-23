@@ -11,6 +11,12 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
+const (
+	featureISR               = "isr"
+	featureImageOptimization = "image-optimization"
+	featureCloudflareEdge    = "cloudflare-edge"
+)
+
 func testCatalogue(enabled ...string) []*contractv1.Feature {
 	on := func(name string) bool {
 		for _, e := range enabled {
@@ -118,7 +124,7 @@ func TestToggleFeatures(t *testing.T) {
 	}
 }
 
-func TestConfiguredFeatures(t *testing.T) {
+func TestProjectFrameworks(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -127,88 +133,30 @@ func TestConfiguredFeatures(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "a project with neither needs nothing",
-			cfg:  &projectconfig.Config{Apps: []projectconfig.App{{Framework: "express"}}},
+			name: "a project with no apps names no framework",
+			cfg:  &projectconfig.Config{},
 		},
 		{
-			name: "a Next app needs regeneration and image optimization",
-			cfg:  &projectconfig.Config{Apps: []projectconfig.App{{Framework: "express"}, {Framework: "next"}}},
-			want: []string{featureImageOptimization, featureISR},
+			name: "an app with no framework is left out",
+			cfg:  &projectconfig.Config{Apps: []projectconfig.App{{Name: "web"}}},
 		},
 		{
-			name: "a Cloudflare front needs its feature and what it stands on",
-			cfg:  &projectconfig.Config{Edge: &projectconfig.EdgeDescriptor{Kind: "cloudflare"}},
-			want: []string{featureCloudflareEdge, featureISR},
+			name: "each app's framework is named",
+			cfg:  &projectconfig.Config{Apps: []projectconfig.App{{Framework: "next"}, {Framework: "express"}}},
+			want: []string{"express", "next"},
 		},
 		{
-			name: "a Cloudflare-fronted Next project needs all three, named once",
-			cfg: &projectconfig.Config{
-				Edge: &projectconfig.EdgeDescriptor{Kind: "cloudflare"},
-				Apps: []projectconfig.App{{Framework: "next"}},
-			},
-			want: []string{featureCloudflareEdge, featureImageOptimization, featureISR},
-		},
-		{
-			name: "a CloudFront-fronted project needs no edge feature",
-			cfg:  &projectconfig.Config{Edge: &projectconfig.EdgeDescriptor{Kind: "cloudfront"}},
+			name: "two apps on one framework name it once",
+			cfg:  &projectconfig.Config{Apps: []projectconfig.App{{Framework: "next"}, {Framework: "next"}}},
+			want: []string{"next"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := configuredFeatures(tc.cfg)
+			got := projectFrameworks(tc.cfg)
 			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("configuredFeatures = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestRequiredFeatures(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name     string
-		cfg      *projectconfig.Config
-		manifest *contractv1.Manifest
-		want     []string
-	}{
-		{
-			name:     "a root app the config never declares is read off the build",
-			cfg:      &projectconfig.Config{},
-			manifest: &contractv1.Manifest{Apps: []*contractv1.ManifestApp{{Name: "web", Framework: "next"}}},
-			want:     []string{featureImageOptimization, featureISR},
-		},
-		{
-			name:     "a function carrying the framework counts too",
-			cfg:      &projectconfig.Config{},
-			manifest: &contractv1.Manifest{Functions: []*contractv1.ManifestFunction{{LogicalName: "server", Framework: "next"}}},
-			want:     []string{featureImageOptimization, featureISR},
-		},
-		{
-			name:     "a build with no framework at all needs nothing",
-			cfg:      &projectconfig.Config{},
-			manifest: &contractv1.Manifest{Apps: []*contractv1.ManifestApp{{Name: "api", Framework: "express"}}},
-		},
-		{
-			name:     "what the config asks for and what the build found are both carried",
-			cfg:      &projectconfig.Config{Edge: &projectconfig.EdgeDescriptor{Kind: "cloudflare"}},
-			manifest: &contractv1.Manifest{Apps: []*contractv1.ManifestApp{{Name: "web", Framework: "next"}}},
-			want:     []string{featureCloudflareEdge, featureImageOptimization, featureISR},
-		},
-		{
-			name:     "a name both sides derive is named once",
-			cfg:      &projectconfig.Config{Apps: []projectconfig.App{{Framework: "next"}}},
-			manifest: &contractv1.Manifest{Apps: []*contractv1.ManifestApp{{Name: "web", Framework: "next"}}},
-			want:     []string{featureImageOptimization, featureISR},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := requiredFeatures(tc.cfg, tc.manifest)
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("requiredFeatures = %v, want %v", got, tc.want)
+				t.Errorf("projectFrameworks = %v, want %v", got, tc.want)
 			}
 		})
 	}

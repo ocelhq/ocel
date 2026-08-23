@@ -14,6 +14,9 @@ const (
 	FeatureISR               = "isr"
 	FeatureImageOptimization = "image-optimization"
 	FeatureCloudflareEdge    = "cloudflare-edge"
+
+	needsFrameworkPrefix = "framework:"
+	needsEdgePrefix      = "edge:"
 )
 
 type stackRefs struct {
@@ -50,6 +53,7 @@ type feature struct {
 	name      string
 	summary   string
 	dependsOn []string
+	needs     []string
 
 	template   func(featureInputs) featureStack
 	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
@@ -131,6 +135,28 @@ func (s FeatureSet) Missing(required []string) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+func RequiredFeatures(frameworks []string, edgeKind string) ([]string, error) {
+	var needed []string
+	for _, f := range featureRegistry {
+		if f.needed(frameworks, edgeKind) {
+			needed = append(needed, f.name)
+		}
+	}
+	return resolveFeatures(needed)
+}
+
+func (f feature) needed(frameworks []string, edgeKind string) bool {
+	for _, need := range f.needs {
+		if id, ok := strings.CutPrefix(need, needsFrameworkPrefix); ok && slices.Contains(frameworks, id) {
+			return true
+		}
+		if kind, ok := strings.CutPrefix(need, needsEdgePrefix); ok && kind == edgeKind && edgeKind != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveFeatures(names []string) ([]string, error) {

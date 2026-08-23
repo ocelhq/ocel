@@ -221,8 +221,6 @@ message DeployRequest {
   string tag = 3 [(buf.validate.field).string = {pattern: "^[A-Za-z0-9._-]*$", max_len: 64}];
 
   EdgeSelection edge = 4;
-
-  repeated string required_features = 5;
 }
 
 message BootstrapRequest {
@@ -397,7 +395,7 @@ message PreflightRequest {
 
   EdgeSelection edge = 4;
 
-  repeated string required_features = 5;
+  repeated string frameworks = 5;
 }
 
 message PreflightResponse {

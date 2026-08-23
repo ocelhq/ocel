@@ -221,6 +221,11 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 	preview := env.GetTier() == environmentv1.Tier_TIER_PREVIEW
 	bootstrapCmd := bootstrapCommand(preview)
 
+	required, err := bootstrap.RequiredFeatures(manifestFrameworks(manifest), req.GetEdge().GetKind())
+	if err != nil {
+		return deploy.Result{}, finishPreparing(connect.NewError(connect.CodeInvalidArgument, err))
+	}
+
 	progress(progressv1.Phase_PHASE_UNSPECIFIED, "Checking account bootstrap", 0, 0)
 	deployed, err := s.deployed(ctx, cfn, opts.Region, preview)
 	if err != nil {
@@ -230,10 +235,10 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 	if err := compat.Explain(deployed.Schema, bootstrap.RequiredSchema, bootstrapCmd); err != nil {
 		return deploy.Result{}, finishPreparing(err)
 	}
-	if err := missingFeatures(deployed, req.GetRequiredFeatures(), preview); err != nil {
+	if err := missingFeatures(deployed, required, preview); err != nil {
 		return deploy.Result{}, finishPreparing(err)
 	}
-	healed, err := s.healBootstrap(ctx, awscfg, deployed, req.GetRequiredFeatures(), preview, logf)
+	healed, err := s.healBootstrap(ctx, awscfg, deployed, required, preview, logf)
 	if err != nil {
 		logf(fmt.Sprintf("could not refresh this account's bootstrap, and this deploy runs against it as it stands: %v", err))
 	}
@@ -243,7 +248,7 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 			return deploy.Result{}, finishPreparing(err)
 		}
 	}
-	if drift := driftReport(deployed, req.GetRequiredFeatures(), bootstrapCmd); drift != "" {
+	if drift := driftReport(deployed, required, bootstrapCmd); drift != "" {
 		logf(drift)
 	}
 	if deployed.StateBucket == "" {
@@ -354,7 +359,7 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		Pulumi:           pulumiCmd,
 		Secrets:          secretsmanager.NewFromConfig(awscfg),
 		Stacks:           stacks,
-		RequiredFeatures: req.GetRequiredFeatures(),
+		RequiredFeatures: required,
 		StateTable:       deployed.StateTable,
 		StateTableARN:    stateTableARN,
 
@@ -588,6 +593,22 @@ func bootstrapCommand(preview bool) string {
 		return "ocel bootstrap --preview"
 	}
 	return "ocel bootstrap"
+}
+
+func manifestFrameworks(manifest *contractv1.Manifest) []string {
+	var frameworks []string
+	for _, app := range manifest.GetApps() {
+		if app.GetFramework() != "" {
+			frameworks = append(frameworks, app.GetFramework())
+		}
+	}
+	for _, fn := range manifest.GetFunctions() {
+		if fn.GetFramework() != "" {
+			frameworks = append(frameworks, fn.GetFramework())
+		}
+	}
+	slices.Sort(frameworks)
+	return slices.Compact(frameworks)
 }
 
 func missingFeatures(deployed bootstrap.Deployed, required []string, preview bool) error {

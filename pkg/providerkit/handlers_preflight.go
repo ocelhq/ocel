@@ -29,7 +29,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	}
 	resp.Identity = identityProto(provider.Vendor(), identity)
 
-	required, err := RequiredFeatures(provider.Bootstrap().Catalogue(), nil, req.GetEdge().GetKind())
+	required, err := RequiredFeatures(provider.Bootstrap().Catalogue(), req.GetFrameworks(), req.GetEdge().GetKind())
 	if err != nil {
 		return nil, refusalError(err)
 	}
