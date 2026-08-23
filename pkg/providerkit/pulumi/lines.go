@@ -1,15 +1,17 @@
-package deploy
+package pulumi
 
 import (
 	"bytes"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-func lineWriter(log func(string)) *lineForwarder {
-	if log == nil {
+func detailWriter(report providerkit.Reporter) *lineForwarder {
+	if report == nil {
 		return nil
 	}
-	return &lineForwarder{log: log}
+	return &lineForwarder{log: report.Detail}
 }
 
 type lineForwarder struct {

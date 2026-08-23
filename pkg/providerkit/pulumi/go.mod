@@ -3,6 +3,7 @@ module github.com/ocelhq/ocel/pkg/providerkit/pulumi
 go 1.26.6
 
 require (
+	github.com/blang/semver v3.5.1+incompatible
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
 	github.com/pulumi/pulumi/sdk/v3 v3.251.0
@@ -24,7 +25,6 @@ require (
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
-	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/bubbles v1.0.0 // indirect

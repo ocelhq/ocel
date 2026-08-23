@@ -12,7 +12,6 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -40,7 +39,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
-	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
@@ -272,7 +270,6 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 	var (
 		params         bootstrap.ClassParams
 		account        string
-		pulumiCmd      auto.PulumiCommand
 		varsReferenced map[values.Coordinate]string
 		stackRecord    domains.StackRecord
 		wildcard       domains.PreviewWildcard
@@ -307,11 +304,9 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		return err
 	})
 	group.Go(func() error {
-		var err error
-		pulumiCmd, err = pulumiruntime.Ensure(gctx, func(m string) {
+		return deploy.EnsurePulumi(gctx, func(m string) {
 			progress(progressv1.Phase_PHASE_UPLOADING, m, 0, 0)
 		})
-		return err
 	})
 	if err := group.Wait(); err != nil {
 		return deploy.Result{}, finishPreparing(err)
@@ -376,7 +371,6 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		BackendURL:       naming.StateBackendURL(deployed.StateBucket, manifest.GetSlug()),
 		Passphrase:       params.Passphrase,
 		PulumiProject:    naming.PulumiProject(manifest.GetSlug()),
-		Pulumi:           pulumiCmd,
 		Secrets:          secretsmanager.NewFromConfig(awscfg),
 		Stacks:           stacks,
 		RequiredFeatures: required,

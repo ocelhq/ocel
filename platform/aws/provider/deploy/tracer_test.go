@@ -85,7 +85,7 @@ func TestSpanUnderMintsAFreshIDDistinctFromItsParent(t *testing.T) {
 
 	ft := &fakeTracer{}
 	parent := NewRootStage("Provisioning")
-	spanUnder(ft, parent.ID, engineBatchSpanName, time.Unix(0, 0), time.Unix(1, 0), nil)
+	spanUnder(ft, parent.ID, "pulumi resource operations", time.Unix(0, 0), time.Unix(1, 0), nil)
 
 	if len(ft.spans) != 1 {
 		t.Fatalf("got %d spans, want 1", len(ft.spans))

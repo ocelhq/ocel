@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"runtime/debug"
 	"strconv"
@@ -10,10 +9,6 @@ import (
 
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -21,6 +16,7 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func runInfraStack(ctx context.Context, cfg Config, in stackInputs, manifest *contractv1.Manifest, plan Plan, log func(string)) ([]*linksv1.Link, error) {
@@ -56,34 +52,30 @@ func runInfraStack(ctx context.Context, cfg Config, in stackInputs, manifest *co
 		return nil
 	}
 
-	stack, err := prepareStack(ctx, cfg, in.realized, plan.InfraStack, infraStackTags(cfg, plan.InfraStack), program)
-	if err != nil {
-		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
-	}
-	if err := refuseHandover(ctx, stack, manifest, plan.InfraStack); err != nil {
+	if err := refuseHandover(ctx, in.release, refFor(cfg, plan.InfraStack), manifest); err != nil {
 		return nil, err
 	}
 
-	res, err := runStack(ctx, cfg, stack, log, cfg.Stages.Provisioning.ID)
+	outputs, err := upStack(ctx, cfg, in, plan.InfraStack, infraStackTags(cfg, plan.InfraStack), program, log, cfg.Stages.Provisioning.ID)
 	if err != nil {
 		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
 	}
-	return collectLinks(ctx, cfg.Secrets, in.sessions, manifest, res.Outputs)
+	return collectLinks(ctx, cfg.Secrets, in.sessions, manifest, outputs)
 }
 
-func refuseHandover(ctx context.Context, stack auto.Stack, manifest *contractv1.Manifest, name naming.StackName) error {
+func refuseHandover(ctx context.Context, release *Releaser, ref providerkit.StackRef, manifest *contractv1.Manifest) error {
 	if len(linkedResources(manifest)) == 0 {
 		return nil
 	}
-	outputs, err := stack.Outputs(ctx)
+	outputs, err := release.Outputs(ctx, ref, nil)
 	if err != nil {
-		return fmt.Errorf("read what infra stack %s already provisions: %w", name, err)
+		return err
 	}
 	provisioned := make(map[string]bool, len(outputs))
 	for logical := range outputs {
 		provisioned[logical] = true
 	}
-	return handedOver(manifest, provisioned, name.String())
+	return handedOver(manifest, provisioned, ref.Name.String())
 }
 
 func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *contractv1.Manifest, plan Plan, app *contractv1.ManifestApp, id Identity, baked appBundle, builds appBuilds, links []*linksv1.Link, stage Stage, log func(string)) (outs []*progressv1.FunctionOutput, names map[string]string, err error) {
@@ -160,12 +152,12 @@ func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *cont
 		}.register(pctx)
 	}
 
-	res, upErr := upStack(ctx, cfg, in.realized, stack, stackTags(cfg, stack, plan.Promotion.PromotionID, id.DeploymentID(), builds.ids[name]), program, log, stage.ID)
+	outputs, upErr := upStack(ctx, cfg, in, stack, stackTags(cfg, stack, plan.Promotion.PromotionID, id.DeploymentID(), builds.ids[name]), program, log, stage.ID)
 	if upErr != nil {
 		err = fmt.Errorf("provision app-deploy stack %s: %w", stack, upErr)
 		return nil, nil, err
 	}
-	outs, names, err = collectAppFunctionOutputs(functions, res.Outputs)
+	outs, names, err = collectAppFunctionOutputs(functions, outputs)
 	return outs, names, err
 }
 
@@ -222,135 +214,20 @@ func expiresAt(unix int64) string {
 	return strconv.FormatInt(unix, 10)
 }
 
-func applyDefaultTags(ctx context.Context, stack auto.Stack, tags map[string]string) error {
-	if len(tags) == 0 {
-		return nil
-	}
-	encoded, err := json.Marshal(map[string]map[string]string{"tags": tags})
-	if err != nil {
-		return fmt.Errorf("render default tags: %w", err)
-	}
-	ws := stack.Workspace()
-	settings, err := ws.StackSettings(ctx, stack.Name())
-	if err != nil {
-		settings = &workspace.ProjectStack{}
-	}
-	if settings.Config == nil {
-		settings.Config = config.Map{}
-	}
-	settings.Config[config.MustMakeKey("aws", "defaultTags")] = config.NewObjectValue(string(encoded))
-	if err := ws.SaveStackSettings(ctx, stack.Name(), settings); err != nil {
-		return fmt.Errorf("stamp default tags on %s: %w", stack.Name(), err)
-	}
-	return nil
+func refFor(cfg Config, name naming.StackName) providerkit.StackRef {
+	return providerkit.StackRef{Project: naming.Sanitize(cfg.Slug), Class: classOf(cfg.Tier), Name: name}
 }
 
-const resourceLatencyOutlierThreshold = 30 * time.Second
-
-const engineDrainGrace = 30 * time.Second
-
-func startEngineTraceDrain(engineEvents <-chan events.EngineEvent, threshold time.Duration) <-chan EngineTrace {
-	result := make(chan EngineTrace, 1)
-	go func() {
-		b := newEngineTraceBuilder(threshold)
-		for ev := range engineEvents {
-			b.consume(ev, time.Now())
-		}
-		result <- b.result()
-	}()
-	return result
+func classOf(tier environmentv1.Tier) providerkit.Class {
+	if tier == environmentv1.Tier_TIER_PREVIEW {
+		return providerkit.ClassPreview
+	}
+	return providerkit.ClassProduction
 }
 
-func awaitEngineTrace(result <-chan EngineTrace, grace time.Duration) EngineTrace {
-	select {
-	case trace := <-result:
-		return trace
-	case <-time.After(grace):
-		return EngineTrace{}
-	}
-}
-
-func upStack(ctx context.Context, cfg Config, realized *Realized, name naming.StackName, tags map[string]string, program pulumi.RunFunc, log func(string), parentStage StageID) (auto.UpResult, error) {
-	stack, err := prepareStack(ctx, cfg, realized, name, tags, program)
-	if err != nil {
-		return auto.UpResult{}, err
-	}
-	return runStack(ctx, cfg, stack, log, parentStage)
-}
-
-func prepareStack(ctx context.Context, cfg Config, realized *Realized, name naming.StackName, tags map[string]string, program pulumi.RunFunc) (auto.Stack, error) {
-	access := cfg.pulumiAccess()
-	stack, err := auto.UpsertStackInlineSource(ctx, name.String(), access.PulumiProject, program, access.workspace()...)
-	if err != nil {
-		return auto.Stack{}, fmt.Errorf("prepare stack %s: %w", name, err)
-	}
-
-	if err := applyDefaultTags(ctx, stack, tags); err != nil {
-		return auto.Stack{}, err
-	}
-
-	index, err := stackIndex(cfg.Stacks)
-	if err != nil {
-		return auto.Stack{}, err
-	}
-	if err := realized.realize(ctx, index, naming.Sanitize(cfg.Slug), name); err != nil {
-		return auto.Stack{}, err
-	}
-
-	if err := stampExpiry(ctx, stack, cfg.ExpiresAt); err != nil {
-		return auto.Stack{}, err
-	}
-	return stack, nil
-}
-
-func runStack(ctx context.Context, cfg Config, stack auto.Stack, log func(string), parentStage StageID) (auto.UpResult, error) {
-	logWriter := lineWriter(log)
-	upOpts := []optup.Option{optup.Parallel(64)}
-	if logWriter != nil {
-		upOpts = append(upOpts, optup.ProgressStreams(logWriter))
-	}
-
-	engineEvents := make(chan events.EngineEvent, 256)
-	traceResult := startEngineTraceDrain(engineEvents, resourceLatencyOutlierThreshold)
-	upOpts = append(upOpts, optup.EventStreams(engineEvents))
-
-	upStart := time.Now()
-	res, err := stack.Up(ctx, upOpts...)
-	upEnd := time.Now()
-	logWriter.Flush()
-
-	trace := awaitEngineTrace(traceResult, engineDrainGrace)
-	if trace.Start.IsZero() {
-		trace.Start, trace.End = upStart, upEnd
-	}
-	emitEngineTrace(cfg.Tracer, parentStage, trace, err)
-	return res, err
-}
-
-func emitEngineTrace(t Tracer, parentStage StageID, trace EngineTrace, upErr error) {
-	if t == nil || (trace.ResourceCount == 0 && upErr == nil) {
-		return
-	}
-	batchErr := upErr
-	if batchErr == nil && trace.Failed {
-		batchErr = errEngineTraceFailed
-	}
-	spanUnder(t, parentStage, engineBatchSpanName, trace.Start, trace.End, batchErr, AttrResourceCount(trace.ResourceCount))
-
-	for _, s := range trace.Standouts {
-		var standoutErr error
-		if s.Failed {
-			standoutErr = errEngineTraceFailed
-		}
-		attrs := []Attr{AttrDurationMS(s.End.Sub(s.Start))}
-		if s.Type != "" {
-			attrs = append(attrs, AttrResourceType(s.Type))
-		}
-		if s.Name != "" {
-			attrs = append(attrs, AttrResourceName(s.Name))
-		}
-		spanUnder(t, parentStage, resourceStandoutName(s.Op, s.Failed), s.Start, s.End, standoutErr, attrs...)
-	}
+func upStack(ctx context.Context, cfg Config, in stackInputs, name naming.StackName, tags map[string]string, program pulumi.RunFunc, log func(string), parentStage StageID) (auto.OutputMap, error) {
+	report := reporterFor(cfg.Tracer, parentStage, nil, log)
+	return in.release.up(ctx, refFor(cfg, name), tags, program, report)
 }
 
 func collectLinks(ctx context.Context, secrets SecretsReader, sessions sessionScope, manifest *contractv1.Manifest, outputs auto.OutputMap) ([]*linksv1.Link, error) {

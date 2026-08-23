@@ -6,8 +6,14 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -16,7 +22,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-const passphraseEnvVar = "PULUMI_CONFIG_PASSPHRASE"
+const (
+	passphraseEnvVar = "PULUMI_CONFIG_PASSPHRASE"
+	backendEnvVar    = "PULUMI_BACKEND_URL"
+)
+
+const DefaultParallel = 64
+
+type Op string
+
+const (
+	OpProvision Op = "provision"
+	OpDestroy   Op = "destroy"
+)
 
 type Access struct {
 	BackendURL string
@@ -36,10 +54,28 @@ type Configurer interface {
 	Configure(ctx context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error)
 }
 
+type Decoder interface {
+	Decode(ctx context.Context, plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error)
+}
+
+type Engine interface {
+	Up(ctx context.Context, setup Setup, report providerkit.Reporter) (auto.OutputMap, error)
+
+	Destroy(ctx context.Context, setup Setup, report providerkit.Reporter) error
+
+	Outputs(ctx context.Context, setup Setup) (auto.OutputMap, error)
+}
+
 type Config struct {
 	Access Access
 
 	Program Program
+
+	Parallel int
+
+	Refresh func(ref providerkit.StackRef, op Op) bool
+
+	Engine Engine
 }
 
 type Adapter struct {
@@ -60,14 +96,30 @@ func (a *Adapter) ProjectName(ref providerkit.StackRef) string {
 }
 
 type Setup struct {
+	Ref providerkit.StackRef
+
+	Stack string
+
 	Project workspace.Project
+
+	Program pulumi.RunFunc
 
 	EnvVars map[string]string
 
 	Options []auto.LocalWorkspaceOption
+
+	Config auto.ConfigMap
+
+	Parallel int
+
+	Refresh bool
 }
 
 func (a *Adapter) Workspace(plan providerkit.StackPlan) (Setup, error) {
+	return a.workspace(plan, OpProvision)
+}
+
+func (a *Adapter) workspace(plan providerkit.StackPlan, op Op) (Setup, error) {
 	access := a.config.Access
 	switch {
 	case access.BackendURL == "":
@@ -90,8 +142,13 @@ func (a *Adapter) Workspace(plan providerkit.StackPlan) (Setup, error) {
 	program := func(ctx *pulumi.Context) error { return a.config.Program.Run(ctx, plan) }
 
 	return Setup{
-		Project: project,
-		EnvVars: env,
+		Ref:      plan.Ref,
+		Stack:    a.StackName(plan.Ref),
+		Project:  project,
+		Program:  program,
+		EnvVars:  env,
+		Parallel: a.parallel(),
+		Refresh:  a.refreshes(plan.Ref, op),
 		Options: []auto.LocalWorkspaceOption{
 			auto.Project(project),
 			auto.EnvVars(env),
@@ -101,8 +158,24 @@ func (a *Adapter) Workspace(plan providerkit.StackPlan) (Setup, error) {
 	}, nil
 }
 
+func (a *Adapter) parallel() int {
+	if a.config.Parallel > 0 {
+		return a.config.Parallel
+	}
+	return DefaultParallel
+}
+
+func (a *Adapter) refreshes(ref providerkit.StackRef, op Op) bool {
+	return a.config.Refresh != nil && a.config.Refresh(ref, op)
+}
+
 func (a *Adapter) env() map[string]string {
-	env := map[string]string{passphraseEnvVar: a.config.Access.Passphrase}
+	env := map[string]string{
+		passphraseEnvVar:           a.config.Access.Passphrase,
+		backendEnvVar:              a.config.Access.BackendURL,
+		"PULUMI_SKIP_CHECKPOINTS":  "true",
+		"PULUMI_SKIP_UPDATE_CHECK": "true",
+	}
 	for _, key := range slices.Sorted(maps.Keys(a.config.Access.Env)) {
 		env[key] = a.config.Access.Env[key]
 	}
@@ -120,20 +193,212 @@ func (a *Adapter) Stack(ctx context.Context, plan providerkit.StackPlan) (auto.C
 	return configurer.Configure(ctx, plan)
 }
 
-func (a *Adapter) Run(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.StackResult, error) {
-	if _, err := a.Stack(ctx, plan); err != nil {
-		return providerkit.StackResult{}, err
+func (a *Adapter) setup(ctx context.Context, plan providerkit.StackPlan, op Op, report providerkit.Reporter) (Setup, error) {
+	setup, err := a.workspace(plan, op)
+	if err != nil {
+		return Setup{}, err
 	}
-	return providerkit.StackResult{}, providerkit.Refuse(providerkit.CodeNotReady,
-		"the pulumi adapter sets a workspace up but runs no engine yet, so %s is not stood up here", plan.Ref.Name)
+	if setup.Config, err = a.Stack(ctx, plan); err != nil {
+		return Setup{}, err
+	}
+	if a.config.Engine == nil {
+		command, err := pinned.install(ctx, report)
+		if err != nil {
+			return Setup{}, err
+		}
+		setup.Options = append(setup.Options, auto.Pulumi(command))
+	}
+	return setup, nil
 }
 
-func (a *Adapter) Destroy(ctx context.Context, ref providerkit.StackRef, _ providerkit.Reporter) error {
-	if _, err := a.Workspace(providerkit.StackPlan{Ref: ref}); err != nil {
+func (a *Adapter) engine() Engine {
+	if a.config.Engine != nil {
+		return a.config.Engine
+	}
+	return autoEngine{}
+}
+
+func (a *Adapter) Run(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+	setup, err := a.setup(ctx, plan, OpProvision, report)
+	if err != nil {
+		return providerkit.StackResult{}, err
+	}
+	outputs, err := a.engine().Up(ctx, setup, report)
+	if err != nil {
+		return providerkit.StackResult{}, busy(err, setup)
+	}
+	decoder, decodes := a.config.Program.(Decoder)
+	if !decodes {
+		return providerkit.StackResult{}, nil
+	}
+	return decoder.Decode(ctx, plan, outputs)
+}
+
+func (a *Adapter) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, report)
+	if err != nil {
 		return err
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
-		"the pulumi adapter sets a workspace up but runs no engine yet, so %s is not taken down here", ref.Name)
+	if err := a.engine().Destroy(ctx, setup, report); err != nil {
+		return busy(err, setup)
+	}
+	return nil
+}
+
+func (a *Adapter) Outputs(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (auto.OutputMap, error) {
+	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpProvision, report)
+	if err != nil {
+		return nil, err
+	}
+	return a.engine().Outputs(ctx, setup)
+}
+
+const lockedMessage = "the stack is currently locked"
+
+func busy(err error, setup Setup) error {
+	if err == nil || !strings.Contains(err.Error(), lockedMessage) {
+		return err
+	}
+	return providerkit.Refuse(providerkit.CodeBusy,
+		"%s is locked by a run that is either still working or was killed."+
+			"\n\nconfirm no deploy or teardown is running against this stack, then release it with:"+
+			"\n  PULUMI_BACKEND_URL=%s PULUMI_CONFIG_PASSPHRASE=<the account passphrase> pulumi cancel --stack %s"+
+			"\nand run this again",
+		setup.Stack, setup.Project.Backend.URL, setup.Stack)
+}
+
+type autoEngine struct{}
+
+func (autoEngine) Up(ctx context.Context, setup Setup, report providerkit.Reporter) (auto.OutputMap, error) {
+	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
+	if err != nil {
+		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
+	}
+	if err := applyConfig(ctx, stack, setup.Config); err != nil {
+		return nil, err
+	}
+
+	lines := detailWriter(report)
+	opts := []optup.Option{optup.Parallel(setup.Parallel)}
+	if lines != nil {
+		opts = append(opts, optup.ProgressStreams(lines))
+	}
+	if setup.Refresh {
+		opts = append(opts, optup.Refresh())
+	}
+
+	engineEvents := make(chan events.EngineEvent, 256)
+	traced := drainTrace(engineEvents, resourceLatencyOutlierThreshold)
+	opts = append(opts, optup.EventStreams(engineEvents))
+
+	start := time.Now()
+	res, upErr := stack.Up(ctx, opts...)
+	end := time.Now()
+	lines.Flush()
+
+	trace := awaitTrace(traced, engineDrainGrace)
+	if trace.Start.IsZero() {
+		trace.Start, trace.End = start, end
+	}
+	reportTrace(report, trace, upErr)
+
+	if upErr != nil {
+		return nil, fmt.Errorf("provision stack %s: %w", setup.Stack, upErr)
+	}
+	return res.Outputs, nil
+}
+
+func (autoEngine) Destroy(ctx context.Context, setup Setup, report providerkit.Reporter) error {
+	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
+	if auto.IsSelectStack404Error(err) {
+		if report != nil {
+			report.Say("No stack " + setup.Stack + " to destroy")
+		}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("select stack %s: %w", setup.Stack, err)
+	}
+
+	if report != nil {
+		report.Say("Destroying resources (this can take several minutes)")
+	}
+	lines := detailWriter(report)
+	opts := []optdestroy.Option{optdestroy.Parallel(setup.Parallel)}
+	if lines != nil {
+		opts = append(opts, optdestroy.ProgressStreams(lines))
+	}
+	if setup.Refresh {
+		opts = append(opts, optdestroy.Refresh())
+	}
+	if _, err := stack.Destroy(ctx, opts...); err != nil {
+		lines.Flush()
+		return fmt.Errorf("destroy stack %s: %w", setup.Stack, err)
+	}
+	lines.Flush()
+
+	if err := stack.Workspace().RemoveStack(ctx, setup.Stack); err != nil {
+		return fmt.Errorf("remove stack %s: %w", setup.Stack, err)
+	}
+	return nil
+}
+
+func (autoEngine) Outputs(ctx context.Context, setup Setup) (auto.OutputMap, error) {
+	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
+	if auto.IsSelectStack404Error(err) {
+		return auto.OutputMap{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("select stack %s: %w", setup.Stack, err)
+	}
+	outputs, err := stack.Outputs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read what stack %s already provisions: %w", setup.Stack, err)
+	}
+	return outputs, nil
+}
+
+func applyConfig(ctx context.Context, stack auto.Stack, values auto.ConfigMap) error {
+	if len(values) == 0 {
+		return nil
+	}
+	ws := stack.Workspace()
+	settings, err := ws.StackSettings(ctx, stack.Name())
+	if err != nil {
+		settings = &workspace.ProjectStack{}
+	}
+	if settings.Config == nil {
+		settings.Config = config.Map{}
+	}
+	for _, name := range slices.Sorted(maps.Keys(values)) {
+		key, err := config.ParseKey(name)
+		if err != nil {
+			return fmt.Errorf("read config key %s: %w", name, err)
+		}
+		settings.Config[key] = configValue(values[name])
+	}
+	if err := ws.SaveStackSettings(ctx, stack.Name(), settings); err != nil {
+		return fmt.Errorf("configure %s: %w", stack.Name(), err)
+	}
+	return nil
+}
+
+func configValue(value auto.ConfigValue) config.Value {
+	if value.Secret {
+		return config.NewSecureValue(value.Value)
+	}
+	if structured(value.Value) {
+		return config.NewObjectValue(value.Value)
+	}
+	return config.NewValue(value.Value)
+}
+
+func structured(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") {
+		return false
+	}
+	return json.Valid([]byte(trimmed))
 }
 
 func Decode[T any](outputs auto.OutputMap) (T, error) {

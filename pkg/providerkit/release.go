@@ -37,6 +37,8 @@ type StackPlan struct {
 	Links LinkReader
 
 	App *AppPlan
+
+	Options any
 }
 
 type LinkReader interface {

@@ -21,7 +21,6 @@ import (
 	awscontrol "github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
-	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -326,11 +325,6 @@ func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts p
 	if params.PassphraseErr != nil {
 		return teardownContext{}, nil, params.PassphraseErr
 	}
-	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
-	if err != nil {
-		return teardownContext{}, nil, err
-	}
-
 	envName, err := deploy.EnvScope(env)
 	if err != nil {
 		return teardownContext{}, nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -343,7 +337,6 @@ func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts p
 				BackendURL:    naming.StateBackendURL(deployed.StateBucket, slug),
 				Passphrase:    params.Passphrase,
 				PulumiProject: naming.PulumiProject(slug),
-				Command:       pulumiCmd,
 			},
 			Slug:   slug,
 			Env:    envName,

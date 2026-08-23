@@ -28,8 +28,8 @@ func runPorts(t *testing.T, suite Suite) {
 	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, provider.Records()) })
 	t.Run("Sealer", func(t *testing.T) { RunSealer(t, provider.Sealer()) })
 	t.Run("Bootstrapper", func(t *testing.T) { RunBootstrapper(t, provider.Bootstrap()) })
-	t.Run("ArtifactStore", func(t *testing.T) { runArtifactStore(t, provider.Artifacts()) })
-	t.Run("Releaser", func(t *testing.T) { runReleaser(t, provider) })
+	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, provider.Artifacts()) })
+	t.Run("Releaser", func(t *testing.T) { RunReleaser(t, provider.Releases(), provider.Serves()) })
 	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, provider.Credentials()) })
 	t.Run("EdgeRegistry", func(t *testing.T) { RunEdgeRegistry(t, provider.Edges()) })
 	t.Run("DNSRegistry", func(t *testing.T) { RunDNSRegistry(t, provider.DNS()) })
@@ -357,7 +357,9 @@ func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
 	})
 }
 
-func runArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
+func RunArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
+	t.Helper()
+
 	ctx := context.Background()
 	ref := providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
 	body := []byte("a build artifact")
@@ -408,9 +410,10 @@ func runArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
 	})
 }
 
-func runReleaser(t *testing.T, provider providerkit.Provider) {
+func RunReleaser(t *testing.T, releaser providerkit.Releaser, serves []providerkit.LinkType) {
+	t.Helper()
+
 	ctx := context.Background()
-	releaser := provider.Releases()
 	ref := providerkit.StackRef{
 		Project: "conformance",
 		Class:   providerkit.ClassPreview,
@@ -427,7 +430,7 @@ func runReleaser(t *testing.T, provider providerkit.Provider) {
 
 	t.Run("every link a plan asks for comes back carrying the properties its type promises", func(t *testing.T) {
 		var resources []providerkit.Resource
-		for _, kind := range provider.Serves() {
+		for _, kind := range serves {
 			resources = append(resources, providerkit.Resource{Name: "c-" + string(kind), Type: kind})
 		}
 		if len(resources) == 0 {

@@ -91,6 +91,8 @@ var attributeKeys = map[string]progressv1.AttributeKey{
 	AttrKeyErrorKind:     progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND,
 }
 
+func AttributeKey(key string) progressv1.AttributeKey { return attributeKeys[key] }
+
 func AttrApp(name string) Attr {
 	return Attr{AttrKeyApp, name}
 }
