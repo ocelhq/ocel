@@ -1,9 +1,8 @@
 package deploy
 
 import (
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-
 	"github.com/ocelhq/ocel/pkg/naming"
+	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -12,15 +11,6 @@ type PulumiAccess struct {
 	BackendURL    string
 	Passphrase    string
 	PulumiProject string
-	Command       auto.PulumiCommand
-}
-
-func (p PulumiAccess) workspace() []auto.LocalWorkspaceOption {
-	return []auto.LocalWorkspaceOption{
-		auto.Pulumi(p.Command),
-		auto.SecretsProvider("passphrase"),
-		auto.EnvVars(pulumiEnv(p.Region, p.BackendURL, p.Passphrase)),
-	}
 }
 
 type ObjectStores struct {
@@ -51,6 +41,7 @@ type ISRWriterAccess struct {
 
 type Teardown struct {
 	Pulumi   PulumiAccess
+	engine   kitpulumi.Engine
 	Slug     string
 	Env      string
 	Stacks   StackIndex
@@ -65,12 +56,12 @@ func (t Teardown) project() string {
 
 func (t Teardown) forStack(name naming.StackName) StackTeardown {
 	return StackTeardown{
-		Pulumi:      t.Pulumi,
-		Project:     t.project(),
-		Stack:       name,
-		Stacks:      t.Stacks,
-		SkipRefresh: skipTeardownRefresh(),
-		Realized:    t.Realized,
+		Pulumi:   t.Pulumi,
+		engine:   t.engine,
+		Project:  t.project(),
+		Stack:    name,
+		Stacks:   t.Stacks,
+		Realized: t.Realized,
 	}
 }
 
@@ -83,16 +74,6 @@ type ProjectTeardown struct {
 	Teardown
 	Values ValueStore
 	DNS    edge.DNSWriter
-}
-
-func (cfg Config) pulumiAccess() PulumiAccess {
-	return PulumiAccess{
-		Region:        cfg.Region,
-		BackendURL:    cfg.BackendURL,
-		Passphrase:    cfg.Passphrase,
-		PulumiProject: cfg.PulumiProject,
-		Command:       cfg.Pulumi,
-	}
 }
 
 func (cfg Config) objectStores() ObjectStores {

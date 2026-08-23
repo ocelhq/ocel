@@ -3,16 +3,16 @@ package deploy
 import (
 	"context"
 	"errors"
-	"io"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/blang/semver"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -34,24 +34,24 @@ func (c *teardownCalls) ordered() []string {
 	return slices.Clone(c.seen)
 }
 
-type fakePulumi struct {
+type fakeEngine struct {
 	record func(string)
 }
 
-var _ auto.PulumiCommand = (*fakePulumi)(nil)
+var _ kitpulumi.Engine = (*fakeEngine)(nil)
 
-func (f *fakePulumi) Version() semver.Version { return semver.MustParse("3.146.0") }
+func (f *fakeEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) (auto.OutputMap, error) {
+	f.record("up-stack " + setup.Stack)
+	return auto.OutputMap{}, nil
+}
 
-func (f *fakePulumi) Run(_ context.Context, _ string, _ io.Reader, _ []io.Writer, _ []io.Writer, _ []string, args ...string) (string, string, int, error) {
-	if args[0] == "destroy" {
-		if i := slices.Index(args, "--stack"); i >= 0 && i+1 < len(args) {
-			f.record("destroy-stack " + args[i+1])
-		}
-	}
-	if len(args) >= 2 && args[0] == "stack" && args[1] == "history" {
-		return "[]", "", 0, nil
-	}
-	return "", "", 0, nil
+func (f *fakeEngine) Destroy(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) error {
+	f.record("destroy-stack " + setup.Stack)
+	return nil
+}
+
+func (f *fakeEngine) Outputs(context.Context, kitpulumi.Setup) (auto.OutputMap, error) {
+	return auto.OutputMap{}, nil
 }
 
 func spanOrder(t *testing.T, spans []spanCall, stage Stage) int {
@@ -84,8 +84,8 @@ func servedProject(t *testing.T, calls *teardownCalls, stacks ...naming.StackNam
 	return ProjectTeardown{Teardown: Teardown{
 		Slug:   "shop",
 		Stacks: &fakeStackIndex{projects: []string{"shop"}, stacks: map[string][]naming.StackName{"shop": stacks}},
+		engine: &fakeEngine{record: calls.record},
 		Pulumi: PulumiAccess{
-			Command:       &fakePulumi{record: calls.record},
 			PulumiProject: "ocel",
 			Passphrase:    "teardown",
 			BackendURL:    "file://" + t.TempDir(),

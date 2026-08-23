@@ -19,6 +19,7 @@ type stackInputs struct {
 	layer       payloads.Placement
 	completer   payloads.Placement
 	realized    *Realized
+	release     *Releaser
 }
 
 type provisionedDeploy struct {
@@ -60,6 +61,7 @@ func provisionDeploy(ctx context.Context, cfg Config, realized *Realized, manife
 		layer:       up.layer,
 		completer:   up.completer,
 		realized:    realized,
+		release:     NewReleaser(cfg, realized),
 	}
 
 	index, err := stackIndex(cfg.Stacks)

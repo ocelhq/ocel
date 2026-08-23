@@ -19,7 +19,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -159,11 +158,6 @@ func (s *Server) productionTeardownDeps(ctx context.Context, opts providerConfig
 	if params.PassphraseErr != nil {
 		return teardownContext{}, params.PassphraseErr
 	}
-	pulumiCmd, err := pulumiruntime.Ensure(ctx, nil)
-	if err != nil {
-		return teardownContext{}, err
-	}
-
 	return teardownContext{
 		teardown: deploy.Teardown{
 			Pulumi: deploy.PulumiAccess{
@@ -171,7 +165,6 @@ func (s *Server) productionTeardownDeps(ctx context.Context, opts providerConfig
 				BackendURL:    naming.StateBackendURL(deployed.StateBucket, slug),
 				Passphrase:    params.Passphrase,
 				PulumiProject: naming.PulumiProject(slug),
-				Command:       pulumiCmd,
 			},
 			Slug:   slug,
 			Env:    deployEnv,

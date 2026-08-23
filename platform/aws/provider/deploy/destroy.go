@@ -3,24 +3,22 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
-
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 )
 
 type StackTeardown struct {
-	Pulumi      PulumiAccess
-	Project     string
-	Stack       naming.StackName
-	Stacks      StackIndex
-	SkipRefresh bool
-	Realized    *Realized
+	Pulumi   PulumiAccess
+	Project  string
+	Stack    naming.StackName
+	Stacks   StackIndex
+	Realized *Realized
+	engine   kitpulumi.Engine
 }
 
 func nilSafe(progress func(string)) func(string) {
@@ -51,42 +49,9 @@ func runBounded[T any](limit int, items []T, run func(T) error) []error {
 }
 
 func Destroy(ctx context.Context, cfg StackTeardown, progress, log func(string)) error {
-	report := func(f func(string), msg string) {
-		if f != nil {
-			f(msg)
-		}
-	}
-
-	index, err := stackIndex(cfg.Stacks)
-	if err != nil {
-		return err
-	}
-
-	name := cfg.Stack.String()
-
-	report(progress, "Selecting stack")
-	stack, err := auto.SelectStackInlineSource(ctx, name, cfg.Pulumi.PulumiProject, nil, cfg.Pulumi.workspace()...)
-	if auto.IsSelectStack404Error(err) {
-		report(progress, "No stack "+name+" to destroy")
-		return index.RemoveStack(ctx, cfg.Project, cfg.Stack)
-	}
-	if err != nil {
-		return fmt.Errorf("select stack %s: %w", name, err)
-	}
-
-	report(progress, "Destroying resources (this can take several minutes)")
-	logWriter := lineWriter(log)
-	if _, err := stack.Destroy(ctx, destroyOptions(cfg, logWriter)...); err != nil {
-		logWriter.Flush()
-		return fmt.Errorf("destroy stack %s: %w%s", name, err, lockRecoveryHint(err, cfg))
-	}
-	logWriter.Flush()
-
-	report(progress, "Removing stack")
-	if err := stack.Workspace().RemoveStack(ctx, name); err != nil {
-		return fmt.Errorf("remove stack %s: %w", name, err)
-	}
-	return index.RemoveStack(ctx, cfg.Project, cfg.Stack)
+	ref := providerkit.StackRef{Project: cfg.Project, Name: cfg.Stack}
+	release := releaserFor(cfg.Pulumi, cfg.Stacks, cfg.Realized, cfg.engine)
+	return release.Destroy(ctx, ref, reporterFor(nil, StageID{}, progress, log))
 }
 
 func destroyStackStage(ctx context.Context, t Teardown, stack naming.StackName, stage Stage, kind string, log func(string)) (err error) {
@@ -100,27 +65,6 @@ func destroyStackStage(ctx context.Context, t Teardown, stack naming.StackName, 
 		return err
 	}
 	return nil
-}
-
-func destroyOptions(cfg StackTeardown, logWriter *lineForwarder) []optdestroy.Option {
-	var opts []optdestroy.Option
-	if !cfg.SkipRefresh && !cfg.Realized.realizedHere(cfg.Project, cfg.Stack) {
-		opts = append(opts, optdestroy.Refresh())
-	}
-	if logWriter != nil {
-		opts = append(opts, optdestroy.ProgressStreams(logWriter))
-	}
-	return opts
-}
-
-func lockRecoveryHint(err error, cfg StackTeardown) string {
-	if err == nil || !strings.Contains(err.Error(), "the stack is currently locked") {
-		return ""
-	}
-	return fmt.Sprintf("\n\nthis lock outlives a run that was killed rather than one still working."+
-		"\nconfirm no deploy or teardown is running against this stack, then release it with:"+
-		"\n  PULUMI_BACKEND_URL=%s PULUMI_CONFIG_PASSPHRASE=<the account passphrase> pulumi cancel --stack %s"+
-		"\nand re-run the teardown", cfg.Pulumi.BackendURL, cfg.Stack)
 }
 
 type PreviewStack struct {

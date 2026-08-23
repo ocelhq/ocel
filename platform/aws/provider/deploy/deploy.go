@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -18,16 +16,6 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func pulumiEnv(region, backendURL, passphrase string) map[string]string {
-	return map[string]string{
-		"PULUMI_BACKEND_URL":       backendURL,
-		"PULUMI_CONFIG_PASSPHRASE": passphrase,
-		"AWS_REGION":               region,
-		"PULUMI_SKIP_CHECKPOINTS":  "true",
-		"PULUMI_SKIP_UPDATE_CHECK": "true",
-	}
-}
-
 type SecretsReader interface {
 	GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 }
@@ -37,7 +25,6 @@ type Config struct {
 	BackendURL    string
 	Passphrase    string
 	PulumiProject string
-	Pulumi        auto.PulumiCommand
 	Secrets       SecretsReader
 
 	Stacks StackIndex
@@ -187,14 +174,6 @@ func appURLs(manifest *contractv1.Manifest, functions []*progressv1.FunctionOutp
 		}
 	}
 	return urls
-}
-
-func stampExpiry(ctx context.Context, stack auto.Stack, expiresAt int64) error {
-	if expiresAt == 0 {
-		return nil
-	}
-	_ = stack
-	return nil
 }
 
 func collectPostgresLink(ctx context.Context, secrets SecretsReader, name string, fields map[string]any) (*linksv1.Link, error) {
