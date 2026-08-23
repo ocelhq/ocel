@@ -414,11 +414,11 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 		longest := strings.Repeat("n", maxS3BucketNameLen)
 
 		varsPolicy, err := varsReadPolicy(executionRole{
-			VarsKeyARN:   productionVarsKeyARN,
-			VarsTableARN: varsTableARN,
-			Slug:         longest,
-			VarsClass:    varsClass,
-			VarsLinks:    links,
+			VarsKeyARN:     productionVarsKeyARN,
+			ValuesTableARN: valuesTableARN,
+			Slug:           longest,
+			VarsClass:      varsClass,
+			VarsReferenced: links,
 		})
 		if err != nil {
 			t.Fatalf("varsReadPolicy: %v", err)
@@ -427,7 +427,7 @@ func TestInlinePolicyBudgetPreflight(t *testing.T) {
 			Coord:    naming.Coordinate{Project: longest, Env: longest, App: longest, Kind: naming.KindFunction, Release: fixedRelease(t)},
 			Bucket:   longest,
 			Prefix:   longest,
-			TableARN: varsTableARN,
+			TableARN: valuesTableARN,
 		})
 		if err != nil {
 			t.Fatalf("isrPolicy: %v", err)

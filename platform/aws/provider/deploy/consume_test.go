@@ -12,7 +12,7 @@ import (
 
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
@@ -128,7 +128,7 @@ func TestConsumeLinks(t *testing.T) {
 		cfg := consumingConfig("main")
 		cfg.Links = &recordingPublisher{
 			published: map[string][]string{varsClass: {"main"}},
-			resolved: map[string]vars.PublishedRecord{"main": {
+			resolved: map[string]PublishedRecord{"main": {
 				Link:    &linksv1.Link{Source: "sst", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "main"}}},
 				Version: 2,
 			}},
@@ -158,7 +158,7 @@ func TestConsumeLinks(t *testing.T) {
 		cfg := consumingConfig("main")
 		cfg.Links = &recordingPublisher{
 			published: map[string][]string{varsClass: {"main"}},
-			resolved: map[string]vars.PublishedRecord{"main": {
+			resolved: map[string]PublishedRecord{"main": {
 				Link:    &linksv1.Link{Name: "main", Source: "sst", Properties: &linksv1.Link_Custom{Custom: custom}},
 				Version: 2,
 			}},
@@ -181,7 +181,7 @@ func TestConsumeLinks(t *testing.T) {
 		cfg := consumingConfig("uploads")
 		cfg.Links = &recordingPublisher{
 			published: map[string][]string{varsClass: {"uploads"}},
-			resolved: map[string]vars.PublishedRecord{"uploads": {
+			resolved: map[string]PublishedRecord{"uploads": {
 				Link:    &linksv1.Link{Source: "sst", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "sst-uploads"}}},
 				Version: 2,
 			}},
@@ -308,7 +308,7 @@ func TestAnUnscopedPublishedGrantIsRefusedBeforeAnyCloudCall(t *testing.T) {
 	manifest := consumingManifest()
 	consumed := map[string]Consumed{"db--main": {
 		Resource: "db--main",
-		Record: vars.PublishedRecord{
+		Record: PublishedRecord{
 			Link: &linksv1.Link{
 				Name:       "main",
 				Source:     "sst",
@@ -341,7 +341,7 @@ func TestOcelNeverRepublishesABoundLink(t *testing.T) {
 	if !slices.Equal(names, []string{"bucket--uploads"}) {
 		t.Errorf("published = %v, want only what this deploy provisioned; the bound link belongs to whoever wrote it", names)
 	}
-	if publisher.owner != vars.OwnerOcel {
+	if publisher.owner != values.OwnerOcel {
 		t.Errorf("owner = %q, want ocel's publishes to prune only ocel's own inventory", publisher.owner)
 	}
 }

@@ -17,9 +17,11 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type VarsServer struct {
@@ -35,13 +37,13 @@ type stores struct {
 	openDomain  func(ctx context.Context, region string) (domainClients, error)
 
 	mu     sync.Mutex
-	cached map[storeKey]*vars.Store
+	cached map[storeKey]values.Store
 }
 
 type account struct {
 	CFN    bootstrap.CFNDescriber
-	Dynamo vars.DynamoAPI
-	KMS    vars.CryptoAPI
+	Dynamo awsports.DynamoAPI
+	KMS    awsports.CryptoAPI
 }
 
 type storeKey struct {
@@ -61,9 +63,26 @@ func awsAccount(ctx context.Context, region string) (account, error) {
 	}, nil
 }
 
-func (s *stores) store(ctx context.Context, region string, tier environmentv1.Tier) (*vars.Store, error) {
+func (s *stores) scoped(ctx context.Context, region string, tier environmentv1.Tier, slug string) (values.Store, values.Scope, error) {
 	key := storeKey{region: region, preview: tier == environmentv1.Tier_TIER_PREVIEW}
+	store, err := s.store(ctx, key)
+	if err != nil {
+		return values.Store{}, values.Scope{}, err
+	}
+	if err := values.ValidateProject(slug); err != nil {
+		return values.Store{}, values.Scope{}, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return store, values.Scope{Project: slug, Class: valueClass(key.preview)}, nil
+}
 
+func valueClass(preview bool) edge.Class {
+	if preview {
+		return edge.ClassPreview
+	}
+	return edge.ClassProduction
+}
+
+func (s *stores) store(ctx context.Context, key storeKey) (values.Store, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if store, ok := s.cached[key]; ok {
@@ -71,86 +90,85 @@ func (s *stores) store(ctx context.Context, region string, tier environmentv1.Ti
 	}
 	store, err := s.open(ctx, key)
 	if err != nil {
-		return nil, err
+		return values.Store{}, err
 	}
 	if s.cached == nil {
-		s.cached = map[storeKey]*vars.Store{}
+		s.cached = map[storeKey]values.Store{}
 	}
 	s.cached[key] = store
 	return store, nil
 }
 
-func (s *stores) open(ctx context.Context, key storeKey) (*vars.Store, error) {
+func (s *stores) open(ctx context.Context, key storeKey) (values.Store, error) {
 	reach := s.openAccount
 	if reach == nil {
 		reach = awsAccount
 	}
 	cloud, err := reach(ctx, key.region)
 	if err != nil {
-		return nil, err
+		return values.Store{}, err
 	}
 
 	bootstrapCmd := bootstrapCommand(key.preview)
 	deployed, err := checkBootstrap(ctx, cloud.CFN, key.preview)
 	if err != nil {
-		return nil, err
+		return values.Store{}, err
 	}
 	compat := bootstrap.CheckCompat(deployed.Schema, deployed.Present, bootstrap.RequiredSchema)
 	if err := compat.Explain(deployed.Schema, bootstrap.RequiredSchema, bootstrapCmd); err != nil {
-		return nil, err
+		return values.Store{}, err
 	}
-	if deployed.VarsTable == "" || deployed.VarsKeyARN == "" {
-		return nil, fmt.Errorf("account bootstrap is present but its variable store is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+	if deployed.StateTable == "" || deployed.VarsKeyARN == "" {
+		return values.Store{}, fmt.Errorf("account bootstrap is present but its variable store is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
+	return valueStore(cloud.Dynamo, cloud.KMS, deployed), nil
+}
 
-	class := bootstrap.ClassProduction
-	if key.preview {
-		class = bootstrap.ClassPreview
+func valueStore(ddb awsports.DynamoAPI, crypto awsports.CryptoAPI, deployed bootstrap.Deployed) values.Store {
+	return values.Store{
+		Records: awsports.Records{Dynamo: ddb, Table: deployed.StateTable},
+		Sealer:  awsports.Sealer{KMS: crypto, KeyARN: deployed.VarsKeyARN},
 	}
-	return &vars.Store{
-		Dynamo: cloud.Dynamo,
-		KMS:    cloud.KMS,
-		Table:  deployed.VarsTable,
-		KeyARN: deployed.VarsKeyARN,
-		Class:  class,
-	}, nil
+}
+
+func bootstrapValues(awscfg aws.Config, deployed bootstrap.Deployed) (values.Store, bool) {
+	if deployed.StateTable == "" || deployed.VarsKeyARN == "" {
+		return values.Store{}, false
+	}
+	return valueStore(dynamodb.NewFromConfig(awscfg), kms.NewFromConfig(awscfg), deployed), true
 }
 
 func linkStore(awscfg aws.Config, deployed bootstrap.Deployed, class string) deploy.LinkStore {
-	store := bootstrapStore(awscfg, deployed, class)
-	if store == nil {
+	store, ok := bootstrapValues(awscfg, deployed)
+	if !ok {
 		return nil
 	}
-	return store
+	return publishedLinks{store: store, class: edge.Class(class)}
 }
 
 func teardownValues(awscfg aws.Config, deployed bootstrap.Deployed, class string) deploy.ValueStore {
-	store := bootstrapStore(awscfg, deployed, class)
-	if store == nil {
+	store, ok := bootstrapValues(awscfg, deployed)
+	if !ok {
 		return nil
 	}
-	return store
+	return projectValues{store: store, class: edge.Class(class)}
 }
 
-func bootstrapStore(awscfg aws.Config, deployed bootstrap.Deployed, class string) *vars.Store {
-	if deployed.VarsTable == "" || deployed.VarsKeyARN == "" {
-		return nil
-	}
-	return &vars.Store{
-		Dynamo: dynamodb.NewFromConfig(awscfg),
-		KMS:    kms.NewFromConfig(awscfg),
-		Table:  deployed.VarsTable,
-		KeyARN: deployed.VarsKeyARN,
-		Class:  class,
-	}
+type projectValues struct {
+	store values.Store
+	class edge.Class
 }
 
-func referenceOwners(ctx context.Context, awscfg aws.Config, deployed bootstrap.Deployed, class, slug string) (map[vars.Coordinate]string, error) {
-	store := bootstrapStore(awscfg, deployed, class)
-	if store == nil {
+func (p projectValues) Purge(ctx context.Context, slug string) (int, error) {
+	return p.store.Purge(ctx, values.Scope{Project: slug, Class: p.class})
+}
+
+func referenceOwners(ctx context.Context, awscfg aws.Config, deployed bootstrap.Deployed, class, slug string) (map[values.Coordinate]string, error) {
+	store, ok := bootstrapValues(awscfg, deployed)
+	if !ok {
 		return nil, nil
 	}
-	return store.ReferenceOwners(ctx, slug)
+	return store.ReferenceOwners(ctx, values.Scope{Project: slug, Class: edge.Class(class)})
 }
 
 func (s *VarsServer) addressable(ctx context.Context, region string, tier environmentv1.Tier, at *envvarsv1.Coordinate) error {
@@ -204,71 +222,75 @@ func (s *VarsServer) SetValue(ctx context.Context, req *envvarsv1.SetValueReques
 	if err := s.addressable(ctx, s.config.get().Region, req.GetTier(), req.GetCoordinate()); err != nil {
 		return nil, err
 	}
-	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
+	store, scope, err := s.scoped(ctx, s.config.get().Region, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	metadata, err := store.Set(ctx, toCoordinate(req.GetCoordinate()), req.GetValue(), req.ExpectedVersion)
+	metadata, err := store.Set(ctx, scope, coordinateOf(req.GetCoordinate()), req.GetValue(), req.ExpectedVersion)
 	if err != nil {
 		return nil, varsError(err)
 	}
-	return &envvarsv1.SetValueResponse{Metadata: toMetadataProto(metadata)}, nil
+	return &envvarsv1.SetValueResponse{Metadata: metadataProto(scope, metadata)}, nil
 }
 
 func (s *VarsServer) SetReference(ctx context.Context, req *envvarsv1.SetReferenceRequest) (*envvarsv1.SetReferenceResponse, error) {
 	if err := s.addressable(ctx, s.config.get().Region, req.GetTier(), req.GetCoordinate()); err != nil {
 		return nil, err
 	}
-	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
+	store, scope, err := s.scoped(ctx, s.config.get().Region, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	metadata, err := store.SetReference(ctx, toCoordinate(req.GetCoordinate()), toCoordinate(req.GetTarget()), nil)
+	target := req.GetTarget()
+	metadata, err := store.SetReference(ctx, scope, coordinateOf(req.GetCoordinate()), values.Target{
+		Project: target.GetSlug(),
+		Cell:    values.Cell{Folder: target.GetFolder(), Key: target.GetKey()},
+	})
 	if err != nil {
 		return nil, varsError(err)
 	}
-	return &envvarsv1.SetReferenceResponse{Metadata: toMetadataProto(metadata)}, nil
+	return &envvarsv1.SetReferenceResponse{Metadata: metadataProto(scope, metadata)}, nil
 }
 
 func (s *VarsServer) ListReferences(ctx context.Context, req *envvarsv1.ListReferencesRequest) (*envvarsv1.ListReferencesResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
+	store, scope, err := s.scoped(ctx, s.config.get().Region, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	found, err := store.References(ctx, toCoordinate(req.GetCoordinate()))
+	found, err := store.References(ctx, scope, coordinateOf(req.GetCoordinate()))
 	if err != nil {
 		return nil, varsError(err)
 	}
 	resp := &envvarsv1.ListReferencesResponse{References: make([]*envvarsv1.Coordinate, 0, len(found))}
-	for _, c := range found {
-		resp.References = append(resp.References, toCoordinateProto(c))
+	for _, r := range found {
+		resp.References = append(resp.References, coordinateProto(r.Project, r.Coordinate))
 	}
 	return resp, nil
 }
 
 func (s *VarsServer) ListValues(ctx context.Context, req *envvarsv1.ListValuesRequest) (*envvarsv1.ListValuesResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
+	store, scope, err := s.scoped(ctx, s.config.get().Region, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	found, err := store.List(ctx, req.GetSlug())
+	found, err := store.List(ctx, scope)
 	if err != nil {
 		return nil, varsError(err)
 	}
 	resp := &envvarsv1.ListValuesResponse{Values: make([]*envvarsv1.ValueMetadata, 0, len(found))}
 	for _, m := range found {
-		resp.Values = append(resp.Values, toMetadataProto(m))
+		resp.Values = append(resp.Values, metadataProto(scope, m))
 	}
 	return resp, nil
 }
 
 func (s *VarsServer) GetValue(ctx context.Context, req *envvarsv1.GetValueRequest) (*envvarsv1.GetValueResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
+	store, scope, err := s.scoped(ctx, s.config.get().Region, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	value, err := store.Get(ctx, toCoordinate(req.GetCoordinate()), req.GetReveal())
-	if errors.Is(err, vars.ErrNotFound) {
+	value, err := store.Get(ctx, scope, coordinateOf(req.GetCoordinate()), req.GetReveal())
+	if errors.Is(err, values.ErrNotFound) {
 		return &envvarsv1.GetValueResponse{}, nil
 	}
 	if err != nil {
@@ -276,33 +298,28 @@ func (s *VarsServer) GetValue(ctx context.Context, req *envvarsv1.GetValueReques
 	}
 	return &envvarsv1.GetValueResponse{
 		Found:    true,
-		Metadata: toMetadataProto(value.Metadata),
+		Metadata: metadataProto(scope, value.Metadata),
 		Value:    value.Plaintext,
 	}, nil
 }
 
 func (s *VarsServer) RevealValues(ctx context.Context, req *envvarsv1.RevealValuesRequest) (*envvarsv1.RevealValuesResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
+	store, scope, err := s.scoped(ctx, s.config.get().Region, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	cells := make([]vars.Coordinate, 0, len(req.GetCells()))
+	cells := make([]values.Coordinate, 0, len(req.GetCells()))
 	for _, c := range req.GetCells() {
-		cells = append(cells, vars.Coordinate{
-			Slug:        req.GetSlug(),
-			Folder:      c.GetFolder(),
-			Key:         c.GetKey(),
-			Environment: c.GetEnvironment(),
-		})
+		cells = append(cells, coordinateOf(c))
 	}
-	values, err := store.Reveal(ctx, req.GetSlug(), cells)
+	found, err := store.Reveal(ctx, scope, cells)
 	if err != nil {
 		return nil, varsError(err)
 	}
-	resp := &envvarsv1.RevealValuesResponse{Values: make([]*envvarsv1.RevealedValue, 0, len(values))}
-	for _, v := range values {
+	resp := &envvarsv1.RevealValuesResponse{Values: make([]*envvarsv1.RevealedValue, 0, len(found))}
+	for _, v := range found {
 		resp.Values = append(resp.Values, &envvarsv1.RevealedValue{
-			Metadata: toMetadataProto(v.Metadata),
+			Metadata: metadataProto(scope, v.Metadata),
 			Value:    v.Plaintext,
 		})
 	}
@@ -310,11 +327,11 @@ func (s *VarsServer) RevealValues(ctx context.Context, req *envvarsv1.RevealValu
 }
 
 func (s *VarsServer) DeleteValue(ctx context.Context, req *envvarsv1.DeleteValueRequest) (*envvarsv1.DeleteValueResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
+	store, scope, err := s.scoped(ctx, s.config.get().Region, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	deleted, err := store.Delete(ctx, toCoordinate(req.GetCoordinate()), req.ExpectedVersion)
+	deleted, err := store.Delete(ctx, scope, coordinateOf(req.GetCoordinate()), req.ExpectedVersion)
 	if err != nil {
 		return nil, varsError(err)
 	}
@@ -322,11 +339,11 @@ func (s *VarsServer) DeleteValue(ctx context.Context, req *envvarsv1.DeleteValue
 }
 
 func (s *VarsServer) ListVersions(ctx context.Context, req *envvarsv1.ListVersionsRequest) (*envvarsv1.ListVersionsResponse, error) {
-	store, err := s.store(ctx, s.config.get().Region, req.GetTier())
+	store, scope, err := s.scoped(ctx, s.config.get().Region, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	history, err := store.Versions(ctx, toCoordinate(req.GetCoordinate()))
+	history, err := store.Versions(ctx, scope, coordinateOf(req.GetCoordinate()))
 	if err != nil {
 		return nil, varsError(err)
 	}
@@ -341,44 +358,46 @@ func (s *VarsServer) ListVersions(ctx context.Context, req *envvarsv1.ListVersio
 	return resp, nil
 }
 
-func toCoordinate(c *envvarsv1.Coordinate) vars.Coordinate {
-	return vars.Coordinate{
-		Slug:        c.GetSlug(),
-		Folder:      c.GetFolder(),
-		Key:         c.GetKey(),
+func coordinateOf(c *envvarsv1.Coordinate) values.Coordinate {
+	return values.Coordinate{
+		Cell:        values.Cell{Folder: c.GetFolder(), Key: c.GetKey()},
 		Environment: c.GetEnvironment(),
 	}
 }
 
-func toCoordinateProto(c vars.Coordinate) *envvarsv1.Coordinate {
+func coordinateProto(slug string, c values.Coordinate) *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{
-		Slug:        c.Slug,
+		Slug:        slug,
 		Folder:      c.Folder,
 		Key:         c.Key,
 		Environment: c.Environment,
 	}
 }
 
-func toMetadataProto(m vars.Metadata) *envvarsv1.ValueMetadata {
+func metadataProto(scope values.Scope, m values.Metadata) *envvarsv1.ValueMetadata {
 	out := &envvarsv1.ValueMetadata{
-		Coordinate: toCoordinateProto(m.Coordinate),
+		Coordinate: coordinateProto(scope.Project, m.Coordinate),
 		Version:    m.Version,
 		UpdatedAt:  m.UpdatedAt,
 		Size:       m.Size,
 	}
-	if m.Target.Slug != "" {
-		out.Target = toCoordinateProto(m.Target)
+	if m.Target != nil {
+		out.Target = &envvarsv1.Coordinate{
+			Slug:   m.Target.Project,
+			Folder: m.Target.Folder,
+			Key:    m.Target.Key,
+		}
 	}
 	return out
 }
 
 func varsError(err error) error {
 	switch {
-	case errors.Is(err, vars.ErrStaleVersion):
+	case errors.Is(err, values.ErrStaleVersion):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
-	case errors.Is(err, vars.ErrWouldDeepen), errors.Is(err, vars.ErrIsReference):
+	case errors.Is(err, values.ErrWouldDeepen), errors.Is(err, values.ErrIsReference), errors.Is(err, values.ErrTooLarge):
 		return connect.NewError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, vars.ErrNotFound):
+	case errors.Is(err, values.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
 	default:
 		return err

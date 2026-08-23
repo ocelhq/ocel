@@ -16,8 +16,10 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func newTestVarsClient(t *testing.T, token string) envvarsv1connect.EnvVarsServiceClient {
@@ -64,10 +66,10 @@ func TestVarsError(t *testing.T) {
 			err  error
 			want connect.Code
 		}{
-			{name: "a write that lost a race", err: vars.ErrStaleVersion, want: connect.CodeFailedPrecondition},
-			{name: "a cell that was never set", err: vars.ErrNotFound, want: connect.CodeNotFound},
-			{name: "a reference to a reference", err: vars.ErrWouldDeepen, want: connect.CodeInvalidArgument},
-			{name: "a value written over a reference", err: vars.ErrIsReference, want: connect.CodeInvalidArgument},
+			{name: "a write that lost a race", err: values.ErrStaleVersion, want: connect.CodeFailedPrecondition},
+			{name: "a cell that was never set", err: values.ErrNotFound, want: connect.CodeNotFound},
+			{name: "a reference to a reference", err: values.ErrWouldDeepen, want: connect.CodeInvalidArgument},
+			{name: "a value written over a reference", err: values.ErrIsReference, want: connect.CodeInvalidArgument},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
@@ -145,7 +147,7 @@ func TestVarsServerStoreLookup(t *testing.T) {
 
 func TestRevealValues(t *testing.T) {
 	t.Parallel()
-	t.Run("reads every named cell in one query", func(t *testing.T) {
+	t.Run("reads each named cell once and decrypts only what is set", func(t *testing.T) {
 		cfn, ddb, crypto := &countingCFN{}, newFakeDynamo(), &fakeKMS{}
 		s := testAccount(cfn, ddb, crypto)
 		ctx := context.Background()
@@ -160,7 +162,7 @@ func TestRevealValues(t *testing.T) {
 			}
 		}
 
-		queriesBefore, _ := ddb.counts()
+		_, readsBefore := ddb.counts()
 		decryptsBefore := crypto.count()
 
 		resp, err := s.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
@@ -184,9 +186,9 @@ func TestRevealValues(t *testing.T) {
 			t.Errorf("RevealValues gave %v, want %v (an unset cell is absent, not empty)", got, want)
 		}
 
-		queriesAfter, _ := ddb.counts()
-		if queries := queriesAfter - queriesBefore; queries != 1 {
-			t.Errorf("revealing 4 cells cost %d queries, want 1", queries)
+		_, readsAfter := ddb.counts()
+		if reads := readsAfter - readsBefore; reads != 4 {
+			t.Errorf("revealing 4 cells cost %d reads, want one per cell", reads)
 		}
 		if decrypts := crypto.count() - decryptsBefore; decrypts != len(want) {
 			t.Errorf("revealing 4 cells cost %d decrypts, want %d (KMS has no batch decrypt, and an unset cell has nothing to decrypt)", decrypts, len(want))
@@ -443,8 +445,8 @@ func TestCoordinate(t *testing.T) {
 
 	t.Run("round trips through the wire", func(t *testing.T) {
 		t.Parallel()
-		want := vars.Coordinate{Slug: "shop", Folder: "/checkout", Key: "STRIPE_API_KEY", Environment: "staging"}
-		if got := toCoordinate(toCoordinateProto(want)); got != want {
+		want := values.Coordinate{Cell: values.Cell{Folder: "/checkout", Key: "STRIPE_API_KEY"}, Environment: "staging"}
+		if got := coordinateOf(coordinateProto("shop", want)); got != want {
 			t.Errorf("coordinate round trip = %+v, want %+v", got, want)
 		}
 	})
@@ -456,22 +458,27 @@ func TestTeardownValues(t *testing.T) {
 	t.Run("is absent until the bootstrap has a store", func(t *testing.T) {
 		t.Parallel()
 		if store := teardownValues(aws.Config{}, bootstrap.Deployed{Present: true}, bootstrap.ClassProduction); store != nil {
-			t.Errorf("teardownValues = %v, want none for a bootstrap with no vars table", store)
+			t.Errorf("teardownValues = %v, want none for a bootstrap with no value store", store)
 		}
 	})
 
 	t.Run("opens the bootstrap's own table under the bootstrap's class", func(t *testing.T) {
 		t.Parallel()
-		deployed := bootstrap.Deployed{Present: true, VarsTable: "ocel-vars", VarsKeyARN: "arn:aws:kms:us-east-1:111122223333:key/abcd"}
-		store, ok := teardownValues(aws.Config{}, deployed, bootstrap.ClassPreview).(*vars.Store)
+		deployed := bootstrap.Deployed{Present: true, StateTable: "ocel-state", VarsKeyARN: "arn:aws:kms:us-east-1:111122223333:key/abcd"}
+		purger, ok := teardownValues(aws.Config{}, deployed, bootstrap.ClassPreview).(projectValues)
 		if !ok {
 			t.Fatal("teardownValues returned no store for a bootstrapped account")
 		}
-		if store.Table != deployed.VarsTable || store.KeyARN != deployed.VarsKeyARN {
-			t.Errorf("store = %+v, want the bootstrap's own table and key", store)
+		records, ok := purger.store.Records.(awsports.Records)
+		if !ok || records.Table != deployed.StateTable {
+			t.Errorf("records = %+v, want the bootstrap's own table", purger.store.Records)
 		}
-		if store.Class != bootstrap.ClassPreview {
-			t.Errorf("store class = %q, want the bootstrap's own class", store.Class)
+		sealer, ok := purger.store.Sealer.(awsports.Sealer)
+		if !ok || sealer.KeyARN != deployed.VarsKeyARN {
+			t.Errorf("sealer = %+v, want the bootstrap's own key", purger.store.Sealer)
+		}
+		if purger.class != edge.ClassPreview {
+			t.Errorf("store class = %q, want the bootstrap's own class", purger.class)
 		}
 	})
 }

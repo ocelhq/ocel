@@ -4,17 +4,27 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
 type LinkStore interface {
-	PublishRecords(ctx context.Context, slug, environment, owner string, records []*linksv1.Link) (vars.PublishResult, error)
-	ResolveRecords(ctx context.Context, slug, environment string, names []string) ([]vars.PublishedRecord, error)
+	PublishRecords(ctx context.Context, slug, environment, owner string, records []*linksv1.Link) error
+	ResolveRecords(ctx context.Context, slug, environment string, names []string) ([]PublishedRecord, error)
 	PublishedNames(ctx context.Context, slug, class, environment string) ([]string, error)
 }
+
+type PublishedRecord struct {
+	Link    *linksv1.Link
+	Version int64
+}
+
+func (r PublishedRecord) Name() string { return r.Link.GetName() }
+
+func (r PublishedRecord) Type() linksv1.LinkType { return naming.LinkTypeOf(r.Link) }
 
 func linkName(r *contractv1.ManifestResource) string {
 	if r.GetLinked() {
@@ -69,7 +79,7 @@ func publishLinkRecords(ctx context.Context, cfg Config, manifest *contractv1.Ma
 		}
 		return fmt.Errorf("this deploy provisions %d linked resources but reached no variable store to deliver their values through", len(records))
 	}
-	if _, err := cfg.Links.PublishRecords(ctx, manifest.GetSlug(), overrideEnvironment(cfg), vars.OwnerOcel, records); err != nil {
+	if err := cfg.Links.PublishRecords(ctx, manifest.GetSlug(), overrideEnvironment(cfg), values.OwnerOcel, records); err != nil {
 		return fmt.Errorf("deliver link values: %w", err)
 	}
 	return nil

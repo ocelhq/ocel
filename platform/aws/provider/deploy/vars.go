@@ -16,7 +16,8 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -32,20 +33,26 @@ func varsReadPolicy(r executionRole) (string, error) {
 			"Resource": r.VarsKeyARN,
 		},
 	}
-	if r.VarsTableARN != "" {
-		partitions := []string{vars.PartitionKey(r.Slug, r.VarsClass)}
-		for _, owner := range r.VarsReferenced {
-			if owner != r.Slug {
-				partitions = append(partitions, vars.PartitionKey(owner, r.VarsClass))
-			}
+	if r.ValuesTableARN != "" {
+		own, err := valuePartition(r.Slug, r.VarsClass)
+		if err != nil {
+			return "", err
 		}
-		for _, link := range r.VarsLinks {
-			partitions = append(partitions, vars.LinkPartitionKey(r.Slug, r.VarsClass, link))
+		partitions := []string{own}
+		for _, owner := range r.VarsReferenced {
+			if owner == r.Slug {
+				continue
+			}
+			held, err := valuePartition(owner, r.VarsClass)
+			if err != nil {
+				return "", err
+			}
+			partitions = append(partitions, held)
 		}
 		statements = append(statements, map[string]any{
 			"Effect":   "Allow",
 			"Action":   []string{"dynamodb:Query"},
-			"Resource": r.VarsTableARN,
+			"Resource": r.ValuesTableARN,
 			"Condition": map[string]any{
 				"ForAllValues:StringEquals": map[string]any{
 					"dynamodb:LeadingKeys": partitions,
@@ -58,6 +65,10 @@ func varsReadPolicy(r executionRole) (string, error) {
 		return "", fmt.Errorf("render vars read policy: %w", err)
 	}
 	return string(out), nil
+}
+
+func valuePartition(slug, class string) (string, error) {
+	return awsports.Partition(values.Under(values.Scope{Project: slug, Class: edge.Class(class)}))
 }
 
 const appFolderEnv = "OCEL_APP_FOLDER"
@@ -103,7 +114,6 @@ type appBundle struct {
 	Ciphertext  []byte
 	Live        []byte
 	Referenced  []string
-	Links       []string
 	Fingerprint string
 }
 
@@ -145,13 +155,13 @@ func renderAppBundles(cfg Config, manifest *contractv1.Manifest, consumed map[st
 }
 
 func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links []live.Link) (appBundle, error) {
-	values := make(map[string]string)
+	sensitive := make(map[string]string)
 	var keys []live.Key
 	for _, v := range app.GetVariables() {
 		switch v.GetClass() {
 		case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
-			values[v.GetKey()] = v.GetValue()
+			sensitive[v.GetKey()] = v.GetValue()
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:
 			keys = append(keys, live.Key{Key: v.GetKey(), Folder: v.GetFolder()})
 		default:
@@ -161,7 +171,7 @@ func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links
 
 	manifest, err := live.Render(live.Manifest{
 		Slug:        slug,
-		Table:       cfg.VarsTable,
+		Table:       cfg.StateTable,
 		KeyARN:      cfg.VarsKeyARN,
 		Class:       cfg.VarsClass,
 		Environment: overrideEnvironment(cfg),
@@ -173,16 +183,15 @@ func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links
 	}
 
 	referenced := referencedOwners(cfg, slug, keys)
-	linked := linkNames(links)
-	if len(values) == 0 {
-		return appBundle{Live: manifest, Referenced: referenced, Links: linked}, nil
+	if len(sensitive) == 0 {
+		return appBundle{Live: manifest, Referenced: referenced}, nil
 	}
 
 	key := make([]byte, baked.KeyBytes)
 	if _, err := rand.Read(key); err != nil {
 		return appBundle{}, fmt.Errorf("generate a data key for %s's encrypted variables: %w", app.GetName(), err)
 	}
-	ciphertext, err := baked.Seal(key, values)
+	ciphertext, err := baked.Seal(key, sensitive)
 	if err != nil {
 		return appBundle{}, fmt.Errorf("seal %s's encrypted variables: %w", app.GetName(), err)
 	}
@@ -191,18 +200,8 @@ func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links
 		Ciphertext:  ciphertext,
 		Live:        manifest,
 		Referenced:  referenced,
-		Links:       linked,
-		Fingerprint: fingerprintValues(values),
+		Fingerprint: fingerprintValues(sensitive),
 	}, nil
-}
-
-func linkNames(links []live.Link) []string {
-	names := make([]string, 0, len(links))
-	for _, l := range links {
-		names = append(names, l.Name)
-	}
-	slices.Sort(names)
-	return names
 }
 
 func referencedOwners(cfg Config, slug string, keys []live.Key) []string {
@@ -214,7 +213,7 @@ func referencedOwners(cfg Config, slug string, keys []live.Key) []string {
 	owners := map[string]bool{}
 	for _, key := range keys {
 		for _, environment := range environments {
-			cell := vars.Coordinate{Slug: slug, Folder: key.Folder, Key: key.Key, Environment: environment}
+			cell := values.Coordinate{Cell: values.Cell{Folder: key.Folder, Key: key.Key}, Environment: environment}
 			if owner := cfg.VarsReferenced[cell]; owner != "" {
 				owners[owner] = true
 			}

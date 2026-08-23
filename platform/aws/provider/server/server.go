@@ -32,6 +32,7 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -41,7 +42,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -276,7 +276,7 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		params         bootstrap.ClassParams
 		account        string
 		pulumiCmd      auto.PulumiCommand
-		varsReferenced map[vars.Coordinate]string
+		varsReferenced map[values.Coordinate]string
 	)
 	group, gctx := errgroup.WithContext(ctx)
 	group.Go(func() error {
@@ -365,8 +365,6 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 
 		VarsKeyARN:         deployed.VarsKeyARN,
 		AppBoundaryARN:     deployed.AppBoundaryARN,
-		VarsTable:          deployed.VarsTable,
-		VarsTableARN:       fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.VarsTable),
 		VarsClass:          class,
 		VarsSiblingClasses: []string{bootstrap.ClassProduction, bootstrap.ClassPreview},
 		VarsReferenced:     varsReferenced,

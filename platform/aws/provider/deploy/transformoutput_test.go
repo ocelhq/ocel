@@ -19,7 +19,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform/transformtest"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 )
 
 func outputManifest() *contractv1.Manifest {
@@ -52,7 +51,7 @@ func customNetworkStore(t *testing.T, properties map[string]any) *recordingPubli
 func storeHolding(link *linksv1.Link) *recordingPublisher {
 	return &recordingPublisher{
 		published: map[string][]string{"production": {"network"}},
-		resolved:  map[string]vars.PublishedRecord{"network": {Link: link, Version: 3}},
+		resolved:  map[string]PublishedRecord{"network": {Link: link, Version: 3}},
 	}
 }
 

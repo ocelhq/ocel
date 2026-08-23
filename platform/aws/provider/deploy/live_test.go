@@ -13,24 +13,33 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
 const (
-	varsTable    = "ocel-vars"
-	varsTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-vars"
-	varsClass    = "production"
+	valuesTable    = "ocel-state"
+	valuesTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-state"
+	varsClass      = "production"
 )
 
 func liveConfig() Config {
 	return Config{
-		VarsKeyARN:   productionVarsKeyARN,
-		VarsTable:    varsTable,
-		VarsTableARN: varsTableARN,
-		VarsClass:    varsClass,
+		VarsKeyARN:    productionVarsKeyARN,
+		StateTable:    valuesTable,
+		StateTableARN: valuesTableARN,
+		VarsClass:     varsClass,
 	}
+}
+
+func partitionOf(t *testing.T, slug string) string {
+	t.Helper()
+	partition, err := valuePartition(slug, varsClass)
+	if err != nil {
+		t.Fatalf("valuePartition: %v", err)
+	}
+	return partition
 }
 
 func scopedVariable(key, folder string, class resourcesv1.VariableClass) *contractv1.ManifestVariable {
@@ -73,7 +82,7 @@ func TestRenderAppBundle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse the live manifest: %v", err)
 		}
-		if manifest.Slug != "shop" || manifest.Table != varsTable || manifest.KeyARN != productionVarsKeyARN || manifest.Class != varsClass {
+		if manifest.Slug != "shop" || manifest.Table != valuesTable || manifest.KeyARN != productionVarsKeyARN || manifest.Class != varsClass {
 			t.Errorf("manifest = %+v, want the bootstrap's own store", manifest)
 		}
 		want := []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
@@ -164,11 +173,11 @@ func TestRenderAppBundle(t *testing.T) {
 	t.Run("references only the owners of its own live values", func(t *testing.T) {
 		t.Parallel()
 		cfg := previewOf(liveConfig(), "pr-42")
-		cfg.VarsReferenced = map[vars.Coordinate]string{
-			{Slug: "shop", Key: "DB_PASSWORD"}:                                          "platform",
-			{Slug: "shop", Folder: "/web", Key: "SESSION_SECRET", Environment: "pr-42"}: "identity",
-			{Slug: "shop", Key: "ADMIN_TOKEN"}:                                          "ops",
-			{Slug: "shop", Key: "POSTHOG_ID"}:                                           "analytics",
+		cfg.VarsReferenced = map[values.Coordinate]string{
+			{Cell: values.Cell{Key: "DB_PASSWORD"}}:                                          "platform",
+			{Cell: values.Cell{Folder: "/web", Key: "SESSION_SECRET"}, Environment: "pr-42"}: "identity",
+			{Cell: values.Cell{Key: "ADMIN_TOKEN"}}:                                          "ops",
+			{Cell: values.Cell{Key: "POSTHOG_ID"}}:                                           "analytics",
 		}
 
 		app := &contractv1.ManifestApp{
@@ -248,7 +257,7 @@ func TestAppBundle(t *testing.T) {
 func TestVarsReadPolicy(t *testing.T) {
 	t.Run("scopes the table grant to the project's own partition", func(t *testing.T) {
 		t.Parallel()
-		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, VarsTableARN: varsTableARN, Slug: "shop", VarsClass: varsClass})
+		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, ValuesTableARN: valuesTableARN, Slug: "shop", VarsClass: varsClass})
 		if err != nil {
 			t.Fatalf("varsReadPolicy: %v", err)
 		}
@@ -269,14 +278,14 @@ func TestVarsReadPolicy(t *testing.T) {
 		}
 
 		table := doc.Statement[1]
-		if table.Resource != varsTableARN {
-			t.Errorf("Resource = %q, want the vars table", table.Resource)
+		if table.Resource != valuesTableARN {
+			t.Errorf("Resource = %q, want the table the values live in", table.Resource)
 		}
 		if want := []string{"dynamodb:Query"}; !slices.Equal(table.Action, want) {
 			t.Errorf("Action = %v, want %v", table.Action, want)
 		}
 		leading := table.Condition["ForAllValues:StringEquals"]["dynamodb:LeadingKeys"]
-		if want := []string{vars.PartitionKey("shop", varsClass)}; !slices.Equal(leading, want) {
+		if want := []string{partitionOf(t, "shop")}; !slices.Equal(leading, want) {
 			t.Errorf("LeadingKeys = %v, want %v", leading, want)
 		}
 
@@ -299,7 +308,7 @@ func TestVarsReadPolicy(t *testing.T) {
 
 	t.Run("reaches the partitions of the projects this one references", func(t *testing.T) {
 		t.Parallel()
-		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, VarsTableARN: varsTableARN, Slug: "shop", VarsClass: varsClass, VarsReferenced: []string{"platform", "shop", "billing"}})
+		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, ValuesTableARN: valuesTableARN, Slug: "shop", VarsClass: varsClass, VarsReferenced: []string{"platform", "shop", "billing"}})
 		if err != nil {
 			t.Fatalf("varsReadPolicy: %v", err)
 		}
@@ -315,9 +324,9 @@ func TestVarsReadPolicy(t *testing.T) {
 
 		leading := doc.Statement[1].Condition["ForAllValues:StringEquals"]["dynamodb:LeadingKeys"]
 		want := []string{
-			vars.PartitionKey("shop", varsClass),
-			vars.PartitionKey("platform", varsClass),
-			vars.PartitionKey("billing", varsClass),
+			partitionOf(t, "shop"),
+			partitionOf(t, "platform"),
+			partitionOf(t, "billing"),
 		}
 		if !slices.Equal(leading, want) {
 			t.Errorf("LeadingKeys = %v, want %v (its own partition once, plus each project it references)", leading, want)
@@ -331,16 +340,16 @@ func TestAppExecutionRoleLiveValues(t *testing.T) {
 		cfg := liveConfig()
 		cfg.Slug = "shop"
 		withLive := appExecutionRole(cfg, "web", nil, nil, appBundle{Live: []byte(`{"slug":"shop"}`)}, nil, nil, false, nil)
-		if withLive.VarsTableARN != varsTableARN {
-			t.Errorf("VarsTableARN = %q, want the vars table", withLive.VarsTableARN)
+		if withLive.ValuesTableARN != valuesTableARN {
+			t.Errorf("ValuesTableARN = %q, want the table the values live in", withLive.ValuesTableARN)
 		}
 		if withLive.Slug != "shop" || withLive.VarsClass != varsClass {
 			t.Errorf("role = %+v, want the partition it may read named", withLive)
 		}
 
 		withoutLive := appExecutionRole(cfg, "admin", nil, nil, appBundle{}, nil, nil, false, nil)
-		if withoutLive.VarsTableARN != "" {
-			t.Errorf("VarsTableARN = %q, want no table grant for an app with no live values", withoutLive.VarsTableARN)
+		if withoutLive.ValuesTableARN != "" {
+			t.Errorf("ValuesTableARN = %q, want no table grant for an app with no live values", withoutLive.ValuesTableARN)
 		}
 		if withoutLive.VarsKeyARN != productionVarsKeyARN {
 			t.Errorf("VarsKeyARN = %q, want the decrypt grant every app keeps", withoutLive.VarsKeyARN)

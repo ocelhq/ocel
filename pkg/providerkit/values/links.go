@@ -87,11 +87,22 @@ func ValidateLinkEnvironment(environment string) error {
 			"%q is reserved: it names the pair that binds class-wide. Leave the environment off to publish there, which serves every preview including the ephemeral ones",
 			ClassWideEnvironment)
 	}
-	for _, r := range environment {
+	return refuseControl("environment name", environment)
+}
+
+func ValidateProject(project string) error {
+	if project == "" {
+		return fmt.Errorf("a project slug is required")
+	}
+	return refuseControl("project slug", project)
+}
+
+func refuseControl(what, value string) error {
+	for _, r := range value {
 		if unicode.IsControl(r) {
 			return fmt.Errorf(
-				"environment name %q carries the control character %q: a coordinate is written into store keys, log lines and generated files, and a character that breaks a line breaks all three",
-				environment, r)
+				"%s %q carries the control character %q: a coordinate is written into store keys, log lines and generated files, and a character that breaks a line breaks all three",
+				what, value, r)
 		}
 	}
 	return nil

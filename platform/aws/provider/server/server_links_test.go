@@ -138,18 +138,11 @@ func TestLinkHandlersRefuseACoordinateNothingBindsTo(t *testing.T) {
 		"an environment outside preview": {
 			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Environment: "pr-9", Owner: "sst", Link: ordersLink(),
 		},
-		"a delimiter in the environment": {
-			Slug: "shop", Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "pr#9", Owner: "sst", Link: ordersLink(),
-		},
 		"a newline in the environment": {
 			Slug: "shop", Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "pr-9\ndeclare const x: string", Owner: "sst", Link: ordersLink(),
 		},
 		"a control character in the slug": {
 			Slug: "sh\x00op", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst", Link: ordersLink(),
-		},
-		"a delimiter in the link name": {
-			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst",
-			Link: &linksv1.Link{Name: "or#ders", Source: "sst", Properties: ordersLink().GetProperties()},
 		},
 		"no link name": {
 			Slug: "shop", Tier: environmentv1.Tier_TIER_PRODUCTION, Owner: "sst",
@@ -163,6 +156,24 @@ func TestLinkHandlersRefuseACoordinateNothingBindsTo(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("the store's own key delimiter is a character like any other", func(t *testing.T) {
+		s := linksServer(t)
+		if _, err := s.SetLink(ctx, &envvarsv1.SetLinkRequest{
+			Slug: "shop", Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "pr#9", Owner: "sst",
+			Link: &linksv1.Link{Name: "or#ders", Source: "sst", Properties: ordersLink().GetProperties()},
+		}); err != nil {
+			t.Fatalf("SetLink: %v", err)
+		}
+
+		published, err := s.ListLinks(ctx, &envvarsv1.ListLinksRequest{Slug: "shop", Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "pr#9"})
+		if err != nil {
+			t.Fatalf("ListLinks: %v", err)
+		}
+		if len(published.GetLinks()) != 1 || published.GetLinks()[0].GetName() != "or#ders" {
+			t.Errorf("ListLinks = %v, want the link read back at the coordinate it was written to", published.GetLinks())
+		}
+	})
 
 	t.Run("a preview environment is legal in the preview class", func(t *testing.T) {
 		if _, err := linksServer(t).SetLink(ctx, &envvarsv1.SetLinkRequest{

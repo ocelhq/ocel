@@ -25,8 +25,8 @@ func runPorts(t *testing.T, suite Suite) {
 		t.Fatalf("New() error = %v, want a provider", err)
 	}
 
-	t.Run("RecordStore", func(t *testing.T) { runRecordStore(t, provider.Records()) })
-	t.Run("Sealer", func(t *testing.T) { runSealer(t, provider.Sealer()) })
+	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, provider.Records()) })
+	t.Run("Sealer", func(t *testing.T) { RunSealer(t, provider.Sealer()) })
 	t.Run("Bootstrapper", func(t *testing.T) { runBootstrapper(t, provider.Bootstrap()) })
 	t.Run("ArtifactStore", func(t *testing.T) { runArtifactStore(t, provider.Artifacts()) })
 	t.Run("Releaser", func(t *testing.T) { runReleaser(t, provider) })
@@ -39,7 +39,9 @@ func under(t *testing.T, rest ...string) providerkit.RecordName {
 	return append(providerkit.RecordName{"conformance", t.Name()}, rest...)
 }
 
-func runRecordStore(t *testing.T, records providerkit.RecordStore) {
+func RunRecordStore(t *testing.T, records providerkit.RecordStore) {
+	t.Helper()
+
 	ctx := context.Background()
 
 	t.Run("an unwritten name is no record", func(t *testing.T) {
@@ -150,7 +152,9 @@ func runRecordStore(t *testing.T, records providerkit.RecordStore) {
 	})
 }
 
-func runSealer(t *testing.T, sealer providerkit.Sealer) {
+func RunSealer(t *testing.T, sealer providerkit.Sealer) {
+	t.Helper()
+
 	ctx := context.Background()
 
 	at := providerkit.Coordinate{

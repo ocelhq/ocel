@@ -16,7 +16,8 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
@@ -28,16 +29,16 @@ type recordingPublisher struct {
 	err         error
 
 	published map[string][]string
-	resolved  map[string]vars.PublishedRecord
+	resolved  map[string]PublishedRecord
 
 	reads            int
 	readEnvironment  string
 	namesEnvironment string
 }
 
-func (p *recordingPublisher) PublishRecords(_ context.Context, slug, environment, owner string, records []*linksv1.Link) (vars.PublishResult, error) {
+func (p *recordingPublisher) PublishRecords(_ context.Context, slug, environment, owner string, records []*linksv1.Link) error {
 	p.slug, p.environment, p.owner, p.records = slug, environment, owner, records
-	return vars.PublishResult{}, p.err
+	return p.err
 }
 
 func (p *recordingPublisher) PublishedNames(_ context.Context, _, class, environment string) ([]string, error) {
@@ -48,25 +49,25 @@ func (p *recordingPublisher) PublishedNames(_ context.Context, _, class, environ
 	return names, nil
 }
 
-func (p *recordingPublisher) ResolveRecords(_ context.Context, _, environment string, names []string) ([]vars.PublishedRecord, error) {
+func (p *recordingPublisher) ResolveRecords(_ context.Context, _, environment string, names []string) ([]PublishedRecord, error) {
 	p.readEnvironment = environment
-	out := make([]vars.PublishedRecord, 0, len(names))
+	out := make([]PublishedRecord, 0, len(names))
 	for _, name := range names {
 		record, ok := p.resolved[name]
 		if !ok {
 			record, ok = publishedFixtures[name]
 		}
 		if !ok {
-			return nil, fmt.Errorf("link %s is not published: %w", name, vars.ErrNotPublished)
+			return nil, fmt.Errorf("link %s is not published: %w", name, values.ErrNotPublished)
 		}
 		record.Link = proto.Clone(record.Link).(*linksv1.Link)
-		record.Link.Name, record.Environment = name, environment
+		record.Link.Name = name
 		out = append(out, record)
 	}
 	return out, nil
 }
 
-var publishedFixtures = map[string]vars.PublishedRecord{
+var publishedFixtures = map[string]PublishedRecord{
 	"main": {
 		Link: &linksv1.Link{
 			Source:     "sst",
@@ -260,7 +261,7 @@ func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 		t.Fatalf("what this deploy publishes drifts from what it tells the app to expect: %v", err)
 	}
 	for _, l := range links {
-		link, err := vars.DecodeLink([]byte(published[l.Key]))
+		link, err := providerkit.DecodeLink([]byte(published[l.Key]))
 		if err != nil {
 			t.Fatalf("link %s conformed to %q, which no app can parse: %v", l.Name, published[l.Key], err)
 		}
@@ -293,10 +294,6 @@ func TestLinkedAppRendersNoCredential(t *testing.T) {
 	if bundle.Ciphertext != nil || bundle.Envelope != "" {
 		t.Errorf("bundle bakes %d bytes for an app whose only values are derived", len(bundle.Ciphertext))
 	}
-	if want := []string{"bucket--uploads", "db--main"}; !slices.Equal(bundle.Links, want) {
-		t.Errorf("bundle.Links = %v, want %v so the role can be scoped to them", bundle.Links, want)
-	}
-
 	env := appEnv(linkedManifest(), app, bundle, sessionConfig(), fixtureSessions)
 	for _, published := range publishedProperties(t) {
 		for key, value := range env {
@@ -341,12 +338,6 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 		t.Errorf("web reads %v, want %v: web uses the shared postgres and never the bucket", addresses["web"], want)
 	}
 
-	if want := []string{"db--main"}; !slices.Equal(bundles["web"].Links, want) {
-		t.Errorf("web's bundle names %v, want %v so its role reaches no other link's partition", bundles["web"].Links, want)
-	}
-	if want := []string{"bucket--uploads", "db--main"}; !slices.Equal(bundles["api"].Links, want) {
-		t.Errorf("api's bundle names %v, want %v: the app whose edges name both is handed both", bundles["api"].Links, want)
-	}
 	if got := envs["api"][envStateTable]; got != cfg.StateTable {
 		t.Errorf("api's env carries %s=%q, want %q so the membrane it brings up can keep the bucket's sessions", envStateTable, got, cfg.StateTable)
 	}
@@ -366,24 +357,16 @@ func TestDeliveryScopesToTheAppsThatUseTheResource(t *testing.T) {
 		t.Error("web packages the bucket's address; a compromise of web must expose no credential it never needed")
 	}
 
-	raw, err := varsReadPolicy(appExecutionRole(cfg, "web", nil, nil, bundles["web"], nil, nil, false, nil))
-	if err != nil {
-		t.Fatalf("varsReadPolicy: %v", err)
-	}
-	if strings.Contains(raw, vars.LinkPartitionKey("shop", varsClass, "bucket--uploads")) {
-		t.Errorf("web's role reaches the bucket's partition: %s", raw)
-	}
-	if !strings.Contains(raw, vars.LinkPartitionKey("shop", varsClass, "db--main")) {
-		t.Errorf("web's role cannot reach the postgres it does use: %s", raw)
-	}
-
-	raw, err = varsReadPolicy(appExecutionRole(cfg, "api", nil, nil, bundles["api"], nil, nil, false, nil))
-	if err != nil {
-		t.Fatalf("varsReadPolicy: %v", err)
-	}
-	for _, link := range []string{"db--main", "bucket--uploads"} {
-		if !strings.Contains(raw, vars.LinkPartitionKey("shop", varsClass, link)) {
-			t.Errorf("api's role cannot reach %s, which its usage edges name: %s", link, raw)
+	for _, app := range []string{"web", "api"} {
+		raw, err := varsReadPolicy(appExecutionRole(cfg, app, nil, nil, bundles[app], nil, nil, false, nil))
+		if err != nil {
+			t.Fatalf("varsReadPolicy: %v", err)
+		}
+		if !strings.Contains(raw, partitionOf(t, "shop")) {
+			t.Errorf("%s's role cannot reach its own project's values: %s", app, raw)
+		}
+		if strings.Contains(raw, partitionOf(t, "other")) {
+			t.Errorf("%s's role reaches another project's values: %s", app, raw)
 		}
 	}
 }
@@ -397,7 +380,7 @@ func publishedRecords(t *testing.T, links []live.Link) (map[string]string, error
 	}
 	out := make(map[string]string, len(records))
 	for _, r := range records {
-		encoded, err := vars.EncodeLink(r)
+		encoded, err := providerkit.EncodeLink(r)
 		if err != nil {
 			return nil, err
 		}
@@ -421,14 +404,13 @@ func publishedProperties(t *testing.T) []string {
 	return out
 }
 
-func TestVarsReadPolicyScopesEachLink(t *testing.T) {
+func TestVarsReadPolicyReachesOneValuePartitionPerProject(t *testing.T) {
 	t.Parallel()
 	raw, err := varsReadPolicy(executionRole{
-		VarsKeyARN:   productionVarsKeyARN,
-		VarsTableARN: varsTableARN,
-		Slug:         "shop",
-		VarsClass:    varsClass,
-		VarsLinks:    []string{"db--main", "bucket--uploads"},
+		VarsKeyARN:     productionVarsKeyARN,
+		ValuesTableARN: valuesTableARN,
+		Slug:           "shop",
+		VarsClass:      varsClass,
 	})
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)
@@ -444,12 +426,7 @@ func TestVarsReadPolicyScopesEachLink(t *testing.T) {
 	}
 
 	leading := doc.Statement[1].Condition["ForAllValues:StringEquals"]["dynamodb:LeadingKeys"]
-	want := []string{
-		vars.PartitionKey("shop", varsClass),
-		vars.LinkPartitionKey("shop", varsClass, "db--main"),
-		vars.LinkPartitionKey("shop", varsClass, "bucket--uploads"),
-	}
-	if !slices.Equal(leading, want) {
-		t.Errorf("LeadingKeys = %v, want %v — one partition per link is what lets a grant narrow to a link", leading, want)
+	if want := []string{partitionOf(t, "shop")}; !slices.Equal(leading, want) {
+		t.Errorf("LeadingKeys = %v, want %v — a project's values and its links share one partition, and a role reaches its own", leading, want)
 	}
 }

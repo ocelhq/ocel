@@ -36,7 +36,7 @@ func DecodeLink(raw []byte) (*linksv1.Link, error) {
 	return link, nil
 }
 
-func linkPair(owner string, link *linksv1.Link) (values.Pair, error) {
+func LinkPair(owner string, link *linksv1.Link) (values.Pair, error) {
 	value, err := EncodeLink(link)
 	if err != nil {
 		return values.Pair{}, fmt.Errorf("render link %s: %w", link.GetName(), err)
@@ -64,7 +64,7 @@ func redacted(link *linksv1.Link) *linksv1.Link {
 	return out
 }
 
-func decodeShapes(raw []byte) ([]naming.PropertyShape, error) {
+func DecodeShapes(raw []byte) ([]naming.PropertyShape, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
