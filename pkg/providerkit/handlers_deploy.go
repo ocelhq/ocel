@@ -27,11 +27,11 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 
 	run, err := h.openDeploy(ctx, req, sender)
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	result, err := run.execute(ctx)
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	sender.send(result)
 	return nil

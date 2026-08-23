@@ -77,7 +77,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*contractv1.RemovalPlan, error) {
 	removal, err := h.openRemoval(ctx, req)
 	if err != nil {
-		return nil, refusalError(err)
+		return nil, RefusalError(err)
 	}
 	return removal.plan(), nil
 }
@@ -132,10 +132,10 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 
 	removal, err := h.openRemoval(ctx, req)
 	if err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	if err := removal.run(ctx, report); err != nil {
-		return sender.fail(refusalError(err))
+		return sender.fail(RefusalError(err))
 	}
 	sender.send(okResult())
 	return nil

@@ -470,9 +470,6 @@ func TestCheckDeployed(t *testing.T) {
 		if got.Schema != 0 {
 			t.Errorf("Schema = %d, want 0 for a bootstrap written before the tag existed", got.Schema)
 		}
-		if compat := CheckCompat(got.Schema, got.Present, RequiredSchema); compat != NeedsBootstrapUpgrade {
-			t.Errorf("CheckCompat = %v, want NeedsBootstrapUpgrade", compat)
-		}
 	})
 
 	t.Run("a stack whose digest moved reads as stale", func(t *testing.T) {

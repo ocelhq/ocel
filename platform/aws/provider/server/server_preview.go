@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 
 	connect "connectrpc.com/connect"
 
@@ -12,14 +11,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -43,18 +43,11 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 	resp := &contractv1.PreflightResponse{Identity: &contractv1.Identity{}}
 
 	awsOK := true
-	if id, err := s.callerIdentity(ctx, sts.NewFromConfig(awscfg), opts.Region); err != nil {
+	if identity, err := awsports.CredentialsFor(awscfg).Whoami(ctx); err != nil {
 		awsOK = false
-		resp.CredentialProblems = append(resp.CredentialProblems, &contractv1.CredentialProblem{
-			Provider: "AWS",
-			Message:  fmt.Sprintf("could not authenticate: %v", err),
-			Hint:     "configure AWS credentials (set AWS_PROFILE, run `aws sso login`, or export access keys)",
-		})
+		resp.CredentialProblems = append(resp.CredentialProblems, providerkit.CredentialProblemProto(awsports.Vendor, err))
 	} else {
-		resp.Identity.Provider = "AWS"
-		resp.Identity.Account = id.account
-		resp.Identity.Principal = id.principal()
-		resp.Identity.Details = identityDetails(awscfg.Region, os.Getenv("AWS_PROFILE"))
+		resp.Identity = providerkit.IdentityProto(awsports.Vendor, identity)
 	}
 
 	resp.DomainClaims = domainClaims(ctx, s.edgeRouteOwner(requestedEdge(req), awscfg.Region), req.GetSlug(), req.GetDomains())
@@ -86,16 +79,26 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 		resp.InfraTier = pf.GetInfraTier()
 		resp.InfrastructurePresent = pf.GetInfrastructurePresent()
 
-		required, err := bootstrap.RequiredFeatures(req.GetFrameworks(), req.GetEdge().GetKind())
+		class, err := classOf(req.GetRequiredTier())
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
-		wanted, _ := requiredBootstrap(req.GetRequiredTier(), preview, production)
-		resp.Bootstrap = s.bootstrapStatus(wanted, req.GetRequiredTier(), required)
-		if wanted.Present {
-			compat := bootstrap.CheckCompat(wanted.Schema, true, bootstrap.RequiredSchema)
-			if err := compat.Explain(wanted.Schema, bootstrap.RequiredSchema, bootstrapCommand(previewTier)); err != nil {
-				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		gate, err := s.gatedOn(ctx, awscfg, class, edgeFront)
+		if err != nil {
+			return nil, err
+		}
+		required, err := providerkit.RequiredFeatures(gate.bootstrapper.Catalogue(), req.GetFrameworks(), req.GetEdge().GetKind())
+		if err != nil {
+			return nil, providerkit.RefusalError(err)
+		}
+		standing, err := gate.Standing(ctx, providerkit.Class(class))
+		if err != nil {
+			return nil, providerkit.RefusalError(err)
+		}
+		resp.Bootstrap = providerkit.BootstrapStatusProto(standing, s.writer, req.GetRequiredTier(), required)
+		if standing.Present {
+			if err := providerkit.CheckSchema(standing.Schema, true, providerkit.Class(class)); err != nil {
+				return nil, providerkit.RefusalError(err)
 			}
 		}
 
@@ -119,16 +122,6 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 	}
 
 	return resp, nil
-}
-
-func identityDetails(region, profile string) []*contractv1.Detail {
-	var details []*contractv1.Detail
-	for _, detail := range []*contractv1.Detail{{Label: "region", Value: region}, {Label: "profile", Value: profile}} {
-		if detail.GetValue() != "" {
-			details = append(details, detail)
-		}
-	}
-	return details
 }
 
 func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *contractv1.PreflightRequest, edgeFront edge.Edge) error {

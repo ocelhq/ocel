@@ -52,4 +52,6 @@ type BootstrapRequest struct {
 	Drop []string
 
 	Unattended bool
+
+	Heal bool
 }

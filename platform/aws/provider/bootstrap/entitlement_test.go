@@ -18,18 +18,12 @@ func (f *freePlanEdge) VerifyCredentials(context.Context) (edge.CredentialIdenti
 }
 
 func TestRunNeverAsksWhatThePlanEntitles(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		run  func(context.Context, APIs, Request, func(string), func(string)) error
-	}{
-		{"production", Run},
-		{"preview", RunPreview},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, class := range []string{ClassProduction, ClassPreview} {
+		t.Run(class, func(t *testing.T) {
 			ed := &freePlanEdge{fakeEdge: &fakeEdge{kind: "cloudflare"}}
 			standInCloudflare(t, ed)
 
-			if err := tc.run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), everything(), nil, nil); err != nil {
+			if err := Run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), class, everything(), nil, nil); err != nil {
 				t.Fatalf("run: %v", err)
 			}
 			if ed.verifications != 0 {

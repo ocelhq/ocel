@@ -8,13 +8,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/channelauth"
 	"github.com/ocelhq/ocel/platform/aws/provider/tracecontext"
 )
 
 func NewMux(token, version string) *http.ServeMux {
-	return newMux(&Server{writer: bootstrap.WriterFor(version)}, token)
+	return newMux(&Server{writer: providerkit.WriterFor(version)}, token)
 }
 
 func newMux(deployments *Server, token string) *http.ServeMux {

@@ -3,6 +3,7 @@ package ports_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"maps"
 	"strings"
 	"testing"
@@ -158,4 +159,31 @@ func TestACoordinateMissingAComponentIsRefused(t *testing.T) {
 func mustSealer() kit.Sealer {
 	sealer, _ := newSealer()
 	return sealer
+}
+
+func TestAnAccountWithNoBootstrapHoldsNoRecords(t *testing.T) {
+	t.Parallel()
+
+	records := awsports.Records{Dynamo: newFakeDynamo()}
+	name := kit.RecordName{"bootstrap", "production"}
+
+	if _, err := records.Read(context.Background(), name); !errors.Is(err, kit.ErrNoRecord) {
+		t.Errorf("Read() with no bootstrap standing = %v, want ErrNoRecord", err)
+	}
+	held, err := records.List(context.Background(), kit.RecordName{"projects"})
+	if err != nil || len(held) != 0 {
+		t.Errorf("List() with no bootstrap standing = %v, %v, want nothing", held, err)
+	}
+	if err := records.Remove(context.Background(), name, "whatever"); !errors.Is(err, kit.ErrNoRecord) {
+		t.Errorf("Remove() with no bootstrap standing = %v, want ErrNoRecord", err)
+	}
+
+	_, err = records.Write(context.Background(), kit.Record{Name: name, Bytes: []byte("{}")})
+	var refusal kit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != kit.CodeNotReady {
+		t.Fatalf("Write() with no bootstrap standing = %v, want a %s refusal rather than a silent no-op", err, kit.CodeNotReady)
+	}
+	if !strings.Contains(refusal.Message, "ocel bootstrap") {
+		t.Errorf("Write() refusal = %q, want it to name what creates the bootstrap", refusal.Message)
+	}
 }

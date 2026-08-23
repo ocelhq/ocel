@@ -340,3 +340,41 @@ func TestOccupancyRefusesWhileAnythingStandsOnTheBootstrap(t *testing.T) {
 		}
 	}
 }
+
+func TestASchemaNewerThanThisBuildIsRefusedWithNoEscapeHatch(t *testing.T) {
+	t.Parallel()
+
+	err := providerkit.RefuseSchemaAhead(providerkit.BootstrapSchema+1, true, providerkit.ClassProduction)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+		t.Fatalf("RefuseSchemaAhead() = %v, want a %s refusal", err, providerkit.CodeNotReady)
+	}
+	if !strings.Contains(refusal.Message, "ocel bootstrap --destroy") {
+		t.Errorf("RefuseSchemaAhead() = %q, want it to name what drops the bootstrap", refusal.Message)
+	}
+	if strings.Contains(refusal.Message, "--force") {
+		t.Errorf("RefuseSchemaAhead() = %q, want no escape hatch offered", refusal.Message)
+	}
+	if got := strings.Count(refusal.Message, "\n"); got != 1 {
+		t.Errorf("RefuseSchemaAhead() = %q, want exactly two lines", refusal.Message)
+	}
+	if err := providerkit.RefuseSchemaAhead(providerkit.BootstrapSchema, true, providerkit.ClassProduction); err != nil {
+		t.Errorf("RefuseSchemaAhead() at the schema this build writes = %v, want it admitted", err)
+	}
+}
+
+func TestAPreviewBootstrapIsRemediatedWithItsOwnCommand(t *testing.T) {
+	t.Parallel()
+
+	gate, provider := gated(t, "2.0.0")
+	bootstrapped(t, provider, providerkit.ClassPreview)
+
+	_, err := gate.Admit(context.Background(), providerkit.ClassPreview, []string{fake.FeatureImages}, &recorder{})
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) {
+		t.Fatalf("Admit() = %v, want a refusal", err)
+	}
+	if !strings.Contains(refusal.Message, "`ocel bootstrap --preview --features ") {
+		t.Errorf("Admit() = %q, want the preview bootstrap's own command", refusal.Message)
+	}
+}

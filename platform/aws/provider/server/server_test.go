@@ -525,11 +525,8 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 		}
 
 		cfn.present[bootstrap.StackName] = true
-		run := func(context.Context, bootstrap.APIs, bootstrap.Request, func(string), func(string)) error {
-			return nil
-		}
-		if err := s.runBootstrap(context.Background(), run, bootstrap.APIs{}, bootstrap.Request{}, func(string) {}, func(string) {}); err != nil {
-			t.Fatalf("runBootstrap: %v", err)
+		if err := s.applying(func() error { return nil }); err != nil {
+			t.Fatalf("applying: %v", err)
 		}
 
 		after, err := s.deployed(context.Background(), cfn, "eu-west-1", false)
@@ -549,11 +546,8 @@ func TestServerBootstrapForgetsDeployed(t *testing.T) {
 		if _, err := s.deployed(context.Background(), cfn, "eu-west-1", false); err != nil {
 			t.Fatalf("deployed: %v", err)
 		}
-		run := func(context.Context, bootstrap.APIs, bootstrap.Request, func(string), func(string)) error {
-			return errors.New("stack rolled back")
-		}
-		if err := s.runBootstrap(context.Background(), run, bootstrap.APIs{}, bootstrap.Request{}, func(string) {}, func(string) {}); err == nil {
-			t.Fatal("runBootstrap = nil error, want the failure")
+		if err := s.applying(func() error { return errors.New("stack rolled back") }); err == nil {
+			t.Fatal("applying = nil error, want the failure")
 		}
 		if _, err := s.deployed(context.Background(), cfn, "eu-west-1", false); err != nil {
 			t.Fatalf("deployed after the failed bootstrap: %v", err)

@@ -13,7 +13,7 @@ var refusalCodes = map[Code]connect.Code{
 	CodeBusy:     connect.CodeAborted,
 }
 
-func refusalError(err error) error {
+func RefusalError(err error) error {
 	if err == nil {
 		return nil
 	}
