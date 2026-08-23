@@ -26,7 +26,7 @@ func (s *Server) GetHostnameStatus(ctx context.Context, req *contractv1.Hostname
 }
 
 func (d *hostnameSession) status(ctx context.Context) (*contractv1.GetHostnameStatusResponse, error) {
-	lookup := newCertLookup(d.engine.Issuer, d.recorded, d.pins)
+	lookup := newCertLookup(d.certifier, d.recorded)
 	resp := &contractv1.GetHostnameStatusResponse{
 		Ready:          len(d.configured) > 0,
 		RecordsWritten: recordList(d.recorded.Validation.Written),
@@ -118,7 +118,7 @@ func (d *hostnameSession) pendingOn(host string, cert certs.Certificate, bound b
 	if !slices.Contains(d.configured, host) {
 		return fmt.Sprintf("this project no longer declares %s; `ocel domain rm` gives it back", host)
 	}
-	if d.engine.Issuer.API != nil {
+	if d.certifier.Issues() {
 		switch {
 		case cert.ARN == "":
 			return fmt.Sprintf("no certificate covers %s yet; run `ocel domain add`", host)

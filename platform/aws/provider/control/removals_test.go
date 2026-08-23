@@ -62,9 +62,6 @@ func TestRemovals(t *testing.T) {
 		if got := surfaceNamed(surfaces, bootstrap.PassphraseParamName); got.Action != edge.SurfaceDelete {
 			t.Errorf("passphrase action = %v, want it deleted when no sibling bootstrap holds it", got.Action)
 		}
-		if surfaceNamed(surfaces, bootstrap.PreviewDomainParamName) != nil {
-			t.Error("the production plan must not name the preview domain parameter")
-		}
 	})
 
 	t.Run("a bootstrapped sibling keeps the passphrase, with the reason", func(t *testing.T) {
@@ -80,9 +77,6 @@ func TestRemovals(t *testing.T) {
 		}
 		if !strings.Contains(kept.Reason, bootstrap.ClassProduction) {
 			t.Errorf("reason = %q, want it to name the bootstrap still holding it", kept.Reason)
-		}
-		if surfaceNamed(surfaces, bootstrap.PreviewDomainParamName) == nil {
-			t.Error("the preview plan must name the preview domain parameter")
 		}
 	})
 

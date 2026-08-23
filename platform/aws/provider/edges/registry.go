@@ -8,6 +8,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -16,6 +19,8 @@ import (
 
 type Deps struct {
 	AWS func(ctx context.Context) (aws.Config, error)
+
+	Certificates map[string]string
 }
 
 var constructors = map[edge.Kind]func(Deps) edge.Edge{
@@ -25,6 +30,25 @@ var constructors = map[edge.Kind]func(Deps) edge.Edge{
 }
 
 const DefaultKind = cloudfront.Kind
+
+type Registry struct {
+	Deps Deps
+}
+
+var _ providerkit.EdgeRegistry = Registry{}
+
+func (r Registry) Supported() []edge.Kind { return SupportedEdges() }
+
+func (r Registry) Default() edge.Kind { return DefaultKind }
+
+func (r Registry) Open(kind edge.Kind) (edge.Edge, error) {
+	construct, ok := constructors[kind]
+	if !ok {
+		return nil, kit.Refuse(kit.CodeInvalid,
+			"this provider cannot front deployments with the %q edge; it supports %s", kind, supportedList())
+	}
+	return construct(r.Deps), nil
+}
 
 func SupportedEdges() []edge.Kind {
 	kinds := make([]edge.Kind, 0, len(constructors))
@@ -36,11 +60,21 @@ func SupportedEdges() []edge.Kind {
 }
 
 func EdgeFor(kind edge.Kind, deps Deps) (edge.Edge, error) {
-	construct, ok := constructors[kind]
-	if !ok {
-		return nil, fmt.Errorf("this provider cannot front deployments with the %q edge; it supports %s", kind, supportedList())
+	return Registry{Deps: deps}.Open(kind)
+}
+
+func (r Registry) Certifier(front edge.Edge, deps certs.Deps) certs.Certifier {
+	return certs.CertifierFor(front, deps, r.Deps.Certificates)
+}
+
+func IgnoredPinNote(front edge.Edge, certifier certs.Certifier, hostname string) string {
+	if !certifier.IgnoresPinFor(hostname) {
+		return ""
 	}
-	return construct(deps), nil
+	return fmt.Sprintf(
+		"the certificate pinned for %s is ignored: the %s edge terminates TLS with a certificate of its own, so ocel neither requests nor uses one here",
+		hostname, front.Kind(),
+	)
 }
 
 func supportedList() string {

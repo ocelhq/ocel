@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -53,14 +54,14 @@ func fakeDomainClients(ssmc *stateSSM, acmAPI *domainACM, writer edge.DNSWriter)
 			Now:      func() time.Time { return time.Unix(1755500000, 0).UTC() },
 			Jitter:   func() float64 { return 0.5 },
 		},
-		issuerFor: func(edge.Edge) certs.Issuer {
-			return certs.Issuer{
+		certifierFor: func(edge.Edge) certs.Certifier {
+			return certs.Certifier{Issuer: certs.Issuer{
 				API:      acmAPI,
 				Region:   certs.CloudFrontRegion,
 				Wait:     func(context.Context, time.Duration) error { return nil },
 				Attempts: 3,
 				Every:    time.Millisecond,
-			}
+			}}
 		},
 		discarderFor: func(certs.Certificate) certs.Issuer {
 			return certs.Issuer{API: acmAPI, Region: certs.CloudFrontRegion}
@@ -69,10 +70,11 @@ func fakeDomainClients(ssmc *stateSSM, acmAPI *domainACM, writer edge.DNSWriter)
 	}
 }
 
-func wholeServer(clients domainClients, front edge.Edge) *Server {
-	s := &Server{stores: stores{openDomain: func(context.Context, string) (domainClients, error) {
-		return clients, nil
-	}}}
+func wholeServer(clients domainClients, state domains.State, front edge.Edge) *Server {
+	s := &Server{stores: stores{
+		openDomain: func(context.Context, string) (domainClients, error) { return clients, nil },
+		openState:  func(context.Context, string, bool) (domains.State, error) { return state, nil },
+	}}
 	if _, err := s.memo.edgeFor(wholeEdgeKind, clients.region).resolve(func() (edge.Edge, error) {
 		return front, nil
 	}); err != nil {
@@ -92,13 +94,14 @@ func TestAddHostnameWhole(t *testing.T) {
 		log:       &callLog{},
 		hostFront: func(hostname string) string { return "front-of-" + hostname + ".example.net" },
 	}
-	if err := bootstrap.WriteStackRecordFor(ctx, ssmc, bootstrap.ClassProduction, domainSlug, bootstrap.StackRecord{Edge: stack.state}); err != nil {
-		t.Fatalf("WriteStackStateFor: %v", err)
+	state := newRecordState()
+	if err := state.WriteStack(ctx, edge.ClassProduction, domainSlug, stackRecordOn(stack.state)); err != nil {
+		t.Fatalf("WriteStack: %v", err)
 	}
 	acmAPI := newDomainACM()
 	acmAPI.log = &callLog{}
 	writer := &domainWriter{log: &callLog{}}
-	s := wholeServer(fakeDomainClients(ssmc, acmAPI, writer), &wholeEdge{stack: stack})
+	s := wholeServer(fakeDomainClients(ssmc, acmAPI, writer), state, &wholeEdge{stack: stack})
 
 	session, err := s.hostnameSession(ctx, hostnameRequest{
 		slug:        domainSlug,
@@ -113,11 +116,11 @@ func TestAddHostnameWhole(t *testing.T) {
 		t.Fatalf("add: %v", err)
 	}
 
-	record, err := bootstrap.ReadStackRecordFor(ctx, ssmc, bootstrap.ClassProduction, domainSlug)
+	record, err := state.ReadStack(ctx, edge.ClassProduction, domainSlug)
 	if err != nil {
-		t.Fatalf("ReadStackRecordFor: %v", err)
+		t.Fatalf("ReadStack: %v", err)
 	}
-	recorded := record.Production
+	recorded := record.Settlement()
 	if !recorded.Ready("shop.app.com", wholeEdgeKind) {
 		t.Errorf("recorded = %+v, want the host settled through the RPC-built session", recorded)
 	}
@@ -140,7 +143,8 @@ func TestUsePreviewWildcardWhole(t *testing.T) {
 	acmAPI.log = &callLog{}
 	writer := &domainWriter{log: &callLog{}}
 	front := &wholeEdge{stack: &boundStack{log: &callLog{}}}
-	s := wholeServer(fakeDomainClients(ssmc, acmAPI, writer), front)
+	state := newRecordState()
+	s := wholeServer(fakeDomainClients(ssmc, acmAPI, writer), state, front)
 	if _, err := s.memo.deployedFor("", true).resolve(func() (bootstrap.Deployed, error) {
 		return bootstrap.Deployed{Present: true, StateTable: "state", AssetBucket: "assets"}, nil
 	}); err != nil {
@@ -156,21 +160,20 @@ func TestUsePreviewWildcardWhole(t *testing.T) {
 		t.Fatalf("runUsePreviewWildcard: %v", err)
 	}
 
-	recorded, err := bootstrap.ReadPreviewDomain(ctx, ssmc, bootstrap.ClassPreview)
+	recorded, err := state.ReadWildcard(ctx, edge.ClassPreview)
 	if err != nil {
-		t.Fatalf("ReadPreviewDomain: %v", err)
+		t.Fatalf("ReadWildcard: %v", err)
 	}
 	if recorded.BaseDomain != "preview.acme.com" || recorded.Edge != wholeEdgeKind || recorded.Scope != "whole-acct" {
 		t.Errorf("recorded = %+v, want the domain, its edge and its scope written through the whole RPC", recorded)
 	}
-	wildcardHost := recorded.Wildcard()
-	if !wildcardHost.Probe.OK || wildcardHost.Probe.Edge != wholeEdgeKind {
-		t.Errorf("probe = %+v, want the wildcard proven against the edge that raised it", wildcardHost.Probe)
+	if probe := recorded.Settled.Probe; !probe.OK || probe.Edge != wholeEdgeKind {
+		t.Errorf("probe = %+v, want the wildcard proven against the edge that raised it", probe)
 	}
 	if len(front.specs) != 1 || front.specs[0].Certificate == "" {
 		t.Errorf("specs = %+v, want the shared entry reconciled with the settled certificate", front.specs)
 	}
-	if recorded.Settlement.Certificate.ARN == "" {
-		t.Errorf("recorded = %+v, want the certificate settled and recorded", recorded.Settlement)
+	if recorded.Certificate.ARN == "" {
+		t.Errorf("recorded = %+v, want the certificate settled and recorded", recorded)
 	}
 }

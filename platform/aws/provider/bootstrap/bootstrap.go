@@ -21,7 +21,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
+	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -35,7 +35,7 @@ const (
 	EdgeUserName        = "ocel-edge"
 	EdgePreviewUserName = "ocel-edge-preview"
 
-	StateTableIndexName = stackindex.IndexName
+	StateTableIndexName = tagclock.IndexName
 
 	outputStateBucket         = "StateBucketName"
 	outputStateTable          = "StateTableName"

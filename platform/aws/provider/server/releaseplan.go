@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -19,7 +19,7 @@ func refusePreviewRelease(baseDomain string, projects []string) error {
 	)
 }
 
-func releasePlan(edgeFront edge.Edge, recorded bootstrap.PreviewDomain) *contractv1.RemovalPlan {
+func releasePlan(edgeFront edge.Edge, recorded domains.PreviewWildcard) *contractv1.RemovalPlan {
 	return &contractv1.RemovalPlan{
 		EdgeKind: string(edgeFront.Kind()),
 		Items:    releasePlanItems(edgeFront, recorded),
@@ -27,14 +27,15 @@ func releasePlan(edgeFront edge.Edge, recorded bootstrap.PreviewDomain) *contrac
 	}
 }
 
-func releasePlanItems(edgeFront edge.Edge, recorded bootstrap.PreviewDomain) []*contractv1.RemovalItem {
+func releasePlanItems(edgeFront edge.Edge, recorded domains.PreviewWildcard) []*contractv1.RemovalItem {
 	removed, kept := edgeFront.PreviewWildcardSurfaces(edge.PreviewWildcard(recorded.BaseDomain))
+	settled := recorded.Settlement()
 
 	items := []*contractv1.RemovalItem{surfaceItem(removed)}
-	if arn := recorded.Settlement.Certificate.ARN; arn != "" {
-		items = append(items, certificateItem(recorded.Settlement.Certificate))
+	if arn := recorded.Certificate.ARN; arn != "" {
+		items = append(items, certificateItem(recorded.Certificate))
 	}
-	for _, rec := range recorded.Settlement.WrittenRecords() {
+	for _, rec := range settled.WrittenRecords() {
 		items = append(items, &contractv1.RemovalItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),
@@ -42,7 +43,7 @@ func releasePlanItems(edgeFront edge.Edge, recorded bootstrap.PreviewDomain) []*
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
-	for _, rec := range recorded.Settlement.OwedRecords() {
+	for _, rec := range settled.OwedRecords() {
 		items = append(items, &contractv1.RemovalItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),

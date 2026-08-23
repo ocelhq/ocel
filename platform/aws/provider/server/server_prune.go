@@ -76,7 +76,11 @@ func (s *Server) runPrune(ctx context.Context, req *contractv1.RemoveStalePromot
 	if err != nil {
 		return finish(err)
 	}
-	stack, err := s.openStackFor(requestedEdge(req), params.Stack, awscfg.Region)
+	record, err := s.stackRecord(ctx, opts.Region, edge.ClassProduction, req.GetSlug())
+	if err != nil {
+		return finish(err)
+	}
+	stack, err := s.openStackFor(requestedEdge(req), record, awscfg.Region)
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return finish(nil)

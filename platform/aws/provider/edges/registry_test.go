@@ -5,11 +5,63 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
+
+func TestRegistryConformance(t *testing.T) {
+	t.Parallel()
+
+	conformance.RunEdgeRegistry(t, Registry{})
+}
+
+func TestIgnoredPinNote(t *testing.T) {
+	t.Parallel()
+
+	const host = "shop.app.com"
+	const arn = "arn:aws:acm:us-east-1:111122223333:certificate/pinned"
+	registry := Registry{Deps: Deps{Certificates: map[string]string{host: arn}}}
+
+	t.Run("an edge that terminates TLS with a certificate of its own says the pin is ignored", func(t *testing.T) {
+		t.Parallel()
+
+		front, err := registry.Open(cloudflare.Kind)
+		if err != nil {
+			t.Fatalf("Open(cloudflare): %v", err)
+		}
+		note := IgnoredPinNote(front, registry.Certifier(front, certs.Deps{}), host)
+		if !strings.Contains(note, "ignored") || !strings.Contains(note, host) || !strings.Contains(note, string(cloudflare.Kind)) {
+			t.Errorf("note = %q, want the ignored pin said out loud, naming the host and the edge", note)
+		}
+	})
+
+	t.Run("an edge ocel certifies keeps the pin", func(t *testing.T) {
+		t.Parallel()
+
+		front, err := registry.Open(cloudfront.Kind)
+		if err != nil {
+			t.Fatalf("Open(cloudfront): %v", err)
+		}
+		certifier := registry.Certifier(front, certs.Deps{AWS: aws.Config{Region: "eu-west-1"}})
+		if !certifier.Issues() {
+			t.Fatal("Issues() = false, want the certifier of an edge ocel requests certificates for")
+		}
+		if certifier.PinFor(host) != arn {
+			t.Errorf("PinFor(%s) = %q, want the operator's pin read from this provider's options", host, certifier.PinFor(host))
+		}
+		if note := IgnoredPinNote(front, certifier, host); note != "" {
+			t.Errorf("note = %q, want nothing said about a pin this edge uses", note)
+		}
+	})
+}
 
 func TestSupportedEdges(t *testing.T) {
 	t.Parallel()

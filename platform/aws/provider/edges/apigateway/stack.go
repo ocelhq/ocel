@@ -12,7 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/edgeledger"
+	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -54,19 +55,15 @@ func (s *stack) plan(pointer string) apiPlan {
 	}
 }
 
-func (s *stack) ledger(c Clients) *edgeledger.Ledger {
-	return &edgeledger.Ledger{
-		Dynamo: c.Dynamo,
-		Table:  s.own.StateTable,
-		Scope:  edgeledger.Scope(s.class(), s.slug()),
-	}
+func (s *stack) ledger(c Clients) *kitledger.Ledger {
+	return awsports.Ledger(c.Dynamo, s.own.StateTable, s.class(), s.slug())
 }
 
 type lazyLedger struct{ s *stack }
 
 var _ edge.Ledger = (*lazyLedger)(nil)
 
-func (l *lazyLedger) resolve(ctx context.Context) (*edgeledger.Ledger, error) {
+func (l *lazyLedger) resolve(ctx context.Context) (*kitledger.Ledger, error) {
 	c, err := l.s.p.clientsFor(ctx)
 	if err != nil {
 		return nil, err

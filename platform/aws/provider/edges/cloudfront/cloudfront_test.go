@@ -15,7 +15,7 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	kvstypes "github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore/types"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/edgeledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 )
@@ -365,7 +365,7 @@ func TestPromote(t *testing.T) {
 
 		steps := w.trail.taken()
 		wrote := indexOf(t, steps, "kvs.UpdateKeys")
-		recorded := indexOf(t, steps, "PutItem EDGELEDGER#production/conformance\x00POINTER#@production")
+		recorded := indexOf(t, steps, "PutItem ledger#production/conformance\x00pointers#@production#")
 		if wrote > recorded {
 			t.Errorf("the ledger pointer moved before the store did (%v); a hostname must never point at a release the edge cannot serve", steps)
 		}
@@ -607,7 +607,7 @@ func TestReconcileLeavesTheTagInvalidatorAFrontToReach(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 
-	held := w.invalidationTargets(edgeledger.Scope(edge.ClassProduction, conformanceSlug))
+	held := w.invalidationTargets(ledger.Scope(edge.ClassProduction, conformanceSlug))
 	if held == nil {
 		t.Fatalf("the ledger names no front for the tag invalidator to reach; it holds %v", slices.Sorted(maps.Keys(w.dynamo.items)))
 	}

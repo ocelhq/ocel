@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awscontrol "github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -107,7 +108,7 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 		}
 
 		if previewTier && preview.Present {
-			recorded, err := bootstrap.ReadPreviewDomain(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview)
+			recorded, err := recordState(awscfg, preview).ReadWildcard(ctx, edge.ClassPreview)
 			if err != nil {
 				return nil, err
 			}
@@ -124,7 +125,7 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 	return resp, nil
 }
 
-func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *contractv1.PreflightRequest, edgeFront edge.Edge) error {
+func globalPreviewProblem(recorded domains.PreviewWildcard, req *contractv1.PreflightRequest, edgeFront edge.Edge) error {
 	servesOnSharedWildcard := req.GetSlug() != "" && len(req.GetDomains()) == 0
 	if !servesOnSharedWildcard {
 		return nil
@@ -135,7 +136,7 @@ func globalPreviewProblem(recorded bootstrap.PreviewDomain, req *contractv1.Pref
 	return globalPreviewScopeMismatch(recorded, edgeFront)
 }
 
-func globalPreviewEdgeMismatch(recorded bootstrap.PreviewDomain, kind edge.Kind) error {
+func globalPreviewEdgeMismatch(recorded domains.PreviewWildcard, kind edge.Kind) error {
 	holder, ok := recorded.Holder()
 	if recorded.BaseDomain == "" || !ok || holder == kind {
 		return nil
@@ -318,6 +319,10 @@ func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts p
 	if err != nil {
 		return teardownContext{}, nil, err
 	}
+	record, err := recordState(awscfg, deployed).ReadStack(ctx, edge.ClassPreview, slug)
+	if err != nil {
+		return teardownContext{}, nil, err
+	}
 	if params.PassphraseErr != nil {
 		return teardownContext{}, nil, params.PassphraseErr
 	}
@@ -361,7 +366,7 @@ func (s *Server) previewTeardownDeps(ctx context.Context, kind edge.Kind, opts p
 	if err != nil {
 		return teardownContext{}, nil, err
 	}
-	stack, err := edgeFront.Open(params.Stack.Edge)
+	stack, err := edgeFront.Open(record.Edge)
 	if err != nil {
 		return teardownContext{}, nil, err
 	}

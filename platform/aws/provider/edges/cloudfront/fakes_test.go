@@ -3,7 +3,6 @@ package cloudfront
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -92,11 +91,15 @@ func (w *world) clients() Clients {
 }
 
 func (w *world) invalidationTargets(scope string) []string {
-	held, _ := w.dynamo.items["EDGELEDGER#"+scope+"\x00META#invalidation"]["distributions"].(*ddbtypes.AttributeValueMemberSS)
-	if held == nil {
+	body, _ := w.dynamo.items["ledger#"+scope+"\x00invalidation#"]["body"].(*ddbtypes.AttributeValueMemberB)
+	if body == nil {
 		return nil
 	}
-	return held.Value
+	var targets []string
+	if err := json.Unmarshal(body.Value, &targets); err != nil {
+		return nil
+	}
+	return targets
 }
 
 func (w *world) edge() *provider {
@@ -896,99 +899,41 @@ func conditionHolds(in *dynamodb.PutItemInput, present map[string]ddbtypes.Attri
 	switch condition {
 	case "":
 		return true, nil
-	case "attribute_not_exists(#promotionId)":
-		_, taken := present["promotionId"]
-		return !taken, nil
-	case "#promotionId = :promotionId", "#promotionId = :held":
-		want, ok := in.ExpressionAttributeValues[":held"].(*ddbtypes.AttributeValueMemberS)
+	case "attribute_not_exists(#pk)":
+		return len(present) == 0, nil
+	case "#rev = :rev":
+		want, ok := in.ExpressionAttributeValues[":rev"].(*ddbtypes.AttributeValueMemberS)
 		if !ok {
-			return false, fmt.Errorf("fake dynamo needs the value the condition %q compares against", condition)
+			return false, fmt.Errorf("fake dynamo needs the revision the condition %q compares against", condition)
 		}
-		got, ok := present["promotionId"].(*ddbtypes.AttributeValueMemberS)
+		got, ok := present["rev"].(*ddbtypes.AttributeValueMemberS)
 		return ok && got.Value == want.Value, nil
 	default:
 		return false, fmt.Errorf("fake dynamo does not speak the condition %q", condition)
 	}
 }
 
-func (f *fakeDynamo) BatchWriteItem(_ context.Context, in *dynamodb.BatchWriteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for table, requests := range in.RequestItems {
-		if len(requests) > 25 {
-			return nil, fmt.Errorf("fake dynamo got %d writes for %s, more than the 25 BatchWriteItem takes", len(requests), table)
-		}
-		for _, request := range requests {
-			if request.DeleteRequest == nil {
-				return nil, fmt.Errorf("fake dynamo batches only deletes, got %+v", request)
-			}
-			key := dynamoKey(request.DeleteRequest.Key)
-			f.record("DeleteItem " + key)
-			delete(f.items, key)
-		}
-	}
-	return &dynamodb.BatchWriteItemOutput{}, nil
-}
-
 func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	key := dynamoKey(in.Key)
+	held, present := f.items[key]
+	if aws.ToString(in.ConditionExpression) != "" {
+		want, ok := in.ExpressionAttributeValues[":rev"].(*ddbtypes.AttributeValueMemberS)
+		if !ok {
+			return nil, fmt.Errorf("fake dynamo needs the revision the condition %q compares against", aws.ToString(in.ConditionExpression))
+		}
+		got, matched := held["rev"].(*ddbtypes.AttributeValueMemberS)
+		if !present {
+			return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("no " + key)}
+		}
+		if !matched || got.Value != want.Value {
+			return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("condition on " + key), Item: held}
+		}
+	}
 	f.record("DeleteItem " + key)
 	delete(f.items, key)
 	return &dynamodb.DeleteItemOutput{}, nil
-}
-
-func (f *fakeDynamo) UpdateItem(_ context.Context, in *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	expression := aws.ToString(in.UpdateExpression)
-	if expression != "ADD #seq :one" && expression != "ADD #targets :target" && expression != "DELETE #targets :target" {
-		return nil, fmt.Errorf("fake dynamo understands only the sequence counter and the invalidation targets, got %q", expression)
-	}
-	key := dynamoKey(in.Key)
-	item, ok := f.items[key]
-	if !ok {
-		item = map[string]ddbtypes.AttributeValue{}
-		for name, value := range in.Key {
-			item[name] = value
-		}
-	}
-	if strings.HasSuffix(expression, "#targets :target") {
-		changed, ok := in.ExpressionAttributeValues[":target"].(*ddbtypes.AttributeValueMemberSS)
-		if !ok {
-			return nil, errors.New("fake dynamo changes the invalidation targets only by a string set")
-		}
-		attribute := in.ExpressionAttributeNames["#targets"]
-		held, _ := item[attribute].(*ddbtypes.AttributeValueMemberSS)
-		members := []string{}
-		if held != nil {
-			members = held.Value
-		}
-		for _, member := range changed.Value {
-			switch {
-			case strings.HasPrefix(expression, "DELETE"):
-				members = slices.DeleteFunc(members, func(m string) bool { return m == member })
-			case !slices.Contains(members, member):
-				members = append(members, member)
-			}
-		}
-		item[attribute] = &ddbtypes.AttributeValueMemberSS{Value: members}
-		f.items[key] = item
-		return &dynamodb.UpdateItemOutput{}, nil
-	}
-	current := int64(0)
-	if seq, ok := item["seq"].(*ddbtypes.AttributeValueMemberN); ok {
-		current, _ = strconv.ParseInt(seq.Value, 10, 64)
-	}
-	step := int64(1)
-	if one, ok := in.ExpressionAttributeValues[":one"].(*ddbtypes.AttributeValueMemberN); ok {
-		step, _ = strconv.ParseInt(one.Value, 10, 64)
-	}
-	next := &ddbtypes.AttributeValueMemberN{Value: strconv.FormatInt(current+step, 10)}
-	item["seq"] = next
-	f.items[key] = item
-	return &dynamodb.UpdateItemOutput{Attributes: map[string]ddbtypes.AttributeValue{"seq": next}}, nil
 }
 
 func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {

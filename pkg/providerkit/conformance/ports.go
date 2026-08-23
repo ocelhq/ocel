@@ -31,8 +31,8 @@ func runPorts(t *testing.T, suite Suite) {
 	t.Run("ArtifactStore", func(t *testing.T) { runArtifactStore(t, provider.Artifacts()) })
 	t.Run("Releaser", func(t *testing.T) { runReleaser(t, provider) })
 	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, provider.Credentials()) })
-	t.Run("EdgeRegistry", func(t *testing.T) { runEdgeRegistry(t, provider.Edges()) })
-	t.Run("DNSRegistry", func(t *testing.T) { runDNSRegistry(t, provider.DNS()) })
+	t.Run("EdgeRegistry", func(t *testing.T) { RunEdgeRegistry(t, provider.Edges()) })
+	t.Run("DNSRegistry", func(t *testing.T) { RunDNSRegistry(t, provider.DNS()) })
 }
 
 func under(t *testing.T, rest ...string) providerkit.RecordName {

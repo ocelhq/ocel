@@ -20,7 +20,11 @@ func StackRecord(slug string, stack naming.StackName) RecordName {
 func StacksRecord(slug string) RecordName { return RecordName{"projects", slug, "stacks"} }
 
 func EdgeStackRecord(class Class, slug string) RecordName {
-	return RecordName{"edgestacks", string(class), slug}
+	return append(EdgeStacksRecord(class), slug)
+}
+
+func EdgeStacksRecord(class Class) RecordName {
+	return RecordName{"edgestacks", string(class)}
 }
 
 func WildcardRecord(class Class) RecordName { return RecordName{"wildcard", string(class)} }

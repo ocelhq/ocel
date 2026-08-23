@@ -5,7 +5,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -16,11 +15,11 @@ type projectPlanScope struct {
 	slug       string
 	stateTable string
 	stacks     int
-	record     bootstrap.StackRecord
+	record     domains.StackRecord
 }
 
 func destroyPlanItems(edgeFront edge.Edge, scope projectPlanScope) []*contractv1.RemovalItem {
-	recorded := scope.record.Production
+	recorded := scope.record.Settlement()
 
 	items := surfaceItems(edgeFront, scope)
 	items = append(items, certificateItems(recorded)...)

@@ -7,7 +7,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -33,6 +33,10 @@ func (s *Server) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectR
 	}
 
 	awscfg, params, err := productionTeardownParams(ctx, opts, req.GetSlug())
+	if err != nil {
+		return nil, err
+	}
+	record, err := s.stackRecord(ctx, opts.Region, edge.ClassProduction, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +62,7 @@ func (s *Server) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectR
 		slug:       req.GetSlug(),
 		stateTable: deployed.StateTable,
 		stacks:     len(plan.AppStacks) + len(infraStacks),
-		record:     params.Stack,
+		record:     record,
 	})
 	if err != nil {
 		return nil, err
@@ -88,7 +92,7 @@ func (s *Server) planDestroyPreviewProject(ctx context.Context, opts providerCon
 	if err != nil {
 		return nil, err
 	}
-	record, err := bootstrap.ReadStackRecordFor(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview, slug)
+	record, err := recordState(awscfg, deployed).ReadStack(ctx, edge.ClassPreview, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +194,15 @@ func (s *Server) runDestroyProject(ctx context.Context, req *contractv1.ProjectR
 	if err != nil {
 		return finish(err)
 	}
-	stack, err := s.openStackFor(requestedEdge(req), params.Stack, awscfg.Region)
+	state, err := s.domainState(ctx, opts.Region, false)
+	if err != nil {
+		return finish(err)
+	}
+	record, err := state.ReadStack(ctx, edge.ClassProduction, req.GetSlug())
+	if err != nil {
+		return finish(err)
+	}
+	stack, err := s.openStackFor(requestedEdge(req), record, awscfg.Region)
 	if err != nil && !errors.Is(err, errNoProductionDeploy) {
 		return finish(err)
 	}
@@ -205,29 +217,29 @@ func (s *Server) runDestroyProject(ctx context.Context, req *contractv1.ProjectR
 
 	result, derr := deploy.DestroyProject(ctx, stack, deps.projectTeardown(reportingWith(tracer, stageReport), writer), stages, logf)
 
-	if teardownFinished(result, params.Stack) {
+	if teardownFinished(result, record) {
 		discarder := func(cert certs.Certificate) certs.Issuer {
 			return certs.DiscardIssuerFor(cert, certs.Deps{AWS: awscfg})
 		}
-		if err := releaseProductionDomains(ctx, params.Stack.Production, writer, discarder, logf); err != nil {
+		if err := releaseProductionDomains(ctx, record.Settlement(), writer, discarder, logf); err != nil {
 			derr = errors.Join(derr, err)
 		}
 	}
-	if err := forgetStackRecord(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassProduction, req.GetSlug(), result, params.Stack, derr); err != nil {
+	if err := forgetStackRecord(ctx, state, edge.ClassProduction, req.GetSlug(), result, record, derr); err != nil {
 		derr = errors.Join(derr, err)
 	}
 	return derr
 }
 
-func teardownFinished(result deploy.DestroyProjectResult, recorded bootstrap.StackRecord) bool {
+func teardownFinished(result deploy.DestroyProjectResult, recorded domains.StackRecord) bool {
 	return result.EdgeTornDown && !recorded.Empty()
 }
 
-func forgetStackRecord(ctx context.Context, ssmClient bootstrap.SSMAPI, class, slug string, result deploy.DestroyProjectResult, recorded bootstrap.StackRecord, failed error) error {
+func forgetStackRecord(ctx context.Context, state domains.State, class edge.Class, slug string, result deploy.DestroyProjectResult, recorded domains.StackRecord, failed error) error {
 	if failed != nil || !teardownFinished(result, recorded) {
 		return nil
 	}
-	return bootstrap.DeleteStackRecordFor(ctx, ssmClient, class, slug)
+	return state.ForgetStack(ctx, class, slug)
 }
 
 func (s *Server) runDestroyPreviewProject(ctx context.Context, req *contractv1.ProjectRequest, env *environmentv1.Environment, tracer deploy.Tracer, stageReport func(deploy.StageID) func(string), logf func(string)) error {
@@ -258,7 +270,13 @@ func (s *Server) runDestroyPreviewProject(ctx context.Context, req *contractv1.P
 
 	result, derr := deploy.DestroyPreviewProject(ctx, stack, deps.projectTeardown(reportingWith(tracer, stageReport), writer), stages, logf)
 
-	if err := forgetStackRecord(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview, slug, result, bootstrap.StackRecord{Edge: stack.State()}, derr); err != nil {
+	state, err := s.domainState(ctx, opts.Region, true)
+	if err != nil {
+		return finish(err)
+	}
+	held := domains.StackRecord{}
+	held.Edge = stack.State()
+	if err := forgetStackRecord(ctx, state, edge.ClassPreview, slug, result, held, derr); err != nil {
 		derr = errors.Join(derr, err)
 	}
 	return derr

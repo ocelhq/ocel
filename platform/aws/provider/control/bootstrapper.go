@@ -18,7 +18,6 @@ import (
 
 type SSMAPI interface {
 	bootstrap.SSMAPI
-	bootstrap.SSMPathAPI
 }
 
 type IAMAPI interface {

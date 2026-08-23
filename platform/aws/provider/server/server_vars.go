@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -36,6 +37,7 @@ type VarsServer struct {
 type stores struct {
 	openAccount func(ctx context.Context, region string) (account, error)
 	openDomain  func(ctx context.Context, region string) (domainClients, error)
+	openState   func(ctx context.Context, region string, preview bool) (domains.State, error)
 
 	mu     sync.Mutex
 	cached map[storeKey]values.Store

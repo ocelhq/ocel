@@ -37,10 +37,12 @@ import (
 	awscontrol "github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
+	"github.com/ocelhq/ocel/platform/aws/provider/domains"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumiruntime"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
-	"github.com/ocelhq/ocel/platform/aws/provider/stackindex"
+	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -133,11 +135,17 @@ func requestedDNS(req edgeSelector) *contractv1.Dns {
 	return req.GetEdge().GetDns()
 }
 
+func (s *Server) edges(region string) edges.Registry {
+	opts := s.config.get()
+	return edges.Registry{Deps: edges.Deps{
+		AWS:          func(ctx context.Context) (aws.Config, error) { return loadAWS(ctx, region) },
+		Certificates: opts.Certificates,
+	}}
+}
+
 func (s *Server) edge(kind edge.Kind, region string) (edge.Edge, error) {
 	return s.memo.edgeFor(kind, region).resolve(func() (edge.Edge, error) {
-		return edges.EdgeFor(kind, edges.Deps{
-			AWS: func(ctx context.Context) (aws.Config, error) { return loadAWS(ctx, region) },
-		})
+		return s.edges(region).Open(kind)
 	})
 }
 
@@ -260,13 +268,29 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		return deploy.Result{}, finishPreparing(fmt.Errorf("account bootstrap is present but its variable store is missing (a partial rollback?); re-run `%s`", bootstrapCmd))
 	}
 
+	state := recordState(awscfg, deployed)
 	var (
 		params         bootstrap.ClassParams
 		account        string
 		pulumiCmd      auto.PulumiCommand
 		varsReferenced map[values.Coordinate]string
+		stackRecord    domains.StackRecord
+		wildcard       domains.PreviewWildcard
 	)
 	group, gctx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		var err error
+		stackRecord, err = state.ReadStack(gctx, edge.Class(class), manifest.GetSlug())
+		return err
+	})
+	group.Go(func() error {
+		if !preview {
+			return nil
+		}
+		var err error
+		wildcard, err = state.ReadWildcard(gctx, edge.ClassPreview)
+		return err
+	})
 	group.Go(func() error {
 		var err error
 		params, err = bootstrap.ReadClassParams(gctx, ssmClient, class, manifest.GetSlug())
@@ -293,16 +317,24 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		return deploy.Result{}, finishPreparing(err)
 	}
 
+	certifier := s.edges(opts.Region).Certifier(edgeFront, certs.Deps{AWS: awscfg})
+	if env.GetTier() == environmentv1.Tier_TIER_PRODUCTION {
+		for _, host := range deploy.DeclaredHostnames(manifest, environmentv1.Tier_TIER_PRODUCTION) {
+			if note := edges.IgnoredPinNote(edgeFront, certifier, host); note != "" {
+				logf(note)
+			}
+		}
+	}
+
 	admitted, err := admitDomains(ctx, domainGate{
 		kind:          edgeFront.Kind(),
 		servesUnbound: edgeFront.Facts().ServesUnbound,
 
-		state:     params.Stack.Edge,
-		recorded:  params.Stack.Production,
-		issuer:    certs.IssuerFor(edgeFront, certs.Deps{AWS: awscfg}),
+		state:     stackRecord.Edge,
+		recorded:  stackRecord.Settlement(),
+		certifier: certifier,
 		prober:    certs.NewProber(),
-		pins:      normalizePins(opts.Certificates),
-		previewOn: params.PreviewDomain.BaseDomain,
+		previewOn: wildcard.BaseDomain,
 	}, env.GetTier(), manifest, logf)
 	if err != nil {
 		return deploy.Result{}, finishPreparing(err)
@@ -334,7 +366,7 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		return deploy.Result{}, finishPreparing(err)
 	}
 
-	priorStackState := params.Stack.Edge
+	priorStackState := stackRecord.Edge
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
 	finishPreparing(nil)
@@ -373,7 +405,7 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		EdgeSecretKey:      edgeCreds.SecretAccessKey,
 		EdgeValues:         edgeValues,
 
-		GlobalPreviewDomain: params.PreviewDomain.BaseDomain,
+		GlobalPreviewDomain: wildcard.BaseDomain,
 
 		Slug:               manifest.GetSlug(),
 		StoreScriptName:    params.DeploymentsStore.ScriptName,
@@ -418,8 +450,9 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 	}
 
 	if stackStateChanged(priorStackState, res.StackState) {
-		record := bootstrap.StackRecord{Edge: res.StackState, Production: params.Stack.Production}
-		if writeErr := bootstrap.WriteStackRecordFor(ctx, ssmClient, class, manifest.GetSlug(), record); writeErr != nil {
+		record := stackRecord
+		record.Edge = res.StackState
+		if writeErr := state.WriteStack(ctx, edge.Class(class), manifest.GetSlug(), record); writeErr != nil {
 			if err != nil {
 				return res, fmt.Errorf("%w (additionally failed to persist edge-stack state: %v)", err, writeErr)
 			}
@@ -622,9 +655,10 @@ func stackIndexFor(awscfg aws.Config, deployed bootstrap.Deployed, bootstrapCmd 
 	if deployed.StateTable == "" {
 		return nil, fmt.Errorf("account bootstrap is present but its state table is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
-	return &stackindex.Index{
-		Dynamo: dynamodb.NewFromConfig(awscfg),
-		Table:  deployed.StateTable,
+	ddb := dynamodb.NewFromConfig(awscfg)
+	return awsports.Stacks{
+		Records: awsports.Records{Dynamo: ddb, Table: deployed.StateTable},
+		Tags:    &tagclock.Sweeper{Dynamo: ddb, Table: deployed.StateTable},
 	}, nil
 }
 

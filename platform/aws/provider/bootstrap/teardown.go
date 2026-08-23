@@ -74,11 +74,7 @@ func ClassParamNames(class string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	params := append(names.edgeParams(), names.originSecretParam)
-	if class == ClassPreview {
-		params = append(params, PreviewDomainParamName)
-	}
-	return params, nil
+	return append(names.edgeParams(), names.originSecretParam), nil
 }
 
 func PassphraseHeldBySibling(ctx context.Context, api CFNDescriber, class string) (bool, error) {

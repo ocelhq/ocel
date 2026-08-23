@@ -83,10 +83,15 @@ func (f *fakeDynamo) holds(expression string, held map[string]ddbtypes.Attribute
 func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if got := aws.ToString(in.KeyConditionExpression); got != "#pk = :pk AND begins_with(#sk, :prefix)" {
+	switch got := aws.ToString(in.KeyConditionExpression); got {
+	case "#pk = :pk", "#pk = :pk AND begins_with(#sk, :prefix)":
+	default:
 		return nil, fmt.Errorf("fakeDynamo: unrecognized key condition %q", got)
 	}
 	pk, prefix := stringAttr(in.ExpressionAttributeValues, ":pk"), stringAttr(in.ExpressionAttributeValues, ":prefix")
+	if prefix == "" && strings.Contains(aws.ToString(in.KeyConditionExpression), "begins_with") {
+		return nil, fmt.Errorf("fakeDynamo: DynamoDB refuses an empty value for the key attribute sk")
+	}
 
 	var sks []string
 	for sk := range f.items[pk] {
