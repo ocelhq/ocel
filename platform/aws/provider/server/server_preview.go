@@ -86,8 +86,12 @@ func (s *Server) Preflight(ctx context.Context, req *contractv1.PreflightRequest
 		resp.InfraTier = pf.GetInfraTier()
 		resp.InfrastructurePresent = pf.GetInfrastructurePresent()
 
+		required, err := bootstrap.RequiredFeatures(req.GetFrameworks(), req.GetEdge().GetKind())
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
 		wanted, _ := requiredBootstrap(req.GetRequiredTier(), preview, production)
-		resp.Bootstrap = s.bootstrapStatus(wanted, req.GetRequiredTier(), req.GetRequiredFeatures())
+		resp.Bootstrap = s.bootstrapStatus(wanted, req.GetRequiredTier(), required)
 		if wanted.Present {
 			compat := bootstrap.CheckCompat(wanted.Schema, true, bootstrap.RequiredSchema)
 			if err := compat.Explain(wanted.Schema, bootstrap.RequiredSchema, bootstrapCommand(previewTier)); err != nil {

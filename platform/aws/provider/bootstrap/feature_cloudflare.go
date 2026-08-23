@@ -12,6 +12,7 @@ var cloudflareEdgeFeature = feature{
 	name:       FeatureCloudflareEdge,
 	summary:    "Cloudflare as the front: the workers Ocel runs there, the credential they read this account with, and the publisher that pushes each tag snapshot to them.",
 	dependsOn:  []string{FeatureISR},
+	needs:      []string{needsEdgePrefix + "cloudflare"},
 	template:   cloudflareEdgeTemplate,
 	payloads:   cloudflareEdgePayloads,
 	placements: cloudflareEdgePlacements,

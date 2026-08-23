@@ -166,11 +166,10 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
 		}
 		req := &contractv1.DeployRequest{
-			Manifest:         manifest,
-			Environment:      env,
-			Tag:              opts.tag,
-			RequiredFeatures: requiredFeatures(cfg, manifest),
-			Edge:             edgeSelection(cfg),
+			Manifest:    manifest,
+			Environment: env,
+			Tag:         opts.tag,
+			Edge:        edgeSelection(cfg),
 		}
 
 		var out deployOutcome
