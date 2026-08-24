@@ -130,6 +130,7 @@ type Link struct {
 	Type       LinkType          `json:"type"`
 	Name       string            `json:"name"`
 	Resource   string            `json:"resource,omitempty"`
+	Source     string            `json:"source,omitempty"`
 	Properties map[string]string `json:"properties,omitempty"`
 	Grants     []Grant           `json:"grants,omitempty"`
 	Version    int64             `json:"version,omitempty"`
