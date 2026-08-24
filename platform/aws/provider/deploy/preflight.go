@@ -20,5 +20,5 @@ func (r *Releaser) Preflight(ctx context.Context, pre providerkit.DeployPrefligh
 		return err
 	}
 	sessions := newSessionScope(naming.Sanitize(pre.Plan.Slug), pre.Plan.Env, cfg.StateTableARN)
-	return checkInlinePolicyBudget(pre.Plan, pre.Resources, pre.Grants, sessions)
+	return checkInlinePolicyBudget(pre.Apps, sessions)
 }

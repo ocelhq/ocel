@@ -165,6 +165,29 @@ func TestDeployHandsPreflightThePlanBeforeItUploadsAnything(t *testing.T) {
 	}
 }
 
+func TestPreflightSeesWhichResourcesEachAppUses(t *testing.T) {
+	builtProject(t)
+	provider := &preflighting{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, provider)
+
+	if result, _ := deploy(t, client, twoAppRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	used := map[string][]string{}
+	for _, app := range provider.Preflighted()[0].Apps {
+		for _, resource := range app.Resources {
+			used[app.App] = append(used[app.App], resource.Name)
+		}
+		slices.Sort(used[app.App])
+	}
+	if !slices.Equal(used["web"], []string{"orders"}) {
+		t.Errorf("preflight saw web using %v, want only what its usage edges name", used["web"])
+	}
+	if !slices.Equal(used["admin"], []string{"orders", "uploads"}) {
+		t.Errorf("preflight saw admin using %v, want both of the resources it declares usages for", used["admin"])
+	}
+}
+
 func TestDeployRefusedByPreflightUploadsNothing(t *testing.T) {
 	builtProject(t)
 	provider := &preflighting{Provider: fake.NewProvider(fake.Options{})}

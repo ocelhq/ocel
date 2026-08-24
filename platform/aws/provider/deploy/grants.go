@@ -187,27 +187,30 @@ func (e *PolicyBudgetError) Error() string {
 	return b.String()
 }
 
-func checkInlinePolicyBudget(plan providerkit.DeployPlan, resources []providerkit.Resource, grants []providerkit.Link, sessions sessionScope) error {
-	items, err := billedPolicies(resources, grants, sessions)
-	if err != nil {
-		return err
-	}
-	total := 0
-	for _, item := range items {
-		total += item.Chars
-	}
-	if total <= policyBudgetChars {
-		return nil
-	}
-	slices.SortFunc(items, func(a, b PolicyBillItem) int {
-		if c := cmp.Compare(b.Chars, a.Chars); c != 0 {
-			return c
+func checkInlinePolicyBudget(apps []providerkit.AppUsage, sessions sessionScope) error {
+	var over []PolicyBudgetApp
+	for _, app := range apps {
+		items, err := billedPolicies(app.Resources, app.Grants, sessions)
+		if err != nil {
+			return err
 		}
-		return cmp.Compare(a.Link, b.Link)
-	})
-	over := make([]PolicyBudgetApp, 0, len(plan.Apps))
-	for _, app := range plan.Apps {
+		total := 0
+		for _, item := range items {
+			total += item.Chars
+		}
+		if total <= policyBudgetChars {
+			continue
+		}
+		slices.SortFunc(items, func(a, b PolicyBillItem) int {
+			if c := cmp.Compare(b.Chars, a.Chars); c != 0 {
+				return c
+			}
+			return cmp.Compare(a.Link, b.Link)
+		})
 		over = append(over, PolicyBudgetApp{App: app.App, Total: total, Items: items})
+	}
+	if len(over) == 0 {
+		return nil
 	}
 	return &PolicyBudgetError{Apps: over}
 }

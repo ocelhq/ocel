@@ -34,7 +34,14 @@ type DeployPreflight struct {
 	Plan      DeployPlan
 	Resources []Resource
 	Grants    []Link
+	Apps      []AppUsage
 	Report    Reporter
+}
+
+type AppUsage struct {
+	App       string
+	Resources []Resource
+	Grants    []Link
 }
 
 type DeployPreflighter interface {
