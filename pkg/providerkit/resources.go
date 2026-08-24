@@ -10,8 +10,10 @@ import (
 )
 
 type Resource struct {
-	Name string
-	Type LinkType
+	Name     string
+	Declared string
+	Type     LinkType
+	Linked   bool
 
 	Postgres  *PostgresSpec
 	Bucket    *BucketSpec
@@ -88,7 +90,7 @@ func LinkMessage(link Link) (*linksv1.Link, error) {
 	if err := VerifyProperties(link); err != nil {
 		return nil, err
 	}
-	message := &linksv1.Link{Name: link.Name}
+	message := &linksv1.Link{Name: link.Name, Grants: grantMessages(link.Grants)}
 	switch link.Type {
 	case LinkPostgres:
 		port, _ := strconv.Atoi(link.Properties[PropertyPort])
@@ -117,6 +119,45 @@ func LinkMessage(link Link) (*linksv1.Link, error) {
 	return message, nil
 }
 
+func grantMessages(grants []Grant) []*linksv1.Grant {
+	if len(grants) == 0 {
+		return nil
+	}
+	out := make([]*linksv1.Grant, 0, len(grants))
+	for _, grant := range grants {
+		message := &linksv1.Grant{Label: grant.Label, Actions: grant.Actions, Resources: grant.Resources}
+		for _, condition := range grant.Conditions {
+			message.Conditions = append(message.Conditions, &linksv1.GrantCondition{
+				Operator: condition.Operator,
+				Key:      condition.Key,
+				Values:   condition.Values,
+			})
+		}
+		out = append(out, message)
+	}
+	return out
+}
+
+func GrantsOf(message *linksv1.Link) []Grant {
+	held := message.GetGrants()
+	if len(held) == 0 {
+		return nil
+	}
+	out := make([]Grant, 0, len(held))
+	for _, grant := range held {
+		carried := Grant{Label: grant.GetLabel(), Actions: grant.GetActions(), Resources: grant.GetResources()}
+		for _, condition := range grant.GetConditions() {
+			carried.Conditions = append(carried.Conditions, GrantCondition{
+				Operator: condition.GetOperator(),
+				Key:      condition.GetKey(),
+				Values:   condition.GetValues(),
+			})
+		}
+		out = append(out, carried)
+	}
+	return out
+}
+
 var linkTypes = map[linksv1.LinkType]LinkType{
 	linksv1.LinkType_LINK_TYPE_POSTGRES: LinkPostgres,
 	linksv1.LinkType_LINK_TYPE_BUCKET:   LinkBucket,
@@ -137,9 +178,13 @@ func manifestResources(manifest *contractv1.Manifest) ([]Resource, error) {
 }
 
 func manifestResource(held *contractv1.ManifestResource) (Resource, error) {
-	name := held.GetResource().GetName()
+	name := held.GetLogicalName()
+	declared := held.GetResource().GetName()
 	if name == "" {
-		name = held.GetLogicalName()
+		name = declared
+	}
+	if declared == "" {
+		declared = name
 	}
 	if name == "" {
 		return Resource{}, Refuse(CodeInvalid, "this manifest declares a resource with no name, and a link is bound by name")
@@ -148,7 +193,7 @@ func manifestResource(held *contractv1.ManifestResource) (Resource, error) {
 	if !known {
 		return Resource{}, Refuse(CodeInvalid, "resource %s declares no type, so nothing knows what to stand up for it", name)
 	}
-	resource := Resource{Name: name, Type: kind}
+	resource := Resource{Name: name, Declared: declared, Type: kind, Linked: held.GetLinked()}
 	switch {
 	case held.GetPostgres() != nil:
 		resource.Postgres = &PostgresSpec{Version: held.GetPostgres().GetVersion()}

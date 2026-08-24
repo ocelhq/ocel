@@ -41,8 +41,8 @@ type routerHost struct {
 	Env               map[string]string
 }
 
-func (h *routerHost) hosts(fn *contractv1.ManifestFunction) bool {
-	return h != nil && routeID(fn) == h.Entry
+func (h *routerHost) hosts(fn appFunction) bool {
+	return h != nil && fn.route() == h.Entry
 }
 
 func (h *routerHost) overlay() map[string][]byte {
@@ -117,14 +117,14 @@ func (h *routerHost) entryEnv(base map[string]string) map[string]string {
 	return env
 }
 
-func (h *routerHost) plannedEntryEnv(base map[string]string, functions []*contractv1.ManifestFunction) map[string]string {
+func (h *routerHost) plannedEntryEnv(base map[string]string, functions []appFunction) map[string]string {
 	env := h.entryEnv(base)
 	size := len("{}")
 	for _, fn := range functions {
 		if h.hosts(fn) {
 			continue
 		}
-		size += len(routeID(fn)) + functionURLBudgetBytes
+		size += len(fn.route()) + functionURLBudgetBytes
 	}
 	env[functionURLsEnv] = strings.Repeat("x", size)
 	return env

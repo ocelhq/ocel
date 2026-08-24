@@ -48,27 +48,35 @@ type LinkReader interface {
 }
 
 type AppPlan struct {
-	App       string
-	Framework string
-	Entry     string
-	Functions []FunctionSpec
+	App        string
+	Framework  string
+	Entry      string
+	Deployment string
+	Functions  []FunctionSpec
 
 	Values AppValues
 
 	Grants []Link
 
 	Routing  *RoutingPlan
+	Guard    *OriginGuard
 	ISR      *ISRPlan
 	Bytecode *BytecodePlan
 
 	AssetPrefix string
 
 	Membrane ArtifactRef
+
+	CrossesMembrane bool
 }
 
 type RoutingPlan struct {
 	Entry    string
 	Manifest []byte
+}
+
+type OriginGuard struct {
+	Entry string
 }
 
 type ISRPlan struct {
@@ -83,13 +91,20 @@ type BytecodePlan struct {
 type AppValues struct {
 	Plain     map[string]string
 	Sensitive map[string]string
-	Secrets   map[string]string
+	Secrets   []SecretRef
 	Links     []Link
 	Owners    map[string]string
+	Folder    string
+}
+
+type SecretRef struct {
+	Key    string
+	Folder string
 }
 
 type FunctionSpec struct {
 	Name     string
+	Route    string
 	Handler  string
 	Runtime  string
 	Artifact ArtifactRef
@@ -109,7 +124,23 @@ type StackResult struct {
 type Link struct {
 	Type       LinkType          `json:"type"`
 	Name       string            `json:"name"`
+	Resource   string            `json:"resource,omitempty"`
 	Properties map[string]string `json:"properties,omitempty"`
+	Grants     []Grant           `json:"grants,omitempty"`
+	Version    int64             `json:"version,omitempty"`
+}
+
+type Grant struct {
+	Label      string           `json:"label,omitempty"`
+	Actions    []string         `json:"actions,omitempty"`
+	Resources  []string         `json:"resources,omitempty"`
+	Conditions []GrantCondition `json:"conditions,omitempty"`
+}
+
+type GrantCondition struct {
+	Operator string   `json:"operator,omitempty"`
+	Key      string   `json:"key,omitempty"`
+	Values   []string `json:"values,omitempty"`
 }
 
 type Function struct {

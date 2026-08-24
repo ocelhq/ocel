@@ -60,7 +60,14 @@ func runInfraStack(ctx context.Context, cfg Config, in stackInputs, manifest *co
 	if err != nil {
 		return nil, fmt.Errorf("provision infra stack %s: %w", plan.InfraStack, err)
 	}
-	return collectLinks(ctx, cfg.Secrets, in.sessions, manifest, outputs)
+	links, err := collectLinks(ctx, cfg.Secrets, in.sessions, manifest, outputs)
+	if err != nil {
+		return nil, err
+	}
+	if err := recordInfraStack(ctx, cfg, plan.InfraStack, links); err != nil {
+		return nil, err
+	}
+	return links, nil
 }
 
 func refuseHandover(ctx context.Context, release *Releaser, ref providerkit.StackRef, manifest *contractv1.Manifest) error {
@@ -98,12 +105,13 @@ func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *cont
 	router := builds.routers[name]
 	guard := builds.guards[name]
 
-	for _, fn := range functions {
+	declarations := manifestAppFunctions(functions)
+	for i, fn := range functions {
 		declared := env
-		if router.hosts(fn) {
-			declared = router.plannedEntryEnv(env, functions)
+		if router.hosts(declarations[i]) {
+			declared = router.plannedEntryEnv(env, declarations)
 		}
-		if guard.hosts(fn) {
+		if guard.hosts(declarations[i]) {
 			declared = guard.entryEnv(declared)
 		}
 		if err = checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(declared, in.transformed.forFunction(fn), caches[name], bytecode[name])); err != nil {
@@ -129,6 +137,7 @@ func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *cont
 	for _, fn := range functions {
 		vpcAccess = vpcAccess || in.transformed.forFunction(fn).VPC.placed()
 	}
+	args := argsFor(functions, in.transformed.forFunction)
 
 	program := func(pctx *pulumi.Context) error {
 		role, err := newFunctionRole(pctx, roleCoordinate(project, stack), appExecutionRole(cfg, name, caches, bytecode, baked, roleTags, policies, vpcAccess, router))
@@ -138,8 +147,8 @@ func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *cont
 		return appStackFunctions{
 			Project:   project,
 			Stack:     stack,
-			Functions: functions,
-			Args:      in.transformed.forFunction,
+			Functions: declarations,
+			Args:      args,
 			Artifacts: in.artifacts,
 			Env:       env,
 			ISR:       caches[name],
@@ -157,8 +166,13 @@ func runAppStack(ctx context.Context, cfg Config, in stackInputs, manifest *cont
 		err = fmt.Errorf("provision app-deploy stack %s: %w", stack, upErr)
 		return nil, nil, err
 	}
-	outs, names, err = collectAppFunctionOutputs(functions, outputs)
-	return outs, names, err
+	if outs, names, err = collectAppFunctionOutputs(functions, outputs); err != nil {
+		return nil, nil, err
+	}
+	if err = recordAppStack(ctx, cfg, stack, name, id, outs, names); err != nil {
+		return nil, nil, err
+	}
+	return outs, names, nil
 }
 
 func appFunctions(manifest *contractv1.Manifest, app string) []*contractv1.ManifestFunction {

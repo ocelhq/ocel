@@ -169,8 +169,8 @@ func TestEntryFunctionCarriesTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 		return appStackFunctions{
 			Project:   "shop",
 			Stack:     stack,
-			Functions: routedFunctions(),
-			Args:      translateFunction,
+			Functions: manifestAppFunctions(routedFunctions()),
+			Args:      argsFor(routedFunctions(), translateFunction),
 			Artifacts: map[string]artifactRef{
 				"fn--web--entry": {Bucket: "artifacts", Key: "entry.zip"},
 				"fn--web--admin": {Bucket: "artifacts", Key: "admin.zip"},
@@ -216,8 +216,8 @@ func TestASiblingFunctionHostsNoRouter(t *testing.T) {
 		return appStackFunctions{
 			Project:   "shop",
 			Stack:     stack,
-			Functions: routedFunctions(),
-			Args:      translateFunction,
+			Functions: manifestAppFunctions(routedFunctions()),
+			Args:      argsFor(routedFunctions(), translateFunction),
 			Artifacts: map[string]artifactRef{},
 			Env:       map[string]string{edgeKindEnv: string(cloudfront.Kind)},
 			Router:    host,
@@ -248,7 +248,7 @@ func TestOnlyTheEntryFunctionPacksTheRoutingManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveRouterHost: %v", err)
 	}
-	functions := routedFunctions()
+	functions := manifestAppFunctions(routedFunctions())
 	dir := filepath.Join(cfg.ArtifactRoot, "apps", "web")
 
 	packed, err := zipDir(dir, withOverlay(nil, host.overlay()))
@@ -331,7 +331,7 @@ func TestTheEnvBudgetChargesForSiblingURLsStillToResolve(t *testing.T) {
 	}
 
 	base := map[string]string{edgeKindEnv: string(cloudfront.Kind)}
-	planned := host.plannedEntryEnv(base, routedFunctions())
+	planned := host.plannedEntryEnv(base, manifestAppFunctions(routedFunctions()))
 	if charged := len(planned[functionURLsEnv]); charged < len("/admin")+functionURLBudgetBytes {
 		t.Errorf("%s charges %d bytes, want an upper bound on the URL Pulumi resolves later", functionURLsEnv, charged)
 	}
@@ -379,8 +379,8 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 		return appStackFunctions{
 			Project:   "shop",
 			Stack:     stack,
-			Functions: routedFunctions(),
-			Args:      translateFunction,
+			Functions: manifestAppFunctions(routedFunctions()),
+			Args:      argsFor(routedFunctions(), translateFunction),
 			Artifacts: map[string]artifactRef{},
 			Env:       map[string]string{edgeKindEnv: string(cloudfront.Kind)},
 			Router:    host,
@@ -430,8 +430,8 @@ func TestAnAppBehindCloudflareGrantsNoInvoke(t *testing.T) {
 		return appStackFunctions{
 			Project:   "shop",
 			Stack:     stack,
-			Functions: routedFunctions(),
-			Args:      translateFunction,
+			Functions: manifestAppFunctions(routedFunctions()),
+			Args:      argsFor(routedFunctions(), translateFunction),
 			Artifacts: map[string]artifactRef{},
 			Env:       map[string]string{},
 			RoleArn:   pulumi.String("arn:aws:iam::123456789012:role/app"),

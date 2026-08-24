@@ -23,6 +23,8 @@ type Releaser struct {
 	stacks   StackIndex
 	realized *Realized
 	adapter  *kitpulumi.Adapter
+
+	served *servedApps
 }
 
 func NewReleaser(cfg Config, realized *Realized) *Releaser {
@@ -30,7 +32,7 @@ func NewReleaser(cfg Config, realized *Realized) *Releaser {
 }
 
 func newReleaser(cfg Config, realized *Realized, engine kitpulumi.Engine) *Releaser {
-	r := &Releaser{cfg: cfg, stacks: cfg.Stacks, realized: realized}
+	r := &Releaser{cfg: cfg, stacks: cfg.Stacks, realized: realized, served: newServedApps()}
 	r.adapter = kitpulumi.New(kitpulumi.Config{
 		Access: kitpulumi.Access{
 			BackendURL: cfg.BackendURL,
@@ -79,12 +81,15 @@ type stackWork struct {
 }
 
 func (r *Releaser) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
-	if work, held := plan.Options.(*stackWork); held {
+	switch work := plan.Options.(type) {
+	case *stackWork:
 		return work.program(pctx)
+	case *appWork:
+		return work.run(pctx)
 	}
 	if plan.Kind != providerkit.StackInfra {
-		return providerkit.Refuse(providerkit.CodeNotReady,
-			"this provider stands an app stack up through its deploy phases, not from a plan alone, so %s is not stood up here", plan.Ref.Name)
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"%s stands up an app and this plan carries none", plan.Ref.Name)
 	}
 	return r.infra(pctx, plan)
 }
@@ -106,6 +111,9 @@ func (r *Releaser) infra(pctx *sdk.Context, plan providerkit.StackPlan) error {
 	sessions := newSessionScope(project, env, r.cfg.StateTableARN)
 
 	for _, resource := range plan.Resources {
+		if resource.Linked {
+			continue
+		}
 		var err error
 		switch resource.Type {
 		case providerkit.LinkPostgres:
@@ -126,8 +134,13 @@ func (r *Releaser) infra(pctx *sdk.Context, plan providerkit.StackPlan) error {
 }
 
 func transformsOf(plan providerkit.StackPlan) *transformedArgs {
-	transformed, _ := plan.Options.(*transformedArgs)
-	return transformed
+	switch held := plan.Options.(type) {
+	case *transformedArgs:
+		return held
+	case *appWork:
+		return held.transformed
+	}
+	return nil
 }
 
 func postgresConfig(resource providerkit.Resource) *resourcesv1.PostgresConfig {
@@ -164,9 +177,15 @@ func (r *Releaser) Decode(ctx context.Context, plan providerkit.StackPlan, outpu
 		work.outputs = outputs
 		return providerkit.StackResult{}, nil
 	}
+	if plan.App != nil {
+		return r.decodeApp(plan, outputs)
+	}
 	sessions := newSessionScope(naming.Sanitize(plan.Ref.Project), plan.Ref.Name.Env, r.cfg.StateTableARN)
 	result := providerkit.StackResult{}
 	for _, resource := range plan.Resources {
+		if resource.Linked {
+			continue
+		}
 		raw, produced := outputs[resource.Name]
 		if !produced {
 			return providerkit.StackResult{}, fmt.Errorf("stack produced no output for %s", resource.Name)
@@ -188,7 +207,9 @@ func (r *Releaser) Decode(ctx context.Context, plan providerkit.StackPlan, outpu
 		if err != nil {
 			return providerkit.StackResult{}, err
 		}
-		result.Links = append(result.Links, linkOf(resource.Type, link))
+		held := linkOf(resource.Type, link)
+		held.Resource = resource.Declared
+		result.Links = append(result.Links, held)
 	}
 	return result, nil
 }
@@ -206,7 +227,38 @@ func linkOf(kind providerkit.LinkType, link *linksv1.Link) providerkit.Link {
 	case providerkit.LinkBucket:
 		properties[providerkit.PropertyBucket] = link.GetBucket().GetBucket()
 	}
-	return providerkit.Link{Type: kind, Name: link.GetName(), Properties: properties}
+	return providerkit.Link{
+		Type:       kind,
+		Name:       link.GetName(),
+		Properties: properties,
+		Grants:     providerkit.GrantsOf(link),
+	}
+}
+
+func (r *Releaser) refuseHandover(ctx context.Context, plan providerkit.StackPlan) error {
+	var linked []providerkit.Resource
+	for _, resource := range plan.Resources {
+		if resource.Linked {
+			linked = append(linked, resource)
+		}
+	}
+	if len(linked) == 0 {
+		return nil
+	}
+	outputs, err := r.adapter.Outputs(ctx, plan.Ref, nil)
+	if err != nil {
+		return err
+	}
+	var handed []string
+	for _, resource := range linked {
+		if _, provisioned := outputs[resource.Name]; provisioned {
+			handed = append(handed, resource.Declared)
+		}
+	}
+	if len(handed) == 0 {
+		return nil
+	}
+	return &HandoverError{Links: handed, Stack: plan.Ref.Name.String()}
 }
 
 func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
@@ -218,7 +270,18 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 		if err != nil {
 			return providerkit.StackResult{}, err
 		}
-		plan.Options = transformed
+		if plan.App == nil {
+			if err := r.refuseHandover(ctx, plan); err != nil {
+				return providerkit.StackResult{}, err
+			}
+			plan.Options = transformed
+		} else {
+			work, err := r.appWork(plan, transformed)
+			if err != nil {
+				return providerkit.StackResult{}, err
+			}
+			plan.Options = work
+		}
 	}
 	return r.adapter.Run(ctx, plan, report)
 }
@@ -252,6 +315,14 @@ func (r *Releaser) index(ctx context.Context, ref providerkit.StackRef) error {
 	return r.realized.realize(ctx, index, naming.Sanitize(ref.Project), ref.Name)
 }
 
+func (r *Releaser) Inspect(ctx context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
+	outputs, err := r.adapter.Outputs(ctx, ref, nil)
+	if err != nil {
+		return providerkit.StackState{}, err
+	}
+	return providerkit.StackState{Present: len(outputs) > 0}, nil
+}
+
 func (r *Releaser) Outputs(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (auto.OutputMap, error) {
 	return r.adapter.Outputs(ctx, ref, report)
 }
@@ -263,11 +334,8 @@ func (r *Releaser) up(
 	program sdk.RunFunc,
 	report providerkit.Reporter,
 ) (auto.OutputMap, error) {
-	if err := r.index(ctx, ref); err != nil {
-		return nil, err
-	}
 	work := &stackWork{program: program, tags: tags}
-	if _, err := r.adapter.Run(ctx, providerkit.StackPlan{Ref: ref, Options: work}, report); err != nil {
+	if _, err := r.Provision(ctx, providerkit.StackPlan{Ref: ref, Options: work}, report); err != nil {
 		return nil, err
 	}
 	return work.outputs, nil

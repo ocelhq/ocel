@@ -373,6 +373,7 @@ func (s *Server) runDeploy(ctx context.Context, req *contractv1.DeployRequest, m
 		PulumiProject:    naming.PulumiProject(manifest.GetSlug()),
 		Secrets:          secretsmanager.NewFromConfig(awscfg),
 		Stacks:           stacks,
+		Records:          awsports.Records{Dynamo: dynamodb.NewFromConfig(awscfg), Table: deployed.StateTable},
 		RequiredFeatures: required,
 		StateTable:       deployed.StateTable,
 		StateTableARN:    stateTableARN,
