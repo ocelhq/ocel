@@ -3,6 +3,7 @@ package providerkit_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -10,7 +11,9 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -405,6 +408,91 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 	}
 	if held := writer.(*fake.DNSWriter).Records(); slices.Contains(held, stale) {
 		t.Errorf("the zone still holds %v, want the superseded validation record released", held)
+	}
+}
+
+var rotatedValidationRecord = edge.Record{
+	Name:  "_ocel-again.app.acme.com",
+	Type:  edge.RecordTypeCNAME,
+	Value: "_rotated.validations.invalid",
+}
+
+func addHostname(t *testing.T, client contractv1connect.ProviderServiceClient) *progressv1.ResultEvent {
+	t.Helper()
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []string{"app.acme.com"},
+		Edge:       zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	return result
+}
+
+func TestAddHostnameDiscardsTheSupersededCertificateOnlyOnceTheRebindFreesIt(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassProduction, "shop")
+	provider.IssueCertificates(validationRecord)
+	if result := addHostname(t, client); !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, want the hostname settled", result.GetError())
+	}
+
+	provider.RotateCertificates()
+	provider.IssueCertificates(rotatedValidationRecord)
+	provider.RefuseDiscardingAServingCertificate(errors.New("the certificate is still bound to the edge"))
+	if result := addHostname(t, client); !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, want the rotation settled with the superseded certificate discarded after the rebind", result.GetError())
+	}
+
+	if discarded := provider.Discarded(); !slices.Contains(discarded, "issued-for-app.acme.com") {
+		t.Errorf("the provider discarded %v, want the superseded certificate among them", discarded)
+	}
+	settled := readStack(t, provider, providerkit.ClassProduction, "shop").Host("app.acme.com")
+	if len(settled.Superseded) != 0 {
+		t.Errorf("the record still carries %+v, want the discarded certificate forgotten", settled.Superseded)
+	}
+	if held := provider.DNS().(*fake.DNS).Writer("acme.com").Records(); slices.Contains(held, validationRecord) {
+		t.Errorf("the zone still holds %v, want the superseded validation record released", held)
+	}
+}
+
+func TestAddHostnameKeepsTheSupersededCertificateOnRecordWhileItsReplacementIsPending(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassProduction, "shop")
+	provider.IssueCertificates(validationRecord)
+	if result := addHostname(t, client); !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, want the hostname settled", result.GetError())
+	}
+
+	provider.RotateCertificates()
+	provider.IssueCertificates(rotatedValidationRecord)
+	provider.StallAfterProving(providerkit.Refuse(providerkit.CodeNotReady, "the certificate is still validating"))
+	if result := addHostname(t, client); result.GetSuccess() {
+		t.Fatal("AddHostname() settled the hostname, want it told to come back to a certificate still validating")
+	}
+
+	settled := readStack(t, provider, providerkit.ClassProduction, "shop").Host("app.acme.com")
+	if len(settled.Superseded) != 1 || settled.Superseded[0].ID != "issued-for-app.acme.com" {
+		t.Fatalf("the record carries %+v superseded, want the certificate the pending one replaced still reachable", settled.Superseded)
+	}
+	if !slices.Contains(settled.Superseded[0].Written, validationRecord) {
+		t.Errorf("the superseded certificate records %v as written, want its validation record still reachable",
+			settled.Superseded[0].Written)
+	}
+
+	provider.StallAfterProving(nil)
+	if result := addHostname(t, client); !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, want the re-run to settle it", result.GetError())
+	}
+	if discarded := provider.Discarded(); !slices.Contains(discarded, "issued-for-app.acme.com") {
+		t.Errorf("the provider discarded %v, want the certificate the re-run superseded released too", discarded)
 	}
 }
 

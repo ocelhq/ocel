@@ -124,7 +124,9 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 		Settled:    w.held.Settled,
 	}
 
-	if err := w.certify(ctx, settle, wildcard, report); err != nil {
+	certifying := w.certification(settle, fmt.Sprintf(
+		"If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard))
+	if err := certifying.certify(ctx, wildcard, report); err != nil {
 		return err
 	}
 
@@ -140,6 +142,9 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 		return err
 	}
 	if err := w.save(ctx); err != nil {
+		return err
+	}
+	if err := certifying.discardSuperseded(ctx, report); err != nil {
 		return err
 	}
 
@@ -171,27 +176,14 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 	return nil
 }
 
-func (w *wildcards) certify(ctx context.Context, settle settler, wildcard string, report Reporter) error {
-	rerun := fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard)
-	cert, err := certificateFor(ctx, w.provider, CertificateRequest{
-		Kind:     settle.kind,
-		Hostname: wildcard,
-		Held:     w.held.Settled.Certificate,
-		Report:   report,
-		Prove: func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error) {
-			written, werr := settle.write(ctx, records, proveHeadline(wildcard), report.Say, proveNote, rerun)
-			cert.Written, cert.Owed = written.Written, written.Owed
-			w.held.Settled.Certificate = cert
-			return cert, errors.Join(werr, w.save(ctx))
-		},
-	})
-	if cert.Held() {
-		w.held.Settled.Certificate = cert
-		if serr := w.save(ctx); serr != nil {
-			return errors.Join(err, serr)
-		}
+func (w *wildcards) certification(settle settler, notes ...string) certification {
+	return certification{
+		provider: w.provider,
+		settle:   settle,
+		settled:  &w.held.Settled,
+		persist:  w.save,
+		notes:    notes,
 	}
-	return err
 }
 
 func (w *wildcards) claimable(front edge.Edge, base string) error {
@@ -344,7 +336,7 @@ func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv
 func (w *wildcards) releaseItems(front edge.Edge) []*contractv1.RemovalItem {
 	removed, kept := front.PreviewWildcardSurfaces(w.held.Hostname())
 	items := []*contractv1.RemovalItem{surfaceItem(removed)}
-	if cert := w.held.Settled.Certificate; cert.Held() {
+	for _, cert := range w.held.Settled.certificates() {
 		items = append(items, certificateItem(cert))
 	}
 	for _, rec := range w.held.Settled.WrittenRecords() {
@@ -405,7 +397,10 @@ func (w *wildcards) release(ctx context.Context, report Reporter) error {
 	if err := w.settler(front).release(ctx, w.held.Settled.WrittenRecords(), report.Say); err != nil {
 		return err
 	}
-	if cert := w.held.Settled.Certificate; cert.Requested {
+	for _, cert := range w.held.Settled.certificates() {
+		if !cert.Requested {
+			continue
+		}
 		report.Say("Discarding certificate " + cert.ID)
 		if err := discardCertificate(ctx, w.provider, cert, report); err != nil {
 			return err

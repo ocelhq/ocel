@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -61,6 +62,18 @@ func (e *Edges) Open(kind edge.Kind) (edge.Edge, error) {
 	return front, nil
 }
 
+func (e *Edges) serving(certificate string) bool {
+	e.mu.Lock()
+	fronts := slices.Collect(maps.Values(e.edges))
+	e.mu.Unlock()
+	for _, front := range fronts {
+		if front.Serving(certificate) {
+			return true
+		}
+	}
+	return false
+}
+
 func (e *Edges) Edge(kind edge.Kind) *Edge {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -84,6 +97,7 @@ type Edge struct {
 	wildcard string
 	specs    []edge.PreviewWildcardSpec
 	bindings []edge.DomainBinding
+	serving  map[string]string
 	serves   *[]edge.Need
 	refusal  error
 }
@@ -98,10 +112,23 @@ func (e *Edge) bound(binding edge.DomainBinding) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.bindings = append(e.bindings, binding)
+	e.serving[binding.Hostname] = binding.Certificate
+}
+
+func (e *Edge) unbound(hostname string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	delete(e.serving, hostname)
+}
+
+func (e *Edge) Serving(certificate string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return certificate != "" && slices.Contains(slices.Collect(maps.Values(e.serving)), certificate)
 }
 
 func newEdge(kind edge.Kind, records providerkit.RecordStore) *Edge {
-	return &Edge{kind: kind, records: records, owners: map[string]string{}}
+	return &Edge{kind: kind, records: records, owners: map[string]string{}, serving: map[string]string{}}
 }
 
 func (e *Edge) UseLedger(ledgers func(edge.StackState) Ledger) {
@@ -304,6 +331,7 @@ func (s *Stack) BindDomain(_ context.Context, binding edge.DomainBinding) error 
 }
 
 func (s *Stack) UnbindDomain(_ context.Context, hostname string) error {
+	s.front.unbound(hostname)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.state.Release(hostname)
