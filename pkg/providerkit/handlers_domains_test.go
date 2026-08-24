@@ -405,3 +405,41 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 		t.Errorf("the zone still holds %v, want the superseded validation record released", held)
 	}
 }
+
+func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
+		Edge: edge.StackState{
+			Slug:     "shop",
+			Class:    providerkit.ClassProduction,
+			Endpoint: "https://shop.fake.invalid",
+			Front:    "shop.relay.fake.invalid",
+			Bound:    []string{"app.acme.com"},
+		},
+		Hosts: map[string]providerkit.Settled{
+			"app.acme.com": {
+				Certificate: providerkit.Certificate{ARN: "cert-of-yesterday"},
+				Probe:       providerkit.Probe{OK: true, Edge: fake.KindRelay},
+			},
+		},
+	})
+	provider.Pin("app.acme.com", "cert-of-today")
+
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []string{"app.acme.com"},
+		Edge:       zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %v %q, want the hostname settled again", err, result.GetError())
+	}
+
+	bindings := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings()
+	if len(bindings) == 0 || bindings[len(bindings)-1].Certificate != "cert-of-today" {
+		t.Errorf("the edge was bound with %+v, want the hostname rebound with the certificate it is served with now", bindings)
+	}
+}
