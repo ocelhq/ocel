@@ -238,7 +238,6 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		AppBoundaryARN:     held.AppBoundaryARN,
 		VarsSiblingClasses: []string{bootstrap.ClassProduction, bootstrap.ClassPreview},
 		VarsReferenced:     referenced,
-		Links:              publishedLinks{store: store, class: scope.Class},
 
 		ArtifactRoot:       filepath.Join(root, artifactRootDirName),
 		ArtifactBucket:     held.ArtifactBucket,
