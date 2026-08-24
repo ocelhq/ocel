@@ -25,6 +25,8 @@ var (
 
 	ErrIsReference = errors.New("values: cell is a reference")
 
+	ErrDangling = errors.New("values: reference to a value that is not there")
+
 	ErrWouldDeepen = errors.New("values: reference to a reference")
 
 	ErrTooLarge = errors.New("values: value is too large")
@@ -191,7 +193,7 @@ func (s Store) dereference(ctx context.Context, scope Scope, at Coordinate, held
 		return cell{}, Scope{}, Coordinate{}, err
 	}
 	if holder.live() == 0 {
-		return cell{}, Scope{}, Coordinate{}, fmt.Errorf("%s references %s, which holds no value: %w", at, held.Target, ErrNotFound)
+		return cell{}, Scope{}, Coordinate{}, fmt.Errorf("%s references %s, which holds no value: %w", at, held.Target, ErrDangling)
 	}
 	if holder.Target != nil {
 		return cell{}, Scope{}, Coordinate{}, fmt.Errorf("%s references %s, which is itself a reference: %w", at, held.Target, ErrWouldDeepen)
@@ -290,6 +292,19 @@ func (s Store) Versions(ctx context.Context, scope Scope, at Coordinate) ([]Vers
 }
 
 func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
+	borrowed, err := s.List(ctx, scope)
+	if err != nil {
+		return 0, err
+	}
+	for _, m := range borrowed {
+		if m.Target == nil {
+			continue
+		}
+		if err := s.unindexReference(ctx, scope, m.Coordinate, m.Target); err != nil {
+			return 0, err
+		}
+	}
+
 	held, err := s.Records.List(ctx, Under(scope))
 	if err != nil {
 		return 0, fmt.Errorf("read %s's values: %w", scope.Project, err)

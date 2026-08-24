@@ -254,6 +254,64 @@ func TestRevealAnswersOnlyTheCellsThatHoldValues(t *testing.T) {
 	}
 }
 
+func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	shared := values.Scope{Project: "platform", Class: ports.ClassProduction}
+
+	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), values.Target{Project: "platform", Cell: values.Cell{Key: "DATABASE_URL"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Delete(ctx, shared, at("DATABASE_URL"), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := store.Reveal(ctx, scope, []values.Coordinate{at("DATABASE_URL")})
+	if !errors.Is(err, values.ErrDangling) {
+		t.Fatalf("Reveal() over a reference to a value that is gone = %v, want ErrDangling rather than a quietly missing variable", err)
+	}
+	if !strings.Contains(err.Error(), "platform") {
+		t.Fatalf("the failure does not name the broken reference: %v", err)
+	}
+
+	reader := values.Reader{Records: store.Records, Sealer: store.Sealer, Scope: scope}
+	if _, err := reader.Values(ctx, []values.Cell{{Key: "DATABASE_URL"}}); !errors.Is(err, values.ErrDangling) {
+		t.Fatalf("a reader over a broken reference = %v, want it to refuse to boot the app", err)
+	}
+}
+
+func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	consumer := values.Scope{Project: "web", Class: ports.ClassProduction}
+
+	if _, err := store.Set(ctx, scope, at("KEY"), "held here", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetReference(ctx, consumer, at("KEY"), values.Target{Project: "shop", Cell: values.Cell{Key: "KEY"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.Purge(ctx, consumer); err != nil {
+		t.Fatal(err)
+	}
+	found, err := store.References(ctx, scope, at("KEY"))
+	if err != nil || len(found) != 0 {
+		t.Fatalf("References() after the consuming project was purged = %+v, %v, want nothing reading it", found, err)
+	}
+
+	shared := values.Scope{Project: "platform", Class: ports.ClassProduction}
+	if _, err := store.Set(ctx, shared, at("KEY"), "held elsewhere", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetReference(ctx, scope, at("KEY"), values.Target{Project: "platform", Cell: values.Cell{Key: "KEY"}}); err != nil {
+		t.Fatalf("SetReference() over a cell only a purged project read = %v, want it taken", err)
+	}
+}
+
 func TestPurgeTakesEveryRecordAProjectHolds(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
