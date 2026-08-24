@@ -56,6 +56,10 @@ type GrantVerifier interface {
 	VerifyGrants(ctx context.Context, link Link) error
 }
 
+type MembraneCrosser interface {
+	CrossesMembrane(kind LinkType) bool
+}
+
 type Vendor string
 
 type LinkType string

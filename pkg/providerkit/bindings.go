@@ -42,14 +42,21 @@ func (r *deployRun) admitLinks(ctx context.Context) error {
 		if !resource.Linked {
 			continue
 		}
-		if err := ReadableAs(published[resource.Declared], resource.Type); err != nil {
+		if err := ReadableAs(published[resource.Declared], resource.Type, r.crossesMembrane); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func ReadableAs(link Link, declared LinkType) error {
+func (r *deployRun) crossesMembrane(kind LinkType) bool {
+	if crosser, asks := r.provider.(MembraneCrosser); asks {
+		return crosser.CrossesMembrane(kind)
+	}
+	return CrossesMembrane(kind)
+}
+
+func ReadableAs(link Link, declared LinkType, crosses func(LinkType) bool) error {
 	switch {
 	case link.Type == LinkCustom:
 		return Refuse(CodeInvalid,
@@ -63,7 +70,7 @@ func ReadableAs(link Link, declared LinkType) error {
 				"Every app that uses %q would fail at its first cold start, so this deploy stops here. "+
 				"Declare it as what was published, or republish it as a %s",
 			link.Name, declared, link.Type, link.Name, declared)
-	case link.Source != "" && CrossesMembrane(declared):
+	case link.Source != "" && crosses(declared):
 		return Refuse(CodeInvalid,
 			"`links` binds %q to a %s record published by %s, and ocel's %s client cannot serve one it did not provision. "+
 				"Hand the app its name as an env var (`ocel env set`) instead",

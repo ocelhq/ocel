@@ -448,7 +448,7 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 				Membrane:        r.membrane,
 				Guard:           facts.Guard,
 				Packed:          pack.Carry,
-				CrossesMembrane: crossesMembrane(grants),
+				CrossesMembrane: crossesMembrane(r.crossesMembrane, grants),
 			},
 		}
 		result, err := r.provider.Releases().Provision(ctx, plan, report)
