@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -72,7 +73,6 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 	t.Run("gives each app its own writer coordinates", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{
-			ArtifactRoot:           twoAppTree(t),
 			AssetBucket:            "assets",
 			StateTable:             "state",
 			Env:                    "prod",
@@ -82,40 +82,44 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 			ISRWriterBootstrapCred: "cred-1",
 			ISRWriterSeed:          "seed-1",
 		}
+		held := releasing(t, cfg)
 
-		builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(twoAppManifest()), nil)
-		if err != nil {
-			t.Fatalf("resolveAppBuilds: %v", err)
-		}
-		againBuilds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(twoAppManifest()), nil)
-		if err != nil {
-			t.Fatalf("resolveAppBuilds (second call): %v", err)
-		}
+		web := held.isrCache(isrPlan("web", "prod/proj/web/r1/isr"))
+		admin := held.isrCache(isrPlan("admin", "prod/proj/admin/r1/isr"))
+		again := releasing(t, cfg).isrCache(isrPlan("web", "prod/proj/web/r1/isr"))
 
-		web, admin := builds.caches["web"], builds.caches["admin"]
-		if want := "https://writer.example/" + isrPrefixFor("web", testDeploymentID) + "/entry"; web.WriterURL != want {
+		if want := "https://writer.example/prod/proj/web/r1/isr/entry"; web.WriterURL != want {
 			t.Errorf("web WriterURL = %q, want %q", web.WriterURL, want)
 		}
 		if web.WriterSecret == admin.WriterSecret {
 			t.Error("two apps in one deploy must not share a write secret")
 		}
-		if web.WriterSecret != againBuilds.caches["web"].WriterSecret {
-			t.Error("resolveAppBuilds must derive the same write secret on every call")
+		if web.WriterSecret != again.WriterSecret {
+			t.Error("a release must derive the same write secret on every call")
 		}
 	})
 
 	t.Run("leaves writer coordinates unset without an adopted writer", func(t *testing.T) {
 		t.Parallel()
-		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
+		cfg := Config{AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(twoAppManifest()), nil)
-		if err != nil {
-			t.Fatalf("resolveAppBuilds: %v", err)
-		}
-		if builds.caches["web"].WriterURL != "" || builds.caches["web"].WriterSecret != "" {
-			t.Errorf("writer coordinates = %+v, want unset", builds.caches["web"])
+		cache := releasing(t, cfg).isrCache(isrPlan("web", "prod/proj/web/r1/isr"))
+		if cache.WriterURL != "" || cache.WriterSecret != "" {
+			t.Errorf("writer coordinates = %+v, want unset", cache)
 		}
 	})
+}
+
+func isrPlan(app, prefix string) providerkit.StackPlan {
+	return providerkit.StackPlan{
+		Ref:  providerkit.StackRef{Project: "proj", Class: providerkit.ClassProduction, Name: naming.AppStack("prod", app, releaseOf(deployedAs(testDeploymentID)))},
+		Kind: providerkit.StackApp,
+		App: &providerkit.AppPlan{
+			App:       app,
+			Framework: frameworkNext,
+			ISR:       &providerkit.ISRPlan{Prefix: prefix, TagNamespace: "tag:proj"},
+		},
+	}
 }
 
 func TestISRWriteSecret(t *testing.T) {

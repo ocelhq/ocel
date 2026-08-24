@@ -2,10 +2,8 @@ package deploy
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -353,69 +351,6 @@ func TestAppExecutionRoleLiveValues(t *testing.T) {
 		}
 		if withoutLive.VarsKeyARN != productionVarsKeyARN {
 			t.Errorf("VarsKeyARN = %q, want the decrypt grant every app keeps", withoutLive.VarsKeyARN)
-		}
-	})
-}
-
-func TestLiveDelivery(t *testing.T) {
-	t.Run("the artifact carries the address and never the value", func(t *testing.T) {
-		t.Parallel()
-		dir := writeTree(t, map[string]string{"src/server.js": "handler"})
-		manifest := &contractv1.Manifest{
-			Slug: "shop",
-			Apps: []*contractv1.ManifestApp{{
-				Name:   "web",
-				Folder: "/web",
-				Variables: []*contractv1.ManifestVariable{
-					scopedVariable("DB_PASSWORD", "/web", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
-					variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-				},
-			}},
-			Functions: []*contractv1.ManifestFunction{
-				{LogicalName: "web_index", ArtifactPath: filepath.Base(dir), App: "web"},
-			},
-		}
-		uploader := &fakeUploader{exists: map[string]bool{}}
-		cfg := liveConfig()
-		cfg.ArtifactRoot = filepath.Dir(dir)
-		cfg.ArtifactBucket = "artifacts"
-		cfg.Uploader = uploader
-
-		bundles, err := renderAppBundles(cfg, manifest, nil)
-		if err != nil {
-			t.Fatalf("renderAppBundles: %v", err)
-		}
-		if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, bakedBuilds(t, cfg, manifest, bundles), nil); err != nil {
-			t.Fatalf("uploadFunctionArtifacts: %v", err)
-		}
-		if len(uploader.puts) != 1 {
-			t.Fatalf("uploaded %d artifacts, want 1", len(uploader.puts))
-		}
-
-		packaged := readZip(t, []byte(uploader.putBodies[uploader.puts[0]]))
-		raw, ok := packaged[live.FilePath]
-		if !ok {
-			t.Fatalf("package = %v, want the live manifest at %s", packaged, live.FilePath)
-		}
-		parsed, err := live.Parse([]byte(raw))
-		if err != nil {
-			t.Fatalf("parse the packaged manifest: %v", err)
-		}
-		if !slices.Equal(parsed.Keys, []live.Key{{Key: "DB_PASSWORD", Folder: "/web"}}) {
-			t.Errorf("packaged keys = %+v, want DB_PASSWORD at /web", parsed.Keys)
-		}
-
-		env := variableEnv(manifest.GetApps()[0])
-		if _, ok := env["DB_PASSWORD"]; ok {
-			t.Error("a live key reached the function configuration")
-		}
-		if len(bundles["web"].env()) != 0 {
-			t.Errorf("env = %v, want a live value to cost the function configuration nothing", bundles["web"].env())
-		}
-		for path, contents := range packaged {
-			if strings.Contains(contents, "ph-123") {
-				t.Errorf("%s in the package carries a plaintext value", path)
-			}
 		}
 	})
 }

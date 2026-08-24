@@ -22,6 +22,8 @@ type appWork struct {
 	role        executionRole
 	roleCoord   naming.Coordinate
 	logical     []string
+	bundle      appBundle
+	cache       *isrConfig
 }
 
 func (w *appWork) run(pctx *sdk.Context) error {
@@ -126,6 +128,8 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 	return &appWork{
 		transformed: transformed,
 		logical:     logical,
+		bundle:      bundle,
+		cache:       cache,
 		roleCoord:   roleCoordinate(project, stack),
 		role:        role,
 		functions: appStackFunctions{
@@ -238,7 +242,7 @@ func (r *release) isrCache(plan providerkit.StackPlan) *isrConfig {
 		return nil
 	}
 	cache := &isrConfig{
-		Coord:     isrCoordinate(plan),
+		Coord:     appCoordinate(plan),
 		Namespace: held.TagNamespace,
 		Bucket:    r.cfg.AssetBucket,
 		Prefix:    held.Prefix,
@@ -253,7 +257,7 @@ func (r *release) isrCache(plan providerkit.StackPlan) *isrConfig {
 	return cache
 }
 
-func isrCoordinate(plan providerkit.StackPlan) naming.Coordinate {
+func appCoordinate(plan providerkit.StackPlan) naming.Coordinate {
 	stack := plan.Ref.Name
 	return naming.Coordinate{
 		Project: naming.Sanitize(plan.Ref.Project),

@@ -20,8 +20,6 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
-
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestBytecodeEmbedEnabled(t *testing.T) {
@@ -525,94 +523,6 @@ func TestEmbedPass(t *testing.T) {
 		}
 		if calls := invoker.called(); len(calls) != 0 {
 			t.Errorf("the pass verified a function mid-update: %v", calls)
-		}
-	})
-}
-
-func TestEmbedBytecodeCaches(t *testing.T) {
-	t.Run("names the clients it is missing", func(t *testing.T) {
-		t.Setenv(bytecodeCacheEnv, "1")
-		t.Setenv(bytecodeEmbedEnv, "1")
-		log, out := collectLog()
-
-		embedBytecodeCaches(context.Background(), Config{}, nextManifest(), nil, nil, appBuilds{}, log)
-
-		for _, want := range []string{"object getter", "code updater", "artifact uploader", "function invoker", "not embedding"} {
-			if !strings.Contains(out(), want) {
-				t.Errorf("embed log missing %q:\n%s", want, out())
-			}
-		}
-	})
-}
-
-func TestEmbedTargets(t *testing.T) {
-	t.Run("keeps a bundle that already answered from its package", func(t *testing.T) {
-		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, "web.func"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(root, "web.func", "index.js"), []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		manifest := &contractv1.Manifest{
-			Slug:      "proj",
-			Functions: []*contractv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", ArtifactPath: "web.func"}},
-		}
-		warmed := []warmResult{{
-			Target: warmTarget{App: "web", LogicalName: "web_index", FunctionName: "ocel-web-index"},
-			Reply:  warmReply{Key: embedTestCacheKey, Source: warmSourceEmbedded},
-		}}
-
-		log, out := collectLog()
-		targets := embedTargets(
-			Config{ArtifactRoot: root},
-			manifest,
-			map[string]*bytecodeConfig{"web": {Bucket: "assets", Prefix: "prod/proj/web/B1/bytecode"}},
-			map[string]artifactRef{"web_index": {Bucket: "artifacts", Key: "proj/web/abc123.zip"}},
-			warmed,
-			log,
-		)
-
-		if len(targets) != 1 {
-			t.Fatalf("embedTargets = %+v, want the bundle kept rather than silently dropped (log: %s)", targets, out())
-		}
-		if targets[0].CacheKey != embedTestCacheKey {
-			t.Errorf("embedTargets[0].CacheKey = %q, want the key the membrane reported", targets[0].CacheKey)
-		}
-	})
-
-	t.Run("keeps a node framework bundle", func(t *testing.T) {
-		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, "api.func"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(root, "api.func", "index.mjs"), []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		manifest := &contractv1.Manifest{
-			Slug:      "proj",
-			Functions: []*contractv1.ManifestFunction{{LogicalName: "api_handler", Framework: "express", App: "api", ArtifactPath: "api.func"}},
-		}
-		warmed := []warmResult{{
-			Target: warmTarget{App: "api", LogicalName: "api_handler", FunctionName: "ocel-api-handler"},
-			Reply:  warmReply{Key: embedTestCacheKey},
-		}}
-
-		log, out := collectLog()
-		targets := embedTargets(
-			Config{ArtifactRoot: root},
-			manifest,
-			map[string]*bytecodeConfig{"api": {Bucket: "assets", Prefix: "prod/proj/api/API1/bytecode"}},
-			map[string]artifactRef{"api_handler": {Bucket: "artifacts", Key: "proj/api/abc123.zip"}},
-			warmed,
-			log,
-		)
-
-		if len(targets) != 1 {
-			t.Fatalf("embedTargets = %+v, want the express bundle kept (log: %s)", targets, out())
-		}
-		if targets[0].CacheBucket != "assets" {
-			t.Errorf("embedTargets[0].CacheBucket = %q, want the bytecode bucket", targets[0].CacheBucket)
 		}
 	})
 }

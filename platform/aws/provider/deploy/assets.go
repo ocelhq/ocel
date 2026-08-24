@@ -14,7 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const staticAssetsDir = "static"
@@ -104,7 +104,10 @@ func assetPlaneTargets(cfg Config) []uploadTarget {
 	}
 }
 
-func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
+func publishStaticAssets(ctx context.Context, cfg Config, app, framework string, coord naming.Coordinate, report providerkit.Reporter) error {
+	if framework != frameworkNext {
+		return nil
+	}
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
 		return nil
 	}
@@ -118,39 +121,32 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Ma
 		headers  objectHeaders
 	}
 	var uploads []upload
-	for _, app := range manifestApps(manifest) {
-		if app.GetFramework() != frameworkNext {
-			continue
-		}
-		name := app.GetName()
-		coord := builds.coords[name]
-		root := appArtifactRoot(cfg.ArtifactRoot, name)
-		dir := filepath.Join(root, staticAssetsDir)
-		rels, err := collectFiles(dir)
-		if err != nil {
-			return err
-		}
-		for _, rel := range rels {
-			uploads = append(uploads, upload{
-				key:     coord.AssetKey(rel),
-				src:     filepath.Join(dir, filepath.FromSlash(rel)),
-				to:      plane,
-				headers: assetHeaders(rel),
-			})
-		}
-		imageConfig := filepath.Join(root, imageConfigFile)
-		switch _, err := os.Stat(imageConfig); {
-		case err == nil:
-			uploads = append(uploads, upload{
-				key:     coord.ImageConfigKey(),
-				src:     imageConfig,
-				to:      []uploadTarget{assetBucket},
-				replace: true,
-				headers: objectHeaders{contentType: "application/json"},
-			})
-		case !errors.Is(err, fs.ErrNotExist):
-			return fmt.Errorf("stat image config for %s: %w", name, err)
-		}
+	root := appArtifactRoot(cfg.ArtifactRoot, app)
+	dir := filepath.Join(root, staticAssetsDir)
+	rels, err := collectFiles(dir)
+	if err != nil {
+		return err
+	}
+	for _, rel := range rels {
+		uploads = append(uploads, upload{
+			key:     coord.AssetKey(rel),
+			src:     filepath.Join(dir, filepath.FromSlash(rel)),
+			to:      plane,
+			headers: assetHeaders(rel),
+		})
+	}
+	imageConfig := filepath.Join(root, imageConfigFile)
+	switch _, err := os.Stat(imageConfig); {
+	case err == nil:
+		uploads = append(uploads, upload{
+			key:     coord.ImageConfigKey(),
+			src:     imageConfig,
+			to:      []uploadTarget{assetBucket},
+			replace: true,
+			headers: objectHeaders{contentType: "application/json"},
+		})
+	case !errors.Is(err, fs.ErrNotExist):
+		return fmt.Errorf("stat image config for %s: %w", app, err)
 	}
 	if len(uploads) == 0 {
 		return nil
@@ -159,6 +155,7 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Ma
 		return err
 	}
 
+	report.Say("Uploading " + app + "'s static assets")
 	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
@@ -181,7 +178,7 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Ma
 			})
 		}
 	}
-	err := g.Wait()
-	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindStaticAsset, stats, err, phaseStart)
+	err = g.Wait()
+	emitUploadBatch(report, uploadKindStaticAsset, stats, err, phaseStart)
 	return err
 }

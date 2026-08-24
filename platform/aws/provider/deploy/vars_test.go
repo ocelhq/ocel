@@ -2,10 +2,8 @@ package deploy
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -670,74 +668,6 @@ func TestBakedBundle(t *testing.T) {
 		}
 		if got := overlay[baked.FilePath]; !bytes.Equal(got, []byte("sealed")) {
 			t.Errorf("overlay[%q] = %q, want the sealed bytes", baked.FilePath, got)
-		}
-	})
-}
-
-func TestBakedDelivery(t *testing.T) {
-	t.Parallel()
-
-	t.Run("the ciphertext rides in the bundle and never the configuration", func(t *testing.T) {
-		t.Parallel()
-
-		dir := writeTree(t, map[string]string{"src/server.js": "handler"})
-		manifest := &contractv1.Manifest{
-			Slug: "proj-1",
-			Apps: []*contractv1.ManifestApp{{
-				Name: "web",
-				Variables: []*contractv1.ManifestVariable{
-					variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
-					variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-				},
-			}},
-			Functions: []*contractv1.ManifestFunction{
-				{LogicalName: "web_index", ArtifactPath: "web.func", App: "web"},
-			},
-		}
-		uploader := &fakeUploader{exists: map[string]bool{}}
-		cfg := Config{
-			ArtifactRoot:   filepath.Dir(dir),
-			ArtifactBucket: "artifacts",
-			Uploader:       uploader,
-			VarsKeyARN:     productionVarsKeyARN,
-		}
-		manifest.Functions[0].ArtifactPath = filepath.Base(dir)
-
-		bundles, err := renderAppBundles(liveConfig(), manifest, nil)
-		if err != nil {
-			t.Fatalf("renderAppBundles: %v", err)
-		}
-		if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, bakedBuilds(t, cfg, manifest, bundles), nil); err != nil {
-			t.Fatalf("uploadFunctionArtifacts: %v", err)
-		}
-
-		if len(uploader.puts) != 1 {
-			t.Fatalf("uploaded %d artifacts, want 1", len(uploader.puts))
-		}
-		packaged := readZip(t, []byte(uploader.putBodies[uploader.puts[0]]))
-		if _, ok := packaged[baked.FilePath]; !ok {
-			t.Fatalf("package = %v, want the sealed values at %s", packaged, baked.FilePath)
-		}
-		for path, contents := range packaged {
-			if strings.Contains(contents, "sk-live") {
-				t.Errorf("%s in the uploaded package carries the plaintext", path)
-			}
-		}
-
-		env := variableEnv(manifest.GetApps()[0])
-		for key, value := range bundles["web"].env() {
-			env[key] = value
-		}
-		if _, ok := env["STRIPE_API_KEY"]; ok {
-			t.Error("the function environment names an encrypted-baked variable")
-		}
-		for key, value := range env {
-			if strings.Contains(value, "sk-live") {
-				t.Errorf("env[%q] carries the plaintext", key)
-			}
-		}
-		if env[baked.EnvelopeVar] == "" {
-			t.Error("the function environment carries no data key; the membrane could not open the bundle")
 		}
 	})
 }

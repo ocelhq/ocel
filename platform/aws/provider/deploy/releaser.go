@@ -334,10 +334,24 @@ func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, rep
 			if err != nil {
 				return providerkit.StackResult{}, err
 			}
+			if err := r.publishBuild(ctx, plan, work, report); err != nil {
+				return providerkit.StackResult{}, err
+			}
 			plan.Options = work
 		}
 	}
 	return r.adapter.Run(ctx, plan, report)
+}
+
+func (r *release) publishBuild(ctx context.Context, plan providerkit.StackPlan, work *appWork, report providerkit.Reporter) error {
+	app, coord := plan.App.App, appCoordinate(plan)
+	if err := publishStaticAssets(ctx, r.cfg, app, plan.App.Framework, coord, report); err != nil {
+		return err
+	}
+	if err := publishPrerenderAssets(ctx, r.cfg, app, work.cache, report); err != nil {
+		return err
+	}
+	return publishEdgeBundle(ctx, r.cfg, app, coord, work.bundle, report)
 }
 
 func (r *Releaser) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
