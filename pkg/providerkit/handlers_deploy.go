@@ -309,6 +309,7 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 				App:             entry.App,
 				Framework:       entry.Manifest.GetFramework(),
 				Entry:           entryFunction(r.manifest, entry.App),
+				Deployment:      entry.Build.DeploymentID(),
 				Functions:       r.functionSpecs(entry),
 				Values:          r.appValues(entry, grants),
 				Grants:          grants,
