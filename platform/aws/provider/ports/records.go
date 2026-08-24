@@ -34,7 +34,7 @@ var partitionSegments = map[string]int{
 	kit.RootConformance: 3,
 	kit.RootLedger:      2,
 	kit.RootEdgeStacks:  2,
-	kit.RootSchema:      2,
+	kit.RootSchema:      1,
 	kit.RootProjects:    2,
 	kit.RootBootstrap:   2,
 	kit.RootWildcard:    2,

@@ -7,7 +7,7 @@ import (
 	"strconv"
 )
 
-const RecordSchemaVersion = 1
+const RecordSchemaVersion = 2
 
 const schemaAttempts = 8
 
@@ -21,13 +21,17 @@ func EnsureRecordSchema(ctx context.Context, records RecordStore, class Class) e
 		if err != nil {
 			return err
 		}
-		if written > RecordSchemaVersion {
+		switch {
+		case written == RecordSchemaVersion:
+			return nil
+		case written > RecordSchemaVersion:
 			return Refuse(CodeNotReady,
 				"this account's records are at schema %d and this build reads schema %d: a newer ocel wrote them, and migrations run forward only. Update ocel rather than downgrade the records",
 				written, RecordSchemaVersion)
-		}
-		if written == RecordSchemaVersion {
-			return nil
+		case written > 0:
+			return Refuse(CodeNotReady,
+				"this account's records are at schema %d and this build reads schema %d: an older ocel wrote them under a layout this build does not read, and there is no migration between the two. Remove what that ocel deployed with the ocel that deployed it, then bootstrap this account afresh",
+				written, RecordSchemaVersion)
 		}
 		held.Bytes = []byte(strconv.Itoa(RecordSchemaVersion))
 		if _, err := records.Write(ctx, held); err != nil {
