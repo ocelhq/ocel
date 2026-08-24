@@ -48,11 +48,8 @@ func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) 
 }
 
 func (w *wildcards) settler(front edge.Edge) settler {
-	s := newSettler(front, w.writer, w.zone, func() edge.StackState {
-		return edge.StackState{GlobalPreview: w.held.BaseDomain}
-	})
+	s := newSettler(front, w.writer, w.zone, servedResolver{kind: front.Kind()})
 	s.ask = w.ask
-	s.resolve = servedResolver{kind: front.Kind()}
 	return s
 }
 

@@ -100,7 +100,8 @@ func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel 
 		return nil, err
 	}
 	session := &stackSession{provider: provider, front: front, stack: stack, store: store, state: state}
-	session.settle = newSettler(front, writer, sel.GetDns().GetZone(), func() edge.StackState { return session.stack.State() })
+	session.settle = newSettler(front, writer, sel.GetDns().GetZone(),
+		boundBy(front, func() edge.StackState { return session.stack.State() }))
 	return session, nil
 }
 
