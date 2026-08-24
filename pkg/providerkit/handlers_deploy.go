@@ -645,6 +645,7 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 }
 
 func (r *deployRun) publish(ctx context.Context, links []Link) error {
+	publishing := make([]values.Publishing, 0, len(links))
 	for _, link := range links {
 		message, err := LinkMessage(link)
 		if err != nil {
@@ -654,9 +655,10 @@ func (r *deployRun) publish(ctx context.Context, links []Link) error {
 		if err != nil {
 			return err
 		}
-		if _, err := r.values.SetLink(ctx, r.scope, r.plan.linkEnvironment(), values.OwnerOcel, link.Name, pair); err != nil {
-			return fmt.Errorf("publish link %s: %w", link.Name, err)
-		}
+		publishing = append(publishing, values.Publishing{Name: link.Name, Pair: pair})
+	}
+	if _, err := r.values.SetLinks(ctx, r.scope, r.plan.linkEnvironment(), values.OwnerOcel, publishing); err != nil {
+		return fmt.Errorf("publish %s's links: %w", r.scope.Project, err)
 	}
 	return nil
 }
@@ -676,9 +678,13 @@ func (p publishedLinks) Published(ctx context.Context) ([]Link, error) {
 	if err != nil {
 		return nil, err
 	}
-	links := make([]Link, 0, len(names))
-	for _, name := range names {
-		link, err := p.Resolve(ctx, name)
+	resolved, err := p.store.ResolveLinks(ctx, p.scope, p.environment, names)
+	if err != nil {
+		return nil, err
+	}
+	links := make([]Link, 0, len(resolved))
+	for i, published := range resolved {
+		link, err := linkPublished(names[i], published)
 		if err != nil {
 			return nil, err
 		}
@@ -692,6 +698,10 @@ func (p publishedLinks) Resolve(ctx context.Context, name string) (Link, error) 
 	if err != nil {
 		return Link{}, err
 	}
+	return linkPublished(name, published)
+}
+
+func linkPublished(name string, published values.Published) (Link, error) {
 	message, err := DecodeLink(published.Value)
 	if err != nil {
 		return Link{}, fmt.Errorf("read link %s: %w", name, err)

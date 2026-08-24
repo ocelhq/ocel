@@ -228,16 +228,136 @@ func (s Store) List(ctx context.Context, scope Scope) ([]Metadata, error) {
 }
 
 func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]Value, error) {
-	out := make([]Value, 0, len(cells))
+	if len(cells) == 0 {
+		return nil, nil
+	}
+	stored, err := s.storedCells(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+
+	found := make([]Coordinate, 0, len(cells))
+	holding := make([]cell, 0, len(cells))
 	for _, at := range cells {
-		value, err := s.Get(ctx, scope, at, true)
-		if errors.Is(err, ErrNotFound) {
+		held, ok := stored[cellName(scope, at).String()]
+		if !ok || held.live() == 0 {
 			continue
 		}
-		if err != nil {
-			return nil, err
+		found = append(found, at)
+		holding = append(holding, held)
+	}
+
+	holders, err := s.gather(ctx, scope, stored, holding)
+	if err != nil {
+		return nil, err
+	}
+
+	sealed := make([]cell, len(found))
+	from := make([]Scope, len(found))
+	holds := make([]Coordinate, len(found))
+	for i, at := range found {
+		if holding[i].Target == nil {
+			sealed[i], from[i], holds[i] = holding[i], scope, at
+			continue
 		}
-		out = append(out, value)
+		target := *holding[i].Target
+		from[i] = Scope{Project: target.Project, Class: scope.Class}
+		holds[i] = Coordinate{Cell: target.Cell}
+		holder := holders[cellName(from[i], holds[i]).String()]
+		if holder.live() == 0 {
+			return nil, fmt.Errorf("%s references %s, which holds no value: %w", at, &target, ErrDangling)
+		}
+		if holder.Target != nil {
+			return nil, fmt.Errorf("%s references %s, which is itself a reference: %w", at, &target, ErrWouldDeepen)
+		}
+		sealed[i] = holder
+	}
+
+	opening := make([]int, 0, len(found))
+	slotOf := make([]int, len(found))
+	slots := make(map[string]int, len(found))
+	for i := range found {
+		key := cellName(from[i], holds[i]).String()
+		slot, seen := slots[key]
+		if !seen {
+			slot = len(opening)
+			slots[key] = slot
+			opening = append(opening, i)
+		}
+		slotOf[i] = slot
+	}
+
+	plaintexts := make([]string, len(opening))
+	if err := each(ctx, len(opening), func(ctx context.Context, slot int) error {
+		i := opening[slot]
+		plaintext, err := s.Sealer.Open(ctx, coordinateOf(from[i], holds[i]), sealed[i].Sealed)
+		if err != nil {
+			return err
+		}
+		plaintexts[slot] = string(plaintext)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	out := make([]Value, 0, len(found))
+	for i, at := range found {
+		out = append(out, Value{Metadata: metadataOf(at, holding[i]), Plaintext: plaintexts[slotOf[i]]})
+	}
+	return out, nil
+}
+
+func (s Store) storedCells(ctx context.Context, scope Scope) (map[string]cell, error) {
+	held, err := s.Records.List(ctx, cellsName(scope))
+	if err != nil {
+		return nil, fmt.Errorf("read %s's values: %w", scope.Project, err)
+	}
+	out := make(map[string]cell, len(held))
+	for _, record := range held {
+		var stored cell
+		if err := json.Unmarshal(record.Bytes, &stored); err != nil {
+			return nil, fmt.Errorf("read %s: %w", record.Name, err)
+		}
+		out[record.Name.String()] = stored
+	}
+	return out, nil
+}
+
+func (s Store) gather(ctx context.Context, scope Scope, stored map[string]cell, holding []cell) (map[string]cell, error) {
+	var from []Scope
+	var holds []Coordinate
+	wanted := map[string]bool{}
+	for _, held := range holding {
+		if held.Target == nil {
+			continue
+		}
+		at := Scope{Project: held.Target.Project, Class: scope.Class}
+		holder := Coordinate{Cell: held.Target.Cell}
+		key := cellName(at, holder).String()
+		if wanted[key] {
+			continue
+		}
+		wanted[key] = true
+		from = append(from, at)
+		holds = append(holds, holder)
+	}
+
+	holders := make([]cell, len(from))
+	if err := each(ctx, len(from), func(ctx context.Context, i int) error {
+		if from[i].Project == scope.Project {
+			holders[i] = stored[cellName(from[i], holds[i]).String()]
+			return nil
+		}
+		_, holder, err := s.cellAt(ctx, from[i], holds[i])
+		holders[i] = holder
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	out := make(map[string]cell, len(from))
+	for i := range from {
+		out[cellName(from[i], holds[i]).String()] = holders[i]
 	}
 	return out, nil
 }
