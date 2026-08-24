@@ -637,3 +637,27 @@ func TestResolvingOneLinkReadsThatLinkAlone(t *testing.T) {
 		t.Errorf("ResolveLink() queried under %q, want the prefix one link's records and values share", under)
 	}
 }
+
+func TestRevealUnderACancelledContextNeverReadsAsEmptyValues(t *testing.T) {
+	store, scope := fixture()
+	var wanted []values.Coordinate
+	for _, key := range []string{"A", "B", "C", "D", "E", "F", "G", "H"} {
+		if _, err := store.Set(context.Background(), scope, at(key), "held "+key, nil); err != nil {
+			t.Fatal(err)
+		}
+		wanted = append(wanted, at(key))
+	}
+
+	ctx, stop := context.WithCancel(context.Background())
+	stop()
+
+	found, err := store.Reveal(ctx, scope, wanted)
+	if err != nil {
+		return
+	}
+	for _, value := range found {
+		if value.Plaintext == "" {
+			t.Fatalf("Reveal() = %+v with no error, want either a refusal or the value: an empty secret read as a success boots the function with a blank variable", value)
+		}
+	}
+}

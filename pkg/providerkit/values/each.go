@@ -2,7 +2,8 @@ package values
 
 import (
 	"context"
-	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
 
 const inFlight = 16
@@ -15,31 +16,10 @@ func each(ctx context.Context, n int, work func(context.Context, int) error) err
 		return nil
 	}
 
-	ctx, stop := context.WithCancel(ctx)
-	defer stop()
-
-	tokens := make(chan struct{}, inFlight)
-	var wg sync.WaitGroup
-	var once sync.Once
-	var failure error
+	group, ctx := errgroup.WithContext(ctx)
+	group.SetLimit(inFlight)
 	for i := range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			select {
-			case tokens <- struct{}{}:
-			case <-ctx.Done():
-				return
-			}
-			defer func() { <-tokens }()
-			if err := work(ctx, i); err != nil {
-				once.Do(func() {
-					failure = err
-					stop()
-				})
-			}
-		}()
+		group.Go(func() error { return work(ctx, i) })
 	}
-	wg.Wait()
-	return failure
+	return group.Wait()
 }
