@@ -29,6 +29,9 @@ func (p publishedLinks) PublishRecords(ctx context.Context, slug, environment, o
 		if err := providerkit.VerifyLink(record); err != nil {
 			return err
 		}
+		if err := deploy.CheckLinkGrants([]*linksv1.Link{record}); err != nil {
+			return err
+		}
 		pair, err := providerkit.LinkPair(owner, record)
 		if err != nil {
 			return err

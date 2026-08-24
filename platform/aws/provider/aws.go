@@ -130,6 +130,10 @@ func (p *Provider) Inspect(ctx context.Context, ref providerkit.StackRef) (provi
 	return p.releases.Inspect(ctx, ref)
 }
 
+func (p *Provider) VerifyGrants(_ context.Context, link providerkit.Link) error {
+	return deploy.VerifyGrants(link)
+}
+
 func (p *Provider) edges() edges.Registry {
 	return edges.Registry{Deps: edges.Deps{
 		AWS:          func(context.Context) (aws.Config, error) { return p.aws, nil },

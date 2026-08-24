@@ -2,6 +2,7 @@ package providerkit_test
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -26,6 +27,12 @@ func served(t *testing.T) (envvarsv1connect.EnvVarsServiceClient, *fake.Provider
 	t.Helper()
 
 	provider := fake.NewProvider(fake.Options{})
+	return varsServedBy(t, provider), provider
+}
+
+func varsServedBy(t *testing.T, provider providerkit.Provider) envvarsv1connect.EnvVarsServiceClient {
+	t.Helper()
+
 	spec := providerkit.Spec{
 		Version: "test",
 		New: func(context.Context, providerkit.Options) (providerkit.Provider, error) {
@@ -48,7 +55,7 @@ func served(t *testing.T) (envvarsv1connect.EnvVarsServiceClient, *fake.Provider
 	if _, err := contract.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
-	return envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL, auth), provider
+	return envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL, auth)
 }
 
 func cell(key string) *envvarsv1.Coordinate {
@@ -355,17 +362,17 @@ func TestALinkOcelCouldNotHaveProducedIsRefused(t *testing.T) {
 			Name:       "db",
 			Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "db.example"}},
 		},
-		"granting a whole service": {
+		"granting no action": {
 			Name:       "files",
 			Source:     "acme",
 			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*linksv1.Grant{{Actions: []string{"s3:*"}, Resources: []string{"arn:aws:s3:::files"}}},
+			Grants:     []*linksv1.Grant{{Resources: []string{"arn:aws:s3:::files"}}},
 		},
-		"granting every resource": {
+		"granting over no resource": {
 			Name:       "files",
 			Source:     "acme",
 			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*linksv1.Grant{{Actions: []string{"s3:GetObject"}, Resources: []string{"*"}}},
+			Grants:     []*linksv1.Grant{{Actions: []string{"s3:GetObject"}}},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -379,6 +386,31 @@ func TestALinkOcelCouldNotHaveProducedIsRefused(t *testing.T) {
 				t.Fatalf("SetLink(): code = %v, want %v", got, connect.CodeInvalidArgument)
 			}
 		})
+	}
+}
+
+type refusingGrants struct{ *fake.Provider }
+
+func (refusingGrants) VerifyGrants(context.Context, providerkit.Link) error {
+	return fmt.Errorf("s3:* names a whole service: %w", providerkit.ErrUnscopedGrant)
+}
+
+func TestSetLinkAsksTheProviderWhetherItWouldGrantThat(t *testing.T) {
+	vars := varsServedBy(t, refusingGrants{fake.NewProvider(fake.Options{})})
+
+	_, err := vars.SetLink(context.Background(), &envvarsv1.SetLinkRequest{
+		Slug:  slug,
+		Tier:  environmentv1.Tier_TIER_PRODUCTION,
+		Owner: "acme",
+		Link: &linksv1.Link{
+			Name:       "files",
+			Source:     "acme",
+			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*linksv1.Grant{{Actions: []string{"s3:*"}, Resources: []string{"arn:aws:s3:::files"}}},
+		},
+	})
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Fatalf("SetLink(): code = %v, want %v: the provider refused the grant", got, connect.CodeInvalidArgument)
 	}
 }
 
