@@ -14,9 +14,6 @@ import (
 	provider "github.com/ocelhq/ocel/platform/aws/provider"
 )
 
-// The port tier runs where each port's AWS doubles live: ports/, deploy/,
-// edges/ and dns/ each call the kit's per-port runs. This is the wire tier,
-// over the binary `build-native` ships.
 func TestAWSProvider(t *testing.T) {
 	conformance.Run(t, conformance.Suite{
 		Spec:    providerkit.Spec{Version: "test", New: provider.New},
