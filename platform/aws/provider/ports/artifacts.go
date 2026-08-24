@@ -17,6 +17,7 @@ import (
 
 type S3API interface {
 	GetObject(ctx context.Context, in *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	HeadObject(ctx context.Context, in *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 	PutObject(ctx context.Context, in *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 	ListObjectsV2(ctx context.Context, in *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 	DeleteObjects(ctx context.Context, in *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
@@ -99,6 +100,29 @@ func (a Artifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io
 	return nil
 }
 
+func (a Artifacts) Has(ctx context.Context, ref providerkit.ArtifactRef) (bool, error) {
+	bucket, err := a.bucket(ctx, ref.Class, ref.Bucket)
+	if err != nil {
+		return false, err
+	}
+	if _, err := a.S3.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(ref.Key),
+	}); err != nil {
+		if absent(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("look for %s/%s: %w", bucket, ref.Key, err)
+	}
+	return true, nil
+}
+
+func absent(err error) bool {
+	var missing *s3types.NotFound
+	var gone *s3types.NoSuchKey
+	return errors.As(err, &missing) || errors.As(err, &gone)
+}
+
 func (a Artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
 	bucket, err := a.bucket(ctx, ref.Class, ref.Bucket)
 	if err != nil {
@@ -109,9 +133,7 @@ func (a Artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.Re
 		Key:    aws.String(ref.Key),
 	})
 	if err != nil {
-		var absent *s3types.NoSuchKey
-		var missing *s3types.NotFound
-		if errors.As(err, &absent) || errors.As(err, &missing) {
+		if absent(err) {
 			return nil, kit.Refuse(kit.CodeInvalid, "no artifact at %s/%s", bucket, ref.Key)
 		}
 		return nil, fmt.Errorf("read %s/%s: %w", bucket, ref.Key, err)

@@ -161,6 +161,11 @@ func (s *memoryStore) Put(_ context.Context, ref providerkit.ArtifactRef, body i
 	return nil
 }
 
+func (s *memoryStore) Has(_ context.Context, ref providerkit.ArtifactRef) (bool, error) {
+	_, held := s.held[ref.Bucket+"/"+ref.Key]
+	return held, nil
+}
+
 func (s *memoryStore) Open(_ context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
 	blob, held := s.held[ref.Bucket+"/"+ref.Key]
 	if !held {

@@ -463,6 +463,21 @@ func RunArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
 		}
 	})
 
+	t.Run("Has answers for a key stored and for one nothing wrote", func(t *testing.T) {
+		held, err := artifacts.Has(ctx, ref)
+		if err != nil || !held {
+			t.Errorf("Has() of an artifact just put = %v, %v, want true: a deploy re-uploads every unchanged build without it", held, err)
+		}
+		absent := providerkit.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
+		held, err = artifacts.Has(ctx, absent)
+		if err != nil {
+			t.Errorf("Has() of a key nothing wrote = %v, want a plain false", err)
+		}
+		if held {
+			t.Error("Has() claims a key nothing wrote is stored, so a changed build would never be uploaded")
+		}
+	})
+
 	t.Run("Open of a key nothing wrote refuses rather than answering empty", func(t *testing.T) {
 		absent := providerkit.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
 		opened, err := artifacts.Open(ctx, absent)

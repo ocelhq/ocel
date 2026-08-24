@@ -23,6 +23,8 @@ import (
 type ArtifactStore interface {
 	Put(ctx context.Context, ref ArtifactRef, body io.Reader) error
 
+	Has(ctx context.Context, ref ArtifactRef) (bool, error)
+
 	Open(ctx context.Context, ref ArtifactRef) (io.ReadCloser, error)
 
 	RemovePrefix(ctx context.Context, class Class, prefix string, report Reporter) error
@@ -140,6 +142,15 @@ func (r *deployRun) put(
 	coordinate := r.plan.coordinate(entry.App, entry.Build.Release())
 	coordinate.Name = name
 	ref := ArtifactRef{Class: r.plan.Class, Bucket: StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)}
+
+	held, err := r.provider.Artifacts().Has(ctx, ref)
+	if err != nil {
+		return ArtifactRef{}, fmt.Errorf("look for %s's artifact: %w", name, err)
+	}
+	if held {
+		report.Detail(name + " is unchanged since it was last uploaded")
+		return ref, nil
+	}
 
 	body, err := packArtifact(dir, overlay)
 	if err != nil {
