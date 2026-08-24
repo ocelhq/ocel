@@ -193,6 +193,9 @@ func (r *Releaser) Plans() []providerkit.StackPlan {
 func (r *Releaser) Provision(_ context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
 	result := providerkit.StackResult{}
 	for _, resource := range plan.Resources {
+		if resource.Linked {
+			continue
+		}
 		result.Links = append(result.Links, providerkit.Link{
 			Type:       resource.Type,
 			Name:       resource.Name,

@@ -142,6 +142,9 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	if err := r.admitDomains(ctx); err != nil {
 		return nil, err
 	}
+	if err := r.admitLinks(ctx); err != nil {
+		return nil, err
+	}
 	if err := r.rememberProject(ctx); err != nil {
 		return nil, err
 	}
@@ -715,6 +718,7 @@ func linkOf(message *linksv1.Link) Link {
 	link := Link{
 		Type:       LinkCustom,
 		Name:       message.GetName(),
+		Source:     message.GetSource(),
 		Properties: map[string]string{},
 		Grants:     GrantsOf(message),
 	}
