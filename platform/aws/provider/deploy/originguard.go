@@ -41,8 +41,8 @@ func resolveOriginGuard(cfg Config, app *contractv1.ManifestApp) (*originGuard, 
 	return &originGuard{Entry: desc.Entry, Secret: cfg.OriginSecret}, nil
 }
 
-func (f *originGuard) hosts(fn *contractv1.ManifestFunction) bool {
-	return f != nil && routeID(fn) == f.Entry
+func (f *originGuard) hosts(fn appFunction) bool {
+	return f != nil && fn.route() == f.Entry
 }
 
 func (f *originGuard) entryEnv(base map[string]string) map[string]string {

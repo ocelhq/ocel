@@ -168,7 +168,10 @@ func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links
 			return appBundle{}, fmt.Errorf("%s declares %s with class %s, which this deploy cannot deliver to a function yet; declare it as `plain` or `sensitive`", app.GetName(), v.GetKey(), v.GetClass())
 		}
 	}
+	return sealAppBundle(cfg, slug, app.GetName(), sensitive, keys, links)
+}
 
+func sealAppBundle(cfg Config, slug, app string, sensitive map[string]string, keys []live.Key, links []live.Link) (appBundle, error) {
 	manifest, err := live.Render(live.Manifest{
 		Slug:        slug,
 		Table:       cfg.StateTable,
@@ -179,7 +182,7 @@ func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links
 		Links:       links,
 	})
 	if err != nil {
-		return appBundle{}, fmt.Errorf("pin %s's live values: %w", app.GetName(), err)
+		return appBundle{}, fmt.Errorf("pin %s's live values: %w", app, err)
 	}
 
 	referenced := referencedOwners(cfg, slug, keys)
@@ -189,11 +192,11 @@ func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links
 
 	key := make([]byte, baked.KeyBytes)
 	if _, err := rand.Read(key); err != nil {
-		return appBundle{}, fmt.Errorf("generate a data key for %s's encrypted variables: %w", app.GetName(), err)
+		return appBundle{}, fmt.Errorf("generate a data key for %s's encrypted variables: %w", app, err)
 	}
 	ciphertext, err := baked.Seal(key, sensitive)
 	if err != nil {
-		return appBundle{}, fmt.Errorf("seal %s's encrypted variables: %w", app.GetName(), err)
+		return appBundle{}, fmt.Errorf("seal %s's encrypted variables: %w", app, err)
 	}
 	return appBundle{
 		Envelope:    base64.StdEncoding.EncodeToString(key),

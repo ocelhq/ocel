@@ -11,6 +11,7 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -27,7 +28,8 @@ type Config struct {
 	PulumiProject string
 	Secrets       SecretsReader
 
-	Stacks StackIndex
+	Stacks  StackIndex
+	Records providerkit.RecordStore
 
 	RequiredFeatures []string
 

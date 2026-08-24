@@ -25,17 +25,19 @@ type MembraneSource interface {
 }
 
 type ServingQuery struct {
-	Root         string
-	Project      string
-	App          string
-	Framework    string
-	Stack        naming.StackName
-	Coordinate   naming.Coordinate
-	EdgeRunsCode bool
+	Root              string
+	Project           string
+	App               string
+	Framework         string
+	Stack             naming.StackName
+	Coordinate        naming.Coordinate
+	EdgeRunsCode      bool
+	EdgeSignsForwards bool
 }
 
 type ServingFacts struct {
 	Routing     *RoutingPlan
+	Guard       *OriginGuard
 	ISR         *ISRPlan
 	Bytecode    *BytecodePlan
 	AssetPrefix string
@@ -57,7 +59,36 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 		return ServingFacts{}, err
 	}
 	facts.Routing = routing
+	guard, err := guardFor(q)
+	if err != nil {
+		return ServingFacts{}, err
+	}
+	facts.Guard = guard
 	return facts, nil
+}
+
+func guardFor(q ServingQuery) (*OriginGuard, error) {
+	if q.EdgeRunsCode || q.EdgeSignsForwards {
+		return nil, nil
+	}
+	desc, present, err := ReadServeDescriptor(q.Root, q.App)
+	if err != nil || !present || desc.Entry == "" {
+		return nil, err
+	}
+	return &OriginGuard{Entry: desc.Entry}, nil
+}
+
+func CrossesMembrane(kind LinkType) bool {
+	return kind == LinkBucket
+}
+
+func crossesMembrane(grants []Link) bool {
+	for _, link := range grants {
+		if CrossesMembrane(link.Type) {
+			return true
+		}
+	}
+	return false
 }
 
 func routingFor(q ServingQuery) (*RoutingPlan, error) {

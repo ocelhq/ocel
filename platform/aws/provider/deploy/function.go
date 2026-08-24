@@ -111,7 +111,8 @@ func (v functionVPC) placed() bool {
 }
 
 type isrConfig struct {
-	Coord naming.Coordinate
+	Coord     naming.Coordinate
+	Namespace string
 
 	Bucket   string
 	Prefix   string
@@ -125,6 +126,9 @@ type isrConfig struct {
 }
 
 func (c isrConfig) tagNamespace() string {
+	if c.Namespace != "" {
+		return c.Namespace
+	}
 	if c.Coord.Project == "" || c.Coord.Env == "" || c.Coord.App == "" || c.Coord.Release.IsZero() {
 		return ""
 	}

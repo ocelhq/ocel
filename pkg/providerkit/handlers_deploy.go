@@ -304,17 +304,19 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 			Tags:  r.plan.tags(entry),
 			Links: r.reader(),
 			App: &AppPlan{
-				App:         entry.App,
-				Framework:   entry.Manifest.GetFramework(),
-				Entry:       entryFunction(r.manifest, entry.App),
-				Functions:   r.functionSpecs(entry),
-				Values:      r.appValues(entry, grants),
-				Grants:      grants,
-				Routing:     facts.Routing,
-				ISR:         facts.ISR,
-				Bytecode:    facts.Bytecode,
-				AssetPrefix: facts.AssetPrefix,
-				Membrane:    r.membrane,
+				App:             entry.App,
+				Framework:       entry.Manifest.GetFramework(),
+				Entry:           entryFunction(r.manifest, entry.App),
+				Functions:       r.functionSpecs(entry),
+				Values:          r.appValues(entry, grants),
+				Grants:          grants,
+				Routing:         facts.Routing,
+				ISR:             facts.ISR,
+				Bytecode:        facts.Bytecode,
+				AssetPrefix:     facts.AssetPrefix,
+				Membrane:        r.membrane,
+				Guard:           facts.Guard,
+				CrossesMembrane: crossesMembrane(grants),
 			},
 		}
 		result, err := r.provider.Releases().Provision(ctx, plan, report)
@@ -322,10 +324,10 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 			return err
 		}
 		r.functions[entry.App] = result.Functions
-		if err := r.embed(ctx, entry, result.Functions, report); err != nil {
+		if err := r.warm(ctx, result.Functions, report); err != nil {
 			return err
 		}
-		if err := r.warm(ctx, result.Functions, report); err != nil {
+		if err := r.embed(ctx, entry, result.Functions, report); err != nil {
 			return err
 		}
 		if err := r.stage(ctx, entry, result.Functions, grants); err != nil {
@@ -366,13 +368,14 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 
 func (r *deployRun) serving(entry AppEntry) (ServingFacts, error) {
 	return ServingFactsFor(ServingQuery{
-		Root:         ArtifactRoot(),
-		Project:      naming.Sanitize(r.plan.Slug),
-		App:          entry.App,
-		Framework:    entry.Manifest.GetFramework(),
-		Stack:        entry.Stack,
-		Coordinate:   r.plan.coordinate(entry.App, entry.Build.Release()),
-		EdgeRunsCode: r.front.Facts().RunsCode,
+		Root:              ArtifactRoot(),
+		Project:           naming.Sanitize(r.plan.Slug),
+		App:               entry.App,
+		Framework:         entry.Manifest.GetFramework(),
+		Stack:             entry.Stack,
+		Coordinate:        r.plan.coordinate(entry.App, entry.Build.Release()),
+		EdgeRunsCode:      r.front.Facts().RunsCode,
+		EdgeSignsForwards: r.front.Facts().SignsOriginForwards,
 	})
 }
 
@@ -418,14 +421,14 @@ func (r *deployRun) appValues(entry AppEntry, grants []Link) AppValues {
 	held := AppValues{
 		Plain:     map[string]string{},
 		Sensitive: map[string]string{},
-		Secrets:   map[string]string{},
 		Owners:    map[string]string{},
 		Links:     grants,
+		Folder:    entry.Manifest.GetFolder(),
 	}
 	for _, variable := range entry.Manifest.GetVariables() {
 		switch variable.GetClass() {
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:
-			held.Secrets[variable.GetKey()] = variable.GetValue()
+			held.Secrets = append(held.Secrets, SecretRef{Key: variable.GetKey(), Folder: variable.GetFolder()})
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
 			held.Sensitive[variable.GetKey()] = variable.GetValue()
 		default:
@@ -444,6 +447,7 @@ func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 		}
 		specs = append(specs, FunctionSpec{
 			Name:     fn.GetLogicalName(),
+			Route:    fn.GetRouteId(),
 			Handler:  fn.GetHandler(),
 			Runtime:  fn.GetRuntime(),
 			Artifact: r.artifacts[fn.GetLogicalName()],
@@ -631,7 +635,9 @@ func (p publishedLinks) resolve(ctx context.Context, name string) (Link, error) 
 	if err != nil {
 		return Link{}, fmt.Errorf("read link %s: %w", name, err)
 	}
-	return linkOf(message), nil
+	link := linkOf(message)
+	link.Version = published.Version
+	return link, nil
 }
 
 func linkOf(message *linksv1.Link) Link {
@@ -639,6 +645,7 @@ func linkOf(message *linksv1.Link) Link {
 		Type:       LinkCustom,
 		Name:       message.GetName(),
 		Properties: map[string]string{},
+		Grants:     GrantsOf(message),
 	}
 	if kind, known := linkTypes[naming.LinkTypeOf(message)]; known {
 		link.Type = kind

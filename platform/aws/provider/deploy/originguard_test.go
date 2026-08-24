@@ -57,8 +57,8 @@ func registerGuarded(t *testing.T, cfg Config, functions []*contractv1.ManifestF
 		return appStackFunctions{
 			Project:   "shop",
 			Stack:     stack,
-			Functions: functions,
-			Args:      translateFunction,
+			Functions: manifestAppFunctions(functions),
+			Args:      argsFor(functions, translateFunction),
 			Artifacts: map[string]artifactRef{},
 			Env:       appEnv(&contractv1.Manifest{}, app, appBundle{}, cfg, sessionScope{}),
 			Router:    host,
@@ -222,8 +222,8 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 		return appStackFunctions{
 			Project:   "shop",
 			Stack:     stack,
-			Functions: functions,
-			Args:      translateFunction,
+			Functions: manifestAppFunctions(functions),
+			Args:      argsFor(functions, translateFunction),
 			Artifacts: map[string]artifactRef{},
 			Env:       appEnv(&contractv1.Manifest{}, app, appBundle{}, cfg, sessionScope{}),
 			Guard:     guard,
