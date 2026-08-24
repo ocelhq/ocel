@@ -21,6 +21,7 @@ type projectRemoval struct {
 	stack    edge.EdgeStack
 	store    stackStore
 	state    EdgeStackState
+	writer   edge.DNSWriter
 
 	slug    string
 	class   Class
@@ -50,9 +51,14 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	if err != nil {
 		return nil, err
 	}
+	writer, err := h.dnsFor(provider, req.GetEdge())
+	if err != nil {
+		return nil, err
+	}
 	removal := &projectRemoval{
 		provider: provider,
 		front:    front,
+		writer:   writer,
 		store:    stackStore{records: provider.Records(), name: EdgeStackRecord(class, req.GetSlug())},
 		slug:     req.GetSlug(),
 		class:    class,
@@ -109,6 +115,7 @@ func (r *projectRemoval) plan() *contractv1.RemovalPlan {
 	}) {
 		plan.Items = append(plan.Items, surfaceItem(surface))
 	}
+	plan.Items = append(plan.Items, r.recordItems()...)
 	plan.Items = append(plan.Items,
 		&contractv1.RemovalItem{
 			Kind:   "variable values",
@@ -123,6 +130,35 @@ func (r *projectRemoval) plan() *contractv1.RemovalPlan {
 			Reason: "the artifacts, assets and cache entries every release of this project wrote",
 		})
 	return plan
+}
+
+func (r *projectRemoval) recordItems() []*contractv1.RemovalItem {
+	var items []*contractv1.RemovalItem
+	for _, rec := range r.state.WrittenRecords() {
+		items = append(items, &contractv1.RemovalItem{
+			Kind:   "DNS record",
+			Name:   rec.String(),
+			Action: contractv1.RemovalItem_ACTION_DELETE,
+			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
+		})
+	}
+	for _, rec := range r.state.OwedRecords() {
+		items = append(items, &contractv1.RemovalItem{
+			Kind:   "DNS record",
+			Name:   rec.String(),
+			Action: contractv1.RemovalItem_ACTION_KEEP,
+			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
+		})
+	}
+	for _, arn := range r.state.Certificates() {
+		items = append(items, &contractv1.RemovalItem{
+			Kind:   "certificate",
+			Name:   arn,
+			Action: contractv1.RemovalItem_ACTION_KEEP,
+			Reason: "you pinned it; ocel never requested it, so it is not ocel's to delete",
+		})
+	}
+	return items
 }
 
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
@@ -146,7 +182,10 @@ func (r *projectRemoval) run(ctx context.Context, report Reporter) error {
 			errs = append(errs, err)
 		}
 	}
+	written := r.state.WrittenRecords()
 	if err := r.tearDownEdge(ctx, report); err != nil {
+		errs = append(errs, err)
+	} else if err := r.releaseRecords(ctx, written, report); err != nil {
 		errs = append(errs, err)
 	}
 	if err := r.purgeValues(ctx, report); err != nil {
@@ -208,6 +247,19 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, report Reporter) erro
 	}
 	r.state = EdgeStackState{}
 	return r.store.write(ctx, r.state)
+}
+
+func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Record, report Reporter) error {
+	if r.writer == nil || len(written) == 0 {
+		return nil
+	}
+	for _, rec := range written {
+		report.Say("Removing " + rec.String())
+	}
+	if err := r.writer.DeleteRecords(ctx, written); err != nil {
+		return fmt.Errorf("remove the DNS records pointing at what this project served: %w", err)
+	}
+	return nil
 }
 
 func (r *projectRemoval) purgeValues(ctx context.Context, report Reporter) error {

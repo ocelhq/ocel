@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func projectRequest() *contractv1.ProjectRequest {
@@ -136,5 +137,90 @@ func TestRemoveProjectRefusesACallNamingNoProject(t *testing.T) {
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	}); err == nil {
 		t.Fatal("PlanRemoveProject() with no slug succeeded, want it refused")
+	}
+}
+
+func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider, *fake.DNSWriter) {
+	t.Helper()
+	client, provider := contractServed(t, "1.0.0")
+	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
+		Edge: edge.StackState{
+			Slug:     "shop",
+			Class:    providerkit.ClassProduction,
+			Endpoint: "https://shop.fake.invalid",
+			Front:    "shop.relay.fake.invalid",
+			Bound:    []string{"app.acme.com"},
+		},
+		Hosts: map[string]providerkit.Settled{
+			"app.acme.com": {
+				Certificate: "cert-for-app",
+				Written:     []edge.Record{{Name: "app.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
+				Owed:        []edge.Record{{Name: "owed.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
+			},
+		},
+	})
+	writer, err := provider.DNS().Open(fake.KindZone, "acme.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.EnsureRecords(context.Background(), []edge.Record{
+		{Name: "app.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"},
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	return client, provider, writer.(*fake.DNSWriter)
+}
+
+func settledRequest() *contractv1.ProjectRequest {
+	req := projectRequest()
+	req.Edge = zoned("acme.com")
+	return req
+}
+
+func TestPlanRemoveProjectNamesTheRecordsAndCertificatesItsHostnamesHold(t *testing.T) {
+	t.Parallel()
+	client, _, _ := settledProject(t)
+
+	plan, err := client.PlanRemoveProject(context.Background(), settledRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+	held := kinds(plan)
+	for _, kind := range []string{"DNS record", "certificate"} {
+		if !slices.Contains(held, kind) {
+			t.Errorf("the plan names %v, want a %q item among them", held, kind)
+		}
+	}
+	for _, item := range plan.GetItems() {
+		switch item.GetName() {
+		case "owed.acme.com CNAME shop.relay.fake.invalid":
+			if item.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
+				t.Errorf("the plan deletes %q, want a record ocel never wrote kept", item.GetName())
+			}
+		case "cert-for-app":
+			if item.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
+				t.Errorf("the plan deletes %q, want a pinned certificate kept", item.GetName())
+			}
+		}
+	}
+}
+
+func TestRemoveProjectReleasesTheRecordsItWrote(t *testing.T) {
+	t.Parallel()
+	client, _, writer := settledProject(t)
+
+	stream, err := client.RemoveProject(context.Background(), settledRequest())
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
+	}
+	if held := writer.Records(); len(held) != 0 {
+		t.Errorf("the zone still holds %v, want every record ocel wrote for this project released", held)
 	}
 }

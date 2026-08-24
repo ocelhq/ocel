@@ -63,6 +63,41 @@ func (s *EdgeStackState) Settle(hostname string, settled Settled) {
 	s.Hosts[hostname] = settled
 }
 
+func (s EdgeStackState) WrittenRecords() []edge.Record {
+	var written []edge.Record
+	for _, hostname := range s.Hostnames() {
+		written = mergeRecords(written, s.Hosts[hostname].Written)
+	}
+	return written
+}
+
+func (s EdgeStackState) OwedRecords() []edge.Record {
+	var owed []edge.Record
+	for _, hostname := range s.Hostnames() {
+		owed = mergeRecords(owed, s.Hosts[hostname].Owed)
+	}
+	return owed
+}
+
+func (s EdgeStackState) Certificates() []string {
+	var held []string
+	for _, hostname := range s.Hostnames() {
+		if arn := s.Hosts[hostname].Certificate; arn != "" && !slices.Contains(held, arn) {
+			held = append(held, arn)
+		}
+	}
+	return held
+}
+
+func mergeRecords(into, records []edge.Record) []edge.Record {
+	for _, rec := range records {
+		if !slices.Contains(into, rec) {
+			into = append(into, rec)
+		}
+	}
+	return into
+}
+
 func (s *EdgeStackState) Forget(hostname string) {
 	delete(s.Hosts, hostname)
 	if len(s.Hosts) == 0 {
