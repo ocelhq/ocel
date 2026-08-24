@@ -89,6 +89,12 @@ func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter
 	settled := d.state.Host(host)
 	serving := settled.Serving()
 
+	certificate, err := certificateFor(ctx, d.provider, d.settle.kind, host, report)
+	if err != nil {
+		return err
+	}
+	settled.Certificate = certificate
+
 	report.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.settle.kind))
 	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate}); err != nil {
 		return err

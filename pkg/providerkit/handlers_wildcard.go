@@ -127,6 +127,12 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 		Settled:    w.held.Settled,
 	}
 
+	certificate, err := certificateFor(ctx, w.provider, front.Kind(), wildcard, report)
+	if err != nil {
+		return err
+	}
+	w.held.Settled.Certificate = certificate
+
 	report.Say("Reconciling the shared preview entry on " + wildcard)
 	published, err := front.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{
 		BaseDomain:  base,

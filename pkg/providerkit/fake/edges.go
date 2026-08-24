@@ -83,8 +83,21 @@ type Edge struct {
 	owners   map[string]string
 	wildcard string
 	specs    []edge.PreviewWildcardSpec
+	bindings []edge.DomainBinding
 	serves   *[]edge.Need
 	refusal  error
+}
+
+func (e *Edge) Bindings() []edge.DomainBinding {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.bindings)
+}
+
+func (e *Edge) bound(binding edge.DomainBinding) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.bindings = append(e.bindings, binding)
 }
 
 func newEdge(kind edge.Kind, records providerkit.RecordStore) *Edge {
@@ -282,6 +295,7 @@ func (s *Stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneRe
 }
 
 func (s *Stack) BindDomain(_ context.Context, binding edge.DomainBinding) error {
+	s.front.bound(binding)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.state.Bind(binding.Hostname)
