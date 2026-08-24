@@ -30,6 +30,17 @@ type CodeEmbedder interface {
 	EmbedCode(ctx context.Context, function string, artifact ArtifactRef, report Reporter) error
 }
 
+type DeployPreflight struct {
+	Plan      DeployPlan
+	Resources []Resource
+	Grants    []Link
+	Report    Reporter
+}
+
+type DeployPreflighter interface {
+	PreflightDeploy(ctx context.Context, pre DeployPreflight) error
+}
+
 type StackInspector interface {
 	Inspect(ctx context.Context, ref StackRef) (StackState, error)
 }

@@ -2,6 +2,8 @@ package providerkit_test
 
 import (
 	"context"
+	"io"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -103,5 +105,92 @@ func TestDeployEmbedsTheBytecodeCacheOfEveryFunctionItShipped(t *testing.T) {
 	}
 	if !strings.Contains(provider.embedded[0], ".zip") {
 		t.Errorf("the deploy embedded %q, want it to name the artifact the function runs from", provider.embedded[0])
+	}
+}
+
+type preflighting struct {
+	*fake.Provider
+
+	mu       sync.Mutex
+	uploaded []string
+}
+
+func (p *preflighting) PreflightDeploy(ctx context.Context, pre providerkit.DeployPreflight) error {
+	return fake.DeployPreflighter{Provider: p.Provider}.PreflightDeploy(ctx, pre)
+}
+
+func (p *preflighting) Artifacts() providerkit.ArtifactStore {
+	return watchedArtifacts{ArtifactStore: p.Provider.Artifacts(), on: p}
+}
+
+func (p *preflighting) uploads() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.uploaded)
+}
+
+type watchedArtifacts struct {
+	providerkit.ArtifactStore
+	on *preflighting
+}
+
+func (w watchedArtifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
+	w.on.mu.Lock()
+	w.on.uploaded = append(w.on.uploaded, ref.Key)
+	w.on.mu.Unlock()
+	return w.ArtifactStore.Put(ctx, ref, body)
+}
+
+func TestDeployHandsPreflightThePlanBeforeItUploadsAnything(t *testing.T) {
+	builtProject(t)
+	provider := &preflighting{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, provider)
+
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	preflighted := provider.Preflighted()
+	if len(preflighted) != 1 {
+		t.Fatalf("the deploy ran %d preflights, want the one that precedes the upload", len(preflighted))
+	}
+	pre := preflighted[0]
+	if pre.Plan.Slug != "shop" || len(pre.Plan.Apps) != 1 {
+		t.Errorf("preflight saw plan %+v, want the project and the app the manifest declares", pre.Plan)
+	}
+	if len(pre.Resources) != 1 || pre.Resources[0].Name != "orders" {
+		t.Errorf("preflight saw resources %+v, want the one the manifest declares", pre.Resources)
+	}
+	if pre.Report == nil {
+		t.Error("preflight was handed no reporter, and a vendor check has nothing to say through")
+	}
+}
+
+func TestDeployRefusedByPreflightUploadsNothing(t *testing.T) {
+	builtProject(t)
+	provider := &preflighting{Provider: fake.NewProvider(fake.Options{})}
+	provider.RefusePreflight(providerkit.Refuse(providerkit.CodeInvalid, "this account holds no room for what the manifest asks for"))
+	client := servedBy(t, provider)
+
+	stream, err := client.Deploy(context.Background(), deployRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failure string
+	for stream.Receive() {
+		if result := stream.Msg().GetResult(); result != nil {
+			failure = result.GetError()
+		}
+	}
+	said := failure + connectMessage(stream.Err())
+	stream.Close()
+
+	if said == "" {
+		t.Fatal("Deploy() shipped past a refusing preflight, want it stopped")
+	}
+	if !strings.Contains(said, "no room") {
+		t.Errorf("Deploy() failed with %q, want the preflight's own refusal", said)
+	}
+	if uploaded := provider.uploads(); len(uploaded) != 0 {
+		t.Errorf("the deploy uploaded %v after a refusing preflight, want nothing put in the store", uploaded)
 	}
 }

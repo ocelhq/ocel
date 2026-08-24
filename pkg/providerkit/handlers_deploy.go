@@ -154,6 +154,9 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	if err := r.checkNeeds(ctx); err != nil {
 		return nil, err
 	}
+	if err := r.preflight(ctx); err != nil {
+		return nil, err
+	}
 	if err := r.timed(r.stages.Uploading, func(report Reporter) error { return r.upload(ctx, report) }); err != nil {
 		return nil, err
 	}
@@ -285,6 +288,27 @@ func (r *deployRun) checkNeeds(ctx context.Context) error {
 	}
 	r.needs = records
 	return nil
+}
+
+func (r *deployRun) preflight(ctx context.Context) error {
+	preflighter, ok := r.provider.(DeployPreflighter)
+	if !ok {
+		return nil
+	}
+	resources, err := manifestResources(r.manifest)
+	if err != nil {
+		return err
+	}
+	grants, err := r.reader().Published(ctx)
+	if err != nil {
+		return err
+	}
+	return preflighter.PreflightDeploy(ctx, DeployPreflight{
+		Plan:      r.plan,
+		Resources: resources,
+		Grants:    grants,
+		Report:    r.report(r.stages.Provisioning, progressv1.Phase_PHASE_PROVISIONING),
+	})
 }
 
 func (r *deployRun) provision(ctx context.Context) error {

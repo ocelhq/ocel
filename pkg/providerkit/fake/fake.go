@@ -23,6 +23,9 @@ type Provider struct {
 	discarded   []string
 	health      *providerkit.CertificateHealth
 
+	preflightRefusal error
+	preflighted      []providerkit.DeployPreflight
+
 	options   Options
 	records   *Records
 	artifacts *Artifacts
@@ -168,6 +171,31 @@ func (p *Provider) DiscardCertificate(_ context.Context, cert providerkit.Certif
 	return nil
 }
 
+func (p *Provider) RefusePreflight(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.preflightRefusal = err
+}
+
+func (p *Provider) Preflighted() []providerkit.DeployPreflight {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.preflighted)
+}
+
+func (p *Provider) preflight(pre providerkit.DeployPreflight) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.preflighted = append(p.preflighted, pre)
+	return p.preflightRefusal
+}
+
+type DeployPreflighter struct{ *Provider }
+
+func (d DeployPreflighter) PreflightDeploy(_ context.Context, pre providerkit.DeployPreflight) error {
+	return d.preflight(pre)
+}
+
 type Warmer struct{ *Provider }
 
 func (Warmer) Warm(context.Context, []string, providerkit.Reporter) error { return nil }
@@ -208,14 +236,19 @@ func (Full) VerifyGrants(context.Context, providerkit.Link) error { return nil }
 
 func (Full) Membrane(context.Context) ([]byte, error) { return []byte(Membrane), nil }
 
+func (f Full) PreflightDeploy(_ context.Context, pre providerkit.DeployPreflight) error {
+	return f.preflight(pre)
+}
+
 var (
-	_ providerkit.Provider       = (*Provider)(nil)
-	_ providerkit.Warmer         = Warmer{}
-	_ providerkit.CodeEmbedder   = CodeEmbedder{}
-	_ providerkit.StackInspector = StackInspector{}
-	_ providerkit.GrantVerifier  = GrantVerifier{}
-	_ providerkit.MembraneSource = MembraneSource{}
-	_ providerkit.Certifier      = (*Provider)(nil)
+	_ providerkit.Provider          = (*Provider)(nil)
+	_ providerkit.Warmer            = Warmer{}
+	_ providerkit.CodeEmbedder      = CodeEmbedder{}
+	_ providerkit.StackInspector    = StackInspector{}
+	_ providerkit.GrantVerifier     = GrantVerifier{}
+	_ providerkit.MembraneSource    = MembraneSource{}
+	_ providerkit.DeployPreflighter = DeployPreflighter{}
+	_ providerkit.Certifier         = (*Provider)(nil)
 )
 
 const Membrane = "fake-membrane"
