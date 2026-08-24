@@ -2,6 +2,7 @@ package providerkit_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const webDeploymentID = "0123456789abcdef0123456789abcdef"
@@ -269,4 +271,71 @@ func servedBy(t *testing.T, provider providerkit.Provider) contractv1connect.Pro
 		t.Fatalf("Configure() error = %v", err)
 	}
 	return client
+}
+
+func declaresNeed(t *testing.T, app string, need edge.Need) {
+	t.Helper()
+	dir := providerkit.AppArtifactRoot(providerkit.ArtifactRoot(), app)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(edge.ServeDescriptor{
+		Needs: map[edge.Need]edge.NeedDetail{need: {Routes: []string{"/feed"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, edge.ServeDescriptorFile), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeployWaivesANeedTheProjectAllowsToDegrade(t *testing.T) {
+	builtProject(t)
+	declaresNeed(t, "web", edge.NeedStreaming)
+	client, provider := contractServed(t, "1.0.0")
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Serves(nil)
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{
+		Kind:          string(fake.KindRelay),
+		AllowDegraded: []string{string(edge.NeedStreaming)},
+	}
+
+	result, events := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() waiving %s = %q, want the deploy to stand up degraded", edge.NeedStreaming, result.GetError())
+	}
+	if !slices.ContainsFunc(events, func(event *progressv1.OperationEvent) bool {
+		return event.GetDegraded().GetNeed() == string(edge.NeedStreaming)
+	}) {
+		t.Errorf("the deploy said nothing about %s, want the waived need reported out loud", edge.NeedStreaming)
+	}
+}
+
+func TestDeployRefusesANeedTheProjectDoesNotWaive(t *testing.T) {
+	builtProject(t)
+	declaresNeed(t, "web", edge.NeedStreaming)
+	client, provider := contractServed(t, "1.0.0")
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Serves(nil)
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+
+	stream, err := client.Deploy(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failure string
+	for stream.Receive() {
+		if result := stream.Msg().GetResult(); result != nil {
+			failure = result.GetError()
+		}
+	}
+	said := failure + connectMessage(stream.Err())
+	stream.Close()
+
+	if !strings.Contains(said, string(edge.NeedStreaming)) {
+		t.Fatalf("Deploy() against an edge serving nothing = %q, want it refused by the need's name", said)
+	}
 }

@@ -72,6 +72,8 @@ type deployRun struct {
 	values values.Store
 	scope  values.Scope
 
+	allowDegraded []string
+
 	artifacts map[string]ArtifactRef
 	membrane  ArtifactRef
 	needs     NeedRecords
@@ -108,6 +110,8 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		scope:     values.Scope{Project: plan.Slug, Class: plan.Class},
 		artifacts: map[string]ArtifactRef{},
 		functions: map[string][]Function{},
+
+		allowDegraded: req.GetEdge().GetAllowDegraded(),
 	}
 	if run.state, err = run.store.read(ctx); err != nil {
 		return nil, err
@@ -218,8 +222,9 @@ func (r *deployRun) checkpoint(ctx context.Context) error {
 
 func (r *deployRun) checkNeeds(ctx context.Context) error {
 	check := NeedCheck{
-		Edge: r.front,
-		Root: ArtifactRoot(),
+		Edge:          r.front,
+		Root:          ArtifactRoot(),
+		AllowDegraded: r.allowDegraded,
 		Degraded: func(need edge.Need, detail string) {
 			r.sender.send(degradedEvent(need, detail))
 		},

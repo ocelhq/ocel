@@ -83,6 +83,7 @@ type Edge struct {
 	owners   map[string]string
 	wildcard string
 	specs    []edge.PreviewWildcardSpec
+	serves   *[]edge.Need
 	refusal  error
 }
 
@@ -130,7 +131,20 @@ func (e *Edge) Facts() edge.Facts {
 	}
 }
 
-func (e *Edge) Supported() []edge.Need { return edge.AllNeeds() }
+func (e *Edge) Serves(needs []edge.Need) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.serves = &needs
+}
+
+func (e *Edge) Supported() []edge.Need {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.serves != nil {
+		return slices.Clone(*e.serves)
+	}
+	return edge.AllNeeds()
+}
 
 func (e *Edge) FlipBound() edge.FlipBound {
 	return edge.FlipBound{Typical: 30 * time.Second, Published: true}
