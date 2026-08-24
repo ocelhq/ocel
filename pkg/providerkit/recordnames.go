@@ -4,18 +4,30 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func SchemaRecord(class Class) RecordName { return RecordName{"schema", string(class)} }
+const (
+	rootSchema     = "schema"
+	rootProjects   = "projects"
+	rootBootstrap  = "bootstrap"
+	rootEdgeStacks = "edgestacks"
+	rootWildcard   = "wildcard"
+	rootLedger     = "ledger"
+)
 
-func ProjectsRecord(class Class) RecordName { return RecordName{"projects", string(class)} }
-
-func ProjectRecord(class Class, slug string) RecordName {
-	return append(ProjectsRecord(class), slug)
+func rooted(root string, class Class, rest ...string) RecordName {
+	return append(RecordName{root, string(class)}, rest...)
 }
 
-func BootstrapRecord(class Class) RecordName { return RecordName{"bootstrap", string(class)} }
+func SchemaRecord(class Class) RecordName { return rooted(rootSchema, class) }
+
+func ProjectsRecord(class Class) RecordName { return rooted(rootProjects, class) }
+
+func ProjectRecord(class Class, slug string) RecordName {
+	return rooted(rootProjects, class, slug)
+}
+
+func BootstrapRecord(class Class) RecordName { return rooted(rootBootstrap, class) }
 
 func StackRecord(class Class, slug string, stack naming.StackName) RecordName {
 	return append(StacksRecord(class, slug), stack.String())
@@ -26,33 +38,29 @@ func StacksRecord(class Class, slug string) RecordName {
 }
 
 func EdgeStackRecord(class Class, slug string) RecordName {
-	return append(EdgeStacksRecord(class), slug)
+	return rooted(rootEdgeStacks, class, slug)
 }
 
 func EdgeStacksRecord(class Class) RecordName {
-	return RecordName{"edgestacks", string(class)}
+	return rooted(rootEdgeStacks, class)
 }
 
-func WildcardRecord(class Class) RecordName { return RecordName{"wildcard", string(class)} }
-
-func EdgePrivate(kind edge.Kind, rest ...string) RecordName {
-	return append(RecordName{"edges", string(kind)}, rest...)
-}
+func WildcardRecord(class Class) RecordName { return rooted(rootWildcard, class) }
 
 func LedgerRecord(scope string, rest ...string) RecordName {
-	return append(RecordName{"ledger", scope}, rest...)
+	return append(RecordName{rootLedger, scope}, rest...)
 }
 
 var classSegment = map[string]int{
-	"schema":      1,
-	"projects":    1,
-	"bootstrap":   1,
-	"conformance": 1,
-	"edgestacks":  1,
-	"wildcard":    1,
-	"valuerefs":   1,
-	"ledger":      1,
-	"values":      2,
+	rootSchema:     1,
+	rootProjects:   1,
+	rootBootstrap:  1,
+	rootEdgeStacks: 1,
+	rootWildcard:   1,
+	rootLedger:     1,
+	"conformance":  1,
+	"valuerefs":    1,
+	"values":       2,
 }
 
 func ClassOf(name RecordName) (Class, bool) {
@@ -64,7 +72,7 @@ func ClassOf(name RecordName) (Class, bool) {
 		return "", false
 	}
 	segment := name[at]
-	if name[0] == "ledger" {
+	if name[0] == rootLedger {
 		segment, _, _ = strings.Cut(segment, naming.PathSeparator)
 	}
 	switch Class(segment) {

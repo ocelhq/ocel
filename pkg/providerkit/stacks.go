@@ -64,13 +64,18 @@ func ForgetStack(ctx context.Context, records RecordStore, class Class, slug str
 }
 
 func ReadStacks(ctx context.Context, records RecordStore, class Class, slug string) ([]StackEntry, error) {
-	held, err := records.List(ctx, StacksRecord(class, slug))
+	under := StacksRecord(class, slug)
+	held, err := records.List(ctx, under)
 	if err != nil {
 		return nil, fmt.Errorf("read %s's stacks: %w", slug, err)
 	}
 	entries := make([]StackEntry, 0, len(held))
 	for _, record := range held {
-		name, err := naming.ParseStackName(record.Name[len(record.Name)-1])
+		rest, named := record.Name.Under(under)
+		if !named {
+			continue
+		}
+		name, err := naming.ParseStackName(rest[0])
 		if err != nil {
 			continue
 		}

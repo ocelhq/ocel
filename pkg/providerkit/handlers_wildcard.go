@@ -233,13 +233,15 @@ func (w *wildcards) routeInstalled(ctx context.Context) bool {
 }
 
 func (w *wildcards) served(ctx context.Context) ([]string, error) {
-	held, err := w.records.List(ctx, RecordName{"edgestacks", string(ClassPreview)})
+	under := EdgeStacksRecord(ClassPreview)
+	held, err := w.records.List(ctx, under)
 	if err != nil {
 		return nil, fmt.Errorf("read the projects served on %s: %w", w.held.Hostname(), err)
 	}
 	var served []string
 	for _, record := range held {
-		if len(record.Bytes) == 0 {
+		rest, named := record.Name.Under(under)
+		if !named || len(record.Bytes) == 0 {
 			continue
 		}
 		var state EdgeStackState
@@ -247,7 +249,7 @@ func (w *wildcards) served(ctx context.Context) ([]string, error) {
 			return nil, fmt.Errorf("read %s: %w", record.Name, err)
 		}
 		if state.Edge.ServedOnGlobalPreview(w.held.BaseDomain) {
-			served = append(served, record.Name[len(record.Name)-1])
+			served = append(served, rest[0])
 		}
 	}
 	slices.Sort(served)

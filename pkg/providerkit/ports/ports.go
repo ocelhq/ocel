@@ -29,6 +29,18 @@ type RecordName []string
 
 func (n RecordName) String() string { return strings.Join(n, "/") }
 
+func (n RecordName) Under(prefix RecordName) (RecordName, bool) {
+	if len(n) <= len(prefix) {
+		return nil, false
+	}
+	for i, segment := range prefix {
+		if n[i] != segment {
+			return nil, false
+		}
+	}
+	return n[len(prefix):], true
+}
+
 type Revision string
 
 type Record struct {
