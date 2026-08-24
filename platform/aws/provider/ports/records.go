@@ -23,6 +23,8 @@ const (
 	sortAttribute      = "sk"
 	bodyAttribute      = "body"
 	revisionAttribute  = "rev"
+
+	conditionalCheckFailed = "ConditionalCheckFailed"
 )
 
 var partitionSegments = map[string]int{
@@ -37,6 +39,7 @@ type DynamoAPI interface {
 	PutItem(context.Context, *dynamodb.PutItemInput, ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	DeleteItem(context.Context, *dynamodb.DeleteItemInput, ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
 	Query(context.Context, *dynamodb.QueryInput, ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+	TransactWriteItems(context.Context, *dynamodb.TransactWriteItemsInput, ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
 }
 
 type Records struct {
@@ -108,43 +111,115 @@ func (r Records) Write(ctx context.Context, record kit.Record) (kit.Revision, er
 	if table == "" {
 		return "", unbootstrapped()
 	}
-	pk, sk, err := keyOf(record.Name)
-	if err != nil {
-		return "", err
-	}
-	next, err := mintRevision()
+	written, err := writingOf(record)
 	if err != nil {
 		return "", err
 	}
 
-	in := &dynamodb.PutItemInput{
-		TableName: aws.String(table),
-		Item: map[string]ddbtypes.AttributeValue{
-			partitionAttribute: &ddbtypes.AttributeValueMemberS{Value: pk},
-			sortAttribute:      &ddbtypes.AttributeValueMemberS{Value: sk},
-			bodyAttribute:      &ddbtypes.AttributeValueMemberB{Value: record.Bytes},
-			revisionAttribute:  &ddbtypes.AttributeValueMemberS{Value: string(next)},
-		},
-		ExpressionAttributeNames: map[string]string{"#pk": partitionAttribute},
-	}
-	if record.Revision == "" {
-		in.ConditionExpression = aws.String("attribute_not_exists(#pk)")
-	} else {
-		in.ConditionExpression = aws.String("#rev = :rev")
-		in.ExpressionAttributeNames["#rev"] = revisionAttribute
-		in.ExpressionAttributeValues = map[string]ddbtypes.AttributeValue{
-			":rev": &ddbtypes.AttributeValueMemberS{Value: string(record.Revision)},
-		}
-	}
-
-	if _, err := r.Dynamo.PutItem(ctx, in); err != nil {
+	if _, err := r.Dynamo.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:                 aws.String(table),
+		Item:                      written.item,
+		ConditionExpression:       aws.String(written.condition),
+		ExpressionAttributeNames:  written.names,
+		ExpressionAttributeValues: written.values,
+	}); err != nil {
 		var failed *ddbtypes.ConditionalCheckFailedException
 		if errors.As(err, &failed) {
 			return "", kit.ErrStale
 		}
 		return "", fmt.Errorf("write %s: %w", record.Name, err)
 	}
-	return next, nil
+	return written.revision, nil
+}
+
+func (r Records) WritePair(ctx context.Context, first, second kit.Record) error {
+	table, err := r.table(ctx, first.Name)
+	if err != nil {
+		return err
+	}
+	if table == "" {
+		return unbootstrapped()
+	}
+	beside, err := r.table(ctx, second.Name)
+	if err != nil {
+		return err
+	}
+	if beside != table {
+		return kit.Refuse(kit.CodeInvalid,
+			"%s and %s are kept in different tables, and one write cannot span both", first.Name, second.Name)
+	}
+
+	writes := make([]ddbtypes.TransactWriteItem, 0, 2)
+	for _, record := range []kit.Record{first, second} {
+		written, err := writingOf(record)
+		if err != nil {
+			return err
+		}
+		writes = append(writes, ddbtypes.TransactWriteItem{Put: &ddbtypes.Put{
+			TableName:                 aws.String(table),
+			Item:                      written.item,
+			ConditionExpression:       aws.String(written.condition),
+			ExpressionAttributeNames:  written.names,
+			ExpressionAttributeValues: written.values,
+		}})
+	}
+
+	if _, err := r.Dynamo.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes}); err != nil {
+		var cancelled *ddbtypes.TransactionCanceledException
+		if errors.As(err, &cancelled) && conditionFailed(cancelled) {
+			return kit.ErrStale
+		}
+		return fmt.Errorf("write %s beside %s: %w", first.Name, second.Name, err)
+	}
+	return nil
+}
+
+func conditionFailed(cancelled *ddbtypes.TransactionCanceledException) bool {
+	for _, reason := range cancelled.CancellationReasons {
+		if aws.ToString(reason.Code) == conditionalCheckFailed {
+			return true
+		}
+	}
+	return false
+}
+
+type writing struct {
+	item      map[string]ddbtypes.AttributeValue
+	condition string
+	names     map[string]string
+	values    map[string]ddbtypes.AttributeValue
+	revision  kit.Revision
+}
+
+func writingOf(record kit.Record) (writing, error) {
+	pk, sk, err := keyOf(record.Name)
+	if err != nil {
+		return writing{}, err
+	}
+	next, err := mintRevision()
+	if err != nil {
+		return writing{}, err
+	}
+
+	written := writing{
+		item: map[string]ddbtypes.AttributeValue{
+			partitionAttribute: &ddbtypes.AttributeValueMemberS{Value: pk},
+			sortAttribute:      &ddbtypes.AttributeValueMemberS{Value: sk},
+			bodyAttribute:      &ddbtypes.AttributeValueMemberB{Value: record.Bytes},
+			revisionAttribute:  &ddbtypes.AttributeValueMemberS{Value: string(next)},
+		},
+		condition: "attribute_not_exists(#pk)",
+		names:     map[string]string{"#pk": partitionAttribute},
+		revision:  next,
+	}
+	if record.Revision != "" {
+		written.condition = "#rev = :rev"
+		written.names["#rev"] = revisionAttribute
+		written.values = map[string]ddbtypes.AttributeValue{
+			":rev": &ddbtypes.AttributeValueMemberS{Value: string(record.Revision)},
+		}
+	}
+	return written, nil
 }
 
 func (r Records) Remove(ctx context.Context, name kit.RecordName, expected kit.Revision) error {

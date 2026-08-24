@@ -110,6 +110,37 @@ func RunRecordStore(t *testing.T, records providerkit.RecordStore) {
 		}
 	})
 
+	t.Run("a pair lands whole or not at all", func(t *testing.T) {
+		record, value := under(t, "pair", "record"), under(t, "pair", "value")
+		if err := records.WritePair(ctx,
+			providerkit.Record{Name: record, Bytes: []byte("one")},
+			providerkit.Record{Name: value, Bytes: []byte("one")},
+		); err != nil {
+			t.Fatalf("WritePair() of two new records = %v, want both stored", err)
+		}
+		held, err := records.Read(ctx, record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		beside, err := records.Read(ctx, value)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		moved := beside
+		moved.Revision = "a revision nobody wrote"
+		held.Bytes, moved.Bytes = []byte("two"), []byte("two")
+		if err := records.WritePair(ctx, held, moved); !errors.Is(err, providerkit.ErrStale) {
+			t.Fatalf("WritePair() where one half moved = %v, want ErrStale", err)
+		}
+		for _, name := range []providerkit.RecordName{record, value} {
+			stood, err := records.Read(ctx, name)
+			if err != nil || !bytes.Equal(stood.Bytes, []byte("one")) {
+				t.Fatalf("Read(%s) after a refused pair write = %q, %v, want the bytes from the write that landed", name, stood.Bytes, err)
+			}
+		}
+	})
+
 	t.Run("a removal names the revision it read", func(t *testing.T) {
 		name := under(t, "removed")
 		revision, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte("one")})

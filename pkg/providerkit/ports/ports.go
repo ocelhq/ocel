@@ -14,6 +14,8 @@ type RecordStore interface {
 
 	Write(ctx context.Context, record Record) (Revision, error)
 
+	WritePair(ctx context.Context, first, second Record) error
+
 	Remove(ctx context.Context, name RecordName, expected Revision) error
 
 	List(ctx context.Context, under RecordName) ([]Record, error)

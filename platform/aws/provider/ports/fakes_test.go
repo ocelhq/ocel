@@ -68,6 +68,33 @@ func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput,
 	return &dynamodb.DeleteItemOutput{}, nil
 }
 
+func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.TransactWriteItemsInput, _ ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, write := range in.TransactItems {
+		if write.Put == nil {
+			return nil, fmt.Errorf("fakeDynamo: this transaction carries an operation that is not a put")
+		}
+		pk, sk := stringAttr(write.Put.Item, "pk"), stringAttr(write.Put.Item, "sk")
+		held, exists := f.items[pk][sk]
+		if f.holds(aws.ToString(write.Put.ConditionExpression), held, exists, write.Put.ExpressionAttributeValues) {
+			continue
+		}
+		return nil, &ddbtypes.TransactionCanceledException{
+			Message:             aws.String("fakeDynamo: the transaction was cancelled"),
+			CancellationReasons: []ddbtypes.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}},
+		}
+	}
+	for _, write := range in.TransactItems {
+		pk, sk := stringAttr(write.Put.Item, "pk"), stringAttr(write.Put.Item, "sk")
+		if f.items[pk] == nil {
+			f.items[pk] = map[string]map[string]ddbtypes.AttributeValue{}
+		}
+		f.items[pk][sk] = maps.Clone(write.Put.Item)
+	}
+	return &dynamodb.TransactWriteItemsOutput{}, nil
+}
+
 func (f *fakeDynamo) holds(expression string, held map[string]ddbtypes.AttributeValue, exists bool, values map[string]ddbtypes.AttributeValue) bool {
 	switch expression {
 	case "":
