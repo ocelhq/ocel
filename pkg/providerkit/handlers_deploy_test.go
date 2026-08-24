@@ -28,19 +28,21 @@ import (
 
 const webDeploymentID = "0123456789abcdef0123456789abcdef"
 
-const artifactPath = "apps/web/fn/server.zip"
+const artifactPath = "apps/web/functions/server.func"
 
-const adminArtifactPath = "apps/admin/fn/server.zip"
+const adminArtifactPath = "apps/admin/functions/server.func"
+
+const builtEntrypoint = "index.mjs"
 
 func builtProject(t *testing.T) {
 	t.Helper()
 	root := t.TempDir()
 	for _, artifact := range []string{artifactPath, adminArtifactPath} {
 		built := filepath.Join(root, ".ocel/output", filepath.FromSlash(artifact))
-		if err := os.MkdirAll(filepath.Dir(built), 0o755); err != nil {
+		if err := os.MkdirAll(built, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(built, []byte("a built function"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(built, builtEntrypoint), []byte("a built function"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}

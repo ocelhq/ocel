@@ -296,6 +296,18 @@ func (r *release) refuseHandover(ctx context.Context, plan providerkit.StackPlan
 	return &HandoverError{Links: handed, Stack: plan.Ref.Name.String()}
 }
 
+func (r *Releaser) PackApp(ctx context.Context, packing providerkit.AppPacking, _ providerkit.Reporter) (providerkit.AppPack, error) {
+	held, err := r.at(ctx, packing.Ref)
+	if err != nil {
+		return providerkit.AppPack{}, err
+	}
+	bundle, err := held.sealApp(packing.Ref.Project, packing.App, packing.Values)
+	if err != nil {
+		return providerkit.AppPack{}, err
+	}
+	return providerkit.AppPack{Overlay: bundle.overlay(), Carry: bundle}, nil
+}
+
 func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
 	held, err := r.at(ctx, plan.Ref)
 	if err != nil {

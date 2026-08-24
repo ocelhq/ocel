@@ -72,6 +72,8 @@ type AppPlan struct {
 
 	Membrane ArtifactRef
 
+	Packed any
+
 	CrossesMembrane bool
 }
 

@@ -126,6 +126,10 @@ func (p *Provider) EmbedCode(ctx context.Context, function string, artifact prov
 	return p.releases.EmbedCode(ctx, function, artifact, report)
 }
 
+func (p *Provider) PackApp(ctx context.Context, packing providerkit.AppPacking, report providerkit.Reporter) (providerkit.AppPack, error) {
+	return p.releases.PackApp(ctx, packing, report)
+}
+
 func (p *Provider) Inspect(ctx context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
 	return p.releases.Inspect(ctx, ref)
 }

@@ -382,6 +382,13 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 		if err != nil {
 			return err
 		}
+		pack, err := r.pack(ctx, entry, values, report)
+		if err != nil {
+			return err
+		}
+		if err := r.uploadApp(ctx, entry, pack, facts.Routing, report); err != nil {
+			return err
+		}
 		plan := StackPlan{
 			Ref:   r.ref(entry.Stack),
 			Kind:  StackApp,
@@ -402,6 +409,7 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 				AssetPrefix:     facts.AssetPrefix,
 				Membrane:        r.membrane,
 				Guard:           facts.Guard,
+				Packed:          pack.Carry,
 				CrossesMembrane: crossesMembrane(grants),
 			},
 		}

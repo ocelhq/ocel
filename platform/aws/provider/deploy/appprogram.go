@@ -273,9 +273,15 @@ func (r *release) bytecodeCache(plan providerkit.StackPlan) *bytecodeConfig {
 }
 
 func (r *release) appBundle(plan providerkit.StackPlan) (appBundle, error) {
-	app := plan.App
-	links := make([]live.Link, 0, len(app.Values.Links))
-	for _, link := range app.Values.Links {
+	if sealed, carried := plan.App.Packed.(appBundle); carried {
+		return sealed, nil
+	}
+	return r.sealApp(plan.Ref.Project, plan.App.App, plan.App.Values)
+}
+
+func (r *release) sealApp(project, app string, held providerkit.AppValues) (appBundle, error) {
+	links := make([]live.Link, 0, len(held.Links))
+	for _, link := range held.Links {
 		kind := wireLinkType(link.Type)
 		links = append(links, live.Link{
 			Name:    link.Name,
@@ -284,11 +290,11 @@ func (r *release) appBundle(plan providerkit.StackPlan) (appBundle, error) {
 			Granted: link.Version,
 		})
 	}
-	keys := make([]live.Key, 0, len(app.Values.Secrets))
-	for _, secret := range app.Values.Secrets {
+	keys := make([]live.Key, 0, len(held.Secrets))
+	for _, secret := range held.Secrets {
 		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
 	}
-	return sealAppBundle(r.cfg, plan.Ref.Project, app.App, app.Values.Sensitive, keys, links)
+	return sealAppBundle(r.cfg, project, app, held.Sensitive, keys, links)
 }
 
 func linkResource(link providerkit.Link) string {

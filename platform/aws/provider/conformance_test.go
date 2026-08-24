@@ -42,6 +42,7 @@ func TestTheRootCarriesTheVendorAndEveryOptionalSet(t *testing.T) {
 		"CodeEmbedder":   held[providerkit.CodeEmbedder](root),
 		"StackInspector": held[providerkit.StackInspector](root),
 		"MembraneSource": held[providerkit.MembraneSource](root),
+		"ArtifactPacker": held[providerkit.ArtifactPacker](root),
 		"GrantVerifier":  held[providerkit.GrantVerifier](root),
 	} {
 		if !held {
