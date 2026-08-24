@@ -71,7 +71,7 @@ func plainFolder(folder string) string {
 }
 
 func Under(scope Scope, rest ...string) ports.RecordName {
-	return append(ports.RecordName{"values", scope.Project, string(scope.Class)}, rest...)
+	return append(ports.RecordName{ports.RootValues, scope.Project, string(scope.Class)}, rest...)
 }
 
 func cellsName(scope Scope) ports.RecordName { return Under(scope, "cells") }
@@ -106,7 +106,7 @@ func linkOwnerName(scope Scope, owner, environment string) ports.RecordName {
 
 func refsName(target Scope, at Coordinate) ports.RecordName {
 	at = at.canonical()
-	return ports.RecordName{"valuerefs", string(target.Class), target.Project, escape(at.Folder), escape(at.Key)}
+	return ports.RecordName{ports.RootValueRefs, string(target.Class), target.Project, escape(at.Folder), escape(at.Key)}
 }
 
 func refName(target Scope, at Coordinate, from Scope, holds Coordinate) ports.RecordName {

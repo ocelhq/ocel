@@ -28,10 +28,15 @@ const (
 )
 
 var partitionSegments = map[string]int{
-	"values":     3,
-	"valuerefs":  3,
-	"ledger":     2,
-	"edgestacks": 2,
+	kit.RootValues:      3,
+	kit.RootValueRefs:   3,
+	kit.RootLedger:      2,
+	kit.RootEdgeStacks:  2,
+	kit.RootSchema:      1,
+	kit.RootProjects:    1,
+	kit.RootBootstrap:   1,
+	kit.RootWildcard:    1,
+	kit.RootConformance: 1,
 }
 
 type DynamoAPI interface {
@@ -305,35 +310,37 @@ func (r Records) List(ctx context.Context, under kit.RecordName) ([]kit.Record, 
 	}
 }
 
-func depthOf(name kit.RecordName) int {
-	if depth := partitionSegments[name[0]]; depth != 0 {
-		return depth
-	}
-	return 1
-}
-
 func prefixOf(under kit.RecordName) (string, string, error) {
-	pk, sk, err := keyOf(under)
+	pk, sk, depth, err := keyed(under)
 	if err != nil {
 		return "", "", err
 	}
-	if len(under) == depthOf(under) {
+	if len(under) == depth {
 		return pk, "", nil
 	}
 	return pk, sk, nil
 }
 
 func keyOf(name kit.RecordName) (string, string, error) {
+	pk, sk, _, err := keyed(name)
+	return pk, sk, err
+}
+
+func keyed(name kit.RecordName) (string, string, int, error) {
 	if len(name) == 0 {
-		return "", "", fmt.Errorf("a record name with no segments names nothing")
+		return "", "", 0, fmt.Errorf("a record name with no segments names nothing")
 	}
-	depth := depthOf(name)
+	depth, partitioned := partitionSegments[name[0]]
+	if !partitioned {
+		return "", "", 0, kit.Refuse(kit.CodeInvalid,
+			"%s is rooted at %q, and this account partitions no records under that root", name, name[0])
+	}
 	if len(name) < depth {
-		return "", "", fmt.Errorf(
+		return "", "", 0, fmt.Errorf(
 			"%s names %d segments and a %s record partitions on %d: reaching under half a partition would have to walk the whole table",
 			name, len(name), name[0], depth)
 	}
-	return join(name[:depth]), join(name[depth:]) + segmentSeparator, nil
+	return join(name[:depth]), join(name[depth:]) + segmentSeparator, depth, nil
 }
 
 func nameOf(item map[string]ddbtypes.AttributeValue) (kit.RecordName, bool) {

@@ -21,3 +21,15 @@ var (
 	Held   = ports.Held
 	Forget = ports.Forget
 )
+
+const (
+	RootSchema      = ports.RootSchema
+	RootProjects    = ports.RootProjects
+	RootBootstrap   = ports.RootBootstrap
+	RootEdgeStacks  = ports.RootEdgeStacks
+	RootWildcard    = ports.RootWildcard
+	RootLedger      = ports.RootLedger
+	RootValues      = ports.RootValues
+	RootValueRefs   = ports.RootValueRefs
+	RootConformance = ports.RootConformance
+)
