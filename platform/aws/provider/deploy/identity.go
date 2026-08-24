@@ -53,3 +53,7 @@ func ParseIdentity(s string) (Identity, error) {
 	}
 	return Identity{deploymentID: deploymentID, fingerprint: fingerprint}, nil
 }
+
+func releaseOf(id Identity) naming.Release {
+	return naming.NewRelease(id.DeploymentID(), id.Fingerprint())
+}

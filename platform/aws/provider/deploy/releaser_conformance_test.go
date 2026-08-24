@@ -80,12 +80,11 @@ func conformingReleaser(engine kitpulumi.Engine) *Releaser {
 		Passphrase:     "a-passphrase",
 		PulumiProject:  "ocel-conformance",
 		Secrets:        standInSecrets{},
-		Stacks:         &fakeStackIndex{},
 		StateTable:     "ocel-state",
 		StateTableARN:  "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state",
 		AppBoundaryARN: "arn:aws:iam::111122223333:policy/ocel-app-boundary",
 	}
-	return newReleaser(cfg, &Realized{}, engine)
+	return newReleaser(fixed(cfg), &Realized{}, engine)
 }
 
 func TestReleaserRunsTheKitsPortTier(t *testing.T) {

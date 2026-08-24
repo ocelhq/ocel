@@ -16,8 +16,8 @@ type Environment struct {
 	Persisted bool
 }
 
-func stackNames(ctx context.Context, records RecordStore, slug string) ([]naming.StackName, error) {
-	held, err := records.List(ctx, StacksRecord(slug))
+func stackNames(ctx context.Context, records RecordStore, class Class, slug string) ([]naming.StackName, error) {
+	held, err := records.List(ctx, StacksRecord(class, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
 	}
@@ -33,7 +33,7 @@ func stackNames(ctx context.Context, records RecordStore, slug string) ([]naming
 }
 
 func previewEnvironments(ctx context.Context, records RecordStore, slug string) ([]Environment, error) {
-	stacks, err := stackNames(ctx, records, slug)
+	stacks, err := stackNames(ctx, records, ClassPreview, slug)
 	if err != nil {
 		return nil, err
 	}

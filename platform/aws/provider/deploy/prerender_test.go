@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"slices"
 	"strings"
 	"testing"
@@ -62,7 +63,7 @@ func twoAppTree(t *testing.T) string {
 
 func deployedConfig(cfg Config) Config {
 	if cfg.Env == "" {
-		cfg.Env = ProductionEnv
+		cfg.Env = providerkit.ProductionEnv
 	}
 	return cfg
 }
@@ -86,19 +87,6 @@ func appBuildsFor(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBu
 func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked map[string]appBundle) appBuilds {
 	t.Helper()
 	builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), baked)
-	if err != nil {
-		t.Fatalf("resolveAppBuilds: %v", err)
-	}
-	return builds
-}
-
-func releaseBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, fingerprint string) appBuilds {
-	t.Helper()
-	bundles := map[string]appBundle{}
-	for _, app := range manifestApps(manifest) {
-		bundles[app.GetName()] = appBundle{Fingerprint: fingerprint}
-	}
-	builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), bundles)
 	if err != nil {
 		t.Fatalf("resolveAppBuilds: %v", err)
 	}

@@ -11,7 +11,6 @@ var controlPlane = []string{
 	"github.com/ocelhq/ocel/platform/aws/provider/control",
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy",
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads",
-	"github.com/ocelhq/ocel/platform/aws/provider/server",
 }
 
 func TestTheRuntimePortsReachNoControlPlane(t *testing.T) {

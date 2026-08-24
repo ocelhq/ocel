@@ -319,8 +319,8 @@ func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 	}
 	return newLiveValues(&storeFetcher{
 		reader: values.Reader{
-			Records:     awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Table: manifest.Table},
-			Sealer:      awsports.Sealer{KMS: kms.NewFromConfig(cfg), KeyARN: manifest.KeyARN},
+			Records:     awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(manifest.Table)},
+			Sealer:      awsports.Sealer{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(manifest.KeyARN)},
 			Scope:       values.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
 			Environment: manifest.Environment,
 		},

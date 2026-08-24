@@ -28,12 +28,7 @@ export function toolchainArtifacts(repoRoot) {
     {
       what: "the AWS provider's deploy binary",
       path: join(repoRoot, "packages", "native-lib", `provider-aws-${suffix}`, "bin", `deploy${exe}`),
-      how: "node scripts/build-native.mjs --host --target provider",
-    },
-    {
-      what: "the AWS provider's runtime binary",
-      path: join(repoRoot, "packages", "native-lib", `provider-aws-${suffix}`, "bin", `runtime${exe}`),
-      how: "node scripts/build-native.mjs --host --target provider",
+      how: "node scripts/build-native.mjs --host --target provider-aws",
     },
   ];
 }

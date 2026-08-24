@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Releaser interface {
@@ -29,6 +30,8 @@ const (
 type StackPlan struct {
 	Ref  StackRef
 	Kind StackKind
+
+	Edge edge.Edge
 
 	Tags map[string]string
 

@@ -42,11 +42,11 @@ func (a *Artifacts) Open(_ context.Context, ref providerkit.ArtifactRef) (io.Rea
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (a *Artifacts) RemovePrefix(_ context.Context, prefix string, report providerkit.Reporter) error {
+func (a *Artifacts) RemovePrefix(_ context.Context, class providerkit.Class, prefix string, report providerkit.Reporter) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for ref := range maps.Keys(a.objects) {
-		if strings.HasPrefix(ref.Key, prefix) {
+		if ref.Class == class && strings.HasPrefix(ref.Key, prefix) {
 			delete(a.objects, ref)
 		}
 	}

@@ -2,13 +2,25 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -18,37 +30,28 @@ import (
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 )
 
 const Vendor providerkit.Vendor = "aws"
 
+const artifactRootDirName = ".ocel/output"
+
 type Options struct {
-	Region  string `json:"region,omitempty"`
-	Profile string `json:"profile,omitempty"`
+	Region       string            `json:"region,omitempty"`
+	Transforms   []string          `json:"transforms,omitempty"`
+	Certificates map[string]string `json:"certificates,omitempty"`
 }
 
 type Provider struct {
-	options  Options
-	aws      aws.Config
-	deployed bootstrap.Deployed
-	writer   providerkit.Writer
+	options Options
+	aws     aws.Config
 
-	records   awsports.Records
-	artifacts awsports.Artifacts
-	sealer    awsports.Sealer
-	stacks    awsports.Stacks
-	releases  *deploy.Releaser
-	front     edge.Edge
-}
+	deployed memo[providerkit.Class, bootstrap.Deployed]
+	params   memo[providerkit.Class, bootstrap.ClassParams]
+	account  memo[struct{}, string]
 
-type Deps struct {
-	AWS      aws.Config
-	Deployed bootstrap.Deployed
-	Writer   providerkit.Writer
-	Edge     edge.Edge
-	Config   deploy.Config
-	Realized *deploy.Realized
+	releases *deploy.Releaser
 }
 
 func New(ctx context.Context, options providerkit.Options) (providerkit.Provider, error) {
@@ -60,70 +63,50 @@ func New(ctx context.Context, options providerkit.Options) (providerkit.Provider
 	if err != nil {
 		return nil, err
 	}
-	return NewProvider(decoded, Deps{AWS: cfg}), nil
+	return NewProvider(decoded, cfg), nil
 }
 
-func NewProvider(options Options, deps Deps) *Provider {
-	ddb := dynamodb.NewFromConfig(deps.AWS)
-	records := awsports.Records{Dynamo: ddb, Table: deps.Deployed.StateTable}
-	stacks := awsports.Stacks{
-		Records: records,
-		Tags:    &tagclock.Sweeper{Dynamo: ddb, Table: deps.Deployed.StateTable},
-	}
-	cfg := deps.Config
-	cfg.Stacks = stacks
-	realized := deps.Realized
-	if realized == nil {
-		realized = &deploy.Realized{}
-	}
-	return &Provider{
-		options:  options,
-		aws:      deps.AWS,
-		deployed: deps.Deployed,
-		writer:   deps.Writer,
-		records:  records,
-		sealer:   awsports.Sealer{KMS: kms.NewFromConfig(deps.AWS), KeyARN: deps.Deployed.VarsKeyARN},
-		stacks:   stacks,
-		front:    deps.Edge,
-		artifacts: awsports.Artifacts{
-			S3:        s3.NewFromConfig(deps.AWS),
-			Functions: deps.Deployed.ArtifactBucket,
-			Assets:    deps.Deployed.AssetBucket,
-			Cache:     cfg.CacheStoreBucket,
-		},
-		releases: deploy.NewReleaser(cfg, realized),
-	}
+func NewProvider(options Options, cfg aws.Config) *Provider {
+	p := &Provider{options: options, aws: cfg}
+	p.releases = deploy.NewReleaser(deploy.ResolverFunc(p.release), &deploy.Realized{})
+	return p
 }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
 
 func (p *Provider) Serves() []providerkit.LinkType { return deploy.Serves() }
 
-func (p *Provider) Region() string { return p.options.Region }
+func (p *Provider) Region() string { return p.aws.Region }
 
 func (p *Provider) Bootstrap() providerkit.Bootstrapper {
-	return control.BootstrapperFor(p.aws, p.front, p.writer)
+	front, err := p.edges().Open(edges.DefaultKind)
+	if err != nil {
+		return refusing{err}
+	}
+	return control.BootstrapperFor(p.aws, front)
 }
 
 func (p *Provider) Releases() providerkit.Releaser { return p.releases }
 
-func (p *Provider) Artifacts() providerkit.ArtifactStore { return p.artifacts }
+func (p *Provider) Artifacts() providerkit.ArtifactStore {
+	return awsports.Artifacts{S3: s3.NewFromConfig(p.aws), Stores: p}
+}
 
-func (p *Provider) Records() providerkit.RecordStore { return p.records }
+func (p *Provider) Records() providerkit.RecordStore {
+	return awsports.Records{Dynamo: dynamodb.NewFromConfig(p.aws), Tables: p}
+}
 
-func (p *Provider) Sealer() providerkit.Sealer { return p.sealer }
+func (p *Provider) Sealer() providerkit.Sealer {
+	return awsports.Sealer{KMS: kms.NewFromConfig(p.aws), Keys: p}
+}
 
 func (p *Provider) Credentials() providerkit.Credentials { return control.CredentialsFor(p.aws) }
 
-func (p *Provider) Edges() providerkit.EdgeRegistry {
-	return edges.Registry{Deps: edges.Deps{AWS: func(context.Context) (aws.Config, error) { return p.aws, nil }}}
-}
+func (p *Provider) Edges() providerkit.EdgeRegistry { return p.edges() }
 
 func (p *Provider) DNS() providerkit.DNSRegistry {
 	return dns.Registry{Deps: dns.Deps{AWS: p.aws}}
 }
-
-func (p *Provider) Stacks() awsports.Stacks { return p.stacks }
 
 func (p *Provider) Membrane(context.Context) ([]byte, error) {
 	return payloads.MembraneLayer().Bytes, nil
@@ -141,10 +124,255 @@ func (p *Provider) Inspect(ctx context.Context, ref providerkit.StackRef) (provi
 	return p.releases.Inspect(ctx, ref)
 }
 
+func (p *Provider) edges() edges.Registry {
+	return edges.Registry{Deps: edges.Deps{
+		AWS:          func(context.Context) (aws.Config, error) { return p.aws, nil },
+		Certificates: p.options.Certificates,
+	}}
+}
+
+func (p *Provider) Table(ctx context.Context, class providerkit.Class) (string, error) {
+	held, err := p.bootstrapped(ctx, class)
+	if err != nil {
+		return "", err
+	}
+	return held.StateTable, nil
+}
+
+func (p *Provider) Key(ctx context.Context, class providerkit.Class) (string, error) {
+	held, err := p.bootstrapped(ctx, class)
+	if err != nil {
+		return "", err
+	}
+	return held.VarsKeyARN, nil
+}
+
+func (p *Provider) Buckets(ctx context.Context, class providerkit.Class) (awsports.Buckets, error) {
+	held, err := p.bootstrapped(ctx, class)
+	if err != nil {
+		return awsports.Buckets{}, err
+	}
+	buckets := awsports.Buckets{Functions: held.ArtifactBucket, Assets: held.AssetBucket}
+	params, err := p.classParams(ctx, class)
+	if err != nil {
+		return buckets, err
+	}
+	buckets.Cache = params.CacheStore.Bucket
+	return buckets, nil
+}
+
+func (p *Provider) bootstrapped(ctx context.Context, class providerkit.Class) (bootstrap.Deployed, error) {
+	return p.deployed.resolve(class, func() (bootstrap.Deployed, error) {
+		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), string(class))
+	})
+}
+
+func (p *Provider) classParams(ctx context.Context, class providerkit.Class) (bootstrap.ClassParams, error) {
+	return p.params.resolve(class, func() (bootstrap.ClassParams, error) {
+		return bootstrap.ReadClassParams(ctx, ssm.NewFromConfig(p.aws), string(class), "")
+	})
+}
+
+func (p *Provider) accountID(ctx context.Context) (string, error) {
+	return p.account.resolve(struct{}{}, func() (string, error) {
+		out, err := sts.NewFromConfig(p.aws).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+		if err != nil {
+			return "", fmt.Errorf("resolve AWS account id: %w", err)
+		}
+		return aws.ToString(out.Account), nil
+	})
+}
+
+func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Config, error) {
+	held, err := p.bootstrapped(ctx, scope.Class)
+	if err != nil {
+		return deploy.Config{}, err
+	}
+	if err := p.standing(held, scope.Class); err != nil {
+		return deploy.Config{}, err
+	}
+	params, err := p.classParams(ctx, scope.Class)
+	if err != nil {
+		return deploy.Config{}, err
+	}
+	account, err := p.accountID(ctx)
+	if err != nil {
+		return deploy.Config{}, err
+	}
+	store := values.Store{
+		Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(p.aws), Tables: p},
+		Sealer:  awsports.Sealer{KMS: kms.NewFromConfig(p.aws), Keys: p},
+	}
+	referenced, err := store.ReferenceOwners(ctx, values.Scope{Project: scope.Slug, Class: scope.Class})
+	if err != nil {
+		return deploy.Config{}, err
+	}
+
+	root := projectRoot()
+	cfg := deploy.Config{
+		Region:        p.aws.Region,
+		BackendURL:    naming.StateBackendURL(held.StateBucket, scope.Slug),
+		Passphrase:    params.Passphrase,
+		PulumiProject: naming.PulumiProject(scope.Slug),
+		Secrets:       secretsmanager.NewFromConfig(p.aws),
+
+		Tags: &tagclock.Sweeper{Dynamo: dynamodb.NewFromConfig(p.aws), Table: held.StateTable},
+
+		Class:              scope.Class,
+		Slug:               scope.Slug,
+		Env:                scope.Env,
+		StateTable:         held.StateTable,
+		StateTableARN:      stateTableARN(p.aws.Region, account, held.StateTable),
+		VarsKeyARN:         held.VarsKeyARN,
+		AppBoundaryARN:     held.AppBoundaryARN,
+		VarsSiblingClasses: []string{bootstrap.ClassProduction, bootstrap.ClassPreview},
+		VarsReferenced:     referenced,
+		Links:              publishedLinks{store: store, class: scope.Class},
+
+		ArtifactRoot:       filepath.Join(root, artifactRootDirName),
+		ArtifactBucket:     held.ArtifactBucket,
+		AssetBucket:        held.AssetBucket,
+		ImageOptimizerURL:  held.ImageOptimizerURL,
+		RevalidateQueueURL: held.RevalidateQueueURL,
+
+		CacheStoreBucket:   params.CacheStore.Bucket,
+		CacheStoreUploader: cacheStoreUploader(params.CacheStore),
+
+		Uploader:    s3.NewFromConfig(p.aws),
+		Getter:      s3.NewFromConfig(p.aws),
+		Invoker:     lambda.NewFromConfig(p.aws),
+		CodeUpdater: lambda.NewFromConfig(p.aws),
+
+		StoreScriptName:    params.DeploymentsStore.ScriptName,
+		StoreEndpoint:      params.DeploymentsStore.Endpoint,
+		StoreBootstrapCred: params.DeploymentsStore.BootstrapCred,
+
+		ISRWriterEndpoint:      params.ISRWriter.Endpoint,
+		ISRWriterBootstrapCred: params.ISRWriter.BootstrapCred,
+		ISRWriterScriptName:    params.ISRWriter.ScriptName,
+		ISRWriterSeed:          params.ISRWriterSeed,
+
+		OriginSecret: params.OriginSecret,
+
+		Transform: p.transforms(root),
+	}
+	if params.EdgeCredentialsErr == nil {
+		cfg.EdgeAccessKeyID = params.EdgeCredentials.AccessKeyID
+		cfg.EdgeSecretKey = params.EdgeCredentials.SecretAccessKey
+	}
+	if params.EdgeValuesErr == nil {
+		cfg.EdgeValues = params.EdgeValues
+	}
+	return cfg, nil
+}
+
+func (p *Provider) standing(held bootstrap.Deployed, class providerkit.Class) error {
+	command := "ocel bootstrap"
+	if class == providerkit.ClassPreview {
+		command = "ocel bootstrap --preview"
+	}
+	for _, missing := range []struct {
+		held string
+		what string
+	}{
+		{held.StateBucket, "state bucket"},
+		{held.ArtifactBucket, "artifact bucket"},
+		{held.AssetBucket, "asset bucket"},
+		{held.StateTable, "state table"},
+		{held.VarsTable, "variable store"},
+		{held.VarsKeyARN, "variable store"},
+	} {
+		if missing.held == "" {
+			return providerkit.Refuse(providerkit.CodeNotReady,
+				"account bootstrap is present but its %s is missing (a partial rollback?); re-run `%s`", missing.what, command)
+		}
+	}
+	return nil
+}
+
+func (p *Provider) transforms(root string) transform.Evaluator {
+	if len(p.options.Transforms) == 0 {
+		return nil
+	}
+	return transform.NodePass{Root: root, Modules: p.options.Transforms}
+}
+
+func stateTableARN(region, account, table string) string {
+	return fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", region, account, table)
+}
+
+func cacheStoreUploader(store bootstrap.CacheStore) deploy.ArtifactUploader {
+	if store.Bucket == "" {
+		return nil
+	}
+	return s3.NewFromConfig(aws.Config{
+		Region:      store.Region,
+		Credentials: credentials.NewStaticCredentialsProvider(store.AccessKeyID, store.SecretAccessKey, ""),
+		Retryer:     sdkconfig.ControlRetryer,
+	}, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(store.Endpoint)
+	})
+}
+
+func projectRoot() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return wd
+}
+
+type memo[K comparable, V any] struct {
+	mu   sync.Mutex
+	held map[K]V
+}
+
+func (m *memo[K, V]) resolve(key K, fill func() (V, error)) (V, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if held, filled := m.held[key]; filled {
+		return held, nil
+	}
+	value, err := fill()
+	if err != nil {
+		var zero V
+		return zero, err
+	}
+	if m.held == nil {
+		m.held = map[K]V{}
+	}
+	m.held[key] = value
+	return value, nil
+}
+
+type refusing struct{ err error }
+
+func (r refusing) Catalogue() []providerkit.Feature { return nil }
+
+func (r refusing) Describe(context.Context, providerkit.Class) (providerkit.Bootstrap, error) {
+	return providerkit.Bootstrap{}, r.err
+}
+
+func (r refusing) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Reporter) error {
+	return r.err
+}
+
+func (r refusing) Removals(context.Context, providerkit.Class) ([]providerkit.Removal, error) {
+	return nil, r.err
+}
+
+func (r refusing) Remove(context.Context, providerkit.Class, providerkit.Reporter) error {
+	return r.err
+}
+
 var (
 	_ providerkit.Provider       = (*Provider)(nil)
 	_ providerkit.Warmer         = (*Provider)(nil)
 	_ providerkit.CodeEmbedder   = (*Provider)(nil)
 	_ providerkit.MembraneSource = (*Provider)(nil)
 	_ providerkit.StackInspector = (*Provider)(nil)
+	_ providerkit.Bootstrapper   = refusing{}
+	_ awsports.Tables            = (*Provider)(nil)
+	_ awsports.Keys              = (*Provider)(nil)
+	_ awsports.Stores            = (*Provider)(nil)
 )

@@ -7,8 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func staticAppTree(t *testing.T) string {
@@ -422,95 +420,6 @@ func TestUploadPrerenderAssetsMirroring(t *testing.T) {
 			if key == entry {
 				t.Errorf("route entry %q was mirrored to the asset bucket, want it R2-only", key)
 			}
-		}
-	})
-}
-
-func TestBuildDeploymentRecordAssets(t *testing.T) {
-	t.Run("asset prefix is the full R2 key root", func(t *testing.T) {
-		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
-		})
-		cfg := Config{ArtifactRoot: root, Env: "prod"}
-		manifest := nextManifest()
-		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
-
-		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if want := assetPrefixFor("web", testDeploymentID); record.AssetPrefix != want {
-			t.Errorf("AssetPrefix = %q, want %q", record.AssetPrefix, want)
-		}
-	})
-
-	t.Run("ISR prefix is the ISR key root", func(t *testing.T) {
-		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
-		})
-		cfg := Config{ArtifactRoot: root, Env: "prod"}
-		manifest := nextManifest()
-		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
-
-		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if want := isrPrefixFor("web", testDeploymentID); record.IsrPrefix != want {
-			t.Errorf("IsrPrefix = %q, want %q", record.IsrPrefix, want)
-		}
-	})
-
-	t.Run("non-Next app has no asset prefix", func(t *testing.T) {
-		cfg := Config{ArtifactRoot: t.TempDir()}
-		manifest := &contractv1.Manifest{Slug: "proj"}
-		app := &contractv1.ManifestApp{Name: "api", Framework: "express"}
-
-		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("API1"), nil, appBuildsFor(t, cfg, manifest), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if record.AssetPrefix != "" {
-			t.Errorf("AssetPrefix = %q, want empty for a non-Next app", record.AssetPrefix)
-		}
-	})
-
-	t.Run("carries the build's write secret", func(t *testing.T) {
-		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
-		})
-		cfg := Config{
-			ArtifactRoot:           root,
-			Env:                    "prod",
-			CacheStoreBucket:       "ocel-edge-cache",
-			CacheStoreUploader:     &fakeUploader{exists: map[string]bool{}},
-			ISRWriterEndpoint:      "https://writer.example",
-			ISRWriterBootstrapCred: "boot",
-			ISRWriterSeed:          "seed-1",
-		}
-		manifest := nextManifest()
-		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
-
-		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if want := isrWriteSecret("seed-1", isrPrefixFor("web", testDeploymentID)); record.IsrWriteSecret != want {
-			t.Errorf("IsrWriteSecret = %q, want the secret derived for this build's prefix", record.IsrWriteSecret)
-		}
-	})
-
-	t.Run("no writer leaves no write secret", func(t *testing.T) {
-		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
-		})
-		cfg := Config{ArtifactRoot: root, Env: "prod"}
-		record, err := buildDeploymentRecord(cfg, nil, nextManifest(), &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, nextManifest()), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if record.IsrWriteSecret != "" {
-			t.Errorf("IsrWriteSecret = %q, want empty", record.IsrWriteSecret)
 		}
 	})
 }

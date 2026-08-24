@@ -169,7 +169,7 @@ func phaseOf(stage Stage, stages deployStages) progressv1.Phase {
 }
 
 func (r *deployRun) rememberProject(ctx context.Context) error {
-	name := ProjectRecord(r.plan.Slug)
+	name := ProjectRecord(r.plan.Class, r.plan.Slug)
 	held, err := Held(ctx, r.provider.Records(), name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
@@ -260,6 +260,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 		result, err := r.provider.Releases().Provision(ctx, StackPlan{
 			Ref:       r.ref(r.plan.Infra),
 			Kind:      StackInfra,
+			Edge:      r.front,
 			Tags:      r.plan.infraTags(),
 			Resources: resources,
 			Links:     r.reader(),
@@ -276,7 +277,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 			return err
 		}
 		r.links = result.Links
-		return WriteStack(ctx, r.provider.Records(), r.plan.Slug, r.plan.Infra, Stack{
+		return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, r.plan.Infra, Stack{
 			Kind:   StackInfra,
 			Links:  result.Links,
 			Writer: WriterFor(""),
@@ -301,6 +302,7 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 		plan := StackPlan{
 			Ref:   r.ref(entry.Stack),
 			Kind:  StackApp,
+			Edge:  r.front,
 			Tags:  r.plan.tags(entry),
 			Links: r.reader(),
 			App: &AppPlan{
@@ -333,7 +335,7 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 		if err := r.stage(ctx, entry, result.Functions, grants); err != nil {
 			return err
 		}
-		return WriteStack(ctx, r.provider.Records(), r.plan.Slug, entry.Stack, Stack{
+		return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, Stack{
 			Kind:      StackApp,
 			App:       entry.App,
 			Release:   entry.Build.Release().String(),
@@ -349,7 +351,7 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 	if !inspects {
 		return nil
 	}
-	_, recorded, err := ReadStack(ctx, r.provider.Records(), r.plan.Slug, stack)
+	_, recorded, err := ReadStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, stack)
 	if err != nil || recorded {
 		return err
 	}

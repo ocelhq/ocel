@@ -1,4 +1,4 @@
-package channelauth
+package membrane
 
 import (
 	"context"
@@ -10,13 +10,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 )
 
-func Interceptor(token string) connect.Interceptor {
-	return &interceptor{token: token}
-}
+type authenticator struct{ token string }
 
-type interceptor struct{ token string }
-
-func (a *interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+func (a *authenticator) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		if err := a.check(req.Header()); err != nil {
 			return nil, err
@@ -25,11 +21,11 @@ func (a *interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	}
 }
 
-func (a *interceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+func (a *authenticator) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return next
 }
 
-func (a *interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+func (a *authenticator) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		if err := a.check(conn.RequestHeader()); err != nil {
 			return err
@@ -38,7 +34,7 @@ func (a *interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) co
 	}
 }
 
-func (a *interceptor) check(header http.Header) error {
+func (a *authenticator) check(header http.Header) error {
 	if !channel.VerifyAuthHeader(header.Get("Authorization"), a.token) {
 		return connect.NewError(connect.CodeUnauthenticated, errors.New("missing or invalid session token"))
 	}

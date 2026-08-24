@@ -20,12 +20,12 @@ const keyARN = "arn:aws:kms:us-east-1:123456789012:key/ocel-vars"
 func newRecords(t *testing.T) (awsports.Records, *fakeDynamo) {
 	t.Helper()
 	ddb := newFakeDynamo()
-	return awsports.Records{Dynamo: ddb, Table: "ocel-state"}, ddb
+	return awsports.Records{Dynamo: ddb, Tables: awsports.Table("ocel-state")}, ddb
 }
 
 func newSealer() (awsports.Sealer, *fakeKMS) {
 	crypto := &fakeKMS{}
-	return awsports.Sealer{KMS: crypto, KeyARN: keyARN}, crypto
+	return awsports.Sealer{KMS: crypto, Keys: awsports.Key(keyARN)}, crypto
 }
 
 func TestRecordsConformance(t *testing.T) {
@@ -170,7 +170,7 @@ func TestAnAccountWithNoBootstrapHoldsNoRecords(t *testing.T) {
 	if _, err := records.Read(context.Background(), name); !errors.Is(err, kit.ErrNoRecord) {
 		t.Errorf("Read() with no bootstrap standing = %v, want ErrNoRecord", err)
 	}
-	held, err := records.List(context.Background(), kit.RecordName{"projects"})
+	held, err := records.List(context.Background(), kit.RecordName{"projects", "production"})
 	if err != nil || len(held) != 0 {
 		t.Errorf("List() with no bootstrap standing = %v, %v, want nothing", held, err)
 	}

@@ -149,8 +149,8 @@ func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
 
 	ctx := context.Background()
 	artifacts := fake.NewArtifacts()
-	kept := providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "other/app.zip"}
-	removed := providerkit.ArtifactRef{Bucket: providerkit.StoreAssets, Key: "releases/r1/app.zip"}
+	kept := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "other/app.zip"}
+	removed := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreAssets, Key: "releases/r1/app.zip"}
 
 	for _, ref := range []providerkit.ArtifactRef{kept, removed} {
 		if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("body"))); err != nil {
@@ -158,7 +158,7 @@ func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
 		}
 	}
 
-	if err := artifacts.RemovePrefix(ctx, "releases/", nil); err != nil {
+	if err := artifacts.RemovePrefix(ctx, providerkit.ClassProduction, "releases/", nil); err != nil {
 		t.Fatalf("RemovePrefix() error = %v", err)
 	}
 	if _, err := artifacts.Open(ctx, removed); err == nil {

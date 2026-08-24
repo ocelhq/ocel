@@ -3,23 +3,13 @@ package deploy
 import (
 	"encoding/json"
 	"maps"
-	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
-
-func fnOutput(logicalName, url string) *progressv1.FunctionOutput {
-	return &progressv1.FunctionOutput{LogicalName: logicalName, Url: url}
-}
 
 func TestWorkerOutputName(t *testing.T) {
 	t.Parallel()
@@ -115,31 +105,6 @@ func TestProjectWorkerStems(t *testing.T) {
 	})
 }
 
-func writeRoutingManifest(t *testing.T, artifactRoot, app, content string) string {
-	t.Helper()
-	dir := appArtifactRoot(artifactRoot, app)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, edge.RoutingManifestFile), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	writeServeDescriptor(t, artifactRoot, app, frameworkNext, buildIDOf(t, content))
-	return dir
-}
-
-func writeServeDescriptor(t *testing.T, artifactRoot, app, framework, buildID string) string {
-	t.Helper()
-	dir := appArtifactRoot(artifactRoot, app)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, edge.ServeDescriptorFile), []byte(serveDescriptor(t, framework, buildID)), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	return dir
-}
-
 func serveDescriptor(t *testing.T, framework, buildID string) string {
 	t.Helper()
 	raw, err := json.Marshal(edge.ServeDescriptor{Framework: framework, BuildID: buildID, Entry: "/"})
@@ -183,36 +148,4 @@ func appOfRoutingManifest(rel string) (string, bool) {
 		return "", false
 	}
 	return parts[1], true
-}
-
-func setWorkerBundle(t *testing.T) {
-	t.Helper()
-	bundle := filepath.Join(t.TempDir(), "index.js")
-	if err := os.WriteFile(bundle, []byte("export default {}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	raw, err := json.Marshal(edge.KindBundleManifest{cloudflare.Kind: bundle})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv(edge.EnvWorkerBundles, string(raw))
-}
-
-func tierDomains(tier environmentv1.Tier, hostnames ...string) []*contractv1.TierDomains {
-	if len(hostnames) == 0 {
-		return nil
-	}
-	return []*contractv1.TierDomains{{Tier: tier, Hostnames: hostnames}}
-}
-
-func slicesEqual(got, want []string) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			return false
-		}
-	}
-	return true
 }

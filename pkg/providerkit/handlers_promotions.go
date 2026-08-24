@@ -250,7 +250,7 @@ func flipBoundProto(flip *edge.FlipBound) *progressv1.FlipBound {
 
 func removePreviewInfra(ctx context.Context, provider Provider, slug, pointer string, report Reporter) error {
 	stack := naming.InfraStack(pointer)
-	_, standing, err := ReadStack(ctx, provider.Records(), slug, stack)
+	_, standing, err := ReadStack(ctx, provider.Records(), ClassPreview, slug, stack)
 	if err != nil || !standing {
 		return err
 	}
@@ -258,5 +258,5 @@ func removePreviewInfra(ctx context.Context, provider Provider, slug, pointer st
 	if err := provider.Releases().Destroy(ctx, StackRef{Project: slug, Class: ClassPreview, Name: stack}, report); err != nil {
 		return fmt.Errorf("destroy %s: %w", stack, err)
 	}
-	return ForgetStack(ctx, provider.Records(), slug, stack)
+	return ForgetStack(ctx, provider.Records(), ClassPreview, slug, stack)
 }

@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -29,7 +29,7 @@ func liveConfig() Config {
 		VarsKeyARN:    productionVarsKeyARN,
 		StateTable:    valuesTable,
 		StateTableARN: valuesTableARN,
-		VarsClass:     varsClass,
+		Class:         varsClass,
 	}
 }
 
@@ -47,7 +47,7 @@ func scopedVariable(key, folder string, class resourcesv1.VariableClass) *contra
 }
 
 func previewOf(cfg Config, identity string) Config {
-	cfg.Tier, cfg.Identity = environmentv1.Tier_TIER_PREVIEW, identity
+	cfg.Class, cfg.Env = providerkit.ClassPreview, identity
 	return cfg
 }
 
@@ -113,7 +113,7 @@ func TestRenderAppBundle(t *testing.T) {
 		}
 
 		production := liveConfig()
-		production.Tier, production.Identity = environmentv1.Tier_TIER_PRODUCTION, "prod"
+		production.Class, production.Env = providerkit.ClassProduction, providerkit.ProductionEnv
 
 		for _, tc := range []struct {
 			name string

@@ -27,8 +27,8 @@ type StackEntry struct {
 	Stack
 }
 
-func ReadStack(ctx context.Context, records RecordStore, slug string, stack naming.StackName) (Stack, bool, error) {
-	name := StackRecord(slug, stack)
+func ReadStack(ctx context.Context, records RecordStore, class Class, slug string, stack naming.StackName) (Stack, bool, error) {
+	name := StackRecord(class, slug, stack)
 	held, err := Held(ctx, records, name)
 	if err != nil {
 		return Stack{}, false, fmt.Errorf("read %s: %w", name, err)
@@ -43,8 +43,8 @@ func ReadStack(ctx context.Context, records RecordStore, slug string, stack nami
 	return recorded, true, nil
 }
 
-func WriteStack(ctx context.Context, records RecordStore, slug string, stack naming.StackName, recorded Stack) error {
-	name := StackRecord(slug, stack)
+func WriteStack(ctx context.Context, records RecordStore, class Class, slug string, stack naming.StackName, recorded Stack) error {
+	name := StackRecord(class, slug, stack)
 	held, err := Held(ctx, records, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
@@ -59,12 +59,12 @@ func WriteStack(ctx context.Context, records RecordStore, slug string, stack nam
 	return nil
 }
 
-func ForgetStack(ctx context.Context, records RecordStore, slug string, stack naming.StackName) error {
-	return Forget(ctx, records, StackRecord(slug, stack))
+func ForgetStack(ctx context.Context, records RecordStore, class Class, slug string, stack naming.StackName) error {
+	return Forget(ctx, records, StackRecord(class, slug, stack))
 }
 
-func ReadStacks(ctx context.Context, records RecordStore, slug string) ([]StackEntry, error) {
-	held, err := records.List(ctx, StacksRecord(slug))
+func ReadStacks(ctx context.Context, records RecordStore, class Class, slug string) ([]StackEntry, error) {
+	held, err := records.List(ctx, StacksRecord(class, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's stacks: %w", slug, err)
 	}

@@ -73,22 +73,30 @@ func (f *fakeS3) DeleteObjects(_ context.Context, in *s3.DeleteObjectsInput, _ .
 }
 
 func artifacts() ports.Artifacts {
-	return ports.Artifacts{
-		S3:        newFakeS3(),
-		Functions: "ocel-artifacts",
-		Assets:    "ocel-assets",
-		Cache:     "ocel-cache",
+	return ports.Artifacts{S3: newFakeS3(), Stores: classBuckets{}}
+}
+
+type classBuckets struct{ cacheless bool }
+
+func (b classBuckets) Buckets(_ context.Context, class providerkit.Class) (ports.Buckets, error) {
+	held := ports.Buckets{
+		Functions: "ocel-artifacts-" + string(class),
+		Assets:    "ocel-assets-" + string(class),
 	}
+	if !b.cacheless {
+		held.Cache = "ocel-cache-" + string(class)
+	}
+	return held, nil
 }
 
 func providerkitCacheRef() providerkit.ArtifactRef {
-	return providerkit.ArtifactRef{Bucket: providerkit.StoreCache, Key: "shop/prod/web/cache.json"}
+	return providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreCache, Key: "shop/prod/web/cache.json"}
 }
 
 func everyStoreRef() []providerkit.ArtifactRef {
 	return []providerkit.ArtifactRef{
-		{Bucket: providerkit.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
-		{Bucket: providerkit.StoreAssets, Key: "shop/prod/web/static/app.js"},
+		{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
+		{Class: providerkit.ClassProduction, Bucket: providerkit.StoreAssets, Key: "shop/prod/web/static/app.js"},
 		providerkitCacheRef(),
 	}
 }
@@ -101,7 +109,7 @@ func TestAStoreThisAccountHasNoBucketForRefusesRatherThanWritingNowhere(t *testi
 	t.Parallel()
 
 	store := artifacts()
-	store.Cache = ""
+	store.Stores = classBuckets{cacheless: true}
 	if err := store.Put(context.Background(), providerkitCacheRef(), bytes.NewReader([]byte("x"))); err == nil {
 		t.Fatal("Put() into a store this account has no bucket for succeeded, so the artifact went nowhere")
 	}
@@ -117,7 +125,7 @@ func TestAPrefixSweepReachesEveryStoreTheAccountKeeps(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := store.RemovePrefix(ctx, "shop/prod/", nil); err != nil {
+	if err := store.RemovePrefix(ctx, providerkit.ClassProduction, "shop/prod/", nil); err != nil {
 		t.Fatalf("RemovePrefix() = %v", err)
 	}
 	for _, ref := range everyStoreRef() {

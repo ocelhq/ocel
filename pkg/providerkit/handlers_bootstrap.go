@@ -85,7 +85,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	}
 	recorded := map[string][]string{}
 	if req.GetWithDependents() {
-		if recorded, err = gate.RecordedFeatures(ctx); err != nil {
+		if recorded, err = gate.RecordedFeatures(ctx, class); err != nil {
 			return nil, RefusalError(err)
 		}
 	}

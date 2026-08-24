@@ -32,10 +32,9 @@ type Bootstrapper struct {
 	Store   bootstrap.ObjectStore
 	Buckets bootstrap.BucketEmptierAPI
 	Edge    edge.Edge
-	Writer  providerkit.Writer
 }
 
-func BootstrapperFor(cfg aws.Config, front edge.Edge, writer providerkit.Writer) Bootstrapper {
+func BootstrapperFor(cfg aws.Config, front edge.Edge) Bootstrapper {
 	return Bootstrapper{
 		CFN:     cloudformation.NewFromConfig(cfg),
 		SSM:     ssm.NewFromConfig(cfg),
@@ -43,7 +42,6 @@ func BootstrapperFor(cfg aws.Config, front edge.Edge, writer providerkit.Writer)
 		Store:   s3.NewFromConfig(cfg),
 		Buckets: s3.NewFromConfig(cfg),
 		Edge:    front,
-		Writer:  writer,
 	}
 }
 
@@ -75,7 +73,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	err := bootstrap.Run(ctx, b.apis(), string(req.Class), bootstrap.Request{
 		Features:           req.Features,
 		Drop:               req.Drop,
-		Writer:             b.Writer,
+		Writer:             req.Writer,
 		AcceptReplacements: !req.Unattended,
 	}, say(report), detail(report))
 	if bootstrap.RefusedWrite(err) {
@@ -87,7 +85,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
 	_, err := bootstrap.Heal(ctx, b.apis(), string(req.Class), bootstrap.HealRequest{
 		Features: req.Features,
-		Writer:   b.Writer,
+		Writer:   req.Writer,
 	}, detail(report))
 	if errors.Is(err, bootstrap.ErrHealNotPermitted) {
 		return providerkit.Refuse(providerkit.CodeDenied, "%s", err.Error())

@@ -56,7 +56,7 @@ func (s *stack) plan(pointer string) apiPlan {
 }
 
 func (s *stack) ledger(c Clients) *kitledger.Ledger {
-	return awsports.Ledger(c.Dynamo, s.own.StateTable, s.class(), s.slug())
+	return awsports.Ledger(c.Dynamo, awsports.Table(s.own.StateTable), s.class(), s.slug())
 }
 
 type lazyLedger struct{ s *stack }

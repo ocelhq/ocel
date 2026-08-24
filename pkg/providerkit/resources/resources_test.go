@@ -147,7 +147,7 @@ func TestReleaserRemovesAResourceThePlanNoLongerDeclares(t *testing.T) {
 	releaser := resources.Releaser(records, own)
 	ref := infraRef()
 
-	if err := providerkit.WriteStack(ctx, records, ref.Project, ref.Name, providerkit.Stack{
+	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
 		Kind: providerkit.StackInfra,
 		Links: []providerkit.Link{
 			{Type: providerkit.LinkBucket, Name: "uploads", Properties: map[string]string{providerkit.PropertyBucket: "shop-uploads"}},
@@ -192,7 +192,7 @@ func TestDestroyTakesDownEveryLinkTheStackRecorded(t *testing.T) {
 	own := &buckets{}
 	ref := infraRef()
 
-	if err := providerkit.WriteStack(ctx, records, ref.Project, ref.Name, providerkit.Stack{
+	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
 		Kind:  providerkit.StackInfra,
 		Links: []providerkit.Link{{Type: providerkit.LinkBucket, Name: "uploads"}},
 	}); err != nil {

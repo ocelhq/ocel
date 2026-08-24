@@ -54,4 +54,6 @@ type BootstrapRequest struct {
 	Unattended bool
 
 	Heal bool
+
+	Writer Writer
 }

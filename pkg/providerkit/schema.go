@@ -11,9 +11,9 @@ const RecordSchemaVersion = 1
 
 const schemaAttempts = 8
 
-func EnsureRecordSchema(ctx context.Context, records RecordStore) error {
+func EnsureRecordSchema(ctx context.Context, records RecordStore, class Class) error {
 	for range schemaAttempts {
-		held, err := Held(ctx, records, SchemaRecord())
+		held, err := Held(ctx, records, SchemaRecord(class))
 		if err != nil {
 			return fmt.Errorf("read the record schema: %w", err)
 		}
@@ -41,8 +41,8 @@ func EnsureRecordSchema(ctx context.Context, records RecordStore) error {
 	return fmt.Errorf("record the record schema: it moved under %d attempts", schemaAttempts)
 }
 
-func RecordSchema(ctx context.Context, records RecordStore) (int, error) {
-	held, err := Held(ctx, records, SchemaRecord())
+func RecordSchema(ctx context.Context, records RecordStore, class Class) (int, error) {
+	held, err := Held(ctx, records, SchemaRecord(class))
 	if err != nil {
 		return 0, fmt.Errorf("read the record schema: %w", err)
 	}

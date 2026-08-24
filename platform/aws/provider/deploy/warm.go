@@ -28,27 +28,6 @@ type FunctionInvoker interface {
 	Invoke(ctx context.Context, in *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error)
 }
 
-func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *contractv1.Manifest, appFunctionNames []map[string]string, builds appBuilds, log func(string)) []warmResult {
-	if cfg.Invoker == nil {
-		return nil
-	}
-	if log == nil {
-		log = func(string) {}
-	}
-	names := map[string]string{}
-	for _, app := range appFunctionNames {
-		for logical, physical := range app {
-			names[logical] = physical
-		}
-	}
-	return warmPass{
-		invoker: cfg.Invoker,
-		targets: warmTargets(manifest, builds.bytecode, names),
-		budget:  warmPassDeadline,
-		log:     log,
-	}.run(ctx)
-}
-
 type warmTarget struct {
 	App          string
 	LogicalName  string

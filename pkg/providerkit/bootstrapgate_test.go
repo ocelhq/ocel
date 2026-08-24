@@ -302,7 +302,7 @@ func TestOccupancyRefusesWhileAnythingStandsOnTheBootstrap(t *testing.T) {
 	}
 
 	for _, slug := range []string{"shop", "blog"} {
-		if _, err := provider.Records().Write(ctx, providerkit.Record{Name: providerkit.ProjectRecord(slug)}); err != nil {
+		if _, err := provider.Records().Write(ctx, providerkit.Record{Name: providerkit.ProjectRecord(providerkit.ClassPreview, slug)}); err != nil {
 			t.Fatal(err)
 		}
 	}

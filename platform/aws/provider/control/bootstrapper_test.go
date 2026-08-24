@@ -56,7 +56,6 @@ func standingBootstrapper(t *testing.T, class string) Bootstrapper {
 		IAM:     &teardownIAM{keys: map[string][]string{userName: {"AKIAOLD"}}},
 		Buckets: &teardownBuckets{},
 		Edge:    &teardownEdge{},
-		Writer:  "1.4.0",
 	}
 }
 

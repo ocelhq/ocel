@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
 )
 
@@ -40,7 +41,27 @@ type DynamoAPI interface {
 
 type Records struct {
 	Dynamo DynamoAPI
-	Table  string
+	Tables Tables
+}
+
+type Tables interface {
+	Table(ctx context.Context, class kit.Class) (string, error)
+}
+
+type Table string
+
+func (t Table) Table(context.Context, kit.Class) (string, error) { return string(t), nil }
+
+func (r Records) table(ctx context.Context, name kit.RecordName) (string, error) {
+	class, named := providerkit.ClassOf(name)
+	if !named {
+		return "", kit.Refuse(kit.CodeInvalid,
+			"%s names no class, and this account keeps each class's records in the bootstrap that owns them", name)
+	}
+	if r.Tables == nil {
+		return "", nil
+	}
+	return r.Tables.Table(ctx, class)
 }
 
 func Partition(name kit.RecordName) (string, error) {
@@ -48,16 +69,17 @@ func Partition(name kit.RecordName) (string, error) {
 	return pk, err
 }
 
-func (r Records) standing() error {
-	if r.Table != "" {
-		return nil
-	}
+func unbootstrapped() error {
 	return kit.Refuse(kit.CodeNotReady,
 		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `ocel bootstrap` to create it, then try again")
 }
 
 func (r Records) Read(ctx context.Context, name kit.RecordName) (kit.Record, error) {
-	if r.Table == "" {
+	table, err := r.table(ctx, name)
+	if err != nil {
+		return kit.Record{}, err
+	}
+	if table == "" {
 		return kit.Record{}, kit.ErrNoRecord
 	}
 	pk, sk, err := keyOf(name)
@@ -65,7 +87,7 @@ func (r Records) Read(ctx context.Context, name kit.RecordName) (kit.Record, err
 		return kit.Record{}, err
 	}
 	out, err := r.Dynamo.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName:      aws.String(r.Table),
+		TableName:      aws.String(table),
 		Key:            pointKey(pk, sk),
 		ConsistentRead: aws.Bool(true),
 	})
@@ -79,8 +101,12 @@ func (r Records) Read(ctx context.Context, name kit.RecordName) (kit.Record, err
 }
 
 func (r Records) Write(ctx context.Context, record kit.Record) (kit.Revision, error) {
-	if err := r.standing(); err != nil {
+	table, err := r.table(ctx, record.Name)
+	if err != nil {
 		return "", err
+	}
+	if table == "" {
+		return "", unbootstrapped()
 	}
 	pk, sk, err := keyOf(record.Name)
 	if err != nil {
@@ -92,7 +118,7 @@ func (r Records) Write(ctx context.Context, record kit.Record) (kit.Revision, er
 	}
 
 	in := &dynamodb.PutItemInput{
-		TableName: aws.String(r.Table),
+		TableName: aws.String(table),
 		Item: map[string]ddbtypes.AttributeValue{
 			partitionAttribute: &ddbtypes.AttributeValueMemberS{Value: pk},
 			sortAttribute:      &ddbtypes.AttributeValueMemberS{Value: sk},
@@ -122,7 +148,11 @@ func (r Records) Write(ctx context.Context, record kit.Record) (kit.Revision, er
 }
 
 func (r Records) Remove(ctx context.Context, name kit.RecordName, expected kit.Revision) error {
-	if r.Table == "" {
+	table, err := r.table(ctx, name)
+	if err != nil {
+		return err
+	}
+	if table == "" {
 		return kit.ErrNoRecord
 	}
 	pk, sk, err := keyOf(name)
@@ -130,7 +160,7 @@ func (r Records) Remove(ctx context.Context, name kit.RecordName, expected kit.R
 		return err
 	}
 	_, err = r.Dynamo.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName:                           aws.String(r.Table),
+		TableName:                           aws.String(table),
 		Key:                                 pointKey(pk, sk),
 		ConditionExpression:                 aws.String("#rev = :rev"),
 		ExpressionAttributeNames:            map[string]string{"#rev": revisionAttribute},
@@ -151,7 +181,11 @@ func (r Records) Remove(ctx context.Context, name kit.RecordName, expected kit.R
 }
 
 func (r Records) List(ctx context.Context, under kit.RecordName) ([]kit.Record, error) {
-	if r.Table == "" {
+	table, err := r.table(ctx, under)
+	if err != nil {
+		return nil, err
+	}
+	if table == "" {
 		return nil, nil
 	}
 	pk, prefix, err := prefixOf(under)
@@ -172,7 +206,7 @@ func (r Records) List(ctx context.Context, under kit.RecordName) ([]kit.Record, 
 	var start map[string]ddbtypes.AttributeValue
 	for {
 		page, err := r.Dynamo.Query(ctx, &dynamodb.QueryInput{
-			TableName:                 aws.String(r.Table),
+			TableName:                 aws.String(table),
 			KeyConditionExpression:    aws.String(condition),
 			ExpressionAttributeNames:  names,
 			ExpressionAttributeValues: values,

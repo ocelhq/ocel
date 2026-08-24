@@ -484,7 +484,7 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 
 func deployPreview(t *testing.T, provider *fake.Provider, environment string) {
 	t.Helper()
-	name := providerkit.StackRecord(slug, naming.InfraStack(environment))
+	name := providerkit.StackRecord(providerkit.ClassPreview, slug, naming.InfraStack(environment))
 	if _, err := provider.Records().Write(context.Background(), providerkit.Record{Name: name, Bytes: []byte("{}")}); err != nil {
 		t.Fatalf("record a deployed preview environment: %v", err)
 	}

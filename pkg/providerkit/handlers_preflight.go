@@ -45,7 +45,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		if err := checkCompat(standing.Schema, true, BootstrapSchema).explain(standing.Schema, BootstrapSchema, bootstrapCommand(class)); err != nil {
 			return nil, RefusalError(err)
 		}
-		resp.KnownSlugs, err = slugsBesides(ctx, gate, req.GetSlug())
+		resp.KnownSlugs, err = slugsBesides(ctx, gate, class, req.GetSlug())
 		if err != nil {
 			return nil, RefusalError(err)
 		}
@@ -62,11 +62,11 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	return resp, nil
 }
 
-func slugsBesides(ctx context.Context, gate Gate, slug string) ([]string, error) {
+func slugsBesides(ctx context.Context, gate Gate, class Class, slug string) ([]string, error) {
 	if slug == "" {
 		return nil, nil
 	}
-	recorded, err := gate.RecordedFeatures(ctx)
+	recorded, err := gate.RecordedFeatures(ctx, class)
 	if err != nil {
 		return nil, err
 	}

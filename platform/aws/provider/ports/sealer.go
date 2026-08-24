@@ -16,8 +16,28 @@ type CryptoAPI interface {
 }
 
 type Sealer struct {
-	KMS    CryptoAPI
-	KeyARN string
+	KMS  CryptoAPI
+	Keys Keys
+}
+
+type Keys interface {
+	Key(ctx context.Context, class kit.Class) (string, error)
+}
+
+type Key string
+
+func (k Key) Key(context.Context, kit.Class) (string, error) { return string(k), nil }
+
+func (s Sealer) key(ctx context.Context, at kit.Coordinate) (string, error) {
+	if at.Class == "" {
+		return "", kit.Refuse(kit.CodeInvalid,
+			"a value names no class, and this account seals each class's values under the key its own bootstrap made")
+	}
+	if s.Keys == nil {
+		return "", kit.Refuse(kit.CodeNotReady,
+			"this account has no Ocel bootstrap, so there is no key to seal a value under.\nRun `ocel bootstrap` to create it, then try again")
+	}
+	return s.Keys.Key(ctx, at.Class)
 }
 
 func (s Sealer) Seal(ctx context.Context, at kit.Coordinate, plaintext []byte) ([]byte, error) {
@@ -25,8 +45,12 @@ func (s Sealer) Seal(ctx context.Context, at kit.Coordinate, plaintext []byte) (
 	if err != nil {
 		return nil, err
 	}
+	key, err := s.key(ctx, at)
+	if err != nil {
+		return nil, err
+	}
 	out, err := s.KMS.Encrypt(ctx, &kms.EncryptInput{
-		KeyId:             aws.String(s.KeyARN),
+		KeyId:             aws.String(key),
 		Plaintext:         plaintext,
 		EncryptionContext: bound,
 	})
@@ -41,8 +65,12 @@ func (s Sealer) Open(ctx context.Context, at kit.Coordinate, sealed []byte) ([]b
 	if err != nil {
 		return nil, err
 	}
+	key, err := s.key(ctx, at)
+	if err != nil {
+		return nil, err
+	}
 	out, err := s.KMS.Decrypt(ctx, &kms.DecryptInput{
-		KeyId:             aws.String(s.KeyARN),
+		KeyId:             aws.String(key),
 		CiphertextBlob:    sealed,
 		EncryptionContext: bound,
 	})

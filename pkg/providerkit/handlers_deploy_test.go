@@ -135,7 +135,7 @@ func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), "shop")
+	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), providerkit.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestDeployRefusesALinkMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	if !strings.Contains(err.Error(), providerkit.PropertyPort) {
 		t.Errorf("Deploy() failed with %q, want it to name the property that is missing", err)
 	}
-	if entries, rerr := providerkit.ReadStacks(context.Background(), base.Records(), "shop"); rerr != nil || len(entries) != 0 {
+	if entries, rerr := providerkit.ReadStacks(context.Background(), base.Records(), providerkit.ClassProduction, "shop"); rerr != nil || len(entries) != 0 {
 		t.Errorf("the refused deploy recorded %v, want nothing written for a link the kit would not accept", entries)
 	}
 }
