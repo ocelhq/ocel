@@ -229,6 +229,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	validation := edge.Record{Name: "_ocel.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.validations.invalid"}
+	stale := edge.Record{Name: "_stale.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_stale.validations.invalid"}
 	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
 		Edge: edge.StackState{
 			Slug:     "shop",
@@ -238,7 +239,10 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 			Bound:    []string{"app.acme.com"},
 		},
 		Hosts: map[string]providerkit.Settled{
-			"app.acme.com": {Certificate: providerkit.Certificate{ID: "ocels-cert", Requested: true, Written: []edge.Record{validation}}},
+			"app.acme.com": {
+				Certificate: providerkit.Certificate{ID: "ocels-cert", Requested: true, Written: []edge.Record{validation}},
+				Superseded:  []providerkit.Certificate{{ID: "stalled-cert", Requested: true, Written: []edge.Record{stale}}},
+			},
 			"old.acme.com": {Certificate: providerkit.Certificate{ID: "pinned-cert"}},
 		},
 	})
@@ -246,7 +250,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := writer.EnsureRecords(context.Background(), []edge.Record{validation}, nil); err != nil {
+	if _, err := writer.EnsureRecords(context.Background(), []edge.Record{validation, stale}, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -280,6 +284,9 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	}
 	if discarded := provider.Discarded(); !slices.Contains(discarded, "ocels-cert") {
 		t.Errorf("the provider discarded %v, want the certificate ocel requested among them", discarded)
+	}
+	if discarded := provider.Discarded(); !slices.Contains(discarded, "stalled-cert") {
+		t.Errorf("the provider discarded %v, want the certificate a stalled rotation left behind among them", discarded)
 	}
 	if discarded := provider.Discarded(); slices.Contains(discarded, "pinned-cert") {
 		t.Errorf("the provider discarded %v, want a pinned certificate left standing", discarded)

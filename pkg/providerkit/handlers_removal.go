@@ -21,7 +21,7 @@ type projectRemoval struct {
 	stack    edge.EdgeStack
 	store    stackStore
 	state    EdgeStackState
-	writer   edge.DNSWriter
+	settle   settler
 
 	slug    string
 	class   Class
@@ -58,7 +58,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	removal := &projectRemoval{
 		provider: provider,
 		front:    front,
-		writer:   writer,
+		settle:   newSettler(front, writer, req.GetEdge().GetDns().GetZone(), servedResolver{kind: front.Kind()}),
 		store:    stackStore{records: provider.Records(), name: EdgeStackRecord(class, req.GetSlug())},
 		slug:     req.GetSlug(),
 		class:    class,
@@ -194,7 +194,7 @@ func (r *projectRemoval) run(ctx context.Context, report Reporter) error {
 			errs = append(errs, err)
 		}
 	}
-	written, held := r.state.WrittenRecords(), r.state.Certificates()
+	written, held := r.state.PointerRecords(), r.state.Certificates()
 	if err := r.tearDownEdge(ctx, report); err != nil {
 		errs = append(errs, err)
 	} else {
@@ -267,13 +267,7 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, report Reporter) erro
 }
 
 func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Record, report Reporter) error {
-	if r.writer == nil || len(written) == 0 {
-		return nil
-	}
-	for _, rec := range written {
-		report.Say("Removing " + rec.String())
-	}
-	if err := r.writer.DeleteRecords(ctx, written); err != nil {
+	if err := r.settle.release(ctx, written, report.Say); err != nil {
 		return fmt.Errorf("remove the DNS records pointing at what this project served: %w", err)
 	}
 	return nil
@@ -282,11 +276,7 @@ func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Reco
 func (r *projectRemoval) discardCertificates(ctx context.Context, held []Certificate, report Reporter) error {
 	var errs []error
 	for _, cert := range held {
-		if !cert.Requested {
-			continue
-		}
-		report.Say("Discarding certificate " + cert.ID)
-		if err := discardCertificate(ctx, r.provider, cert, report); err != nil {
+		if err := retireCertificate(ctx, r.provider, r.settle, cert, Certificate{}, report); err != nil {
 			errs = append(errs, fmt.Errorf("discard the certificate ocel requested for this project: %w", err))
 		}
 	}
