@@ -306,12 +306,47 @@ func (r *deployRun) preflight(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	apps, err := r.usage(resources, grants)
+	if err != nil {
+		return err
+	}
 	return preflighter.PreflightDeploy(ctx, DeployPreflight{
 		Plan:      r.plan,
 		Resources: resources,
 		Grants:    grants,
+		Apps:      apps,
 		Report:    r.report(r.stages.Provisioning, progressv1.Phase_PHASE_PROVISIONING),
 	})
+}
+
+func (r *deployRun) usage(resources []Resource, published []Link) ([]AppUsage, error) {
+	apps := make([]AppUsage, 0, len(r.plan.Apps))
+	for _, entry := range r.plan.Apps {
+		used, err := r.used(entry.App)
+		if err != nil {
+			return nil, err
+		}
+		usage := AppUsage{App: entry.App}
+		for _, resource := range resources {
+			if used[boundName(resource)] {
+				usage.Resources = append(usage.Resources, resource)
+			}
+		}
+		for _, link := range published {
+			if used[link.Name] {
+				usage.Grants = append(usage.Grants, link)
+			}
+		}
+		apps = append(apps, usage)
+	}
+	return apps, nil
+}
+
+func boundName(resource Resource) string {
+	if resource.Linked {
+		return resource.Declared
+	}
+	return resource.Name
 }
 
 func (r *deployRun) provision(ctx context.Context) error {
@@ -495,14 +530,9 @@ func (r *deployRun) used(app string) (map[string]bool, error) {
 	}
 	names := map[string]bool{}
 	for _, resource := range resources {
-		if !edges[resource.Name] {
-			continue
+		if edges[resource.Name] {
+			names[boundName(resource)] = true
 		}
-		if resource.Linked {
-			names[resource.Declared] = true
-			continue
-		}
-		names[resource.Name] = true
 	}
 	return names, nil
 }
