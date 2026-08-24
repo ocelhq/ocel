@@ -54,6 +54,10 @@ func deployRequest() *contractv1.DeployRequest {
 					Name: "orders",
 				},
 			}},
+			Domains: []*contractv1.TierDomains{{
+				Tier:      environmentv1.Tier_TIER_PRODUCTION,
+				Hostnames: []string{"shop.example"},
+			}},
 			Apps: []*contractv1.ManifestApp{{
 				Name:         "web",
 				Framework:    "next",
@@ -195,6 +199,7 @@ func TestDeployPublishesEveryInfraLinkForItsAppsToRead(t *testing.T) {
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
+	hostnameAdded(t, client)
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
 	}
@@ -441,5 +446,71 @@ func TestDeployRecordsTheFeaturesItsProjectDependsOn(t *testing.T) {
 	said := result.GetError() + connectMessage(err)
 	if !strings.Contains(said, "shop") {
 		t.Fatalf("dropping every feature = %q, want it refused for the project that depends on them", said)
+	}
+}
+
+func hostnameAdded(t *testing.T, client contractv1connect.ProviderServiceClient) {
+	t.Helper()
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []string{"shop.example"},
+		Edge:       &contractv1.EdgeSelection{Dns: &contractv1.Dns{Kind: string(fake.KindZone), Zone: "shop.example"}},
+	})
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil || !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, %v", result.GetError(), err)
+	}
+}
+
+func TestDeployWithholdsTheURLUntilTheHostnameIsSettled(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	result, _ := deploy(t, client, deployRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	if len(result.GetAppUrls()) != 0 || !strings.Contains(result.GetUrlNote(), "shop.example") {
+		t.Fatalf("the first deploy returned urls %v and the note %q, want no url and a note naming the hostname nothing is bound to yet",
+			result.GetAppUrls(), result.GetUrlNote())
+	}
+
+	hostnameAdded(t, client)
+
+	result, _ = deploy(t, client, deployRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("a second Deploy() = %q", result.GetError())
+	}
+	if len(result.GetAppUrls()) == 0 || result.GetUrlNote() != "" {
+		t.Errorf("the deploy after the hostname settled returned urls %v and the note %q, want the address printed",
+			result.GetAppUrls(), result.GetUrlNote())
+	}
+}
+
+func TestDeployRefusesAProductionProjectThatDeclaresNoHostname(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	req := deployRequest()
+	req.Manifest.Domains = nil
+
+	stream, err := client.Deploy(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failure string
+	for stream.Receive() {
+		if result := stream.Msg().GetResult(); result != nil {
+			failure = result.GetError()
+		}
+	}
+	said := failure + connectMessage(stream.Err())
+	stream.Close()
+
+	if !strings.Contains(said, "domains.production") {
+		t.Fatalf("Deploy() of a project declaring no hostname = %q, want it refused for the domain it does not declare", said)
 	}
 }
