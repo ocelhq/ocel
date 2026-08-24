@@ -600,14 +600,18 @@ type publishedLinks struct {
 	environment string
 }
 
+func (p publishedLinks) Names(ctx context.Context) ([]string, error) {
+	return p.store.PublishedNames(ctx, p.scope, p.environment)
+}
+
 func (p publishedLinks) Published(ctx context.Context) ([]Link, error) {
-	names, err := p.store.PublishedNames(ctx, p.scope, p.environment)
+	names, err := p.Names(ctx)
 	if err != nil {
 		return nil, err
 	}
 	links := make([]Link, 0, len(names))
 	for _, name := range names {
-		link, err := p.resolve(ctx, name)
+		link, err := p.Resolve(ctx, name)
 		if err != nil {
 			return nil, err
 		}
@@ -616,19 +620,7 @@ func (p publishedLinks) Published(ctx context.Context) ([]Link, error) {
 	return links, nil
 }
 
-func (p publishedLinks) Resolve(ctx context.Context, name, property string) (string, error) {
-	link, err := p.resolve(ctx, name)
-	if err != nil {
-		return "", err
-	}
-	value, held := link.Properties[property]
-	if !held {
-		return "", Refuse(CodeInvalid, "link %s carries no property %q", name, property)
-	}
-	return value, nil
-}
-
-func (p publishedLinks) resolve(ctx context.Context, name string) (Link, error) {
+func (p publishedLinks) Resolve(ctx context.Context, name string) (Link, error) {
 	published, err := p.store.ResolveLink(ctx, p.scope, p.environment, name)
 	if err != nil {
 		return Link{}, err

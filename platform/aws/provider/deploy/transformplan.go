@@ -3,7 +3,10 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
@@ -158,29 +161,37 @@ func readPlanOutputs(ctx context.Context, plan providerkit.StackPlan, placed []p
 			"a transform fills %s from link %q, and this deploy reached no variable store to read published records from",
 			placed[0].At, placed[0].Ref.Link)
 	}
-	published, err := plan.Links.Published(ctx)
+	names, err := plan.Links.Names(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("a transform fills %s from link %q: %w", placed[0].At, placed[0].Ref.Link, err)
 	}
-	names := make([]string, 0, len(published))
-	for _, link := range published {
-		names = append(names, link.Name)
-	}
 	slices.Sort(names)
 
-	values := make(map[outputRef]any, len(placed))
+	wanted := make([]string, 0, len(placed))
 	for _, p := range placed {
 		if !slices.Contains(names, p.Ref.Link) {
 			return nil, &UnpublishedOutputError{
 				Ref: p.Ref, At: p.At, Class: string(plan.Ref.Class), Environment: plan.Ref.Name.Env, Published: names,
 			}
 		}
+		if !slices.Contains(wanted, p.Ref.Link) {
+			wanted = append(wanted, p.Ref.Link)
+		}
+	}
+	records, err := resolvePlanLinks(ctx, plan.Links, wanted)
+	if err != nil {
+		return nil, fmt.Errorf("a transform fills %s from link %q: %w", placed[0].At, placed[0].Ref.Link, err)
+	}
+
+	values := make(map[outputRef]any, len(placed))
+	for _, p := range placed {
 		if _, done := values[p.Ref]; done {
 			continue
 		}
-		value, err := plan.Links.Resolve(ctx, p.Ref.Link, p.Ref.Property)
-		if err != nil {
-			return nil, &OutputPropertyError{Ref: p.Ref, At: p.At, Carries: carriedBy(published, p.Ref.Link)}
+		record := records[p.Ref.Link]
+		value, carries := record.Properties[p.Ref.Property]
+		if !carries {
+			return nil, &OutputPropertyError{Ref: p.Ref, At: p.At, Carries: slices.Sorted(maps.Keys(record.Properties))}
 		}
 		if emptyOutput(value) {
 			return nil, &EmptyOutputError{Ref: p.Ref, At: p.At}
@@ -190,17 +201,25 @@ func readPlanOutputs(ctx context.Context, plan providerkit.StackPlan, placed []p
 	return values, nil
 }
 
-func carriedBy(published []providerkit.Link, name string) []string {
-	for _, link := range published {
-		if link.Name != name {
-			continue
-		}
-		carries := make([]string, 0, len(link.Properties))
-		for property := range link.Properties {
-			carries = append(carries, property)
-		}
-		slices.Sort(carries)
-		return carries
+func resolvePlanLinks(ctx context.Context, links providerkit.LinkReader, names []string) (map[string]providerkit.Link, error) {
+	held := make([]providerkit.Link, len(names))
+	group, gctx := errgroup.WithContext(ctx)
+	for i, name := range names {
+		group.Go(func() error {
+			record, err := links.Resolve(gctx, name)
+			if err != nil {
+				return err
+			}
+			held[i] = record
+			return nil
+		})
 	}
-	return nil
+	if err := group.Wait(); err != nil {
+		return nil, err
+	}
+	records := make(map[string]providerkit.Link, len(names))
+	for i, name := range names {
+		records[name] = held[i]
+	}
+	return records, nil
 }

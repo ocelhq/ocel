@@ -3,7 +3,9 @@ package deploy
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -12,27 +14,38 @@ import (
 )
 
 type publishedReader struct {
-	links []providerkit.Link
+	links   []providerkit.Link
+	failure error
+
+	mu    sync.Mutex
 	asked []string
+}
+
+func (r *publishedReader) Names(context.Context) ([]string, error) {
+	names := make([]string, 0, len(r.links))
+	for _, held := range r.links {
+		names = append(names, held.Name)
+	}
+	return names, nil
 }
 
 func (r *publishedReader) Published(context.Context) ([]providerkit.Link, error) {
 	return r.links, nil
 }
 
-func (r *publishedReader) Resolve(_ context.Context, link, property string) (string, error) {
-	r.asked = append(r.asked, link+"."+property)
-	for _, held := range r.links {
-		if held.Name != link {
-			continue
-		}
-		value, carries := held.Properties[property]
-		if !carries {
-			return "", providerkit.Refuse(providerkit.CodeInvalid, "link %s carries no property %q", link, property)
-		}
-		return value, nil
+func (r *publishedReader) Resolve(_ context.Context, link string) (providerkit.Link, error) {
+	r.mu.Lock()
+	r.asked = append(r.asked, link)
+	r.mu.Unlock()
+	if r.failure != nil {
+		return providerkit.Link{}, r.failure
 	}
-	return "", providerkit.Refuse(providerkit.CodeInvalid, "nothing published %s", link)
+	for _, held := range r.links {
+		if held.Name == link {
+			return held, nil
+		}
+	}
+	return providerkit.Link{}, providerkit.Refuse(providerkit.CodeInvalid, "nothing published %s", link)
 }
 
 func planUnderTransform() providerkit.StackPlan {
@@ -130,7 +143,7 @@ func TestATransformReadsALinkOutputThroughThePlansOwnLinks(t *testing.T) {
 	if got := transformed.functions["fn--api--users"].Runtime; got != "nodejs22.x" {
 		t.Errorf("the function runs %q, want the value the published link carries", got)
 	}
-	if len(links.asked) != 1 || links.asked[0] != "legacy.runtime" {
+	if len(links.asked) != 1 || links.asked[0] != "legacy" {
 		t.Fatalf("the pass asked the plan's links for %v, want the one output the transform named", links.asked)
 	}
 }
@@ -181,5 +194,64 @@ func TestATransformReadingALinkThisPlanOnlyBindsIsRead(t *testing.T) {
 	}
 	if got := transformed.functions["fn--api--users"].Runtime; got != "nodejs22.x" {
 		t.Errorf("the function runs %q, want the value the bound link's record carries", got)
+	}
+}
+
+func TestAStoreThatFailsToResolveALinkIsNotReportedAsABadProperty(t *testing.T) {
+	torn := errors.New("the record's pair is torn")
+	plan := planUnderTransform()
+	plan.Links = &publishedReader{
+		links:   []providerkit.Link{{Type: providerkit.LinkPostgres, Name: "legacy"}},
+		failure: torn,
+	}
+
+	_, err := transformStackPlan(context.Background(), filledFromLink("legacy", "runtime"), plan)
+	if !errors.Is(err, torn) {
+		t.Fatalf("transformStackPlan() = %v, want the store's own failure carried out", err)
+	}
+	var property *OutputPropertyError
+	if errors.As(err, &property) {
+		t.Error("a store that could not be read was reported as a record missing a property")
+	}
+}
+
+func TestALinkCarryingNoSuchPropertyNamesWhatItDoesCarry(t *testing.T) {
+	plan := planUnderTransform()
+	plan.Links = &publishedReader{links: []providerkit.Link{{
+		Type:       providerkit.LinkPostgres,
+		Name:       "legacy",
+		Properties: map[string]string{"host": "db.internal", "port": "5432"},
+	}}}
+
+	_, err := transformStackPlan(context.Background(), filledFromLink("legacy", "runtime"), plan)
+	var property *OutputPropertyError
+	if !errors.As(err, &property) {
+		t.Fatalf("transformStackPlan() = %v, want an OutputPropertyError", err)
+	}
+	if want := []string{"host", "port"}; !slices.Equal(property.Carries, want) {
+		t.Errorf("carries = %v, want the published record's own keys %v", property.Carries, want)
+	}
+}
+
+func TestEveryOutputOffTheSameLinkResolvesItOnce(t *testing.T) {
+	links := &publishedReader{links: []providerkit.Link{
+		{Type: providerkit.LinkPostgres, Name: "legacy", Properties: map[string]string{"runtime": "nodejs22.x"}},
+	}}
+	plan := planUnderTransform()
+	plan.Links = links
+
+	evaluator := echoingEvaluator{patch: func(surfaces []transform.Surfaces) {
+		placeholder := map[string]any{
+			outputPlaceholderKey: map[string]any{"link": "legacy", "property": "runtime"},
+		}
+		surfaces[len(surfaces)-1]["lambda"]["runtime"] = placeholder
+		surfaces[len(surfaces)-1]["lambda"]["handler"] = placeholder
+	}}
+
+	if _, err := transformStackPlan(context.Background(), evaluator, plan); err != nil {
+		t.Fatalf("transformStackPlan() = %v", err)
+	}
+	if len(links.asked) != 1 {
+		t.Errorf("the pass resolved %v, want one read for the one link both outputs name", links.asked)
 	}
 }
