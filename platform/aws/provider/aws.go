@@ -83,7 +83,12 @@ func (p *Provider) Bootstrap() providerkit.Bootstrapper {
 	if err != nil {
 		return refusing{err}
 	}
-	return control.BootstrapperFor(p.aws, front)
+	return settling{Bootstrapper: control.BootstrapperFor(p.aws, front), settled: p.forget}
+}
+
+func (p *Provider) forget() {
+	p.deployed.forget()
+	p.params.forget()
 }
 
 func (p *Provider) Releases() providerkit.Releaser { return p.releases }
@@ -345,6 +350,33 @@ func (m *memo[K, V]) resolve(key K, fill func() (V, error)) (V, error) {
 	return value, nil
 }
 
+func (m *memo[K, V]) forget() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.held = nil
+}
+
+type settling struct {
+	providerkit.Bootstrapper
+	settled func()
+}
+
+func (s settling) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+	if err := s.Bootstrapper.Apply(ctx, req, report); err != nil {
+		return err
+	}
+	s.settled()
+	return nil
+}
+
+func (s settling) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
+	if err := s.Bootstrapper.Remove(ctx, class, report); err != nil {
+		return err
+	}
+	s.settled()
+	return nil
+}
+
 type refusing struct{ err error }
 
 func (r refusing) Catalogue() []providerkit.Feature { return nil }
@@ -372,6 +404,7 @@ var (
 	_ providerkit.MembraneSource = (*Provider)(nil)
 	_ providerkit.StackInspector = (*Provider)(nil)
 	_ providerkit.Bootstrapper   = refusing{}
+	_ providerkit.Bootstrapper   = settling{}
 	_ awsports.Tables            = (*Provider)(nil)
 	_ awsports.Keys              = (*Provider)(nil)
 	_ awsports.Stores            = (*Provider)(nil)
