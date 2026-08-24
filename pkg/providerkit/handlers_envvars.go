@@ -359,6 +359,8 @@ func valuesError(err error) error {
 	switch {
 	case errors.Is(err, values.ErrStaleVersion):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
+	case errors.Is(err, values.ErrDangling):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
 	case errors.Is(err, values.ErrWouldDeepen), errors.Is(err, values.ErrIsReference), errors.Is(err, values.ErrTooLarge):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, values.ErrNotFound):
