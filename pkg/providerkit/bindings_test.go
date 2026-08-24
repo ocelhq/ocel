@@ -150,3 +150,16 @@ func TestReadableAs(t *testing.T) {
 		}
 	})
 }
+
+func TestDeployRefusesAVariableClassItCannotDeliver(t *testing.T) {
+	req := deployRequest()
+	req.Manifest.Apps[0].Variables = []*contractv1.ManifestVariable{
+		{Key: "WEBHOOK_SECRET", Value: "whsec", Class: resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED},
+	}
+	message := refusedDeploy(t, req, nil)
+	for _, want := range []string{"web", "WEBHOOK_SECRET"} {
+		if !strings.Contains(message, want) {
+			t.Errorf("refusal = %q, want it to name %q", message, want)
+		}
+	}
+}
