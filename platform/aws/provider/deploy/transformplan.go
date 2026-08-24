@@ -145,7 +145,7 @@ func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candida
 
 func refusePlanProvisionedOutputs(plan providerkit.StackPlan, placed []placedOutput) error {
 	for _, p := range placed {
-		if slices.ContainsFunc(plan.Resources, func(r providerkit.Resource) bool { return r.Name == p.Ref.Link }) {
+		if slices.ContainsFunc(plan.Resources, func(r providerkit.Resource) bool { return r.Name == p.Ref.Link && !r.Linked }) {
 			return &ProvisionedOutputError{Ref: p.Ref, At: p.At}
 		}
 	}

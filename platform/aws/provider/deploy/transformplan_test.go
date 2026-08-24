@@ -165,3 +165,21 @@ func TestATransformReadingAnUnpublishedLinkNamesWhatIsPublished(t *testing.T) {
 		t.Errorf("the refusal lists %v as published, want what the plan's links actually carry", unpublished.Published)
 	}
 }
+
+func TestATransformReadingALinkThisPlanOnlyBindsIsRead(t *testing.T) {
+	plan := planUnderTransform()
+	plan.Resources[0].Linked = true
+	plan.Links = &publishedReader{links: []providerkit.Link{
+		{Type: providerkit.LinkPostgres, Name: "db", Properties: map[string]string{"runtime": "nodejs22.x"}},
+	}}
+
+	evaluator := filledFromLink("db", "runtime")
+
+	transformed, err := transformStackPlan(context.Background(), evaluator, plan)
+	if err != nil {
+		t.Fatalf("transformStackPlan() = %v, want the bound link's own published record read", err)
+	}
+	if got := transformed.functions["fn--api--users"].Runtime; got != "nodejs22.x" {
+		t.Errorf("the function runs %q, want the value the bound link's record carries", got)
+	}
+}
