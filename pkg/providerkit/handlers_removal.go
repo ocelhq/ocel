@@ -150,15 +150,27 @@ func (r *projectRemoval) recordItems() []*contractv1.RemovalItem {
 			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
 		})
 	}
-	for _, arn := range r.state.Certificates() {
-		items = append(items, &contractv1.RemovalItem{
-			Kind:   "certificate",
-			Name:   arn,
-			Action: contractv1.RemovalItem_ACTION_KEEP,
-			Reason: "you pinned it; ocel never requested it, so it is not ocel's to delete",
-		})
+	for _, cert := range r.state.Certificates() {
+		items = append(items, certificateItem(cert))
 	}
 	return items
+}
+
+func certificateItem(cert Certificate) *contractv1.RemovalItem {
+	if !cert.Requested {
+		return &contractv1.RemovalItem{
+			Kind:   "certificate",
+			Name:   cert.ARN,
+			Action: contractv1.RemovalItem_ACTION_KEEP,
+			Reason: "you pinned it; ocel never requested it, so it is not ocel's to delete",
+		}
+	}
+	return &contractv1.RemovalItem{
+		Kind:   "certificate",
+		Name:   cert.ARN,
+		Action: contractv1.RemovalItem_ACTION_DELETE,
+		Reason: "ocel requested it for a hostname this project serves, and nothing is left to serve",
+	}
 }
 
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {

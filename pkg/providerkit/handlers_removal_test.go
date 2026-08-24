@@ -153,7 +153,7 @@ func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 		},
 		Hosts: map[string]providerkit.Settled{
 			"app.acme.com": {
-				Certificate: "cert-for-app",
+				Certificate: providerkit.Certificate{ARN: "cert-for-app"},
 				Written:     []edge.Record{{Name: "app.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
 				Owed:        []edge.Record{{Name: "owed.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
 			},

@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -18,6 +19,8 @@ type Provider struct {
 	mu          sync.Mutex
 	pins        map[string]string
 	certRefusal error
+	issue       []edge.Record
+	discarded   []string
 
 	options   Options
 	records   *Records
@@ -100,13 +103,44 @@ func (p *Provider) RefuseCertificates(err error) {
 	p.certRefusal = err
 }
 
-func (p *Provider) Certificate(_ context.Context, _ edge.Kind, hostname string, _ providerkit.Reporter) (string, error) {
+func (p *Provider) IssueCertificates(validation ...edge.Record) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.certRefusal != nil {
-		return "", p.certRefusal
+	p.issue = validation
+}
+
+func (p *Provider) Discarded() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.discarded)
+}
+
+func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+	p.mu.Lock()
+	refusal, pinned, validation := p.certRefusal, p.pins[req.Hostname], slices.Clone(p.issue)
+	p.mu.Unlock()
+
+	if refusal != nil {
+		return providerkit.Certificate{}, refusal
 	}
-	return p.pins[hostname], nil
+	if pinned != "" {
+		return providerkit.Certificate{ARN: pinned}, nil
+	}
+	if validation == nil {
+		return providerkit.Certificate{}, nil
+	}
+	cert := providerkit.Certificate{ARN: "issued-for-" + req.Hostname, Requested: true}
+	if req.Held.Requested && req.Held.ARN == cert.ARN {
+		return req.Held, nil
+	}
+	return req.Prove(ctx, cert, validation)
+}
+
+func (p *Provider) DiscardCertificate(_ context.Context, cert providerkit.Certificate, _ providerkit.Reporter) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.discarded = append(p.discarded, cert.ARN)
+	return nil
 }
 
 type Warmer struct{ *Provider }
