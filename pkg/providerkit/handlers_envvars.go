@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
@@ -25,6 +26,21 @@ func (h *handlers) values(tier environmentv1.Tier) (values.Store, Class, error) 
 		class = ClassPreview
 	}
 	return values.Store{Records: provider.Records(), Sealer: provider.Sealer()}, class, nil
+}
+
+func (h *handlers) verifyGrants(ctx context.Context, link *linksv1.Link) error {
+	if len(link.GetGrants()) == 0 {
+		return nil
+	}
+	provider, err := h.session.use()
+	if err != nil {
+		return err
+	}
+	verifier, vets := provider.(GrantVerifier)
+	if !vets {
+		return nil
+	}
+	return verifier.VerifyGrants(ctx, linkOf(link))
 }
 
 func (h *handlers) scoped(tier environmentv1.Tier, slug string) (values.Store, values.Scope, error) {
@@ -243,6 +259,9 @@ func (h *handlers) SetLink(ctx context.Context, req *envvarsv1.SetLinkRequest) (
 		return nil, linksError(err)
 	}
 	if err := VerifyLink(link); err != nil {
+		return nil, linksError(err)
+	}
+	if err := h.verifyGrants(ctx, link); err != nil {
 		return nil, linksError(err)
 	}
 	pair, err := LinkPair(req.GetOwner(), link)

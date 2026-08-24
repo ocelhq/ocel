@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
-	"strings"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -124,26 +122,14 @@ func VerifyLink(link *linksv1.Link) error {
 		}
 	}
 	for _, g := range link.GetGrants() {
-		if len(g.GetActions()) == 0 || slices.ContainsFunc(g.GetActions(), UnscopedAction) {
-			return fmt.Errorf("link %s grants %v over %v: an action naming a whole service reaches past the resource it links: %w",
-				link.GetName(), g.GetActions(), g.GetResources(), ErrUnscopedGrant)
+		if len(g.GetActions()) == 0 {
+			return fmt.Errorf("link %s carries a grant over %v naming no action: a grant names what an app may do with the resource it links: %w",
+				link.GetName(), g.GetResources(), ErrUnscopedGrant)
 		}
-		if len(g.GetResources()) == 0 || slices.ContainsFunc(g.GetResources(), UnscopedResource) {
-			return fmt.Errorf("link %s grants %v over %v: an app receives permissions for the resource it links and nothing else: %w",
-				link.GetName(), g.GetActions(), g.GetResources(), ErrUnscopedGrant)
+		if len(g.GetResources()) == 0 {
+			return fmt.Errorf("link %s grants %v over no resource: an app receives permissions for the resource it links and nothing else: %w",
+				link.GetName(), g.GetActions(), ErrUnscopedGrant)
 		}
 	}
 	return nil
 }
-
-const grantWildcard = "*"
-
-func UnscopedAction(action string) bool {
-	service, verb, scoped := strings.Cut(action, ":")
-	if !scoped {
-		return action == grantWildcard
-	}
-	return verb == grantWildcard || service == grantWildcard
-}
-
-func UnscopedResource(resource string) bool { return resource == grantWildcard }

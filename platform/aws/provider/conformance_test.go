@@ -45,6 +45,7 @@ func TestTheRootCarriesTheVendorAndEveryOptionalSet(t *testing.T) {
 		"CodeEmbedder":   held[providerkit.CodeEmbedder](root),
 		"StackInspector": held[providerkit.StackInspector](root),
 		"MembraneSource": held[providerkit.MembraneSource](root),
+		"GrantVerifier":  held[providerkit.GrantVerifier](root),
 	} {
 		if !held {
 			t.Errorf("the root does not carry %s, and a wrapped port would never bring it back", name)

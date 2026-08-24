@@ -66,7 +66,9 @@ func (e *UnscopedGrantError) Error() string {
 	)
 }
 
-func checkLinkGrants(links []*linksv1.Link) error {
+func (e *UnscopedGrantError) Unwrap() error { return providerkit.ErrUnscopedGrant }
+
+func CheckLinkGrants(links []*linksv1.Link) error {
 	for _, link := range links {
 		for _, grant := range link.GetGrants() {
 			if err := checkGrant(link.GetName(), grant); err != nil {
@@ -77,19 +79,43 @@ func checkLinkGrants(links []*linksv1.Link) error {
 	return nil
 }
 
+func VerifyGrants(link providerkit.Link) error {
+	for _, grant := range link.Grants {
+		if err := scoped(link.Name, grant.Label, grant.Actions, grant.Resources); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func checkGrant(link string, grant *linksv1.Grant) error {
-	label := grant.GetLabel()
+	return scoped(link, grant.GetLabel(), grant.GetActions(), grant.GetResources())
+}
+
+func scoped(link, label string, actions, resources []string) error {
 	if label == "" {
 		label = "unlabelled"
 	}
-	if len(grant.GetActions()) == 0 || slices.ContainsFunc(grant.GetActions(), providerkit.UnscopedAction) {
+	if len(actions) == 0 || slices.ContainsFunc(actions, unscopedAction) {
 		return &UnscopedGrantError{Link: link, Label: label, Field: "action set"}
 	}
-	if len(grant.GetResources()) == 0 || slices.ContainsFunc(grant.GetResources(), providerkit.UnscopedResource) {
+	if len(resources) == 0 || slices.ContainsFunc(resources, unscopedResource) {
 		return &UnscopedGrantError{Link: link, Label: label, Field: "resource set"}
 	}
 	return nil
 }
+
+const grantWildcard = "*"
+
+func unscopedAction(action string) bool {
+	service, verb, named := strings.Cut(action, ":")
+	if !named {
+		return action == grantWildcard
+	}
+	return verb == grantWildcard || service == grantWildcard
+}
+
+func unscopedResource(resource string) bool { return resource == grantWildcard }
 
 func linkPolicyDocument(name string, grants []*linksv1.Grant) (string, error) {
 	if len(grants) == 0 {
