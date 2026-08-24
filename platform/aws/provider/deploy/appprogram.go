@@ -353,7 +353,7 @@ func planLinkPolicies(grants []providerkit.Link) ([]linkPolicy, error) {
 		if policy == "" {
 			continue
 		}
-		out = append(out, linkPolicy{Link: link.Name, Type: link.Type, Policy: policy})
+		out = append(out, linkPolicy{Link: link.Name, Policy: policy})
 	}
 	return out, nil
 }

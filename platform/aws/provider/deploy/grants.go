@@ -22,7 +22,6 @@ const (
 
 type linkPolicy struct {
 	Link   string
-	Type   providerkit.LinkType
 	Policy string
 }
 
@@ -67,17 +66,6 @@ func (e *UnscopedGrantError) Error() string {
 }
 
 func (e *UnscopedGrantError) Unwrap() error { return providerkit.ErrUnscopedGrant }
-
-func CheckLinkGrants(links []*linksv1.Link) error {
-	for _, link := range links {
-		for _, grant := range link.GetGrants() {
-			if err := checkGrant(link.GetName(), grant); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
 
 func VerifyGrants(link providerkit.Link) error {
 	for _, grant := range link.Grants {
