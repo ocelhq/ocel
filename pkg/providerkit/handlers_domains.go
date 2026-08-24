@@ -36,23 +36,17 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 	return &hostnames{stackSession: session, configured: configured, host: host}, nil
 }
 
-func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
-	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = errors.Join(err, sender.close()) }()
-	report := newReporter(sender, Stage{}, progressv1.Phase_PHASE_UNSPECIFIED)
-
-	session, err := h.hostnames(ctx, req)
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	session.settle.ask = func(headline string, records []edge.Record, notes ...string) {
-		sender.send(dnsOwedEvent(headline, records, notes...))
-	}
-	if err := session.add(ctx, report); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	sender.send(okResult())
-	return nil
+func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(sender *eventSender, report Reporter) error {
+		session, err := h.hostnames(ctx, req)
+		if err != nil {
+			return err
+		}
+		session.settle.ask = func(headline string, records []edge.Record, notes ...string) {
+			sender.send(dnsOwedEvent(headline, records, notes...))
+		}
+		return session.add(ctx, report)
+	})
 }
 
 func (d *hostnames) add(ctx context.Context, report Reporter) error {
@@ -148,20 +142,14 @@ func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, 
 	return nil
 }
 
-func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
-	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = errors.Join(err, sender.close()) }()
-	report := newReporter(sender, Stage{}, progressv1.Phase_PHASE_UNSPECIFIED)
-
-	session, err := h.hostnames(ctx, req)
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	if err := session.remove(ctx, report); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	sender.send(okResult())
-	return nil
+func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(_ *eventSender, report Reporter) error {
+		session, err := h.hostnames(ctx, req)
+		if err != nil {
+			return err
+		}
+		return session.remove(ctx, report)
+	})
 }
 
 func (d *hostnames) remove(ctx context.Context, report Reporter) error {

@@ -125,20 +125,14 @@ func (r *projectRemoval) plan() *contractv1.RemovalPlan {
 	return plan
 }
 
-func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
-	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = errors.Join(err, sender.close()) }()
-	report := newReporter(sender, Stage{}, progressv1.Phase_PHASE_DELETING)
-
-	removal, err := h.openRemoval(ctx, req)
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	if err := removal.run(ctx, report); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	sender.send(okResult())
-	return nil
+func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamed(ctx, stream, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
+		removal, err := h.openRemoval(ctx, req)
+		if err != nil {
+			return err
+		}
+		return removal.run(ctx, report)
+	})
 }
 
 func (r *projectRemoval) run(ctx context.Context, report Reporter) error {

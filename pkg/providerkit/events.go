@@ -2,6 +2,7 @@ package providerkit
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -69,6 +70,37 @@ func (s *eventSender) close() error {
 	close(s.events)
 	<-s.done
 	return s.err
+}
+
+func streamResult(
+	ctx context.Context,
+	stream *connect.ServerStream[progressv1.OperationEvent],
+	phase progressv1.Phase,
+	do func(*eventSender, Reporter) (*progressv1.OperationEvent, error),
+) (err error) {
+	sender := newEventSender(ctx, stream.Send)
+	defer func() { err = errors.Join(err, sender.close()) }()
+
+	result, err := do(sender, newReporter(sender, Stage{}, phase))
+	if err != nil {
+		return sender.fail(RefusalError(err))
+	}
+	sender.send(result)
+	return nil
+}
+
+func streamed(
+	ctx context.Context,
+	stream *connect.ServerStream[progressv1.OperationEvent],
+	phase progressv1.Phase,
+	do func(*eventSender, Reporter) error,
+) error {
+	return streamResult(ctx, stream, phase, func(sender *eventSender, report Reporter) (*progressv1.OperationEvent, error) {
+		if err := do(sender, report); err != nil {
+			return nil, err
+		}
+		return okResult(), nil
+	})
 }
 
 type reporter struct {
