@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -260,6 +261,82 @@ func TestDeployRefusesALinkMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	}
 	if entries, rerr := providerkit.ReadStacks(context.Background(), base.Records(), providerkit.ClassProduction, "shop"); rerr != nil || len(entries) != 0 {
 		t.Errorf("the refused deploy recorded %v, want nothing written for a link the kit would not accept", entries)
+	}
+}
+
+type resolvingReleaser struct {
+	inner providerkit.Releaser
+
+	mu       sync.Mutex
+	host     string
+	resolved []providerkit.Link
+}
+
+func (r *resolvingReleaser) publishes(host string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.host = host
+}
+
+func (r *resolvingReleaser) Resolved() []providerkit.Link {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.resolved)
+}
+
+func (r *resolvingReleaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+	result, err := r.inner.Provision(ctx, plan, report)
+	if err != nil {
+		return result, err
+	}
+	if plan.Kind == providerkit.StackInfra {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		for _, link := range result.Links {
+			link.Properties[providerkit.PropertyHost] = r.host
+		}
+		return result, nil
+	}
+	link, err := plan.Links.Resolve(ctx, "orders")
+	if err != nil {
+		return providerkit.StackResult{}, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.resolved = append(r.resolved, link)
+	return result, nil
+}
+
+func (r *resolvingReleaser) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+	return r.inner.Destroy(ctx, ref, report)
+}
+
+func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysLink(t *testing.T) {
+	builtProject(t)
+	base := fake.NewProvider(fake.Options{})
+	releaser := &resolvingReleaser{inner: base.Releases(), host: "db-one.invalid"}
+	client := servedBy(t, refusingReleaser{Provider: base, releaser: releaser})
+
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	hostnameAdded(t, client)
+	releaser.publishes("db-two.invalid")
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("a second Deploy() = %q", result.GetError())
+	}
+
+	resolved := releaser.Resolved()
+	if len(resolved) != 2 {
+		t.Fatalf("the app stack resolved %d links over two deploys, want one per deploy", len(resolved))
+	}
+	if host := resolved[0].Properties[providerkit.PropertyHost]; host != "db-one.invalid" {
+		t.Fatalf("the first deploy's app stack resolved orders at %q, want the link its own infra stack published: "+
+			"the app stack is provisioned after the infra stack, so the record it reads is the one this deploy just wrote", host)
+	}
+	if host := resolved[1].Properties[providerkit.PropertyHost]; host != "db-two.invalid" {
+		t.Errorf("the second deploy's app stack resolved orders at %q, want %q: the app stack read a link its own deploy replaced, "+
+			"so provisioning ran an app before the infra it reads from", host, "db-two.invalid")
 	}
 }
 
