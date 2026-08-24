@@ -31,14 +31,6 @@ func manifestAppFunctions(functions []*contractv1.ManifestFunction) []appFunctio
 	return out
 }
 
-func argsFor(functions []*contractv1.ManifestFunction, resolve func(*contractv1.ManifestFunction) functionArgs) func(appFunction) functionArgs {
-	args := make(map[string]functionArgs, len(functions))
-	for _, fn := range functions {
-		args[fn.GetLogicalName()] = resolve(fn)
-	}
-	return func(fn appFunction) functionArgs { return args[fn.Logical] }
-}
-
 type appStackFunctions struct {
 	Project   string
 	Stack     naming.StackName

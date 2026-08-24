@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -268,28 +267,6 @@ func isrPolicy(c isrConfig) (string, error) {
 		return "", fmt.Errorf("render isr policy: %w", err)
 	}
 	return string(out), nil
-}
-
-func translateFunction(fn *contractv1.ManifestFunction) functionArgs {
-	runtime := defaultFunctionRuntime
-	if r := fn.GetRuntime(); r != "" {
-		runtime = r
-	}
-	handler := defaultFunctionEntry
-	if h := fn.GetHandler(); h != "" {
-		handler = h
-	}
-	memoryMB := defaultFunctionMemoryMB
-	if fn.GetFramework() == frameworkNext {
-		memoryMB = nextBundleFunctionMemoryMB
-	}
-	return functionArgs{
-		Runtime:        runtime,
-		Handler:        handler,
-		MemorySizeMB:   memoryMB,
-		TimeoutSeconds: defaultFunctionTimeoutSeconds,
-		InvokeMode:     functionURLInvokeModeStream,
-	}
 }
 
 func functionCoordinate(project string, stack naming.StackName, logicalName string) naming.Coordinate {

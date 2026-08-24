@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform/transformtest"
 )
@@ -31,7 +31,7 @@ func TestSurfaceConformance(t *testing.T) {
 	}
 
 	rendered := map[string]transform.Surfaces{
-		"function": functionSurfaces(translateFunction(&contractv1.ManifestFunction{})),
+		"function": functionSurfaces(translateFunctionSpec("", providerkit.FunctionSpec{})),
 		"bucket":   bucketSurfaces(translateBucket(&resourcesv1.BucketConfig{})),
 		"postgres": postgresSurfaces(translatePostgres(&resourcesv1.PostgresConfig{})),
 	}
