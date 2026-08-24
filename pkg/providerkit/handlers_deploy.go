@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	connect "connectrpc.com/connect"
@@ -75,6 +76,7 @@ type deployRun struct {
 	scope  values.Scope
 
 	allowDegraded []string
+	withheld      string
 
 	artifacts map[string]ArtifactRef
 	membrane  ArtifactRef
@@ -143,6 +145,9 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	if err := r.admit(ctx); err != nil {
 		return nil, err
 	}
+	if err := r.admitDomains(ctx); err != nil {
+		return nil, err
+	}
 	if err := r.rememberProject(ctx); err != nil {
 		return nil, err
 	}
@@ -186,6 +191,41 @@ func phaseOf(stage Stage, stages deployStages) progressv1.Phase {
 func (r *deployRun) admit(ctx context.Context) error {
 	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, r.report(r.stages.Provisioning, progressv1.Phase_PHASE_PROVISIONING))
 	return err
+}
+
+func (r *deployRun) admitDomains(ctx context.Context) error {
+	hosts := r.hostnames()
+	if r.plan.Class == ClassPreview {
+		wildcard, err := readWildcard(ctx, r.provider.Records())
+		if err != nil {
+			return err
+		}
+		if len(hosts) > 0 || wildcard.BaseDomain != "" {
+			return nil
+		}
+		return Refuse(CodeNotReady,
+			"this project declares no domains.preview wildcard and no global preview domain is in use, so a preview deploy has nowhere to serve: "+
+				"declare a project-level domains.preview wildcard, or run `ocel domain use '*.preview.example.com' --preview` to serve every project's previews on one wildcard")
+	}
+	if len(hosts) == 0 {
+		return Refuse(CodeNotReady,
+			"this project declares no domains.production, so a production deploy has no hostname to serve: "+
+				"declare one in your ocel config and run `ocel domain add` to provision the certificate, the edge surface and the DNS for it")
+	}
+	if r.state.Edge.Empty() {
+		r.withheld = fmt.Sprintf(
+			"this deploy is the one that creates the edge surface, so nothing is bound to %s yet: "+
+				"run `ocel domain add` to settle the certificate, the surface and the DNS, then deploy again — until then there is no address of yours to print",
+			strings.Join(hosts, ", "))
+		return nil
+	}
+	for _, host := range hosts {
+		if !r.state.Ready(host, r.front.Kind()) {
+			return Refuse(CodeNotReady,
+				"%s is not bound to the %s edge, so nothing there would answer for it: run `ocel domain add`", host, r.front.Kind())
+		}
+	}
+	return nil
 }
 
 func (r *deployRun) rememberProject(ctx context.Context) error {
@@ -603,6 +643,9 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 	}
 	if front := r.stack.State().Front; front != "" {
 		result.AppUrls = []string{"https://" + front}
+	}
+	if r.withheld != "" {
+		result.AppUrls, result.UrlNote = nil, r.withheld
 	}
 	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: result}}, nil
 }
