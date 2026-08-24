@@ -50,18 +50,29 @@ func Held(ctx context.Context, records RecordStore, name RecordName) (Record, er
 }
 
 func Forget(ctx context.Context, records RecordStore, name RecordName) error {
-	held, err := records.Read(ctx, name)
-	if errors.Is(err, ErrNoRecord) {
-		return nil
+	for range forgetAttempts {
+		held, err := records.Read(ctx, name)
+		if errors.Is(err, ErrNoRecord) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		err = records.Remove(ctx, name, held.Revision)
+		if err == nil || errors.Is(err, ErrNoRecord) {
+			return nil
+		}
+		if !errors.Is(err, ErrStale) {
+			return err
+		}
 	}
-	if err != nil {
-		return err
-	}
-	if err := records.Remove(ctx, name, held.Revision); err != nil && !errors.Is(err, ErrNoRecord) && !errors.Is(err, ErrStale) {
-		return err
-	}
-	return nil
+	return fmt.Errorf(
+		"%s was rewritten between every read of it and the removal that followed, %d times over. "+
+			"Something is still writing that record; removing it now would drop a write nobody has seen",
+		name, forgetAttempts)
 }
+
+const forgetAttempts = 5
 
 type Sealer interface {
 	Seal(ctx context.Context, at Coordinate, plaintext []byte) ([]byte, error)
