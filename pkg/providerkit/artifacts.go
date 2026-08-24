@@ -181,12 +181,7 @@ func artifactFiles(dir string) ([]string, error) {
 }
 
 func overlayFiles(overlay map[string][]byte) []string {
-	rels := make([]string, 0, len(overlay))
-	for rel := range overlay {
-		rels = append(rels, rel)
-	}
-	slices.Sort(rels)
-	return rels
+	return slices.Sorted(maps.Keys(overlay))
 }
 
 const artifactDigestLen = 16
@@ -203,7 +198,7 @@ func digestArtifact(dir string, overlay map[string][]byte) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		lengthPrefixed(sum, []byte(rel))
+		writeLenPrefixed(sum, []byte(rel))
 
 		if info.Mode()&os.ModeSymlink != 0 {
 			target, err := os.Readlink(full)
@@ -211,7 +206,7 @@ func digestArtifact(dir string, overlay map[string][]byte) (string, error) {
 				return "", err
 			}
 			sum.Write([]byte{2})
-			lengthPrefixed(sum, []byte(target))
+			writeLenPrefixed(sum, []byte(target))
 			continue
 		}
 
@@ -235,18 +230,11 @@ func digestArtifact(dir string, overlay map[string][]byte) (string, error) {
 		}
 	}
 	for _, rel := range overlayFiles(overlay) {
-		lengthPrefixed(sum, []byte(rel))
+		writeLenPrefixed(sum, []byte(rel))
 		sum.Write([]byte{0})
-		lengthPrefixed(sum, overlay[rel])
+		writeLenPrefixed(sum, overlay[rel])
 	}
 	return hex.EncodeToString(sum.Sum(nil))[:artifactDigestLen], nil
-}
-
-func lengthPrefixed(sum io.Writer, body []byte) {
-	var size [8]byte
-	binary.BigEndian.PutUint64(size[:], uint64(len(body)))
-	sum.Write(size[:])
-	sum.Write(body)
 }
 
 func packArtifact(dir string, overlay map[string][]byte) ([]byte, error) {
