@@ -178,14 +178,15 @@ func (g Gate) RecordedFeatures(ctx context.Context, class Class) (map[string][]s
 	}
 	recorded := map[string][]string{}
 	for _, record := range held {
-		if len(record.Name) != 3 || len(record.Bytes) == 0 {
+		rest, under := record.Name.Under(ProjectsRecord(class))
+		if !under || len(rest) != 1 || len(record.Bytes) == 0 {
 			continue
 		}
 		var project Project
 		if err := json.Unmarshal(record.Bytes, &project); err != nil {
 			return nil, fmt.Errorf("read %s's record: %w", record.Name, err)
 		}
-		recorded[record.Name[2]] = project.Features
+		recorded[rest[0]] = project.Features
 	}
 	return recorded, nil
 }
@@ -316,10 +317,11 @@ func (g Gate) Occupancy(ctx context.Context, class Class) (Occupancy, error) {
 	}
 	var projects []string
 	for _, record := range held {
-		if len(record.Name) < 3 || record.Name[2] == "" {
+		rest, under := record.Name.Under(ProjectsRecord(class))
+		if !under || rest[0] == "" {
 			continue
 		}
-		projects = append(projects, record.Name[2])
+		projects = append(projects, rest[0])
 	}
 	slices.Sort(projects)
 	occupancy := Occupancy{Projects: slices.Compact(projects)}

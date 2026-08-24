@@ -358,7 +358,11 @@ func (l *Ledger) Pointers(ctx context.Context) ([]string, error) {
 	}
 	names := make([]string, 0, len(held))
 	for _, record := range held {
-		names = append(names, record.Name[len(record.Name)-1])
+		rest, under := record.Name.Under(l.pointersName())
+		if !under {
+			continue
+		}
+		names = append(names, rest[0])
 	}
 	slices.Sort(names)
 	return names, nil
@@ -488,13 +492,12 @@ func (l *Ledger) recordKeys(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read the deployment records for %s: %w", l.scope, err)
 	}
-	under := len(l.recordsName())
 	keys := make([]string, 0, len(held))
 	for _, record := range held {
-		if len(record.Name) <= under {
+		rest, under := record.Name.Under(l.recordsName())
+		if !under || len(rest) < 2 {
 			continue
 		}
-		rest := record.Name[under:]
 		keys = append(keys, RecordKey(rest[0], strings.Join(rest[1:], "/")))
 	}
 	slices.Sort(keys)
