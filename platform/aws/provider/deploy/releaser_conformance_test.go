@@ -2,6 +2,8 @@ package deploy
 
 import (
 	"context"
+	"slices"
+	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,17 +16,23 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 type mockedEngine struct {
 	outputs auto.OutputMap
+	mocks   sdk.MockResourceMonitor
 	ran     []string
 }
 
 var _ kitpulumi.Engine = (*mockedEngine)(nil)
 
 func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) (auto.OutputMap, error) {
-	if err := sdk.RunErr(setup.Program, sdk.WithMocks("shop", setup.Stack, standInCloud{})); err != nil {
+	var monitor sdk.MockResourceMonitor = standInCloud{}
+	if e.mocks != nil {
+		monitor = e.mocks
+	}
+	if err := sdk.RunErr(setup.Program, sdk.WithMocks("shop", setup.Stack, monitor)); err != nil {
 		return nil, err
 	}
 	e.ran = append(e.ran, setup.Stack)
@@ -73,6 +81,10 @@ func provisionedOutputs() auto.OutputMap {
 }
 
 func conformingReleaser(engine kitpulumi.Engine) *Releaser {
+	return releaserPlacingInto(engine, &fakeUploader{})
+}
+
+func releaserPlacingInto(engine kitpulumi.Engine, uploader *fakeUploader) *Releaser {
 	cfg := Config{
 		Slug:           "conformance",
 		Region:         "eu-west-1",
@@ -83,6 +95,8 @@ func conformingReleaser(engine kitpulumi.Engine) *Releaser {
 		StateTable:     "ocel-state",
 		StateTableARN:  "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state",
 		AppBoundaryARN: "arn:aws:iam::111122223333:policy/ocel-app-boundary",
+		ArtifactBucket: "ocel-artifacts",
+		Uploader:       uploader,
 	}
 	return newReleaser(fixed(cfg), &Realized{}, engine)
 }
@@ -116,5 +130,60 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryLink(t *testing
 	}
 	if got := result.Links[0].Properties[providerkit.PropertyPassword]; got != "a-master-password" {
 		t.Errorf("the postgres link carries password %q, want the one the managed secret holds", got)
+	}
+}
+
+type lambdaCodeRecorder struct {
+	standInCloud
+	mu   sync.Mutex
+	code map[string]payloads.Placement
+}
+
+func (r *lambdaCodeRecorder) NewResource(args sdk.MockResourceArgs) (string, resource.PropertyMap, error) {
+	if args.TypeToken == "aws:lambda/function:Function" {
+		r.mu.Lock()
+		if r.code == nil {
+			r.code = map[string]payloads.Placement{}
+		}
+		r.code[args.Name] = payloads.Placement{
+			Bucket: stringInput(args.Inputs, "s3Bucket"),
+			Key:    stringInput(args.Inputs, "s3Key"),
+		}
+		r.mu.Unlock()
+	}
+	return r.standInCloud.NewResource(args)
+}
+
+func stringInput(inputs resource.PropertyMap, key string) string {
+	value, held := inputs[resource.PropertyKey(key)]
+	if !held || !value.IsString() {
+		return ""
+	}
+	return value.StringValue()
+}
+
+func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
+	t.Parallel()
+
+	uploader := &fakeUploader{}
+	recorder := &lambdaCodeRecorder{}
+	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: recorder}
+	if _, err := releaserPlacingInto(engine, uploader).Provision(context.Background(), providerkit.StackPlan{
+		Ref:  providerkit.StackRef{Project: "conformance", Class: providerkit.ClassProduction, Name: naming.InfraStack("conformance")},
+		Kind: providerkit.StackInfra,
+		Resources: []providerkit.Resource{
+			{Name: "c-bucket", Type: providerkit.LinkBucket, Bucket: &providerkit.BucketSpec{}},
+		},
+	}, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+
+	at := payloads.At("ocel-artifacts", uploadCompleterKeyPrefix, payloads.UploadCompleter())
+	if !slices.Contains(uploader.puts, at.Key) {
+		t.Errorf("uploaded %v, want the upload completer placed at %s", uploader.puts, at.Key)
+	}
+	want := payloads.Placement{Bucket: at.Bucket, Key: at.Key}
+	if placed := recorder.code["bucket-c-bucket-upload-completer"]; placed != want {
+		t.Errorf("the upload completer lambda declares code at %+v, want %+v", placed, want)
 	}
 }
