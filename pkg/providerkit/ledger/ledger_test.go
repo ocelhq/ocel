@@ -246,6 +246,33 @@ func TestPruneKeepsAnActivePromotionThatFellOutOfTheWindow(t *testing.T) {
 	}
 }
 
+func TestPruneKeepsARecordAnUnprunedPromotionStillNames(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+
+	if err := l.PutStaged(ctx, edge.DeploymentRecord{App: "web", Identity: "b1"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"p1", "p2"} {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id, Builds: map[string]string{"web": "b1"}}, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := l.Prune(ctx, 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.RemovedRecordKeys) != 0 {
+		t.Fatalf("removed record keys = %v, want nothing: the kept promotion serves the same build", result.RemovedRecordKeys)
+	}
+	if strings.Join(result.SurvivingRecordKeys, ",") != "record:web/b1" {
+		t.Fatalf("surviving record keys = %v, want the build the kept promotion serves", result.SurvivingRecordKeys)
+	}
+	if _, held, err := l.Record(ctx, "web", "b1"); err != nil || !held {
+		t.Fatalf("the record the kept promotion serves = held %v, %v, want it kept", held, err)
+	}
+}
+
 func TestATagIsFreedWithThePromotionItNamed(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
