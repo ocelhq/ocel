@@ -187,10 +187,10 @@ func (i Issuer) AwaitValidation(ctx context.Context, cert Certificate, say func(
 			return cert, nil
 		}
 	}
-	return cert, fmt.Errorf(
+	return cert, pending{fmt.Errorf(
 		"gave up after %s waiting for ACM to publish the validation record for certificate %s: nothing can be created until it does, so re-run this once ACM has caught up",
 		i.window(), cert.ARN,
-	)
+	)}
 }
 
 func (i Issuer) AwaitIssued(ctx context.Context, cert Certificate, say func(string)) (Certificate, error) {
@@ -216,10 +216,10 @@ func (i Issuer) AwaitIssued(ctx context.Context, cert Certificate, say func(stri
 			return cert, fmt.Errorf("certificate %s is %s: delete it in ACM and run this again", cert.ARN, strings.ToLower(cert.Status))
 		}
 	}
-	return cert, fmt.Errorf(
+	return cert, pending{fmt.Errorf(
 		"gave up after %s waiting for certificate %s to be issued; it is still %s: %s, then re-run — this picks up where it left off",
 		i.window(), cert.ARN, strings.ToLower(cert.Status), outstanding(cert.Validation),
-	)
+	)}
 }
 
 func (i Issuer) Describe(ctx context.Context, cert Certificate) (Certificate, error) {
@@ -304,6 +304,13 @@ func (i Issuer) Discard(ctx context.Context, cert Certificate, say func(string))
 		return fmt.Errorf("delete certificate %s: %w", cert.ARN, err)
 	}
 	return nil
+}
+
+type pending struct{ error }
+
+func Pending(err error) bool {
+	var held pending
+	return errors.As(err, &held)
 }
 
 func Gone(err error) bool {

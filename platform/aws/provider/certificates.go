@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
@@ -16,17 +18,86 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 	}
 	pinned := certifier.PinFor(req.Hostname)
 	if pinned == "" {
-		// TODO(#390): nothing here requests a certificate yet, so a hostname without a pin
-		// has none to be served with; refuse before the edge attaches an empty one.
-		return providerkit.Certificate{}, providerkit.Refuse(providerkit.CodeNotReady,
-			"the %s edge terminates TLS for %s itself, and ocel issues no certificate yet: pin one already issued in %s that covers %s under `certificates` in this provider's options, then run this again",
-			req.Kind, req.Hostname, certifier.Issuer.Region, req.Hostname)
+		return issue(ctx, certifier.Issuer, req)
 	}
 	held, err := certifier.Issuer.Pinned(ctx, req.Hostname, pinned)
 	if err != nil {
 		return providerkit.Certificate{}, providerkit.Refuse(providerkit.CodeInvalid, "%s", err)
 	}
 	return providerkit.Certificate{ARN: held.ARN, Region: held.Region}, nil
+}
+
+func issue(ctx context.Context, issuer certs.Issuer, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+	cover := []string{req.Hostname}
+	say := req.Report.Say
+
+	cert, err := recalled(ctx, issuer, req.Held, cover, say)
+	if err != nil {
+		return req.Held, err
+	}
+	if cert.Issued() {
+		return req.Held, nil
+	}
+	if cert.ARN == "" {
+		if cert, err = adoptOrRequest(ctx, issuer, cover, say); err != nil {
+			return providerkit.Certificate{}, err
+		}
+		if cert.Adopted {
+			return providerkit.Certificate{ARN: cert.ARN, Region: cert.Region}, nil
+		}
+	}
+
+	settled := providerkit.Certificate{ARN: cert.ARN, Region: issuer.Region, Requested: true}
+	if len(cert.Validation) == 0 {
+		if cert, err = issuer.AwaitValidation(ctx, cert, say); err != nil {
+			return settled, waiting(err)
+		}
+	}
+	if settled, err = req.Prove(ctx, settled, cert.Validation); err != nil {
+		return settled, err
+	}
+	if _, err := issuer.AwaitIssued(ctx, cert, say); err != nil {
+		return settled, waiting(err)
+	}
+	return settled, nil
+}
+
+func recalled(ctx context.Context, issuer certs.Issuer, recorded providerkit.Certificate, cover []string, say func(string)) (certs.Certificate, error) {
+	if recorded.ARN == "" || (recorded.Region != "" && recorded.Region != issuer.Region) {
+		return certs.Certificate{}, nil
+	}
+	adopted := !recorded.Requested
+	live, err := issuer.Describe(ctx, certs.Certificate{ARN: recorded.ARN, Region: issuer.Region, Adopted: adopted})
+	if err != nil && !certs.Gone(err) {
+		return certs.Certificate{}, err
+	}
+	if err == nil && live.CoversAll(cover) && (live.Issued() || recorded.Requested) {
+		live.Adopted = adopted
+		return live, nil
+	}
+	say(fmt.Sprintf("Certificate %s no longer answers for %s in %s; settling one that does",
+		recorded.ARN, strings.Join(cover, ", "), issuer.Region))
+	return certs.Certificate{}, nil
+}
+
+func adoptOrRequest(ctx context.Context, issuer certs.Issuer, cover []string, say func(string)) (certs.Certificate, error) {
+	found, err := issuer.Existing(ctx, cover)
+	if err != nil {
+		return certs.Certificate{}, err
+	}
+	if found.ARN != "" {
+		say(fmt.Sprintf("Reusing certificate %s in %s: it already covers %s", found.ARN, issuer.Region, strings.Join(cover, ", ")))
+		return found, nil
+	}
+	say(fmt.Sprintf("Requesting a certificate for %s in %s", strings.Join(cover, ", "), issuer.Region))
+	return issuer.Request(ctx, cover)
+}
+
+func waiting(err error) error {
+	if !certs.Pending(err) {
+		return err
+	}
+	return providerkit.Refuse(providerkit.CodeNotReady, "%s", err)
 }
 
 func (p *Provider) DiscardCertificate(ctx context.Context, cert providerkit.Certificate, report providerkit.Reporter) error {
