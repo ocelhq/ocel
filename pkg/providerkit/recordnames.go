@@ -25,7 +25,7 @@ func StackRecord(class Class, slug string, stack naming.StackName) RecordName {
 }
 
 func StacksRecord(class Class, slug string) RecordName {
-	return append(ProjectRecord(class, slug), "stacks")
+	return rooted(RootStacks, class, slug)
 }
 
 func EdgeStackRecord(class Class, slug string) RecordName {
@@ -45,6 +45,7 @@ func LedgerRecord(scope string, rest ...string) RecordName {
 var classSegment = map[string]int{
 	RootSchema:      1,
 	RootProjects:    1,
+	RootStacks:      1,
 	RootBootstrap:   1,
 	RootEdgeStacks:  1,
 	RootWildcard:    1,

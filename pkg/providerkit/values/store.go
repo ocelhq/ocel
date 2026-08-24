@@ -434,7 +434,7 @@ func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
 			return 0, fmt.Errorf("remove %s's stored values: %w", scope.Project, err)
 		}
 	}
-	refs, err := s.Records.List(ctx, ports.RecordName{ports.RootValueRefs, string(scope.Class), scope.Project})
+	refs, err := s.Records.List(ctx, Refs(scope))
 	if err != nil {
 		return 0, fmt.Errorf("read what references %s: %w", scope.Project, err)
 	}
