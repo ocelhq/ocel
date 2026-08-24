@@ -28,8 +28,21 @@ type CertificateRequest struct {
 	Report   Reporter
 }
 
+type CertificateHealth struct {
+	Terminates   bool
+	Status       string
+	Issued       bool
+	Domains      []string
+	Covers       bool
+	Renewal      string
+	ExpiresAt    int64
+	ExpiringSoon bool
+}
+
 type Certifier interface {
 	Certificate(ctx context.Context, req CertificateRequest) (Certificate, error)
+
+	InspectCertificate(ctx context.Context, kind edge.Kind, hostname string, cert Certificate) (CertificateHealth, error)
 
 	DiscardCertificate(ctx context.Context, cert Certificate, report Reporter) error
 }
@@ -40,6 +53,14 @@ func certificateFor(ctx context.Context, provider Provider, req CertificateReque
 		return Certificate{}, nil
 	}
 	return certifier.Certificate(ctx, req)
+}
+
+func inspectCertificate(ctx context.Context, provider Provider, kind edge.Kind, hostname string, cert Certificate) (CertificateHealth, error) {
+	certifier, ok := provider.(Certifier)
+	if !ok {
+		return CertificateHealth{}, nil
+	}
+	return certifier.InspectCertificate(ctx, kind, hostname, cert)
 }
 
 func discardCertificate(ctx context.Context, provider Provider, cert Certificate, report Reporter) error {

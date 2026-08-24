@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
@@ -98,6 +99,40 @@ func waiting(err error) error {
 		return err
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady, "%s", err)
+}
+
+func (p *Provider) InspectCertificate(ctx context.Context, kind edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
+	registry := p.edges()
+	front, err := registry.Open(kind)
+	if err != nil {
+		return providerkit.CertificateHealth{}, err
+	}
+	certifier := registry.Certifier(front, certs.Deps{AWS: p.aws})
+	if !certifier.Issues() {
+		return providerkit.CertificateHealth{}, nil
+	}
+	health := providerkit.CertificateHealth{Terminates: true}
+	arn := certifier.Wants(certs.Certificate{ARN: cert.ARN}, hostname)
+	if arn == "" {
+		return health, nil
+	}
+	described, err := certifier.Issuer.Describe(ctx, certs.Certificate{ARN: arn, Region: certifier.Issuer.Region})
+	if err != nil {
+		if certs.Gone(err) {
+			return health, nil
+		}
+		return health, err
+	}
+	health.Status = described.Status
+	health.Issued = described.Issued()
+	health.Domains = described.Domains
+	health.Covers = described.Covers(hostname)
+	health.Renewal = described.Renewal
+	if !described.NotAfter.IsZero() {
+		health.ExpiresAt = described.NotAfter.Unix()
+		health.ExpiringSoon = described.ExpiringSoon(time.Now())
+	}
+	return health, nil
 }
 
 func (p *Provider) DiscardCertificate(ctx context.Context, cert providerkit.Certificate, report providerkit.Reporter) error {

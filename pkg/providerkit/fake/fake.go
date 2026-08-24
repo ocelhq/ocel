@@ -21,6 +21,7 @@ type Provider struct {
 	certRefusal error
 	issue       []edge.Record
 	discarded   []string
+	health      *providerkit.CertificateHealth
 
 	options   Options
 	records   *Records
@@ -134,6 +135,30 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 		return req.Held, nil
 	}
 	return req.Prove(ctx, cert, validation)
+}
+
+func (p *Provider) ReportCertificate(health providerkit.CertificateHealth) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.health = &health
+}
+
+func (p *Provider) InspectCertificate(_ context.Context, _ edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.health != nil {
+		return *p.health, nil
+	}
+	if p.pins == nil && p.issue == nil {
+		return providerkit.CertificateHealth{}, nil
+	}
+	health := providerkit.CertificateHealth{Terminates: true}
+	if cert.ARN == "" {
+		return health, nil
+	}
+	health.Status, health.Issued = "issued", true
+	health.Domains, health.Covers = []string{hostname}, true
+	return health, nil
 }
 
 func (p *Provider) DiscardCertificate(_ context.Context, cert providerkit.Certificate, _ providerkit.Reporter) error {
