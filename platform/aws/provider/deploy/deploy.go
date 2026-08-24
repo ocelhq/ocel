@@ -39,7 +39,6 @@ type Config struct {
 	Class              providerkit.Class
 	VarsSiblingClasses []string
 	VarsReferenced     map[values.Coordinate]string
-	Links              LinkStore
 
 	ArtifactRoot   string
 	ArtifactBucket string
