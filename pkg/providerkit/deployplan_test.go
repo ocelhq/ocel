@@ -202,3 +202,40 @@ func TestClassifyStacksSplitsProductionFromPreview(t *testing.T) {
 		t.Errorf("preview carries pointers %v, want one per preview environment", pointers)
 	}
 }
+
+func functionRequest(fn *contractv1.ManifestFunction, apps ...*contractv1.ManifestApp) *contractv1.DeployRequest {
+	req := productionRequest(apps...)
+	req.Manifest.Functions = []*contractv1.ManifestFunction{fn}
+	return req
+}
+
+func TestBuildDeployPlanRefusesAFunctionNoDeclaredAppOwns(t *testing.T) {
+	t.Parallel()
+
+	web := &contractv1.ManifestApp{Name: "web", DeploymentId: deploymentID}
+
+	t.Run("an undeclared app", func(t *testing.T) {
+		_, err := buildDeployPlan(functionRequest(
+			&contractv1.ManifestFunction{LogicalName: "admin-server", App: "admin"}, web), "p1")
+		if err == nil {
+			t.Fatal("buildDeployPlan() accepted a function naming an app no stack stands up, so the deploy would succeed with the route 404ing")
+		}
+		if !strings.Contains(err.Error(), "admin") {
+			t.Errorf("buildDeployPlan() = %v, want the refusal to name the app it cannot find", err)
+		}
+	})
+
+	t.Run("no app at all", func(t *testing.T) {
+		if _, err := buildDeployPlan(functionRequest(
+			&contractv1.ManifestFunction{LogicalName: "server"}, web), "p1"); err == nil {
+			t.Fatal("buildDeployPlan() accepted a function naming no app, which would ship once into every app that deploys")
+		}
+	})
+
+	t.Run("a declared app", func(t *testing.T) {
+		if _, err := buildDeployPlan(functionRequest(
+			&contractv1.ManifestFunction{LogicalName: "server", App: "web"}, web), "p1"); err != nil {
+			t.Fatalf("buildDeployPlan() = %v, want a function its own app declares to be accepted", err)
+		}
+	})
+}

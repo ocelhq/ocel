@@ -93,7 +93,7 @@ func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, 
 func (r *deployRun) uploadApp(ctx context.Context, entry AppEntry, pack AppPack, routing *RoutingPlan, report Reporter) error {
 	root := ArtifactRoot()
 	for _, fn := range r.manifest.GetFunctions() {
-		if fn.GetApp() != "" && fn.GetApp() != entry.App {
+		if fn.GetApp() != entry.App {
 			continue
 		}
 		ref, err := r.put(ctx, root, entry, fn, overlayFor(pack.Overlay, fn, routing), report)

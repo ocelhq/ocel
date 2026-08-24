@@ -70,7 +70,25 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 		plan.Apps = append(plan.Apps, entry)
 		plan.Builds[entry.App] = entry.Build.String()
 	}
+	if err := refuseOrphanFunctions(manifest, plan.Builds); err != nil {
+		return DeployPlan{}, err
+	}
 	return plan, nil
+}
+
+func refuseOrphanFunctions(manifest *contractv1.Manifest, declared map[string]string) error {
+	for _, fn := range manifest.GetFunctions() {
+		app := fn.GetApp()
+		if app == "" {
+			return Refuse(CodeInvalid,
+				"function %s names no app, and a function ships inside the app that declares it", fn.GetLogicalName())
+		}
+		if _, ours := declared[app]; !ours {
+			return Refuse(CodeInvalid,
+				"function %s names the app %q, which this manifest does not declare", fn.GetLogicalName(), app)
+		}
+	}
+	return nil
 }
 
 func appEntry(app *contractv1.ManifestApp, env string) (AppEntry, error) {

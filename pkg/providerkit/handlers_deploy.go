@@ -577,7 +577,7 @@ func (r *deployRun) appValues(entry AppEntry, grants []Link) (AppValues, error) 
 func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 	var specs []FunctionSpec
 	for _, fn := range r.manifest.GetFunctions() {
-		if fn.GetApp() != "" && fn.GetApp() != entry.App {
+		if fn.GetApp() != entry.App {
 			continue
 		}
 		specs = append(specs, FunctionSpec{
