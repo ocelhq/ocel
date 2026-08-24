@@ -171,11 +171,8 @@ func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, n
 	}
 
 	heldValue.Bytes = beside
-	if _, err := s.Records.Write(ctx, heldValue); err != nil {
-		return 0, s.racedPair(err, name)
-	}
 	heldRecord.Bytes = written
-	if _, err := s.Records.Write(ctx, heldRecord); err != nil {
+	if err := s.Records.WritePair(ctx, heldValue, heldRecord); err != nil {
 		return 0, s.racedPair(err, name)
 	}
 	return next, nil

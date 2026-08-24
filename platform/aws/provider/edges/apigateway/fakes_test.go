@@ -834,6 +834,10 @@ func conditionHolds(in *dynamodb.PutItemInput, present map[string]ddbtypes.Attri
 	}
 }
 
+func (f *fakeDynamo) TransactWriteItems(context.Context, *dynamodb.TransactWriteItemsInput, ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+	return nil, fmt.Errorf("fake dynamo writes no transaction: nothing this suite drives writes a pair")
+}
+
 func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

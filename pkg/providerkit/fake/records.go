@@ -34,19 +34,39 @@ func (r *Records) Read(_ context.Context, name providerkit.RecordName) (provider
 func (r *Records) Write(_ context.Context, record providerkit.Record) (providerkit.Revision, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	key := record.Name.String()
-	prior, exists := r.rows[key]
-	switch {
-	case !exists && record.Revision != "":
-		return "", providerkit.ErrStale
-	case exists && prior.Revision != record.Revision:
-		return "", providerkit.ErrStale
+	if err := r.held(record); err != nil {
+		return "", err
 	}
+	return r.store(record), nil
+}
+
+func (r *Records) WritePair(_ context.Context, first, second providerkit.Record) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, record := range []providerkit.Record{first, second} {
+		if err := r.held(record); err != nil {
+			return err
+		}
+	}
+	r.store(first)
+	r.store(second)
+	return nil
+}
+
+func (r *Records) held(record providerkit.Record) error {
+	prior, exists := r.rows[record.Name.String()]
+	if exists != (record.Revision != "") || (exists && prior.Revision != record.Revision) {
+		return providerkit.ErrStale
+	}
+	return nil
+}
+
+func (r *Records) store(record providerkit.Record) providerkit.Revision {
 	r.seq++
 	next := copyRecord(record)
 	next.Revision = providerkit.Revision(strconv.FormatUint(r.seq, 10))
-	r.rows[key] = next
-	return next.Revision, nil
+	r.rows[record.Name.String()] = next
+	return next.Revision
 }
 
 func (r *Records) Remove(_ context.Context, name providerkit.RecordName, expected providerkit.Revision) error {

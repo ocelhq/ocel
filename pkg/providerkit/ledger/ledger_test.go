@@ -40,6 +40,17 @@ func (s *store) Write(_ context.Context, record ports.Record) (ports.Revision, e
 	return record.Revision, nil
 }
 
+func (s *store) WritePair(ctx context.Context, first, second ports.Record) error {
+	if held := s.held[second.Name.String()]; held.Revision != second.Revision {
+		return ports.ErrStale
+	}
+	if _, err := s.Write(ctx, first); err != nil {
+		return err
+	}
+	_, err := s.Write(ctx, second)
+	return err
+}
+
 func (s *store) Remove(_ context.Context, name ports.RecordName, expected ports.Revision) error {
 	held, ok := s.held[name.String()]
 	if !ok {
