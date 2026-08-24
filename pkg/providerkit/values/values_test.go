@@ -519,6 +519,7 @@ type counted struct {
 	reads  int
 	lists  int
 	opened int
+	under  []ports.RecordName
 }
 
 func (c *counted) Read(ctx context.Context, name ports.RecordName) (ports.Record, error) {
@@ -531,6 +532,7 @@ func (c *counted) Read(ctx context.Context, name ports.RecordName) (ports.Record
 func (c *counted) List(ctx context.Context, under ports.RecordName) ([]ports.Record, error) {
 	c.mu.Lock()
 	c.lists++
+	c.under = append(c.under, under)
 	c.mu.Unlock()
 	return c.RecordStore.List(ctx, under)
 }
@@ -606,5 +608,32 @@ func TestResolvingABatchOfLinksReadsEachEnvironmentOnce(t *testing.T) {
 	}
 	if watched.reads != 0 || watched.lists != 1 {
 		t.Errorf("ResolveLinks() made %d point reads and %d queries, want one query serving the whole batch", watched.reads, watched.lists)
+	}
+}
+
+func TestResolvingOneLinkReadsThatLinkAlone(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	for _, name := range []string{"db", "cache", "queue"} {
+		if _, err := store.SetLink(ctx, scope, "", "OCEL", name, values.Pair{Record: []byte("{}"), Value: []byte(`"` + name + `"`)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.SetLink(ctx, scope, "pr-7", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte(`"pr-7 db"`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	watched := &counted{RecordStore: store.Records, Sealer: store.Sealer}
+	store.Records, store.Sealer = watched, watched
+	resolved, err := store.ResolveLink(ctx, scope, "pr-7", "db")
+	if err != nil || string(resolved.Value) != `"pr-7 db"` {
+		t.Fatalf("ResolveLink() = %q, %v, want the pair published to the environment", resolved.Value, err)
+	}
+	if watched.reads != 0 || watched.lists != 1 {
+		t.Fatalf("ResolveLink() made %d point reads and %d queries, want one query holding the whole pair", watched.reads, watched.lists)
+	}
+	if under := watched.under[0].String(); !strings.HasSuffix(under, "links/db") {
+		t.Errorf("ResolveLink() queried under %q, want the prefix one link's records and values share", under)
 	}
 }

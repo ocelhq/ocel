@@ -183,7 +183,7 @@ func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, n
 	if owner != OwnerOcel && record.Version > 0 && record.owner() != owner {
 		return 0, s.claimRefusal(scope, name, record.owner(), owner)
 	}
-	heldValue, err := ports.Held(ctx, s.Records, linkValueName(scope, environment, name))
+	heldValue, err := ports.Held(ctx, s.Records, linkValueName(scope, name, environment))
 	if err != nil {
 		return 0, fmt.Errorf("read link %s's value: %w", name, err)
 	}
@@ -289,8 +289,8 @@ func (s Store) RemoveLinks(ctx context.Context, scope Scope, environment string,
 	}
 	if err := each(ctx, len(dropping), func(ctx context.Context, i int) error {
 		for _, name := range []ports.RecordName{
-			linkRecordName(scope, environment, dropping[i]),
-			linkValueName(scope, environment, dropping[i]),
+			linkRecordName(scope, dropping[i], environment),
+			linkValueName(scope, dropping[i], environment),
 		} {
 			if err := ports.Forget(ctx, s.Records, name); err != nil {
 				return fmt.Errorf("remove %s: %w", name, err)
@@ -325,9 +325,12 @@ func (s Store) ResolveLinks(ctx context.Context, scope Scope, environment string
 	sealed := make([][]byte, len(names))
 	for range linkAttempts {
 		held := s.pages(scope)
+		if err := held.named(ctx, names); err != nil {
+			return nil, err
+		}
 		torn := ""
 		for i, name := range names {
-			resolved, value, err := s.readPair(ctx, held, scope, environment, name)
+			resolved, value, err := s.readPair(held, scope, environment, name)
 			if errors.Is(err, ErrTornPair) {
 				torn = name
 				break
@@ -358,17 +361,13 @@ func (s Store) ResolveLinks(ctx context.Context, scope Scope, environment string
 		linkAttempts, describeEnvironment(environment), ErrTornPair)
 }
 
-func (s Store) readPair(ctx context.Context, held *pages, scope Scope, environment, name string) (Published, []byte, error) {
+func (s Store) readPair(held *pages, scope Scope, environment, name string) (Published, []byte, error) {
 	for _, at := range shadowing(environment) {
-		published, err := held.at(ctx, at)
+		record, err := decodeLinkRecord(name, held.at(linkRecordName(scope, name, at)))
 		if err != nil {
 			return Published{}, nil, err
 		}
-		record, err := decodeLinkRecord(name, published[linkRecordName(scope, at, name).String()])
-		if err != nil {
-			return Published{}, nil, err
-		}
-		value, err := decodeLinkValue(name, published[linkValueName(scope, at, name).String()])
+		value, err := decodeLinkValue(name, held.at(linkValueName(scope, name, at)))
 		if err != nil {
 			return Published{}, nil, err
 		}
@@ -401,14 +400,13 @@ func (s Store) ListLinks(ctx context.Context, scope Scope, environment string) (
 	}
 
 	held := s.pages(scope)
+	if err := held.all(ctx); err != nil {
+		return nil, err
+	}
 	out := make([]Published, 0, len(names))
 	for _, name := range names {
 		for _, at := range shadowing(environment) {
-			published, err := held.at(ctx, at)
-			if err != nil {
-				return nil, err
-			}
-			record, err := decodeLinkRecord(name, published[linkRecordName(scope, at, name).String()])
+			record, err := decodeLinkRecord(name, held.at(linkRecordName(scope, name, at)))
 			if err != nil {
 				return nil, err
 			}
@@ -434,28 +432,36 @@ func (s Store) ListLinks(ctx context.Context, scope Scope, environment string) (
 type pages struct {
 	store Store
 	scope Scope
-	held  map[string]map[string]ports.Record
+	held  map[string]ports.Record
 }
 
 func (s Store) pages(scope Scope) *pages {
-	return &pages{store: s, scope: scope, held: map[string]map[string]ports.Record{}}
+	return &pages{store: s, scope: scope, held: map[string]ports.Record{}}
 }
 
-func (p *pages) at(ctx context.Context, environment string) (map[string]ports.Record, error) {
-	if held, ok := p.held[environment]; ok {
-		return held, nil
+func (p *pages) named(ctx context.Context, names []string) error {
+	if len(names) == 1 {
+		return p.load(ctx, linkName(p.scope, names[0]))
 	}
-	stored, err := p.store.Records.List(ctx, Under(p.scope, "links", escape(environment)))
-	if err != nil {
-		return nil, fmt.Errorf("read %s's published links: %w", p.scope.Project, err)
-	}
-	held := make(map[string]ports.Record, len(stored))
-	for _, record := range stored {
-		held[record.Name.String()] = record
-	}
-	p.held[environment] = held
-	return held, nil
+	return p.all(ctx)
 }
+
+func (p *pages) all(ctx context.Context) error {
+	return p.load(ctx, linksName(p.scope))
+}
+
+func (p *pages) load(ctx context.Context, under ports.RecordName) error {
+	stored, err := p.store.Records.List(ctx, under)
+	if err != nil {
+		return fmt.Errorf("read %s's published links: %w", p.scope.Project, err)
+	}
+	for _, record := range stored {
+		p.held[record.Name.String()] = record
+	}
+	return nil
+}
+
+func (p *pages) at(name ports.RecordName) ports.Record { return p.held[name.String()] }
 
 func (s Store) PublishedNames(ctx context.Context, scope Scope, environment string) ([]string, error) {
 	held, err := s.Records.List(ctx, linkOwnersName(scope))
@@ -610,7 +616,7 @@ func (s Store) reindex(ctx context.Context, scope Scope, owner, environment stri
 }
 
 func (s Store) linkRecordAt(ctx context.Context, scope Scope, environment, name string) (ports.Record, linkRecord, error) {
-	held, err := ports.Held(ctx, s.Records, linkRecordName(scope, environment, name))
+	held, err := ports.Held(ctx, s.Records, linkRecordName(scope, name, environment))
 	if err != nil {
 		return ports.Record{}, linkRecord{}, fmt.Errorf("read link %s's record: %w", name, err)
 	}
