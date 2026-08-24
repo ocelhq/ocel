@@ -3,8 +3,6 @@ package deploy
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,7 +21,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -42,28 +39,6 @@ func isrPrefixOf(c naming.Coordinate) string {
 
 func bytecodePrefixOf(c naming.Coordinate) string {
 	return strings.TrimSuffix(c.BytecodePrefix(), naming.PathSeparator)
-}
-
-func newRandomID() (string, error) {
-	buf := make([]byte, 16)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("mint random id: %w", err)
-	}
-	return hex.EncodeToString(buf), nil
-}
-
-func appBuildID(cfg Config, app *contractv1.ManifestApp) (string, error) {
-	name := app.GetName()
-	desc, ok, err := readServeDescriptor(cfg.ArtifactRoot, name)
-	switch {
-	case err != nil:
-		return "", err
-	case !ok:
-		return newRandomID()
-	case desc.BuildID == "":
-		return "", fmt.Errorf("serve descriptor for %s is missing buildId; rebuild the app", name)
-	}
-	return desc.BuildID, nil
 }
 
 func publishPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isrConfig, report providerkit.Reporter) error {

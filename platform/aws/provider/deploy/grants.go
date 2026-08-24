@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -161,36 +160,6 @@ func grantCondition(grant *linksv1.Grant) map[string]any {
 		}
 	}
 	return out
-}
-
-func appLinkPolicies(manifest *contractv1.Manifest, app string, links []*linksv1.Link) ([]linkPolicy, error) {
-	used := usedResources(manifest, app)
-	out := make([]linkPolicy, 0, len(used))
-	for _, link := range links {
-		if !used[link.GetName()] {
-			continue
-		}
-		policy, err := linkPolicyDocument(link.GetName(), link.GetGrants())
-		if err != nil {
-			return nil, err
-		}
-		if policy == "" {
-			continue
-		}
-		out = append(out, linkPolicy{Link: link.GetName(), Policy: policy})
-	}
-	slices.SortFunc(out, func(a, b linkPolicy) int { return cmp.Compare(a.Link, b.Link) })
-	return out, nil
-}
-
-func usedResources(manifest *contractv1.Manifest, app string) map[string]bool {
-	used := map[string]bool{}
-	for _, usage := range manifest.GetUsages() {
-		if usage.GetApp() == app {
-			used[usage.GetResource()] = true
-		}
-	}
-	return used
 }
 
 type PolicyBillItem struct {

@@ -12,8 +12,6 @@ import (
 	"slices"
 	"strings"
 
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -72,42 +70,6 @@ func valuePartition(slug, class string) (string, error) {
 
 const appFolderEnv = "OCEL_APP_FOLDER"
 
-func variableEnv(app *contractv1.ManifestApp) map[string]string {
-	env := make(map[string]string)
-	for _, v := range app.GetVariables() {
-		if v.GetClass() != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
-			continue
-		}
-		env[v.GetKey()] = v.GetValue()
-	}
-	if folder := app.GetFolder(); folder != "" {
-		env[appFolderEnv] = folder
-	}
-	return env
-}
-
-func appEnv(manifest *contractv1.Manifest, app *contractv1.ManifestApp, bundle appBundle, cfg Config, sessions sessionScope) map[string]string {
-	env := map[string]string{}
-	if cfg.Edge != nil {
-		env[edgeKindEnv] = string(cfg.Edge.Kind())
-		facts := cfg.Edge.Facts()
-		if !facts.RunsCode {
-			env[edge.OriginRouterVar] = "1"
-			env[edge.OriginSignedVar] = "1"
-		}
-		if facts.InvalidatesByCacheTag {
-			env[edge.CacheTagPurgeVar] = "1"
-		}
-	}
-	if appCrossesMembrane(manifest, app.GetName()) {
-		env[envStateTable] = cfg.StateTable
-		env[envSessionPrefix] = sessions.KeyPrefix
-	}
-	maps.Copy(env, variableEnv(app))
-	maps.Copy(env, bundle.env())
-	return env
-}
-
 type appBundle struct {
 	Envelope    string
 	Ciphertext  []byte
@@ -138,37 +100,6 @@ func (b appBundle) overlay() map[string][]byte {
 }
 
 func (b appBundle) hasLive() bool { return len(b.Live) > 0 }
-
-func renderAppBundles(cfg Config, manifest *contractv1.Manifest, consumed map[string]Consumed) (map[string]appBundle, error) {
-	bundles := make(map[string]appBundle, len(manifest.GetApps()))
-	for _, app := range manifest.GetApps() {
-		bundle, err := renderAppBundle(cfg, manifest.GetSlug(), app, appLinks(manifest, app.GetName(), consumed))
-		if err != nil {
-			return nil, err
-		}
-		if bundle.Envelope != "" || bundle.hasLive() {
-			bundles[app.GetName()] = bundle
-		}
-	}
-	return bundles, nil
-}
-
-func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links []live.Link) (appBundle, error) {
-	sensitive := make(map[string]string)
-	var keys []live.Key
-	for _, v := range app.GetVariables() {
-		switch v.GetClass() {
-		case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:
-		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
-			sensitive[v.GetKey()] = v.GetValue()
-		case resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:
-			keys = append(keys, live.Key{Key: v.GetKey(), Folder: v.GetFolder()})
-		default:
-			return appBundle{}, fmt.Errorf("%s declares %s with class %s, which this deploy cannot deliver to a function yet; declare it as `plain` or `sensitive`", app.GetName(), v.GetKey(), v.GetClass())
-		}
-	}
-	return sealAppBundle(cfg, slug, app.GetName(), sensitive, keys, links)
-}
 
 func sealAppBundle(cfg Config, slug, app string, sensitive map[string]string, keys []live.Key, links []live.Link) (appBundle, error) {
 	manifest, err := live.Render(live.Manifest{

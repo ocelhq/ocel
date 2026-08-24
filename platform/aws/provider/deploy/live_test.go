@@ -232,7 +232,7 @@ func TestAppBundle(t *testing.T) {
 			}},
 		}
 
-		bundles, err := renderAppBundles(liveConfig(), manifest, nil)
+		bundles, err := renderAppBundles(liveConfig(), manifest)
 		if err != nil {
 			t.Fatalf("renderAppBundles: %v", err)
 		}

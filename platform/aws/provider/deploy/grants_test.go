@@ -12,9 +12,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const rolePolicyToken = "aws:iam/rolePolicy:RolePolicy"
@@ -70,29 +69,6 @@ func renderAppRole(t *testing.T, app string, policies []linkPolicy) *policyRecor
 	return rec
 }
 
-func grantsManifest() *contractv1.Manifest {
-	return &contractv1.Manifest{
-		Slug: "shop",
-		Apps: []*contractv1.ManifestApp{{Name: "web"}, {Name: "admin"}},
-		Resources: []*contractv1.ManifestResource{
-			{
-				LogicalName: "bucket--uploads",
-				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads"},
-				Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
-			},
-			{
-				LogicalName: "database--main",
-				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"},
-				Config:      &contractv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
-			},
-		},
-		Usages: []*contractv1.ManifestUsage{
-			{App: "web", Resource: "bucket--uploads"},
-			{App: "admin", Resource: "database--main"},
-		},
-	}
-}
-
 const stateTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-state"
 
 var testSessions = newSessionScope("shop", "prod", stateTableARN)
@@ -104,17 +80,30 @@ func grantsLinks() []*linksv1.Link {
 	}
 }
 
-func TestAppLinkPoliciesRenderOnlyOnTheUsingRole(t *testing.T) {
+func plannedLinks(links []*linksv1.Link) []providerkit.Link {
+	out := make([]providerkit.Link, 0, len(links))
+	for _, link := range links {
+		held := providerkit.Link{Type: providerkit.LinkCustom, Name: link.GetName(), Grants: providerkit.GrantsOf(link)}
+		switch naming.LinkTypeOf(link) {
+		case linksv1.LinkType_LINK_TYPE_BUCKET:
+			held.Type = providerkit.LinkBucket
+		case linksv1.LinkType_LINK_TYPE_POSTGRES:
+			held.Type = providerkit.LinkPostgres
+		}
+		out = append(out, held)
+	}
+	return out
+}
+
+func TestLinkPoliciesRenderOnlyForAGrantingLink(t *testing.T) {
 	t.Parallel()
 
-	manifest, links := grantsManifest(), grantsLinks()
-
-	t.Run("the using app carries one inline policy for the link it uses", func(t *testing.T) {
+	t.Run("a granting link carries one inline policy", func(t *testing.T) {
 		t.Parallel()
 
-		policies, err := appLinkPolicies(manifest, "web", links)
+		policies, err := planLinkPolicies(plannedLinks(grantsLinks()))
 		if err != nil {
-			t.Fatalf("appLinkPolicies: %v", err)
+			t.Fatalf("planLinkPolicies: %v", err)
 		}
 		if len(policies) != 1 || policies[0].Link != "bucket--uploads" {
 			t.Fatalf("policies = %+v, want one for bucket--uploads", policies)
@@ -157,37 +146,18 @@ func TestAppLinkPoliciesRenderOnlyOnTheUsingRole(t *testing.T) {
 		}
 	})
 
-	t.Run("an app that uses no granting link carries no link policy", func(t *testing.T) {
+	t.Run("a grant-free link carries no policy", func(t *testing.T) {
 		t.Parallel()
 
-		policies, err := appLinkPolicies(manifest, "admin", links)
+		policies, err := planLinkPolicies(plannedLinks(grantsLinks()[1:]))
 		if err != nil {
-			t.Fatalf("appLinkPolicies: %v", err)
+			t.Fatalf("planLinkPolicies: %v", err)
 		}
 		if len(policies) != 0 {
 			t.Fatalf("policies = %+v, want none for a grant-free link", policies)
 		}
 		if rendered := renderAppRole(t, "admin", policies).named("link"); len(rendered) != 0 {
 			t.Fatalf("rendered link policies = %v, want none", rendered)
-		}
-	})
-
-	t.Run("a link the app does not use never reaches its role", func(t *testing.T) {
-		t.Parallel()
-
-		unused := append(grantsLinks(), &linksv1.Link{
-			Name:       "bucket--reports",
-			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "shop-prod-reports-def"}},
-			Grants:     bucketGrants("shop-prod-reports-def", testSessions),
-		})
-		policies, err := appLinkPolicies(manifest, "web", unused)
-		if err != nil {
-			t.Fatalf("appLinkPolicies: %v", err)
-		}
-		for _, p := range policies {
-			if p.Link == "bucket--reports" {
-				t.Fatalf("policies = %+v, want no policy for an unused link", policies)
-			}
 		}
 	})
 }
@@ -215,8 +185,8 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 			if unscoped.Link != "bucket--uploads" {
 				t.Errorf("Link = %q, want bucket--uploads", unscoped.Link)
 			}
-			if _, err := appLinkPolicies(grantsManifest(), "web", links); !errors.As(err, &unscoped) {
-				t.Fatalf("appLinkPolicies = %v, want an *UnscopedGrantError", err)
+			if _, err := planLinkPolicies(plannedLinks(links)); !errors.As(err, &unscoped) {
+				t.Fatalf("planLinkPolicies = %v, want an *UnscopedGrantError", err)
 			}
 		})
 	}
