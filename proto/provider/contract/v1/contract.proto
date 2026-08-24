@@ -214,6 +214,10 @@ message ManifestResource {
 }
 
 message DeployRequest {
+  reserved 5;
+
+  reserved "required_features";
+
   Manifest manifest = 1 [(buf.validate.field).required = true];
 
   common.environment.v1.Environment environment = 2;
@@ -387,6 +391,10 @@ message PreviewEnvironment {
 }
 
 message PreflightRequest {
+  reserved 5;
+
+  reserved "required_features";
+
   common.environment.v1.Tier required_tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
@@ -395,7 +403,7 @@ message PreflightRequest {
 
   EdgeSelection edge = 4;
 
-  repeated string frameworks = 5;
+  repeated string frameworks = 6;
 }
 
 message PreflightResponse {

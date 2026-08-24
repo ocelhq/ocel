@@ -2556,7 +2556,7 @@ type PreflightRequest struct {
 	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
 	Domains       []string               `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty"`
 	Edge          *EdgeSelection         `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
-	Frameworks    []string               `protobuf:"bytes,5,rep,name=frameworks,proto3" json:"frameworks,omitempty"`
+	Frameworks    []string               `protobuf:"bytes,6,rep,name=frameworks,proto3" json:"frameworks,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3557,12 +3557,12 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\bpostgres\x18\x03 \x01(\v2 .app.resources.v1.PostgresConfigH\x00R\bpostgres\x128\n" +
 	"\x06bucket\x18\x04 \x01(\v2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n" +
 	"\x06linked\x18\x05 \x01(\bR\x06linkedB\b\n" +
-	"\x06config\"\x80\x02\n" +
+	"\x06config\"\x99\x02\n" +
 	"\rDeployRequest\x12B\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x12,\n" +
 	"\x03tag\x18\x03 \x01(\tB\x1a\xbaH\x17r\x15\x18@2\x11^[A-Za-z0-9._-]*$R\x03tag\x127\n" +
-	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xe0\x01\n" +
+	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edgeJ\x04\b\x05\x10\x06R\x11required_features\"\xe0\x01\n" +
 	"\x10BootstrapRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x12\x1a\n" +
 	"\bfeatures\x18\x02 \x03(\tR\bfeatures\x12\x14\n" +
@@ -3652,15 +3652,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"\x8b\x02\n" +
+	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"\xa4\x02\n" +
 	"\x10PreflightRequest\x12J\n" +
 	"\rrequired_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\frequiredTier\x128\n" +
 	"\x04slug\x18\x02 \x01(\tB$\xbaH!\xd8\x01\x01r\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x18\n" +
 	"\adomains\x18\x03 \x03(\tR\adomains\x127\n" +
 	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x1e\n" +
 	"\n" +
-	"frameworks\x18\x05 \x03(\tR\n" +
-	"frameworks\"\x9c\x04\n" +
+	"frameworks\x18\x06 \x03(\tR\n" +
+	"frameworksJ\x04\b\x05\x10\x06R\x11required_features\"\x9c\x04\n" +
 	"\x11PreflightResponse\x12:\n" +
 	"\n" +
 	"infra_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\tinfraTier\x125\n" +
