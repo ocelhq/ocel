@@ -878,3 +878,18 @@ func TestReconcileForgetsABindingWhoseDomainNameIsGone(t *testing.T) {
 		t.Errorf("warned = %v, want the vanished domain name named", warned)
 	}
 }
+
+func TestALedgerOpenedOnStateThatNamesNoTableRefuses(t *testing.T) {
+	ctx := context.Background()
+	stack, err := newWorld().edge().Open(edge.StackState{Slug: conformanceSlug, Class: edge.ClassProduction})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	if _, err := stack.Ledger().History(ctx, ""); !errors.Is(err, edge.ErrStoreAbsent) {
+		t.Errorf("History err = %v, want %v: a ledger over no table must refuse, not read an empty history", err, edge.ErrStoreAbsent)
+	}
+	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{App: "web", Identity: "d1.f1"}); !errors.Is(err, edge.ErrStoreAbsent) {
+		t.Errorf("PutStaged err = %v, want %v", err, edge.ErrStoreAbsent)
+	}
+}
