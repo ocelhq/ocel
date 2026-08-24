@@ -13,8 +13,9 @@ export interface AwsProviderOptions {
   transforms?: readonly string[];
   /**
    * Certificates to serve a hostname with, keyed by hostname, valued by the
-   * ARN of an already-issued ACM certificate. A hostname left off this map is
-   * served with a certificate ocel issues itself.
+   * ARN of an already-issued ACM certificate. Every hostname served by an edge
+   * that terminates TLS in your account needs one here; ocel issues none of its
+   * own, and refuses a hostname it finds no certificate for.
    */
   certificates?: Record<string, string>;
 }
