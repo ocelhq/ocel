@@ -25,6 +25,7 @@ var (
 const (
 	RootSchema      = ports.RootSchema
 	RootProjects    = ports.RootProjects
+	RootStacks      = ports.RootStacks
 	RootBootstrap   = ports.RootBootstrap
 	RootEdgeStacks  = ports.RootEdgeStacks
 	RootWildcard    = ports.RootWildcard

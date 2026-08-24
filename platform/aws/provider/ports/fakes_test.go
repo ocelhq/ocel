@@ -151,6 +151,12 @@ func (f *fakeDynamo) partitions() []string {
 	return slices.Sorted(maps.Keys(f.items))
 }
 
+func (f *fakeDynamo) sortKeys(pk string) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Sorted(maps.Keys(f.items[pk]))
+}
+
 func stringAttr(item map[string]ddbtypes.AttributeValue, name string) string {
 	value, ok := item[name].(*ddbtypes.AttributeValueMemberS)
 	if !ok {

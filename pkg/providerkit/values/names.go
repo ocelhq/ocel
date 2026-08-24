@@ -110,9 +110,13 @@ func linkOwnerName(scope Scope, owner, environment string) ports.RecordName {
 	return Under(scope, "linkowners", escape(owner), escape(canonicalEnvironment(environment)))
 }
 
+func Refs(scope Scope) ports.RecordName {
+	return ports.RecordName{ports.RootValueRefs, string(scope.Class), scope.Project}
+}
+
 func refsName(target Scope, at Coordinate) ports.RecordName {
 	at = at.canonical()
-	return ports.RecordName{ports.RootValueRefs, string(target.Class), target.Project, escape(at.Folder), escape(at.Key)}
+	return append(Refs(target), escape(at.Folder), escape(at.Key))
 }
 
 func refName(target Scope, at Coordinate, from Scope, holds Coordinate) ports.RecordName {

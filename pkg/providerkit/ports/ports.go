@@ -28,6 +28,7 @@ var ErrNoRecord = errors.New("no such record")
 const (
 	RootSchema      = "schema"
 	RootProjects    = "projects"
+	RootStacks      = "stacks"
 	RootBootstrap   = "bootstrap"
 	RootEdgeStacks  = "edgestacks"
 	RootWildcard    = "wildcard"
