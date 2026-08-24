@@ -4,10 +4,14 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"maps"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -208,5 +212,92 @@ func TestAnUnchangedBuildIsNotUploadedTwice(t *testing.T) {
 		if count != 1 {
 			t.Errorf("%s was uploaded %d times, want one: an unchanged build is already at the digest that names it", key, count)
 		}
+	}
+}
+
+type barrierProvider struct {
+	*fake.Provider
+	store *barrierArtifacts
+}
+
+func (p *barrierProvider) Artifacts() providerkit.ArtifactStore { return p.store }
+
+type barrierArtifacts struct {
+	providerkit.ArtifactStore
+
+	want  int
+	ready chan struct{}
+
+	mu    sync.Mutex
+	going int
+	peak  int
+}
+
+func (b *barrierArtifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
+	b.mu.Lock()
+	b.going++
+	b.peak = max(b.peak, b.going)
+	if b.going == b.want {
+		close(b.ready)
+	}
+	b.mu.Unlock()
+
+	select {
+	case <-b.ready:
+	case <-time.After(5 * time.Second):
+	}
+
+	b.mu.Lock()
+	b.going--
+	b.mu.Unlock()
+	return b.ArtifactStore.Put(ctx, ref, body)
+}
+
+func builtFunction(t *testing.T, name string) string {
+	t.Helper()
+	path := "apps/web/functions/" + name + ".func"
+	dir := filepath.Join(providerkit.ArtifactRoot(), filepath.FromSlash(path))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, builtEntrypoint), []byte("a built "+name), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestAnAppsFunctionsAreUploadedTogether(t *testing.T) {
+	builtProject(t)
+	const functions = 4
+
+	req := deployRequest()
+	manifest := req.GetManifest()
+	manifest.Functions[0].RouteId = "index"
+	manifest.Functions[0].ArtifactPath = builtFunction(t, "index")
+	for i := 1; i < functions; i++ {
+		route := fmt.Sprintf("route-%d", i)
+		manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{
+			LogicalName:  route,
+			App:          "web",
+			RouteId:      route,
+			Runtime:      "nodejs22.x",
+			Handler:      "index.handler",
+			ArtifactPath: builtFunction(t, route),
+		})
+	}
+
+	base := fake.NewProvider(fake.Options{})
+	provider := &barrierProvider{
+		Provider: base,
+		store:    &barrierArtifacts{ArtifactStore: base.Artifacts(), want: functions, ready: make(chan struct{})},
+	}
+	client := servedBy(t, provider)
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	if provider.store.peak != functions {
+		t.Errorf("at most %d of the app's %d functions were uploading at once, want them in flight together: an app of many functions waits one round trip at a time otherwise",
+			provider.store.peak, functions)
 	}
 }
