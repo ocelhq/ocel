@@ -91,31 +91,25 @@ func (w *wildcards) save(ctx context.Context) error {
 	return nil
 }
 
-func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
-	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = errors.Join(err, sender.close()) }()
-	report := newReporter(sender, Stage{}, progressv1.Phase_PHASE_UNSPECIFIED)
-
-	base, err := previewBaseDomain(req.GetBaseDomain())
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	w, err := h.wildcard(ctx, req.GetEdge())
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	w.ask = func(headline string, records []edge.Record, notes ...string) {
-		sender.send(dnsOwedEvent(headline, records, notes...))
-	}
-	front, err := h.edgeFor(w.provider, req.GetEdge())
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	if err := w.use(ctx, front, base, report); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	sender.send(okResult())
-	return nil
+func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(sender *eventSender, report Reporter) error {
+		base, err := previewBaseDomain(req.GetBaseDomain())
+		if err != nil {
+			return err
+		}
+		w, err := h.wildcard(ctx, req.GetEdge())
+		if err != nil {
+			return err
+		}
+		w.ask = func(headline string, records []edge.Record, notes ...string) {
+			sender.send(dnsOwedEvent(headline, records, notes...))
+		}
+		front, err := h.edgeFor(w.provider, req.GetEdge())
+		if err != nil {
+			return err
+		}
+		return w.use(ctx, front, base, report)
+	})
 }
 
 func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, report Reporter) error {
@@ -349,20 +343,14 @@ func surfaceItem(surface Removal) *contractv1.RemovalItem {
 	}
 }
 
-func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
-	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = errors.Join(err, sender.close()) }()
-	report := newReporter(sender, Stage{}, progressv1.Phase_PHASE_UNSPECIFIED)
-
-	w, err := h.wildcard(ctx, req.GetEdge())
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	if err := w.release(ctx, report); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	sender.send(okResult())
-	return nil
+func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(_ *eventSender, report Reporter) error {
+		w, err := h.wildcard(ctx, req.GetEdge())
+		if err != nil {
+			return err
+		}
+		return w.release(ctx, report)
+	})
 }
 
 func (w *wildcards) release(ctx context.Context, report Reporter) error {

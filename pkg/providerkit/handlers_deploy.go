@@ -3,7 +3,6 @@ package providerkit
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -22,20 +21,15 @@ import (
 
 const stackVersion = "1"
 
-func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
-	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = errors.Join(err, sender.close()) }()
-
-	run, err := h.openDeploy(ctx, req, sender)
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	result, err := run.execute(ctx)
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	sender.send(result)
-	return nil
+func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamResult(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED,
+		func(sender *eventSender, _ Reporter) (*progressv1.OperationEvent, error) {
+			run, err := h.openDeploy(ctx, req, sender)
+			if err != nil {
+				return nil, err
+			}
+			return run.execute(ctx)
+		})
 }
 
 type deployStages struct {

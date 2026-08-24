@@ -34,47 +34,44 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 	return resp, nil
 }
 
-func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
-	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = errors.Join(err, sender.close()) }()
-	report := newReporter(sender, Stage{}, progressv1.Phase_PHASE_UNSPECIFIED)
-
-	pointer, err := envName(req.GetEnvironment())
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	if pointer == ProductionEnv {
-		return sender.fail(RefusalError(Refuse(CodeInvalid,
-			"production is not an environment to remove; `ocel destroy` removes the project's production footprint")))
-	}
-	session, err := h.openStack(ctx, ClassPreview, req.GetSlug(), req.GetEdge())
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	report.Say(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
-	removed, err := session.stack.RemovePointer(ctx, pointer)
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	if err := session.checkpoint(ctx); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	targets, err := ReclaimTargets(req.GetSlug(), pointer,
-		removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	if err := reclaim(ctx, session.provider, req.GetSlug(), ClassPreview, targets, report); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	if err := removePreviewInfra(ctx, session.provider, req.GetSlug(), pointer, report); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	for _, line := range pruneLines(removed) {
-		report.Say(line)
-	}
-	sender.send(okResult())
-	return nil
+func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(_ *eventSender, report Reporter) error {
+		pointer, err := envName(req.GetEnvironment())
+		if err != nil {
+			return err
+		}
+		if pointer == ProductionEnv {
+			return Refuse(CodeInvalid,
+				"production is not an environment to remove; `ocel destroy` removes the project's production footprint")
+		}
+		session, err := h.openStack(ctx, ClassPreview, req.GetSlug(), req.GetEdge())
+		if err != nil {
+			return err
+		}
+		report.Say(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
+		removed, err := session.stack.RemovePointer(ctx, pointer)
+		if err != nil {
+			return err
+		}
+		if err := session.checkpoint(ctx); err != nil {
+			return err
+		}
+		targets, err := ReclaimTargets(req.GetSlug(), pointer,
+			removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
+		if err != nil {
+			return err
+		}
+		if err := reclaim(ctx, session.provider, req.GetSlug(), ClassPreview, targets, report); err != nil {
+			return err
+		}
+		if err := removePreviewInfra(ctx, session.provider, req.GetSlug(), pointer, report); err != nil {
+			return err
+		}
+		for _, line := range pruneLines(removed) {
+			report.Say(line)
+		}
+		return nil
+	})
 }
 
 func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
@@ -152,57 +149,53 @@ func rollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion
 	return edge.Promotion{}, Refuse(CodeNotReady, "this project has no active promotion to roll back from")
 }
 
-func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
-	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = errors.Join(err, sender.close()) }()
-	report := newReporter(sender, Stage{}, progressv1.Phase_PHASE_UNSPECIFIED)
+func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(_ *eventSender, report Reporter) error {
+		class, err := classOf(req.GetEnvironment().GetTier())
+		if err != nil {
+			return err
+		}
+		pointer, err := envName(req.GetEnvironment())
+		if err != nil {
+			return err
+		}
+		if class == ClassProduction {
+			pointer = ""
+		}
 
-	class, err := classOf(req.GetEnvironment().GetTier())
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	pointer, err := envName(req.GetEnvironment())
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	if class == ClassProduction {
-		pointer = ""
-	}
-
-	session, err := h.openStack(ctx, class, req.GetSlug(), req.GetEdge())
-	if undeployed(err) {
-		report.Say("Nothing to prune.")
-		sender.send(okResult())
+		session, err := h.openStack(ctx, class, req.GetSlug(), req.GetEdge())
+		if undeployed(err) {
+			report.Say("Nothing to prune.")
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		report.Say("Diffing deployments to reclaim")
+		pruned, err := session.stack.Ledger().Prune(ctx, int(req.GetKeepN()), pointer)
+		if err != nil {
+			return err
+		}
+		if err := session.checkpoint(ctx); err != nil {
+			return err
+		}
+		env := pointer
+		if class == ClassProduction {
+			env = ProductionEnv
+		}
+		targets, err := ReclaimTargets(req.GetSlug(), env,
+			pruned.RemovedRecordKeys, pruned.SurvivingRecordKeys, pruned.SurvivingPointerRecordKeys)
+		if err != nil {
+			return err
+		}
+		if err := reclaim(ctx, session.provider, req.GetSlug(), class, targets, report); err != nil {
+			return err
+		}
+		for _, line := range pruneLines(pruned) {
+			report.Say(line)
+		}
 		return nil
-	}
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	report.Say("Diffing deployments to reclaim")
-	pruned, err := session.stack.Ledger().Prune(ctx, int(req.GetKeepN()), pointer)
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	if err := session.checkpoint(ctx); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	env := pointer
-	if class == ClassProduction {
-		env = ProductionEnv
-	}
-	targets, err := ReclaimTargets(req.GetSlug(), env,
-		pruned.RemovedRecordKeys, pruned.SurvivingRecordKeys, pruned.SurvivingPointerRecordKeys)
-	if err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	if err := reclaim(ctx, session.provider, req.GetSlug(), class, targets, report); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	for _, line := range pruneLines(pruned) {
-		report.Say(line)
-	}
-	sender.send(okResult())
-	return nil
+	})
 }
 
 func undeployed(err error) bool {

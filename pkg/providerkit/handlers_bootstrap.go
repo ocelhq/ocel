@@ -44,7 +44,7 @@ func (h *handlers) gate(requested string) (Provider, Gate, error) {
 	}, nil
 }
 
-func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
+func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	class, err := classOf(req.GetTier())
 	if err != nil {
 		return err
@@ -54,15 +54,9 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 		return err
 	}
 
-	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = errors.Join(err, sender.close()) }()
-	report := newReporter(sender, Stage{}, progressv1.Phase_PHASE_UNSPECIFIED)
-
-	if err := gate.Apply(ctx, class, applyRequestOf(req), report); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	sender.send(okResult())
-	return nil
+	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(_ *eventSender, report Reporter) error {
+		return gate.Apply(ctx, class, applyRequestOf(req), report)
+	})
 }
 
 func applyRequestOf(req *contractv1.BootstrapRequest) ApplyRequest {
@@ -156,7 +150,7 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	}, nil
 }
 
-func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope, stream *connect.ServerStream[progressv1.OperationEvent]) (err error) {
+func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	class, err := classOf(req.GetTier())
 	if err != nil {
 		return err
@@ -166,15 +160,9 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 		return err
 	}
 
-	sender := newEventSender(ctx, stream.Send)
-	defer func() { err = errors.Join(err, sender.close()) }()
-	report := newReporter(sender, Stage{}, progressv1.Phase_PHASE_UNSPECIFIED)
-
-	if err := gate.Remove(ctx, class, report); err != nil {
-		return sender.fail(RefusalError(err))
-	}
-	sender.send(okResult())
-	return nil
+	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(_ *eventSender, report Reporter) error {
+		return gate.Remove(ctx, class, report)
+	})
 }
 
 func edgeKind(provider Provider, requested string) edge.Kind {
