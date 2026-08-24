@@ -340,7 +340,10 @@ func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv
 func (w *wildcards) releaseItems(front edge.Edge) []*contractv1.RemovalItem {
 	removed, kept := front.PreviewWildcardSurfaces(w.held.Hostname())
 	items := []*contractv1.RemovalItem{surfaceItem(removed)}
-	for _, rec := range w.held.Settled.Written {
+	if cert := w.held.Settled.Certificate; cert.Held() {
+		items = append(items, certificateItem(cert))
+	}
+	for _, rec := range w.held.Settled.WrittenRecords() {
 		items = append(items, &contractv1.RemovalItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),
@@ -348,7 +351,7 @@ func (w *wildcards) releaseItems(front edge.Edge) []*contractv1.RemovalItem {
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
-	for _, rec := range w.held.Settled.Owed {
+	for _, rec := range w.held.Settled.OwedRecords() {
 		items = append(items, &contractv1.RemovalItem{
 			Kind:   "DNS record",
 			Name:   rec.String(),
@@ -395,8 +398,14 @@ func (w *wildcards) release(ctx context.Context, report Reporter) error {
 	if err := front.DestroyPreviewWildcard(ctx, w.held.BaseDomain); err != nil {
 		return err
 	}
-	if err := w.settler(front).release(ctx, w.held.Settled.Written, report.Say); err != nil {
+	if err := w.settler(front).release(ctx, w.held.Settled.WrittenRecords(), report.Say); err != nil {
 		return err
+	}
+	if cert := w.held.Settled.Certificate; cert.Requested {
+		report.Say("Discarding certificate " + cert.ARN)
+		if err := discardCertificate(ctx, w.provider, cert, report); err != nil {
+			return err
+		}
 	}
 	return Forget(ctx, w.records, WildcardRecord(ClassPreview))
 }

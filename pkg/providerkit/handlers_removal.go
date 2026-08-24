@@ -194,11 +194,16 @@ func (r *projectRemoval) run(ctx context.Context, report Reporter) error {
 			errs = append(errs, err)
 		}
 	}
-	written := r.state.WrittenRecords()
+	written, held := r.state.WrittenRecords(), r.state.Certificates()
 	if err := r.tearDownEdge(ctx, report); err != nil {
 		errs = append(errs, err)
-	} else if err := r.releaseRecords(ctx, written, report); err != nil {
-		errs = append(errs, err)
+	} else {
+		if err := r.releaseRecords(ctx, written, report); err != nil {
+			errs = append(errs, err)
+		}
+		if err := r.discardCertificates(ctx, held, report); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	if err := r.purgeValues(ctx, report); err != nil {
 		errs = append(errs, err)
@@ -272,6 +277,20 @@ func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Reco
 		return fmt.Errorf("remove the DNS records pointing at what this project served: %w", err)
 	}
 	return nil
+}
+
+func (r *projectRemoval) discardCertificates(ctx context.Context, held []Certificate, report Reporter) error {
+	var errs []error
+	for _, cert := range held {
+		if !cert.Requested {
+			continue
+		}
+		report.Say("Discarding certificate " + cert.ARN)
+		if err := discardCertificate(ctx, r.provider, cert, report); err != nil {
+			errs = append(errs, fmt.Errorf("discard the certificate ocel requested for this project: %w", err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (r *projectRemoval) purgeValues(ctx context.Context, report Reporter) error {

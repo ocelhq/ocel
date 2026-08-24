@@ -130,6 +130,7 @@ func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter
 }
 
 func (d *hostnames) certify(ctx context.Context, host string, settled *Settled, report Reporter) error {
+	superseded := settled.Certificate
 	cert, err := certificateFor(ctx, d.provider, CertificateRequest{
 		Kind:     d.settle.kind,
 		Hostname: host,
@@ -150,7 +151,20 @@ func (d *hostnames) certify(ctx context.Context, host string, settled *Settled, 
 			return errors.Join(err, cerr)
 		}
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return d.discard(ctx, superseded, cert, report)
+}
+
+func (d *hostnames) discard(ctx context.Context, superseded, holding Certificate, report Reporter) error {
+	if !superseded.Held() || superseded.ARN == holding.ARN || d.state.Uses(superseded.ARN) {
+		return nil
+	}
+	if err := discardCertificate(ctx, d.provider, superseded, report); err != nil {
+		return err
+	}
+	return d.settle.release(ctx, edge.Unwritten(superseded.Written, holding.Written), report.Say)
 }
 
 func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, report Reporter) error {
@@ -198,11 +212,15 @@ func (d *hostnames) remove(ctx context.Context, report Reporter) error {
 		if err := d.stack.UnbindDomain(ctx, host); err != nil {
 			return err
 		}
-		if err := d.settle.release(ctx, d.state.Host(host).Written, report.Say); err != nil {
+		settled := d.state.Host(host)
+		if err := d.settle.release(ctx, settled.Written, report.Say); err != nil {
 			return err
 		}
 		d.state.Forget(host)
 		if err := d.checkpoint(ctx); err != nil {
+			return err
+		}
+		if err := d.discard(ctx, settled.Certificate, Certificate{}, report); err != nil {
 			return err
 		}
 	}
