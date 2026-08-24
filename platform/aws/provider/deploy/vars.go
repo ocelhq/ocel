@@ -259,22 +259,19 @@ func fingerprintValues(values map[string]string) string {
 
 var runtimeOwnedPrefixes = []string{"AWS_", "LAMBDA_"}
 
-func plainNamesTaken(app *contractv1.ManifestApp, owned func(string) bool) []string {
+func plainNamesTaken(plain map[string]string, owned func(string) bool) []string {
 	var taken []string
-	for _, v := range app.GetVariables() {
-		if v.GetClass() != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
-			continue
-		}
-		if owned(v.GetKey()) {
-			taken = append(taken, v.GetKey())
+	for key := range plain {
+		if owned(key) {
+			taken = append(taken, key)
 		}
 	}
 	slices.Sort(taken)
 	return taken
 }
 
-func checkRuntimeOwnedNames(app *contractv1.ManifestApp) error {
-	taken := plainNamesTaken(app, func(key string) bool {
+func checkRuntimeOwnedNames(app string, plain map[string]string) error {
+	taken := plainNamesTaken(plain, func(key string) bool {
 		for _, prefix := range runtimeOwnedPrefixes {
 			if strings.HasPrefix(key, prefix) {
 				return true
@@ -290,12 +287,12 @@ func checkRuntimeOwnedNames(app *contractv1.ManifestApp) error {
 		"app %s declares %s, which the AWS Lambda runtime injects into every function environment (%s). "+
 			"A plaintext variable is delivered under its own name, so the runtime would overwrite it. "+
 			"Rename it, or reclassify it as `sensitive` to deliver it inside the bundle instead",
-		app.GetName(), strings.Join(taken, ", "), strings.Join(runtimeOwnedPrefixes, ", "),
+		app, strings.Join(taken, ", "), strings.Join(runtimeOwnedPrefixes, ", "),
 	)
 }
 
-func checkEdgeOwnedNames(app *contractv1.ManifestApp) error {
-	taken := plainNamesTaken(app, func(key string) bool {
+func checkEdgeOwnedNames(app string, plain map[string]string) error {
+	taken := plainNamesTaken(plain, func(key string) bool {
 		return slices.Contains(edge.OwnedVariableNames, key) || strings.HasPrefix(key, baked.Prefix)
 	})
 	if len(taken) == 0 {
@@ -306,15 +303,24 @@ func checkEdgeOwnedNames(app *contractv1.ManifestApp) error {
 		"app %s declares %s, which the edge entry worker injects into every worker environment (%s, %s*). "+
 			"A plaintext variable is delivered under its own name, so the entry worker would overwrite it. "+
 			"Rename it, or reclassify it as `sensitive` to deliver it inside the sealed overlay instead",
-		app.GetName(), strings.Join(taken, ", "), strings.Join(edge.OwnedVariableNames, ", "), baked.Prefix,
+		app, strings.Join(taken, ", "), strings.Join(edge.OwnedVariableNames, ", "), baked.Prefix,
 	)
 }
 
-func checkEdgeVariables(app *contractv1.ManifestApp, bundle appBundle) error {
-	if err := checkEdgeOwnedNames(app); err != nil {
+func checkEdgeVariables(app string, values providerkit.AppValues, ciphertext []byte) error {
+	if err := checkEdgeOwnedNames(app, values.Plain); err != nil {
 		return err
 	}
-	return checkEdgeEnvBudget(app.GetName(), variableEnv(app), bundle.Ciphertext)
+	return checkEdgeEnvBudget(app, plainEnv(values), ciphertext)
+}
+
+func plainEnv(values providerkit.AppValues) map[string]string {
+	env := make(map[string]string, len(values.Plain)+1)
+	maps.Copy(env, values.Plain)
+	if values.Folder != "" {
+		env[appFolderEnv] = values.Folder
+	}
+	return env
 }
 
 func envBudget(env map[string]string) (int, []string) {

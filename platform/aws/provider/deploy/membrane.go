@@ -6,6 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const providerName = "aws"
@@ -21,7 +22,7 @@ func completesUploads(manifest *contractv1.Manifest) bool {
 
 type MissingMembraneError struct {
 	Resource string
-	Type     linksv1.LinkType
+	Type     providerkit.LinkType
 	Provider string
 }
 
@@ -43,13 +44,27 @@ func appCrossesMembrane(manifest *contractv1.Manifest, app string) bool {
 	return false
 }
 
-func checkMembraneServices(manifest *contractv1.Manifest, serves func(linksv1.LinkType) bool) error {
-	for _, r := range manifest.GetResources() {
-		typ := r.GetResource().GetType()
-		if !naming.CrossesMembrane(typ) || serves(typ) {
-			continue
+func checkMembraneServices(plan providerkit.StackPlan, serves func(linksv1.LinkType) bool) error {
+	for _, resource := range plan.Resources {
+		if err := membraneServed(resource.Declared, resource.Type, serves); err != nil {
+			return err
 		}
-		return &MissingMembraneError{Resource: r.GetLogicalName(), Type: typ, Provider: providerName}
+	}
+	if plan.App == nil {
+		return nil
+	}
+	for _, link := range plan.App.Grants {
+		if err := membraneServed(linkResource(link), link.Type, serves); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func membraneServed(resource string, kind providerkit.LinkType, serves func(linksv1.LinkType) bool) error {
+	wire := wireLinkType(kind)
+	if !naming.CrossesMembrane(wire) || serves(wire) {
+		return nil
+	}
+	return &MissingMembraneError{Resource: resource, Type: kind, Provider: providerName}
 }

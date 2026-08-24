@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const testPrefix = "prod/acme/web/BUILD1"
@@ -60,6 +62,10 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		writerOnly := adoptISRWriter(t, base)
 		if err := checkISRWriterAgrees(writerOnly.objectStores(), writerOnly.isrWriter()); err == nil {
 			t.Error("a writer with no adopted cache store must fail the deploy")
+		}
+
+		if _, err := newReleaser(fixed(storeOnly), &Realized{}, nil).at(context.Background(), providerkit.StackRef{}); err == nil {
+			t.Error("opening a release against a bootstrap that disagrees with itself must fail before any stack is asked for")
 		}
 	})
 

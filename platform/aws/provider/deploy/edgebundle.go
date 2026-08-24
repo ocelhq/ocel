@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -85,12 +86,12 @@ func putEdgeBundles(ctx context.Context, cfg Config, manifest *contractv1.Manife
 	return nil
 }
 
-func checkAppEdgeVariables(cfg Config, app *contractv1.ManifestApp, bundle appBundle) error {
-	_, ok, err := readEdgeBundle(cfg, app.GetName())
+func checkAppEdgeVariables(cfg Config, app string, values providerkit.AppValues, bundle appBundle) error {
+	_, ok, err := readEdgeBundle(cfg, app)
 	if err != nil || !ok {
 		return err
 	}
-	return checkEdgeVariables(app, bundle)
+	return checkEdgeVariables(app, values, bundle.Ciphertext)
 }
 
 func recordUploadFailure(stats *uploadBatchStats, err error) error {

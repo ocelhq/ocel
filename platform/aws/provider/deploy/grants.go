@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -23,6 +22,7 @@ const (
 
 type linkPolicy struct {
 	Link   string
+	Type   providerkit.LinkType
 	Policy string
 }
 
@@ -193,23 +193,9 @@ func usedResources(manifest *contractv1.Manifest, app string) map[string]bool {
 	return used
 }
 
-func billedResourcePolicy(r *contractv1.ManifestResource, consumed map[string]Consumed, sessions sessionScope) (string, error) {
-	if r.GetLinked() {
-		return linkPolicyDocument(r.GetLogicalName(), publishedGrants(consumed[r.GetLogicalName()]))
-	}
-	if r.GetBucket() == nil {
-		return "", nil
-	}
-	return linkPolicyDocument(r.GetLogicalName(), bucketGrants(strings.Repeat("b", maxS3BucketNameLen), sessions))
-}
-
-func publishedGrants(c Consumed) []*linksv1.Grant {
-	return c.Record.Link.GetGrants()
-}
-
 type PolicyBillItem struct {
 	Link  string
-	Type  linksv1.LinkType
+	Type  providerkit.LinkType
 	Chars int
 }
 
@@ -243,58 +229,21 @@ func (e *PolicyBudgetError) Error() string {
 	return b.String()
 }
 
-func checkInlinePolicyBudget(manifest *contractv1.Manifest, consumed map[string]Consumed, sessions sessionScope) error {
-	costs := make(map[string]PolicyBillItem, len(manifest.GetResources()))
-	for _, r := range manifest.GetResources() {
-		policy, err := billedResourcePolicy(r, consumed, sessions)
-		if err != nil {
-			return err
-		}
-		if policy == "" {
-			continue
-		}
-		costs[r.GetLogicalName()] = PolicyBillItem{
-			Link:  r.GetLogicalName(),
-			Type:  r.GetResource().GetType(),
-			Chars: len(policy),
-		}
+func checkInlinePolicyBudget(app string, policies []linkPolicy) error {
+	total := 0
+	items := make([]PolicyBillItem, 0, len(policies))
+	for _, held := range policies {
+		items = append(items, PolicyBillItem{Link: held.Link, Type: held.Type, Chars: len(held.Policy)})
+		total += len(held.Policy)
 	}
-
-	bills := map[string][]PolicyBillItem{}
-	billed := map[[2]string]bool{}
-	for _, usage := range manifest.GetUsages() {
-		item, ok := costs[usage.GetResource()]
-		if !ok {
-			continue
-		}
-		pair := [2]string{usage.GetApp(), usage.GetResource()}
-		if billed[pair] {
-			continue
-		}
-		billed[pair] = true
-		bills[usage.GetApp()] = append(bills[usage.GetApp()], item)
-	}
-
-	var over []PolicyBudgetApp
-	for _, app := range slices.Sorted(maps.Keys(bills)) {
-		items := bills[app]
-		total := 0
-		for _, item := range items {
-			total += item.Chars
-		}
-		if total <= policyBudgetChars {
-			continue
-		}
-		slices.SortFunc(items, func(a, b PolicyBillItem) int {
-			if c := cmp.Compare(b.Chars, a.Chars); c != 0 {
-				return c
-			}
-			return cmp.Compare(a.Link, b.Link)
-		})
-		over = append(over, PolicyBudgetApp{App: app, Total: total, Items: items})
-	}
-	if len(over) == 0 {
+	if total <= policyBudgetChars {
 		return nil
 	}
-	return &PolicyBudgetError{Apps: over}
+	slices.SortFunc(items, func(a, b PolicyBillItem) int {
+		if c := cmp.Compare(b.Chars, a.Chars); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Link, b.Link)
+	})
+	return &PolicyBudgetError{Apps: []PolicyBudgetApp{{App: app, Total: total, Items: items}}}
 }

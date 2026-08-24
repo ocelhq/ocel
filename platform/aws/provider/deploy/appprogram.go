@@ -58,6 +58,15 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 	if err != nil {
 		return nil, err
 	}
+	if err := checkInlinePolicyBudget(app.App, policies); err != nil {
+		return nil, err
+	}
+	if err := checkRuntimeOwnedNames(app.App, app.Values.Plain); err != nil {
+		return nil, err
+	}
+	if err := checkAppEdgeVariables(r.cfg, app.App, app.Values, bundle); err != nil {
+		return nil, err
+	}
 
 	functions := make([]appFunction, 0, len(app.Functions))
 	artifacts := make(map[string]artifactRef, len(app.Functions))
@@ -338,7 +347,7 @@ func planLinkPolicies(grants []providerkit.Link) ([]linkPolicy, error) {
 		if policy == "" {
 			continue
 		}
-		out = append(out, linkPolicy{Link: link.Name, Policy: policy})
+		out = append(out, linkPolicy{Link: link.Name, Type: link.Type, Policy: policy})
 	}
 	return out, nil
 }
