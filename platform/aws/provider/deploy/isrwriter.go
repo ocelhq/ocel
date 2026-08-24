@@ -34,15 +34,13 @@ func checkISRWriterAgrees(stores ObjectStores, w ISRWriterAccess) error {
 	return nil
 }
 
-func seedISRWriters(ctx context.Context, w ISRWriterAccess, caches map[string]*isrConfig) error {
+func seedISRWriter(ctx context.Context, w ISRWriterAccess, app string, cache *isrConfig) error {
 	if !isrWriterConfigured(w) {
 		return nil
 	}
-	for app, cache := range caches {
-		secret := isrWriteSecret(w.Seed, cache.Prefix)
-		if err := initializeISRWriter(ctx, w, cache.Prefix, secret); err != nil {
-			return fmt.Errorf("seed the isr writer for %s: %w", app, err)
-		}
+	secret := isrWriteSecret(w.Seed, cache.Prefix)
+	if err := initializeISRWriter(ctx, w, cache.Prefix, secret); err != nil {
+		return fmt.Errorf("seed the isr writer for %s: %w", app, err)
 	}
 	return nil
 }

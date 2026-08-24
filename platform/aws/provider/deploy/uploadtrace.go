@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const (
@@ -184,8 +186,8 @@ func (s *uploadBatchStats) snapshot() uploadBatchSnapshot {
 	}
 }
 
-func emitUploadBatch(t Tracer, parent StageID, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
-	if t == nil || stats == nil {
+func emitUploadBatch(report providerkit.Reporter, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
+	if report == nil || stats == nil {
 		return
 	}
 	snap := stats.snapshot()
@@ -204,12 +206,14 @@ func emitUploadBatch(t Tracer, parent StageID, k uploadKind, stats *uploadBatchS
 	if end.IsZero() {
 		end = phaseStart
 	}
-	spanUnder(t, parent, uploadBatchSpanName(k), start, end, batchErr, AttrResourceCount(snap.transferred), AttrBytes(snap.bytes))
+	report.Span(uploadBatchSpanName(k), start, end, batchErr,
+		providerkit.AttrResourceCount(snap.transferred), providerkit.AttrBytes(snap.bytes))
 
 	for _, f := range snap.failures {
-		spanUnder(t, parent, uploadStandoutName(k, true), f.Start, f.End, errorForKind(f.Kind), AttrBytes(f.Bytes))
+		report.Span(uploadStandoutName(k, true), f.Start, f.End, errorForKind(f.Kind), providerkit.AttrBytes(f.Bytes))
 	}
 	for _, s := range snap.slowest {
-		spanUnder(t, parent, uploadStandoutName(k, false), s.Start, s.End, nil, AttrDurationMS(s.End.Sub(s.Start)), AttrBytes(s.Bytes))
+		report.Span(uploadStandoutName(k, false), s.Start, s.End, nil,
+			providerkit.AttrDurationMS(s.End.Sub(s.Start)), providerkit.AttrBytes(s.Bytes))
 	}
 }

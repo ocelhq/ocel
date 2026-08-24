@@ -14,18 +14,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -272,63 +267,4 @@ func isNotFound(err error) bool {
 type artifactRef struct {
 	Bucket string
 	Key    string
-}
-
-func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds, progress Progress) (map[string]artifactRef, error) {
-	functions := manifest.GetFunctions()
-	refs := make(map[string]artifactRef, len(functions))
-	if len(functions) == 0 {
-		return refs, nil
-	}
-	if cfg.ArtifactBucket == "" {
-		return nil, fmt.Errorf("no artifact bucket configured; re-run `ocel bootstrap`")
-	}
-	if cfg.Uploader == nil {
-		return nil, fmt.Errorf("no artifact uploader configured")
-	}
-
-	total := uint32(len(functions))
-	var done atomic.Uint32
-	progress.report(progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", 0, total)
-
-	phaseStart := time.Now()
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(uploadConcurrency)
-
-	stats := newUploadBatchStats()
-	var mu sync.Mutex
-	for _, fn := range functions {
-		g.Go(func() error {
-			coord, ok := builds.coords[fn.GetApp()]
-			if !ok {
-				return fmt.Errorf("function %s names the app %q, which this manifest does not declare", fn.GetLogicalName(), fn.GetApp())
-			}
-			dir := artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
-			overlay := builds.baked[fn.GetApp()].overlay()
-			if router := builds.routers[fn.GetApp()]; router.hosts(appFunction{Logical: fn.GetLogicalName(), RouteID: fn.GetRouteId()}) {
-				overlay = withOverlay(overlay, router.overlay())
-			}
-			hash, err := hashArtifact(dir, overlay)
-			if err != nil {
-				return err
-			}
-			key := artifactKey(coord, fn.GetLogicalName(), hash)
-			if err := tracedUpload(ctx, cfg.Uploader, cfg.ArtifactBucket, key, objectHeaders{}, func() ([]byte, error) {
-				return zipDir(dir, overlay)
-			}, stats); err != nil {
-				return err
-			}
-			mu.Lock()
-			refs[fn.GetLogicalName()] = artifactRef{Bucket: cfg.ArtifactBucket, Key: key}
-			progress.report(progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", done.Add(1), total)
-			mu.Unlock()
-			return nil
-		})
-	}
-	err := g.Wait()
-	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindFunctionArtifact, stats, err, phaseStart)
-	if err != nil {
-		return nil, err
-	}
-	return refs, nil
 }

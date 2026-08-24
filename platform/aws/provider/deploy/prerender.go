@@ -24,6 +24,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func storageCoordinate(env, slug, app string, release naming.Release) naming.Coordinate {
@@ -41,99 +42,6 @@ func isrPrefixOf(c naming.Coordinate) string {
 
 func bytecodePrefixOf(c naming.Coordinate) string {
 	return strings.TrimSuffix(c.BytecodePrefix(), naming.PathSeparator)
-}
-
-type appBuilds struct {
-	ids        map[string]string
-	identities Identities
-	coords     map[string]naming.Coordinate
-	caches     map[string]*isrConfig
-	bytecode   map[string]*bytecodeConfig
-	baked      map[string]appBundle
-	routers    map[string]*routerHost
-	guards     map[string]*originGuard
-}
-
-func resolveAppBuilds(cfg Config, manifest *contractv1.Manifest, baked map[string]appBundle) (appBuilds, error) {
-	builds := appBuilds{
-		ids:        map[string]string{},
-		identities: Identities{},
-		coords:     map[string]naming.Coordinate{},
-		caches:     map[string]*isrConfig{},
-		bytecode:   map[string]*bytecodeConfig{},
-		baked:      baked,
-		routers:    map[string]*routerHost{},
-		guards:     map[string]*originGuard{},
-	}
-	for _, app := range manifestApps(manifest) {
-		name := app.GetName()
-		if err := builds.recordBuildID(cfg, app); err != nil {
-			return appBuilds{}, err
-		}
-		id, err := NewIdentity(app.GetDeploymentId(), cfg.Env, baked[name].Fingerprint)
-		if err != nil {
-			return appBuilds{}, fmt.Errorf("deployment identity for %s: %w", name, err)
-		}
-		builds.identities[name] = id
-		coord := storageCoordinate(cfg.Env, manifest.GetSlug(), name, releaseOf(id))
-		builds.coords[name] = coord
-		builds.bytecode[name] = &bytecodeConfig{
-			Bucket: cfg.AssetBucket,
-			Prefix: bytecodePrefixOf(coord),
-		}
-		router, err := resolveRouterHost(cfg, app, coord, id.DeploymentID())
-		if err != nil {
-			return appBuilds{}, err
-		}
-		if router != nil {
-			builds.routers[name] = router
-		}
-		guard, err := resolveOriginGuard(cfg, app)
-		if err != nil {
-			return appBuilds{}, err
-		}
-		if guard != nil {
-			builds.guards[name] = guard
-		}
-	}
-	for _, fn := range manifest.GetFunctions() {
-		app := fn.GetApp()
-		if fn.GetFramework() != frameworkNext || builds.caches[app] != nil {
-			continue
-		}
-		coord, ok := builds.coords[app]
-		if !ok {
-			return appBuilds{}, fmt.Errorf("function %s names the app %q, which this manifest does not declare", fn.GetLogicalName(), app)
-		}
-		prefix := isrPrefixOf(coord)
-		cache := &isrConfig{
-			Coord:    coord,
-			Bucket:   cfg.AssetBucket,
-			Prefix:   prefix,
-			Table:    cfg.StateTable,
-			TableARN: cfg.StateTableARN,
-		}
-		if isrEntriesAdopted(cfg.objectStores()) {
-			cache.CacheStoreBucket = cfg.CacheStoreBucket
-			cache.WriterURL = cfg.ISRWriterEndpoint + "/" + prefix + "/entry"
-			cache.WriterSecret = isrWriteSecret(cfg.ISRWriterSeed, prefix)
-		}
-		builds.caches[app] = cache
-	}
-	return builds, nil
-}
-
-func (b appBuilds) recordBuildID(cfg Config, app *contractv1.ManifestApp) error {
-	name := app.GetName()
-	if b.ids[name] != "" {
-		return nil
-	}
-	id, err := appBuildID(cfg, app)
-	if err != nil {
-		return err
-	}
-	b.ids[name] = id
-	return nil
 }
 
 func newRandomID() (string, error) {
@@ -158,8 +66,10 @@ func appBuildID(cfg Config, app *contractv1.ManifestApp) (string, error) {
 	return desc.BuildID, nil
 }
 
-func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) error {
-	caches := builds.caches
+func publishPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isrConfig, report providerkit.Reporter) error {
+	if cache == nil {
+		return nil
+	}
 
 	segments := []struct {
 		dir string
@@ -174,26 +84,24 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) er
 		to       uploadTarget
 	}
 	var uploads []upload
-	for app, cache := range caches {
-		for _, seg := range segments {
-			dir := filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), seg.dir)
-			entries, err := collectFiles(dir)
-			if err != nil {
-				return err
-			}
-			for _, rel := range entries {
-				uploads = append(uploads, upload{
-					key: path.Join(cache.Prefix, seg.dir, rel),
-					src: filepath.Join(dir, filepath.FromSlash(rel)),
-					to:  seg.to,
-				})
-			}
+	for _, seg := range segments {
+		dir := filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), seg.dir)
+		entries, err := collectFiles(dir)
+		if err != nil {
+			return err
+		}
+		for _, rel := range entries {
+			uploads = append(uploads, upload{
+				key: path.Join(cache.Prefix, seg.dir, rel),
+				src: filepath.Join(dir, filepath.FromSlash(rel)),
+				to:  seg.to,
+			})
 		}
 	}
-	if err := seedTagSnapshots(ctx, cfg, caches, time.Now()); err != nil {
+	if err := seedTagSnapshot(ctx, cfg, cache, time.Now()); err != nil {
 		return err
 	}
-	if err := seedISRWriters(ctx, cfg.isrWriter(), caches); err != nil {
+	if err := seedISRWriter(ctx, cfg.isrWriter(), app, cache); err != nil {
 		return err
 	}
 	if len(uploads) == 0 {
@@ -206,6 +114,7 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) er
 		}
 	}
 
+	report.Say("Uploading " + app + "'s prerendered pages")
 	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
@@ -218,7 +127,7 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) er
 		})
 	}
 	err := g.Wait()
-	emitUploadBatch(cfg.Tracer, cfg.Stages.Uploading.ID, uploadKindPrerenderAsset, stats, err, phaseStart)
+	emitUploadBatch(report, uploadKindPrerenderAsset, stats, err, phaseStart)
 	return err
 }
 
@@ -264,25 +173,23 @@ func genesisSnapshot(at time.Time) tagSnapshot {
 	}
 }
 
-func seedTagSnapshots(ctx context.Context, cfg Config, caches map[string]*isrConfig, at time.Time) error {
+func seedTagSnapshot(ctx context.Context, cfg Config, cache *isrConfig, at time.Time) error {
 	body, err := json.Marshal(genesisSnapshot(at))
 	if err != nil {
 		return fmt.Errorf("encode tag snapshot: %w", err)
 	}
 
 	for _, target := range snapshotTargets(cfg) {
-		for _, cache := range caches {
-			key := cache.Prefix + tagSnapshotSuffix
-			_, err := target.up.PutObject(ctx, &s3.PutObjectInput{
-				Bucket:      aws.String(target.bucket),
-				Key:         aws.String(key),
-				Body:        bytes.NewReader(body),
-				ContentType: aws.String("application/json"),
-				IfNoneMatch: aws.String("*"),
-			})
-			if err != nil && !isPreconditionFailed(err) {
-				return fmt.Errorf("seed tag snapshot %s in %s: %w", key, target.bucket, err)
-			}
+		key := cache.Prefix + tagSnapshotSuffix
+		_, err := target.up.PutObject(ctx, &s3.PutObjectInput{
+			Bucket:      aws.String(target.bucket),
+			Key:         aws.String(key),
+			Body:        bytes.NewReader(body),
+			ContentType: aws.String("application/json"),
+			IfNoneMatch: aws.String("*"),
+		})
+		if err != nil && !isPreconditionFailed(err) {
+			return fmt.Errorf("seed tag snapshot %s in %s: %w", key, target.bucket, err)
 		}
 	}
 	return nil

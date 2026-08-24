@@ -21,8 +21,6 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"golang.org/x/sync/errgroup"
-
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const embedCacheCeiling = 32 << 20
@@ -57,33 +55,6 @@ type embedTarget struct {
 	TreeBytes   int64
 }
 
-func embedBytecodeCaches(ctx context.Context, cfg Config, manifest *contractv1.Manifest, artifacts map[string]artifactRef, warmed []warmResult, builds appBuilds, log func(string)) {
-	if log == nil {
-		log = func(string) {}
-	}
-	if !bytecodeEmbedRequested() {
-		return
-	}
-	if !bytecodeEmbedEnabled() {
-		log(fmt.Sprintf("ocel: %s=1 has nothing to embed without %s=1; not embedding", bytecodeEmbedEnv, bytecodeCacheEnv))
-		return
-	}
-	if missing := missingEmbedClients(cfg); missing != "" {
-		log(fmt.Sprintf("ocel: %s=1 but this deploy has no %s; not embedding", bytecodeEmbedEnv, missing))
-		return
-	}
-	embedPass{
-		objects:  cfg.Getter,
-		uploader: cfg.Uploader,
-		code:     cfg.CodeUpdater,
-		invoker:  cfg.Invoker,
-		targets:  embedTargets(cfg, manifest, builds.bytecode, artifacts, warmed, log),
-		budget:   embedPassDeadline,
-		settle:   embedUpdateSettle,
-		log:      log,
-	}.run(ctx)
-}
-
 func missingEmbedClients(cfg Config) string {
 	var missing []string
 	for _, c := range []struct {
@@ -100,37 +71,6 @@ func missingEmbedClients(cfg Config) string {
 		}
 	}
 	return strings.Join(missing, ", ")
-}
-
-func embedTargets(cfg Config, manifest *contractv1.Manifest, bytecode map[string]*bytecodeConfig, artifacts map[string]artifactRef, warmed []warmResult, log func(string)) []embedTarget {
-	dirs := map[string]string{}
-	for _, fn := range manifest.GetFunctions() {
-		dirs[fn.GetLogicalName()] = artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
-	}
-	var targets []embedTarget
-	for _, result := range warmed {
-		logical := result.Target.LogicalName
-		cache := bytecode[result.Target.App]
-		artifact := artifacts[logical]
-		if cache == nil || artifact.Key == "" || result.Reply.Key == "" {
-			continue
-		}
-		size, err := unzippedTreeBytes(dirs[logical])
-		if err != nil {
-			log(fmt.Sprintf("  %s app=%s  could not size the package: %v; not embedded", logical, result.Target.App, err))
-			continue
-		}
-		targets = append(targets, embedTarget{
-			App:          result.Target.App,
-			LogicalName:  logical,
-			FunctionName: result.Target.FunctionName,
-			Artifact:     artifact,
-			CacheBucket:  cache.Bucket,
-			CacheKey:     result.Reply.Key,
-			TreeBytes:    size,
-		})
-	}
-	return targets
 }
 
 func unzippedTreeBytes(dir string) (int64, error) {

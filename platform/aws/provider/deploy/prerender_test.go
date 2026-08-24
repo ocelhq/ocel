@@ -3,13 +3,15 @@ package deploy
 import (
 	"context"
 	"encoding/json"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func nextManifest() *contractv1.Manifest {
@@ -79,6 +81,12 @@ func deployedManifest(manifest *contractv1.Manifest) *contractv1.Manifest {
 	return manifest
 }
 
+type appBuilds struct {
+	coords map[string]naming.Coordinate
+	caches map[string]*isrConfig
+	baked  map[string]appBundle
+}
+
 func appBuildsFor(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBuilds {
 	t.Helper()
 	return bakedBuilds(t, cfg, manifest, nil)
@@ -86,11 +94,79 @@ func appBuildsFor(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBu
 
 func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked map[string]appBundle) appBuilds {
 	t.Helper()
-	builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), baked)
-	if err != nil {
-		t.Fatalf("resolveAppBuilds: %v", err)
+	cfg, manifest = deployedConfig(cfg), deployedManifest(manifest)
+	builds := appBuilds{
+		coords: map[string]naming.Coordinate{},
+		caches: map[string]*isrConfig{},
+		baked:  baked,
+	}
+	if builds.baked == nil {
+		builds.baked = map[string]appBundle{}
+	}
+	for _, app := range manifestApps(manifest) {
+		name := app.GetName()
+		id, err := NewIdentity(app.GetDeploymentId(), cfg.Env, builds.baked[name].Fingerprint)
+		if err != nil {
+			t.Fatalf("deployment identity for %s: %v", name, err)
+		}
+		coord := storageCoordinate(cfg.Env, manifest.GetSlug(), name, releaseOf(id))
+		builds.coords[name] = coord
+		if app.GetFramework() != frameworkNext {
+			continue
+		}
+		prefix := isrPrefixOf(coord)
+		cache := &isrConfig{
+			Coord:    coord,
+			Bucket:   cfg.AssetBucket,
+			Prefix:   prefix,
+			Table:    cfg.StateTable,
+			TableARN: cfg.StateTableARN,
+		}
+		if isrEntriesAdopted(cfg.objectStores()) {
+			cache.CacheStoreBucket = cfg.CacheStoreBucket
+			cache.WriterURL = cfg.ISRWriterEndpoint + "/" + prefix + "/entry"
+			cache.WriterSecret = isrWriteSecret(cfg.ISRWriterSeed, prefix)
+		}
+		builds.caches[name] = cache
 	}
 	return builds
+}
+
+type quietReporter struct{}
+
+func (quietReporter) Say(string) {}
+
+func (quietReporter) Detail(string) {}
+
+func (quietReporter) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+
+func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
+	for _, app := range manifestApps(deployedManifest(manifest)) {
+		name := app.GetName()
+		if err := publishStaticAssets(ctx, deployedConfig(cfg), name, app.GetFramework(), builds.coords[name], quietReporter{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) error {
+	for _, name := range slices.Sorted(maps.Keys(builds.coords)) {
+		if err := publishPrerenderAssets(ctx, deployedConfig(cfg), name, builds.caches[name], quietReporter{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
+	for _, app := range manifestApps(deployedManifest(manifest)) {
+		name := app.GetName()
+		if err := publishEdgeBundle(ctx, deployedConfig(cfg), name, builds.coords[name], builds.baked[name], quietReporter{}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func releaseTokenFor(deploymentID string) string {
@@ -117,182 +193,6 @@ func entryPuts(puts []string) []string {
 		}
 	}
 	return out
-}
-
-func TestResolveAppBuilds(t *testing.T) {
-	t.Parallel()
-
-	t.Run("gives each app its own prefix", func(t *testing.T) {
-		t.Parallel()
-		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
-
-		builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(twoAppManifest()), nil)
-		if err != nil {
-			t.Fatalf("resolveAppBuilds: %v", err)
-		}
-		if len(builds.caches) != 2 {
-			t.Fatalf("got %d caches, want one per app", len(builds.caches))
-		}
-		if want := isrPrefixFor("web", testDeploymentID); builds.caches["web"].Prefix != want {
-			t.Errorf("web prefix = %q, want %q", builds.caches["web"].Prefix, want)
-		}
-		if want := isrPrefixFor("admin", testDeploymentID); builds.caches["admin"].Prefix != want {
-			t.Errorf("admin prefix = %q, want %q", builds.caches["admin"].Prefix, want)
-		}
-	})
-
-	t.Run("identifies each app by the id its own build carries", func(t *testing.T) {
-		t.Parallel()
-		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
-		webID := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-		adminID := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-		manifest := twoAppManifest()
-		manifest.Apps = []*contractv1.ManifestApp{
-			{Name: "web", Framework: "next", DeploymentId: webID},
-			{Name: "admin", Framework: "next", DeploymentId: adminID},
-		}
-
-		builds, err := resolveAppBuilds(deployedConfig(cfg), manifest, nil)
-		if err != nil {
-			t.Fatalf("resolveAppBuilds: %v", err)
-		}
-		if got := builds.identities["web"].DeploymentID(); got != webID {
-			t.Errorf("web deployment id = %q, want %q", got, webID)
-		}
-		if got := builds.identities["admin"].DeploymentID(); got != adminID {
-			t.Errorf("admin deployment id = %q, want %q", got, adminID)
-		}
-		if want := isrPrefixFor("web", webID); builds.caches["web"].Prefix != want {
-			t.Errorf("web prefix = %q, want %q", builds.caches["web"].Prefix, want)
-		}
-		if want := isrPrefixFor("admin", adminID); builds.caches["admin"].Prefix != want {
-			t.Errorf("admin prefix = %q, want %q", builds.caches["admin"].Prefix, want)
-		}
-	})
-
-	t.Run("refuses an app the build never stamped", func(t *testing.T) {
-		t.Parallel()
-		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
-		manifest := twoAppManifest()
-		manifest.Apps = []*contractv1.ManifestApp{
-			{Name: "web", Framework: "next", DeploymentId: testDeploymentID},
-			{Name: "admin", Framework: "next"},
-		}
-
-		_, err := resolveAppBuilds(deployedConfig(cfg), manifest, nil)
-		if err == nil || !strings.Contains(err.Error(), "admin") {
-			t.Errorf("resolveAppBuilds err = %v, want it to name the app carrying no deployment id", err)
-		}
-	})
-
-	t.Run("omits an app with no prerendered content", func(t *testing.T) {
-		t.Parallel()
-		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
-		})
-		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
-		manifest := &contractv1.Manifest{
-			Slug: "proj",
-			Functions: []*contractv1.ManifestFunction{
-				{LogicalName: "web_index", Framework: "next", App: "web"},
-				{LogicalName: "api_index", Framework: "express", App: "api"},
-			},
-		}
-
-		builds, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(manifest), nil)
-		if err != nil {
-			t.Fatalf("resolveAppBuilds: %v", err)
-		}
-		if _, ok := builds.caches["api"]; ok {
-			t.Errorf("an app with no prerendered content must have no cache, got %+v", builds.caches["api"])
-		}
-		if builds.caches["web"] == nil {
-			t.Error("the Next app must still have its own cache")
-		}
-		for _, app := range []string{"web", "api"} {
-			if builds.bytecode[app] == nil {
-				t.Errorf("bytecode cache = nil for %s; every app gets one", app)
-			}
-		}
-	})
-
-	t.Run("a node framework app takes its build id from the serve descriptor", func(t *testing.T) {
-		t.Parallel()
-		cfg := Config{ArtifactRoot: nodeAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
-		manifest := nodeManifest()
-
-		builds := appBuildsFor(t, cfg, manifest)
-		if got := builds.ids["api"]; got != "a1b2c3d4e5f60718" {
-			t.Errorf("build id = %q, want the descriptor's own", got)
-		}
-		if again := appBuildsFor(t, cfg, manifest).ids["api"]; again != builds.ids["api"] {
-			t.Errorf("build id moved to %q with nothing rebuilt", again)
-		}
-		if builds.caches["api"] != nil {
-			t.Errorf("cache = %+v, want none for a framework with no prerendering", builds.caches["api"])
-		}
-		cache := builds.bytecode["api"]
-		if cache == nil {
-			t.Fatal("bytecode cache = nil for an express app; the compile cache is not a Next feature")
-		}
-		if want := bytecodePrefixOf(builds.coords["api"]); cache.Prefix != want {
-			t.Errorf("bytecode prefix = %q, want %q", cache.Prefix, want)
-		}
-		if cache.Bucket != "assets" {
-			t.Errorf("bytecode bucket = %q, want the asset bucket", cache.Bucket)
-		}
-	})
-
-	t.Run("the serve descriptor is authoritative for next too", func(t *testing.T) {
-		t.Parallel()
-		root := writeTree(t, map[string]string{
-			"apps/web/routing-manifest.json": `{"buildId":"STALE"}`,
-			"apps/web/serve.json":            serveDescriptor(t, frameworkNext, "WEB1"),
-		})
-		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
-
-		builds := appBuildsFor(t, cfg, nextManifest())
-		if got := builds.ids["web"]; got != "WEB1" {
-			t.Errorf("build id = %q, want the descriptor's own", got)
-		}
-	})
-
-	t.Run("a serve descriptor with no build id fails naming the app", func(t *testing.T) {
-		t.Parallel()
-		root := writeTree(t, map[string]string{"apps/api/serve.json": `{"framework":"express"}`})
-		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
-
-		_, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(nodeManifest()), nil)
-		if err == nil {
-			t.Fatal("expected a descriptor with no build id to fail the deploy")
-		}
-		if !strings.Contains(err.Error(), "api") {
-			t.Errorf("error must name the app, got %q", err)
-		}
-	})
-
-	t.Run("an unparseable serve descriptor fails naming the app", func(t *testing.T) {
-		t.Parallel()
-		root := writeTree(t, map[string]string{"apps/api/serve.json": `{`})
-		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
-
-		_, err := resolveAppBuilds(deployedConfig(cfg), deployedManifest(nodeManifest()), nil)
-		if err == nil {
-			t.Fatal("expected an unparseable descriptor to fail the deploy")
-		}
-		if !strings.Contains(err.Error(), "api") {
-			t.Errorf("error must name the app, got %q", err)
-		}
-	})
-
-	t.Run("an app whose build emitted no descriptor still gets an id", func(t *testing.T) {
-		t.Parallel()
-		cfg := Config{ArtifactRoot: t.TempDir(), AssetBucket: "assets", StateTable: "state", Env: "prod"}
-
-		if got := appBuildsFor(t, cfg, nodeManifest()).ids["api"]; got == "" {
-			t.Error("build id is empty; an app with no artifact must still deploy")
-		}
-	})
 }
 
 func TestUploadPrerenderAssets(t *testing.T) {
