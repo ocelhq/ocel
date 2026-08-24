@@ -25,7 +25,7 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 	if err != nil {
 		return providerkit.Certificate{}, providerkit.Refuse(providerkit.CodeInvalid, "%s", err)
 	}
-	return providerkit.Certificate{ARN: held.ARN, Region: held.Region}, nil
+	return providerkit.Certificate{ID: held.ARN}, nil
 }
 
 func issue(ctx context.Context, issuer certs.Issuer, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
@@ -44,11 +44,11 @@ func issue(ctx context.Context, issuer certs.Issuer, req providerkit.Certificate
 			return providerkit.Certificate{}, err
 		}
 		if cert.Adopted {
-			return providerkit.Certificate{ARN: cert.ARN, Region: cert.Region}, nil
+			return providerkit.Certificate{ID: cert.ARN}, nil
 		}
 	}
 
-	settled := providerkit.Certificate{ARN: cert.ARN, Region: issuer.Region, Requested: true}
+	settled := providerkit.Certificate{ID: cert.ARN, Requested: true}
 	if len(cert.Validation) == 0 {
 		if cert, err = issuer.AwaitValidation(ctx, cert, say); err != nil {
 			return settled, waiting(err)
@@ -64,11 +64,12 @@ func issue(ctx context.Context, issuer certs.Issuer, req providerkit.Certificate
 }
 
 func recalled(ctx context.Context, issuer certs.Issuer, recorded providerkit.Certificate, cover []string, say func(string)) (certs.Certificate, error) {
-	if recorded.ARN == "" || (recorded.Region != "" && recorded.Region != issuer.Region) {
+	region := certs.RegionOfARN(recorded.ID)
+	if recorded.ID == "" || (region != "" && region != issuer.Region) {
 		return certs.Certificate{}, nil
 	}
 	adopted := !recorded.Requested
-	live, err := issuer.Describe(ctx, certs.Certificate{ARN: recorded.ARN, Region: issuer.Region, Adopted: adopted})
+	live, err := issuer.Describe(ctx, certs.Certificate{ARN: recorded.ID, Region: issuer.Region, Adopted: adopted})
 	if err != nil && !certs.Gone(err) {
 		return certs.Certificate{}, err
 	}
@@ -77,7 +78,7 @@ func recalled(ctx context.Context, issuer certs.Issuer, recorded providerkit.Cer
 		return live, nil
 	}
 	say(fmt.Sprintf("Certificate %s no longer answers for %s in %s; settling one that does",
-		recorded.ARN, strings.Join(cover, ", "), issuer.Region))
+		recorded.ID, strings.Join(cover, ", "), issuer.Region))
 	return certs.Certificate{}, nil
 }
 
@@ -112,7 +113,7 @@ func (p *Provider) InspectCertificate(ctx context.Context, kind edge.Kind, hostn
 		return providerkit.CertificateHealth{}, nil
 	}
 	health := providerkit.CertificateHealth{Terminates: true}
-	arn := certifier.Wants(certs.Certificate{ARN: cert.ARN}, hostname)
+	arn := certifier.Wants(certs.Certificate{ARN: cert.ID}, hostname)
 	if arn == "" {
 		return health, nil
 	}
@@ -136,10 +137,10 @@ func (p *Provider) InspectCertificate(ctx context.Context, kind edge.Kind, hostn
 }
 
 func (p *Provider) DiscardCertificate(ctx context.Context, cert providerkit.Certificate, report providerkit.Reporter) error {
-	if !cert.Requested || cert.ARN == "" {
+	if !cert.Requested || cert.ID == "" {
 		return nil
 	}
-	held := certs.Certificate{ARN: cert.ARN, Region: cert.Region}
+	held := certs.Certificate{ARN: cert.ID, Region: certs.RegionOfARN(cert.ID)}
 	return certs.DiscardIssuerFor(held, certs.Deps{AWS: p.aws}).Discard(ctx, held, report.Say)
 }
 

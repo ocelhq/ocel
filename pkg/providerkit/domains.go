@@ -89,7 +89,7 @@ func (s EdgeStackState) Certificates() []Certificate {
 	var held []Certificate
 	for _, hostname := range s.Hostnames() {
 		cert := s.Hosts[hostname].Certificate
-		if !cert.Held() || slices.ContainsFunc(held, func(other Certificate) bool { return other.ARN == cert.ARN }) {
+		if !cert.Held() || slices.ContainsFunc(held, func(other Certificate) bool { return other.ID == cert.ID }) {
 			continue
 		}
 		held = append(held, cert)
@@ -97,8 +97,8 @@ func (s EdgeStackState) Certificates() []Certificate {
 	return held
 }
 
-func (s EdgeStackState) Uses(arn string) bool {
-	return slices.ContainsFunc(s.Certificates(), func(cert Certificate) bool { return cert.ARN == arn })
+func (s EdgeStackState) Uses(id string) bool {
+	return id != "" && slices.ContainsFunc(s.Certificates(), func(cert Certificate) bool { return cert.ID == id })
 }
 
 func mergeRecords(into, records []edge.Record) []edge.Record {

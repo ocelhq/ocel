@@ -153,7 +153,7 @@ func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 		},
 		Hosts: map[string]providerkit.Settled{
 			"app.acme.com": {
-				Certificate: providerkit.Certificate{ARN: "cert-for-app"},
+				Certificate: providerkit.Certificate{ID: "cert-for-app"},
 				Written:     []edge.Record{{Name: "app.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
 				Owed:        []edge.Record{{Name: "owed.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
 			},
@@ -238,8 +238,8 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 			Bound:    []string{"app.acme.com"},
 		},
 		Hosts: map[string]providerkit.Settled{
-			"app.acme.com": {Certificate: providerkit.Certificate{ARN: "ocels-cert", Requested: true, Written: []edge.Record{validation}}},
-			"old.acme.com": {Certificate: providerkit.Certificate{ARN: "pinned-cert"}},
+			"app.acme.com": {Certificate: providerkit.Certificate{ID: "ocels-cert", Requested: true, Written: []edge.Record{validation}}},
+			"old.acme.com": {Certificate: providerkit.Certificate{ID: "pinned-cert"}},
 		},
 	})
 	writer, err := provider.DNS().Open(fake.KindZone, "acme.com")

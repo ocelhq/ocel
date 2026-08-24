@@ -97,8 +97,8 @@ func TestIssueRequestsACertificateForAnUnpinnedHostname(t *testing.T) {
 	if api.requested != 1 {
 		t.Errorf("ACM was asked for %d certificates, want exactly one requested", api.requested)
 	}
-	if cert.ARN != issuedARN || !cert.Requested {
-		t.Errorf("issue() = %+v, want the ARN ocel requested, marked as ocel's", cert)
+	if cert.ID != issuedARN || !cert.Requested {
+		t.Errorf("issue() = %+v, want the handle ocel requested, marked as ocel's", cert)
 	}
 	if len(proved) != 1 || proved[0].Name != "_ocel.app.acme.com" {
 		t.Errorf("the validation records settled were %v, want the one ACM named", proved)
@@ -118,8 +118,8 @@ func TestIssueRefusesAsNotReadyWhileACMIsStillValidating(t *testing.T) {
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
 		t.Fatalf("issue() error = %v, want the run told to come back to it", err)
 	}
-	if cert.ARN != issuedARN {
-		t.Errorf("issue() = %+v, want the requested ARN carried out so the re-run picks it up", cert)
+	if cert.ID != issuedARN {
+		t.Errorf("issue() = %+v, want the requested handle carried out so the re-run picks it up", cert)
 	}
 	if len(proved) != 1 {
 		t.Errorf("the validation records settled were %v, want them written before the wait", proved)
@@ -130,13 +130,13 @@ func TestIssueKeepsACertificateThatStillCoversTheHostname(t *testing.T) {
 	t.Parallel()
 	api := &stubACM{statuses: []string{certs.StatusIssued}}
 	var proved []edge.Record
-	held := providerkit.Certificate{ARN: issuedARN, Region: certs.CloudFrontRegion, Requested: true}
+	held := providerkit.Certificate{ID: issuedARN, Requested: true}
 
 	cert, err := issue(context.Background(), issuerOver(api), requestFor("app.acme.com", held, &proved))
 	if err != nil {
 		t.Fatalf("issue() error = %v", err)
 	}
-	if cert.ARN != held.ARN || !cert.Requested {
+	if cert.ID != held.ID || !cert.Requested {
 		t.Errorf("issue() = %+v, want the certificate already held", cert)
 	}
 	if api.requested != 0 {

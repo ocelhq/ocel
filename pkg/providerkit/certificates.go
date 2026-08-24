@@ -8,14 +8,13 @@ import (
 )
 
 type Certificate struct {
-	ARN       string        `json:"arn,omitempty"`
-	Region    string        `json:"region,omitempty"`
+	ID        string        `json:"id,omitempty"`
 	Requested bool          `json:"requested,omitempty"`
 	Written   []edge.Record `json:"written,omitempty"`
 	Owed      []edge.Record `json:"owed,omitempty"`
 }
 
-func (c Certificate) Held() bool { return c.ARN != "" }
+func (c Certificate) Held() bool { return c.ID != "" }
 
 type Prover func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error)
 
@@ -24,7 +23,6 @@ type CertificateRequest struct {
 	Hostname string
 	Held     Certificate
 	Prove    Prover
-	Notes    []string
 	Report   Reporter
 }
 
@@ -65,7 +63,7 @@ func inspectCertificate(ctx context.Context, provider Provider, kind edge.Kind, 
 
 func discardCertificate(ctx context.Context, provider Provider, cert Certificate, report Reporter) error {
 	certifier, ok := provider.(Certifier)
-	if !ok || !cert.Requested || cert.ARN == "" {
+	if !ok || !cert.Requested || cert.ID == "" {
 		return nil
 	}
 	return certifier.DiscardCertificate(ctx, cert, report)

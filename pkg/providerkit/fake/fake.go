@@ -128,13 +128,13 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 		return providerkit.Certificate{}, refusal
 	}
 	if pinned != "" {
-		return providerkit.Certificate{ARN: pinned}, nil
+		return providerkit.Certificate{ID: pinned}, nil
 	}
 	if validation == nil {
 		return providerkit.Certificate{}, nil
 	}
-	cert := providerkit.Certificate{ARN: "issued-for-" + req.Hostname, Requested: true}
-	if req.Held.Requested && req.Held.ARN == cert.ARN {
+	cert := providerkit.Certificate{ID: "issued-for-" + req.Hostname, Requested: true}
+	if req.Held.Requested && req.Held.ID == cert.ID {
 		return req.Held, nil
 	}
 	return req.Prove(ctx, cert, validation)
@@ -156,7 +156,7 @@ func (p *Provider) InspectCertificate(_ context.Context, _ edge.Kind, hostname s
 		return providerkit.CertificateHealth{}, nil
 	}
 	health := providerkit.CertificateHealth{Terminates: true}
-	if cert.ARN == "" {
+	if cert.ID == "" {
 		return health, nil
 	}
 	health.Status, health.Issued = "issued", true
@@ -167,7 +167,7 @@ func (p *Provider) InspectCertificate(_ context.Context, _ edge.Kind, hostname s
 func (p *Provider) DiscardCertificate(_ context.Context, cert providerkit.Certificate, _ providerkit.Reporter) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.discarded = append(p.discarded, cert.ARN)
+	p.discarded = append(p.discarded, cert.ID)
 	return nil
 }
 
