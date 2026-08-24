@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -14,6 +15,10 @@ type Options struct {
 }
 
 type Provider struct {
+	mu          sync.Mutex
+	pins        map[string]string
+	certRefusal error
+
 	options   Options
 	records   *Records
 	artifacts *Artifacts
@@ -80,6 +85,30 @@ func (p *Provider) Edges() providerkit.EdgeRegistry { return p.edges }
 
 func (p *Provider) DNS() providerkit.DNSRegistry { return p.dns }
 
+func (p *Provider) Pin(hostname, certificate string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.pins == nil {
+		p.pins = map[string]string{}
+	}
+	p.pins[hostname] = certificate
+}
+
+func (p *Provider) RefuseCertificates(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.certRefusal = err
+}
+
+func (p *Provider) Certificate(_ context.Context, _ edge.Kind, hostname string, _ providerkit.Reporter) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.certRefusal != nil {
+		return "", p.certRefusal
+	}
+	return p.pins[hostname], nil
+}
+
 type Warmer struct{ *Provider }
 
 func (Warmer) Warm(context.Context, []string, providerkit.Reporter) error { return nil }
@@ -127,6 +156,7 @@ var (
 	_ providerkit.StackInspector = StackInspector{}
 	_ providerkit.GrantVerifier  = GrantVerifier{}
 	_ providerkit.MembraneSource = MembraneSource{}
+	_ providerkit.Certifier      = (*Provider)(nil)
 )
 
 const Membrane = "fake-membrane"

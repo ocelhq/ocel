@@ -273,3 +273,56 @@ func TestRemoveHostnameRefusesAHostTheProjectDoesNotServe(t *testing.T) {
 		t.Fatalf("RemoveHostname() = %v, want it refused as an invalid argument", err)
 	}
 }
+
+func TestAddHostnameBindsTheCertificateItsProviderSettles(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassProduction, "shop")
+	provider.Pin("app.acme.com", "cert-for-app")
+
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []string{"app.acme.com"},
+		Edge:       zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	if _, err := drain(stream); err != nil {
+		t.Fatal(err)
+	}
+
+	bindings := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings()
+	if len(bindings) != 1 || bindings[0].Certificate != "cert-for-app" {
+		t.Errorf("the edge was bound with %+v, want the certificate the provider settled", bindings)
+	}
+	if settled := readStack(t, provider, providerkit.ClassProduction, "shop").Host("app.acme.com"); settled.Certificate != "cert-for-app" {
+		t.Errorf("recorded certificate = %q, want the one the provider settled", settled.Certificate)
+	}
+}
+
+func TestAddHostnameRefusesWhenNoCertificateCanBeSettled(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassProduction, "shop")
+	provider.RefuseCertificates(providerkit.Refuse(providerkit.CodeNotReady, "no certificate covers app.acme.com"))
+
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []string{"app.acme.com"},
+		Edge:       zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.GetSuccess() {
+		t.Fatal("AddHostname() bound a hostname with no certificate to serve it with")
+	}
+	if bindings := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings(); len(bindings) != 0 {
+		t.Errorf("the edge was bound with %+v, want the run refused before it bound anything", bindings)
+	}
+}

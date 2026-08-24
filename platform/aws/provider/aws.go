@@ -381,6 +381,7 @@ var (
 	_ providerkit.CodeEmbedder   = (*Provider)(nil)
 	_ providerkit.MembraneSource = (*Provider)(nil)
 	_ providerkit.StackInspector = (*Provider)(nil)
+	_ providerkit.Certifier      = (*Provider)(nil)
 	_ providerkit.Bootstrapper   = settling{}
 	_ awsports.Tables            = (*Provider)(nil)
 	_ awsports.Keys              = (*Provider)(nil)

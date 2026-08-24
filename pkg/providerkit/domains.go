@@ -14,8 +14,8 @@ type EdgeStackState struct {
 }
 
 type Settled struct {
-	// TODO(#390): the edge lands the certificate surface. Whatever fills this in must carry
-	// whether the operator pinned it: a pinned certificate is never ocel's to delete.
+	// TODO(#390): only a certificate the operator pinned reaches this, so it is never ocel's
+	// to delete. Once the edge lands issuance, what fills this in must carry which it is.
 	Certificate string        `json:"certificate,omitempty"`
 	Written     []edge.Record `json:"written,omitempty"`
 	Owed        []edge.Record `json:"owed,omitempty"`
