@@ -83,17 +83,17 @@ func (d *hostnames) addTargets() []string {
 func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter) (bool, error) {
 	settled := d.state.Host(host)
 	serving := settled.Serving()
-	held := settled.Certificate.ARN
+	held := settled.Certificate.ID
 
 	if err := d.certify(ctx, host, &settled, report); err != nil {
 		return false, err
 	}
-	if d.state.Ready(host, d.settle.kind) && settled.Certificate.ARN == held {
+	if d.state.Ready(host, d.settle.kind) && settled.Certificate.ID == held {
 		return false, nil
 	}
 
 	report.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.settle.kind))
-	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate.ARN}); err != nil {
+	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate.ID}); err != nil {
 		return true, err
 	}
 	if err := d.checkpoint(ctx); err != nil {
@@ -157,7 +157,7 @@ func (d *hostnames) certify(ctx context.Context, host string, settled *Settled, 
 }
 
 func (d *hostnames) discard(ctx context.Context, superseded, holding Certificate, report Reporter) error {
-	if !superseded.Held() || superseded.ARN == holding.ARN || d.state.Uses(superseded.ARN) {
+	if !superseded.Held() || superseded.ID == holding.ID || d.state.Uses(superseded.ID) {
 		return nil
 	}
 	if err := discardCertificate(ctx, d.provider, superseded, report); err != nil {
@@ -334,10 +334,10 @@ func (d *hostnames) pendingOn(host string, cert Certificate, health CertificateH
 	case health.Terminates && !cert.Held():
 		return fmt.Sprintf("no certificate covers %s yet; run `ocel domain add`", host)
 	case health.Terminates && !health.Issued:
-		return fmt.Sprintf("certificate %s is %s, not issued", cert.ARN, certificateStatusWord(health.Status))
+		return fmt.Sprintf("certificate %s is %s, not issued", cert.ID, certificateStatusWord(health.Status))
 	case health.Terminates && !health.Covers:
 		return fmt.Sprintf("certificate %s covers %s, which does not include %s",
-			cert.ARN, strings.Join(health.Domains, ", "), host)
+			cert.ID, strings.Join(health.Domains, ", "), host)
 	case !bound:
 		return fmt.Sprintf("%s is not bound to the %s edge yet; run `ocel domain add`", host, d.settle.kind)
 	case !probe.OK:
@@ -362,7 +362,7 @@ func certificateStatusWord(status string) string {
 
 func certificateState(settled Settled, probe Probe, owed []edge.Record, status string) *contractv1.CertificateState {
 	return &contractv1.CertificateState{
-		CertificateId:     settled.Certificate.ARN,
+		CertificateId:     settled.Certificate.ID,
 		CertificateStatus: status,
 		RecordsWritten:    recordLines(settled.WrittenRecords()),
 		RecordsOwed:       recordLines(append(settled.OwedRecords(), owed...)),

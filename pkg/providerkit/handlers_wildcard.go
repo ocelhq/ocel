@@ -131,7 +131,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 	report.Say("Reconciling the shared preview entry on " + wildcard)
 	published, err := front.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{
 		BaseDomain:  base,
-		Certificate: w.held.Settled.Certificate.ARN,
+		Certificate: w.held.Settled.Certificate.ID,
 		GrammarMin:  edge.PreviewGrammarMin,
 		GrammarMax:  edge.PreviewGrammarMax,
 		Warn:        report.Detail,
@@ -406,7 +406,7 @@ func (w *wildcards) release(ctx context.Context, report Reporter) error {
 		return err
 	}
 	if cert := w.held.Settled.Certificate; cert.Requested {
-		report.Say("Discarding certificate " + cert.ARN)
+		report.Say("Discarding certificate " + cert.ID)
 		if err := discardCertificate(ctx, w.provider, cert, report); err != nil {
 			return err
 		}

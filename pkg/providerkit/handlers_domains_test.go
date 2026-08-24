@@ -298,8 +298,8 @@ func TestAddHostnameBindsTheCertificateItsProviderSettles(t *testing.T) {
 	if len(bindings) != 1 || bindings[0].Certificate != "cert-for-app" {
 		t.Errorf("the edge was bound with %+v, want the certificate the provider settled", bindings)
 	}
-	if settled := readStack(t, provider, providerkit.ClassProduction, "shop").Host("app.acme.com"); settled.Certificate.ARN != "cert-for-app" {
-		t.Errorf("recorded certificate = %q, want the one the provider settled", settled.Certificate.ARN)
+	if settled := readStack(t, provider, providerkit.ClassProduction, "shop").Host("app.acme.com"); settled.Certificate.ID != "cert-for-app" {
+		t.Errorf("recorded certificate = %q, want the one the provider settled", settled.Certificate.ID)
 	}
 }
 
@@ -358,7 +358,7 @@ func TestAddHostnameSettlesTheValidationRecordsItsProviderProves(t *testing.T) {
 	}
 
 	settled := readStack(t, provider, providerkit.ClassProduction, "shop").Host("app.acme.com")
-	if !settled.Certificate.Requested || settled.Certificate.ARN != "issued-for-app.acme.com" {
+	if !settled.Certificate.Requested || settled.Certificate.ID != "issued-for-app.acme.com" {
 		t.Errorf("recorded certificate = %+v, want the one ocel requested", settled.Certificate)
 	}
 	if !slices.Contains(settled.Certificate.Written, validationRecord) {
@@ -376,7 +376,7 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
 		Edge: edge.StackState{Slug: "shop", Class: providerkit.ClassProduction, Endpoint: "https://shop.fake.invalid"},
 		Hosts: map[string]providerkit.Settled{
-			"app.acme.com": {Certificate: providerkit.Certificate{ARN: "superseded", Requested: true, Written: []edge.Record{stale}}},
+			"app.acme.com": {Certificate: providerkit.Certificate{ID: "superseded", Requested: true, Written: []edge.Record{stale}}},
 		},
 	})
 	writer, err := provider.DNS().Open(fake.KindZone, "acme.com")
@@ -421,7 +421,7 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 		},
 		Hosts: map[string]providerkit.Settled{
 			"app.acme.com": {
-				Certificate: providerkit.Certificate{ARN: "cert-of-yesterday"},
+				Certificate: providerkit.Certificate{ID: "cert-of-yesterday"},
 				Probe:       providerkit.Probe{OK: true, Edge: fake.KindRelay},
 			},
 		},
@@ -459,7 +459,7 @@ func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) 
 		},
 		Hosts: map[string]providerkit.Settled{
 			"app.acme.com": {
-				Certificate: providerkit.Certificate{ARN: "pending-cert", Requested: true},
+				Certificate: providerkit.Certificate{ID: "pending-cert", Requested: true},
 				Probe:       providerkit.Probe{OK: true, Edge: fake.KindRelay},
 			},
 		},

@@ -160,14 +160,14 @@ func certificateItem(cert Certificate) *contractv1.RemovalItem {
 	if !cert.Requested {
 		return &contractv1.RemovalItem{
 			Kind:   "certificate",
-			Name:   cert.ARN,
+			Name:   cert.ID,
 			Action: contractv1.RemovalItem_ACTION_KEEP,
 			Reason: "you pinned it; ocel never requested it, so it is not ocel's to delete",
 		}
 	}
 	return &contractv1.RemovalItem{
 		Kind:   "certificate",
-		Name:   cert.ARN,
+		Name:   cert.ID,
 		Action: contractv1.RemovalItem_ACTION_DELETE,
 		Reason: "ocel requested it for a hostname this project serves, and nothing is left to serve",
 	}
@@ -285,7 +285,7 @@ func (r *projectRemoval) discardCertificates(ctx context.Context, held []Certifi
 		if !cert.Requested {
 			continue
 		}
-		report.Say("Discarding certificate " + cert.ARN)
+		report.Say("Discarding certificate " + cert.ID)
 		if err := discardCertificate(ctx, r.provider, cert, report); err != nil {
 			errs = append(errs, fmt.Errorf("discard the certificate ocel requested for this project: %w", err))
 		}
