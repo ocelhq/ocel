@@ -45,10 +45,9 @@ type ArtifactPacker interface {
 }
 
 type AppPacking struct {
-	Ref       StackRef
-	App       string
-	Framework string
-	Values    AppValues
+	Ref    StackRef
+	App    string
+	Values AppValues
 }
 
 type AppPack struct {
@@ -79,10 +78,9 @@ func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, 
 		return AppPack{}, nil
 	}
 	pack, err := packer.PackApp(ctx, AppPacking{
-		Ref:       r.ref(entry.Stack),
-		App:       entry.App,
-		Framework: entry.Manifest.GetFramework(),
-		Values:    values,
+		Ref:    r.ref(entry.Stack),
+		App:    entry.App,
+		Values: values,
 	}, report)
 	if err != nil {
 		return AppPack{}, fmt.Errorf("pack %s's function package: %w", entry.App, err)
