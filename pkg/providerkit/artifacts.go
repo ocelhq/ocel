@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"slices"
 
+	"golang.org/x/sync/errgroup"
+
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -89,17 +91,31 @@ func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, 
 	return pack, nil
 }
 
+const uploadConcurrency = 64
+
 func (r *deployRun) uploadApp(ctx context.Context, entry AppEntry, pack AppPack, routing *RoutingPlan, report Reporter) error {
 	root := ArtifactRoot()
+	var shipping []*contractv1.ManifestFunction
 	for _, fn := range r.manifest.GetFunctions() {
-		if fn.GetApp() != entry.App {
-			continue
+		if fn.GetApp() == entry.App {
+			shipping = append(shipping, fn)
 		}
-		ref, err := r.put(ctx, root, entry, fn, overlayFor(pack.Overlay, fn, routing), report)
-		if err != nil {
+	}
+	refs := make([]ArtifactRef, len(shipping))
+	group, ctx := errgroup.WithContext(ctx)
+	group.SetLimit(uploadConcurrency)
+	for slot, fn := range shipping {
+		group.Go(func() error {
+			ref, err := r.put(ctx, root, entry, fn, overlayFor(pack.Overlay, fn, routing), report)
+			refs[slot] = ref
 			return err
-		}
-		r.artifacts[fn.GetLogicalName()] = ref
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return err
+	}
+	for slot, fn := range shipping {
+		r.artifacts[fn.GetLogicalName()] = refs[slot]
 	}
 	return nil
 }
