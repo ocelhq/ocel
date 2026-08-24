@@ -49,7 +49,7 @@ func under(t *testing.T, rest ...string) providerkit.RecordName {
 }
 
 func in(class providerkit.Class, t *testing.T, rest ...string) providerkit.RecordName {
-	return append(providerkit.RecordName{"conformance", string(class), t.Name()}, rest...)
+	return append(providerkit.RecordName{providerkit.RootConformance, string(class), t.Name()}, rest...)
 }
 
 func RunRecordStore(t *testing.T, records providerkit.RecordStore) {

@@ -38,7 +38,7 @@ func Scope(class ports.Class, slug string) string {
 func RecordKey(app, identity string) string { return "record:" + app + "/" + identity }
 
 func (l *Ledger) name(rest ...string) ports.RecordName {
-	return append(ports.RecordName{"ledger", l.scope}, rest...)
+	return append(ports.RecordName{ports.RootLedger, l.scope}, rest...)
 }
 
 func (l *Ledger) schemaName() ports.RecordName { return l.name("schema") }

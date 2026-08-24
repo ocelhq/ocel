@@ -25,6 +25,18 @@ var ErrStale = errors.New("the record moved since it was read")
 
 var ErrNoRecord = errors.New("no such record")
 
+const (
+	RootSchema      = "schema"
+	RootProjects    = "projects"
+	RootBootstrap   = "bootstrap"
+	RootEdgeStacks  = "edgestacks"
+	RootWildcard    = "wildcard"
+	RootLedger      = "ledger"
+	RootValues      = "values"
+	RootValueRefs   = "valuerefs"
+	RootConformance = "conformance"
+)
+
 type RecordName []string
 
 func (n RecordName) String() string { return strings.Join(n, "/") }

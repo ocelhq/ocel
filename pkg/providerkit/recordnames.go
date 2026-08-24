@@ -6,28 +6,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
-const (
-	rootSchema     = "schema"
-	rootProjects   = "projects"
-	rootBootstrap  = "bootstrap"
-	rootEdgeStacks = "edgestacks"
-	rootWildcard   = "wildcard"
-	rootLedger     = "ledger"
-)
-
 func rooted(root string, class Class, rest ...string) RecordName {
 	return append(RecordName{root, string(class)}, rest...)
 }
 
-func SchemaRecord(class Class) RecordName { return rooted(rootSchema, class) }
+func SchemaRecord(class Class) RecordName { return rooted(RootSchema, class) }
 
-func ProjectsRecord(class Class) RecordName { return rooted(rootProjects, class) }
+func ProjectsRecord(class Class) RecordName { return rooted(RootProjects, class) }
 
 func ProjectRecord(class Class, slug string) RecordName {
-	return rooted(rootProjects, class, slug)
+	return rooted(RootProjects, class, slug)
 }
 
-func BootstrapRecord(class Class) RecordName { return rooted(rootBootstrap, class) }
+func BootstrapRecord(class Class) RecordName { return rooted(RootBootstrap, class) }
 
 func StackRecord(class Class, slug string, stack naming.StackName) RecordName {
 	return append(StacksRecord(class, slug), stack.String())
@@ -38,29 +29,29 @@ func StacksRecord(class Class, slug string) RecordName {
 }
 
 func EdgeStackRecord(class Class, slug string) RecordName {
-	return rooted(rootEdgeStacks, class, slug)
+	return rooted(RootEdgeStacks, class, slug)
 }
 
 func EdgeStacksRecord(class Class) RecordName {
-	return rooted(rootEdgeStacks, class)
+	return rooted(RootEdgeStacks, class)
 }
 
-func WildcardRecord(class Class) RecordName { return rooted(rootWildcard, class) }
+func WildcardRecord(class Class) RecordName { return rooted(RootWildcard, class) }
 
 func LedgerRecord(scope string, rest ...string) RecordName {
-	return append(RecordName{rootLedger, scope}, rest...)
+	return append(RecordName{RootLedger, scope}, rest...)
 }
 
 var classSegment = map[string]int{
-	rootSchema:     1,
-	rootProjects:   1,
-	rootBootstrap:  1,
-	rootEdgeStacks: 1,
-	rootWildcard:   1,
-	rootLedger:     1,
-	"conformance":  1,
-	"valuerefs":    1,
-	"values":       2,
+	RootSchema:      1,
+	RootProjects:    1,
+	RootBootstrap:   1,
+	RootEdgeStacks:  1,
+	RootWildcard:    1,
+	RootLedger:      1,
+	RootConformance: 1,
+	RootValueRefs:   1,
+	RootValues:      2,
 }
 
 func ClassOf(name RecordName) (Class, bool) {
@@ -72,7 +63,7 @@ func ClassOf(name RecordName) (Class, bool) {
 		return "", false
 	}
 	segment := name[at]
-	if name[0] == rootLedger {
+	if name[0] == RootLedger {
 		segment, _, _ = strings.Cut(segment, naming.PathSeparator)
 	}
 	switch Class(segment) {
