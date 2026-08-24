@@ -374,6 +374,18 @@ func TestALinkOcelCouldNotHaveProducedIsRefused(t *testing.T) {
 			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
 			Grants:     []*linksv1.Grant{{Actions: []string{"s3:GetObject"}}},
 		},
+		"granting every action": {
+			Name:       "files",
+			Source:     "acme",
+			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*linksv1.Grant{{Actions: []string{"*"}, Resources: []string{"arn:aws:s3:::files"}}},
+		},
+		"granting over every resource": {
+			Name:       "files",
+			Source:     "acme",
+			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*linksv1.Grant{{Actions: []string{"s3:GetObject"}, Resources: []string{"*"}}},
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := vars.SetLink(ctx, &envvarsv1.SetLinkRequest{

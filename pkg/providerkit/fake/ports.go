@@ -175,6 +175,8 @@ func (b *Bootstrapper) Remove(_ context.Context, class providerkit.Class, report
 }
 
 type Releaser struct {
+	Grants []providerkit.Grant
+
 	mu     sync.Mutex
 	stacks map[string]providerkit.StackResult
 	plans  []providerkit.StackPlan
@@ -200,6 +202,7 @@ func (r *Releaser) Provision(_ context.Context, plan providerkit.StackPlan, repo
 			Type:       resource.Type,
 			Name:       resource.Name,
 			Properties: propertiesFor(resource.Type, resource.Name),
+			Grants:     r.Grants,
 		})
 	}
 	if plan.App != nil {
