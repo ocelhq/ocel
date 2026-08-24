@@ -65,8 +65,9 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 			t.Error("a writer with no adopted cache store must fail the deploy")
 		}
 
-		if _, err := newReleaser(fixed(storeOnly), &Realized{}, nil).at(context.Background(), providerkit.StackRef{}); err == nil {
-			t.Error("opening a release against a bootstrap that disagrees with itself must fail before any stack is asked for")
+		pre := providerkit.DeployPreflight{Plan: providerkit.DeployPlan{Slug: "shop", Class: providerkit.ClassProduction, Env: "prod"}}
+		if err := newReleaser(fixed(storeOnly), &Realized{}, nil).Preflight(context.Background(), pre); err == nil {
+			t.Error("a bootstrap that disagrees with itself must fail preflight, before a byte of this deploy is uploaded")
 		}
 	})
 

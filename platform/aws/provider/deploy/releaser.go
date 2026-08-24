@@ -18,7 +18,6 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
-	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -80,9 +79,6 @@ func (r *Releaser) at(ctx context.Context, ref providerkit.StackRef) (*release, 
 	}
 	cfg, err := r.resolve.Release(ctx, scope)
 	if err != nil {
-		return nil, err
-	}
-	if err := checkISRWriterAgrees(cfg.objectStores(), cfg.isrWriter()); err != nil {
 		return nil, err
 	}
 	held := &release{Releaser: r, cfg: cfg}
@@ -310,9 +306,6 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 
 func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
 	r.realized.mark(naming.Sanitize(plan.Ref.Project), plan.Ref.Name)
-	if err := checkMembraneServices(plan, membrane.Serves); err != nil {
-		return providerkit.StackResult{}, err
-	}
 	if plan.Options == nil {
 		transformed, err := transformStackPlan(ctx, r.cfg.Transform, plan)
 		if err != nil {

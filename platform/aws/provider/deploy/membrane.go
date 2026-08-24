@@ -24,16 +24,13 @@ func (e *MissingMembraneError) Error() string {
 	)
 }
 
-func checkMembraneServices(plan providerkit.StackPlan, serves func(linksv1.LinkType) bool) error {
-	for _, resource := range plan.Resources {
+func checkMembraneServices(resources []providerkit.Resource, grants []providerkit.Link, serves func(linksv1.LinkType) bool) error {
+	for _, resource := range resources {
 		if err := membraneServed(resource.Declared, resource.Type, serves); err != nil {
 			return err
 		}
 	}
-	if plan.App == nil {
-		return nil
-	}
-	for _, link := range plan.App.Grants {
+	for _, link := range grants {
 		if err := membraneServed(linkResource(link), link.Type, serves); err != nil {
 			return err
 		}

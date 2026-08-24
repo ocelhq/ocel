@@ -10,11 +10,15 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 )
 
-func membranePlan() providerkit.StackPlan {
-	return providerkit.StackPlan{Resources: []providerkit.Resource{
+func membraneResources() []providerkit.Resource {
+	return []providerkit.Resource{
 		{Name: "database--main", Declared: "database--main", Type: providerkit.LinkPostgres},
 		{Name: "bucket--uploads", Declared: "bucket--uploads", Type: providerkit.LinkBucket},
-	}}
+	}
+}
+
+func membranePlan() providerkit.StackPlan {
+	return providerkit.StackPlan{Resources: membraneResources()}
 }
 
 func TestCheckMembraneServices(t *testing.T) {
@@ -23,7 +27,7 @@ func TestCheckMembraneServices(t *testing.T) {
 	t.Run("this provider serves every type its plans reach through the membrane", func(t *testing.T) {
 		t.Parallel()
 
-		if err := checkMembraneServices(membranePlan(), membrane.Serves); err != nil {
+		if err := checkMembraneServices(membraneResources(), nil, membrane.Serves); err != nil {
 			t.Fatalf("checkMembraneServices = %v, want nil", err)
 		}
 	})
@@ -31,7 +35,7 @@ func TestCheckMembraneServices(t *testing.T) {
 	t.Run("a type served by no membrane fails by resource, type and provider", func(t *testing.T) {
 		t.Parallel()
 
-		err := checkMembraneServices(membranePlan(), func(linksv1.LinkType) bool { return false })
+		err := checkMembraneServices(membraneResources(), nil, func(linksv1.LinkType) bool { return false })
 
 		var missing *MissingMembraneError
 		if !errors.As(err, &missing) {
@@ -47,13 +51,10 @@ func TestCheckMembraneServices(t *testing.T) {
 	t.Run("an app is refused for a link it is granted, not only for one this deploy stands up", func(t *testing.T) {
 		t.Parallel()
 
-		plan := providerkit.StackPlan{App: &providerkit.AppPlan{
-			App:    "web",
-			Grants: []providerkit.Link{{Name: "uploads", Resource: "bucket--uploads", Type: providerkit.LinkBucket}},
-		}}
+		grants := []providerkit.Link{{Name: "uploads", Resource: "bucket--uploads", Type: providerkit.LinkBucket}}
 
 		var missing *MissingMembraneError
-		if err := checkMembraneServices(plan, func(linksv1.LinkType) bool { return false }); !errors.As(err, &missing) {
+		if err := checkMembraneServices(nil, grants, func(linksv1.LinkType) bool { return false }); !errors.As(err, &missing) {
 			t.Fatalf("checkMembraneServices = %v, want a *MissingMembraneError", err)
 		}
 		if missing.Resource != "bucket--uploads" {
@@ -64,9 +65,7 @@ func TestCheckMembraneServices(t *testing.T) {
 	t.Run("postgres goes direct, so no membrane is asked for it", func(t *testing.T) {
 		t.Parallel()
 
-		plan := providerkit.StackPlan{Resources: membranePlan().Resources[:1]}
-
-		if err := checkMembraneServices(plan, func(linksv1.LinkType) bool { return false }); err != nil {
+		if err := checkMembraneServices(membraneResources()[:1], nil, func(linksv1.LinkType) bool { return false }); err != nil {
 			t.Fatalf("checkMembraneServices = %v, want postgres to need no membrane service", err)
 		}
 	})

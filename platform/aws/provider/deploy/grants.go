@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -198,12 +199,14 @@ func (e *PolicyBudgetError) Error() string {
 	return b.String()
 }
 
-func checkInlinePolicyBudget(app string, policies []linkPolicy) error {
+func checkInlinePolicyBudget(plan providerkit.DeployPlan, resources []providerkit.Resource, grants []providerkit.Link, sessions sessionScope) error {
+	items, err := billedPolicies(resources, grants, sessions)
+	if err != nil {
+		return err
+	}
 	total := 0
-	items := make([]PolicyBillItem, 0, len(policies))
-	for _, held := range policies {
-		items = append(items, PolicyBillItem{Link: held.Link, Type: held.Type, Chars: len(held.Policy)})
-		total += len(held.Policy)
+	for _, item := range items {
+		total += item.Chars
 	}
 	if total <= policyBudgetChars {
 		return nil
@@ -214,5 +217,38 @@ func checkInlinePolicyBudget(app string, policies []linkPolicy) error {
 		}
 		return cmp.Compare(a.Link, b.Link)
 	})
-	return &PolicyBudgetError{Apps: []PolicyBudgetApp{{App: app, Total: total, Items: items}}}
+	over := make([]PolicyBudgetApp, 0, len(plan.Apps))
+	for _, app := range plan.Apps {
+		over = append(over, PolicyBudgetApp{App: app.App, Total: total, Items: items})
+	}
+	return &PolicyBudgetError{Apps: over}
+}
+
+func billedPolicies(resources []providerkit.Resource, grants []providerkit.Link, sessions sessionScope) ([]PolicyBillItem, error) {
+	billed := map[string]PolicyBillItem{}
+	for _, link := range grants {
+		policy, err := linkPolicyDocument(link.Name, grantMessages(link.Grants))
+		if err != nil {
+			return nil, err
+		}
+		if policy == "" {
+			continue
+		}
+		billed[link.Name] = PolicyBillItem{Link: link.Name, Type: link.Type, Chars: len(policy)}
+	}
+	for _, resource := range resources {
+		if resource.Linked || resource.Type != providerkit.LinkBucket {
+			continue
+		}
+		policy, err := linkPolicyDocument(resource.Name, bucketGrants(strings.Repeat("b", maxS3BucketNameLen), sessions))
+		if err != nil {
+			return nil, err
+		}
+		billed[resource.Name] = PolicyBillItem{Link: resource.Name, Type: resource.Type, Chars: len(policy)}
+	}
+	items := make([]PolicyBillItem, 0, len(billed))
+	for _, name := range slices.Sorted(maps.Keys(billed)) {
+		items = append(items, billed[name])
+	}
+	return items, nil
 }
