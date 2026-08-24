@@ -192,7 +192,6 @@ func TestAnAccountWithNoBootstrapHoldsNoRecords(t *testing.T) {
 
 func TestNoRootKeepsAWholeAccountInOnePartition(t *testing.T) {
 	for _, name := range []kit.RecordName{
-		providerkit.SchemaRecord(providerkit.ClassProduction),
 		providerkit.ProjectsRecord(providerkit.ClassProduction),
 		providerkit.BootstrapRecord(providerkit.ClassProduction),
 		providerkit.WildcardRecord(providerkit.ClassPreview),
@@ -205,6 +204,19 @@ func TestNoRootKeepsAWholeAccountInOnePartition(t *testing.T) {
 		}
 		if partition == name[0] {
 			t.Errorf("%s partitions on %q alone, so every account's %s records share one key", name, partition, name[0])
+		}
+	}
+}
+
+func TestTheSchemaRecordSitsOnTheSameKeyEveryLayoutWrote(t *testing.T) {
+	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+		partition, err := awsports.Partition(providerkit.SchemaRecord(class))
+		if err != nil {
+			t.Fatalf("Partition(%s) err = %v", providerkit.SchemaRecord(class), err)
+		}
+		if partition != kit.RootSchema {
+			t.Errorf("the %s schema record partitions on %q, want %q: a build that cannot find the schema an older layout wrote reads it as unwritten and stamps its own over live records",
+				class, partition, kit.RootSchema)
 		}
 	}
 }

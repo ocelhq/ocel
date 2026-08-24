@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -36,6 +37,29 @@ func TestTheRootSchemaIsWrittenOnceAndReadBack(t *testing.T) {
 	}
 	if written, err := providerkit.RecordSchema(ctx, records, providerkit.ClassProduction); err != nil || written != providerkit.RecordSchemaVersion {
 		t.Fatalf("RecordSchema() = %d, %v, want %d", written, err, providerkit.RecordSchemaVersion)
+	}
+}
+
+func TestARecordTreeAnOlderOcelWroteIsRefused(t *testing.T) {
+	records := fake.NewRecords()
+	ctx := context.Background()
+
+	behind := strconv.Itoa(providerkit.RecordSchemaVersion - 1)
+	if _, err := records.Write(ctx, providerkit.Record{Name: providerkit.SchemaRecord(providerkit.ClassProduction), Bytes: []byte(behind)}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := providerkit.EnsureRecordSchema(ctx, records, providerkit.ClassProduction)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+		t.Fatalf("EnsureRecordSchema() over an older tree = %v, want it refused as not ready", err)
+	}
+	if !strings.Contains(refusal.Message, behind) || !strings.Contains(refusal.Message, strconv.Itoa(providerkit.RecordSchemaVersion)) {
+		t.Errorf("refusal = %q, want it to name both the schema written and the schema this build reads", refusal.Message)
+	}
+	held, err := records.Read(ctx, providerkit.SchemaRecord(providerkit.ClassProduction))
+	if err != nil || string(held.Bytes) != behind {
+		t.Fatalf("the refused tree was stamped %q, want it left at %q rather than claimed as this build's", held.Bytes, behind)
 	}
 }
 
