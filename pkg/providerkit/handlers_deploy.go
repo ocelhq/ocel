@@ -392,7 +392,7 @@ func (r *deployRun) ref(stack naming.StackName) StackRef {
 }
 
 func (r *deployRun) reader() LinkReader {
-	return publishedLinks{store: r.values, scope: r.scope, environment: r.plan.Env}
+	return publishedLinks{store: r.values, scope: r.scope, environment: r.plan.linkEnvironment()}
 }
 
 func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Link, error) {
@@ -593,7 +593,7 @@ func (r *deployRun) publish(ctx context.Context, links []Link) error {
 		if err != nil {
 			return err
 		}
-		if _, err := r.values.SetLink(ctx, r.scope, r.plan.Env, values.OwnerOcel, link.Name, pair); err != nil {
+		if _, err := r.values.SetLink(ctx, r.scope, r.plan.linkEnvironment(), values.OwnerOcel, link.Name, pair); err != nil {
 			return fmt.Errorf("publish link %s: %w", link.Name, err)
 		}
 	}

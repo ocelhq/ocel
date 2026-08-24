@@ -18,6 +18,8 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -337,5 +339,54 @@ func TestDeployRefusesANeedTheProjectDoesNotWaive(t *testing.T) {
 
 	if !strings.Contains(said, string(edge.NeedStreaming)) {
 		t.Fatalf("Deploy() against an edge serving nothing = %q, want it refused by the need's name", said)
+	}
+}
+
+func operatorServed(t *testing.T) (contractv1connect.ProviderServiceClient, envvarsv1connect.EnvVarsServiceClient) {
+	t.Helper()
+	provider := fake.NewProvider(fake.Options{})
+	spec := providerkit.Spec{
+		Version: "1.0.0",
+		New:     func(context.Context, providerkit.Options) (providerkit.Provider, error) { return provider, nil },
+	}
+	const token = "a-token"
+	server := httptest.NewServer(providerkit.NewMux(spec, token))
+	t.Cleanup(server.Close)
+
+	auth := connect.WithInterceptors(bearer(token))
+	deploys := contractv1connect.NewProviderServiceClient(server.Client(), server.URL, auth)
+	if _, err := deploys.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+	return deploys, envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL, auth)
+}
+
+func TestDeployPublishesLinksWhereTheOperatorReadsThem(t *testing.T) {
+	builtProject(t)
+	deploys, vars := operatorServed(t)
+	ctx := context.Background()
+
+	if result, _ := deploy(t, deploys, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	listed, err := vars.ListLinks(ctx, &envvarsv1.ListLinksRequest{
+		Slug: "shop",
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil {
+		t.Fatalf("ListLinks() = %v", err)
+	}
+	if len(listed.GetLinks()) != 1 || listed.GetLinks()[0].GetName() != "orders" {
+		t.Fatalf("ListLinks() after a production deploy = %+v, want the link the deploy published", listed.GetLinks())
+	}
+
+	removed, err := vars.RemoveLink(ctx, &envvarsv1.RemoveLinkRequest{
+		Slug: "shop",
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Name: "orders",
+	})
+	if err != nil || !removed.GetRemoved() {
+		t.Fatalf("RemoveLink() = %+v, %v, want the published link taken away", removed, err)
 	}
 }

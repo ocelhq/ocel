@@ -113,6 +113,13 @@ func envScope(env *environmentv1.Environment) (string, error) {
 	return envName(env)
 }
 
+func (p DeployPlan) linkEnvironment() string {
+	if p.Class == ClassProduction {
+		return ""
+	}
+	return p.Env
+}
+
 func (p DeployPlan) coordinate(app string, release naming.Release) naming.Coordinate {
 	return naming.Coordinate{
 		Project: naming.Sanitize(p.Slug),
