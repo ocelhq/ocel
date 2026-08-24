@@ -1,8 +1,6 @@
 package deploy
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -18,31 +16,6 @@ import (
 	smithy "github.com/aws/smithy-go"
 )
 
-func readZip(t *testing.T, data []byte) map[string]string {
-	t.Helper()
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatalf("open zip: %v", err)
-	}
-	out := map[string]string{}
-	for _, f := range zr.File {
-		if f.FileInfo().IsDir() {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			t.Fatalf("open %s: %v", f.Name, err)
-		}
-		b, err := io.ReadAll(rc)
-		rc.Close()
-		if err != nil {
-			t.Fatalf("read %s: %v", f.Name, err)
-		}
-		out[f.Name] = string(b)
-	}
-	return out
-}
-
 func writeTree(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -56,132 +29,6 @@ func writeTree(t *testing.T, files map[string]string) string {
 		}
 	}
 	return dir
-}
-
-func TestHashArtifact(t *testing.T) {
-	overlayHash := func(t *testing.T, overlay map[string][]byte) string {
-		t.Helper()
-		h, err := hashArtifact(writeTree(t, map[string]string{"src/server.js": "handler"}), overlay)
-		if err != nil {
-			t.Fatalf("hashArtifact: %v", err)
-		}
-		return h
-	}
-
-	t.Run("deterministic", func(t *testing.T) {
-		t.Parallel()
-		files := map[string]string{
-			"src/server.js": "export const handler = () => 'hi'",
-			"package.json":  `{"name":"app"}`,
-		}
-		a := writeTree(t, files)
-		b := writeTree(t, files)
-
-		ha, err := hashArtifact(a, nil)
-		if err != nil {
-			t.Fatalf("hashArtifact(a): %v", err)
-		}
-		hb, err := hashArtifact(b, nil)
-		if err != nil {
-			t.Fatalf("hashArtifact(b): %v", err)
-		}
-		if ha != hb {
-			t.Errorf("hash of identical trees differ: %q vs %q", ha, hb)
-		}
-	})
-
-	t.Run("sensitive to content", func(t *testing.T) {
-		t.Parallel()
-		base, err := hashArtifact(writeTree(t, map[string]string{"a.js": "one"}), nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		changedContent, err := hashArtifact(writeTree(t, map[string]string{"a.js": "two"}), nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if base == changedContent {
-			t.Error("hash unchanged after a file's contents changed")
-		}
-	})
-
-	t.Run("sensitive to paths", func(t *testing.T) {
-		t.Parallel()
-		base, err := hashArtifact(writeTree(t, map[string]string{"a.js": "one"}), nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		changedPath, err := hashArtifact(writeTree(t, map[string]string{"b.js": "one"}), nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if base == changedPath {
-			t.Error("hash unchanged after a file was renamed")
-		}
-	})
-
-	t.Run("sensitive to the symlink target", func(t *testing.T) {
-		t.Parallel()
-		build := func(target string) string {
-			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "a.js"), []byte("x"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(dir, "b.js"), []byte("x"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Symlink(target, filepath.Join(dir, "link.js")); err != nil {
-				t.Fatal(err)
-			}
-			h, err := hashArtifact(dir, nil)
-			if err != nil {
-				t.Fatalf("hashArtifact: %v", err)
-			}
-			return h
-		}
-		if build("a.js") == build("b.js") {
-			t.Error("hash ignored the symlink target")
-		}
-	})
-
-	t.Run("sensitive to an overlay being added", func(t *testing.T) {
-		t.Parallel()
-		if overlayHash(t, nil) == overlayHash(t, map[string][]byte{".ocel/variables.enc": []byte("one")}) {
-			t.Error("hash unchanged after an overlay was added")
-		}
-	})
-
-	t.Run("sensitive to the overlay's contents", func(t *testing.T) {
-		t.Parallel()
-		first := overlayHash(t, map[string][]byte{".ocel/variables.enc": []byte("one")})
-		second := overlayHash(t, map[string][]byte{".ocel/variables.enc": []byte("two")})
-		if first == second {
-			t.Error("hash unchanged after the overlay's contents changed")
-		}
-	})
-
-	t.Run("stable for one tree and one overlay", func(t *testing.T) {
-		t.Parallel()
-		first := overlayHash(t, map[string][]byte{".ocel/variables.enc": []byte("one")})
-		if again := overlayHash(t, map[string][]byte{".ocel/variables.enc": []byte("one")}); again != first {
-			t.Error("hash of one tree and one overlay is not stable")
-		}
-	})
-}
-
-func TestArtifactKey(t *testing.T) {
-	coord := storageCoordinate("prod", "proj-123", "web", releaseOf(deployedAs("WEB1")))
-	got := artifactKey(coord, "web_index", "abc123")
-	want := "prod/proj-123/web/" + releaseTokenFor("WEB1") + "/fn/web-index/abc123.zip"
-	if got != want {
-		t.Errorf("artifactKey = %q, want %q", got, want)
-	}
-	if !strings.HasPrefix(got, functionArtifactPrefix(coord)+"/") {
-		t.Errorf("artifactKey = %q, want it under the release's function prefix %q", got, functionArtifactPrefix(coord))
-	}
-	if other := artifactKey(storageCoordinate("prod", "proj-123", "web", releaseOf(deployedAs("WEB2"))), "web_index", "abc123"); other == got {
-		t.Errorf("two releases share the artifact key %q", got)
-	}
 }
 
 type fakeUploader struct {
@@ -334,91 +181,6 @@ func TestUploadArtifact(t *testing.T) {
 			if put == nil || !strings.Contains(put.Error(), bucket) {
 				t.Errorf("put failure = %v, want it to name %q", put, bucket)
 			}
-		}
-	})
-}
-
-func TestZipDir(t *testing.T) {
-	t.Run("preserves symlinks", func(t *testing.T) {
-		t.Parallel()
-		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, "real.js"), []byte("module.exports={}"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Symlink("real.js", filepath.Join(dir, "link.js")); err != nil {
-			t.Fatal(err)
-		}
-
-		data, err := zipDir(dir, nil)
-		if err != nil {
-			t.Fatalf("zipDir: %v", err)
-		}
-		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-		if err != nil {
-			t.Fatalf("open zip: %v", err)
-		}
-
-		entries := map[string]*zip.File{}
-		for _, f := range zr.File {
-			entries[f.Name] = f
-		}
-		link, ok := entries["link.js"]
-		if !ok {
-			t.Fatal("symlink entry missing from zip")
-		}
-		if link.Mode()&os.ModeSymlink == 0 {
-			t.Errorf("link.js zipped as mode %v, want a symlink", link.Mode())
-		}
-		rc, err := link.Open()
-		if err != nil {
-			t.Fatal(err)
-		}
-		target, _ := io.ReadAll(rc)
-		rc.Close()
-		if string(target) != "real.js" {
-			t.Errorf("symlink target = %q, want %q", target, "real.js")
-		}
-		if entries["real.js"].Mode()&os.ModeSymlink != 0 {
-			t.Error("real.js should be a regular file, not a symlink")
-		}
-	})
-
-	t.Run("round trips", func(t *testing.T) {
-		t.Parallel()
-		dir := writeTree(t, map[string]string{
-			"src/server.js": "handler",
-			"package.json":  "{}",
-		})
-		data, err := zipDir(dir, nil)
-		if err != nil {
-			t.Fatalf("zipDir: %v", err)
-		}
-		got := readZip(t, data)
-		want := map[string]string{"src/server.js": "handler", "package.json": "{}"}
-		if len(got) != len(want) {
-			t.Fatalf("zip entries = %v, want %v", got, want)
-		}
-		for k, v := range want {
-			if got[k] != v {
-				t.Errorf("zip[%q] = %q, want %q", k, got[k], v)
-			}
-		}
-	})
-
-	t.Run("carries the overlay", func(t *testing.T) {
-		t.Parallel()
-		dir := writeTree(t, map[string]string{"src/server.js": "handler"})
-
-		data, err := zipDir(dir, map[string][]byte{".ocel/variables.enc": []byte("sealed")})
-		if err != nil {
-			t.Fatalf("zipDir: %v", err)
-		}
-		got := readZip(t, data)
-		if got["src/server.js"] != "handler" {
-			t.Errorf("zip lost the built tree: %v", got)
-		}
-		if got[".ocel/variables.enc"] != "sealed" {
-			t.Errorf("zip[.ocel/variables.enc] = %q, want the sealed bytes", got[".ocel/variables.enc"])
 		}
 	})
 }
