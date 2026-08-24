@@ -13,9 +13,11 @@ export interface AwsProviderOptions {
   transforms?: readonly string[];
   /**
    * Certificates to serve a hostname with, keyed by hostname, valued by the
-   * ARN of an already-issued ACM certificate. Every hostname served by an edge
-   * that terminates TLS in your account needs one here; ocel issues none of its
-   * own, and refuses a hostname it finds no certificate for.
+   * ARN of an already-issued ACM certificate. Optional: a hostname listed here
+   * is served with the certificate you name, and one that is not gets an ACM
+   * certificate ocel requests, validates through DNS and deletes again once
+   * nothing it serves is left. A certificate you pin is never requested,
+   * renewed or deleted here.
    */
   certificates?: Record<string, string>;
 }
