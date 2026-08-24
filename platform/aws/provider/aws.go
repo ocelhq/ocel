@@ -233,15 +233,14 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 
 		Tags: &tagclock.Sweeper{Dynamo: dynamodb.NewFromConfig(p.aws), Table: held.StateTable},
 
-		Class:              scope.Class,
-		Slug:               scope.Slug,
-		Env:                scope.Env,
-		StateTable:         held.StateTable,
-		StateTableARN:      stateTableARN(p.aws.Region, account, held.StateTable),
-		VarsKeyARN:         held.VarsKeyARN,
-		AppBoundaryARN:     held.AppBoundaryARN,
-		VarsSiblingClasses: []string{bootstrap.ClassProduction, bootstrap.ClassPreview},
-		VarsReferenced:     referenced,
+		Class:          scope.Class,
+		Slug:           scope.Slug,
+		Env:            scope.Env,
+		StateTable:     held.StateTable,
+		StateTableARN:  stateTableARN(p.aws.Region, account, held.StateTable),
+		VarsKeyARN:     held.VarsKeyARN,
+		AppBoundaryARN: held.AppBoundaryARN,
+		VarsReferenced: referenced,
 
 		ArtifactRoot:       filepath.Join(root, artifactRootDirName),
 		ArtifactBucket:     held.ArtifactBucket,

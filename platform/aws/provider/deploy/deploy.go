@@ -32,13 +32,12 @@ type Config struct {
 
 	RequiredFeatures []string
 
-	StateTable         string
-	StateTableARN      string
-	VarsKeyARN         string
-	AppBoundaryARN     string
-	Class              providerkit.Class
-	VarsSiblingClasses []string
-	VarsReferenced     map[values.Coordinate]string
+	StateTable     string
+	StateTableARN  string
+	VarsKeyARN     string
+	AppBoundaryARN string
+	Class          providerkit.Class
+	VarsReferenced map[values.Coordinate]string
 
 	ArtifactRoot   string
 	ArtifactBucket string

@@ -179,8 +179,8 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 			links := []*linksv1.Link{{Name: "bucket--uploads", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "b"}}, Grants: []*linksv1.Grant{tc.grant}}}
 
 			var unscoped *UnscopedGrantError
-			if err := CheckLinkGrants(links); !errors.As(err, &unscoped) {
-				t.Fatalf("checkLinkGrants = %v, want an *UnscopedGrantError", err)
+			if err := VerifyGrants(plannedLinks(links)[0]); !errors.As(err, &unscoped) {
+				t.Fatalf("VerifyGrants = %v, want an *UnscopedGrantError", err)
 			}
 			if unscoped.Link != "bucket--uploads" {
 				t.Errorf("Link = %q, want bucket--uploads", unscoped.Link)
@@ -194,8 +194,10 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 	t.Run("scoped grants pass", func(t *testing.T) {
 		t.Parallel()
 
-		if err := CheckLinkGrants(grantsLinks()); err != nil {
-			t.Fatalf("checkLinkGrants = %v, want nil", err)
+		for _, link := range plannedLinks(grantsLinks()) {
+			if err := VerifyGrants(link); err != nil {
+				t.Fatalf("VerifyGrants(%s) = %v, want nil", link.Name, err)
+			}
 		}
 	})
 }
