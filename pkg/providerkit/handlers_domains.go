@@ -59,15 +59,16 @@ func (d *hostnames) add(ctx context.Context, report Reporter) error {
 			"this project does not declare %q: add it to domains.production and run this again — no command edits the config, which declares %s",
 			d.host, strings.Join(d.configured, ", "))
 	}
-	targets := d.addTargets()
-	if len(targets) == 0 {
-		report.Say(fmt.Sprintf("Every hostname this project declares is already served: %s", strings.Join(d.configured, ", ")))
-		return nil
-	}
-	for _, host := range targets {
-		if err := d.settleHost(ctx, host, report); err != nil {
+	var settledAny bool
+	for _, host := range d.addTargets() {
+		changed, err := d.settleHost(ctx, host, report)
+		if err != nil {
 			return err
 		}
+		settledAny = settledAny || changed
+	}
+	if !settledAny && d.host == "" {
+		report.Say(fmt.Sprintf("Every hostname this project declares is already served: %s", strings.Join(d.configured, ", ")))
 	}
 	return nil
 }
@@ -76,57 +77,55 @@ func (d *hostnames) addTargets() []string {
 	if d.host != "" {
 		return []string{d.host}
 	}
-	var hosts []string
-	for _, host := range d.configured {
-		if !d.state.Ready(host, d.settle.kind) {
-			hosts = append(hosts, host)
-		}
-	}
-	return hosts
+	return d.configured
 }
 
-func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter) error {
+func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter) (bool, error) {
 	settled := d.state.Host(host)
 	serving := settled.Serving()
+	held := settled.Certificate.ARN
 
 	if err := d.certify(ctx, host, &settled, report); err != nil {
-		return err
+		return false, err
+	}
+	if d.state.Ready(host, d.settle.kind) && settled.Certificate.ARN == held {
+		return false, nil
 	}
 
 	report.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.settle.kind))
 	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate.ARN}); err != nil {
-		return err
+		return true, err
 	}
 	if err := d.checkpoint(ctx); err != nil {
-		return err
+		return true, err
 	}
 
 	records, err := d.settle.recordsFor(d.stack.State(), host)
 	if err != nil {
-		return err
+		return true, err
 	}
 	written, err := d.settle.write(ctx, records,
 		fmt.Sprintf("Point %s at the %s edge", host, d.settle.kind), report.Say)
 	settled.Written, settled.Owed = written.Written, written.Owed
 	d.state.Settle(host, settled)
 	if cerr := d.checkpoint(ctx); cerr != nil {
-		return errors.Join(err, cerr)
+		return true, errors.Join(err, cerr)
 	}
 	if err != nil {
-		return err
+		return true, err
 	}
 
 	probe, err := d.settle.await(ctx, host, report.Say)
 	settled.Probe = probe
 	d.state.Settle(host, settled)
 	if cerr := d.checkpoint(ctx); cerr != nil {
-		return errors.Join(err, cerr)
+		return true, errors.Join(err, cerr)
 	}
 	if err != nil {
-		return err
+		return true, err
 	}
 	report.Say(fmt.Sprintf("%s is served by the %s edge", host, d.settle.kind))
-	return d.retire(ctx, host, serving, report)
+	return true, d.retire(ctx, host, serving, report)
 }
 
 func (d *hostnames) certify(ctx context.Context, host string, settled *Settled, report Reporter) error {
