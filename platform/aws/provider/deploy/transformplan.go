@@ -23,7 +23,7 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 		name := resource.Name
 		switch resource.Type {
 		case providerkit.LinkPostgres:
-			args := translatePostgres(postgresConfig(resource))
+			args := translatePostgres(resource.Postgres)
 			req.Resources = append(req.Resources, transform.Resource{
 				Type: "postgres", Name: name, Surfaces: postgresSurfaces(args),
 			})
@@ -33,7 +33,7 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 				return err
 			}})
 		case providerkit.LinkBucket:
-			args := translateBucket(bucketConfig(resource))
+			args := translateBucket(resource.Bucket)
 			req.Resources = append(req.Resources, transform.Resource{
 				Type: "bucket", Name: name, Surfaces: bucketSurfaces(args),
 			})

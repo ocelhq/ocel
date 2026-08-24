@@ -8,7 +8,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func masterUserSecret(args pulumi.MockResourceArgs) resource.PropertyMap {
@@ -26,7 +26,7 @@ func masterUserSecret(args pulumi.MockResourceArgs) resource.PropertyMap {
 
 func TestPostgresComponentTags(t *testing.T) {
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		err := registerPostgres(ctx, "shop", "prod", "db--main", translatePostgres(&resourcesv1.PostgresConfig{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
+		err := registerPostgres(ctx, "shop", "prod", "db--main", translatePostgres(&providerkit.PostgresSpec{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
 		return err
 	}, masterUserSecret)
 
@@ -146,7 +146,7 @@ func TestTranslatePostgres(t *testing.T) {
 	t.Run("fixed serverless v2 defaults", func(t *testing.T) {
 		t.Parallel()
 
-		got := translatePostgres(&resourcesv1.PostgresConfig{Version: "15"})
+		got := translatePostgres(&providerkit.PostgresSpec{Version: "15"})
 
 		if got.Engine != "aurora-postgresql" {
 			t.Errorf("Engine = %q, want aurora-postgresql", got.Engine)
@@ -192,7 +192,7 @@ func TestTranslatePostgres(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := translatePostgres(&resourcesv1.PostgresConfig{Version: tc.version})
+			got := translatePostgres(&providerkit.PostgresSpec{Version: tc.version})
 			if got.EngineVersion != tc.want {
 				t.Errorf("EngineVersion = %q, want %q", got.EngineVersion, tc.want)
 			}

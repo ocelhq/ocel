@@ -15,7 +15,6 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
@@ -171,10 +170,10 @@ func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan, work *inf
 		var err error
 		switch resource.Type {
 		case providerkit.LinkPostgres:
-			args := transformed.forPostgres(resource.Name, postgresConfig(resource))
+			args := transformed.forPostgres(resource.Name, resource.Postgres)
 			err = registerPostgres(pctx, project, env, resource.Name, args, vpc.Id, vpc.CidrBlock, subnets.Ids)
 		case providerkit.LinkBucket:
-			args := transformed.forBucket(resource.Name, bucketConfig(resource))
+			args := transformed.forBucket(resource.Name, resource.Bucket)
 			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
 		default:
 			return providerkit.Refuse(providerkit.CodeInvalid,
@@ -191,20 +190,6 @@ func provisionsBucket(plan providerkit.StackPlan) bool {
 	return slices.ContainsFunc(plan.Resources, func(resource providerkit.Resource) bool {
 		return resource.Type == providerkit.LinkBucket && !resource.Linked
 	})
-}
-
-func postgresConfig(resource providerkit.Resource) *resourcesv1.PostgresConfig {
-	if resource.Postgres == nil {
-		return nil
-	}
-	return &resourcesv1.PostgresConfig{Version: resource.Postgres.Version}
-}
-
-func bucketConfig(resource providerkit.Resource) *resourcesv1.BucketConfig {
-	if resource.Bucket == nil {
-		return nil
-	}
-	return &resourcesv1.BucketConfig{AllowedOrigins: resource.Bucket.AllowedOrigins}
 }
 
 func (r *release) Configure(_ context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error) {
