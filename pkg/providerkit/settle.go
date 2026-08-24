@@ -30,19 +30,22 @@ type settler struct {
 	ask      func(headline string, records []edge.Record, notes ...string)
 }
 
-func newSettler(front edge.Edge, writer edge.DNSWriter, zone string, state func() edge.StackState) settler {
-	unbound := front.Facts().ServesUnbound
+func newSettler(front edge.Edge, writer edge.DNSWriter, zone string, resolve Resolver) settler {
 	return settler{
 		kind:     front.Kind(),
-		unbound:  unbound,
+		unbound:  front.Facts().ServesUnbound,
 		writer:   writer,
 		zone:     zone,
-		resolve:  boundResolver{kind: front.Kind(), unbound: unbound, state: state},
+		resolve:  resolve,
 		attempts: settleAttempts,
 		wait:     settleWait,
 		sleep:    sleep,
 		now:      time.Now,
 	}
+}
+
+func boundBy(front edge.Edge, state func() edge.StackState) Resolver {
+	return boundResolver{kind: front.Kind(), unbound: front.Facts().ServesUnbound, state: state}
 }
 
 // TODO(#390): stands in for the prober the edge lands, which asks the hostname itself
