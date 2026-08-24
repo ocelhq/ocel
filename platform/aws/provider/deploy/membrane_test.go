@@ -5,50 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 )
-
-func membraneManifest() *contractv1.Manifest {
-	return &contractv1.Manifest{
-		Resources: []*contractv1.ManifestResource{
-			{
-				LogicalName: "database--main",
-				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"},
-				Config:      &contractv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
-			},
-			{
-				LogicalName: "bucket--uploads",
-				Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads"},
-				Config:      &contractv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
-			},
-		},
-	}
-}
-
-func TestAppCrossesMembrane(t *testing.T) {
-	t.Parallel()
-
-	manifest := membraneManifest()
-	manifest.Usages = []*contractv1.ManifestUsage{
-		{App: "web", Resource: "bucket--uploads"},
-		{App: "web", Resource: "database--main"},
-		{App: "worker", Resource: "database--main"},
-	}
-
-	if !appCrossesMembrane(manifest, "web") {
-		t.Error("an app that links a bucket reaches it through the membrane")
-	}
-	if appCrossesMembrane(manifest, "worker") {
-		t.Error("an app that links only postgres reaches it directly, so it is told nothing about the membrane's state")
-	}
-	if appCrossesMembrane(manifest, "docs") {
-		t.Error("an app that links nothing reaches nothing through the membrane")
-	}
-}
 
 func membranePlan() providerkit.StackPlan {
 	return providerkit.StackPlan{Resources: []providerkit.Resource{
@@ -112,35 +72,36 @@ func TestCheckMembraneServices(t *testing.T) {
 	})
 }
 
-func TestCompletesUploads(t *testing.T) {
+func TestProvisionsBucket(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a bucket of ours completes its own uploads", func(t *testing.T) {
 		t.Parallel()
 
-		if !completesUploads(membraneManifest()) {
-			t.Error("completesUploads = false, want true for a bucket this deploy provisions")
+		if !provisionsBucket(membranePlan()) {
+			t.Error("provisionsBucket = false, want true for a bucket this deploy provisions")
 		}
 	})
 
 	t.Run("postgres alone completes nothing", func(t *testing.T) {
 		t.Parallel()
 
-		manifest := &contractv1.Manifest{Resources: membraneManifest().GetResources()[:1]}
+		plan := membranePlan()
+		plan.Resources = plan.Resources[:1]
 
-		if completesUploads(manifest) {
-			t.Error("completesUploads = true, want false where no bucket is ours")
+		if provisionsBucket(plan) {
+			t.Error("provisionsBucket = true, want false where no bucket is ours")
 		}
 	})
 
 	t.Run("a linked bucket completes uploads of its own", func(t *testing.T) {
 		t.Parallel()
 
-		manifest := membraneManifest()
-		manifest.Resources[1].Linked = true
+		plan := membranePlan()
+		plan.Resources[1].Linked = true
 
-		if completesUploads(manifest) {
-			t.Error("completesUploads = true, want false for a bucket handed to us")
+		if provisionsBucket(plan) {
+			t.Error("provisionsBucket = true, want false for a bucket handed to us")
 		}
 	})
 }

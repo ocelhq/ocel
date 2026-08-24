@@ -9,6 +9,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
 func edgeAppTree(t *testing.T) string {
@@ -174,9 +175,23 @@ func edgeVarsManifest(variables ...*contractv1.ManifestVariable) *contractv1.Man
 
 func edgeBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBuilds {
 	t.Helper()
-	bundles, err := renderAppBundles(liveConfig(), manifest, nil)
-	if err != nil {
-		t.Fatalf("renderAppBundles: %v", err)
+	bundles := map[string]appBundle{}
+	for _, app := range manifestApps(manifest) {
+		sensitive := map[string]string{}
+		var keys []live.Key
+		for _, v := range app.GetVariables() {
+			switch v.GetClass() {
+			case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
+				sensitive[v.GetKey()] = v.GetValue()
+			case resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:
+				keys = append(keys, live.Key{Key: v.GetKey(), Folder: v.GetFolder()})
+			}
+		}
+		bundle, err := sealAppBundle(liveConfig(), manifest.GetSlug(), app.GetName(), sensitive, keys, nil)
+		if err != nil {
+			t.Fatalf("sealAppBundle(%s): %v", app.GetName(), err)
+		}
+		bundles[app.GetName()] = bundle
 	}
 	builds := appBuildsFor(t, cfg, manifest)
 	builds.baked = bundles

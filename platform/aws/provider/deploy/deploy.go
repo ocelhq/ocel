@@ -9,7 +9,6 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
@@ -125,14 +124,6 @@ func AppStages(provisioning Stage, manifest *contractv1.Manifest) (map[string]St
 		declared = append(declared, s)
 	}
 	return byApp, declared
-}
-
-type Progress func(phase progressv1.Phase, message string, current, total uint32)
-
-func (p Progress) report(phase progressv1.Phase, message string, current, total uint32) {
-	if p != nil {
-		p(phase, message, current, total)
-	}
 }
 
 func collectPostgresLink(ctx context.Context, secrets SecretsReader, name string, fields map[string]any) (*linksv1.Link, error) {

@@ -303,19 +303,17 @@ func TestRouterHostRefusesARoutedBuildThatWroteNoManifest(t *testing.T) {
 func TestAppEnvNamesTheEdgeKind(t *testing.T) {
 	t.Parallel()
 
-	manifest := &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{routedApp()}}
-
-	env := appEnv(manifest, routedApp(), appBundle{}, routedConfig(t, cloudfront.Kind), sessionScope{})
+	env := plannedEnv(t, routedConfig(t, cloudfront.Kind), routedApp(), fakeEdgeOf(cloudfront.Kind))
 	if env[edgeKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want the kind of edge the deploy chose", edgeKindEnv, env[edgeKindEnv])
 	}
 
-	behind := appEnv(manifest, routedApp(), appBundle{}, routedConfig(t, cloudflare.Kind), sessionScope{})
+	behind := plannedEnv(t, routedConfig(t, cloudflare.Kind), routedApp(), fakeEdgeOf(cloudflare.Kind))
 	if behind[edgeKindEnv] != string(cloudflare.Kind) {
 		t.Errorf("%s = %q, want the Cloudflare kind named too", edgeKindEnv, behind[edgeKindEnv])
 	}
 
-	none := appEnv(manifest, routedApp(), appBundle{}, Config{}, sessionScope{})
+	none := plannedEnv(t, Config{}, routedApp(), nil)
 	if _, named := none[edgeKindEnv]; named {
 		t.Errorf("%s = %q, want no kind where the deploy binds no edge", edgeKindEnv, none[edgeKindEnv])
 	}

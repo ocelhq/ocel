@@ -13,6 +13,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
+	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
 const (
@@ -90,48 +91,32 @@ func variable(key, value string, class resourcesv1.VariableClass) *contractv1.Ma
 	return &contractv1.ManifestVariable{Key: key, Class: class, Value: value}
 }
 
-func TestVariableEnv(t *testing.T) {
-	t.Parallel()
-
-	t.Run("only plain and under its bare key", func(t *testing.T) {
-		t.Parallel()
-
-		app := &contractv1.ManifestApp{
-			Name: "web",
-			Variables: []*contractv1.ManifestVariable{
-				variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-				variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
-				variable("WEBHOOK_SECRET", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
-			},
+func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links []live.Link) (appBundle, error) {
+	sensitive := map[string]string{}
+	var keys []live.Key
+	for _, v := range app.GetVariables() {
+		switch v.GetClass() {
+		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
+			sensitive[v.GetKey()] = v.GetValue()
+		case resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:
+			keys = append(keys, live.Key{Key: v.GetKey(), Folder: v.GetFolder()})
 		}
+	}
+	return sealAppBundle(cfg, slug, app.GetName(), sensitive, keys, links)
+}
 
-		env := variableEnv(app)
-		if got, want := env["POSTHOG_ID"], "ph-123"; got != want {
-			t.Errorf("POSTHOG_ID = %q, want %q", got, want)
+func renderAppBundles(cfg Config, manifest *contractv1.Manifest) (map[string]appBundle, error) {
+	bundles := map[string]appBundle{}
+	for _, app := range manifest.GetApps() {
+		bundle, err := renderAppBundle(cfg, manifest.GetSlug(), app, nil)
+		if err != nil {
+			return nil, err
 		}
-		if len(env) != 1 {
-			t.Errorf("env = %v, want the plaintext variable alone", env)
+		if bundle.Envelope != "" || bundle.hasLive() {
+			bundles[app.GetName()] = bundle
 		}
-		for _, raw := range env {
-			if strings.Contains(raw, "sk-live") {
-				t.Errorf("env = %v, must not carry an encrypted-class value", env)
-			}
-		}
-	})
-
-	t.Run("carries the app's folder binding", func(t *testing.T) {
-		t.Parallel()
-
-		bound := variableEnv(&contractv1.ManifestApp{Name: "admin", Folder: "/admin"})
-		if got, want := bound["OCEL_APP_FOLDER"], "/admin"; got != want {
-			t.Errorf("OCEL_APP_FOLDER = %q, want %q", got, want)
-		}
-
-		root := variableEnv(&contractv1.ManifestApp{Name: "web"})
-		if _, ok := root["OCEL_APP_FOLDER"]; ok {
-			t.Errorf("env = %v, want no binding at all: the root is the absence of one", root)
-		}
-	})
+	}
+	return bundles, nil
 }
 
 func TestFunctionEnvVariables(t *testing.T) {
@@ -494,39 +479,6 @@ func TestRenderBakedBundle(t *testing.T) {
 		}
 	})
 
-	t.Run("a class with no delivery fails the deploy", func(t *testing.T) {
-		t.Parallel()
-
-		for _, tc := range []struct {
-			name  string
-			class resourcesv1.VariableClass
-		}{
-			{"unspecified", resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED},
-			{"from a newer client", resourcesv1.VariableClass(99)},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-
-				app := &contractv1.ManifestApp{
-					Name: "web",
-					Variables: []*contractv1.ManifestVariable{
-						variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-						variable("WEBHOOK_SECRET", "whsec", tc.class),
-					},
-				}
-
-				_, err := renderAppBundle(liveConfig(), "shop", app, nil)
-				if err == nil {
-					t.Fatal("renderAppBundle = nil, want a class it cannot deliver refused")
-				}
-				for _, want := range []string{"web", "WEBHOOK_SECRET"} {
-					if !strings.Contains(err.Error(), want) {
-						t.Errorf("error does not name %q: %v", want, err)
-					}
-				}
-			})
-		}
-	})
 }
 
 func TestFingerprintValues(t *testing.T) {
@@ -620,7 +572,7 @@ func TestRenderBakedBundles(t *testing.T) {
 			},
 		}}
 
-		bundles, err := renderAppBundles(liveConfig(), manifest, nil)
+		bundles, err := renderAppBundles(liveConfig(), manifest)
 		if err != nil {
 			t.Fatalf("renderAppBundles: %v", err)
 		}

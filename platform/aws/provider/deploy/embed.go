@@ -73,25 +73,6 @@ func missingEmbedClients(cfg Config) string {
 	return strings.Join(missing, ", ")
 }
 
-func unzippedTreeBytes(dir string) (int64, error) {
-	if dir == "" {
-		return 0, fmt.Errorf("no artifact directory")
-	}
-	rels, err := walkRegularFiles(dir)
-	if err != nil {
-		return 0, err
-	}
-	var total int64
-	for _, rel := range rels {
-		info, err := os.Lstat(filepath.Join(dir, rel))
-		if err != nil {
-			return 0, err
-		}
-		total += info.Size()
-	}
-	return total, nil
-}
-
 type embedPass struct {
 	objects  ObjectGetter
 	uploader ArtifactUploader
