@@ -1,9 +1,11 @@
 import { defineConfig } from "ocel/config";
 import { cloudflare } from "ocel/edge";
 import awsProvider from "@ocel/provider-aws";
+import { cloudflareDns } from "ocel/dns";
 
 export default defineConfig({
-  slug: "e2e-31323687264-87121599",
+  slug: "nxtest",
   provider: awsProvider(),
   edge: cloudflare(),
+  dns: cloudflareDns(),
 });
