@@ -117,7 +117,7 @@ func routingFor(q ServingQuery) (*RoutingPlan, error) {
 	return &RoutingPlan{Entry: desc.Entry, Manifest: raw}, nil
 }
 
-func PlaceMembrane(ctx context.Context, source MembraneSource, store ArtifactStore, report Reporter) (ArtifactRef, error) {
+func PlaceMembrane(ctx context.Context, source MembraneSource, class Class, store ArtifactStore, report Reporter) (ArtifactRef, error) {
 	if source == nil {
 		return ArtifactRef{}, nil
 	}
@@ -130,7 +130,7 @@ func PlaceMembrane(ctx context.Context, source MembraneSource, store ArtifactSto
 			"this provider carries no membrane for an app's functions to boot through")
 	}
 	sum := sha256.Sum256(body)
-	ref := ArtifactRef{Bucket: StoreFunctions, Key: MembraneKey(hex.EncodeToString(sum[:]))}
+	ref := ArtifactRef{Class: class, Bucket: StoreFunctions, Key: MembraneKey(hex.EncodeToString(sum[:]))}
 	if held, err := store.Open(ctx, ref); err == nil {
 		return ref, held.Close()
 	}

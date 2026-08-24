@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
+	"sync"
 
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
@@ -18,51 +21,94 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
+type Scope struct {
+	Class providerkit.Class
+	Slug  string
+	Env   string
+}
+
+func scopeOf(ref providerkit.StackRef) Scope {
+	return Scope{Class: ref.Class, Slug: ref.Project, Env: ref.Name.Env}
+}
+
+type Resolver interface {
+	Release(ctx context.Context, scope Scope) (Config, error)
+}
+
+type ResolverFunc func(ctx context.Context, scope Scope) (Config, error)
+
+func (f ResolverFunc) Release(ctx context.Context, scope Scope) (Config, error) { return f(ctx, scope) }
+
 type Releaser struct {
-	cfg      Config
-	stacks   StackIndex
+	resolve  Resolver
 	realized *Realized
-	adapter  *kitpulumi.Adapter
+	engine   kitpulumi.Engine
 
 	served *servedApps
+
+	mu     sync.Mutex
+	opened map[Scope]*release
 }
 
-func NewReleaser(cfg Config, realized *Realized) *Releaser {
-	return newReleaser(cfg, realized, nil)
+type release struct {
+	*Releaser
+	cfg     Config
+	adapter *kitpulumi.Adapter
 }
 
-func newReleaser(cfg Config, realized *Realized, engine kitpulumi.Engine) *Releaser {
-	r := &Releaser{cfg: cfg, stacks: cfg.Stacks, realized: realized, served: newServedApps()}
-	r.adapter = kitpulumi.New(kitpulumi.Config{
+func NewReleaser(resolve Resolver, realized *Realized) *Releaser {
+	return newReleaser(resolve, realized, nil)
+}
+
+func newReleaser(resolve Resolver, realized *Realized, engine kitpulumi.Engine) *Releaser {
+	return &Releaser{
+		resolve:  resolve,
+		realized: realized,
+		engine:   engine,
+		served:   newServedApps(),
+		opened:   map[Scope]*release{},
+	}
+}
+
+func (r *Releaser) at(ctx context.Context, ref providerkit.StackRef) (*release, error) {
+	scope := scopeOf(ref)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if held, opened := r.opened[scope]; opened {
+		return held, nil
+	}
+	cfg, err := r.resolve.Release(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	held := &release{Releaser: r, cfg: cfg}
+	held.adapter = kitpulumi.New(kitpulumi.Config{
 		Access: kitpulumi.Access{
 			BackendURL: cfg.BackendURL,
 			Passphrase: cfg.Passphrase,
 			Project:    cfg.PulumiProject,
 			Env:        map[string]string{"AWS_REGION": cfg.Region},
 		},
-		Program: r,
-		Refresh: refreshPolicy(realized),
-		Engine:  engine,
+		Program: held,
+		Refresh: refreshPolicy(r.realized),
+		Engine:  r.engine,
 	})
-	return r
+	r.opened[scope] = held
+	return held, nil
 }
 
 func Serves() []providerkit.LinkType {
 	return []providerkit.LinkType{providerkit.LinkPostgres, providerkit.LinkBucket}
 }
 
-func EnsurePulumi(ctx context.Context, say func(string)) error {
-	return kitpulumi.Install(ctx, reporterFor(nil, StageID{}, say, nil))
-}
+const skipTeardownRefreshEnv = "OCEL_SKIP_TEARDOWN_REFRESH"
 
-func releaserFor(access PulumiAccess, stacks StackIndex, realized *Realized, engine kitpulumi.Engine) *Releaser {
-	return newReleaser(Config{
-		Region:        access.Region,
-		BackendURL:    access.BackendURL,
-		Passphrase:    access.Passphrase,
-		PulumiProject: access.PulumiProject,
-		Stacks:        stacks,
-	}, realized, engine)
+func skipTeardownRefresh() bool {
+	switch strings.ToLower(os.Getenv(skipTeardownRefreshEnv)) {
+	case "1", "true":
+		return true
+	}
+	return false
 }
 
 func refreshPolicy(realized *Realized) func(providerkit.StackRef, kitpulumi.Op) bool {
@@ -80,7 +126,7 @@ type stackWork struct {
 	outputs auto.OutputMap
 }
 
-func (r *Releaser) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
+func (r *release) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
 	switch work := plan.Options.(type) {
 	case *stackWork:
 		return work.program(pctx)
@@ -94,7 +140,7 @@ func (r *Releaser) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
 	return r.infra(pctx, plan)
 }
 
-func (r *Releaser) infra(pctx *sdk.Context, plan providerkit.StackPlan) error {
+func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan) error {
 	vpc, err := ec2.LookupVpc(pctx, &ec2.LookupVpcArgs{Default: sdk.BoolRef(true)})
 	if err != nil {
 		return fmt.Errorf("look up default VPC: %w", err)
@@ -157,7 +203,7 @@ func bucketConfig(resource providerkit.Resource) *resourcesv1.BucketConfig {
 	return &resourcesv1.BucketConfig{AllowedOrigins: resource.Bucket.AllowedOrigins}
 }
 
-func (r *Releaser) Configure(_ context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error) {
+func (r *release) Configure(_ context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error) {
 	tags := plan.Tags
 	if work, held := plan.Options.(*stackWork); held {
 		tags = work.tags
@@ -172,7 +218,7 @@ func (r *Releaser) Configure(_ context.Context, plan providerkit.StackPlan) (aut
 	return auto.ConfigMap{"aws:defaultTags": auto.ConfigValue{Value: string(encoded)}}, nil
 }
 
-func (r *Releaser) Decode(ctx context.Context, plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error) {
+func (r *release) Decode(ctx context.Context, plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error) {
 	if work, held := plan.Options.(*stackWork); held {
 		work.outputs = outputs
 		return providerkit.StackResult{}, nil
@@ -235,7 +281,7 @@ func linkOf(kind providerkit.LinkType, link *linksv1.Link) providerkit.Link {
 	}
 }
 
-func (r *Releaser) refuseHandover(ctx context.Context, plan providerkit.StackPlan) error {
+func (r *release) refuseHandover(ctx context.Context, plan providerkit.StackPlan) error {
 	var linked []providerkit.Resource
 	for _, resource := range plan.Resources {
 		if resource.Linked {
@@ -262,9 +308,15 @@ func (r *Releaser) refuseHandover(ctx context.Context, plan providerkit.StackPla
 }
 
 func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
-	if err := r.index(ctx, plan.Ref); err != nil {
+	held, err := r.at(ctx, plan.Ref)
+	if err != nil {
 		return providerkit.StackResult{}, err
 	}
+	return held.provision(ctx, plan, report)
+}
+
+func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+	r.realized.mark(naming.Sanitize(plan.Ref.Project), plan.Ref.Name)
 	if plan.Options == nil {
 		transformed, err := transformStackPlan(ctx, r.cfg.Transform, plan)
 		if err != nil {
@@ -286,37 +338,22 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 	return r.adapter.Run(ctx, plan, report)
 }
 
-type TagSweeper interface {
-	SweepTagClock(ctx context.Context, project string, stack naming.StackName) error
-}
-
 func (r *Releaser) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
-	index, err := stackIndex(r.stacks)
+	held, err := r.at(ctx, ref)
 	if err != nil {
 		return err
 	}
-	if err := r.adapter.Destroy(ctx, ref, report); err != nil {
+	if err := held.adapter.Destroy(ctx, ref, report); err != nil {
 		return err
 	}
-	project := naming.Sanitize(ref.Project)
-	if sweeper, sweeps := index.(TagSweeper); sweeps {
-		if err := sweeper.SweepTagClock(ctx, project, ref.Name); err != nil {
-			return err
-		}
+	if held.cfg.Tags == nil {
+		return nil
 	}
-	return index.RemoveStack(ctx, project, ref.Name)
-}
-
-func (r *Releaser) index(ctx context.Context, ref providerkit.StackRef) error {
-	index, err := stackIndex(r.stacks)
-	if err != nil {
-		return err
-	}
-	return r.realized.realize(ctx, index, naming.Sanitize(ref.Project), ref.Name)
+	return held.cfg.Tags.SweepTagClock(ctx, naming.Sanitize(ref.Project), ref.Name)
 }
 
 func (r *Releaser) Inspect(ctx context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
-	outputs, err := r.adapter.Outputs(ctx, ref, nil)
+	outputs, err := r.Outputs(ctx, ref, nil)
 	if err != nil {
 		return providerkit.StackState{}, err
 	}
@@ -324,21 +361,11 @@ func (r *Releaser) Inspect(ctx context.Context, ref providerkit.StackRef) (provi
 }
 
 func (r *Releaser) Outputs(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (auto.OutputMap, error) {
-	return r.adapter.Outputs(ctx, ref, report)
-}
-
-func (r *Releaser) up(
-	ctx context.Context,
-	ref providerkit.StackRef,
-	tags map[string]string,
-	program sdk.RunFunc,
-	report providerkit.Reporter,
-) (auto.OutputMap, error) {
-	work := &stackWork{program: program, tags: tags}
-	if _, err := r.Provision(ctx, providerkit.StackPlan{Ref: ref, Options: work}, report); err != nil {
+	held, err := r.at(ctx, ref)
+	if err != nil {
 		return nil, err
 	}
-	return work.outputs, nil
+	return held.adapter.Outputs(ctx, ref, report)
 }
 
 var _ providerkit.Releaser = (*Releaser)(nil)

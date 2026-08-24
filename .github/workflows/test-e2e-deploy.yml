@@ -95,7 +95,7 @@ jobs:
         working-directory: adapter
         run: |
           node scripts/build-native.mjs --host --target cli
-          node scripts/build-native.mjs --host --target provider --version "0.0.0-e2e.${{ github.run_number }}"
+          node scripts/build-native.mjs --host --target provider-aws --version "0.0.0-e2e.${{ github.run_number }}"
 
       - name: Build the ocel sidecar
         working-directory: adapter

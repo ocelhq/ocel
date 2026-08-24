@@ -3,6 +3,8 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -132,6 +134,14 @@ func (b appBuilds) recordBuildID(cfg Config, app *contractv1.ManifestApp) error 
 	}
 	b.ids[name] = id
 	return nil
+}
+
+func newRandomID() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("mint random id: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 func appBuildID(cfg Config, app *contractv1.ManifestApp) (string, error) {

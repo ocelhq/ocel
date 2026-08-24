@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +12,24 @@ function exeName(name, goos) {
   return goos === "windows" ? `${name}.exe` : name;
 }
 
+function providerTargets() {
+  const platform = join(REPO_ROOT, "platform");
+  const found = {};
+  for (const entry of readdirSync(platform, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const goModuleDir = join(platform, entry.name, "provider");
+    if (!existsSync(join(goModuleDir, "cmd", "deploy"))) continue;
+    found[`provider-${entry.name}`] = {
+      goModuleDir,
+      pkgPrefix: `provider-${entry.name}`,
+      versionLdflagPkg: "main",
+      generate: true,
+      binaries: [{ cmd: "./cmd/deploy", name: "deploy" }],
+    };
+  }
+  return found;
+}
+
 const TARGETS = {
   cli: {
     goModuleDir: join(REPO_ROOT, "cli"),
@@ -20,13 +38,7 @@ const TARGETS = {
     generate: true,
     binaries: [{ cmd: "./ocel", name: "ocel" }],
   },
-  provider: {
-    goModuleDir: join(REPO_ROOT, "platform", "aws", "provider"),
-    pkgPrefix: "provider-aws",
-    versionLdflagPkg: "main",
-    generate: true,
-    binaries: [{ cmd: "./cmd/deploy", name: "deploy" }],
-  },
+  ...providerTargets(),
 };
 
 const PLATFORM_MATRIX = [
@@ -83,7 +95,7 @@ function parseArgs(argv) {
   }
   if (!TARGETS[args.target]) {
     throw new Error(
-      `Unknown --target: ${args.target} (expected cli or provider)`,
+      `Unknown --target: ${args.target} (expected one of ${Object.keys(TARGETS).join(", ")})`,
     );
   }
   return args;

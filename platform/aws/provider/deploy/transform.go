@@ -1,12 +1,10 @@
 package deploy
 
 import (
-	"context"
 	"fmt"
 	"math"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 )
 
@@ -19,93 +17,6 @@ type transformedArgs struct {
 type transformCandidate struct {
 	name  string
 	apply func(*transformedArgs, transform.Result) error
-}
-
-func resolveTransforms(ctx context.Context, cfg Config, manifest *contractv1.Manifest) (*transformedArgs, error) {
-	if cfg.Transform == nil {
-		return nil, nil
-	}
-
-	req := transform.Request{EnvClass: envClass(cfg.Tier), Env: cfg.Env}
-	var candidates []transformCandidate
-
-	for _, r := range manifest.GetResources() {
-		name := r.GetLogicalName()
-		switch {
-		case r.GetPostgres() != nil:
-			args := translatePostgres(r.GetPostgres())
-			req.Resources = append(req.Resources, transform.Resource{
-				Type: "postgres", Name: name, Surfaces: postgresSurfaces(args),
-			})
-			candidates = append(candidates, transformCandidate{name: name, apply: func(out *transformedArgs, result transform.Result) error {
-				applied, err := applyPostgresSurfaces(args, result)
-				out.postgres[name] = applied
-				return err
-			}})
-		case r.GetBucket() != nil:
-			args := translateBucket(r.GetBucket())
-			req.Resources = append(req.Resources, transform.Resource{
-				Type: "bucket", Name: name, Surfaces: bucketSurfaces(args),
-			})
-			candidates = append(candidates, transformCandidate{name: name, apply: func(out *transformedArgs, result transform.Result) error {
-				applied, err := applyBucketSurfaces(args, result)
-				out.buckets[name] = applied
-				return err
-			}})
-		}
-	}
-
-	for _, fn := range manifest.GetFunctions() {
-		name := fn.GetLogicalName()
-		args := translateFunction(fn)
-		req.Resources = append(req.Resources, transform.Resource{
-			Type: "function", Name: name, App: fn.GetApp(), Surfaces: functionSurfaces(args),
-		})
-		candidates = append(candidates, transformCandidate{name: name, apply: func(out *transformedArgs, result transform.Result) error {
-			applied, err := applyFunctionSurfaces(args, result)
-			out.functions[name] = applied
-			return err
-		}})
-	}
-
-	results, err := cfg.Transform.Evaluate(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	if results == nil {
-		return nil, nil
-	}
-	if len(results) != len(candidates) {
-		return nil, fmt.Errorf("transforms returned %d results for %d resources", len(results), len(candidates))
-	}
-	placed, err := resolveOutputs(ctx, cfg, manifest, candidates, results)
-	if err != nil {
-		return nil, err
-	}
-
-	out := &transformedArgs{
-		functions: map[string]functionArgs{},
-		buckets:   map[string]bucketArgs{},
-		postgres:  map[string]postgresArgs{},
-	}
-	for i, c := range candidates {
-		if err := c.apply(out, results[i]); err != nil {
-			if named := nameOutputBehind(placed, c.name, err); named != nil {
-				return nil, named
-			}
-			return nil, fmt.Errorf("transform %s: %w", c.name, err)
-		}
-	}
-	return out, nil
-}
-
-func (t *transformedArgs) forFunction(fn *contractv1.ManifestFunction) functionArgs {
-	if t != nil {
-		if args, ok := t.functions[fn.GetLogicalName()]; ok {
-			return args
-		}
-	}
-	return translateFunction(fn)
 }
 
 func (t *transformedArgs) forBucket(logicalName string, cfg *resourcesv1.BucketConfig) bucketArgs {

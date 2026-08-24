@@ -18,10 +18,11 @@ type ArtifactStore interface {
 
 	Open(ctx context.Context, ref ArtifactRef) (io.ReadCloser, error)
 
-	RemovePrefix(ctx context.Context, prefix string, report Reporter) error
+	RemovePrefix(ctx context.Context, class Class, prefix string, report Reporter) error
 }
 
 type ArtifactRef struct {
+	Class  Class  `json:"class,omitempty"`
 	Bucket string `json:"bucket,omitempty"`
 	Key    string `json:"key,omitempty"`
 }
@@ -53,7 +54,7 @@ func (r *deployRun) upload(ctx context.Context, report Reporter) error {
 	if !carries {
 		return nil
 	}
-	ref, err := PlaceMembrane(ctx, source, r.provider.Artifacts(), report)
+	ref, err := PlaceMembrane(ctx, source, r.plan.Class, r.provider.Artifacts(), report)
 	if err != nil {
 		return err
 	}
@@ -79,7 +80,7 @@ func (r *deployRun) put(
 	}
 	coordinate := r.plan.coordinate(entry.App, entry.Build.Release())
 	coordinate.Name = name
-	ref := ArtifactRef{Bucket: StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)}
+	ref := ArtifactRef{Class: r.plan.Class, Bucket: StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)}
 
 	body, err := os.Open(path)
 	if err != nil {

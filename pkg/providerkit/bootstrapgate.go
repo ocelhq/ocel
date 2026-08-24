@@ -109,7 +109,7 @@ func (g Gate) Apply(ctx context.Context, class Class, req ApplyRequest, report R
 		return err
 	}
 	drop := featureDrop(catalogue, standing.Features, requested)
-	if err := g.admitDrops(ctx, drop, req.Force); err != nil {
+	if err := g.admitDrops(ctx, class, drop, req.Force); err != nil {
 		return err
 	}
 	ordered, err := featureDeleteOrder(catalogue, drop)
@@ -126,13 +126,14 @@ func (g Gate) Apply(ctx context.Context, class Class, req ApplyRequest, report R
 		Features:   requested,
 		Drop:       ordered,
 		Unattended: !req.AcceptReplacements,
+		Writer:     g.Writer,
 	}, report); err != nil {
 		return err
 	}
 	if err := g.RecordBootstrap(ctx, class, BootstrapState{AutoHeal: autoHeal}); err != nil {
 		return err
 	}
-	return EnsureRecordSchema(ctx, g.Records)
+	return EnsureRecordSchema(ctx, g.Records, class)
 }
 
 func (g Gate) Remove(ctx context.Context, class Class, report Reporter) error {
@@ -153,11 +154,11 @@ func (g Gate) Vacant(ctx context.Context, class Class) error {
 	return occupancy.Refuse(class)
 }
 
-func (g Gate) admitDrops(ctx context.Context, drop []string, force bool) error {
+func (g Gate) admitDrops(ctx context.Context, class Class, drop []string, force bool) error {
 	if len(drop) == 0 || force {
 		return nil
 	}
-	recorded, err := g.RecordedFeatures(ctx)
+	recorded, err := g.RecordedFeatures(ctx, class)
 	if err != nil {
 		return err
 	}
@@ -170,21 +171,21 @@ func (g Gate) admitDrops(ctx context.Context, drop []string, force bool) error {
 		strings.Join(drop, ", "), len(dependents), strings.Join(dependents, ", "))
 }
 
-func (g Gate) RecordedFeatures(ctx context.Context) (map[string][]string, error) {
-	held, err := g.Records.List(ctx, ProjectsRecord())
+func (g Gate) RecordedFeatures(ctx context.Context, class Class) (map[string][]string, error) {
+	held, err := g.Records.List(ctx, ProjectsRecord(class))
 	if err != nil {
 		return nil, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	recorded := map[string][]string{}
 	for _, record := range held {
-		if len(record.Name) != 2 || len(record.Bytes) == 0 {
+		if len(record.Name) != 3 || len(record.Bytes) == 0 {
 			continue
 		}
 		var project Project
 		if err := json.Unmarshal(record.Bytes, &project); err != nil {
 			return nil, fmt.Errorf("read %s's record: %w", record.Name, err)
 		}
-		recorded[record.Name[1]] = project.Features
+		recorded[record.Name[2]] = project.Features
 	}
 	return recorded, nil
 }
@@ -259,6 +260,7 @@ func (g Gate) heal(ctx context.Context, standing Standing, required []string, re
 		Features:   standing.Features,
 		Unattended: true,
 		Heal:       true,
+		Writer:     g.Writer,
 	}, report)
 	var refusal Refusal
 	if errors.As(err, &refusal) && refusal.Code == CodeDenied {
@@ -308,16 +310,16 @@ type Occupancy struct {
 }
 
 func (g Gate) Occupancy(ctx context.Context, class Class) (Occupancy, error) {
-	held, err := g.Records.List(ctx, ProjectsRecord())
+	held, err := g.Records.List(ctx, ProjectsRecord(class))
 	if err != nil {
 		return Occupancy{}, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	var projects []string
 	for _, record := range held {
-		if len(record.Name) < 2 || record.Name[1] == "" {
+		if len(record.Name) < 3 || record.Name[2] == "" {
 			continue
 		}
-		projects = append(projects, record.Name[1])
+		projects = append(projects, record.Name[2])
 	}
 	slices.Sort(projects)
 	occupancy := Occupancy{Projects: slices.Compact(projects)}

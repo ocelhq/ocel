@@ -26,6 +26,7 @@ func plannedAppStack(t *testing.T) (Config, providerkit.StackPlan) {
 	plan := providerkit.StackPlan{
 		Ref:  providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack},
 		Kind: providerkit.StackApp,
+		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &providerkit.AppPlan{
 			App:        "web",
 			Framework:  frameworkNext,
@@ -49,7 +50,7 @@ func TestAnAppStackStandsUpFromThePlanAlone(t *testing.T) {
 	t.Parallel()
 
 	cfg, plan := plannedAppStack(t)
-	release := NewReleaser(cfg, &Realized{})
+	release := releasing(t, cfg)
 	work, err := release.appWork(plan, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
@@ -90,7 +91,7 @@ func TestThePlannedAppBootsThroughTheMembraneItWasHandedAndNoOther(t *testing.T)
 	t.Parallel()
 
 	cfg, plan := plannedAppStack(t)
-	release := NewReleaser(cfg, &Realized{})
+	release := releasing(t, cfg)
 	work, err := release.appWork(plan, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
@@ -112,7 +113,7 @@ func TestAPlannedAppWithNoISRAsksForNoRevalidationLedger(t *testing.T) {
 
 	cfg, plan := plannedAppStack(t)
 	plan.App.ISR = nil
-	release := NewReleaser(cfg, &Realized{})
+	release := releasing(t, cfg)
 	work, err := release.appWork(plan, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
@@ -127,14 +128,14 @@ func TestAPlannedAppGuardsItsOriginOnlyWithASecretToDemand(t *testing.T) {
 
 	cfg, plan := plannedAppStack(t)
 	plan.App.Guard = &providerkit.OriginGuard{Entry: "fn--web--entry"}
-	release := NewReleaser(cfg, &Realized{})
+	release := releasing(t, cfg)
 
 	if _, err := release.appWork(plan, nil); err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
 		t.Fatalf("appWork() = %v, want it to say the bootstrap holds no origin secret", err)
 	}
 
 	cfg.OriginSecret = "s3cret"
-	work, err := NewReleaser(cfg, &Realized{}).appWork(plan, nil)
+	work, err := releasing(t, cfg).appWork(plan, nil)
 	if err != nil {
 		t.Fatalf("appWork() with a secret = %v", err)
 	}
@@ -156,7 +157,7 @@ func TestAPlannedAppTakesItsGrantsFromTheLinksItWasGranted(t *testing.T) {
 			Resources: []string{"arn:aws:s3:::uploads/*"},
 		}},
 	}}
-	work, err := NewReleaser(cfg, &Realized{}).appWork(plan, nil)
+	work, err := releasing(t, cfg).appWork(plan, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -171,7 +172,7 @@ func TestAPlannedAppTakesItsGrantsFromTheLinksItWasGranted(t *testing.T) {
 func TestAnAppStackWhosePlanCarriesNoAppIsRefusedRatherThanStoodUpEmpty(t *testing.T) {
 	t.Parallel()
 
-	release := NewReleaser(Config{}, &Realized{})
+	release := releasing(t, Config{})
 	plan := providerkit.StackPlan{
 		Ref:  providerkit.StackRef{Project: "shop", Name: naming.AppStack("prod", "web", naming.NewRelease("d1", ""))},
 		Kind: providerkit.StackApp,
@@ -187,7 +188,7 @@ func TestTheWarmerAndTheEmbedderReachTheFunctionsThePlanStoodUp(t *testing.T) {
 	t.Parallel()
 
 	cfg, plan := plannedAppStack(t)
-	release := NewReleaser(cfg, &Realized{})
+	release := releasing(t, cfg)
 	if _, err := release.appWork(plan, nil); err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}

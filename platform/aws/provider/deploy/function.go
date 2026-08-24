@@ -402,7 +402,7 @@ func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, byte
 		role.ValuesTableARN = cfg.StateTableARN
 		role.VarsReferenced = bundle.Referenced
 		role.Slug = cfg.Slug
-		role.VarsClass = cfg.VarsClass
+		role.VarsClass = string(cfg.Class)
 	}
 	return role
 }

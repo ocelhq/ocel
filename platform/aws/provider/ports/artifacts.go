@@ -25,20 +25,45 @@ type S3API interface {
 type Artifacts struct {
 	S3 S3API
 
+	Stores Stores
+}
+
+type Stores interface {
+	Buckets(ctx context.Context, class kit.Class) (Buckets, error)
+}
+
+type Buckets struct {
 	Functions string
 	Assets    string
 	Cache     string
 }
 
-func (a Artifacts) bucket(store string) (string, error) {
+func (b Buckets) Buckets(context.Context, kit.Class) (Buckets, error) { return b, nil }
+
+func (a Artifacts) buckets(ctx context.Context, class kit.Class) (Buckets, error) {
+	if class == "" {
+		return Buckets{}, kit.Refuse(kit.CodeInvalid,
+			"an artifact names no class, and this account keeps each class's artifacts in the bootstrap that owns them")
+	}
+	if a.Stores == nil {
+		return Buckets{}, nil
+	}
+	return a.Stores.Buckets(ctx, class)
+}
+
+func (a Artifacts) bucket(ctx context.Context, class kit.Class, store string) (string, error) {
+	held, err := a.buckets(ctx, class)
+	if err != nil {
+		return "", err
+	}
 	var name string
 	switch store {
 	case providerkit.StoreFunctions:
-		name = a.Functions
+		name = held.Functions
 	case providerkit.StoreAssets:
-		name = a.Assets
+		name = held.Assets
 	case providerkit.StoreCache:
-		name = a.Cache
+		name = held.Cache
 	default:
 		return "", kit.Refuse(kit.CodeInvalid,
 			"this provider keeps no %q store; it keeps %q, %q and %q",
@@ -52,7 +77,7 @@ func (a Artifacts) bucket(store string) (string, error) {
 }
 
 func (a Artifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
-	bucket, err := a.bucket(ref.Bucket)
+	bucket, err := a.bucket(ctx, ref.Class, ref.Bucket)
 	if err != nil {
 		return err
 	}
@@ -75,7 +100,7 @@ func (a Artifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io
 }
 
 func (a Artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
-	bucket, err := a.bucket(ref.Bucket)
+	bucket, err := a.bucket(ctx, ref.Class, ref.Bucket)
 	if err != nil {
 		return nil, err
 	}
@@ -94,12 +119,16 @@ func (a Artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.Re
 	return out.Body, nil
 }
 
-func (a Artifacts) RemovePrefix(ctx context.Context, prefix string, report providerkit.Reporter) error {
+func (a Artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, prefix string, report providerkit.Reporter) error {
 	if prefix == "" {
 		return kit.Refuse(kit.CodeInvalid, "an empty prefix names every artifact this account keeps")
 	}
+	held, err := a.buckets(ctx, class)
+	if err != nil {
+		return err
+	}
 	var errs []error
-	for _, bucket := range []string{a.Functions, a.Assets, a.Cache} {
+	for _, bucket := range []string{held.Functions, held.Assets, held.Cache} {
 		if bucket == "" {
 			continue
 		}

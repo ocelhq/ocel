@@ -169,20 +169,22 @@ func (s *memoryStore) Open(_ context.Context, ref providerkit.ArtifactRef) (io.R
 	return io.NopCloser(bytes.NewReader(blob)), nil
 }
 
-func (s *memoryStore) RemovePrefix(context.Context, string, providerkit.Reporter) error { return nil }
+func (s *memoryStore) RemovePrefix(context.Context, providerkit.Class, string, providerkit.Reporter) error {
+	return nil
+}
 
 func TestTheMembraneIsPlacedOnceAndAddressedByItsContent(t *testing.T) {
 	store := &memoryStore{}
 	source := membraneCarrier{body: []byte("membrane")}
 
-	first, err := providerkit.PlaceMembrane(context.Background(), source, store, nil)
+	first, err := providerkit.PlaceMembrane(context.Background(), source, providerkit.ClassProduction, store, nil)
 	if err != nil {
 		t.Fatalf("PlaceMembrane() = %v", err)
 	}
 	if first.Bucket != providerkit.StoreFunctions {
 		t.Errorf("membrane placed in %q, want the %q store the functions read their code from", first.Bucket, providerkit.StoreFunctions)
 	}
-	second, err := providerkit.PlaceMembrane(context.Background(), source, store, nil)
+	second, err := providerkit.PlaceMembrane(context.Background(), source, providerkit.ClassProduction, store, nil)
 	if err != nil {
 		t.Fatalf("PlaceMembrane() a second time = %v", err)
 	}
@@ -195,7 +197,7 @@ func TestTheMembraneIsPlacedOnceAndAddressedByItsContent(t *testing.T) {
 }
 
 func TestAProviderCarryingNoMembraneIsRefusedRatherThanShippingAnEmptyOne(t *testing.T) {
-	_, err := providerkit.PlaceMembrane(context.Background(), membraneCarrier{}, &memoryStore{}, nil)
+	_, err := providerkit.PlaceMembrane(context.Background(), membraneCarrier{}, providerkit.ClassProduction, &memoryStore{}, nil)
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
 		t.Fatalf("PlaceMembrane() with no membrane = %v, want a %s refusal", err, providerkit.CodeNotReady)

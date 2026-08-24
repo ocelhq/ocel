@@ -1,7 +1,6 @@
 package deploy
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -9,9 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/naming"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 )
 
@@ -113,33 +109,6 @@ func (e *EmptyOutputError) Error() string {
 		e.At, e.Ref.Link, e.Ref.Property, e.Ref.Link, e.Ref.Property)
 }
 
-func resolveOutputs(ctx context.Context, cfg Config, manifest *contractv1.Manifest, candidates []transformCandidate, results []transform.Result) ([]placedOutput, error) {
-	var placed []placedOutput
-	if err := walkOutputs(candidates, results, func(ref outputRef, at outputSite, authored any) (any, error) {
-		placed = append(placed, placedOutput{Ref: ref, At: at})
-		return authored, nil
-	}); err != nil {
-		return nil, err
-	}
-	if len(placed) == 0 {
-		return nil, nil
-	}
-	if err := refuseProvisionedOutputs(manifest, placed); err != nil {
-		return nil, err
-	}
-
-	values, err := readOutputs(ctx, cfg, manifest.GetSlug(), placed)
-	if err != nil {
-		return nil, err
-	}
-	if err := walkOutputs(candidates, results, func(ref outputRef, _ outputSite, _ any) (any, error) {
-		return values[ref], nil
-	}); err != nil {
-		return nil, err
-	}
-	return placed, nil
-}
-
 type OutputShapeError struct {
 	Ref outputRef
 	At  outputSite
@@ -162,21 +131,6 @@ func nameOutputBehind(placed []placedOutput, resource string, err error) error {
 	for _, p := range placed {
 		if p.At == (outputSite{Resource: resource, Surface: undecodable.Surface, Field: undecodable.Field}) {
 			return &OutputShapeError{Ref: p.Ref, At: p.At, Err: err}
-		}
-	}
-	return nil
-}
-
-func refuseProvisionedOutputs(manifest *contractv1.Manifest, placed []placedOutput) error {
-	provisioned := map[string]bool{}
-	for _, r := range manifest.GetResources() {
-		if !r.GetLinked() {
-			provisioned[r.GetLogicalName()] = true
-		}
-	}
-	for _, p := range placed {
-		if provisioned[p.Ref.Link] {
-			return &ProvisionedOutputError{Ref: p.Ref, At: p.At}
 		}
 	}
 	return nil
@@ -253,66 +207,6 @@ func readOutputRef(m map[string]any, at outputSite) (outputRef, bool, error) {
 		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: fmt.Sprintf("names link %q and no property on it", link)}
 	}
 	return outputRef{Link: link, Property: property}, true, nil
-}
-
-func readOutputs(ctx context.Context, cfg Config, slug string, placed []placedOutput) (map[outputRef]any, error) {
-	if cfg.Links == nil {
-		return nil, fmt.Errorf(
-			"a transform fills %s from link %q, and this deploy reached no variable store to read published records from",
-			placed[0].At, placed[0].Ref.Link)
-	}
-
-	environment := overrideEnvironment(cfg)
-	published, err := cfg.Links.PublishedNames(ctx, slug, cfg.VarsClass, environment)
-	if err != nil {
-		return nil, fmt.Errorf("a transform fills %s from link %q: %w", placed[0].At, placed[0].Ref.Link, err)
-	}
-	for _, p := range placed {
-		if !slices.Contains(published, p.Ref.Link) {
-			return nil, &UnpublishedOutputError{
-				Ref: p.Ref, At: p.At, Class: cfg.VarsClass, Environment: environment, Published: published,
-				FoundIn: cfg.classesPublishing(ctx, slug, environment, p.Ref.Link),
-			}
-		}
-	}
-
-	names := make([]string, 0, len(placed))
-	for _, p := range placed {
-		if !slices.Contains(names, p.Ref.Link) {
-			names = append(names, p.Ref.Link)
-		}
-	}
-	slices.Sort(names)
-
-	records, err := cfg.Links.ResolveRecords(ctx, slug, environment, names)
-	if err != nil {
-		return nil, fmt.Errorf("a transform fills %s from link %q: %w", placed[0].At, placed[0].Ref.Link, err)
-	}
-	if len(records) != len(names) {
-		return nil, fmt.Errorf("the variable store resolved %d records for %d links a transform reads", len(records), len(names))
-	}
-	links := make(map[string]*linksv1.Link, len(records))
-	for i, name := range names {
-		links[name] = records[i].Link
-	}
-
-	values := make(map[outputRef]any, len(placed))
-	for _, p := range placed {
-		if _, done := values[p.Ref]; done {
-			continue
-		}
-		value, carries := naming.LinkProperty(links[p.Ref.Link], p.Ref.Property)
-		if !carries {
-			return nil, &OutputPropertyError{
-				Ref: p.Ref, At: p.At, Carries: naming.LinkPropertyNames(links[p.Ref.Link]),
-			}
-		}
-		if emptyOutput(value) {
-			return nil, &EmptyOutputError{Ref: p.Ref, At: p.At}
-		}
-		values[p.Ref] = value
-	}
-	return values, nil
 }
 
 func carried(properties []string) string {

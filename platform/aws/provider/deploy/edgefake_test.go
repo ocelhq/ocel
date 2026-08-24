@@ -343,11 +343,6 @@ func isZeroPruneResult(r edge.PruneResult) bool {
 		len(r.SurvivingPointerRecordKeys) == 0
 }
 
-func withEdge(cfg Config, e edge.Edge) Config {
-	cfg.Edge = e
-	return cfg
-}
-
 func fakeEdgeOf(kind edge.Kind) edge.Edge {
 	f := &recordingEdge{kind: kind}
 	if slices.ContainsFunc(edge.CodeNeeds(), func(need edge.Need) bool { return edge.Supports(f, need) }) {
@@ -478,4 +473,12 @@ func TestRecordingEdge(t *testing.T) {
 			t.Error("expected Destroy to reject a state no reconcile ever produced")
 		}
 	})
+}
+
+type unprogrammableEdge struct{ edge.Edge }
+
+func (u unprogrammableEdge) Facts() edge.Facts {
+	facts := u.Edge.Facts()
+	facts.RunsCode = false
+	return facts
 }

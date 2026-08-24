@@ -40,7 +40,7 @@ func buildIdentity(seq int) string {
 func seedEnvironment(t *testing.T, provider *fake.Provider, slug string, stacks ...naming.StackName) {
 	t.Helper()
 	for _, stack := range stacks {
-		name := providerkit.StackRecord(slug, stack)
+		name := providerkit.StackRecord(providerkit.ClassPreview, slug, stack)
 		held, err := providerkit.Held(context.Background(), provider.Records(), name)
 		if err != nil {
 			t.Fatal(err)

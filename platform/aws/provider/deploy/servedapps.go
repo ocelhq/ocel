@@ -13,6 +13,8 @@ type servedFunction struct {
 	Physical string
 	Bytecode *bytecodeConfig
 	Warmed   warmReply
+
+	from *release
 }
 
 type servedApps struct {
@@ -28,11 +30,11 @@ func newServedApps() *servedApps {
 	}
 }
 
-func (s *servedApps) plan(app string, logical []string, bytecode *bytecodeConfig) {
+func (s *servedApps) plan(from *release, app string, logical []string, bytecode *bytecodeConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, name := range logical {
-		s.byLogic[name] = &servedFunction{App: app, Logical: name, Bytecode: bytecode}
+		s.byLogic[name] = &servedFunction{App: app, Logical: name, Bytecode: bytecode, from: from}
 	}
 }
 
@@ -63,23 +65,23 @@ func (s *servedApps) warmed(physical string, reply warmReply) {
 }
 
 func (r *Releaser) Warm(ctx context.Context, targets []string, report providerkit.Reporter) error {
-	if r.cfg.Invoker == nil || !bytecodeCacheEnabled() {
+	if !bytecodeCacheEnabled() {
 		return nil
 	}
 	say := sayTo(report)
-	var warming []warmTarget
+	warming := map[*release][]warmTarget{}
 	for _, physical := range targets {
 		held, known := r.served.byPhysicalName(physical)
-		if !known || held.Bytecode == nil {
+		if !known || held.Bytecode == nil || held.from == nil || held.from.cfg.Invoker == nil {
 			continue
 		}
-		warming = append(warming, warmTarget{App: held.App, LogicalName: held.Logical, FunctionName: physical})
+		warming[held.from] = append(warming[held.from],
+			warmTarget{App: held.App, LogicalName: held.Logical, FunctionName: physical})
 	}
-	if len(warming) == 0 {
-		return nil
-	}
-	for _, result := range (warmPass{invoker: r.cfg.Invoker, targets: warming, budget: warmPassDeadline, log: say}).run(ctx) {
-		r.served.warmed(result.Target.FunctionName, result.Reply)
+	for from, batch := range warming {
+		for _, result := range (warmPass{invoker: from.cfg.Invoker, targets: batch, budget: warmPassDeadline, log: say}).run(ctx) {
+			r.served.warmed(result.Target.FunctionName, result.Reply)
+		}
 	}
 	return nil
 }
@@ -93,23 +95,24 @@ func (r *Releaser) EmbedCode(ctx context.Context, physical string, artifact prov
 		say("ocel: " + bytecodeEmbedEnv + "=1 has nothing to embed without " + bytecodeCacheEnv + "=1; not embedding")
 		return nil
 	}
-	if missing := missingEmbedClients(r.cfg); missing != "" {
+	held, known := r.served.byPhysicalName(physical)
+	if !known || held.Bytecode == nil || held.Warmed.Key == "" || held.from == nil {
+		return nil
+	}
+	from := held.from
+	if missing := missingEmbedClients(from.cfg); missing != "" {
 		say("ocel: " + bytecodeEmbedEnv + "=1 but this deploy has no " + missing + "; not embedding")
 		return nil
 	}
-	held, known := r.served.byPhysicalName(physical)
-	if !known || held.Bytecode == nil || held.Warmed.Key == "" {
-		return nil
-	}
-	code, err := r.artifactAt(artifact)
+	code, err := from.artifactAt(artifact)
 	if err != nil {
 		return nil
 	}
 	embedPass{
-		objects:  r.cfg.Getter,
-		uploader: r.cfg.Uploader,
-		code:     r.cfg.CodeUpdater,
-		invoker:  r.cfg.Invoker,
+		objects:  from.cfg.Getter,
+		uploader: from.cfg.Uploader,
+		code:     from.cfg.CodeUpdater,
+		invoker:  from.cfg.Invoker,
 		targets: []embedTarget{{
 			App:          held.App,
 			LogicalName:  held.Logical,

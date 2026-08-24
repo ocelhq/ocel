@@ -36,7 +36,11 @@ func runPorts(t *testing.T, suite Suite) {
 }
 
 func under(t *testing.T, rest ...string) providerkit.RecordName {
-	return append(providerkit.RecordName{"conformance", t.Name()}, rest...)
+	return in(providerkit.ClassProduction, t, rest...)
+}
+
+func in(class providerkit.Class, t *testing.T, rest ...string) providerkit.RecordName {
+	return append(providerkit.RecordName{"conformance", string(class), t.Name()}, rest...)
 }
 
 func RunRecordStore(t *testing.T, records providerkit.RecordStore) {
@@ -111,6 +115,23 @@ func RunRecordStore(t *testing.T, records providerkit.RecordStore) {
 		}
 		if _, err := records.Read(ctx, name); !errors.Is(err, providerkit.ErrNoRecord) {
 			t.Fatalf("Read() after Remove() = %v, want ErrNoRecord", err)
+		}
+	})
+
+	t.Run("one class's records are not the other's", func(t *testing.T) {
+		production, preview := in(providerkit.ClassProduction, t, "held"), in(providerkit.ClassPreview, t, "held")
+		if _, err := records.Write(ctx, providerkit.Record{Name: production, Bytes: []byte("production")}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := records.Read(ctx, preview); !errors.Is(err, providerkit.ErrNoRecord) {
+			t.Fatalf("Read() of the preview name after only production was written = %v, want ErrNoRecord", err)
+		}
+		if _, err := records.Write(ctx, providerkit.Record{Name: preview, Bytes: []byte("preview")}); err != nil {
+			t.Fatal(err)
+		}
+		held, err := records.Read(ctx, production)
+		if err != nil || string(held.Bytes) != "production" {
+			t.Fatalf("Read() of the production name = %q, %v, want the production bytes untouched", held.Bytes, err)
 		}
 	})
 
@@ -361,7 +382,7 @@ func RunArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
 	t.Helper()
 
 	ctx := context.Background()
-	ref := providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
+	ref := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
 	body := []byte("a build artifact")
 
 	t.Run("what Put stores, Open reads back", func(t *testing.T) {
@@ -380,7 +401,7 @@ func RunArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
 	})
 
 	t.Run("Open of a key nothing wrote refuses rather than answering empty", func(t *testing.T) {
-		absent := providerkit.ArtifactRef{Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
+		absent := providerkit.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
 		opened, err := artifacts.Open(ctx, absent)
 		if err == nil {
 			opened.Close()
@@ -389,11 +410,11 @@ func RunArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
 	})
 
 	t.Run("RemovePrefix takes the prefix and nothing beside it", func(t *testing.T) {
-		kept := providerkit.ArtifactRef{Bucket: ref.Bucket, Key: "conformance/" + t.Name() + "-sibling/bundle.zip"}
+		kept := providerkit.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: "conformance/" + t.Name() + "-sibling/bundle.zip"}
 		if err := artifacts.Put(ctx, kept, bytes.NewReader(body)); err != nil {
 			t.Fatal(err)
 		}
-		if err := artifacts.RemovePrefix(ctx, "conformance/"+t.Name()+"/", nil); err != nil {
+		if err := artifacts.RemovePrefix(ctx, ref.Class, "conformance/"+t.Name()+"/", nil); err != nil {
 			t.Fatalf("RemovePrefix() = %v", err)
 		}
 		opened, err := artifacts.Open(ctx, kept)
@@ -403,8 +424,27 @@ func RunArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
 		opened.Close()
 	})
 
+	t.Run("RemovePrefix of one class leaves the other class's artifacts", func(t *testing.T) {
+		key := "conformance/" + t.Name() + "/bundle.zip"
+		production := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: ref.Bucket, Key: key}
+		preview := providerkit.ArtifactRef{Class: providerkit.ClassPreview, Bucket: ref.Bucket, Key: key}
+		for _, at := range []providerkit.ArtifactRef{production, preview} {
+			if err := artifacts.Put(ctx, at, bytes.NewReader(body)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := artifacts.RemovePrefix(ctx, providerkit.ClassPreview, "conformance/"+t.Name()+"/", nil); err != nil {
+			t.Fatalf("RemovePrefix() = %v", err)
+		}
+		opened, err := artifacts.Open(ctx, production)
+		if err != nil {
+			t.Fatalf("Open() of the production artifact after a preview prefix was removed = %v, want it still stored", err)
+		}
+		opened.Close()
+	})
+
 	t.Run("RemovePrefix of a prefix holding nothing is not an error", func(t *testing.T) {
-		if err := artifacts.RemovePrefix(ctx, "conformance/"+t.Name()+"/nothing-here/", nil); err != nil {
+		if err := artifacts.RemovePrefix(ctx, ref.Class, "conformance/"+t.Name()+"/nothing-here/", nil); err != nil {
 			t.Fatalf("RemovePrefix() of a prefix nothing was written under = %v, want nil", err)
 		}
 	})

@@ -7,13 +7,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -37,21 +33,6 @@ func manifestApps(manifest *contractv1.Manifest) []*contractv1.ManifestApp {
 	return apps
 }
 
-func workerApps(artifactRoot string, manifest *contractv1.Manifest) []*contractv1.ManifestApp {
-	var apps []*contractv1.ManifestApp
-	for _, app := range manifestApps(manifest) {
-		if isEdgeServed(artifactRoot, app.GetName()) && len(appRoutes(manifest.GetFunctions(), app)) > 0 {
-			apps = append(apps, app)
-		}
-	}
-	return apps
-}
-
-func isEdgeServed(artifactRoot, app string) bool {
-	_, err := os.Stat(filepath.Join(appArtifactRoot(artifactRoot, app), edge.ServeDescriptorFile))
-	return err == nil
-}
-
 func readServeDescriptor(artifactRoot, app string) (edge.ServeDescriptor, bool, error) {
 	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(artifactRoot, app), edge.ServeDescriptorFile))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -67,120 +48,12 @@ func readServeDescriptor(artifactRoot, app string) (edge.ServeDescriptor, bool, 
 	return desc, true, nil
 }
 
-func appRoutes(functions []*contractv1.ManifestFunction, app *contractv1.ManifestApp) []string {
-	var routes []string
-	for _, fn := range functions {
-		if fn.GetApp() == app.GetName() && fn.GetFramework() == app.GetFramework() {
-			routes = append(routes, routeID(fn))
-		}
-	}
-	return routes
-}
-
 const frameworkNext = "next"
 
 const appsDirName = "apps"
 
 func appArtifactRoot(artifactRoot, app string) string {
 	return filepath.Join(artifactRoot, appsDirName, app)
-}
-
-func routeID(fn *contractv1.ManifestFunction) string {
-	if id := fn.GetRouteId(); id != "" {
-		return id
-	}
-	return fn.GetLogicalName()
-}
-
-func functionURLsByLogicalName(functions []*progressv1.FunctionOutput) map[string]string {
-	urls := make(map[string]string)
-	for _, fn := range functions {
-		urls[fn.GetLogicalName()] = fn.GetUrl()
-	}
-	return urls
-}
-
-func appFunctionURLsByRoute(functions []*contractv1.ManifestFunction, app string, urlByLogical map[string]string) map[string]string {
-	result := make(map[string]string)
-	for _, fn := range functions {
-		if fn.GetApp() != app {
-			continue
-		}
-		if url := urlByLogical[fn.GetLogicalName()]; url != "" {
-			result[routeID(fn)] = url
-		}
-	}
-	return result
-}
-
-func DeclaredHostnames(manifest *contractv1.Manifest, tier environmentv1.Tier) []string {
-	var hosts []string
-	add := func(names []string) {
-		for _, host := range names {
-			if host != "" && !slices.Contains(hosts, host) {
-				hosts = append(hosts, host)
-			}
-		}
-	}
-	add(hostnamesFor(manifest.GetDomains(), tier))
-	for _, app := range manifestApps(manifest) {
-		add(hostnamesFor(app.GetDomains(), tier))
-	}
-	return hosts
-}
-
-func hostnamesFor(domains []*contractv1.TierDomains, tier environmentv1.Tier) []string {
-	for _, d := range domains {
-		if d.GetTier() == tier {
-			return d.GetHostnames()
-		}
-	}
-	return nil
-}
-
-func workerDomains(cfg Config, manifest *contractv1.Manifest, apps []*contractv1.ManifestApp) (map[string][]string, error) {
-	if cfg.Tier != environmentv1.Tier_TIER_PRODUCTION &&
-		cfg.Tier != environmentv1.Tier_TIER_PREVIEW {
-		return nil, nil
-	}
-	domains := map[string][]string{}
-	var undeclared []string
-	for _, app := range apps {
-		if d := hostnamesFor(app.GetDomains(), cfg.Tier); len(d) > 0 {
-			domains[app.GetName()] = d
-			continue
-		}
-		undeclared = append(undeclared, app.GetName())
-	}
-
-	project := hostnamesFor(manifest.GetDomains(), cfg.Tier)
-	switch {
-	case len(project) == 0 || len(undeclared) == 0:
-		return domains, nil
-	case cfg.Tier == environmentv1.Tier_TIER_PREVIEW:
-		for _, app := range undeclared {
-			domains[app] = project
-		}
-		return domains, nil
-	case len(apps) == 1:
-		domains[undeclared[0]] = project
-		return domains, nil
-	case len(undeclared) == len(apps):
-		return nil, fmt.Errorf("the project-level domains %s are ambiguous: apps %s each run their own edge worker and none declares a domain of its own — give each app its own domain instead", quotedList(project), quotedList(undeclared))
-	default:
-		return domains, nil
-	}
-}
-
-func quotedList(names []string) string {
-	quoted := make([]string, len(names))
-	for i, n := range names {
-		quoted[i] = strconv.Quote(n)
-	}
-	if len(quoted) < 2 {
-		return strings.Join(quoted, "")
-	}
-	return strings.Join(quoted[:len(quoted)-1], ", ") + " and " + quoted[len(quoted)-1]
 }
 
 const (

@@ -11,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -406,41 +405,6 @@ func TestParseWarmReply(t *testing.T) {
 
 		if _, err := parseWarmReply([]byte("Internal Server Error")); err == nil {
 			t.Error("parseWarmReply() err = nil, want an unreadable payload reported")
-		}
-	})
-}
-
-func TestCollectAppFunctionOutputs(t *testing.T) {
-	t.Parallel()
-
-	t.Run("reads physical names", func(t *testing.T) {
-		t.Parallel()
-
-		functions := []*contractv1.ManifestFunction{
-			{LogicalName: "web_index"},
-			{LogicalName: "web_api"},
-		}
-		outputs := auto.OutputMap{
-			"web_index": {Value: map[string]any{
-				outputKeyFunctionURL:  "https://index.lambda-url.aws/",
-				outputKeyFunctionName: "ocel-web-index-a1b2",
-			}},
-			"web_api": {Value: map[string]any{outputKeyFunctionURL: "https://api.lambda-url.aws/"}},
-		}
-
-		outs, names, err := collectAppFunctionOutputs(functions, outputs)
-		if err != nil {
-			t.Fatalf("collectAppFunctionOutputs: %v", err)
-		}
-
-		if len(outs) != 2 {
-			t.Fatalf("got %d outputs, want 2", len(outs))
-		}
-		if names["web_index"] != "ocel-web-index-a1b2" {
-			t.Errorf("names[web_index] = %q, want the physical Lambda name", names["web_index"])
-		}
-		if _, ok := names["web_api"]; ok {
-			t.Errorf("names[web_api] = %q, want no entry for a function that reported no name", names["web_api"])
 		}
 	})
 }

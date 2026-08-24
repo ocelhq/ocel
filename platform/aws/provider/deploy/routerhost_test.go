@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -445,34 +444,5 @@ func TestAnAppBehindCloudflareGrantsNoInvoke(t *testing.T) {
 	name := naming.ResourceID(naming.KindRole, roleLocalName, "policy", "router", "invoke")
 	if _, granted := rec.inputs(rolePolicyToken, name)["policy"]; granted {
 		t.Error("an app whose edge routes carries an invoke grant, want the grant only where the origin routes")
-	}
-}
-
-func TestDeploymentRecordNamesTheEntryFunctionTheDeployCreated(t *testing.T) {
-	t.Parallel()
-
-	cfg := routedConfig(t, apigateway.Kind)
-	cfg.Env = "prod"
-	manifest := &contractv1.Manifest{
-		Slug:      "shop",
-		Apps:      []*contractv1.ManifestApp{routedApp()},
-		Functions: routedFunctions(),
-	}
-	builds := appBuildsFor(t, cfg, manifest)
-	stack := builds.coords["web"].Stack()
-	names := map[string]string{
-		"fn--web--entry": functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(maxLambdaBaseNameLen),
-		"fn--web--admin": functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(maxLambdaBaseNameLen),
-	}
-
-	record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], builds.identities["web"], nil, builds, names)
-	if err != nil {
-		t.Fatalf("buildDeploymentRecord: %v", err)
-	}
-	if record.Entry != "/" {
-		t.Errorf("Entry = %q, want the route id the build named", record.Entry)
-	}
-	if record.EntryFunction != names["fn--web--entry"] {
-		t.Errorf("EntryFunction = %q, want the Lambda the entry route was realized as (%q)", record.EntryFunction, names["fn--web--entry"])
 	}
 }

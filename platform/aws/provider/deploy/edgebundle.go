@@ -99,24 +99,6 @@ func recordUploadFailure(stats *uploadBatchStats, err error) error {
 	return err
 }
 
-func appEdgeWorkers(cfg Config, c naming.Coordinate, app string) (*edge.Code, error) {
-	program, ok := cfg.Edge.(edge.Programmable)
-	if !ok {
-		return nil, nil
-	}
-	bundle, ok, err := readEdgeBundle(cfg, app)
-	if err != nil || !ok {
-		return nil, err
-	}
-	compatDate, compatFlags := program.CodeRuntime()
-	return &edge.Code{
-		BundleKey:   appEdgeBundleKey(c),
-		ID:          loaderID(bundle, compatDate, compatFlags),
-		CompatDate:  compatDate,
-		CompatFlags: compatFlags,
-	}, nil
-}
-
 func loaderID(bundle []byte, compatDate string, compatFlags []string) string {
 	h := sha256.New()
 	h.Write(bundle)

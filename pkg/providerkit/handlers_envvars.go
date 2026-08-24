@@ -68,7 +68,7 @@ func (h *handlers) namedEnvironments(ctx context.Context, slug string) ([]string
 	if err != nil {
 		return nil, err
 	}
-	stacks, err := stackNames(ctx, provider.Records(), slug)
+	stacks, err := stackNames(ctx, provider.Records(), ClassPreview, slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

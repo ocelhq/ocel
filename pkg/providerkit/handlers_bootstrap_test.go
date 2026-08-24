@@ -172,7 +172,7 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		t.Fatalf("the bootstrap record holds %q, %v, want auto_heal on", held.Bytes, err)
 	}
 
-	written, err := providerkit.RecordSchema(ctx, provider.Records())
+	written, err := providerkit.RecordSchema(ctx, provider.Records(), providerkit.ClassProduction)
 	if err != nil || written != providerkit.RecordSchemaVersion {
 		t.Fatalf("RecordSchema() = %d, %v, want the bootstrap to have stamped %d", written, err, providerkit.RecordSchemaVersion)
 	}
@@ -263,7 +263,7 @@ func recordProject(t *testing.T, provider *fake.Provider, slug string, features 
 		t.Fatal(err)
 	}
 	if _, err := provider.Records().Write(context.Background(), providerkit.Record{
-		Name:  providerkit.ProjectRecord(slug),
+		Name:  providerkit.ProjectRecord(providerkit.ClassProduction, slug),
 		Bytes: body,
 	}); err != nil {
 		t.Fatal(err)

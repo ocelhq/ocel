@@ -35,7 +35,7 @@ func (w *appWork) run(pctx *sdk.Context) error {
 	return stack.register(pctx)
 }
 
-func (r *Releaser) appWork(plan providerkit.StackPlan, transformed *transformedArgs) (*appWork, error) {
+func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedArgs) (*appWork, error) {
 	app := plan.App
 	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
 	sessions := newSessionScope(project, stack.Env, r.cfg.StateTableARN)
@@ -109,10 +109,10 @@ func (r *Releaser) appWork(plan providerkit.StackPlan, transformed *transformedA
 		role.ValuesTableARN = r.cfg.StateTableARN
 		role.VarsReferenced = bundle.Referenced
 		role.Slug = r.cfg.Slug
-		role.VarsClass = r.cfg.VarsClass
+		role.VarsClass = string(r.cfg.Class)
 	}
 
-	r.served.plan(app.App, logical, bytecode)
+	r.served.plan(r, app.App, logical, bytecode)
 
 	return &appWork{
 		transformed: transformed,
@@ -144,7 +144,7 @@ func (t *transformedArgs) forSpec(framework string, spec providerkit.FunctionSpe
 	return translateFunctionSpec(framework, spec)
 }
 
-func (r *Releaser) artifactAt(ref providerkit.ArtifactRef) (artifactRef, error) {
+func (r *release) artifactAt(ref providerkit.ArtifactRef) (artifactRef, error) {
 	bucket, err := r.store(ref.Bucket)
 	if err != nil {
 		return artifactRef{}, err
@@ -155,7 +155,7 @@ func (r *Releaser) artifactAt(ref providerkit.ArtifactRef) (artifactRef, error) 
 	return artifactRef{Bucket: bucket, Key: ref.Key}, nil
 }
 
-func (r *Releaser) store(name string) (string, error) {
+func (r *release) store(name string) (string, error) {
 	switch name {
 	case providerkit.StoreFunctions:
 		return r.cfg.ArtifactBucket, nil
@@ -167,7 +167,7 @@ func (r *Releaser) store(name string) (string, error) {
 	return "", fmt.Errorf("this provider keeps no %q store", name)
 }
 
-func (r *Releaser) membranePlacement(ref providerkit.ArtifactRef) (payloads.Placement, error) {
+func (r *release) membranePlacement(ref providerkit.ArtifactRef) (payloads.Placement, error) {
 	if ref.Key == "" {
 		return payloads.Placement{}, nil
 	}
@@ -179,7 +179,7 @@ func (r *Releaser) membranePlacement(ref providerkit.ArtifactRef) (payloads.Plac
 	return payloads.Placement{Bucket: bucket, Key: ref.Key, SHA256: digest}, nil
 }
 
-func (r *Releaser) routerHost(plan providerkit.StackPlan) (*routerHost, error) {
+func (r *release) routerHost(plan providerkit.StackPlan) (*routerHost, error) {
 	routing := plan.App.Routing
 	if routing == nil {
 		return nil, nil
@@ -210,7 +210,7 @@ func (r *Releaser) routerHost(plan providerkit.StackPlan) (*routerHost, error) {
 	return host, nil
 }
 
-func (r *Releaser) originGuard(plan providerkit.StackPlan) (*originGuard, error) {
+func (r *release) originGuard(plan providerkit.StackPlan) (*originGuard, error) {
 	guard := plan.App.Guard
 	if guard == nil {
 		return nil, nil
@@ -223,7 +223,7 @@ func (r *Releaser) originGuard(plan providerkit.StackPlan) (*originGuard, error)
 	return &originGuard{Entry: guard.Entry, Secret: r.cfg.OriginSecret}, nil
 }
 
-func (r *Releaser) isrCache(plan providerkit.StackPlan) *isrConfig {
+func (r *release) isrCache(plan providerkit.StackPlan) *isrConfig {
 	held := plan.App.ISR
 	if held == nil {
 		return nil
@@ -254,7 +254,7 @@ func isrCoordinate(plan providerkit.StackPlan) naming.Coordinate {
 	}
 }
 
-func (r *Releaser) bytecodeCache(plan providerkit.StackPlan) *bytecodeConfig {
+func (r *release) bytecodeCache(plan providerkit.StackPlan) *bytecodeConfig {
 	held := plan.App.Bytecode
 	if held == nil {
 		return nil
@@ -262,7 +262,7 @@ func (r *Releaser) bytecodeCache(plan providerkit.StackPlan) *bytecodeConfig {
 	return &bytecodeConfig{Bucket: r.cfg.AssetBucket, Prefix: held.Prefix}
 }
 
-func (r *Releaser) appBundle(plan providerkit.StackPlan) (appBundle, error) {
+func (r *release) appBundle(plan providerkit.StackPlan) (appBundle, error) {
 	app := plan.App
 	links := make([]live.Link, 0, len(app.Values.Links))
 	for _, link := range app.Values.Links {
@@ -298,12 +298,12 @@ func wireLinkType(kind providerkit.LinkType) linksv1.LinkType {
 	return linksv1.LinkType_LINK_TYPE_CUSTOM
 }
 
-func (r *Releaser) appEnv(plan providerkit.StackPlan, bundle appBundle, sessions sessionScope) map[string]string {
+func (r *release) appEnv(plan providerkit.StackPlan, bundle appBundle, sessions sessionScope) map[string]string {
 	app := plan.App
 	env := map[string]string{}
-	if r.cfg.Edge != nil {
-		env[edgeKindEnv] = string(r.cfg.Edge.Kind())
-		facts := r.cfg.Edge.Facts()
+	if plan.Edge != nil {
+		env[edgeKindEnv] = string(plan.Edge.Kind())
+		facts := plan.Edge.Facts()
 		if !facts.RunsCode {
 			env[edge.OriginRouterVar] = "1"
 			env[edge.OriginSignedVar] = "1"
@@ -362,7 +362,7 @@ func grantMessages(grants []providerkit.Grant) []*linksv1.Grant {
 	return out
 }
 
-func (r *Releaser) decodeApp(plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error) {
+func (r *release) decodeApp(plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error) {
 	work, held := plan.Options.(*appWork)
 	if !held {
 		return providerkit.StackResult{}, fmt.Errorf("this stack was not planned as an app stack")

@@ -5,33 +5,52 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 )
 
-type sweepingIndex struct {
-	fakeStackIndex
+type fakeEngine struct {
+	record func(string)
+}
+
+var _ kitpulumi.Engine = (*fakeEngine)(nil)
+
+func (f *fakeEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) (auto.OutputMap, error) {
+	f.record("up-stack " + setup.Stack)
+	return auto.OutputMap{}, nil
+}
+
+func (f *fakeEngine) Destroy(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) error {
+	f.record("destroy-stack " + setup.Stack)
+	return nil
+}
+
+func (f *fakeEngine) Outputs(context.Context, kitpulumi.Setup) (auto.OutputMap, error) {
+	return auto.OutputMap{}, nil
+}
+
+type sweepingClock struct {
 	order []string
 	err   error
 }
 
-func (s *sweepingIndex) SweepTagClock(_ context.Context, project string, stack naming.StackName) error {
+func (s *sweepingClock) SweepTagClock(_ context.Context, project string, stack naming.StackName) error {
 	s.order = append(s.order, "sweep "+project+"/"+stack.String())
 	return s.err
 }
 
-func (s *sweepingIndex) RemoveStack(ctx context.Context, project string, stack naming.StackName) error {
-	s.order = append(s.order, "forget "+project+"/"+stack.String())
-	return s.fakeStackIndex.RemoveStack(ctx, project, stack)
-}
-
-func teardownAccess(t *testing.T) PulumiAccess {
+func tearingDown(t *testing.T, clock TagSweeper, engine kitpulumi.Engine) *Releaser {
 	t.Helper()
-	return PulumiAccess{
+	cfg := Config{
 		PulumiProject: "ocel",
 		Passphrase:    "teardown",
 		BackendURL:    "file://" + t.TempDir(),
+		Tags:          clock,
 	}
+	return newReleaser(fixed(cfg), &Realized{}, engine)
 }
 
 func teardownRef() providerkit.StackRef {
@@ -42,42 +61,36 @@ func teardownRef() providerkit.StackRef {
 	}
 }
 
-func TestATeardownSweepsTheTagClockBeforeItForgetsTheStack(t *testing.T) {
-	index := &sweepingIndex{}
-	release := releaserFor(teardownAccess(t), index, &Realized{}, &fakeEngine{record: func(string) {}})
+func TestATeardownSweepsTheTagClockOfTheStackItDestroyed(t *testing.T) {
+	clock := &sweepingClock{}
+	var engine []string
+	release := tearingDown(t, clock, &fakeEngine{record: func(s string) { engine = append(engine, s) }})
 
 	if err := release.Destroy(context.Background(), teardownRef(), nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
-	want := []string{
-		"sweep shop/" + teardownRef().Name.String(),
-		"forget shop/" + teardownRef().Name.String(),
+	if len(engine) != 1 {
+		t.Fatalf("the engine was asked for %v, want the one stack destroyed", engine)
 	}
-	if len(index.order) != len(want) || index.order[0] != want[0] || index.order[1] != want[1] {
-		t.Fatalf("teardown did %v, want %v — a forgotten stack is one nothing will ever sweep the clock for", index.order, want)
+	want := "sweep shop/" + teardownRef().Name.String()
+	if len(clock.order) != 1 || clock.order[0] != want {
+		t.Fatalf("teardown did %v, want %q — a destroyed stack leaves clock rows nothing else will reach", clock.order, want)
 	}
 }
 
-func TestATagClockThatWillNotSweepStopsTheTeardownShortOfForgettingTheStack(t *testing.T) {
-	index := &sweepingIndex{err: errors.New("dynamo is down")}
-	release := releaserFor(teardownAccess(t), index, &Realized{}, &fakeEngine{record: func(string) {}})
+func TestATagClockThatWillNotSweepFailsTheTeardown(t *testing.T) {
+	clock := &sweepingClock{err: errors.New("dynamo is down")}
+	release := tearingDown(t, clock, &fakeEngine{record: func(string) {}})
 
 	if err := release.Destroy(context.Background(), teardownRef(), nil); err == nil {
 		t.Fatal("Destroy() = nil where the tag clock refused to sweep, want the failure surfaced")
 	}
-	if len(index.removed) != 0 {
-		t.Errorf("the stack was forgotten as %v despite an unswept clock, leaving rows nothing can reach", index.removed)
-	}
 }
 
-func TestAnIndexThatKeepsNoTagClockTearsDownAllTheSame(t *testing.T) {
-	index := &fakeStackIndex{}
-	release := releaserFor(teardownAccess(t), index, &Realized{}, &fakeEngine{record: func(string) {}})
+func TestAnAccountThatKeepsNoTagClockTearsDownAllTheSame(t *testing.T) {
+	release := tearingDown(t, nil, &fakeEngine{record: func(string) {}})
 
 	if err := release.Destroy(context.Background(), teardownRef(), nil); err != nil {
-		t.Fatalf("Destroy() through an index with no tag clock = %v", err)
-	}
-	if len(index.removed) != 1 {
-		t.Errorf("the index forgot %v, want the one stack the teardown named", index.removed)
+		t.Fatalf("Destroy() with no tag clock = %v", err)
 	}
 }

@@ -10,12 +10,11 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
@@ -176,7 +175,7 @@ func sealAppBundle(cfg Config, slug, app string, sensitive map[string]string, ke
 		Slug:        slug,
 		Table:       cfg.StateTable,
 		KeyARN:      cfg.VarsKeyARN,
-		Class:       cfg.VarsClass,
+		Class:       string(cfg.Class),
 		Environment: overrideEnvironment(cfg),
 		Keys:        keys,
 		Links:       links,
@@ -232,53 +231,11 @@ func referencedOwners(cfg Config, slug string, keys []live.Key) []string {
 }
 
 func overrideEnvironment(cfg Config) string {
-	if cfg.Tier != environmentv1.Tier_TIER_PREVIEW {
+	if cfg.Class != providerkit.ClassPreview {
 		return ""
 	}
-	return cfg.Identity
+	return cfg.Env
 }
-
-func recordedAudit(cfg Config, app *contractv1.ManifestApp) (string, []edge.VariableRecord) {
-	if cfg.Tier != environmentv1.Tier_TIER_PRODUCTION {
-		return "", nil
-	}
-	var records []edge.VariableRecord
-	for _, v := range app.GetVariables() {
-		record := edge.VariableRecord{Key: v.GetKey(), Folder: v.GetFolder()}
-		if v.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
-			record.Live = true
-		} else {
-			record.Version = v.GetVersion()
-		}
-		records = append(records, record)
-	}
-	slices.SortFunc(records, func(a, b edge.VariableRecord) int {
-		if c := cmp.Compare(a.Key, b.Key); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.Folder, b.Folder)
-	})
-	return fingerprintRecords(records), records
-}
-
-func fingerprintRecords(records []edge.VariableRecord) string {
-	if len(records) == 0 {
-		return ""
-	}
-	h := sha256.New()
-	for _, record := range records {
-		writeLenPrefixed(h, []byte(record.Key))
-		writeLenPrefixed(h, []byte(record.Folder))
-		if record.Live {
-			writeLenPrefixed(h, []byte(liveVersionMarker))
-			continue
-		}
-		writeLenPrefixed(h, []byte(strconv.FormatInt(record.Version, 10)))
-	}
-	return hex.EncodeToString(h.Sum(nil))[:fingerprintValuesHexLen]
-}
-
-const liveVersionMarker = "live"
 
 const fingerprintValuesHexLen = 12
 

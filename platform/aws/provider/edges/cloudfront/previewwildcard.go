@@ -83,7 +83,7 @@ func reconcileWildcardDistribution(ctx context.Context, c Clients, plan distribu
 }
 
 func bootstrapLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *kitledger.Ledger {
-	return awsports.Ledger(c.Dynamo, deployed.StateTable, class, "")
+	return awsports.Ledger(c.Dynamo, awsports.Table(deployed.StateTable), class, "")
 }
 
 func cloudFrontCertificate(wildcard, certificate string) error {

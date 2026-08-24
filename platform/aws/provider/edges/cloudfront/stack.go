@@ -62,7 +62,7 @@ func (s *stack) plan() distributionPlan {
 }
 
 func (s *stack) ledger(c Clients) *kitledger.Ledger {
-	return awsports.Ledger(c.Dynamo, s.own.StateTable, s.class(), s.slug())
+	return awsports.Ledger(c.Dynamo, awsports.Table(s.own.StateTable), s.class(), s.slug())
 }
 
 func (s *stack) routes(c Clients) routeWriter {

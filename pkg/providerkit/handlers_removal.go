@@ -66,7 +66,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 			return nil, err
 		}
 	}
-	entries, err := ReadStacks(ctx, provider.Records(), req.GetSlug())
+	entries, err := ReadStacks(ctx, provider.Records(), class, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, re
 	if err := r.provider.Releases().Destroy(ctx, ref, report); err != nil {
 		return fmt.Errorf("destroy %s: %w", stack, err)
 	}
-	return ForgetStack(ctx, r.provider.Records(), r.slug, stack)
+	return ForgetStack(ctx, r.provider.Records(), r.class, r.slug, stack)
 }
 
 func (r *projectRemoval) tearDownEdge(ctx context.Context, report Reporter) error {
@@ -229,7 +229,7 @@ func (r *projectRemoval) purgeObjects(ctx context.Context, report Reporter) erro
 	var errs []error
 	for _, env := range r.environments() {
 		prefix := naming.Coordinate{Project: naming.Sanitize(r.slug), Env: env}.StoragePrefix()
-		if err := r.provider.Artifacts().RemovePrefix(ctx, prefix, report); err != nil {
+		if err := r.provider.Artifacts().RemovePrefix(ctx, r.class, prefix, report); err != nil {
 			errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
 		}
 	}
@@ -249,7 +249,7 @@ func (r *projectRemoval) environments() []string {
 }
 
 func (r *projectRemoval) forget(ctx context.Context, report Reporter) error {
-	remaining, err := ReadStacks(ctx, r.provider.Records(), r.slug)
+	remaining, err := ReadStacks(ctx, r.provider.Records(), r.class, r.slug)
 	if err != nil {
 		return err
 	}
@@ -260,7 +260,7 @@ func (r *projectRemoval) forget(ctx context.Context, report Reporter) error {
 	if err := Forget(ctx, r.provider.Records(), EdgeStackRecord(r.class, r.slug)); err != nil {
 		return err
 	}
-	return Forget(ctx, r.provider.Records(), ProjectRecord(r.slug))
+	return Forget(ctx, r.provider.Records(), ProjectRecord(r.class, r.slug))
 }
 
 func reclaim(
@@ -279,11 +279,11 @@ func reclaim(
 			errs = append(errs, fmt.Errorf("destroy %s: %w", target.Stack, err))
 			continue
 		}
-		if err := ForgetStack(ctx, provider.Records(), slug, target.Stack); err != nil {
+		if err := ForgetStack(ctx, provider.Records(), class, slug, target.Stack); err != nil {
 			errs = append(errs, err)
 		}
 		for _, prefix := range target.Prefixes {
-			if err := provider.Artifacts().RemovePrefix(ctx, prefix, report); err != nil {
+			if err := provider.Artifacts().RemovePrefix(ctx, class, prefix, report); err != nil {
 				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
 			}
 		}

@@ -2,22 +2,13 @@ package deploy
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
-
-func testLoaderEdge() *recordingEdge {
-	return &recordingEdge{kind: cloudflare.Kind, compatDate: "2026-07-13", compatFlags: []string{"nodejs_compat"}}
-}
 
 func edgeAppTree(t *testing.T) string {
 	t.Helper()
@@ -168,74 +159,6 @@ func TestUploadEdgeBundles(t *testing.T) {
 	})
 }
 
-func TestBuildDeploymentRecordEdgeWorkers(t *testing.T) {
-	t.Run("names the bundle and its runtime", func(t *testing.T) {
-		t.Parallel()
-		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
-		manifest := nextManifest()
-		app := &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
-
-		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("WEB1"), nil, appBuildsFor(t, cfg, manifest), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if record.EdgeWorkers == nil {
-			t.Fatal("EdgeWorkers = nil, want the build's edge bundle")
-		}
-		if want := edgeBundleKeyFor("web", testDeploymentID); record.EdgeWorkers.BundleKey != want {
-			t.Errorf("BundleKey = %q, want %q", record.EdgeWorkers.BundleKey, want)
-		}
-		if record.EdgeWorkers.CompatDate != "2026-07-13" {
-			t.Errorf("CompatDate = %q, want the edge's own", record.EdgeWorkers.CompatDate)
-		}
-		if len(record.EdgeWorkers.CompatFlags) != 1 || record.EdgeWorkers.CompatFlags[0] != "nodejs_compat" {
-			t.Errorf("CompatFlags = %v, want the edge's own", record.EdgeWorkers.CompatFlags)
-		}
-		if len(record.EdgeWorkers.ID) != 64 {
-			t.Errorf("ID = %q, want a sha256 hex digest", record.EdgeWorkers.ID)
-		}
-
-		raw, err := json.Marshal(record.EdgeWorkers)
-		if err != nil {
-			t.Fatalf("marshal edge workers: %v", err)
-		}
-		var wire map[string]any
-		if err := json.Unmarshal(raw, &wire); err != nil {
-			t.Fatalf("unmarshal edge workers: %v", err)
-		}
-		for _, key := range []string{"bundleKey", "id", "compatDate", "compatFlags"} {
-			if _, ok := wire[key]; !ok {
-				t.Errorf("edge workers JSON %s is missing %q", raw, key)
-			}
-		}
-		if len(wire) != 4 {
-			t.Errorf("edge workers JSON = %s, want exactly the four contracted keys", raw)
-		}
-	})
-
-	t.Run("no edge output omits edge workers", func(t *testing.T) {
-		t.Parallel()
-		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
-		manifest := twoAppManifest()
-		app := &contractv1.ManifestApp{Name: "admin", Framework: frameworkNext}
-
-		record, err := buildDeploymentRecord(cfg, nil, manifest, app, deployedAs("ADM1"), nil, appBuildsFor(t, cfg, manifest), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if record.EdgeWorkers != nil {
-			t.Errorf("EdgeWorkers = %+v, want none for a build with no edge output", record.EdgeWorkers)
-		}
-		raw, err := json.Marshal(record)
-		if err != nil {
-			t.Fatalf("marshal record: %v", err)
-		}
-		if strings.Contains(string(raw), "edgeWorkers") {
-			t.Errorf("record JSON = %s, want no edgeWorkers key at all", raw)
-		}
-	})
-}
-
 func edgeVarsManifest(variables ...*contractv1.ManifestVariable) *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj",
@@ -368,138 +291,6 @@ func TestCheckAppEdgeVariables(t *testing.T) {
 			t.Errorf("checkAppEdgeVariables = %v, want an app that ships no edge worker accepted", err)
 		}
 	})
-}
-
-func edgeRecordConfig(t *testing.T) Config {
-	t.Helper()
-	cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
-	cfg.CacheStoreBucket = "isr"
-	cfg.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
-	return cfg
-}
-
-func TestBuildDeploymentRecordEdgeDelivery(t *testing.T) {
-	t.Run("carries plain values, the folder and the data key", func(t *testing.T) {
-		t.Parallel()
-		cfg := edgeRecordConfig(t)
-		manifest := edgeVarsManifest(
-			variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-			variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
-			scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
-		)
-		builds := edgeBuilds(t, cfg, manifest)
-
-		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, builds, nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if got, want := record.Env["POSTHOG_ID"], "ph-123"; got != want {
-			t.Errorf("Env[POSTHOG_ID] = %q, want %q", got, want)
-		}
-		if got, want := record.Env["OCEL_APP_FOLDER"], "/shop"; got != want {
-			t.Errorf("Env[OCEL_APP_FOLDER] = %q, want %q", got, want)
-		}
-		if len(record.Env) != 2 {
-			t.Errorf("Env = %v, want the plain values and the folder alone", record.Env)
-		}
-		if record.Envelope != builds.baked["web"].Envelope {
-			t.Errorf("Envelope = %q, want the data key the function already holds", record.Envelope)
-		}
-		key, err := base64.StdEncoding.DecodeString(record.Envelope)
-		if err != nil {
-			t.Fatalf("envelope is not base64: %v", err)
-		}
-		if len(key) != baked.KeyBytes {
-			t.Fatalf("envelope holds %d bytes, want the %d-byte data key", len(key), baked.KeyBytes)
-		}
-
-		raw, err := json.Marshal(record)
-		if err != nil {
-			t.Fatalf("marshal record: %v", err)
-		}
-		for _, absent := range []string{"sk-live", "STRIPE_API_KEY", "DB_PASSWORD"} {
-			if strings.Contains(string(raw), absent) {
-				t.Errorf("record = %s, want no %q on the delivery side", raw, absent)
-			}
-		}
-	})
-
-	t.Run("no sensitive declaration carries no envelope", func(t *testing.T) {
-		t.Parallel()
-		cfg := edgeRecordConfig(t)
-		manifest := edgeVarsManifest(variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
-
-		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, edgeBuilds(t, cfg, manifest), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if record.Envelope != "" {
-			t.Errorf("Envelope = %q, want none with nothing sealed", record.Envelope)
-		}
-		if _, ok := recordFields(t, record)["envelope"]; ok {
-			t.Error("record carries an envelope field with nothing sealed")
-		}
-	})
-
-	t.Run("no cache store seals nothing, so no envelope", func(t *testing.T) {
-		t.Parallel()
-		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
-		manifest := edgeVarsManifest(
-			variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-			variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
-		)
-
-		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("WEB1"), nil, edgeBuilds(t, cfg, manifest), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if record.Envelope != "" {
-			t.Errorf("Envelope = %q, want none for an overlay no cache store received", record.Envelope)
-		}
-		if _, ok := recordFields(t, record)["envelope"]; ok {
-			t.Error("record carries an envelope field for an overlay that was never written")
-		}
-		if got, want := record.Env["POSTHOG_ID"], "ph-123"; got != want {
-			t.Errorf("Env[POSTHOG_ID] = %q, want %q", got, want)
-		}
-	})
-
-	t.Run("no edge output carries no delivery", func(t *testing.T) {
-		t.Parallel()
-		cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
-		manifest := &contractv1.Manifest{
-			Slug: "proj",
-			Apps: []*contractv1.ManifestApp{{
-				Name: "admin", Framework: frameworkNext,
-				Variables: []*contractv1.ManifestVariable{
-					variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-					variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
-				},
-			}},
-			Functions: []*contractv1.ManifestFunction{{LogicalName: "admin_index", Framework: "next", App: "admin"}},
-		}
-
-		record, err := buildDeploymentRecord(cfg, nil, manifest, manifest.GetApps()[0], deployedAs("ADM1"), nil, edgeBuilds(t, cfg, manifest), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if record.Env != nil || record.Envelope != "" {
-			t.Errorf("Env = %v, Envelope = %q, want neither for a build with no edge output", record.Env, record.Envelope)
-		}
-	})
-}
-
-func recordFields(t *testing.T, record edge.DeploymentRecord) map[string]json.RawMessage {
-	t.Helper()
-	raw, err := json.Marshal(record)
-	if err != nil {
-		t.Fatalf("marshal record: %v", err)
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		t.Fatalf("unmarshal record: %v", err)
-	}
-	return fields
 }
 
 func TestLoaderID(t *testing.T) {

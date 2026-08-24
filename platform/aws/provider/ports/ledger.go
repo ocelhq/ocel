@@ -9,8 +9,8 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func Ledger(dynamo DynamoAPI, table string, class edge.Class, slug string) *ledger.Ledger {
-	return ledger.New(ledgerRecords{Records{Dynamo: dynamo, Table: table}}, class, slug)
+func Ledger(dynamo DynamoAPI, tables Tables, class edge.Class, slug string) *ledger.Ledger {
+	return ledger.New(ledgerRecords{Records{Dynamo: dynamo, Tables: tables}}, class, slug)
 }
 
 type ledgerRecords struct{ Records }
@@ -19,7 +19,7 @@ func (r ledgerRecords) provisioned() error {
 	if r.Dynamo == nil {
 		return fmt.Errorf("%w: the deployments ledger has no DynamoDB client; bootstrap the account first", edge.ErrStoreAbsent)
 	}
-	if r.Table == "" {
+	if r.Tables == nil {
 		return fmt.Errorf("%w: the deployments ledger names no state table; bootstrap the account first", edge.ErrStoreAbsent)
 	}
 	return nil

@@ -8,7 +8,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/channelauth"
 )
 
 var served = map[linksv1.LinkType]bool{
@@ -23,7 +22,7 @@ func NewMux(token string, svc blobv1connect.BucketServiceHandler) *http.ServeMux
 	mux := http.NewServeMux()
 	path, handler := blobv1connect.NewBucketServiceHandler(
 		svc,
-		connect.WithInterceptors(channelauth.Interceptor(token), validate.NewInterceptor()),
+		connect.WithInterceptors(&authenticator{token: token}, validate.NewInterceptor()),
 	)
 	mux.Handle(path, handler)
 	return mux

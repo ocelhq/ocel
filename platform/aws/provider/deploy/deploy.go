@@ -28,7 +28,7 @@ type Config struct {
 	PulumiProject string
 	Secrets       SecretsReader
 
-	Stacks  StackIndex
+	Tags    TagSweeper
 	Records providerkit.RecordStore
 
 	RequiredFeatures []string
@@ -37,7 +37,7 @@ type Config struct {
 	StateTableARN      string
 	VarsKeyARN         string
 	AppBoundaryARN     string
-	VarsClass          string
+	Class              providerkit.Class
 	VarsSiblingClasses []string
 	VarsReferenced     map[values.Coordinate]string
 	Links              LinkStore
@@ -136,46 +136,6 @@ func (p Progress) report(phase progressv1.Phase, message string, current, total 
 	if p != nil {
 		p(phase, message, current, total)
 	}
-}
-
-type Result struct {
-	Links       []*linksv1.Link
-	Functions   []*progressv1.FunctionOutput
-	AppURLs     []string
-	URLNote     string
-	PromotionID string
-	Flip        *edge.FlipBound
-	StackState  edge.StackState
-}
-
-func Run(ctx context.Context, cfg Config, manifest *contractv1.Manifest, progress Progress, log func(string)) (Result, error) {
-	return realize(ctx, cfg, &Realized{}, manifest, progress, log)
-}
-
-func appURLs(manifest *contractv1.Manifest, functions []*progressv1.FunctionOutput) []string {
-	urlByLogical := make(map[string]string, len(functions))
-	for _, f := range functions {
-		if f.GetUrl() != "" {
-			urlByLogical[f.GetLogicalName()] = f.GetUrl()
-		}
-	}
-
-	var urls []string
-	for _, app := range manifestApps(manifest) {
-		if worker := urlByLogical[workerOutputName(app.GetName())]; worker != "" {
-			urls = append(urls, worker)
-			continue
-		}
-		for _, fn := range manifest.GetFunctions() {
-			if fn.GetApp() != app.GetName() {
-				continue
-			}
-			if url := urlByLogical[fn.GetLogicalName()]; url != "" {
-				urls = append(urls, url)
-			}
-		}
-	}
-	return urls
 }
 
 func collectPostgresLink(ctx context.Context, secrets SecretsReader, name string, fields map[string]any) (*linksv1.Link, error) {

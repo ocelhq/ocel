@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"reflect"
 	"strings"
 	"testing"
@@ -34,7 +35,7 @@ func TestIdentity(t *testing.T) {
 	t.Run("one build deployed into two environments never collides", func(t *testing.T) {
 		t.Parallel()
 
-		prod := deployedInto(ProductionEnv, "dep1", "")
+		prod := deployedInto(providerkit.ProductionEnv, "dep1", "")
 		preview := deployedInto("pr-7", "dep1", "")
 		other := deployedInto("pr-8", "dep1", "")
 		for _, pair := range [][2]Identity{{prod, preview}, {prod, other}, {preview, other}} {
@@ -67,7 +68,7 @@ func TestNewIdentity(t *testing.T) {
 		t.Parallel()
 
 		want := deploymentIDFor("dep1")
-		id, err := NewIdentity(want, ProductionEnv, "")
+		id, err := NewIdentity(want, providerkit.ProductionEnv, "")
 		if err != nil {
 			t.Fatalf("NewIdentity: %v", err)
 		}
@@ -94,16 +95,16 @@ func TestNewIdentity(t *testing.T) {
 		t.Parallel()
 
 		for _, c := range []struct{ deploymentID, environment, values string }{
-			{"", ProductionEnv, ""},
+			{"", providerkit.ProductionEnv, ""},
 			{"", "", "abc"},
-			{"dep" + identitySeparator + "1", ProductionEnv, ""},
+			{"dep" + identitySeparator + "1", providerkit.ProductionEnv, ""},
 			{deploymentIDFor("dep1"), "", ""},
-			{"dep1", ProductionEnv, ""},
-			{strings.ToUpper(deploymentIDFor("dep1")), ProductionEnv, ""},
-			{deploymentIDFor("dep1")[:31], ProductionEnv, ""},
-			{deploymentIDFor("dep1") + "0", ProductionEnv, ""},
-			{deploymentIDFor("dep1") + "\n", ProductionEnv, ""},
-			{"../" + deploymentIDFor("dep1"), ProductionEnv, ""},
+			{"dep1", providerkit.ProductionEnv, ""},
+			{strings.ToUpper(deploymentIDFor("dep1")), providerkit.ProductionEnv, ""},
+			{deploymentIDFor("dep1")[:31], providerkit.ProductionEnv, ""},
+			{deploymentIDFor("dep1") + "0", providerkit.ProductionEnv, ""},
+			{deploymentIDFor("dep1") + "\n", providerkit.ProductionEnv, ""},
+			{"../" + deploymentIDFor("dep1"), providerkit.ProductionEnv, ""},
 		} {
 			if _, err := NewIdentity(c.deploymentID, c.environment, c.values); err == nil {
 				t.Errorf("NewIdentity(%q, %q, %q) err = nil, want an error", c.deploymentID, c.environment, c.values)

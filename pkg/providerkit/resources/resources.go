@@ -199,7 +199,7 @@ func (f *fanout) remove(ctx context.Context, ref providerkit.StackRef, link prov
 }
 
 func (f *fanout) recorded(ctx context.Context, ref providerkit.StackRef) (providerkit.Stack, error) {
-	recorded, _, err := providerkit.ReadStack(ctx, f.records, ref.Project, ref.Name)
+	recorded, _, err := providerkit.ReadStack(ctx, f.records, ref.Class, ref.Project, ref.Name)
 	return recorded, err
 }
 

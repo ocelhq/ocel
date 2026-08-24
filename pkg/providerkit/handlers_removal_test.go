@@ -89,7 +89,7 @@ func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
 		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
 	}
 
-	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), "shop")
+	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), providerkit.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}

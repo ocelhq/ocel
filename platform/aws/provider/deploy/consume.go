@@ -175,7 +175,7 @@ func consumeLinks(ctx context.Context, cfg Config, manifest *contractv1.Manifest
 	}
 
 	environment := overrideEnvironment(cfg)
-	published, err := cfg.Links.PublishedNames(ctx, manifest.GetSlug(), cfg.VarsClass, environment)
+	published, err := cfg.Links.PublishedNames(ctx, manifest.GetSlug(), string(cfg.Class), environment)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +223,7 @@ func (cfg Config) refuseUnpublished(ctx context.Context, slug, environment strin
 	}
 	return &UnpublishedLinkError{
 		Links:       missing,
-		Class:       cfg.VarsClass,
+		Class:       string(cfg.Class),
 		Environment: environment,
 		Siblings:    published,
 		FoundIn:     found,
@@ -233,7 +233,7 @@ func (cfg Config) refuseUnpublished(ctx context.Context, slug, environment strin
 func (cfg Config) classesPublishing(ctx context.Context, slug, environment, name string) []string {
 	var found []string
 	for _, class := range cfg.VarsSiblingClasses {
-		if class == cfg.VarsClass {
+		if class == string(cfg.Class) {
 			continue
 		}
 		if slices.Contains(cfg.publishedOrNothing(ctx, slug, class, environment), name) {
@@ -260,7 +260,7 @@ func warnShadowedProvisioning(cfg Config, manifest *contractv1.Manifest, publish
 		warn(fmt.Sprintf(
 			"a link named %q is already published to %s, and this deploy provisions %s beside it. "+
 				"Ocel binds neither to the other on its own: add %q to `links` to consume the published record instead",
-			name, describeCoordinate(cfg.VarsClass, overrideEnvironment(cfg)), r.GetLogicalName(), name,
+			name, describeCoordinate(string(cfg.Class), overrideEnvironment(cfg)), r.GetLogicalName(), name,
 		))
 	}
 }
@@ -274,14 +274,4 @@ func consumedLinks(consumed map[string]Consumed) []*linksv1.Link {
 		out = append(out, link)
 	}
 	return out
-}
-
-func reportGrantVersions(consumed map[string]Consumed, log func(string)) {
-	for _, name := range slices.Sorted(maps.Keys(consumed)) {
-		c := consumed[name]
-		log(fmt.Sprintf(
-			"link %s is published at version %d; the apps that use it are deployed with the grants that version carries",
-			c.Record.Name(), c.Record.Version,
-		))
-	}
 }
