@@ -354,6 +354,10 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 		if err != nil {
 			return err
 		}
+		values, err := r.appValues(entry, grants)
+		if err != nil {
+			return err
+		}
 		plan := StackPlan{
 			Ref:   r.ref(entry.Stack),
 			Kind:  StackApp,
@@ -366,7 +370,7 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 				Entry:           entryFunction(r.manifest, entry.App),
 				Deployment:      entry.Build.DeploymentID(),
 				Functions:       r.functionSpecs(entry),
-				Values:          r.appValues(entry, grants),
+				Values:          values,
 				Grants:          grants,
 				Routing:         facts.Routing,
 				ISR:             facts.ISR,
@@ -475,7 +479,7 @@ func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Link, error) 
 	return grants, nil
 }
 
-func (r *deployRun) appValues(entry AppEntry, grants []Link) AppValues {
+func (r *deployRun) appValues(entry AppEntry, grants []Link) (AppValues, error) {
 	held := AppValues{
 		Plain:     map[string]string{},
 		Sensitive: map[string]string{},
@@ -489,12 +493,16 @@ func (r *deployRun) appValues(entry AppEntry, grants []Link) AppValues {
 			held.Secrets = append(held.Secrets, SecretRef{Key: variable.GetKey(), Folder: variable.GetFolder()})
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
 			held.Sensitive[variable.GetKey()] = variable.GetValue()
-		default:
+		case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:
 			held.Plain[variable.GetKey()] = variable.GetValue()
+		default:
+			return AppValues{}, Refuse(CodeInvalid,
+				"%s declares %s with class %s, which this deploy cannot deliver to a function; declare it as `plain`, `sensitive` or `secret`",
+				entry.App, variable.GetKey(), variable.GetClass())
 		}
 		held.Owners[variable.GetKey()] = entry.App
 	}
-	return held
+	return held, nil
 }
 
 func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
