@@ -23,6 +23,7 @@
     "@bufbuild/protobuf": "^2.12.1",
     "@bufbuild/protoc-gen-es": "^2.12.1",
     "@changesets/cli": "^2.31.0",
+    "@ocel/provider-aws": "workspace:^",
     "@types/node": "^26.1.1",
     "ocel": "workspace:*"
   }

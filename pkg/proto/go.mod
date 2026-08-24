@@ -4,7 +4,7 @@
 // carries only protobuf/connect so importers don't inherit each other's deps.
 module github.com/ocelhq/ocel/pkg/proto
 
-go 1.26.6
+go 1.27.0
 
 require (
 	connectrpc.com/connect v1.20.0

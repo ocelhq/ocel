@@ -277,16 +277,16 @@ func (e *Edge) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
 
 func (e *Edge) PreviewWildcardSurfaces(wildcard string) (removed, kept edge.Surface) {
 	return edge.Surface{
-			Kind:   "preview entry",
-			Name:   wildcard,
-			Action: edge.SurfaceDelete,
-			Reason: "the shared entry every preview on this wildcard is served through",
-		}, edge.Surface{
-			Kind:   "preview entry worker",
-			Name:   edge.PreviewEntryOwner,
-			Action: edge.SurfaceKeep,
-			Reason: "shared with every other wildcard in this account",
-		}
+		Kind:   "preview entry",
+		Name:   wildcard,
+		Action: edge.SurfaceDelete,
+		Reason: "the shared entry every preview on this wildcard is served through",
+	}, edge.Surface{
+		Kind:   "preview entry worker",
+		Name:   edge.PreviewEntryOwner,
+		Action: edge.SurfaceKeep,
+		Reason: "shared with every other wildcard in this account",
+	}
 }
 
 func (e *Edge) SharedPreviewSurface() edge.Surface {

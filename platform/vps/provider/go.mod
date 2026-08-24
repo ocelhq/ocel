@@ -1,6 +1,6 @@
 module github.com/ocelhq/ocel/platform/vps/provider
 
-go 1.26.6
+go 1.27.0
 
 require (
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0

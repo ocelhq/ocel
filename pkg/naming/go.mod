@@ -1,6 +1,6 @@
 module github.com/ocelhq/ocel/pkg/naming
 
-go 1.26.6
+go 1.27.0
 
 require github.com/ocelhq/ocel/pkg/proto v0.0.0
 
