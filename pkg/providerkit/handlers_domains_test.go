@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -441,5 +443,53 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 	bindings := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings()
 	if len(bindings) == 0 || bindings[len(bindings)-1].Certificate != "cert-of-today" {
 		t.Errorf("the edge was bound with %+v, want the hostname rebound with the certificate it is served with now", bindings)
+	}
+}
+
+func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
+		Edge: edge.StackState{
+			Slug:     "shop",
+			Class:    providerkit.ClassProduction,
+			Endpoint: "https://shop.fake.invalid",
+			Front:    "shop.relay.fake.invalid",
+			Bound:    []string{"app.acme.com"},
+		},
+		Hosts: map[string]providerkit.Settled{
+			"app.acme.com": {
+				Certificate: providerkit.Certificate{ARN: "pending-cert", Requested: true},
+				Probe:       providerkit.Probe{OK: true, Edge: fake.KindRelay},
+			},
+		},
+	})
+	expiry := time.Now().Add(24 * time.Hour)
+	provider.ReportCertificate(providerkit.CertificateHealth{
+		Terminates:   true,
+		Status:       "PENDING_VALIDATION",
+		Domains:      []string{"other.acme.com"},
+		Renewal:      "PENDING_AUTO_RENEWAL",
+		ExpiresAt:    expiry.Unix(),
+		ExpiringSoon: true,
+	})
+
+	status, err := client.GetHostnameStatus(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []string{"app.acme.com"},
+		Edge:       zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("GetHostnameStatus() error = %v", err)
+	}
+	row := status.GetHostnames()[0]
+	if got := row.GetCertificate().GetCertificateStatus(); got != "PENDING_VALIDATION" {
+		t.Errorf("certificate status = %q, want the state the provider reports", got)
+	}
+	if row.GetRenewalStatus() != "PENDING_AUTO_RENEWAL" || row.GetExpiresAt() != expiry.Unix() || !row.GetExpiringSoon() {
+		t.Errorf("renewal = %+v, want the expiry and renewal the provider reports", row)
+	}
+	if !strings.Contains(row.GetPending(), "not issued") || row.GetReady() {
+		t.Errorf("pending = %q, want a hostname whose certificate is not issued held back", row.GetPending())
 	}
 }

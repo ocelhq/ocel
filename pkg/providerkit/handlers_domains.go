@@ -299,13 +299,20 @@ func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.Prod
 	if bound {
 		probe = d.probe(ctx, host)
 	}
+	health, err := inspectCertificate(ctx, d.provider, d.settle.kind, host, settled.Certificate)
+	if err != nil {
+		return nil, err
+	}
 	row := &contractv1.ProductionHostname{
 		Hostname:       host,
 		Declared:       slices.Contains(d.configured, host),
-		Certificate:    certificateState(settled, probe, owed),
+		Certificate:    certificateState(settled, probe, owed, health.Status),
+		RenewalStatus:  health.Renewal,
+		ExpiresAt:      health.ExpiresAt,
+		ExpiringSoon:   health.ExpiringSoon,
 		ServingPointer: servingPointer(probe, d.settle.kind),
 	}
-	row.Pending = d.pendingOn(host, bound, probe)
+	row.Pending = d.pendingOn(host, settled.Certificate, health, bound, probe)
 	row.Ready = row.GetPending() == ""
 	return row, nil
 }
@@ -320,10 +327,17 @@ func (d *hostnames) probe(ctx context.Context, host string) Probe {
 	return probe
 }
 
-func (d *hostnames) pendingOn(host string, bound bool, probe Probe) string {
+func (d *hostnames) pendingOn(host string, cert Certificate, health CertificateHealth, bound bool, probe Probe) string {
 	switch {
 	case !slices.Contains(d.configured, host):
 		return fmt.Sprintf("this project no longer declares %s; `ocel domain rm` gives it back", host)
+	case health.Terminates && !cert.Held():
+		return fmt.Sprintf("no certificate covers %s yet; run `ocel domain add`", host)
+	case health.Terminates && !health.Issued:
+		return fmt.Sprintf("certificate %s is %s, not issued", cert.ARN, certificateStatusWord(health.Status))
+	case health.Terminates && !health.Covers:
+		return fmt.Sprintf("certificate %s covers %s, which does not include %s",
+			cert.ARN, strings.Join(health.Domains, ", "), host)
 	case !bound:
 		return fmt.Sprintf("%s is not bound to the %s edge yet; run `ocel domain add`", host, d.settle.kind)
 	case !probe.OK:
@@ -339,13 +353,21 @@ func servingPointer(probe Probe, kind edge.Kind) string {
 	return string(kind)
 }
 
-func certificateState(settled Settled, probe Probe, owed []edge.Record) *contractv1.CertificateState {
+func certificateStatusWord(status string) string {
+	if status == "" {
+		return "in no state the provider reports"
+	}
+	return strings.ToLower(status)
+}
+
+func certificateState(settled Settled, probe Probe, owed []edge.Record, status string) *contractv1.CertificateState {
 	return &contractv1.CertificateState{
-		CertificateId:  settled.Certificate.ARN,
-		RecordsWritten: recordLines(settled.WrittenRecords()),
-		RecordsOwed:    recordLines(append(settled.OwedRecords(), owed...)),
-		LastProbeAt:    probe.At,
-		LastProbeOk:    probe.OK,
-		LastProbeEdge:  string(probe.Edge),
+		CertificateId:     settled.Certificate.ARN,
+		CertificateStatus: status,
+		RecordsWritten:    recordLines(settled.WrittenRecords()),
+		RecordsOwed:       recordLines(append(settled.OwedRecords(), owed...)),
+		LastProbeAt:       probe.At,
+		LastProbeOk:       probe.OK,
+		LastProbeEdge:     string(probe.Edge),
 	}
 }

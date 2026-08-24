@@ -221,6 +221,10 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	if err != nil {
 		return nil, RefusalError(err)
 	}
+	health, err := inspectCertificate(ctx, w.provider, w.held.Edge, w.held.Hostname(), w.held.Settled.Certificate)
+	if err != nil {
+		return nil, RefusalError(err)
+	}
 	return &contractv1.GetPreviewWildcardResponse{
 		Wildcard: &contractv1.PreviewWildcard{
 			BaseDomain:     w.held.BaseDomain,
@@ -228,7 +232,7 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 			GrammarMin:     w.held.GrammarMin,
 			GrammarMax:     w.held.GrammarMax,
 			RouteInstalled: w.routeInstalled(ctx),
-			Certificate:    certificateState(w.held.Settled, w.held.Settled.Probe, nil),
+			Certificate:    certificateState(w.held.Settled, w.held.Settled.Probe, nil, health.Status),
 		},
 		Projects: served,
 	}, nil
