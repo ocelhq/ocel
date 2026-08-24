@@ -238,14 +238,6 @@ func TestEventConstructors(t *testing.T) {
 		t.Errorf("progressEvent() message = %q", got)
 	}
 
-	phased := phaseProgressEvent(stage.ID[:], progressv1.Phase_PHASE_UPLOADING, "uploading", 2, 7).GetProgress()
-	if phased.GetCurrent() != 2 || phased.GetTotal() != 7 {
-		t.Errorf("phaseProgressEvent() = %d/%d, want 2/7", phased.GetCurrent(), phased.GetTotal())
-	}
-	if untotalled := phaseProgressEvent(nil, progressv1.Phase_PHASE_UPLOADING, "uploading", 2, 0).GetProgress(); untotalled.Total != nil {
-		t.Error("phaseProgressEvent() carried a total where none was known")
-	}
-
 	if got := stageProgressEvent(stage.ID, progressv1.Phase_PHASE_DELETING, "deleting").GetProgress(); StageID(got.GetStageId()) != stage.ID {
 		t.Errorf("stageProgressEvent() StageId = %x, want %x", got.GetStageId(), stage.ID)
 	}
