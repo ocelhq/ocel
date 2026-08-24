@@ -14,32 +14,35 @@ func (r *deployRun) admitLinks(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	published, err := r.reader().Names(ctx)
+	links, err := r.reader().Published(ctx)
 	if err != nil {
 		return err
 	}
-	r.warnShadowed(resources, published)
+	published := make(map[string]Link, len(links))
+	names := make([]string, 0, len(links))
+	for _, link := range links {
+		published[link.Name] = link
+		names = append(names, link.Name)
+	}
+	r.warnShadowed(resources, names)
 
-	var bound []Resource
 	var missing []string
 	for _, resource := range resources {
 		if !resource.Linked {
 			continue
 		}
-		bound = append(bound, resource)
-		if !slices.Contains(published, resource.Declared) {
+		if _, bound := published[resource.Declared]; !bound {
 			missing = append(missing, resource.Declared)
 		}
 	}
 	if len(missing) > 0 {
-		return r.refuseUnpublished(ctx, missing, published)
+		return r.refuseUnpublished(ctx, missing, names)
 	}
-	for _, resource := range bound {
-		link, err := r.reader().Resolve(ctx, resource.Declared)
-		if err != nil {
-			return err
+	for _, resource := range resources {
+		if !resource.Linked {
+			continue
 		}
-		if err := ReadableAs(link, resource.Type); err != nil {
+		if err := ReadableAs(published[resource.Declared], resource.Type); err != nil {
 			return err
 		}
 	}
