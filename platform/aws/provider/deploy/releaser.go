@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -126,21 +127,28 @@ type stackWork struct {
 	outputs auto.OutputMap
 }
 
+type infraWork struct {
+	transformed *transformedArgs
+	completer   payloads.Placement
+}
+
 func (r *release) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
 	switch work := plan.Options.(type) {
 	case *stackWork:
 		return work.program(pctx)
 	case *appWork:
 		return work.run(pctx)
+	case *infraWork:
+		return r.infra(pctx, plan, work)
 	}
 	if plan.Kind != providerkit.StackInfra {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"%s stands up an app and this plan carries none", plan.Ref.Name)
 	}
-	return r.infra(pctx, plan)
+	return r.infra(pctx, plan, &infraWork{})
 }
 
-func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan) error {
+func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan, work *infraWork) error {
 	vpc, err := ec2.LookupVpc(pctx, &ec2.LookupVpcArgs{Default: sdk.BoolRef(true)})
 	if err != nil {
 		return fmt.Errorf("look up default VPC: %w", err)
@@ -153,7 +161,7 @@ func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan) error {
 	}
 
 	project, env := naming.Sanitize(plan.Ref.Project), plan.Ref.Name.Env
-	transformed := transformsOf(plan)
+	transformed := work.transformed
 	sessions := newSessionScope(project, env, r.cfg.StateTableARN)
 
 	for _, resource := range plan.Resources {
@@ -167,7 +175,7 @@ func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan) error {
 			err = registerPostgres(pctx, project, env, resource.Name, args, vpc.Id, vpc.CidrBlock, subnets.Ids)
 		case providerkit.LinkBucket:
 			args := transformed.forBucket(resource.Name, bucketConfig(resource))
-			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, payloads.Placement{})
+			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
 		default:
 			return providerkit.Refuse(providerkit.CodeInvalid,
 				"this provider stands up no %s; it stands up %s and %s", resource.Type, providerkit.LinkPostgres, providerkit.LinkBucket)
@@ -179,14 +187,10 @@ func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan) error {
 	return nil
 }
 
-func transformsOf(plan providerkit.StackPlan) *transformedArgs {
-	switch held := plan.Options.(type) {
-	case *transformedArgs:
-		return held
-	case *appWork:
-		return held.transformed
-	}
-	return nil
+func provisionsBucket(plan providerkit.StackPlan) bool {
+	return slices.ContainsFunc(plan.Resources, func(resource providerkit.Resource) bool {
+		return resource.Type == providerkit.LinkBucket && !resource.Linked
+	})
 }
 
 func postgresConfig(resource providerkit.Resource) *resourcesv1.PostgresConfig {
@@ -326,7 +330,13 @@ func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, rep
 			if err := r.refuseHandover(ctx, plan); err != nil {
 				return providerkit.StackResult{}, err
 			}
-			plan.Options = transformed
+			work := &infraWork{transformed: transformed}
+			if provisionsBucket(plan) {
+				if work.completer, err = placeUploadCompleter(ctx, r.cfg); err != nil {
+					return providerkit.StackResult{}, err
+				}
+			}
+			plan.Options = work
 		} else {
 			work, err := r.appWork(plan, transformed)
 			if err != nil {
