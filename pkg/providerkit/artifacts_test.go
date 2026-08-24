@@ -2,7 +2,6 @@ package providerkit
 
 import (
 	"archive/zip"
-	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,9 +23,18 @@ func builtTree(t *testing.T, files map[string]string) string {
 	return dir
 }
 
+func walked(t *testing.T, dir string) []string {
+	t.Helper()
+	rels, err := artifactFiles(dir)
+	if err != nil {
+		t.Fatalf("artifactFiles: %v", err)
+	}
+	return rels
+}
+
 func digested(t *testing.T, dir string, overlay map[string][]byte) string {
 	t.Helper()
-	sum, err := digestArtifact(dir, overlay)
+	sum, err := digestArtifact(dir, walked(t, dir), overlay)
 	if err != nil {
 		t.Fatalf("digestArtifact: %v", err)
 	}
@@ -88,11 +96,16 @@ func TestAnArtifactDigestNamesOneTreeAndOneOverlay(t *testing.T) {
 
 func packed(t *testing.T, dir string, overlay map[string][]byte) *zip.Reader {
 	t.Helper()
-	raw, err := packArtifact(dir, overlay)
+	file, err := packArtifact(dir, walked(t, dir), overlay)
 	if err != nil {
 		t.Fatalf("packArtifact: %v", err)
 	}
-	archive, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	t.Cleanup(func() { discard(file) })
+	size, err := file.Seek(0, io.SeekEnd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive, err := zip.NewReader(file, size)
 	if err != nil {
 		t.Fatalf("the packed artifact is not a zip: %v", err)
 	}

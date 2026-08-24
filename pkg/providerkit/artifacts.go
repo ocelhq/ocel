@@ -2,7 +2,6 @@ package providerkit
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
@@ -135,7 +134,11 @@ func (r *deployRun) put(
 		return ArtifactRef{}, Refuse(CodeInvalid, "function %s names no build artifact, so there is nothing to ship", name)
 	}
 	dir := filepath.Join(root, filepath.FromSlash(fn.GetArtifactPath()))
-	sum, err := digestArtifact(dir, overlay)
+	rels, err := artifactFiles(dir)
+	if err != nil {
+		return ArtifactRef{}, fmt.Errorf("read %s's artifact: %w", name, err)
+	}
+	sum, err := digestArtifact(dir, rels, overlay)
 	if err != nil {
 		return ArtifactRef{}, fmt.Errorf("read %s's artifact: %w", name, err)
 	}
@@ -152,13 +155,14 @@ func (r *deployRun) put(
 		return ref, nil
 	}
 
-	body, err := packArtifact(dir, overlay)
+	body, err := packArtifact(dir, rels, overlay)
 	if err != nil {
 		return ArtifactRef{}, fmt.Errorf("pack %s's artifact: %w", name, err)
 	}
+	defer discard(body)
 
 	report.Say("Uploading " + name)
-	if err := r.provider.Artifacts().Put(ctx, ref, bytes.NewReader(body)); err != nil {
+	if err := r.provider.Artifacts().Put(ctx, ref, body); err != nil {
 		return ArtifactRef{}, fmt.Errorf("upload %s's artifact: %w", name, err)
 	}
 	return ref, nil
@@ -195,11 +199,7 @@ func overlayFiles(overlay map[string][]byte) []string {
 
 const artifactDigestLen = 16
 
-func digestArtifact(dir string, overlay map[string][]byte) (string, error) {
-	rels, err := artifactFiles(dir)
-	if err != nil {
-		return "", err
-	}
+func digestArtifact(dir string, rels []string, overlay map[string][]byte) (string, error) {
 	sum := sha256.New()
 	for _, rel := range rels {
 		full := filepath.Join(dir, rel)
@@ -246,56 +246,69 @@ func digestArtifact(dir string, overlay map[string][]byte) (string, error) {
 	return hex.EncodeToString(sum.Sum(nil))[:artifactDigestLen], nil
 }
 
-func packArtifact(dir string, overlay map[string][]byte) ([]byte, error) {
-	rels, err := artifactFiles(dir)
+func packArtifact(dir string, rels []string, overlay map[string][]byte) (*os.File, error) {
+	packed, err := os.CreateTemp("", "ocel-artifact-*.zip")
 	if err != nil {
 		return nil, err
 	}
-	var packed bytes.Buffer
-	archive := zip.NewWriter(&packed)
+	if err := writeArchive(packed, dir, rels, overlay); err != nil {
+		discard(packed)
+		return nil, err
+	}
+	if _, err := packed.Seek(0, io.SeekStart); err != nil {
+		discard(packed)
+		return nil, err
+	}
+	return packed, nil
+}
+
+func discard(packed *os.File) {
+	packed.Close()
+	os.Remove(packed.Name())
+}
+
+func writeArchive(into io.Writer, dir string, rels []string, overlay map[string][]byte) error {
+	archive := zip.NewWriter(into)
 	for _, rel := range rels {
 		full := filepath.Join(dir, rel)
 		info, err := os.Lstat(full)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		header, err := zip.FileInfoHeader(info)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		header.Name = rel
 		header.Method = zip.Deflate
 		entry, err := archive.CreateHeader(header)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			target, err := os.Readlink(full)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if _, err := io.WriteString(entry, target); err != nil {
-				return nil, err
+				return err
 			}
 			continue
 		}
 		if err := copyInto(entry, full); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	for _, rel := range overlayFiles(overlay) {
 		entry, err := archive.Create(rel)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if _, err := entry.Write(overlay[rel]); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	if err := archive.Close(); err != nil {
-		return nil, err
-	}
-	return packed.Bytes(), nil
+	return archive.Close()
 }
 
 func copyInto(entry io.Writer, path string) error {
