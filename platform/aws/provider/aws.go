@@ -205,10 +205,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	store := values.Store{
-		Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(p.aws), Tables: p},
-		Sealer:  awsports.Sealer{KMS: kms.NewFromConfig(p.aws), Keys: p},
-	}
+	store := values.Store{Records: p.Records(), Sealer: p.Sealer()}
 	referenced, err := store.ReferenceOwners(ctx, values.Scope{Project: scope.Slug, Class: scope.Class})
 	if err != nil {
 		return deploy.Config{}, err
