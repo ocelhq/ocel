@@ -107,6 +107,14 @@ func (s EdgeStackState) WrittenRecords() []edge.Record {
 	return written
 }
 
+func (s EdgeStackState) PointerRecords() []edge.Record {
+	var written []edge.Record
+	for _, hostname := range s.Hostnames() {
+		written = mergeRecords(written, s.Hosts[hostname].Written)
+	}
+	return written
+}
+
 func (s EdgeStackState) OwedRecords() []edge.Record {
 	var owed []edge.Record
 	for _, hostname := range s.Hostnames() {
