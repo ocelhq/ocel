@@ -1,26 +1,19 @@
 package deploy
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
-	"path/filepath"
-	"slices"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -28,158 +21,11 @@ const uploadConcurrency = 64
 
 type ArtifactUploader = payloads.ObjectStore
 
-func walkRegularFiles(dir string) ([]string, error) {
-	var rels []string
-	if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !d.Type().IsRegular() && d.Type()&fs.ModeSymlink == 0 {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		rels = append(rels, filepath.ToSlash(rel))
-		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("walk artifact %s: %w", dir, err)
-	}
-	slices.Sort(rels)
-	return rels, nil
-}
-
-func overlayPaths(overlay map[string][]byte) []string {
-	rels := make([]string, 0, len(overlay))
-	for rel := range overlay {
-		rels = append(rels, rel)
-	}
-	slices.Sort(rels)
-	return rels
-}
-
-func hashArtifact(dir string, overlay map[string][]byte) (string, error) {
-	rels, err := walkRegularFiles(dir)
-	if err != nil {
-		return "", err
-	}
-	h := sha256.New()
-	for _, rel := range rels {
-		full := filepath.Join(dir, rel)
-		info, err := os.Lstat(full)
-		if err != nil {
-			return "", err
-		}
-		writeLenPrefixed(h, []byte(rel))
-
-		if info.Mode()&os.ModeSymlink != 0 {
-			target, err := os.Readlink(full)
-			if err != nil {
-				return "", err
-			}
-			h.Write([]byte{2})
-			writeLenPrefixed(h, []byte(target))
-			continue
-		}
-
-		var execBit [1]byte
-		if info.Mode()&0o100 != 0 {
-			execBit[0] = 1
-		}
-		h.Write(execBit[:])
-
-		f, err := os.Open(full)
-		if err != nil {
-			return "", err
-		}
-		var size [8]byte
-		binary.BigEndian.PutUint64(size[:], uint64(info.Size()))
-		h.Write(size[:])
-		if _, err := io.Copy(h, f); err != nil {
-			f.Close()
-			return "", err
-		}
-		f.Close()
-	}
-	for _, rel := range overlayPaths(overlay) {
-		writeLenPrefixed(h, []byte(rel))
-		h.Write([]byte{0})
-		writeLenPrefixed(h, overlay[rel])
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
 func writeLenPrefixed(h io.Writer, b []byte) {
 	var size [8]byte
 	binary.BigEndian.PutUint64(size[:], uint64(len(b)))
 	h.Write(size[:])
 	h.Write(b)
-}
-
-func functionArtifactPrefix(c naming.Coordinate) string {
-	return c.StoragePrefix() + string(naming.KindFunction)
-}
-
-func artifactKey(c naming.Coordinate, logicalName, hash string) string {
-	c.Kind = naming.KindFunction
-	c.Name = logicalName
-	return c.FunctionArtifactKey(hash)
-}
-
-func zipDir(dir string, overlay map[string][]byte) ([]byte, error) {
-	rels, err := walkRegularFiles(dir)
-	if err != nil {
-		return nil, err
-	}
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	for _, rel := range rels {
-		full := filepath.Join(dir, rel)
-		info, err := os.Lstat(full)
-		if err != nil {
-			return nil, err
-		}
-		header, err := zip.FileInfoHeader(info)
-		if err != nil {
-			return nil, err
-		}
-		header.Name = rel
-		header.Method = zip.Deflate
-		w, err := zw.CreateHeader(header)
-		if err != nil {
-			return nil, err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			target, err := os.Readlink(full)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := io.WriteString(w, target); err != nil {
-				return nil, fmt.Errorf("zip artifact %s: %w", dir, err)
-			}
-			continue
-		}
-		if err := copyFileInto(w, full); err != nil {
-			return nil, fmt.Errorf("zip artifact %s: %w", dir, err)
-		}
-	}
-	for _, rel := range overlayPaths(overlay) {
-		w, err := zw.Create(rel)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := w.Write(overlay[rel]); err != nil {
-			return nil, fmt.Errorf("zip artifact %s: %w", dir, err)
-		}
-	}
-	if err := zw.Close(); err != nil {
-		return nil, fmt.Errorf("finalize artifact zip %s: %w", dir, err)
-	}
-	return buf.Bytes(), nil
 }
 
 func copyFileInto(w io.Writer, path string) error {

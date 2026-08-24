@@ -1,17 +1,11 @@
 package deploy
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func workerOutputName(app string) string {
@@ -31,21 +25,6 @@ func manifestApps(manifest *contractv1.Manifest) []*contractv1.ManifestApp {
 		}
 	}
 	return apps
-}
-
-func readServeDescriptor(artifactRoot, app string) (edge.ServeDescriptor, bool, error) {
-	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(artifactRoot, app), edge.ServeDescriptorFile))
-	if errors.Is(err, fs.ErrNotExist) {
-		return edge.ServeDescriptor{}, false, nil
-	}
-	if err != nil {
-		return edge.ServeDescriptor{}, false, fmt.Errorf("read serve descriptor for %s: %w", app, err)
-	}
-	var desc edge.ServeDescriptor
-	if err := json.Unmarshal(raw, &desc); err != nil {
-		return edge.ServeDescriptor{}, false, fmt.Errorf("parse serve descriptor for %s: %w", app, err)
-	}
-	return desc, true, nil
 }
 
 const frameworkNext = "next"

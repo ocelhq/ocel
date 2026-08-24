@@ -197,7 +197,6 @@ func (r *release) routerHost(plan providerkit.StackPlan) (*routerHost, error) {
 	prefix := plan.App.AssetPrefix
 	host := &routerHost{
 		Entry:             routing.Entry,
-		Manifest:          routing.Manifest,
 		AssetBucket:       r.cfg.AssetBucket,
 		AssetPrefix:       prefix,
 		ImageOptimizerURL: r.cfg.ImageOptimizerURL,

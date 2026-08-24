@@ -1,10 +1,7 @@
 package deploy
 
 import (
-	"archive/zip"
-	"bytes"
 	"encoding/json"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -13,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -48,51 +46,63 @@ func routedApp() *contractv1.ManifestApp {
 	return &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
 }
 
-func TestRouterHostStaysUnbuiltBehindCloudflare(t *testing.T) {
-	t.Parallel()
-
-	host, err := resolveRouterHost(routedConfig(t, cloudflare.Kind), routedApp(), routedCoordinate(t), "d1")
+func servingPlan(t *testing.T, cfg Config, app, framework string, coord naming.Coordinate) providerkit.StackPlan {
+	t.Helper()
+	stack := coord.Stack()
+	facts := cfg.Edge.Facts()
+	serving, err := providerkit.ServingFactsFor(providerkit.ServingQuery{
+		Root:              cfg.ArtifactRoot,
+		Project:           "shop",
+		App:               app,
+		Framework:         framework,
+		Stack:             stack,
+		Coordinate:        coord,
+		EdgeRunsCode:      facts.RunsCode,
+		EdgeSignsForwards: facts.SignsOriginForwards,
+	})
 	if err != nil {
-		t.Fatalf("resolveRouterHost: %v", err)
+		t.Fatalf("ServingFactsFor: %v", err)
 	}
-	if host != nil {
-		t.Errorf("router host = %+v, want none where the Cloudflare worker routes", host)
+	return providerkit.StackPlan{
+		Ref:  providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack},
+		Kind: providerkit.StackApp,
+		Edge: cfg.Edge,
+		App: &providerkit.AppPlan{
+			App:         app,
+			Framework:   framework,
+			Deployment:  "d1",
+			Routing:     serving.Routing,
+			Guard:       serving.Guard,
+			AssetPrefix: serving.AssetPrefix,
+		},
 	}
 }
 
-func TestRouterHostStaysUnbuiltForAnAppThatRoutesNothing(t *testing.T) {
-	t.Parallel()
+func routedPlan(t *testing.T, cfg Config) providerkit.StackPlan {
+	t.Helper()
+	return servingPlan(t, cfg, "web", frameworkNext, routedCoordinate(t))
+}
 
-	cfg := routedConfig(t, cloudfront.Kind)
-	cfg.ArtifactRoot = writeTree(t, map[string]string{
-		"apps/api/serve.json": `{"framework":"express","buildId":"API1"}`,
-	})
-
-	host, err := resolveRouterHost(cfg, &contractv1.ManifestApp{Name: "api", Framework: "express"}, routedCoordinate(t), "d1")
+func routedRouter(t *testing.T, cfg Config) *routerHost {
+	t.Helper()
+	host, err := releasing(t, cfg).routerHost(routedPlan(t, cfg))
 	if err != nil {
-		t.Fatalf("resolveRouterHost: %v", err)
+		t.Fatalf("routerHost: %v", err)
 	}
-	if host != nil {
-		t.Errorf("router host = %+v, want none for an app whose build declares no routing", host)
-	}
+	return host
 }
 
 func TestRouterHostNamesTheEntryAndWhatTheRouterReads(t *testing.T) {
 	t.Parallel()
 
+	cfg := routedConfig(t, cloudfront.Kind)
 	coord := routedCoordinate(t)
-	host, err := resolveRouterHost(routedConfig(t, cloudfront.Kind), routedApp(), coord, "d1")
-	if err != nil {
-		t.Fatalf("resolveRouterHost: %v", err)
-	}
+	host := routedRouter(t, cfg)
 	if host == nil {
 		t.Fatal("router host = none, want the entry function to host the router")
 	}
 	if host.Entry != "/" {
-		t.Errorf("entry = %q, want the route id serve.json names", host.Entry)
-	}
-	if string(host.Manifest) != routedManifest {
-		t.Errorf("manifest = %q, want the routing manifest the build wrote", host.Manifest)
+		t.Errorf("entry = %q, want the route id the plan names", host.Entry)
 	}
 	want := map[string]string{
 		routingManifestEnv:         routingManifestInTask,
@@ -109,20 +119,6 @@ func TestRouterHostNamesTheEntryAndWhatTheRouterReads(t *testing.T) {
 		if host.Env[key] != value {
 			t.Errorf("entry env %s = %q, want %q", key, host.Env[key], value)
 		}
-	}
-}
-
-func TestRouterHostRefusesARoutedBuildThatNamesNoEntry(t *testing.T) {
-	t.Parallel()
-
-	cfg := routedConfig(t, cloudfront.Kind)
-	cfg.ArtifactRoot = writeTree(t, map[string]string{
-		"apps/web/routing-manifest.json": routedManifest,
-		"apps/web/serve.json":            `{"framework":"next","buildId":"WEB1","edgeRouting":true}`,
-	})
-
-	if _, err := resolveRouterHost(cfg, routedApp(), routedCoordinate(t), "d1"); err == nil {
-		t.Error("a routed build naming no entry was accepted, want the deploy refused")
 	}
 }
 
@@ -152,11 +148,7 @@ func TestEntryFunctionCarriesTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	t.Parallel()
 
 	cfg := routedConfig(t, cloudfront.Kind)
-	coord := routedCoordinate(t)
-	host, err := resolveRouterHost(cfg, routedApp(), coord, "d1")
-	if err != nil {
-		t.Fatalf("resolveRouterHost: %v", err)
-	}
+	host := routedRouter(t, cfg)
 
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
@@ -204,10 +196,7 @@ func TestASiblingFunctionHostsNoRouter(t *testing.T) {
 	t.Parallel()
 
 	cfg := routedConfig(t, cloudfront.Kind)
-	host, err := resolveRouterHost(cfg, routedApp(), routedCoordinate(t), "d1")
-	if err != nil {
-		t.Fatalf("resolveRouterHost: %v", err)
-	}
+	host := routedRouter(t, cfg)
 
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
@@ -239,67 +228,6 @@ func TestASiblingFunctionHostsNoRouter(t *testing.T) {
 	}
 }
 
-func TestOnlyTheEntryFunctionPacksTheRoutingManifest(t *testing.T) {
-	t.Parallel()
-
-	cfg := routedConfig(t, cloudfront.Kind)
-	host, err := resolveRouterHost(cfg, routedApp(), routedCoordinate(t), "d1")
-	if err != nil {
-		t.Fatalf("resolveRouterHost: %v", err)
-	}
-	functions := manifestAppFunctions(routedFunctions())
-	dir := filepath.Join(cfg.ArtifactRoot, "apps", "web")
-
-	packed, err := zipDir(dir, withOverlay(nil, host.overlay()))
-	if err != nil {
-		t.Fatalf("zipDir: %v", err)
-	}
-	if !host.hosts(functions[0]) || host.hosts(functions[1]) {
-		t.Fatal("the entry predicate does not single out the entry function")
-	}
-	if got := zipEntry(t, packed, edge.RoutingManifestFile); got != routedManifest {
-		t.Errorf("packed %s = %q, want the routing manifest the router reads", edge.RoutingManifestFile, got)
-	}
-}
-
-func zipEntry(t *testing.T, archive []byte, name string) string {
-	t.Helper()
-	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
-	if err != nil {
-		t.Fatalf("read zip: %v", err)
-	}
-	for _, file := range reader.File {
-		if file.Name != name {
-			continue
-		}
-		opened, err := file.Open()
-		if err != nil {
-			t.Fatalf("open %s: %v", name, err)
-		}
-		defer opened.Close()
-		var buf bytes.Buffer
-		if _, err := buf.ReadFrom(opened); err != nil {
-			t.Fatalf("read %s: %v", name, err)
-		}
-		return buf.String()
-	}
-	t.Fatalf("zip carries no %s", name)
-	return ""
-}
-
-func TestRouterHostRefusesARoutedBuildThatWroteNoManifest(t *testing.T) {
-	t.Parallel()
-
-	cfg := routedConfig(t, cloudfront.Kind)
-	cfg.ArtifactRoot = writeTree(t, map[string]string{
-		"apps/web/serve.json": `{"framework":"next","buildId":"WEB1","edgeRouting":true,"entry":"/"}`,
-	})
-
-	if _, err := resolveRouterHost(cfg, routedApp(), routedCoordinate(t), "d1"); err == nil {
-		t.Error("a routed build missing its routing manifest was accepted, want the deploy refused")
-	}
-}
-
 func TestAppEnvNamesTheEdgeKind(t *testing.T) {
 	t.Parallel()
 
@@ -322,10 +250,7 @@ func TestAppEnvNamesTheEdgeKind(t *testing.T) {
 func TestTheEnvBudgetChargesForSiblingURLsStillToResolve(t *testing.T) {
 	t.Parallel()
 
-	host, err := resolveRouterHost(routedConfig(t, cloudfront.Kind), routedApp(), routedCoordinate(t), "d1")
-	if err != nil {
-		t.Fatalf("resolveRouterHost: %v", err)
-	}
+	host := routedRouter(t, routedConfig(t, cloudfront.Kind))
 
 	base := map[string]string{edgeKindEnv: string(cloudfront.Kind)}
 	planned := host.plannedEntryEnv(base, manifestAppFunctions(routedFunctions()))
@@ -361,10 +286,7 @@ func routerInvokeGrant(t *testing.T, rec *inputRecorder) []invokeStatement {
 func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 	t.Parallel()
 
-	host, err := resolveRouterHost(routedConfig(t, cloudfront.Kind), routedApp(), routedCoordinate(t), "d1")
-	if err != nil {
-		t.Fatalf("resolveRouterHost: %v", err)
-	}
+	host := routedRouter(t, routedConfig(t, cloudfront.Kind))
 
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}

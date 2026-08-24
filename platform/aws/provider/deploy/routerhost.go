@@ -2,19 +2,12 @@ package deploy
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"maps"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/naming"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -34,7 +27,6 @@ const (
 
 type routerHost struct {
 	Entry             string
-	Manifest          []byte
 	AssetBucket       string
 	AssetPrefix       string
 	ImageOptimizerURL string
@@ -43,68 +35,6 @@ type routerHost struct {
 
 func (h *routerHost) hosts(fn appFunction) bool {
 	return h != nil && fn.route() == h.Entry
-}
-
-func (h *routerHost) overlay() map[string][]byte {
-	return map[string][]byte{edge.RoutingManifestFile: h.Manifest}
-}
-
-func withOverlay(base, extra map[string][]byte) map[string][]byte {
-	merged := make(map[string][]byte, len(base)+len(extra))
-	maps.Copy(merged, base)
-	maps.Copy(merged, extra)
-	return merged
-}
-
-func resolveRouterHost(cfg Config, app *contractv1.ManifestApp, coord naming.Coordinate, deploymentID string) (*routerHost, error) {
-	if cfg.Edge == nil {
-		return nil, nil
-	}
-	if cfg.Edge.Facts().RunsCode {
-		return nil, nil
-	}
-	name := app.GetName()
-	desc, ok, err := readServeDescriptor(cfg.ArtifactRoot, name)
-	if err != nil {
-		return nil, err
-	}
-	if !ok || !desc.EdgeRouting {
-		return nil, nil
-	}
-	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, name), edge.RoutingManifestFile))
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("app %s routes at its origin but its build wrote no %s; rebuild the app", name, edge.RoutingManifestFile)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read the routing manifest %s hosts at its origin: %w", name, err)
-	}
-	if desc.Entry == "" {
-		return nil, fmt.Errorf("app %s routes at its origin but its build names no entry route; rebuild the app", name)
-	}
-
-	host := &routerHost{
-		Entry:             desc.Entry,
-		Manifest:          raw,
-		AssetBucket:       cfg.AssetBucket,
-		AssetPrefix:       appAssetPrefix(coord),
-		ImageOptimizerURL: cfg.ImageOptimizerURL,
-		Env: map[string]string{
-			routingManifestEnv:         routingManifestInTask,
-			assetPrefixEnv:             appAssetPrefix(coord),
-			slugEnv:                    cfg.Slug,
-			appNameEnv:                 name,
-			deploymentIDEnv:            deploymentID,
-			edge.OriginBodyLimitVar:    strconv.Itoa(lambdaOriginBodyLimitBytes),
-			edge.OriginBodyEncodingVar: edge.OriginBodyEncodingBase64,
-		},
-	}
-	if cfg.AssetBucket != "" {
-		host.Env[assetBucketEnv] = cfg.AssetBucket
-	}
-	if cfg.ImageOptimizerURL != "" {
-		host.Env[edge.ImageOptimizerURLVar] = cfg.ImageOptimizerURL
-	}
-	return host, nil
 }
 
 func (h *routerHost) entryEnv(base map[string]string) map[string]string {

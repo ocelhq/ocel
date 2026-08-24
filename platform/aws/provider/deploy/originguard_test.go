@@ -1,13 +1,13 @@
 package deploy
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -37,20 +37,21 @@ func functionURLAuthOf(t *testing.T, rec *inputRecorder, logicalName string, sta
 	return value.StringValue()
 }
 
-func registerGuarded(t *testing.T, cfg Config, functions []*contractv1.ManifestFunction, app *contractv1.ManifestApp, stack naming.StackName) *inputRecorder {
+func registerGuarded(t *testing.T, cfg Config, plan providerkit.StackPlan, functions []*contractv1.ManifestFunction, stack naming.StackName) *inputRecorder {
 	t.Helper()
-	host, err := resolveRouterHost(cfg, app, routedCoordinate(t), "d1")
+	held := releasing(t, cfg)
+	host, err := held.routerHost(plan)
 	if err != nil {
-		t.Fatalf("resolveRouterHost: %v", err)
+		t.Fatalf("routerHost: %v", err)
 	}
-	guard, err := resolveOriginGuard(cfg, app)
+	guard, err := held.originGuard(plan)
 	if err != nil {
-		t.Fatalf("resolveOriginGuard: %v", err)
+		t.Fatalf("originGuard: %v", err)
 	}
 
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: app.GetName(), Router: host})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: plan.App.App, Router: host})
 		if err != nil {
 			return err
 		}
@@ -60,49 +61,30 @@ func registerGuarded(t *testing.T, cfg Config, functions []*contractv1.ManifestF
 			Functions: manifestAppFunctions(functions),
 			Args:      argsFor(functions),
 			Artifacts: map[string]artifactRef{},
-			Env:       plannedEnv(t, cfg, app, cfg.Edge),
+			Env:       held.appEnv(plan, appBundle{}, sessionScope{}),
 			Router:    host,
 			Guard:     guard,
 			RoleArn:   role.Arn,
 			RoleName:  role.Name,
 		}.register(pctx)
 	}
-	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--web", rec)); err != nil {
+	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", stack.String(), rec)); err != nil {
 		t.Fatalf("run program: %v", err)
 	}
 	return rec
 }
 
-func TestNoOriginSecretIsMintedForAnAppBehindCloudflare(t *testing.T) {
-	t.Parallel()
-
-	guard, err := resolveOriginGuard(guardedConfig(t, cloudflare.Kind), routedApp())
-	if err != nil {
-		t.Fatalf("resolveOriginGuard: %v", err)
-	}
-	if guard != nil {
-		t.Errorf("guard = %+v, want none where the Cloudflare worker holds the front door", guard)
-	}
-}
-
-func TestAnEntryFunctionTheInternetReachesRefusesToDeployWithoutASecret(t *testing.T) {
-	t.Parallel()
-
-	cfg := routedConfig(t, cloudfront.Kind)
-	_, err := resolveOriginGuard(cfg, routedApp())
-	if err == nil {
-		t.Fatal("a public Function URL with no secret behind it was accepted, want the deploy refused")
-	}
-	if !strings.Contains(err.Error(), "ocel bootstrap") {
-		t.Errorf("err = %v, want the message naming what mints the secret", err)
-	}
+func registerRoutedGuarded(t *testing.T, kind edge.Kind, stack naming.StackName) *inputRecorder {
+	t.Helper()
+	cfg := guardedConfig(t, kind)
+	return registerGuarded(t, cfg, routedPlan(t, cfg), routedFunctions(), stack)
 }
 
 func TestTheEntryFunctionAnswersWithoutSigV4AndDemandsTheSecret(t *testing.T) {
 	t.Parallel()
 
 	stack := testStack(t, "prod", "web")
-	rec := registerGuarded(t, guardedConfig(t, cloudfront.Kind), routedFunctions(), routedApp(), stack)
+	rec := registerRoutedGuarded(t, cloudfront.Kind, stack)
 
 	if auth := functionURLAuthOf(t, rec, "fn--web--entry", stack); auth != functionURLAuthNone {
 		t.Errorf("entry Function URL auth = %q, want %q so a browser POST needs no signature", auth, functionURLAuthNone)
@@ -129,7 +111,7 @@ func TestASiblingKeepsItsSignedURLAndLearnsNoSecret(t *testing.T) {
 	t.Parallel()
 
 	stack := testStack(t, "prod", "web")
-	rec := registerGuarded(t, guardedConfig(t, cloudfront.Kind), routedFunctions(), routedApp(), stack)
+	rec := registerRoutedGuarded(t, cloudfront.Kind, stack)
 
 	if auth := functionURLAuthOf(t, rec, "fn--web--admin", stack); auth != functionURLAuthIAM {
 		t.Errorf("sibling Function URL auth = %q, want %q; only the entry answers the internet", auth, functionURLAuthIAM)
@@ -151,7 +133,7 @@ func TestEveryFunctionURLBehindCloudflareStaysSigned(t *testing.T) {
 	t.Parallel()
 
 	stack := testStack(t, "prod", "web")
-	rec := registerGuarded(t, guardedConfig(t, cloudflare.Kind), routedFunctions(), routedApp(), stack)
+	rec := registerRoutedGuarded(t, cloudflare.Kind, stack)
 
 	for _, logical := range []string{"fn--web--entry", "fn--web--admin"} {
 		if auth := functionURLAuthOf(t, rec, logical, stack); auth != functionURLAuthIAM {
@@ -171,17 +153,9 @@ func TestEveryFunctionURLBehindCloudflareStaysSigned(t *testing.T) {
 func TestNoneModeReachesItsEntryOverASignedURL(t *testing.T) {
 	t.Parallel()
 
-	cfg := guardedConfig(t, apigateway.Kind)
-	guard, err := resolveOriginGuard(cfg, routedApp())
-	if err != nil {
-		t.Fatalf("resolveOriginGuard: %v", err)
-	}
-	if guard != nil {
-		t.Fatalf("guard = %+v, want none: none mode reaches the entry through API Gateway's execution role", guard)
-	}
-
 	stack := testStack(t, "prod", "web")
-	rec := registerGuarded(t, cfg, routedFunctions(), routedApp(), stack)
+	rec := registerRoutedGuarded(t, apigateway.Kind, stack)
+
 	for _, logical := range []string{"fn--web--entry", "fn--web--admin"} {
 		if auth := functionURLAuthOf(t, rec, logical, stack); auth != functionURLAuthIAM {
 			t.Errorf("%s Function URL auth = %q, want %q; none mode adds no resource policy to a release function", logical, auth, functionURLAuthIAM)
@@ -207,33 +181,14 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 	cfg.ArtifactRoot = writeTree(t, map[string]string{
 		"apps/api/serve.json": `{"framework":"express","buildId":"API1","entry":"/"}`,
 	})
-	app := &contractv1.ManifestApp{Name: "api", Framework: "express"}
+	coord := storageCoordinate("prod", "shop", "api", fixedRelease(t))
+	plan := servingPlan(t, cfg, "api", "express", coord)
 	functions := []*contractv1.ManifestFunction{
 		{LogicalName: "fn--api--entry", App: "api", RouteId: "/"},
 	}
 
 	stack := testStack(t, "prod", "api")
-	guard, err := resolveOriginGuard(cfg, app)
-	if err != nil {
-		t.Fatalf("resolveOriginGuard: %v", err)
-	}
-	rec := &inputRecorder{}
-	program := func(pctx *pulumi.Context) error {
-		return appStackFunctions{
-			Project:   "shop",
-			Stack:     stack,
-			Functions: manifestAppFunctions(functions),
-			Args:      argsFor(functions),
-			Artifacts: map[string]artifactRef{},
-			Env:       plannedEnv(t, cfg, app, cfg.Edge),
-			Guard:     guard,
-			RoleArn:   pulumi.String("arn:aws:iam::123456789012:role/app"),
-			RoleName:  pulumi.String("app"),
-		}.register(pctx)
-	}
-	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
-		t.Fatalf("run program: %v", err)
-	}
+	rec := registerGuarded(t, cfg, plan, functions, stack)
 
 	name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, "fn--api--entry").Name, "url")
 	value := rec.inputs(functionURLToken, name)["authorizationType"]
