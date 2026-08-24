@@ -326,3 +326,82 @@ func TestAddHostnameRefusesWhenNoCertificateCanBeSettled(t *testing.T) {
 		t.Errorf("the edge was bound with %+v, want the run refused before it bound anything", bindings)
 	}
 }
+
+var validationRecord = edge.Record{
+	Name:  "_ocel.app.acme.com",
+	Type:  edge.RecordTypeCNAME,
+	Value: "_target.validations.invalid",
+}
+
+func TestAddHostnameSettlesTheValidationRecordsItsProviderProves(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassProduction, "shop")
+	provider.IssueCertificates(validationRecord)
+
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []string{"app.acme.com"},
+		Edge:       zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, want the certificate issued and the hostname settled", result.GetError())
+	}
+
+	settled := readStack(t, provider, providerkit.ClassProduction, "shop").Host("app.acme.com")
+	if !settled.Certificate.Requested || settled.Certificate.ARN != "issued-for-app.acme.com" {
+		t.Errorf("recorded certificate = %+v, want the one ocel requested", settled.Certificate)
+	}
+	if !slices.Contains(settled.Certificate.Written, validationRecord) {
+		t.Errorf("the certificate records %v as written, want the validation record among them", settled.Certificate.Written)
+	}
+	if written := provider.DNS().(*fake.DNS).Writer("acme.com").Records(); len(written) != 2 {
+		t.Errorf("the zone holds %v, want the validation record beside the one pointing at the edge", written)
+	}
+}
+
+func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	stale := edge.Record{Name: "_stale.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_stale.validations.invalid"}
+	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
+		Edge: edge.StackState{Slug: "shop", Class: providerkit.ClassProduction, Endpoint: "https://shop.fake.invalid"},
+		Hosts: map[string]providerkit.Settled{
+			"app.acme.com": {Certificate: providerkit.Certificate{ARN: "superseded", Requested: true, Written: []edge.Record{stale}}},
+		},
+	})
+	writer, err := provider.DNS().Open(fake.KindZone, "acme.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.EnsureRecords(context.Background(), []edge.Record{stale}, nil); err != nil {
+		t.Fatal(err)
+	}
+	provider.IssueCertificates(validationRecord)
+
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []string{"app.acme.com"},
+		Edge:       zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %v %q, want the hostname settled", err, result.GetError())
+	}
+
+	if discarded := provider.Discarded(); !slices.Contains(discarded, "superseded") {
+		t.Errorf("the provider discarded %v, want the superseded certificate among them", discarded)
+	}
+	if held := writer.(*fake.DNSWriter).Records(); slices.Contains(held, stale) {
+		t.Errorf("the zone still holds %v, want the superseded validation record released", held)
+	}
+}

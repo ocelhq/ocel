@@ -224,3 +224,67 @@ func TestRemoveProjectReleasesTheRecordsItWrote(t *testing.T) {
 		t.Errorf("the zone still holds %v, want every record ocel wrote for this project released", held)
 	}
 }
+
+func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	validation := edge.Record{Name: "_ocel.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.validations.invalid"}
+	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
+		Edge: edge.StackState{
+			Slug:     "shop",
+			Class:    providerkit.ClassProduction,
+			Endpoint: "https://shop.fake.invalid",
+			Front:    "shop.relay.fake.invalid",
+			Bound:    []string{"app.acme.com"},
+		},
+		Hosts: map[string]providerkit.Settled{
+			"app.acme.com": {Certificate: providerkit.Certificate{ARN: "ocels-cert", Requested: true, Written: []edge.Record{validation}}},
+			"old.acme.com": {Certificate: providerkit.Certificate{ARN: "pinned-cert"}},
+		},
+	})
+	writer, err := provider.DNS().Open(fake.KindZone, "acme.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.EnsureRecords(context.Background(), []edge.Record{validation}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := client.PlanRemoveProject(context.Background(), settledRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+	for _, item := range plan.GetItems() {
+		switch item.GetName() {
+		case "ocels-cert":
+			if item.GetAction() != contractv1.RemovalItem_ACTION_DELETE {
+				t.Errorf("the plan keeps %q, want a certificate ocel requested deleted", item.GetName())
+			}
+		case "pinned-cert":
+			if item.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
+				t.Errorf("the plan deletes %q, want a pinned certificate kept", item.GetName())
+			}
+		}
+	}
+
+	stream, err := client.RemoveProject(context.Background(), settledRequest())
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
+	}
+	if discarded := provider.Discarded(); !slices.Contains(discarded, "ocels-cert") {
+		t.Errorf("the provider discarded %v, want the certificate ocel requested among them", discarded)
+	}
+	if discarded := provider.Discarded(); slices.Contains(discarded, "pinned-cert") {
+		t.Errorf("the provider discarded %v, want a pinned certificate left standing", discarded)
+	}
+	if held := writer.(*fake.DNSWriter).Records(); len(held) != 0 {
+		t.Errorf("the zone still holds %v, want the validation record released with the certificate", held)
+	}
+}
