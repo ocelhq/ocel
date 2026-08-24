@@ -90,12 +90,18 @@ func versionName(scope Scope, at Coordinate, version int64) ports.RecordName {
 	return append(historyName(scope, at), fmt.Sprintf("%0*d", versionDigits, version))
 }
 
+func linksName(scope Scope) ports.RecordName { return Under(scope, "links") }
+
+func linkName(scope Scope, link string) ports.RecordName {
+	return Under(scope, "links", escape(link))
+}
+
 func linkRecordName(scope Scope, link, environment string) ports.RecordName {
-	return Under(scope, "links", escape(link), "records", escape(canonicalEnvironment(environment)))
+	return append(linkName(scope, link), "records", escape(canonicalEnvironment(environment)))
 }
 
 func linkValueName(scope Scope, link, environment string) ports.RecordName {
-	return Under(scope, "links", escape(link), "values", escape(canonicalEnvironment(environment)))
+	return append(linkName(scope, link), "values", escape(canonicalEnvironment(environment)))
 }
 
 func linkOwnersName(scope Scope) ports.RecordName { return Under(scope, "linkowners") }
