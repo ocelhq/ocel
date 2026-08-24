@@ -389,6 +389,51 @@ func TestDeployRefusesALinkMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	}
 }
 
+type countingSealer struct {
+	providerkit.Sealer
+
+	mu     sync.Mutex
+	opened int
+}
+
+func (c *countingSealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+	if at.Link != "" {
+		c.mu.Lock()
+		c.opened++
+		c.mu.Unlock()
+	}
+	return c.Sealer.Open(ctx, at, sealed)
+}
+
+func (c *countingSealer) count() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.opened
+}
+
+type sealCounting struct {
+	*fake.Provider
+	sealer *countingSealer
+}
+
+func (s sealCounting) Sealer() providerkit.Sealer { return s.sealer }
+
+func TestDeployResolvesThePublishedLinksOnce(t *testing.T) {
+	builtProject(t)
+	base := fake.NewProvider(fake.Options{})
+	sealer := &countingSealer{Sealer: base.Sealer()}
+	client := servedBy(t, sealCounting{Provider: base, sealer: sealer})
+
+	if result, _ := deploy(t, client, twoAppRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	if opened := sealer.count(); opened != 2 {
+		t.Fatalf("the deploy opened %d sealed link values, want one per published link: "+
+			"two apps over two links resolve the same set, and the run reads it once", opened)
+	}
+}
+
 type resolvingReleaser struct {
 	inner providerkit.Releaser
 

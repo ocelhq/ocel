@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	connect "connectrpc.com/connect"
@@ -66,8 +67,9 @@ type deployRun struct {
 	store stackStore
 	state EdgeStackState
 
-	values values.Store
-	scope  values.Scope
+	values    values.Store
+	scope     values.Scope
+	published *publishedLinks
 
 	allowDegraded []string
 	withheld      string
@@ -117,6 +119,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
 	}
+	run.published = &publishedLinks{store: run.values, scope: run.scope, environment: plan.linkEnvironment()}
 	if run.state, err = run.store.read(ctx); err != nil {
 		return nil, err
 	}
@@ -477,9 +480,7 @@ func (r *deployRun) ref(stack naming.StackName) StackRef {
 	return StackRef{Project: r.plan.Slug, Class: r.plan.Class, Name: stack}
 }
 
-func (r *deployRun) reader() LinkReader {
-	return publishedLinks{store: r.values, scope: r.scope, environment: r.plan.linkEnvironment()}
-}
+func (r *deployRun) reader() *publishedLinks { return r.published }
 
 func (r *deployRun) used(app string) (map[string]bool, error) {
 	resources, err := manifestResources(r.manifest)
@@ -743,7 +744,11 @@ func (r *deployRun) publish(ctx context.Context, links []Link) error {
 	if _, err := r.values.SetLinks(ctx, r.scope, r.plan.linkEnvironment(), values.OwnerOcel, publishing); err != nil {
 		return fmt.Errorf("publish %s's links: %w", r.scope.Project, err)
 	}
-	return r.prune(ctx, links)
+	if err := r.prune(ctx, links); err != nil {
+		return err
+	}
+	r.reader().forget()
+	return nil
 }
 
 func (r *deployRun) prune(ctx context.Context, links []Link) error {
@@ -775,14 +780,25 @@ type publishedLinks struct {
 	store       values.Store
 	scope       values.Scope
 	environment string
+
+	mu       sync.Mutex
+	resolved []Link
+	held     bool
 }
 
-func (p publishedLinks) Names(ctx context.Context) ([]string, error) {
-	return p.store.PublishedNames(ctx, p.scope, p.environment)
+func (p *publishedLinks) forget() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.resolved, p.held = nil, false
 }
 
-func (p publishedLinks) Published(ctx context.Context) ([]Link, error) {
-	names, err := p.Names(ctx)
+func (p *publishedLinks) Published(ctx context.Context) ([]Link, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.held {
+		return p.resolved, nil
+	}
+	names, err := p.store.PublishedNames(ctx, p.scope, p.environment)
 	if err != nil {
 		return nil, err
 	}
@@ -798,10 +814,32 @@ func (p publishedLinks) Published(ctx context.Context) ([]Link, error) {
 		}
 		links = append(links, link)
 	}
+	p.resolved, p.held = links, true
 	return links, nil
 }
 
-func (p publishedLinks) Resolve(ctx context.Context, name string) (Link, error) {
+func (p *publishedLinks) Names(ctx context.Context) ([]string, error) {
+	links, err := p.Published(ctx)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(links))
+	for _, link := range links {
+		names = append(names, link.Name)
+	}
+	return names, nil
+}
+
+func (p *publishedLinks) Resolve(ctx context.Context, name string) (Link, error) {
+	links, err := p.Published(ctx)
+	if err != nil {
+		return Link{}, err
+	}
+	for _, link := range links {
+		if link.Name == name {
+			return link, nil
+		}
+	}
 	published, err := p.store.ResolveLink(ctx, p.scope, p.environment, name)
 	if err != nil {
 		return Link{}, err
