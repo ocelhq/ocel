@@ -30,15 +30,19 @@ const webDeploymentID = "0123456789abcdef0123456789abcdef"
 
 const artifactPath = "apps/web/fn/server.zip"
 
+const adminArtifactPath = "apps/admin/fn/server.zip"
+
 func builtProject(t *testing.T) {
 	t.Helper()
 	root := t.TempDir()
-	built := filepath.Join(root, ".ocel/output", filepath.FromSlash(artifactPath))
-	if err := os.MkdirAll(filepath.Dir(built), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(built, []byte("a built function"), 0o644); err != nil {
-		t.Fatal(err)
+	for _, artifact := range []string{artifactPath, adminArtifactPath} {
+		built := filepath.Join(root, ".ocel/output", filepath.FromSlash(artifact))
+		if err := os.MkdirAll(filepath.Dir(built), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(built, []byte("a built function"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Chdir(root)
 }
@@ -55,6 +59,7 @@ func deployRequest() *contractv1.DeployRequest {
 					Name: "orders",
 				},
 			}},
+			Usages: []*contractv1.ManifestUsage{{App: "web", Resource: "orders"}},
 			Domains: []*contractv1.TierDomains{{
 				Tier:      environmentv1.Tier_TIER_PRODUCTION,
 				Hostnames: []string{"shop.example"},
@@ -136,6 +141,99 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 	}
 	if plans[1].App.Deployment != webDeploymentID {
 		t.Errorf("the app plan names deployment %q, want %q: the router serves the build the CLI built under this id", plans[1].App.Deployment, webDeploymentID)
+	}
+}
+
+const adminDeploymentID = "fedcba9876543210fedcba9876543210"
+
+func twoAppRequest() *contractv1.DeployRequest {
+	req := deployRequest()
+	manifest := req.GetManifest()
+	manifest.Resources = append(manifest.Resources, &contractv1.ManifestResource{
+		LogicalName: "uploads",
+		Resource: &resourcesv1.ResourceIdentifier{
+			Type: linksv1.LinkType_LINK_TYPE_BUCKET,
+			Name: "uploads",
+		},
+	})
+	manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
+		Name:         "admin",
+		Framework:    "next",
+		DeploymentId: adminDeploymentID,
+	})
+	manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{
+		LogicalName:  "admin-server",
+		App:          "admin",
+		Runtime:      "nodejs22.x",
+		Handler:      "index.handler",
+		ArtifactPath: adminArtifactPath,
+	})
+	manifest.Usages = append(manifest.Usages,
+		&contractv1.ManifestUsage{App: "admin", Resource: "orders"},
+		&contractv1.ManifestUsage{App: "admin", Resource: "uploads"})
+	return req
+}
+
+func grantNames(plan providerkit.StackPlan) []string {
+	names := make([]string, 0, len(plan.App.Grants))
+	for _, link := range plan.App.Grants {
+		names = append(names, link.Name)
+	}
+	slices.Sort(names)
+	return names
+}
+
+func TestDeployGrantsAnAppOnlyWhatItsUsageEdgesName(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+
+	if result, _ := deploy(t, client, twoAppRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	apps := map[string]providerkit.StackPlan{}
+	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+		if plan.App != nil {
+			apps[plan.App.App] = plan
+		}
+	}
+	if len(apps) != 2 {
+		t.Fatalf("the releaser stood up %d apps, want web and admin", len(apps))
+	}
+
+	if want := []string{"orders", "uploads"}; !slices.Equal(grantNames(apps["admin"]), want) {
+		t.Errorf("admin is granted %v, want %v: it names both in its usage edges", grantNames(apps["admin"]), want)
+	}
+	if want := []string{"orders"}; !slices.Equal(grantNames(apps["web"]), want) {
+		t.Errorf("web is granted %v, want %v; a compromise of web must expose no credential it never needed", grantNames(apps["web"]), want)
+	}
+	for _, link := range apps["web"].App.Values.Links {
+		if link.Name == "uploads" {
+			t.Error("web is handed the bucket's address for a bucket it never uses")
+		}
+	}
+}
+
+func TestDeployGrantsNothingToAnAppCarryingNoUsageEdge(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+
+	req := twoAppRequest()
+	manifest := req.GetManifest()
+	manifest.Usages = slices.DeleteFunc(manifest.Usages, func(usage *contractv1.ManifestUsage) bool {
+		return usage.GetApp() == "admin"
+	})
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+		if plan.App == nil || plan.App.App != "admin" {
+			continue
+		}
+		if len(plan.App.Grants) != 0 || len(plan.App.Values.Links) != 0 {
+			t.Errorf("admin is granted %v, want nothing for an app carrying no usage edge at all", plan.App.Grants)
+		}
 	}
 }
 

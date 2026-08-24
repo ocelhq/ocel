@@ -473,13 +473,50 @@ func (r *deployRun) reader() LinkReader {
 	return publishedLinks{store: r.values, scope: r.scope, environment: r.plan.linkEnvironment()}
 }
 
+func (r *deployRun) used(app string) (map[string]bool, error) {
+	resources, err := manifestResources(r.manifest)
+	if err != nil {
+		return nil, err
+	}
+	edges := map[string]bool{}
+	for _, usage := range r.manifest.GetUsages() {
+		if usage.GetApp() == app {
+			edges[usage.GetResource()] = true
+		}
+	}
+	names := map[string]bool{}
+	for _, resource := range resources {
+		if !edges[resource.Name] {
+			continue
+		}
+		if resource.Linked {
+			names[resource.Declared] = true
+			continue
+		}
+		names[resource.Name] = true
+	}
+	return names, nil
+}
+
 func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Link, error) {
-	grants := slices.Clone(r.links)
+	used, err := r.used(entry.App)
+	if err != nil {
+		return nil, err
+	}
+	var grants []Link
+	for _, link := range r.links {
+		if used[link.Name] {
+			grants = append(grants, link)
+		}
+	}
 	consumed, err := r.reader().Published(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, link := range consumed {
+		if !used[link.Name] {
+			continue
+		}
 		if !slices.ContainsFunc(grants, func(held Link) bool { return held.Name == link.Name }) {
 			grants = append(grants, link)
 		}
