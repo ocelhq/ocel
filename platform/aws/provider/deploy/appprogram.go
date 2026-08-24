@@ -60,9 +60,6 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 	if err != nil {
 		return nil, err
 	}
-	if err := checkInlinePolicyBudget(app.App, policies); err != nil {
-		return nil, err
-	}
 	if err := checkRuntimeOwnedNames(app.App, app.Values.Plain); err != nil {
 		return nil, err
 	}

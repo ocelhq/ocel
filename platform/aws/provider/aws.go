@@ -134,6 +134,10 @@ func (p *Provider) VerifyGrants(_ context.Context, link providerkit.Link) error 
 	return deploy.VerifyGrants(link)
 }
 
+func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPreflight) error {
+	return p.releases.Preflight(ctx, pre)
+}
+
 func (p *Provider) edges() edges.Registry {
 	return edges.Registry{Deps: edges.Deps{
 		AWS:          func(context.Context) (aws.Config, error) { return p.aws, nil },
