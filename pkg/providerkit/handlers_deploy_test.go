@@ -125,6 +125,9 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 	if plans[1].App.Functions[0].Artifact.Key == "" {
 		t.Error("the app plan carries a function with no artifact, so the upload never reached the release")
 	}
+	if plans[1].App.Deployment != webDeploymentID {
+		t.Errorf("the app plan names deployment %q, want %q: the router serves the build the CLI built under this id", plans[1].App.Deployment, webDeploymentID)
+	}
 }
 
 func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
