@@ -52,6 +52,46 @@ func seedWildcard(t *testing.T, provider *fake.Provider, held providerkit.Wildca
 	}
 }
 
+func readHeldWildcard(t *testing.T, provider *fake.Provider) providerkit.Wildcard {
+	t.Helper()
+	record, err := providerkit.Held(context.Background(), provider.Records(), providerkit.WildcardRecord(providerkit.ClassPreview))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var held providerkit.Wildcard
+	if len(record.Bytes) > 0 {
+		if err := json.Unmarshal(record.Bytes, &held); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return held
+}
+
+func TestUsePreviewWildcardDiscardsTheCertificateItSupersedes(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	provider.IssueCertificates(validationRecord)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
+	}
+
+	provider.RotateCertificates()
+	provider.IssueCertificates(rotatedValidationRecord)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q, want the rotation settled", result.GetError())
+	}
+
+	if discarded := provider.Discarded(); !slices.Contains(discarded, "issued-for-*.preview.acme.com") {
+		t.Errorf("the provider discarded %v, want the superseded certificate among them", discarded)
+	}
+	if held := readHeldWildcard(t, provider); len(held.Settled.Superseded) != 0 {
+		t.Errorf("the record still carries %+v, want the discarded certificate forgotten", held.Settled.Superseded)
+	}
+	if records := provider.DNS().(*fake.DNS).Writer("acme.com").Records(); slices.Contains(records, validationRecord) {
+		t.Errorf("the zone still holds %v, want the superseded validation record released", records)
+	}
+}
+
 func TestUsePreviewWildcardRaisesTheEntryAndRecordsItsHolder(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")

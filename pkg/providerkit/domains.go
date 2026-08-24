@@ -15,17 +15,47 @@ type EdgeStackState struct {
 
 type Settled struct {
 	Certificate Certificate   `json:"certificate,omitzero"`
+	Superseded  []Certificate `json:"superseded,omitempty"`
 	Written     []edge.Record `json:"written,omitempty"`
 	Owed        []edge.Record `json:"owed,omitempty"`
 	Probe       Probe         `json:"probe,omitzero"`
 }
 
+func (s *Settled) Supersede(cert Certificate) {
+	if !cert.Held() || cert.ID == s.Certificate.ID || holds(s.Superseded, cert) {
+		return
+	}
+	s.Superseded = append(s.Superseded, cert)
+}
+
+func (s Settled) certificates() []Certificate {
+	held := make([]Certificate, 0, 1+len(s.Superseded))
+	for _, cert := range append([]Certificate{s.Certificate}, s.Superseded...) {
+		if cert.Held() && !holds(held, cert) {
+			held = append(held, cert)
+		}
+	}
+	return held
+}
+
+func holds(certificates []Certificate, cert Certificate) bool {
+	return slices.ContainsFunc(certificates, func(other Certificate) bool { return other.ID == cert.ID })
+}
+
 func (s Settled) WrittenRecords() []edge.Record {
-	return mergeRecords(slices.Clone(s.Written), s.Certificate.Written)
+	written := slices.Clone(s.Written)
+	for _, cert := range s.certificates() {
+		written = mergeRecords(written, cert.Written)
+	}
+	return written
 }
 
 func (s Settled) OwedRecords() []edge.Record {
-	return mergeRecords(slices.Clone(s.Owed), s.Certificate.Owed)
+	owed := slices.Clone(s.Owed)
+	for _, cert := range s.certificates() {
+		owed = mergeRecords(owed, cert.Owed)
+	}
+	return owed
 }
 
 type Probe struct {
@@ -88,17 +118,25 @@ func (s EdgeStackState) OwedRecords() []edge.Record {
 func (s EdgeStackState) Certificates() []Certificate {
 	var held []Certificate
 	for _, hostname := range s.Hostnames() {
-		cert := s.Hosts[hostname].Certificate
-		if !cert.Held() || slices.ContainsFunc(held, func(other Certificate) bool { return other.ID == cert.ID }) {
-			continue
+		for _, cert := range s.Hosts[hostname].certificates() {
+			if !holds(held, cert) {
+				held = append(held, cert)
+			}
 		}
-		held = append(held, cert)
 	}
 	return held
 }
 
 func (s EdgeStackState) Uses(id string) bool {
-	return id != "" && slices.ContainsFunc(s.Certificates(), func(cert Certificate) bool { return cert.ID == id })
+	if id == "" {
+		return false
+	}
+	for _, settled := range s.Hosts {
+		if settled.Certificate.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func mergeRecords(into, records []edge.Record) []edge.Record {

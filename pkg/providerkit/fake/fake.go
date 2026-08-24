@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"slices"
+	"strconv"
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -21,6 +22,9 @@ type Provider struct {
 	certRefusal error
 	issue       []edge.Record
 	discarded   []string
+	discardHeld error
+	rotation    int
+	pending     error
 	health      *providerkit.CertificateHealth
 
 	preflightRefusal error
@@ -113,6 +117,24 @@ func (p *Provider) IssueCertificates(validation ...edge.Record) {
 	p.issue = validation
 }
 
+func (p *Provider) RotateCertificates() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.rotation++
+}
+
+func (p *Provider) StallAfterProving(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.pending = err
+}
+
+func (p *Provider) RefuseDiscardingAServingCertificate(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.discardHeld = err
+}
+
 func (p *Provider) Discarded() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -122,6 +144,7 @@ func (p *Provider) Discarded() []string {
 func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
 	p.mu.Lock()
 	refusal, pinned, validation := p.certRefusal, p.pins[req.Hostname], slices.Clone(p.issue)
+	rotation, pending := p.rotation, p.pending
 	p.mu.Unlock()
 
 	if refusal != nil {
@@ -133,11 +156,23 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 	if validation == nil {
 		return providerkit.Certificate{}, nil
 	}
-	cert := providerkit.Certificate{ID: "issued-for-" + req.Hostname, Requested: true}
+	cert := providerkit.Certificate{ID: issuedFor(req.Hostname, rotation), Requested: true}
 	if req.Held.Requested && req.Held.ID == cert.ID {
 		return req.Held, nil
 	}
-	return req.Prove(ctx, cert, validation)
+	settled, err := req.Prove(ctx, cert, validation)
+	if err != nil {
+		return settled, err
+	}
+	return settled, pending
+}
+
+func issuedFor(hostname string, rotation int) string {
+	id := "issued-for-" + hostname
+	if rotation == 0 {
+		return id
+	}
+	return id + "-" + strconv.Itoa(rotation)
 }
 
 func (p *Provider) ReportCertificate(health providerkit.CertificateHealth) {
@@ -165,6 +200,12 @@ func (p *Provider) InspectCertificate(_ context.Context, _ edge.Kind, hostname s
 }
 
 func (p *Provider) DiscardCertificate(_ context.Context, cert providerkit.Certificate, _ providerkit.Reporter) error {
+	p.mu.Lock()
+	refusal := p.discardHeld
+	p.mu.Unlock()
+	if refusal != nil && p.edges.serving(cert.ID) {
+		return refusal
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.discarded = append(p.discarded, cert.ID)

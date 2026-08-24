@@ -84,12 +84,13 @@ func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter
 	settled := d.state.Host(host)
 	serving := settled.Serving()
 	held := settled.Certificate.ID
+	certifying := d.certification(host, &settled)
 
-	if err := d.certify(ctx, host, &settled, report); err != nil {
+	if err := certifying.certify(ctx, host, report); err != nil {
 		return false, err
 	}
 	if d.state.Ready(host, d.settle.kind) && settled.Certificate.ID == held {
-		return false, nil
+		return false, certifying.discardSuperseded(ctx, report)
 	}
 
 	report.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.settle.kind))
@@ -97,6 +98,9 @@ func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter
 		return true, err
 	}
 	if err := d.checkpoint(ctx); err != nil {
+		return true, err
+	}
+	if err := certifying.discardSuperseded(ctx, report); err != nil {
 		return true, err
 	}
 
@@ -128,42 +132,17 @@ func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter
 	return true, d.retire(ctx, host, serving, report)
 }
 
-func (d *hostnames) certify(ctx context.Context, host string, settled *Settled, report Reporter) error {
-	superseded := settled.Certificate
-	cert, err := certificateFor(ctx, d.provider, CertificateRequest{
-		Kind:     d.settle.kind,
-		Hostname: host,
-		Held:     settled.Certificate,
-		Report:   report,
-		Prove: func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error) {
-			written, werr := d.settle.write(ctx, records, proveHeadline(host), report.Say, proveNote)
-			cert.Written, cert.Owed = written.Written, written.Owed
-			settled.Certificate = cert
+func (d *hostnames) certification(host string, settled *Settled) certification {
+	return certification{
+		provider: d.provider,
+		settle:   d.settle,
+		settled:  settled,
+		uses:     func(id string) bool { return d.state.Uses(id) },
+		persist: func(ctx context.Context) error {
 			d.state.Settle(host, *settled)
-			return cert, errors.Join(werr, d.checkpoint(ctx))
+			return d.checkpoint(ctx)
 		},
-	})
-	if cert.Held() {
-		settled.Certificate = cert
-		d.state.Settle(host, *settled)
-		if cerr := d.checkpoint(ctx); cerr != nil {
-			return errors.Join(err, cerr)
-		}
 	}
-	if err != nil {
-		return err
-	}
-	return d.discard(ctx, superseded, cert, report)
-}
-
-func (d *hostnames) discard(ctx context.Context, superseded, holding Certificate, report Reporter) error {
-	if !superseded.Held() || superseded.ID == holding.ID || d.state.Uses(superseded.ID) {
-		return nil
-	}
-	if err := discardCertificate(ctx, d.provider, superseded, report); err != nil {
-		return err
-	}
-	return d.settle.release(ctx, edge.Unwritten(superseded.Written, holding.Written), report.Say)
 }
 
 func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, report Reporter) error {
@@ -219,8 +198,13 @@ func (d *hostnames) remove(ctx context.Context, report Reporter) error {
 		if err := d.checkpoint(ctx); err != nil {
 			return err
 		}
-		if err := d.discard(ctx, settled.Certificate, Certificate{}, report); err != nil {
-			return err
+		for _, cert := range settled.certificates() {
+			if d.state.Uses(cert.ID) {
+				continue
+			}
+			if err := retireCertificate(ctx, d.provider, d.settle, cert, Certificate{}, report); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
