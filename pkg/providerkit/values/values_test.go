@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
@@ -508,5 +509,102 @@ func TestTheClassWideEnvironmentIsReserved(t *testing.T) {
 	}
 	if _, err := store.SetLink(ctx, scope, "", "", "db", values.Pair{}); err == nil {
 		t.Fatal("SetLink() with no publisher succeeded, want it refused")
+	}
+}
+
+type counted struct {
+	ports.RecordStore
+	ports.Sealer
+	mu     sync.Mutex
+	reads  int
+	lists  int
+	opened int
+}
+
+func (c *counted) Read(ctx context.Context, name ports.RecordName) (ports.Record, error) {
+	c.mu.Lock()
+	c.reads++
+	c.mu.Unlock()
+	return c.RecordStore.Read(ctx, name)
+}
+
+func (c *counted) List(ctx context.Context, under ports.RecordName) ([]ports.Record, error) {
+	c.mu.Lock()
+	c.lists++
+	c.mu.Unlock()
+	return c.RecordStore.List(ctx, under)
+}
+
+func (c *counted) Open(ctx context.Context, at ports.Coordinate, sealed []byte) ([]byte, error) {
+	c.mu.Lock()
+	c.opened++
+	c.mu.Unlock()
+	return c.Sealer.Open(ctx, at, sealed)
+}
+
+func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	shared := values.Scope{Project: "platform", Class: ports.ClassProduction}
+
+	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"A", "B", "C"} {
+		if _, err := store.Set(ctx, scope, at(key), "held "+key, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := values.Target{Project: "platform", Cell: values.Cell{Key: "DATABASE_URL"}}
+	for _, key := range []string{"PRIMARY_URL", "REPLICA_URL"} {
+		if _, err := store.SetReference(ctx, scope, at(key), target); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	watched := &counted{RecordStore: store.Records, Sealer: store.Sealer}
+	store.Records, store.Sealer = watched, watched
+	found, err := store.Reveal(ctx, scope, []values.Coordinate{
+		at("A"), at("B"), at("C"), at("PRIMARY_URL"), at("REPLICA_URL"), at("NEVER_SET"),
+	})
+	if err != nil || len(found) != 5 {
+		t.Fatalf("Reveal() = %d values, %v, want the five that hold one", len(found), err)
+	}
+	if watched.lists != 1 {
+		t.Errorf("Reveal() listed the project's cells %d times, want one query for the whole batch", watched.lists)
+	}
+	if watched.reads != 1 {
+		t.Errorf("Reveal() read %d cells one at a time, want only the borrowed cell in the other project", watched.reads)
+	}
+	if watched.opened != 4 {
+		t.Errorf("Reveal() opened %d ciphertexts, want one per distinct cell behind the six asked for", watched.opened)
+	}
+}
+
+func TestResolvingABatchOfLinksReadsEachEnvironmentOnce(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	publishing := make([]values.Publishing, 0, 3)
+	for _, name := range []string{"db", "cache", "queue"} {
+		publishing = append(publishing, values.Publishing{Name: name, Pair: values.Pair{Record: []byte("{}"), Value: []byte(`"` + name + `"`)}})
+	}
+	if _, err := store.SetLinks(ctx, scope, "", "OCEL", publishing); err != nil {
+		t.Fatal(err)
+	}
+
+	watched := &counted{RecordStore: store.Records, Sealer: store.Sealer}
+	store.Records, store.Sealer = watched, watched
+	resolved, err := store.ResolveLinks(ctx, scope, "", []string{"db", "cache", "queue"})
+	if err != nil || len(resolved) != 3 {
+		t.Fatalf("ResolveLinks() = %+v, %v, want all three", resolved, err)
+	}
+	for i, name := range []string{"db", "cache", "queue"} {
+		if string(resolved[i].Value) != `"`+name+`"` {
+			t.Fatalf("ResolveLinks() answered %q for %s", resolved[i].Value, name)
+		}
+	}
+	if watched.reads != 0 || watched.lists != 1 {
+		t.Errorf("ResolveLinks() made %d point reads and %d queries, want one query serving the whole batch", watched.reads, watched.lists)
 	}
 }

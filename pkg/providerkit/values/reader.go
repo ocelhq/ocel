@@ -2,7 +2,6 @@ package values
 
 import (
 	"context"
-	"errors"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/ports"
 )
@@ -16,17 +15,29 @@ type Reader struct {
 
 func (r Reader) Values(ctx context.Context, cells []Cell) (map[string]string, error) {
 	store := Store{Records: r.Records, Sealer: r.Sealer}
+	wanted := make([]Coordinate, 0, len(cells)*2)
+	for _, at := range cells {
+		for _, environment := range shadowing(r.Environment) {
+			wanted = append(wanted, Coordinate{Cell: at, Environment: environment})
+		}
+	}
+	found, err := store.Reveal(ctx, r.Scope, wanted)
+	if err != nil {
+		return nil, err
+	}
+
+	held := make(map[Coordinate]string, len(found))
+	for _, value := range found {
+		held[value.Coordinate] = value.Plaintext
+	}
 	out := make(map[string]string, len(cells))
 	for _, at := range cells {
 		for _, environment := range shadowing(r.Environment) {
-			value, err := store.Get(ctx, r.Scope, Coordinate{Cell: at, Environment: environment}, true)
-			if errors.Is(err, ErrNotFound) {
+			plaintext, ok := held[Coordinate{Cell: at, Environment: environment}]
+			if !ok {
 				continue
 			}
-			if err != nil {
-				return nil, err
-			}
-			out[at.Key] = value.Plaintext
+			out[at.Key] = plaintext
 			break
 		}
 	}
@@ -35,13 +46,5 @@ func (r Reader) Values(ctx context.Context, cells []Cell) (map[string]string, er
 
 func (r Reader) Links(ctx context.Context, names []string) ([]Published, error) {
 	store := Store{Records: r.Records, Sealer: r.Sealer}
-	out := make([]Published, 0, len(names))
-	for _, name := range names {
-		published, err := store.ResolveLink(ctx, r.Scope, r.Environment, name)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, published)
-	}
-	return out, nil
+	return store.ResolveLinks(ctx, r.Scope, r.Environment, names)
 }

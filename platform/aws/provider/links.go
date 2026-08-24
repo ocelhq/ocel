@@ -23,6 +23,7 @@ func (p publishedLinks) scope(slug string) values.Scope {
 
 func (p publishedLinks) PublishRecords(ctx context.Context, slug, environment, owner string, records []*linksv1.Link) error {
 	scope := p.scope(slug)
+	publishing := make([]values.Publishing, 0, len(records))
 	published := make([]string, 0, len(records))
 	for _, record := range records {
 		if err := providerkit.VerifyLink(record); err != nil {
@@ -32,38 +33,40 @@ func (p publishedLinks) PublishRecords(ctx context.Context, slug, environment, o
 		if err != nil {
 			return err
 		}
-		if _, err := p.store.SetLink(ctx, scope, environment, owner, record.GetName(), pair); err != nil {
-			return err
-		}
+		publishing = append(publishing, values.Publishing{Name: record.GetName(), Pair: pair})
 		published = append(published, record.GetName())
+	}
+	if _, err := p.store.SetLinks(ctx, scope, environment, owner, publishing); err != nil {
+		return err
 	}
 
 	held, err := p.store.ListLinks(ctx, scope, environment)
 	if err != nil {
 		return err
 	}
+	stale := make([]string, 0, len(held))
 	for _, link := range held {
 		if link.Owner != owner || link.Environment != canonical(environment) || slices.Contains(published, link.Name) {
 			continue
 		}
-		if _, err := p.store.RemoveLink(ctx, scope, environment, link.Name); err != nil {
-			return err
-		}
+		stale = append(stale, link.Name)
+	}
+	if _, err := p.store.RemoveLinks(ctx, scope, environment, stale); err != nil {
+		return err
 	}
 	return nil
 }
 
 func (p publishedLinks) ResolveRecords(ctx context.Context, slug, environment string, names []string) ([]deploy.PublishedRecord, error) {
-	scope := p.scope(slug)
-	out := make([]deploy.PublishedRecord, 0, len(names))
-	for _, name := range names {
-		published, err := p.store.ResolveLink(ctx, scope, environment, name)
-		if err != nil {
-			return nil, err
-		}
+	resolved, err := p.store.ResolveLinks(ctx, p.scope(slug), environment, names)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]deploy.PublishedRecord, 0, len(resolved))
+	for i, published := range resolved {
 		link, err := providerkit.DecodeLink(published.Value)
 		if err != nil {
-			return nil, fmt.Errorf("read link %s: %v: %w", name, err, providerkit.ErrUnreadableRecord)
+			return nil, fmt.Errorf("read link %s: %v: %w", names[i], err, providerkit.ErrUnreadableRecord)
 		}
 		out = append(out, deploy.PublishedRecord{Link: link, Version: published.Version})
 	}

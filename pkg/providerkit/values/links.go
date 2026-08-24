@@ -29,6 +29,11 @@ var (
 	ErrTornPair = errors.New("values: torn link pair")
 )
 
+type Publishing struct {
+	Name string
+	Pair Pair
+}
+
 type Pair struct {
 	Record []byte
 	Shapes []byte
@@ -116,24 +121,53 @@ func ValidateOwner(owner string) error {
 }
 
 func (s Store) SetLink(ctx context.Context, scope Scope, environment, owner, name string, pair Pair) (int64, error) {
-	if err := ValidateLinkName(environment, name); err != nil {
+	versions, err := s.SetLinks(ctx, scope, environment, owner, []Publishing{{Name: name, Pair: pair}})
+	if err != nil {
 		return 0, err
 	}
+	return versions[0], nil
+}
+
+func (s Store) SetLinks(ctx context.Context, scope Scope, environment, owner string, links []Publishing) ([]int64, error) {
 	if err := ValidateOwner(owner); err != nil {
-		return 0, err
+		return nil, err
+	}
+	if err := ValidateLinkEnvironment(environment); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(links))
+	for _, link := range links {
+		if err := ValidateLinkName(environment, link.Name); err != nil {
+			return nil, err
+		}
+		names = append(names, link.Name)
+	}
+	if len(links) == 0 {
+		return nil, nil
 	}
 
 	claimed, err := s.claims(ctx, scope)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	if by, taken := otherOwner(claimed[name], owner); taken {
-		return 0, s.claimRefusal(scope, name, by, owner)
+	for _, name := range names {
+		if by, taken := otherOwner(claimed[name], owner); taken {
+			return nil, s.claimRefusal(scope, name, by, owner)
+		}
 	}
-	if err := s.claim(ctx, scope, owner, environment, name); err != nil {
-		return 0, err
+	if err := s.claim(ctx, scope, owner, environment, names...); err != nil {
+		return nil, err
 	}
-	return s.writePair(ctx, scope, environment, owner, name, pair)
+
+	versions := make([]int64, len(links))
+	if err := each(ctx, len(links), func(ctx context.Context, i int) error {
+		version, err := s.writePair(ctx, scope, environment, owner, links[i].Name, links[i].Pair)
+		versions[i] = version
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return versions, nil
 }
 
 func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, name string, pair Pair) (int64, error) {
@@ -202,92 +236,159 @@ func describeOwner(owner string) string {
 }
 
 func (s Store) RemoveLink(ctx context.Context, scope Scope, environment, name string) (bool, error) {
-	if err := ValidateLinkName(environment, name); err != nil {
+	removed, err := s.RemoveLinks(ctx, scope, environment, []string{name})
+	if err != nil {
 		return false, err
+	}
+	return removed[0], nil
+}
+
+func (s Store) RemoveLinks(ctx context.Context, scope Scope, environment string, names []string) ([]bool, error) {
+	if err := ValidateLinkEnvironment(environment); err != nil {
+		return nil, err
+	}
+	for _, name := range names {
+		if err := ValidateLinkName(environment, name); err != nil {
+			return nil, err
+		}
+	}
+	if len(names) == 0 {
+		return nil, nil
 	}
 
 	claimed, err := s.claims(ctx, scope)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	at := canonicalEnvironment(environment)
-	var owners []string
-	for _, c := range claimed[name] {
-		if c.environment == at && !slices.Contains(owners, c.owner) {
-			owners = append(owners, c.owner)
+	removed := make([]bool, len(names))
+	held := map[string][]string{}
+	for i, name := range names {
+		for _, c := range claimed[name] {
+			if c.environment != at {
+				continue
+			}
+			removed[i] = true
+			if !slices.Contains(held[c.owner], name) {
+				held[c.owner] = append(held[c.owner], name)
+			}
 		}
 	}
-	if len(owners) == 0 {
-		return false, nil
-	}
-	slices.Sort(owners)
 
-	for _, owner := range owners {
-		if err := s.unclaim(ctx, scope, owner, environment, name); err != nil {
-			return false, err
+	for _, owner := range slices.Sorted(maps.Keys(held)) {
+		if err := s.unclaim(ctx, scope, owner, environment, held[owner]...); err != nil {
+			return nil, err
 		}
 	}
-	for _, name := range []ports.RecordName{
-		linkRecordName(scope, environment, name),
-		linkValueName(scope, environment, name),
-	} {
-		if err := ports.Forget(ctx, s.Records, name); err != nil {
-			return false, fmt.Errorf("remove %s: %w", name, err)
+
+	dropping := make([]string, 0, len(names))
+	for i, name := range names {
+		if removed[i] && !slices.Contains(dropping, name) {
+			dropping = append(dropping, name)
 		}
 	}
-	return true, nil
+	if err := each(ctx, len(dropping), func(ctx context.Context, i int) error {
+		for _, name := range []ports.RecordName{
+			linkRecordName(scope, environment, dropping[i]),
+			linkValueName(scope, environment, dropping[i]),
+		} {
+			if err := ports.Forget(ctx, s.Records, name); err != nil {
+				return fmt.Errorf("remove %s: %w", name, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return removed, nil
 }
 
 func (s Store) ResolveLink(ctx context.Context, scope Scope, environment, name string) (Published, error) {
-	if err := ValidateLinkName(environment, name); err != nil {
+	resolved, err := s.ResolveLinks(ctx, scope, environment, []string{name})
+	if err != nil {
 		return Published{}, err
 	}
-
-	for range linkAttempts {
-		resolved, err := s.readPair(ctx, scope, environment, name)
-		if errors.Is(err, ErrTornPair) {
-			continue
-		}
-		return resolved, err
-	}
-	return Published{}, fmt.Errorf(
-		"link %s's record and the value beside it came from different publishes, %d reads in a row. "+
-			"A deploy is rewriting that link; nothing will be served half of one publish and half of another: %w",
-		name, linkAttempts, ErrTornPair)
+	return resolved[0], nil
 }
 
-func (s Store) readPair(ctx context.Context, scope Scope, environment, name string) (Published, error) {
-	for _, at := range shadowing(environment) {
-		_, record, err := s.linkRecordAt(ctx, scope, at, name)
-		if err != nil {
-			return Published{}, err
+func (s Store) ResolveLinks(ctx context.Context, scope Scope, environment string, names []string) ([]Published, error) {
+	for _, name := range names {
+		if err := ValidateLinkName(environment, name); err != nil {
+			return nil, err
 		}
-		value, err := s.linkValueAt(ctx, scope, at, name)
+	}
+	if len(names) == 0 {
+		return nil, nil
+	}
+
+	out := make([]Published, len(names))
+	sealed := make([][]byte, len(names))
+	for range linkAttempts {
+		held := s.pages(scope)
+		torn := ""
+		for i, name := range names {
+			resolved, value, err := s.readPair(ctx, held, scope, environment, name)
+			if errors.Is(err, ErrTornPair) {
+				torn = name
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			out[i], sealed[i] = resolved, value
+		}
+		if torn != "" {
+			continue
+		}
+		if err := each(ctx, len(names), func(ctx context.Context, i int) error {
+			plaintext, err := s.Sealer.Open(ctx, linkCoordinate(scope, out[i].Environment, names[i]), sealed[i])
+			if err != nil {
+				return fmt.Errorf("open link %s's value: %w", names[i], err)
+			}
+			out[i].Value = plaintext
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+	return nil, fmt.Errorf(
+		"a link's record and the value beside it came from different publishes, %d reads in a row. "+
+			"A deploy is rewriting %s; nothing will be served half of one publish and half of another: %w",
+		linkAttempts, describeEnvironment(environment), ErrTornPair)
+}
+
+func (s Store) readPair(ctx context.Context, held *pages, scope Scope, environment, name string) (Published, []byte, error) {
+	for _, at := range shadowing(environment) {
+		published, err := held.at(ctx, at)
 		if err != nil {
-			return Published{}, err
+			return Published{}, nil, err
+		}
+		record, err := decodeLinkRecord(name, published[linkRecordName(scope, at, name).String()])
+		if err != nil {
+			return Published{}, nil, err
+		}
+		value, err := decodeLinkValue(name, published[linkValueName(scope, at, name).String()])
+		if err != nil {
+			return Published{}, nil, err
 		}
 		if record.Version == 0 && value.Version == 0 {
 			continue
 		}
 		if record.Version != value.Version {
-			return Published{}, ErrTornPair
-		}
-		plaintext, err := s.Sealer.Open(ctx, linkCoordinate(scope, at, name), value.Sealed)
-		if err != nil {
-			return Published{}, fmt.Errorf("open link %s's value: %w", name, err)
+			return Published{}, nil, ErrTornPair
 		}
 		return Published{
 			Name:        name,
 			Environment: at,
 			Record:      record.Record,
 			Shapes:      record.Shapes,
-			Value:       plaintext,
 			Owner:       record.owner(),
 			Version:     record.Version,
 			UpdatedAt:   record.UpdatedAt,
-		}, nil
+		}, value.Sealed, nil
 	}
-	return Published{}, fmt.Errorf("link %s is not published to %s: %w", name, describeEnvironment(environment), ErrNotPublished)
+	return Published{}, nil, fmt.Errorf("link %s is not published to %s: %w", name, describeEnvironment(environment), ErrNotPublished)
 }
 
 func (s Store) ListLinks(ctx context.Context, scope Scope, environment string) ([]Published, error) {
@@ -299,10 +400,15 @@ func (s Store) ListLinks(ctx context.Context, scope Scope, environment string) (
 		return nil, err
 	}
 
+	held := s.pages(scope)
 	out := make([]Published, 0, len(names))
 	for _, name := range names {
 		for _, at := range shadowing(environment) {
-			_, record, err := s.linkRecordAt(ctx, scope, at, name)
+			published, err := held.at(ctx, at)
+			if err != nil {
+				return nil, err
+			}
+			record, err := decodeLinkRecord(name, published[linkRecordName(scope, at, name).String()])
 			if err != nil {
 				return nil, err
 			}
@@ -323,6 +429,32 @@ func (s Store) ListLinks(ctx context.Context, scope Scope, environment string) (
 	}
 	slices.SortFunc(out, func(a, b Published) int { return strings.Compare(a.Name, b.Name) })
 	return out, nil
+}
+
+type pages struct {
+	store Store
+	scope Scope
+	held  map[string]map[string]ports.Record
+}
+
+func (s Store) pages(scope Scope) *pages {
+	return &pages{store: s, scope: scope, held: map[string]map[string]ports.Record{}}
+}
+
+func (p *pages) at(ctx context.Context, environment string) (map[string]ports.Record, error) {
+	if held, ok := p.held[environment]; ok {
+		return held, nil
+	}
+	stored, err := p.store.Records.List(ctx, Under(p.scope, "links", escape(environment)))
+	if err != nil {
+		return nil, fmt.Errorf("read %s's published links: %w", p.scope.Project, err)
+	}
+	held := make(map[string]ports.Record, len(stored))
+	for _, record := range stored {
+		held[record.Name.String()] = record
+	}
+	p.held[environment] = held
+	return held, nil
 }
 
 func (s Store) PublishedNames(ctx context.Context, scope Scope, environment string) ([]string, error) {
@@ -410,18 +542,21 @@ func otherOwner(claims []claim, owner string) (string, bool) {
 	return others[0], true
 }
 
-func (s Store) claim(ctx context.Context, scope Scope, owner, environment, name string) error {
+func (s Store) claim(ctx context.Context, scope Scope, owner, environment string, taking ...string) error {
 	return s.reindex(ctx, scope, owner, environment, func(names []string) []string {
-		if slices.Contains(names, name) {
-			return names
+		kept := slices.Clone(names)
+		for _, name := range taking {
+			if !slices.Contains(kept, name) {
+				kept = append(kept, name)
+			}
 		}
-		return append(names, name)
+		return kept
 	})
 }
 
-func (s Store) unclaim(ctx context.Context, scope Scope, owner, environment, name string) error {
+func (s Store) unclaim(ctx context.Context, scope Scope, owner, environment string, dropping ...string) error {
 	return s.reindex(ctx, scope, owner, environment, func(names []string) []string {
-		return slices.DeleteFunc(slices.Clone(names), func(held string) bool { return held == name })
+		return slices.DeleteFunc(slices.Clone(names), func(held string) bool { return slices.Contains(dropping, held) })
 	})
 }
 
@@ -479,21 +614,25 @@ func (s Store) linkRecordAt(ctx context.Context, scope Scope, environment, name 
 	if err != nil {
 		return ports.Record{}, linkRecord{}, fmt.Errorf("read link %s's record: %w", name, err)
 	}
-	if len(held.Bytes) == 0 {
-		return held, linkRecord{}, nil
-	}
-	var record linkRecord
-	if err := json.Unmarshal(held.Bytes, &record); err != nil {
-		return ports.Record{}, linkRecord{}, fmt.Errorf("read link %s's record: %w", name, err)
+	record, err := decodeLinkRecord(name, held)
+	if err != nil {
+		return ports.Record{}, linkRecord{}, err
 	}
 	return held, record, nil
 }
 
-func (s Store) linkValueAt(ctx context.Context, scope Scope, environment, name string) (linkValue, error) {
-	held, err := ports.Held(ctx, s.Records, linkValueName(scope, environment, name))
-	if err != nil {
-		return linkValue{}, fmt.Errorf("read link %s's value: %w", name, err)
+func decodeLinkRecord(name string, held ports.Record) (linkRecord, error) {
+	if len(held.Bytes) == 0 {
+		return linkRecord{}, nil
 	}
+	var record linkRecord
+	if err := json.Unmarshal(held.Bytes, &record); err != nil {
+		return linkRecord{}, fmt.Errorf("read link %s's record: %w", name, err)
+	}
+	return record, nil
+}
+
+func decodeLinkValue(name string, held ports.Record) (linkValue, error) {
 	if len(held.Bytes) == 0 {
 		return linkValue{}, nil
 	}
