@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -121,6 +122,12 @@ func VerifyLink(link *linksv1.Link) error {
 				link.GetName(), len(link.GetGrants()), ErrUnattachedGrant)
 		}
 	}
+	return VerifyGrantScope(link)
+}
+
+const grantWildcard = "*"
+
+func VerifyGrantScope(link *linksv1.Link) error {
 	for _, g := range link.GetGrants() {
 		if len(g.GetActions()) == 0 {
 			return fmt.Errorf("link %s carries a grant over %v naming no action: a grant names what an app may do with the resource it links: %w",
@@ -129,6 +136,14 @@ func VerifyLink(link *linksv1.Link) error {
 		if len(g.GetResources()) == 0 {
 			return fmt.Errorf("link %s grants %v over no resource: an app receives permissions for the resource it links and nothing else: %w",
 				link.GetName(), g.GetActions(), ErrUnscopedGrant)
+		}
+		if slices.Contains(g.GetActions(), grantWildcard) {
+			return fmt.Errorf("link %s grants %q over %v: %q is every action any vendor has, which reaches past the resource it links: %w",
+				link.GetName(), grantWildcard, g.GetResources(), grantWildcard, ErrUnscopedGrant)
+		}
+		if slices.Contains(g.GetResources(), grantWildcard) {
+			return fmt.Errorf("link %s grants %v over %q: %q is every resource in the account, and an app receives permissions for the resource it links and nothing else: %w",
+				link.GetName(), g.GetActions(), grantWildcard, grantWildcard, ErrUnscopedGrant)
 		}
 	}
 	return nil

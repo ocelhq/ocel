@@ -731,6 +731,9 @@ func (r *deployRun) publish(ctx context.Context, links []Link) error {
 		if err != nil {
 			return err
 		}
+		if err := VerifyGrantScope(message); err != nil {
+			return linksError(err)
+		}
 		pair, err := LinkPair(values.OwnerOcel, message)
 		if err != nil {
 			return err

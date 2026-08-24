@@ -146,6 +146,31 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 	}
 }
 
+func TestDeployRefusesToPublishABlanketGrantWithoutAskingTheProvider(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	provider.Releases().(*fake.Releaser).Grants = []providerkit.Grant{{
+		Label:     "everything",
+		Actions:   []string{"*"},
+		Resources: []string{"*"},
+	}}
+
+	stream, err := client.Deploy(context.Background(), deployRequest())
+	if err != nil {
+		t.Fatalf("Deploy() error = %v", err)
+	}
+	defer stream.Close()
+	for stream.Receive() {
+	}
+	err = stream.Err()
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("Deploy() = %v, want it refused: a provider that vets no grant still may not publish one over every resource", err)
+	}
+	if !strings.Contains(err.Error(), "every action") {
+		t.Fatalf("Deploy() = %v, want it to name the wildcard the kit refuses", err)
+	}
+}
+
 const adminDeploymentID = "fedcba9876543210fedcba9876543210"
 
 func twoAppRequest() *contractv1.DeployRequest {
