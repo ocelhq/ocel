@@ -131,7 +131,7 @@ func TestPreflightRefusesABootstrapThisBuildCannotRead(t *testing.T) {
 	ctx := context.Background()
 	client, provider := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.Bootstrap().(*fake.Bootstrapper).AtSchema(providerkit.BootstrapSchema + 1)
+	provider.Bootstrapper().AtSchema(providerkit.BootstrapSchema + 1)
 
 	_, err := client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {

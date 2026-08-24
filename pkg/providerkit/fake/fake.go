@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const Vendor providerkit.Vendor = "fake"
@@ -55,7 +56,15 @@ func (p *Provider) Serves() []providerkit.LinkType {
 
 func (p *Provider) Region() string { return p.options.Region }
 
-func (p *Provider) Bootstrap() providerkit.Bootstrapper { return p.bootstrap }
+func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
+	if _, err := p.edges.Open(kind); err != nil {
+		return nil, err
+	}
+	p.bootstrap.fronting(kind)
+	return p.bootstrap, nil
+}
+
+func (p *Provider) Bootstrapper() *Bootstrapper { return p.bootstrap }
 
 func (p *Provider) Releases() providerkit.Releaser { return p.releases }
 

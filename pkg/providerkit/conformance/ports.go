@@ -27,12 +27,21 @@ func runPorts(t *testing.T, suite Suite) {
 
 	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, provider.Records()) })
 	t.Run("Sealer", func(t *testing.T) { RunSealer(t, provider.Sealer()) })
-	t.Run("Bootstrapper", func(t *testing.T) { RunBootstrapper(t, provider.Bootstrap()) })
+	t.Run("Bootstrapper", func(t *testing.T) { RunBootstrapper(t, bootstrapperOf(t, provider)) })
 	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, provider.Artifacts()) })
 	t.Run("Releaser", func(t *testing.T) { RunReleaser(t, provider.Releases(), provider.Serves()) })
 	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, provider.Credentials()) })
 	t.Run("EdgeRegistry", func(t *testing.T) { RunEdgeRegistry(t, provider.Edges()) })
 	t.Run("DNSRegistry", func(t *testing.T) { RunDNSRegistry(t, provider.DNS()) })
+}
+
+func bootstrapperOf(t *testing.T, provider providerkit.Provider) providerkit.Bootstrapper {
+	t.Helper()
+	bootstrapper, err := provider.Bootstrap(provider.Edges().Default())
+	if err != nil {
+		t.Fatalf("Bootstrap(%q) error = %v, want the bootstrapper for this provider's default edge", provider.Edges().Default(), err)
+	}
+	return bootstrapper
 }
 
 func under(t *testing.T, rest ...string) providerkit.RecordName {

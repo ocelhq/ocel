@@ -15,7 +15,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	if err != nil {
 		return nil, err
 	}
-	provider, gate, err := h.gate()
+	provider, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	}
 	resp.Identity = IdentityProto(provider.Vendor(), identity)
 
-	required, err := RequiredFeatures(provider.Bootstrap().Catalogue(), req.GetFrameworks(), req.GetEdge().GetKind())
+	required, err := RequiredFeatures(gate.Bootstrapper.Catalogue(), req.GetFrameworks(), req.GetEdge().GetKind())
 	if err != nil {
 		return nil, RefusalError(err)
 	}

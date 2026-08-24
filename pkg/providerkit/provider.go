@@ -12,7 +12,7 @@ type Provider interface {
 
 	Serves() []LinkType
 
-	Bootstrap() Bootstrapper
+	Bootstrap(kind edge.Kind) (Bootstrapper, error)
 	Releases() Releaser
 	Artifacts() ArtifactStore
 	Records() RecordStore

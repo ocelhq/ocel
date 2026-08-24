@@ -31,6 +31,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const Vendor providerkit.Vendor = "aws"
@@ -78,12 +79,12 @@ func (p *Provider) Serves() []providerkit.LinkType { return deploy.Serves() }
 
 func (p *Provider) Region() string { return p.aws.Region }
 
-func (p *Provider) Bootstrap() providerkit.Bootstrapper {
-	front, err := p.edges().Open(edges.DefaultKind)
+func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
+	front, err := p.edges().Open(kind)
 	if err != nil {
-		return refusing{err}
+		return nil, err
 	}
-	return settling{Bootstrapper: control.BootstrapperFor(p.aws, front), settled: p.forget}
+	return settling{Bootstrapper: control.BootstrapperFor(p.aws, front), settled: p.forget}, nil
 }
 
 func (p *Provider) forget() {
@@ -377,33 +378,12 @@ func (s settling) Remove(ctx context.Context, class providerkit.Class, report pr
 	return nil
 }
 
-type refusing struct{ err error }
-
-func (r refusing) Catalogue() []providerkit.Feature { return nil }
-
-func (r refusing) Describe(context.Context, providerkit.Class) (providerkit.Bootstrap, error) {
-	return providerkit.Bootstrap{}, r.err
-}
-
-func (r refusing) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Reporter) error {
-	return r.err
-}
-
-func (r refusing) Removals(context.Context, providerkit.Class) ([]providerkit.Removal, error) {
-	return nil, r.err
-}
-
-func (r refusing) Remove(context.Context, providerkit.Class, providerkit.Reporter) error {
-	return r.err
-}
-
 var (
 	_ providerkit.Provider       = (*Provider)(nil)
 	_ providerkit.Warmer         = (*Provider)(nil)
 	_ providerkit.CodeEmbedder   = (*Provider)(nil)
 	_ providerkit.MembraneSource = (*Provider)(nil)
 	_ providerkit.StackInspector = (*Provider)(nil)
-	_ providerkit.Bootstrapper   = refusing{}
 	_ providerkit.Bootstrapper   = settling{}
 	_ awsports.Tables            = (*Provider)(nil)
 	_ awsports.Keys              = (*Provider)(nil)
