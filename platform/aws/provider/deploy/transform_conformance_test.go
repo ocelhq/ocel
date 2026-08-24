@@ -5,7 +5,6 @@ import (
 	"slices"
 	"testing"
 
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform/transformtest"
@@ -32,8 +31,8 @@ func TestSurfaceConformance(t *testing.T) {
 
 	rendered := map[string]transform.Surfaces{
 		"function": functionSurfaces(translateFunctionSpec("", providerkit.FunctionSpec{})),
-		"bucket":   bucketSurfaces(translateBucket(&resourcesv1.BucketConfig{})),
-		"postgres": postgresSurfaces(translatePostgres(&resourcesv1.PostgresConfig{})),
+		"bucket":   bucketSurfaces(translateBucket(&providerkit.BucketSpec{})),
+		"postgres": postgresSurfaces(translatePostgres(&providerkit.PostgresSpec{})),
 	}
 
 	t.Run("the provider renders exactly the underlying resources the module targets", func(t *testing.T) {

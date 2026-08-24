@@ -12,7 +12,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -83,7 +83,7 @@ func testUploadCompleter() payloads.Placement {
 
 func TestBucketComponentTags(t *testing.T) {
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&resourcesv1.BucketConfig{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&providerkit.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 		return err
 	})
 
@@ -217,7 +217,7 @@ func TestTranslateBucket(t *testing.T) {
 		t.Parallel()
 
 		origins := []string{"https://app.example.com", "https://www.example.com"}
-		got := translateBucket(&resourcesv1.BucketConfig{AllowedOrigins: origins})
+		got := translateBucket(&providerkit.BucketSpec{AllowedOrigins: origins})
 
 		if !reflect.DeepEqual(got.AllowedOrigins, origins) {
 			t.Errorf("AllowedOrigins = %v, want %v (carried through for the upload completer allowlist)", got.AllowedOrigins, origins)
@@ -239,7 +239,7 @@ func TestTranslateBucket(t *testing.T) {
 	t.Run("notification and lambda args", func(t *testing.T) {
 		t.Parallel()
 
-		got := translateBucket(&resourcesv1.BucketConfig{})
+		got := translateBucket(&providerkit.BucketSpec{})
 
 		if !reflect.DeepEqual(got.NotificationEvents, []string{"s3:ObjectCreated:*"}) {
 			t.Errorf("NotificationEvents = %v, want [s3:ObjectCreated:*]", got.NotificationEvents)
@@ -258,7 +258,7 @@ func TestTranslateBucket(t *testing.T) {
 	t.Run("IAM args", func(t *testing.T) {
 		t.Parallel()
 
-		got := translateBucket(&resourcesv1.BucketConfig{})
+		got := translateBucket(&providerkit.BucketSpec{})
 
 		if !slices.Contains(got.UploadCompleterS3Actions, "s3:GetObjectTagging") {
 			t.Errorf("UploadCompleterS3Actions = %v, want it to include s3:GetObjectTagging", got.UploadCompleterS3Actions)
@@ -274,7 +274,7 @@ func TestTranslateBucket(t *testing.T) {
 	t.Run("empty origins yield empty CORS origins", func(t *testing.T) {
 		t.Parallel()
 
-		got := translateBucket(&resourcesv1.BucketConfig{})
+		got := translateBucket(&providerkit.BucketSpec{})
 		if len(got.CORS.AllowedOrigins) != 0 {
 			t.Errorf("CORS.AllowedOrigins = %v, want empty for a bucket with no declared origins", got.CORS.AllowedOrigins)
 		}

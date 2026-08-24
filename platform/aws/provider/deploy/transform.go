@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 )
 
@@ -19,22 +19,22 @@ type transformCandidate struct {
 	apply func(*transformedArgs, transform.Result) error
 }
 
-func (t *transformedArgs) forBucket(logicalName string, cfg *resourcesv1.BucketConfig) bucketArgs {
+func (t *transformedArgs) forBucket(logicalName string, spec *providerkit.BucketSpec) bucketArgs {
 	if t != nil {
 		if args, ok := t.buckets[logicalName]; ok {
 			return args
 		}
 	}
-	return translateBucket(cfg)
+	return translateBucket(spec)
 }
 
-func (t *transformedArgs) forPostgres(logicalName string, cfg *resourcesv1.PostgresConfig) postgresArgs {
+func (t *transformedArgs) forPostgres(logicalName string, spec *providerkit.PostgresSpec) postgresArgs {
 	if t != nil {
 		if args, ok := t.postgres[logicalName]; ok {
 			return args
 		}
 	}
-	return translatePostgres(cfg)
+	return translatePostgres(spec)
 }
 
 func functionSurfaces(a functionArgs) transform.Surfaces {
