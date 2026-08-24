@@ -743,6 +743,31 @@ func (r *deployRun) publish(ctx context.Context, links []Link) error {
 	if _, err := r.values.SetLinks(ctx, r.scope, r.plan.linkEnvironment(), values.OwnerOcel, publishing); err != nil {
 		return fmt.Errorf("publish %s's links: %w", r.scope.Project, err)
 	}
+	return r.prune(ctx, links)
+}
+
+func (r *deployRun) prune(ctx context.Context, links []Link) error {
+	environment := r.plan.linkEnvironment()
+	held, err := r.values.ListLinks(ctx, r.scope, environment)
+	if err != nil {
+		return fmt.Errorf("read %s's published links: %w", r.scope.Project, err)
+	}
+	var stale []string
+	for _, record := range held {
+		if record.Owner != values.OwnerOcel || record.Environment != environment {
+			continue
+		}
+		if slices.ContainsFunc(links, func(link Link) bool { return link.Name == record.Name }) {
+			continue
+		}
+		stale = append(stale, record.Name)
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+	if _, err := r.values.RemoveLinks(ctx, r.scope, environment, stale); err != nil {
+		return fmt.Errorf("prune %s's published links: %w", r.scope.Project, err)
+	}
 	return nil
 }
 

@@ -615,6 +615,74 @@ func TestDeployPublishesLinksWhereTheOperatorReadsThem(t *testing.T) {
 	}
 }
 
+func TestDeployPrunesTheLinkItStoppedProvisioning(t *testing.T) {
+	builtProject(t)
+	deploys, vars := operatorServed(t)
+	ctx := context.Background()
+
+	if result, _ := deploy(t, deploys, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	hostnameAdded(t, deploys)
+	dropped := deployRequest()
+	dropped.Manifest.Resources = nil
+	dropped.Manifest.Usages = nil
+	if result, _ := deploy(t, deploys, dropped); !result.GetSuccess() {
+		t.Fatalf("Deploy() without the resource = %q", result.GetError())
+	}
+
+	listed, err := vars.ListLinks(ctx, &envvarsv1.ListLinksRequest{
+		Slug: "shop",
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil {
+		t.Fatalf("ListLinks() = %v", err)
+	}
+	if len(listed.GetLinks()) != 0 {
+		t.Fatalf("ListLinks() = %+v, want nothing: the deploy stopped provisioning the resource, so its record and credentials go with it", listed.GetLinks())
+	}
+}
+
+func TestDeployLeavesAnotherPublishersLinkAlone(t *testing.T) {
+	builtProject(t)
+	deploys, vars := operatorServed(t)
+	ctx := context.Background()
+
+	if _, err := vars.SetLink(ctx, &envvarsv1.SetLinkRequest{
+		Slug:  "shop",
+		Tier:  environmentv1.Tier_TIER_PRODUCTION,
+		Owner: "acme",
+		Link: &linksv1.Link{
+			Name:       "warehouse",
+			Source:     "acme",
+			Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "db.acme"}},
+		},
+	}); err != nil {
+		t.Fatalf("SetLink() = %v", err)
+	}
+
+	if result, _ := deploy(t, deploys, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	listed, err := vars.ListLinks(ctx, &envvarsv1.ListLinksRequest{
+		Slug: "shop",
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil {
+		t.Fatalf("ListLinks() = %v", err)
+	}
+	names := make([]string, 0, len(listed.GetLinks()))
+	for _, link := range listed.GetLinks() {
+		names = append(names, link.GetName())
+	}
+	slices.Sort(names)
+	if !slices.Equal(names, []string{"orders", "warehouse"}) {
+		t.Fatalf("ListLinks() = %v, want ocel's own link beside the one acme published", names)
+	}
+}
+
 func TestDeployRecordsTheFeaturesItsProjectDependsOn(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
