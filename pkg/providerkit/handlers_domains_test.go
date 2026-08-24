@@ -296,8 +296,8 @@ func TestAddHostnameBindsTheCertificateItsProviderSettles(t *testing.T) {
 	if len(bindings) != 1 || bindings[0].Certificate != "cert-for-app" {
 		t.Errorf("the edge was bound with %+v, want the certificate the provider settled", bindings)
 	}
-	if settled := readStack(t, provider, providerkit.ClassProduction, "shop").Host("app.acme.com"); settled.Certificate != "cert-for-app" {
-		t.Errorf("recorded certificate = %q, want the one the provider settled", settled.Certificate)
+	if settled := readStack(t, provider, providerkit.ClassProduction, "shop").Host("app.acme.com"); settled.Certificate.ARN != "cert-for-app" {
+		t.Errorf("recorded certificate = %q, want the one the provider settled", settled.Certificate.ARN)
 	}
 }
 

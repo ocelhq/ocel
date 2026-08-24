@@ -89,14 +89,12 @@ func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter
 	settled := d.state.Host(host)
 	serving := settled.Serving()
 
-	certificate, err := certificateFor(ctx, d.provider, d.settle.kind, host, report)
-	if err != nil {
+	if err := d.certify(ctx, host, &settled, report); err != nil {
 		return err
 	}
-	settled.Certificate = certificate
 
 	report.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.settle.kind))
-	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate}); err != nil {
+	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate.ARN}); err != nil {
 		return err
 	}
 	if err := d.checkpoint(ctx); err != nil {
@@ -129,6 +127,30 @@ func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter
 	}
 	report.Say(fmt.Sprintf("%s is served by the %s edge", host, d.settle.kind))
 	return d.retire(ctx, host, serving, report)
+}
+
+func (d *hostnames) certify(ctx context.Context, host string, settled *Settled, report Reporter) error {
+	cert, err := certificateFor(ctx, d.provider, CertificateRequest{
+		Kind:     d.settle.kind,
+		Hostname: host,
+		Held:     settled.Certificate,
+		Report:   report,
+		Prove: func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error) {
+			written, werr := d.settle.write(ctx, records, proveHeadline(host), report.Say, proveNote)
+			cert.Written, cert.Owed = written.Written, written.Owed
+			settled.Certificate = cert
+			d.state.Settle(host, *settled)
+			return cert, errors.Join(werr, d.checkpoint(ctx))
+		},
+	})
+	if cert.Held() {
+		settled.Certificate = cert
+		d.state.Settle(host, *settled)
+		if cerr := d.checkpoint(ctx); cerr != nil {
+			return errors.Join(err, cerr)
+		}
+	}
+	return err
 }
 
 func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, report Reporter) error {
@@ -302,9 +324,9 @@ func servingPointer(probe Probe, kind edge.Kind) string {
 
 func certificateState(settled Settled, probe Probe, owed []edge.Record) *contractv1.CertificateState {
 	return &contractv1.CertificateState{
-		CertificateId:  settled.Certificate,
-		RecordsWritten: recordLines(settled.Written),
-		RecordsOwed:    recordLines(append(slices.Clone(settled.Owed), owed...)),
+		CertificateId:  settled.Certificate.ARN,
+		RecordsWritten: recordLines(settled.WrittenRecords()),
+		RecordsOwed:    recordLines(append(settled.OwedRecords(), owed...)),
 		LastProbeAt:    probe.At,
 		LastProbeOk:    probe.OK,
 		LastProbeEdge:  string(probe.Edge),

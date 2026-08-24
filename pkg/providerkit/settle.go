@@ -83,8 +83,13 @@ func (s settler) recordsFor(state edge.StackState, hostname string) ([]edge.Reco
 	return edge.RecordsFor(target, []string{hostname})
 }
 
-func (s settler) write(ctx context.Context, records []edge.Record, headline string, say func(string), notes ...string) (Settled, error) {
-	var settled Settled
+type recordSet struct {
+	Written []edge.Record
+	Owed    []edge.Record
+}
+
+func (s settler) write(ctx context.Context, records []edge.Record, headline string, say func(string), notes ...string) (recordSet, error) {
+	var settled recordSet
 	if len(records) == 0 {
 		return settled, nil
 	}

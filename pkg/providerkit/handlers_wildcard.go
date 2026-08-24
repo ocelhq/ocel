@@ -124,16 +124,14 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 		Settled:    w.held.Settled,
 	}
 
-	certificate, err := certificateFor(ctx, w.provider, front.Kind(), wildcard, report)
-	if err != nil {
+	if err := w.certify(ctx, settle, wildcard, report); err != nil {
 		return err
 	}
-	w.held.Settled.Certificate = certificate
 
 	report.Say("Reconciling the shared preview entry on " + wildcard)
 	published, err := front.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{
 		BaseDomain:  base,
-		Certificate: w.held.Settled.Certificate,
+		Certificate: w.held.Settled.Certificate.ARN,
 		GrammarMin:  edge.PreviewGrammarMin,
 		GrammarMax:  edge.PreviewGrammarMax,
 		Warn:        report.Detail,
@@ -171,6 +169,29 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 	}
 	report.Say(fmt.Sprintf("Previews are served on %s by the %s edge", wildcard, front.Kind()))
 	return nil
+}
+
+func (w *wildcards) certify(ctx context.Context, settle settler, wildcard string, report Reporter) error {
+	rerun := fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard)
+	cert, err := certificateFor(ctx, w.provider, CertificateRequest{
+		Kind:     settle.kind,
+		Hostname: wildcard,
+		Held:     w.held.Settled.Certificate,
+		Report:   report,
+		Prove: func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error) {
+			written, werr := settle.write(ctx, records, proveHeadline(wildcard), report.Say, proveNote, rerun)
+			cert.Written, cert.Owed = written.Written, written.Owed
+			w.held.Settled.Certificate = cert
+			return cert, errors.Join(werr, w.save(ctx))
+		},
+	})
+	if cert.Held() {
+		w.held.Settled.Certificate = cert
+		if serr := w.save(ctx); serr != nil {
+			return errors.Join(err, serr)
+		}
+	}
+	return err
 }
 
 func (w *wildcards) claimable(front edge.Edge, base string) error {
