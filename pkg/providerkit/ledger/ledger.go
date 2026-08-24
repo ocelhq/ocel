@@ -300,7 +300,8 @@ func (l *Ledger) Prune(ctx context.Context, keepN int, pointer string) (edge.Pru
 		return edge.PruneResult{}, err
 	}
 	kept, removed := Retain(rows, keepN, active, func(row promotionRecord) string { return row.PromotionID })
-	if err := l.drop(ctx, name, removed); err != nil {
+	held := recordKeysOf(kept)
+	if err := l.drop(ctx, name, removed, held); err != nil {
 		return edge.PruneResult{}, err
 	}
 	surviving, err := l.recordKeys(ctx)
@@ -310,9 +311,9 @@ func (l *Ledger) Prune(ctx context.Context, keepN int, pointer string) (edge.Pru
 	return edge.PruneResult{
 		KeptPromotionIDs:           promotionIDs(kept),
 		RemovedPromotionIDs:        promotionIDs(removed),
-		RemovedRecordKeys:          recordKeysOf(removed),
+		RemovedRecordKeys:          without(recordKeysOf(removed), held),
 		SurvivingRecordKeys:        surviving,
-		SurvivingPointerRecordKeys: recordKeysOf(kept),
+		SurvivingPointerRecordKeys: held,
 	}, nil
 }
 
@@ -333,7 +334,7 @@ func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (edge.PruneR
 	if err != nil {
 		return edge.PruneResult{}, err
 	}
-	if err := l.drop(ctx, name, rows); err != nil {
+	if err := l.drop(ctx, name, rows, nil); err != nil {
 		return edge.PruneResult{}, err
 	}
 	if err := ports.Forget(ctx, l.records, l.pointerName(name)); err != nil {
@@ -424,10 +425,13 @@ func (l *Ledger) retarget(ctx context.Context, distribution string, note bool) e
 	return fmt.Errorf("record the invalidation targets for %s: they moved under %d attempts", l.scope, casAttempts)
 }
 
-func (l *Ledger) drop(ctx context.Context, pointer string, rows []promotionRecord) error {
+func (l *Ledger) drop(ctx context.Context, pointer string, rows []promotionRecord, held []string) error {
 	for _, row := range rows {
 		names := []ports.RecordName{l.promotionName(pointer, row.PromotionID)}
 		for app, identity := range row.Builds {
+			if slices.Contains(held, RecordKey(app, identity)) {
+				continue
+			}
 			names = append(names, l.recordName(app, identity))
 		}
 		if row.Tag != "" {
@@ -503,6 +507,10 @@ func promotionIDs(rows []promotionRecord) []string {
 		ids = append(ids, row.PromotionID)
 	}
 	return ids
+}
+
+func without(keys, held []string) []string {
+	return slices.DeleteFunc(slices.Clone(keys), func(key string) bool { return slices.Contains(held, key) })
 }
 
 func recordKeysOf(rows []promotionRecord) []string {
