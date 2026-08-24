@@ -85,9 +85,6 @@ type Config struct {
 	DNS      edge.DNSWriter
 	DNSAwait RecordWaiter
 
-	AllowDegraded []string
-	Degraded      func(need edge.Need, detail string)
-
 	Tier                   environmentv1.Tier
 	Lifecycle              environmentv1.Lifecycle
 	Identity               string
