@@ -49,6 +49,15 @@ func (f *fakeS3) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*
 	return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(slices.Clone(blob)))}, nil
 }
 
+func (f *fakeS3) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, held := f.objects[f.at(aws.ToString(in.Bucket), aws.ToString(in.Key))]; !held {
+		return nil, &s3types.NotFound{}
+	}
+	return &s3.HeadObjectOutput{}, nil
+}
+
 func (f *fakeS3) ListObjectsV2(_ context.Context, in *s3.ListObjectsV2Input, _ ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

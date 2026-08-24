@@ -131,8 +131,12 @@ func PlaceMembrane(ctx context.Context, source MembraneSource, class Class, stor
 	}
 	sum := sha256.Sum256(body)
 	ref := ArtifactRef{Class: class, Bucket: StoreFunctions, Key: MembraneKey(hex.EncodeToString(sum[:]))}
-	if held, err := store.Open(ctx, ref); err == nil {
-		return ref, held.Close()
+	held, err := store.Has(ctx, ref)
+	if err != nil {
+		return ArtifactRef{}, fmt.Errorf("look for the membrane: %w", err)
+	}
+	if held {
+		return ref, nil
 	}
 	if err := store.Put(ctx, ref, bytes.NewReader(body)); err != nil {
 		return ArtifactRef{}, fmt.Errorf("place the membrane: %w", err)

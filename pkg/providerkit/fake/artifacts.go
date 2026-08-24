@@ -32,6 +32,13 @@ func (a *Artifacts) Put(_ context.Context, ref providerkit.ArtifactRef, body io.
 	return nil
 }
 
+func (a *Artifacts) Has(_ context.Context, ref providerkit.ArtifactRef) (bool, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	_, held := a.objects[ref]
+	return held, nil
+}
+
 func (a *Artifacts) Open(_ context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

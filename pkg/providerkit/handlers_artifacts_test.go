@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"maps"
 	"sync"
 	"testing"
 
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
@@ -141,5 +143,70 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 	}
 	if packages["server"][sealedFile] == "" || packages["feed"][sealedFile] == "" {
 		t.Error("the sealed values reach only some of the app's functions, want every one of them")
+	}
+}
+
+func previewRequest() *contractv1.DeployRequest {
+	req := deployRequest()
+	req.Manifest.Domains = []*contractv1.TierDomains{{
+		Tier:      environmentv1.Tier_TIER_PREVIEW,
+		Hostnames: []string{"pr-7.preview.example"},
+	}}
+	req.Environment = &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"}
+	return req
+}
+
+type countingProvider struct {
+	*fake.Provider
+
+	mu   sync.Mutex
+	puts map[string]int
+}
+
+func (p *countingProvider) Artifacts() providerkit.ArtifactStore {
+	return countedArtifacts{ArtifactStore: p.Provider.Artifacts(), on: p}
+}
+
+func (p *countingProvider) uploads() map[string]int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return maps.Clone(p.puts)
+}
+
+type countedArtifacts struct {
+	providerkit.ArtifactStore
+	on *countingProvider
+}
+
+func (c countedArtifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
+	c.on.mu.Lock()
+	c.on.puts[ref.Key]++
+	c.on.mu.Unlock()
+	return c.ArtifactStore.Put(ctx, ref, body)
+}
+
+func TestAnUnchangedBuildIsNotUploadedTwice(t *testing.T) {
+	builtProject(t)
+	provider := &countingProvider{Provider: fake.NewProvider(fake.Options{}), puts: map[string]int{}}
+	client := servedBy(t, provider)
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{
+		Tier:     environmentv1.Tier_TIER_PREVIEW,
+		Features: []string{fake.FeatureCache, fake.FeatureImages},
+	})
+
+	for range 2 {
+		if result, _ := deploy(t, client, previewRequest()); !result.GetSuccess() {
+			t.Fatalf("Deploy() = %q", result.GetError())
+		}
+	}
+
+	uploads := provider.uploads()
+	if len(uploads) == 0 {
+		t.Fatal("the deploy uploaded nothing, so the count proves nothing")
+	}
+	for key, count := range uploads {
+		if count != 1 {
+			t.Errorf("%s was uploaded %d times, want one: an unchanged build is already at the digest that names it", key, count)
+		}
 	}
 }
