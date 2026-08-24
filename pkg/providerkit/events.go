@@ -136,17 +136,6 @@ func progressEvent(message string) *progressv1.OperationEvent {
 	}
 }
 
-func phaseProgressEvent(stageID []byte, phase progressv1.Phase, message string, current, total uint32) *progressv1.OperationEvent {
-	p := &progressv1.ProgressEvent{Message: message, Phase: phase, StageId: stageID}
-	if total > 0 {
-		p.Current = &current
-		p.Total = &total
-	}
-	return &progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: p},
-	}
-}
-
 func stageProgressEvent(id StageID, phase progressv1.Phase, message string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{
