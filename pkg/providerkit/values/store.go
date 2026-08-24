@@ -192,13 +192,20 @@ func (s Store) dereference(ctx context.Context, scope Scope, at Coordinate, held
 	if err != nil {
 		return cell{}, Scope{}, Coordinate{}, err
 	}
-	if holder.live() == 0 {
-		return cell{}, Scope{}, Coordinate{}, fmt.Errorf("%s references %s, which holds no value: %w", at, held.Target, ErrDangling)
-	}
-	if holder.Target != nil {
-		return cell{}, Scope{}, Coordinate{}, fmt.Errorf("%s references %s, which is itself a reference: %w", at, held.Target, ErrWouldDeepen)
+	if err := validateHolder(at, held.Target, holder); err != nil {
+		return cell{}, Scope{}, Coordinate{}, err
 	}
 	return holder, from, holds, nil
+}
+
+func validateHolder(at Coordinate, target *Target, holder cell) error {
+	switch {
+	case holder.live() == 0:
+		return fmt.Errorf("%s references %s, which holds no value: %w", at, target, ErrDangling)
+	case holder.Target != nil:
+		return fmt.Errorf("%s references %s, which is itself a reference: %w", at, target, ErrWouldDeepen)
+	}
+	return nil
 }
 
 func (s Store) List(ctx context.Context, scope Scope) ([]Metadata, error) {
@@ -264,11 +271,8 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 		from[i] = Scope{Project: target.Project, Class: scope.Class}
 		holds[i] = Coordinate{Cell: target.Cell}
 		holder := holders[cellName(from[i], holds[i]).String()]
-		if holder.live() == 0 {
-			return nil, fmt.Errorf("%s references %s, which holds no value: %w", at, &target, ErrDangling)
-		}
-		if holder.Target != nil {
-			return nil, fmt.Errorf("%s references %s, which is itself a reference: %w", at, &target, ErrWouldDeepen)
+		if err := validateHolder(at, &target, holder); err != nil {
+			return nil, err
 		}
 		sealed[i] = holder
 	}
