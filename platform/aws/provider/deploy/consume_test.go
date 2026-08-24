@@ -12,6 +12,7 @@ import (
 
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
@@ -291,37 +292,28 @@ func TestConsumedLinksAreBilledAgainstTheRoleCeiling(t *testing.T) {
 	manifest := consumingManifest()
 	consumed := mustConsume(t, consumingConfig("main"), manifest)
 
-	policy, err := billedResourcePolicy(manifest.GetResources()[0], consumed, testSessions)
+	policies, err := appLinkPolicies(manifest, "api", consumedLinks(consumed))
 	if err != nil {
-		t.Fatalf("billedResourcePolicy: %v", err)
+		t.Fatalf("appLinkPolicies: %v", err)
 	}
-	if !strings.Contains(policy, "rds-db:connect") {
-		t.Errorf("bill = %q, want a bound link billed at the grants it actually carries", policy)
+	if !strings.Contains(policies[0].Policy, "rds-db:connect") {
+		t.Errorf("bill = %q, want a bound link billed at the grants it actually carries", policies[0].Policy)
 	}
-	if err := checkInlinePolicyBudget(manifest, consumed, testSessions); err != nil {
+	if err := checkInlinePolicyBudget("api", policies); err != nil {
 		t.Errorf("checkInlinePolicyBudget = %v, want two links well inside the ceiling", err)
 	}
 }
 
 func TestAnUnscopedPublishedGrantIsRefusedBeforeAnyCloudCall(t *testing.T) {
 	t.Parallel()
-	manifest := consumingManifest()
-	consumed := map[string]Consumed{"db--main": {
-		Resource: "db--main",
-		Record: PublishedRecord{
-			Link: &linksv1.Link{
-				Name:       "main",
-				Source:     "sst",
-				Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "sst"}},
-				Grants:     []*linksv1.Grant{{Label: "everything", Actions: []string{"s3:*"}, Resources: []string{"*"}}},
-			},
-			Version: 1,
-		},
-	}}
 
 	var unscoped *UnscopedGrantError
-	if err := checkInlinePolicyBudget(manifest, consumed, testSessions); !errors.As(err, &unscoped) {
-		t.Fatalf("checkInlinePolicyBudget = %v, want an *UnscopedGrantError: a publisher may not hand an app blanket access", err)
+	err := VerifyGrants(providerkit.Link{
+		Name:   "db--main",
+		Grants: []providerkit.Grant{{Label: "everything", Actions: []string{"s3:*"}, Resources: []string{"*"}}},
+	})
+	if !errors.As(err, &unscoped) {
+		t.Fatalf("VerifyGrants = %v, want an *UnscopedGrantError: a publisher may not hand an app blanket access", err)
 	}
 }
 

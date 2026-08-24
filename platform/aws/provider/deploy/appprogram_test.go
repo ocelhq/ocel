@@ -3,6 +3,8 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -207,4 +209,46 @@ func TestTheWarmerAndTheEmbedderReachTheFunctionsThePlanStoodUp(t *testing.T) {
 	if err := release.Warm(context.Background(), []string{"shop-prod-web-entry"}, nil); err != nil {
 		t.Errorf("Warm() with no invoker configured = %v, want it to pass over", err)
 	}
+}
+
+func TestAnAppIsRefusedBeforeItsRoleIsBuilt(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a plain name the Lambda runtime owns", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, plan := plannedAppStack(t)
+		plan.App.Values.Plain = map[string]string{"AWS_REGION": "us-west-2"}
+
+		_, err := releasing(t, cfg).appWork(plan, nil)
+		if err == nil || !strings.Contains(err.Error(), "AWS_REGION") {
+			t.Fatalf("appWork() = %v, want the deploy refused before the role is built", err)
+		}
+	})
+
+	t.Run("more inline policy than one role holds", func(t *testing.T) {
+		t.Parallel()
+
+		cfg, plan := plannedAppStack(t)
+		for i := range 40 {
+			name := fmt.Sprintf("bucket--%02d", i)
+			plan.App.Grants = append(plan.App.Grants, providerkit.Link{
+				Name: name,
+				Type: providerkit.LinkBucket,
+				Grants: []providerkit.Grant{{
+					Label:     "objects",
+					Actions:   []string{"s3:GetObject", "s3:PutObject", "s3:DeleteObject"},
+					Resources: []string{"arn:aws:s3:::" + strings.Repeat("b", 50) + name + "/*"},
+				}},
+			})
+		}
+
+		var over *PolicyBudgetError
+		if _, err := releasing(t, cfg).appWork(plan, nil); !errors.As(err, &over) {
+			t.Fatalf("appWork() = %v, want a *PolicyBudgetError", err)
+		}
+		if over.Apps[0].App != "web" {
+			t.Errorf("billed app = %q, want the app whose role is over", over.Apps[0].App)
+		}
+	})
 }

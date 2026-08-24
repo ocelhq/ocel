@@ -13,6 +13,7 @@ import (
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 )
 
@@ -168,7 +169,7 @@ func TestCheckRuntimeOwnedNames(t *testing.T) {
 			},
 		}
 
-		err := checkRuntimeOwnedNames(app)
+		err := checkRuntimeOwnedNames(app.GetName(), appValuesOf(app).Plain)
 		if err == nil {
 			t.Fatal("AWS_REGION was accepted; the Lambda runtime would overwrite it")
 		}
@@ -192,7 +193,7 @@ func TestCheckRuntimeOwnedNames(t *testing.T) {
 			},
 		}
 
-		if err := checkRuntimeOwnedNames(app); err != nil {
+		if err := checkRuntimeOwnedNames(app.GetName(), appValuesOf(app).Plain); err != nil {
 			t.Errorf("checkRuntimeOwnedNames = %v, want every one of these accepted", err)
 		}
 	})
@@ -210,7 +211,7 @@ func TestCheckEdgeOwnedNames(t *testing.T) {
 				Variables: []*contractv1.ManifestVariable{variable(key, "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
 			}
 
-			err := checkEdgeOwnedNames(app)
+			err := checkEdgeOwnedNames(app.GetName(), appValuesOf(app).Plain)
 			if err == nil {
 				t.Fatalf("%s was accepted; the entry worker would overwrite it", key)
 			}
@@ -234,7 +235,7 @@ func TestCheckEdgeOwnedNames(t *testing.T) {
 			},
 		}
 
-		if err := checkEdgeOwnedNames(app); err != nil {
+		if err := checkEdgeOwnedNames(app.GetName(), appValuesOf(app).Plain); err != nil {
 			t.Errorf("checkEdgeOwnedNames = %v, want every one of these accepted", err)
 		}
 	})
@@ -274,10 +275,10 @@ func TestCheckEdgeEnvBudget(t *testing.T) {
 			},
 		}
 
-		if err := checkEdgeVariables(app, appBundle{}); err == nil {
+		if err := checkEdgeVariables(app.GetName(), appValuesOf(app), nil); err == nil {
 			t.Fatal("checkEdgeVariables = nil, want the app's own environment charged")
 		}
-		if err := checkEdgeVariables(&contractv1.ManifestApp{Name: "web"}, appBundle{}); err != nil {
+		if err := checkEdgeVariables("web", providerkit.AppValues{}, nil); err != nil {
 			t.Errorf("checkEdgeVariables on an app that declares nothing: %v", err)
 		}
 	})

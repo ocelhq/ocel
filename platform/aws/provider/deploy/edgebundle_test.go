@@ -8,6 +8,7 @@ import (
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func edgeAppTree(t *testing.T) string {
@@ -251,6 +252,16 @@ func TestUploadEdgeSeal(t *testing.T) {
 
 }
 
+func appValuesOf(app *contractv1.ManifestApp) providerkit.AppValues {
+	plain := map[string]string{}
+	for _, v := range app.GetVariables() {
+		if v.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
+			plain[v.GetKey()] = v.GetValue()
+		}
+	}
+	return providerkit.AppValues{Plain: plain, Folder: app.GetFolder()}
+}
+
 func TestCheckAppEdgeVariables(t *testing.T) {
 	t.Run("a name the entry worker owns fails the deploy with no cache store", func(t *testing.T) {
 		t.Parallel()
@@ -258,7 +269,7 @@ func TestCheckAppEdgeVariables(t *testing.T) {
 		manifest := edgeVarsManifest(variable("OCEL_CACHE_SCOPE", "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		app := manifest.GetApps()[0]
 
-		err := checkAppEdgeVariables(cfg, app, edgeBuilds(t, cfg, manifest).baked[app.GetName()])
+		err := checkAppEdgeVariables(cfg, app.GetName(), appValuesOf(app), edgeBuilds(t, cfg, manifest).baked[app.GetName()])
 		if err == nil {
 			t.Fatal("checkAppEdgeVariables = nil, want the deploy refused")
 		}
@@ -273,7 +284,7 @@ func TestCheckAppEdgeVariables(t *testing.T) {
 		manifest := edgeVarsManifest(variable("BIG_ONE", strings.Repeat("a", functionEnvBudgetBytes), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		app := manifest.GetApps()[0]
 
-		err := checkAppEdgeVariables(cfg, app, edgeBuilds(t, cfg, manifest).baked[app.GetName()])
+		err := checkAppEdgeVariables(cfg, app.GetName(), appValuesOf(app), edgeBuilds(t, cfg, manifest).baked[app.GetName()])
 		if err == nil {
 			t.Fatal("checkAppEdgeVariables = nil, want the deploy refused")
 		}
@@ -287,7 +298,8 @@ func TestCheckAppEdgeVariables(t *testing.T) {
 		cfg := Config{ArtifactRoot: t.TempDir(), Env: "prod"}
 		manifest := edgeVarsManifest(variable("OCEL_CACHE_SCOPE", "mine", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
-		if err := checkAppEdgeVariables(cfg, manifest.GetApps()[0], appBundle{}); err != nil {
+		app := manifest.GetApps()[0]
+		if err := checkAppEdgeVariables(cfg, app.GetName(), appValuesOf(app), appBundle{}); err != nil {
 			t.Errorf("checkAppEdgeVariables = %v, want an app that ships no edge worker accepted", err)
 		}
 	})
