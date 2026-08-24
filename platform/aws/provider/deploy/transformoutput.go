@@ -50,7 +50,6 @@ type UnpublishedOutputError struct {
 	Class       string
 	Environment string
 	Published   []string
-	FoundIn     []string
 }
 
 func (e *UnpublishedOutputError) Error() string {
@@ -59,10 +58,6 @@ func (e *UnpublishedOutputError) Error() string {
 		"a transform fills %s from link %q's %s, and nothing has published a record under that name to %s. "+
 			"Ocel never runs your infrastructure tool for you: run it, then deploy again",
 		e.At, e.Ref.Link, e.Ref.Property, describeCoordinate(e.Class, e.Environment))
-	if len(e.FoundIn) > 0 {
-		fmt.Fprintf(&b, "\n\n%q is published to %s instead. A publisher writes to one coordinate: point one at %s as well",
-			e.Ref.Link, strings.Join(e.FoundIn, " and "), e.Class)
-	}
 	if len(e.Published) == 0 {
 		fmt.Fprintf(&b, "\n\nNothing at all is published to %s.", describeCoordinate(e.Class, e.Environment))
 		return b.String()

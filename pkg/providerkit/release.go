@@ -45,9 +45,11 @@ type StackPlan struct {
 }
 
 type LinkReader interface {
+	Names(ctx context.Context) ([]string, error)
+
 	Published(ctx context.Context) ([]Link, error)
 
-	Resolve(ctx context.Context, link, property string) (string, error)
+	Resolve(ctx context.Context, link string) (Link, error)
 }
 
 type AppPlan struct {
