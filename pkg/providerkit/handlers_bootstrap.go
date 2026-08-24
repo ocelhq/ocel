@@ -28,13 +28,17 @@ func classOf(tier environmentv1.Tier) (Class, error) {
 	}
 }
 
-func (h *handlers) gate() (Provider, Gate, error) {
+func (h *handlers) gate(requested string) (Provider, Gate, error) {
 	provider, err := h.session.use()
 	if err != nil {
 		return nil, Gate{}, err
 	}
+	bootstrapper, err := provider.Bootstrap(edgeKind(provider, requested))
+	if err != nil {
+		return nil, Gate{}, RefusalError(err)
+	}
 	return provider, Gate{
-		Bootstrapper: provider.Bootstrap(),
+		Bootstrapper: bootstrapper,
 		Records:      provider.Records(),
 		Writer:       h.session.writer,
 	}, nil
@@ -45,7 +49,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	if err != nil {
 		return err
 	}
-	_, gate, err := h.gate()
+	_, gate, err := h.gate("")
 	if err != nil {
 		return err
 	}
@@ -75,7 +79,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	if err != nil {
 		return nil, err
 	}
-	provider, gate, err := h.gate()
+	_, gate, err := h.gate("")
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +97,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	resp := &contractv1.DescribeBootstrapResponse{
 		Bootstrap: BootstrapStatusProto(standing, h.session.writer, req.GetTier(), standing.Features),
 	}
-	for _, f := range provider.Bootstrap().Catalogue() {
+	for _, f := range gate.Bootstrapper.Catalogue() {
 		resp.Features = append(resp.Features, &contractv1.Feature{
 			Name:       f.Name,
 			Summary:    f.Summary,
@@ -134,19 +138,19 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	if err != nil {
 		return nil, err
 	}
-	provider, gate, err := h.gate()
+	provider, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
 	if err := gate.Vacant(ctx, class); err != nil {
 		return nil, RefusalError(err)
 	}
-	surfaces, err := provider.Bootstrap().Removals(ctx, class)
+	surfaces, err := gate.Bootstrapper.Removals(ctx, class)
 	if err != nil {
 		return nil, RefusalError(err)
 	}
 	return &contractv1.RemovalPlan{
-		EdgeKind: string(removalEdge(provider, req.GetEdge().GetKind())),
+		EdgeKind: string(edgeKind(provider, req.GetEdge().GetKind())),
 		Items:    RemovalItems(surfaces),
 		Subject:  string(class),
 	}, nil
@@ -157,7 +161,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	if err != nil {
 		return err
 	}
-	_, gate, err := h.gate()
+	_, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return err
 	}
@@ -173,7 +177,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	return nil
 }
 
-func removalEdge(provider Provider, requested string) edge.Kind {
+func edgeKind(provider Provider, requested string) edge.Kind {
 	if requested != "" {
 		return edge.Kind(requested)
 	}

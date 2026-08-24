@@ -101,7 +101,7 @@ func TestBootstrapPullsInWhatAFeatureDependsOn(t *testing.T) {
 		Features: []string{fake.FeatureImages},
 	})
 
-	applied := provider.Bootstrap().(*fake.Bootstrapper).Applied()
+	applied := provider.Bootstrapper().Applied()
 	if len(applied) != 1 {
 		t.Fatalf("Apply() ran %d times, want once", len(applied))
 	}
@@ -126,7 +126,7 @@ func TestBootstrapAcceptsReplacementsWhenTheRequestDoes(t *testing.T) {
 		AcceptReplacements: true,
 	})
 
-	applied := provider.Bootstrap().(*fake.Bootstrapper).Applied()
+	applied := provider.Bootstrapper().Applied()
 	if applied[0].Unattended {
 		t.Error("Apply() ran unattended where the request accepted replacements")
 	}
@@ -245,7 +245,7 @@ func TestBootstrapDropsInDeleteOrderWhenForced(t *testing.T) {
 		Force: true,
 	})
 
-	applied := provider.Bootstrap().(*fake.Bootstrapper).Applied()
+	applied := provider.Bootstrapper().Applied()
 	dropping := applied[len(applied)-1]
 	if want := []string{fake.FeatureImages, fake.FeatureCache}; !slices.Equal(dropping.Drop, want) {
 		t.Errorf("Apply() dropped %v, want %v — what stands on a feature goes first", dropping.Drop, want)
@@ -331,7 +331,7 @@ func TestDescribeBootstrapReportsADowngrade(t *testing.T) {
 
 	client, provider := contractServed(t, "1.0.0")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.Bootstrap().(*fake.Bootstrapper).WrittenBy("2.0.0")
+	provider.Bootstrapper().WrittenBy("2.0.0")
 
 	described, err := client.DescribeBootstrap(context.Background(), &contractv1.DescribeBootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
@@ -461,5 +461,69 @@ func TestRemoveBootstrapTakesTheBootstrapAndItsRecord(t *testing.T) {
 	}
 	if _, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(providerkit.ClassProduction)); !errors.Is(err, providerkit.ErrNoRecord) {
 		t.Errorf("the bootstrap record survived the removal: %v", err)
+	}
+}
+
+func TestRemoveBootstrapTearsDownTheEdgeItWasAsked(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client, provider := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+
+	stream, err := client.RemoveBootstrap(ctx, &contractv1.BootstrapScope{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+	})
+	if err != nil {
+		t.Fatalf("RemoveBootstrap() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatalf("RemoveBootstrap() stream = %v", err)
+	}
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("RemoveBootstrap() result = %v, want it to succeed", result)
+	}
+	if fronting := provider.Bootstrapper().Fronting(); fronting != fake.KindDirect {
+		t.Errorf("RemoveBootstrap() removed the %q edge, want the %q the request named", fronting, fake.KindDirect)
+	}
+}
+
+func TestPlanRemoveBootstrapPlansTheEdgeItWasAsked(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client, provider := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+
+	plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+	})
+	if err != nil {
+		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
+	}
+	if plan.GetEdgeKind() != string(fake.KindDirect) {
+		t.Errorf("PlanRemoveBootstrap() planned against %q, want %q", plan.GetEdgeKind(), fake.KindDirect)
+	}
+	if fronting := provider.Bootstrapper().Fronting(); fronting != fake.KindDirect {
+		t.Errorf("PlanRemoveBootstrap() asked the provider for the %q edge, want the %q the request named", fronting, fake.KindDirect)
+	}
+}
+
+func TestBootstrapRefusesAnEdgeTheProviderDoesNotServe(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client, _ := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+
+	_, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Edge: &contractv1.EdgeSelection{Kind: "nowhere"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "nowhere") {
+		t.Fatalf("PlanRemoveBootstrap() against an unserved edge = %v, want it named in a refusal", err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const Vendor providerkit.Vendor = "vps"
@@ -43,7 +44,9 @@ func (p *Provider) Host() string { return p.options.Host }
 
 func (p *Provider) Serves() []providerkit.LinkType { return nil }
 
-func (p *Provider) Bootstrap() providerkit.Bootstrapper { return bootstrapper{} }
+func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
+	return bootstrapper{}, nil
+}
 
 func (p *Provider) Releases() providerkit.Releaser { return releaser{} }
 

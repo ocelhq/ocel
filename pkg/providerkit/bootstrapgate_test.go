@@ -45,7 +45,7 @@ func gated(t *testing.T, writer providerkit.Writer) (providerkit.Gate, *fake.Pro
 
 	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
 	return providerkit.Gate{
-		Bootstrapper: provider.Bootstrap(),
+		Bootstrapper: provider.Bootstrapper(),
 		Records:      provider.Records(),
 		Writer:       writer,
 	}, provider
@@ -54,7 +54,7 @@ func gated(t *testing.T, writer providerkit.Writer) (providerkit.Gate, *fake.Pro
 func bootstrapped(t *testing.T, provider *fake.Provider, class providerkit.Class, features ...string) {
 	t.Helper()
 
-	if err := provider.Bootstrap().Apply(context.Background(), providerkit.BootstrapRequest{
+	if err := provider.Bootstrapper().Apply(context.Background(), providerkit.BootstrapRequest{
 		Class:    class,
 		Features: features,
 	}, nil); err != nil {
@@ -137,7 +137,7 @@ func TestAdmitRefusesASchemaThisBuildCannotRead(t *testing.T) {
 
 	gate, provider := gated(t, "2.0.0")
 	bootstrapped(t, provider, providerkit.ClassProduction)
-	provider.Bootstrap().(*fake.Bootstrapper).AtSchema(providerkit.BootstrapSchema + 1)
+	provider.Bootstrapper().AtSchema(providerkit.BootstrapSchema + 1)
 
 	_, err := gate.Admit(context.Background(), providerkit.ClassProduction, nil, &recorder{})
 	var refusal providerkit.Refusal
@@ -175,7 +175,7 @@ func TestAdmitHealsAStaleBootstrapUnattended(t *testing.T) {
 
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
-	bootstrapper := provider.Bootstrap().(*fake.Bootstrapper)
+	bootstrapper := provider.Bootstrapper()
 	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
 	if err := gate.RecordBootstrap(ctx, providerkit.ClassProduction, providerkit.BootstrapState{AutoHeal: true}); err != nil {
 		t.Fatal(err)
@@ -206,7 +206,7 @@ func TestAdmitLeavesAStaleBootstrapAloneWhenNobodyAskedForHealing(t *testing.T) 
 
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
-	bootstrapper := provider.Bootstrap().(*fake.Bootstrapper)
+	bootstrapper := provider.Bootstrapper()
 	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
 	bootstrapper.Behind(fake.FeatureCache)
 
@@ -227,7 +227,7 @@ func TestAdmitWillNotHealFromADevelopmentBuild(t *testing.T) {
 
 	ctx := context.Background()
 	gate, provider := gated(t, "dev+cafebabe")
-	bootstrapper := provider.Bootstrap().(*fake.Bootstrapper)
+	bootstrapper := provider.Bootstrapper()
 	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
 	if err := gate.RecordBootstrap(ctx, providerkit.ClassProduction, providerkit.BootstrapState{AutoHeal: true}); err != nil {
 		t.Fatal(err)
@@ -251,7 +251,7 @@ func TestAdmitReportsAHealTheCredentialsCannotDo(t *testing.T) {
 
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
-	bootstrapper := provider.Bootstrap().(*fake.Bootstrapper)
+	bootstrapper := provider.Bootstrapper()
 	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
 	if err := gate.RecordBootstrap(ctx, providerkit.ClassProduction, providerkit.BootstrapState{AutoHeal: true}); err != nil {
 		t.Fatal(err)
@@ -273,7 +273,7 @@ func TestDowngradeIsAWriterOlderThanTheOneThatWrote(t *testing.T) {
 
 	gate, provider := gated(t, "1.0.0")
 	bootstrapped(t, provider, providerkit.ClassProduction)
-	provider.Bootstrap().(*fake.Bootstrapper).WrittenBy("2.0.0")
+	provider.Bootstrapper().WrittenBy("2.0.0")
 
 	standing, err := gate.Standing(context.Background(), providerkit.ClassProduction)
 	if err != nil {

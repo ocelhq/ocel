@@ -22,6 +22,7 @@ type Bootstrapper struct {
 	schema   uint32
 	refusal  error
 	requests []providerkit.BootstrapRequest
+	front    edge.Kind
 }
 
 func NewBootstrapper() *Bootstrapper {
@@ -31,6 +32,18 @@ func NewBootstrapper() *Bootstrapper {
 		writer:  "1.0.0",
 		schema:  providerkit.BootstrapSchema,
 	}
+}
+
+func (b *Bootstrapper) fronting(kind edge.Kind) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.front = kind
+}
+
+func (b *Bootstrapper) Fronting() edge.Kind {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.front
 }
 
 func (b *Bootstrapper) Catalogue() []providerkit.Feature {

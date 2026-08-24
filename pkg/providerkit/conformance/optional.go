@@ -24,7 +24,7 @@ func runOptionalSets(t *testing.T, suite Suite) {
 			if !set.onRoot(provider) {
 				t.Skipf("the provider does not implement %s", set.name)
 			}
-			for _, port := range wrapPorts(provider) {
+			for _, port := range wrapPorts(t, provider) {
 				if set.onPort(port.value) {
 					t.Errorf("%s is reachable through the wrapped %s port, which only holds while nothing wraps it", set.name, port.name)
 				}
@@ -68,9 +68,10 @@ type namedPort struct {
 	value any
 }
 
-func wrapPorts(p providerkit.Provider) []namedPort {
+func wrapPorts(t *testing.T, p providerkit.Provider) []namedPort {
+	t.Helper()
 	return []namedPort{
-		{"Bootstrapper", wrappedBootstrapper{p.Bootstrap()}},
+		{"Bootstrapper", wrappedBootstrapper{bootstrapperOf(t, p)}},
 		{"Releaser", wrappedReleaser{p.Releases()}},
 		{"ArtifactStore", wrappedArtifacts{p.Artifacts()}},
 		{"RecordStore", wrappedRecords{p.Records()}},
