@@ -62,6 +62,11 @@ var optionalSets = []struct {
 		onPort: func(port any) bool { _, ok := port.(providerkit.GrantVerifier); return ok },
 	},
 	{
+		name:   "MembraneSource",
+		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.MembraneSource); return ok },
+		onPort: func(port any) bool { _, ok := port.(providerkit.MembraneSource); return ok },
+	},
+	{
 		name:   "Certifier",
 		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.Certifier); return ok },
 		onPort: func(port any) bool { _, ok := port.(providerkit.Certifier); return ok },
