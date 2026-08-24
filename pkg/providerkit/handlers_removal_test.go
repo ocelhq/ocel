@@ -23,7 +23,7 @@ func projectRequest() *contractv1.ProjectRequest {
 func deployedProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
 	builtProject(t)
-	client, provider := contractServed(t, "1.0.0")
+	client, provider := deployServed(t)
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}

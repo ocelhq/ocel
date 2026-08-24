@@ -96,7 +96,7 @@ func deploy(t *testing.T, client contractv1connect.ProviderServiceClient, req *c
 
 func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 	builtProject(t)
-	client, provider := contractServed(t, "1.0.0")
+	client, provider := deployServed(t)
 
 	result, events := deploy(t, client, deployRequest())
 	if result == nil || !result.GetSuccess() {
@@ -136,7 +136,7 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 
 func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
 	builtProject(t)
-	client, provider := contractServed(t, "1.0.0")
+	client, provider := deployServed(t)
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
@@ -170,7 +170,7 @@ func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
 
 func TestDeployUploadsEveryFunctionArtifact(t *testing.T) {
 	builtProject(t)
-	client, provider := contractServed(t, "1.0.0")
+	client, provider := deployServed(t)
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
@@ -190,7 +190,7 @@ func TestDeployUploadsEveryFunctionArtifact(t *testing.T) {
 
 func TestDeployPublishesEveryInfraLinkForItsAppsToRead(t *testing.T) {
 	builtProject(t)
-	client, provider := contractServed(t, "1.0.0")
+	client, provider := deployServed(t)
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
@@ -272,7 +272,23 @@ func servedBy(t *testing.T, provider providerkit.Provider) contractv1connect.Pro
 	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
+	standsBootstrapped(t, client)
 	return client
+}
+
+func deployServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider) {
+	t.Helper()
+	client, provider := contractServed(t, "1.0.0")
+	standsBootstrapped(t, client)
+	return client, provider
+}
+
+func standsBootstrapped(t *testing.T, client contractv1connect.ProviderServiceClient) {
+	t.Helper()
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{
+		Tier:     environmentv1.Tier_TIER_PRODUCTION,
+		Features: []string{fake.FeatureCache, fake.FeatureImages},
+	})
 }
 
 func declaresNeed(t *testing.T, app string, need edge.Need) {
@@ -295,7 +311,7 @@ func declaresNeed(t *testing.T, app string, need edge.Need) {
 func TestDeployWaivesANeedTheProjectAllowsToDegrade(t *testing.T) {
 	builtProject(t)
 	declaresNeed(t, "web", edge.NeedStreaming)
-	client, provider := contractServed(t, "1.0.0")
+	client, provider := deployServed(t)
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Serves(nil)
 
 	req := deployRequest()
@@ -318,7 +334,7 @@ func TestDeployWaivesANeedTheProjectAllowsToDegrade(t *testing.T) {
 func TestDeployRefusesANeedTheProjectDoesNotWaive(t *testing.T) {
 	builtProject(t)
 	declaresNeed(t, "web", edge.NeedStreaming)
-	client, provider := contractServed(t, "1.0.0")
+	client, provider := deployServed(t)
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Serves(nil)
 
 	req := deployRequest()
@@ -358,6 +374,7 @@ func operatorServed(t *testing.T) (contractv1connect.ProviderServiceClient, envv
 	if _, err := deploys.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
+	standsBootstrapped(t, deploys)
 	return deploys, envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL, auth)
 }
 
@@ -388,5 +405,41 @@ func TestDeployPublishesLinksWhereTheOperatorReadsThem(t *testing.T) {
 	})
 	if err != nil || !removed.GetRemoved() {
 		t.Fatalf("RemoveLink() = %+v, %v, want the published link taken away", removed, err)
+	}
+}
+
+func TestDeployRecordsTheFeaturesItsProjectDependsOn(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	ctx := context.Background()
+
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
+		Tier:           environmentv1.Tier_TIER_PRODUCTION,
+		WithDependents: true,
+	})
+	if err != nil {
+		t.Fatalf("DescribeBootstrap() error = %v", err)
+	}
+	for _, feature := range described.GetFeatures() {
+		if feature.GetName() != fake.FeatureCache {
+			continue
+		}
+		if !slices.Contains(feature.GetDependents(), "shop") {
+			t.Errorf("%s reports dependents %v, want the project deployed against it", fake.FeatureCache, feature.GetDependents())
+		}
+	}
+
+	stream, err := client.Bootstrap(ctx, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := drain(stream)
+	said := result.GetError() + connectMessage(err)
+	if !strings.Contains(said, "shop") {
+		t.Fatalf("dropping every feature = %q, want it refused for the project that depends on them", said)
 	}
 }

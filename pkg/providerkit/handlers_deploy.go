@@ -58,6 +58,8 @@ func (s deployStages) declared(plan DeployPlan) []Stage {
 
 type deployRun struct {
 	provider Provider
+	gate     Gate
+	features []string
 	sender   *eventSender
 	tracer   *eventTracer
 	manifest *contractv1.Manifest
@@ -82,7 +84,7 @@ type deployRun struct {
 }
 
 func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest, sender *eventSender) (*deployRun, error) {
-	provider, err := h.session.use()
+	provider, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
@@ -98,8 +100,14 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
+	features, err := RequiredFeatures(gate.Bootstrapper.Catalogue(), frameworksOf(req.GetManifest()), req.GetEdge().GetKind())
+	if err != nil {
+		return nil, RefusalError(err)
+	}
 	run := &deployRun{
 		provider:  provider,
+		gate:      gate,
+		features:  features,
 		sender:    sender,
 		tracer:    newEventTracer(sender),
 		manifest:  req.GetManifest(),
@@ -132,6 +140,9 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
 	r.tracer.DeclareStages(true, r.stages.declared(r.plan)...)
 
+	if err := r.admit(ctx); err != nil {
+		return nil, err
+	}
 	if err := r.rememberProject(ctx); err != nil {
 		return nil, err
 	}
@@ -172,16 +183,18 @@ func phaseOf(stage Stage, stages deployStages) progressv1.Phase {
 	}
 }
 
+func (r *deployRun) admit(ctx context.Context) error {
+	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, r.report(r.stages.Provisioning, progressv1.Phase_PHASE_PROVISIONING))
+	return err
+}
+
 func (r *deployRun) rememberProject(ctx context.Context) error {
 	name := ProjectRecord(r.plan.Class, r.plan.Slug)
 	held, err := Held(ctx, r.provider.Records(), name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
-	if len(held.Bytes) > 0 {
-		return nil
-	}
-	if held.Bytes, err = json.Marshal(Project{}); err != nil {
+	if held.Bytes, err = json.Marshal(Project{Features: r.features}); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	if _, err := r.provider.Records().Write(ctx, held); err != nil {
@@ -463,6 +476,17 @@ func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 		})
 	}
 	return specs
+}
+
+func frameworksOf(manifest *contractv1.Manifest) []string {
+	var frameworks []string
+	for _, app := range manifest.GetApps() {
+		if name := app.GetFramework(); name != "" && !slices.Contains(frameworks, name) {
+			frameworks = append(frameworks, name)
+		}
+	}
+	slices.Sort(frameworks)
+	return frameworks
 }
 
 func entryFunction(manifest *contractv1.Manifest, app string) string {
