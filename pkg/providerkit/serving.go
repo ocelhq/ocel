@@ -79,12 +79,17 @@ func guardFor(q ServingQuery) (*OriginGuard, error) {
 }
 
 func CrossesMembrane(kind LinkType) bool {
-	return kind == LinkBucket
+	for wire, held := range linkTypes {
+		if held == kind {
+			return naming.CrossesMembrane(wire)
+		}
+	}
+	return false
 }
 
-func crossesMembrane(grants []Link) bool {
+func crossesMembrane(crosses func(LinkType) bool, grants []Link) bool {
 	for _, link := range grants {
-		if CrossesMembrane(link.Type) {
+		if crosses(link.Type) {
 			return true
 		}
 	}

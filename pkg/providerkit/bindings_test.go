@@ -136,16 +136,32 @@ func TestDeployRefusesABindingTheRecordCannotSatisfy(t *testing.T) {
 	})
 }
 
+type servingBuckets struct{ *fake.Provider }
+
+func (servingBuckets) CrossesMembrane(providerkit.LinkType) bool { return false }
+
+func TestAVendorSaysWhichLinkTypesCrossItsMembrane(t *testing.T) {
+	builtProject(t)
+	base := fake.NewProvider(fake.Options{})
+	client := servedBy(t, servingBuckets{Provider: base})
+	publishRecord(t, base, providerkit.ClassProduction, "terraform", bucketRecord("uploads", "terraform"))
+
+	result, _ := deploy(t, client, bindingRequest("uploads", linksv1.LinkType_LINK_TYPE_BUCKET))
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want a foreign bucket bound: this vendor's membrane serves one it did not provision", result.GetError())
+	}
+}
+
 func TestReadableAs(t *testing.T) {
 	t.Run("refuses a custom record bound as a link", func(t *testing.T) {
-		err := providerkit.ReadableAs(providerkit.Link{Name: "flags", Type: providerkit.LinkCustom}, providerkit.LinkPostgres)
+		err := providerkit.ReadableAs(providerkit.Link{Name: "flags", Type: providerkit.LinkCustom}, providerkit.LinkPostgres, providerkit.CrossesMembrane)
 		if err == nil || !strings.Contains(err.Error(), "transform") {
 			t.Errorf("ReadableAs = %v, want a custom record sent to transforms", err)
 		}
 	})
 
 	t.Run("admits a record of the declared type ocel provisioned", func(t *testing.T) {
-		if err := providerkit.ReadableAs(providerkit.Link{Name: "uploads", Type: providerkit.LinkBucket}, providerkit.LinkBucket); err != nil {
+		if err := providerkit.ReadableAs(providerkit.Link{Name: "uploads", Type: providerkit.LinkBucket}, providerkit.LinkBucket, providerkit.CrossesMembrane); err != nil {
 			t.Errorf("ReadableAs = %v, want a record ocel published bound", err)
 		}
 	})
