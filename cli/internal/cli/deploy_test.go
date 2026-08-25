@@ -7,18 +7,19 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestConfirmDeploy(t *testing.T) {
@@ -171,7 +172,7 @@ func TestToDeclarations(t *testing.T) {
 
 func TestRunDeploy(t *testing.T) {
 	t.Run("a missing config errors before any spawn", func(t *testing.T) {
-		err := runDeploy(context.Background(), defaultDeps(), t.TempDir(), deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runDeploy(context.Background(), newSession(), t.TempDir(), deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want error")
 		}
@@ -182,9 +183,9 @@ func TestRunDeploy(t *testing.T) {
 
 	t.Run("a malformed config errors before any spawn", func(t *testing.T) {
 		root := t.TempDir()
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `this is not valid TypeScript {{{`)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `this is not valid TypeScript {{{`)
 
-		err := runDeploy(context.Background(), defaultDeps(), root, deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runDeploy(context.Background(), newSession(), root, deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want error")
 		}
@@ -195,13 +196,13 @@ func TestRunDeploy(t *testing.T) {
 
 	t.Run("no provider configured errors before any spawn", func(t *testing.T) {
 		root := t.TempDir()
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
 };
 `)
 
-		err := runDeploy(context.Background(), defaultDeps(), root, deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runDeploy(context.Background(), newSession(), root, deployOptions{yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want error")
 		}
@@ -211,10 +212,10 @@ export default {
 	})
 
 	t.Run("the happy path discovers, builds, spawns and deploys to success", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		root, sockPath := setUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
 		err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
@@ -248,9 +249,9 @@ export default {
 	})
 
 	t.Run("an app builds its functions into the manifest", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, []manifestbuilder.Function{
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, []manifestbuilder.Function{
 			{
 				Name:         "api",
 				Runtime:      "nodejs24.x",
@@ -260,7 +261,7 @@ export default {
 				App:          "api",
 			},
 		})
-		root, sockPath := setUpDeployFixture(t)
+		root, sockPath := clitest.SetUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
 
 		var stdout, stderr bytes.Buffer
@@ -284,10 +285,10 @@ export default {
 	})
 
 	t.Run("no apps warns and deploys resources only", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		root, sockPath := setUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
 		err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
@@ -313,13 +314,13 @@ export default {
 	})
 
 	t.Run("an app build failure aborts before spawn", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		d.buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		d.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 			return errors.New("boom: app build failed")
 		}
-		root, _ := setUpDeployFixture(t)
+		root, _ := clitest.SetUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
 
 		var stdout, stderr bytes.Buffer
@@ -342,21 +343,21 @@ export default {
 	}{
 		{
 			name: "a class mismatch refuses without deploying",
-			env:  map[string]string{fakeInfraClassEnvVar: "preview", fakeInfraPresentEnvVar: "1"},
+			env:  map[string]string{clitest.FakeInfraClassEnvVar: "preview", clitest.FakeInfraPresentEnvVar: "1"},
 			want: "ocel deploy can only run against production infrastructure",
 		},
 		{
 			name: "absent infrastructure refuses without deploying",
-			env:  map[string]string{fakeInfraPresentEnvVar: "0"},
+			env:  map[string]string{clitest.FakeInfraPresentEnvVar: "0"},
 			want: "ocel bootstrap",
 		},
 	}
 	for _, tc := range refusals {
 		t.Run(tc.name, func(t *testing.T) {
-			d := defaultDeps()
-			setLoggedIn(&d)
-			stubAppFunctions(&d, nil)
-			root, _ := setUpDeployFixture(t)
+			d := newSession()
+			clitest.SetLoggedIn(&d)
+			clitest.StubAppFunctions(&d, nil)
+			root, _ := clitest.SetUpDeployFixture(t)
 			for key, value := range tc.env {
 				t.Setenv(key, value)
 			}
@@ -376,10 +377,10 @@ export default {
 	}
 
 	t.Run("stdin that is not a terminal proceeds without prompting", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		root, sockPath := setUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
 		err := runDeploy(context.Background(), d, root, deployOptions{yes: false}, &stdout, &stderr, strings.NewReader(""))
@@ -398,11 +399,11 @@ export default {
 	})
 
 	t.Run("declared domains carry the slug", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		root, sockPath := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -422,12 +423,12 @@ export default {
 	})
 
 	t.Run("--yes leaves the slug out", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		d.stdinIsTerminal = func(io.Reader) bool { return true }
-		root, sockPath := setUpDeployFixture(t)
-		t.Setenv(fakeKnownSlugsEnvVar, "my-application,billing")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		d.StdinIsTerminal = func(io.Reader) bool { return true }
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -441,11 +442,11 @@ export default {
 	})
 
 	t.Run("a non-TTY stdin leaves the slug out", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		root, sockPath := setUpDeployFixture(t)
-		t.Setenv(fakeKnownSlugsEnvVar, "my-application,billing")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: false}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -459,12 +460,12 @@ export default {
 	})
 
 	t.Run("an interactive deploy warns about other projects", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		d.stdinIsTerminal = func(io.Reader) bool { return true }
-		root, sockPath := setUpDeployFixture(t)
-		t.Setenv(fakeKnownSlugsEnvVar, "my-application,billing")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		d.StdinIsTerminal = func(io.Reader) bool { return true }
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
@@ -490,11 +491,11 @@ export default {
 	})
 
 	t.Run("--yes bypasses the slug drift guard", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		root, sockPath := setUpDeployFixture(t)
-		t.Setenv(fakeKnownSlugsEnvVar, "my-application,billing")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -513,16 +514,16 @@ export default {
 	})
 
 	t.Run("the identity banner prints before the build and the deploy", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
 		pretendStdoutIsTerminal(&d)
-		root, sockPath := setUpDeployFixture(t)
-		t.Setenv(fakeIDProviderEnvVar, "Origin")
-		t.Setenv(fakeIDAccountEnvVar, "123456789012")
-		t.Setenv(fakeIDProfileEnvVar, "default")
-		t.Setenv(fakeIDRegionEnvVar, "us-east-1")
-		t.Setenv(fakeIDEdgeScopeEnvVar, "abcd1234")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		t.Setenv(clitest.FakeIDProviderEnvVar, "Origin")
+		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
+		t.Setenv(clitest.FakeIDProfileEnvVar, "default")
+		t.Setenv(clitest.FakeIDRegionEnvVar, "us-east-1")
+		t.Setenv(clitest.FakeIDEdgeScopeEnvVar, "abcd1234")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -549,14 +550,14 @@ export default {
 	})
 
 	t.Run("without a terminal the identity banner is omitted", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		root, sockPath := setUpDeployFixture(t)
-		t.Setenv(fakeIDAccountEnvVar, "123456789012")
-		t.Setenv(fakeIDProfileEnvVar, "default")
-		t.Setenv(fakeIDRegionEnvVar, "us-east-1")
-		t.Setenv(fakeIDEdgeScopeEnvVar, "abcd1234")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
+		t.Setenv(clitest.FakeIDProfileEnvVar, "default")
+		t.Setenv(clitest.FakeIDRegionEnvVar, "us-east-1")
+		t.Setenv(clitest.FakeIDEdgeScopeEnvVar, "abcd1234")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -577,14 +578,14 @@ export default {
 	})
 
 	t.Run("a credential problem aborts before the build and the deploy", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
 		pretendStdoutIsTerminal(&d)
-		root, _ := setUpDeployFixture(t)
-		t.Setenv(fakeIDAccountEnvVar, "123456789012")
-		t.Setenv(fakeIDProfileEnvVar, "default")
-		t.Setenv(fakeCredProblemEnvVar, "Cloudflare")
+		root, _ := clitest.SetUpDeployFixture(t)
+		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
+		t.Setenv(clitest.FakeIDProfileEnvVar, "default")
+		t.Setenv(clitest.FakeCredProblemEnvVar, "Cloudflare")
 
 		var stdout, stderr bytes.Buffer
 		err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
@@ -608,13 +609,13 @@ export default {
 	})
 
 	t.Run("a single app produces exactly one attributed app", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, []manifestbuilder.Function{
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, []manifestbuilder.Function{
 			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
-		root, sockPath := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -635,7 +636,7 @@ export default {
 		if !strings.Contains(out, "APP name=api framework=express production_domain=api.acme.com") {
 			t.Errorf("stdout = %q, want the app with its per-app production domain", out)
 		}
-		if !strings.Contains(out, "deployment="+fixtureDeploymentID("api")) {
+		if !strings.Contains(out, "deployment="+clitest.FixtureDeploymentID("api")) {
 			t.Errorf("stdout = %q, want the app deployed under the id its build recorded", out)
 		}
 		if !strings.Contains(out, "framework=express app=api") {
@@ -646,14 +647,14 @@ export default {
 	})
 
 	t.Run("two apps attribute their functions to their own app", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, []manifestbuilder.Function{
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, []manifestbuilder.Function{
 			{Name: "web", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
 			{Name: "admin", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/admin", Framework: "express", App: "admin"},
 		})
-		root, sockPath := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -690,11 +691,11 @@ export default {
 			if !strings.Contains(out, "name="+app+" framework=express production_domain=") {
 				t.Errorf("stdout = %q, want %s echoed", out, app)
 			}
-			if !strings.Contains(out, "deployment="+fixtureDeploymentID(app)) {
+			if !strings.Contains(out, "deployment="+clitest.FixtureDeploymentID(app)) {
 				t.Errorf("stdout = %q, want %s deployed under the id its own build recorded", out, app)
 			}
 		}
-		if fixtureDeploymentID("web") == fixtureDeploymentID("admin") {
+		if clitest.FixtureDeploymentID("web") == clitest.FixtureDeploymentID("admin") {
 			t.Fatal("the fixture gives both apps one id, so this proves nothing")
 		}
 
@@ -702,12 +703,12 @@ export default {
 	})
 
 	t.Run("a detected app appears in the manifest", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, []manifestbuilder.Function{
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, []manifestbuilder.Function{
 			{Name: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "output/index", Framework: "next", App: "express-app"},
 		})
-		root, sockPath := setUpDeployFixture(t)
+		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -726,91 +727,13 @@ export default {
 	})
 }
 
-func stubAppFunctions(d *deps, functions []manifestbuilder.Function) {
-	d.buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
-		return nil
-	}
-	d.collectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
-		return functions, nil
-	}
-	stubRecordedDeploymentIDs(d)
-}
-
-func stubRecordedDeploymentIDs(d *deps) {
-	d.deploymentID = func(_, app string) (string, error) { return fixtureDeploymentID(app), nil }
-}
-
-func pretendStdoutIsTerminal(d *deps) {
-	d.stdoutIsTerminal = func(io.Writer) bool { return true }
-}
-
-func setUpDeployFixture(t *testing.T) (root, sockPath string) {
-	t.Helper()
-
-	if runtime.GOOS == "windows" {
-		t.Skip("uses a Unix-domain-socket fake provider and POSIX symlinks")
-	}
-	if _, err := exec.LookPath("node"); err != nil {
-		t.Skip("node not found on PATH")
-	}
-
-	prevTimeout := deployReadyTimeout
-	deployReadyTimeout = 5 * time.Second
-	t.Cleanup(func() { deployReadyTimeout = prevTimeout })
-
-	root = t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
-  domains: { preview: "*.preview.acme.com" },
-};
-`)
-	writeFile(t, filepath.Join(root, "ocel", "main.ts"), `
-declare global {
-  var __ocelRegister: Promise<unknown>[];
-}
-const stack = new Error().stack ?? "";
-globalThis.__ocelRegister ??= [];
-globalThis.__ocelRegister.push(
-  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      resource: { type: "LINK_TYPE_POSTGRES", name: "main" },
-      postgres: { version: "17" },
-      stack,
-    }),
-  }),
-);
-export {};
-`)
-
-	binDir := filepath.Join(root, "node_modules", "@ocel", "provider-aws-"+nodePlatformSuffix(t), "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", binDir, err)
-	}
-	testBinary, err := filepath.Abs(os.Args[0])
-	if err != nil {
-		t.Fatalf("resolve test binary path: %v", err)
-	}
-	if err := os.Symlink(testBinary, filepath.Join(binDir, "deploy")); err != nil {
-		t.Fatalf("symlink fake provider binary: %v", err)
-	}
-
-	sockPath = filepath.Join(t.TempDir(), "deploy-provider.sock")
-	t.Setenv(deployFakeProviderEnvVar, "1")
-	t.Setenv(deployFakeProviderSockEnvVar, sockPath)
-
-	t.Setenv(fakeInfraClassEnvVar, "production")
-	t.Setenv(fakeInfraPresentEnvVar, "1")
-
-	return root, sockPath
+func pretendStdoutIsTerminal(d *session.Session) {
+	d.StdoutIsTerminal = func(io.Writer) bool { return true }
 }
 
 func addAppToFixtureConfig(t *testing.T, root string) {
 	t.Helper()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -824,26 +747,12 @@ export default {
 func writeAppSource(t *testing.T, root string, apps ...string) {
 	t.Helper()
 	for _, app := range apps {
-		writeFile(t, filepath.Join(root, "apps", app, "src", "server.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "apps", app, "src", "server.ts"), `
 export function handler() {
   return "`+app+`";
 }
 `)
 	}
-}
-
-func nodePlatformSuffix(t *testing.T) string {
-	t.Helper()
-
-	nodePlatform := map[string]string{"darwin": "darwin", "linux": "linux"}[runtime.GOOS]
-	if nodePlatform == "" {
-		t.Skipf("no node platform mapping for GOOS=%s", runtime.GOOS)
-	}
-	nodeArch := map[string]string{"amd64": "x64", "arm64": "arm64"}[runtime.GOARCH]
-	if nodeArch == "" {
-		t.Skipf("no node arch mapping for GOARCH=%s", runtime.GOARCH)
-	}
-	return nodePlatform + "-" + nodeArch
 }
 
 func waitForNoStaleSocket(t *testing.T, sockPath string) {

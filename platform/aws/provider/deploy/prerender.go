@@ -51,7 +51,7 @@ func publishPrerenderAssets(ctx context.Context, cfg Config, app string, cache *
 		to  uploadTarget
 	}{
 		{"cache", entryTarget(cfg)},
-		{"fetch-cache", uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket}},
+		{"fetch-cache", uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket, class: cfg.Class}},
 	}
 
 	type upload struct {
@@ -109,11 +109,12 @@ func publishPrerenderAssets(ctx context.Context, cfg Config, app string, cache *
 type uploadTarget struct {
 	up     ArtifactUploader
 	bucket string
+	class  providerkit.Class
 }
 
 func (t uploadTarget) validate() error {
 	if t.bucket == "" {
-		return fmt.Errorf("this project has objects to publish but no asset bucket is configured; re-run `ocel bootstrap`")
+		return fmt.Errorf("this project has objects to publish but no asset bucket is configured; re-run `%s`", providerkit.BootstrapCommand(t.class))
 	}
 	if t.up == nil {
 		return fmt.Errorf("no asset uploader configured")
@@ -195,9 +196,9 @@ func isPreconditionFailed(err error) bool {
 
 func entryTarget(cfg Config) uploadTarget {
 	if isrEntriesAdopted(cfg.objectStores()) {
-		return uploadTarget{up: cfg.CacheStoreUploader, bucket: cfg.CacheStoreBucket}
+		return uploadTarget{up: cfg.CacheStoreUploader, bucket: cfg.CacheStoreBucket, class: cfg.Class}
 	}
-	return uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket}
+	return uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket, class: cfg.Class}
 }
 
 func isrEntriesAdopted(stores ObjectStores) bool {

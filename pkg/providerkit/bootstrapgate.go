@@ -210,7 +210,7 @@ func (g Gate) Admit(ctx context.Context, class Class, required []string, report 
 	if err != nil {
 		return Standing{}, err
 	}
-	command := bootstrapCommand(class)
+	command := BootstrapCommand(class)
 	if err := CheckSchema(standing.Schema, standing.Present, class); err != nil {
 		return standing, err
 	}
@@ -398,7 +398,7 @@ func (c compatibility) explain(deployed, required int, command string) error {
 }
 
 func CheckSchema(deployed int, present bool, class Class) error {
-	return checkCompat(deployed, present, BootstrapSchema).explain(deployed, BootstrapSchema, bootstrapCommand(class))
+	return checkCompat(deployed, present, BootstrapSchema).explain(deployed, BootstrapSchema, BootstrapCommand(class))
 }
 
 func RefuseSchemaAhead(deployed int, present bool, class Class) error {
@@ -414,25 +414,29 @@ func schemaAhead(deployed int, class Class) error {
 		deployed, BootstrapSchema, bootstrapDestroyCommand(class))
 }
 
-func bootstrapCommand(class Class) string {
+func BootstrapCommand(class Class) string {
 	if class == ClassPreview {
-		return "ocel bootstrap --preview"
+		return "ocel bootstrap preview"
 	}
-	return "ocel bootstrap"
+	return "ocel bootstrap production"
+}
+
+func BootstrapFeaturesCommand(class Class) string {
+	return BootstrapCommand(class) + " --features"
 }
 
 func bootstrapDestroyCommand(class Class) string {
 	if class == ClassPreview {
-		return "ocel bootstrap --destroy --preview"
+		return "ocel bootstrap destroy preview"
 	}
-	return "ocel bootstrap --destroy"
+	return "ocel bootstrap destroy production"
 }
 
 func destroyCommand(class Class) string {
 	if class == ClassPreview {
-		return "ocel destroy --preview"
+		return "ocel destroy preview"
 	}
-	return "ocel destroy"
+	return "ocel destroy production"
 }
 
 func detail(report Reporter, message string) {

@@ -14,6 +14,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/consolebinding"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 type cloudServer struct {
@@ -81,17 +84,17 @@ func TestRunLink(t *testing.T) {
 	t.Run("not logged in returns an exit error pointing at `ocel login`", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		d.loadCredentials = func() (credentials.Credentials, error) {
+		d := newSession()
+		d.LoadCredentials = func() (credentials.Credentials, error) {
 			return credentials.Credentials{}, credentials.ErrNotLoggedIn
 		}
 
 		var stderr bytes.Buffer
 		err := runConsoleLink(context.Background(), d, t.TempDir(), "", consoleLinkOptions{}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("runConsoleLink err = %v (%T), want *ExitError", err, err)
+			t.Fatalf("runConsoleLink err = %v (%T), want *exitsig.ExitError", err, err)
 		}
 		if !strings.Contains(stderr.String(), "ocel login") {
 			t.Fatalf("stderr = %q, want it to mention `ocel login`", stderr.String())
@@ -101,8 +104,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("it selects an existing project by slug", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 		srv := newCloudServer(t, project("p1", "My App", "my-app"), project("p2", "Other", "other"))
 		dir := t.TempDir()
 
@@ -130,8 +133,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("an unknown slug errors listing the available projects", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 		srv := newCloudServer(t, project("p1", "My App", "my-app"))
 
 		opts := consoleLinkOptions{apiURL: srv.URL}
@@ -147,8 +150,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("without a terminal and without a project or --create it errors about the flags", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 		srv := newCloudServer(t, project("p1", "My App", "my-app"))
 
 		dir := t.TempDir()
@@ -168,8 +171,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("--create without a name uses the directory name", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 		srv := newCloudServer(t)
 
 		dir := filepath.Join(t.TempDir(), "my-fresh-app")
@@ -194,8 +197,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("--create with a name slugifies it", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 		srv := newCloudServer(t)
 
 		opts := consoleLinkOptions{apiURL: srv.URL, create: true}
@@ -210,8 +213,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("a create conflict points at linking to the existing project", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 		srv := newCloudServer(t)
 		srv.createConflict = true
 
@@ -228,8 +231,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("several organizations without a terminal require --org", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 		srv := newCloudServer(t)
 		srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
 
@@ -243,8 +246,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("--org selects among several", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 		srv := newCloudServer(t)
 		srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
 
@@ -262,8 +265,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("an unknown --org errors listing the available org slugs", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 		srv := newCloudServer(t)
 
 		opts := consoleLinkOptions{apiURL: srv.URL, create: true, org: "nope"}
@@ -276,8 +279,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("relinking reports the previous link and replaces it", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 		srv := newCloudServer(t, project("p1", "My App", "my-app"), project("p2", "Other", "other"))
 
 		dir := t.TempDir()
@@ -303,8 +306,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("it ignores a record from another control plane", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 		srv := newCloudServer(t, project("p1", "My App", "my-app"))
 
 		dir := t.TempDir()

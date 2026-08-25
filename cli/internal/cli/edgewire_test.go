@@ -4,59 +4,15 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
+	"github.com/ocelhq/ocel/cli/internal/removalplan"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
-
-func writeEdgeConfig(t *testing.T, root, declaration string) {
-	t.Helper()
-
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
-  domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "express" }],
-`+declaration+`};
-`)
-}
-
-func readJournal(t *testing.T, path string) []string {
-	t.Helper()
-
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read edge journal: %v", err)
-	}
-	var lines []string
-	for _, line := range strings.Split(string(raw), "\n") {
-		if line != "" {
-			lines = append(lines, line)
-		}
-	}
-	return lines
-}
-
-func setUpEdgeFixture(t *testing.T, declaration string) (root, journal string, d deps) {
-	t.Helper()
-
-	root, _ = setUpDeployFixture(t)
-	writeUsageMonorepo(t, root)
-	writeEdgeConfig(t, root, declaration)
-
-	journal = filepath.Join(t.TempDir(), "edge.journal")
-	t.Setenv(fakeEdgeJournalEnvVar, journal)
-
-	d = defaultDeps()
-	setLoggedIn(&d)
-	stubAppFunctions(&d, []manifestbuilder.Function{
-		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
-	})
-	return root, journal, d
-}
 
 func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	cases := []struct {
@@ -71,14 +27,14 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, d := setUpEdgeFixture(t, tc.declaration)
+			root, journal, d := clitest.SetUpEdgeFixture(t, tc.declaration)
 
 			var stdout, stderr bytes.Buffer
 			if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
-			got := readJournal(t, journal)
+			got := clitest.ReadJournal(t, journal)
 			if len(got) != 1 {
 				t.Fatalf("deploy reached the provider %d times, want exactly 1: %v", len(got), got)
 			}
@@ -90,14 +46,14 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 }
 
 func TestDeployCarriesTheEdgeSettingsUnchanged(t *testing.T) {
-	root, journal, d := setUpEdgeFixture(t, "  edge: { kind: \"cloudflare\", options: { zone: \"acme.com\" } },\n  dns: { kind: \"cloudflare\", zone: \"acme.com\" },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
+	root, journal, d := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\", options: { zone: \"acme.com\" } },\n  dns: { kind: \"cloudflare\", zone: \"acme.com\" },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
 
 	var stdout, stderr bytes.Buffer
 	if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	got := readJournal(t, journal)
+	got := clitest.ReadJournal(t, journal)
 	if len(got) != 1 {
 		t.Fatalf("deploy reached the provider %d times, want exactly 1: %v", len(got), got)
 	}
@@ -111,8 +67,8 @@ func TestDeployCarriesTheEdgeSettingsUnchanged(t *testing.T) {
 func TestDeployRendersAnEdgeTheOriginRefuses(t *testing.T) {
 	const refusal = `this provider cannot front deployments with the "fastly" edge; it supports cloudflare`
 
-	root, _, d := setUpEdgeFixture(t, "")
-	t.Setenv(fakeEdgeRefusalEnvVar, refusal)
+	root, _, d := clitest.SetUpEdgeFixture(t, "")
+	t.Setenv(clitest.FakeEdgeRefusalEnvVar, refusal)
 
 	var stdout, stderr bytes.Buffer
 	err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
@@ -142,15 +98,15 @@ func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, d := setUpEdgeFixture(t, tc.declaration)
+			root, journal, d := clitest.SetUpEdgeFixture(t, tc.declaration)
 
 			var stdout, stderr bytes.Buffer
-			opts := bootstrapOptions{yes: true, features: tc.features, declared: true}
-			if err := runBootstrap(context.Background(), d, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			opts := bootstrap.Options{Yes: true, Features: tc.features, Declared: true}
+			if err := bootstrap.Run(context.Background(), d, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
-			got := readJournal(t, journal)
+			got := clitest.ReadJournal(t, journal)
 			if len(got) != 1 {
 				t.Fatalf("bootstrap reached the provider %d times, want exactly 1: %v", len(got), got)
 			}
@@ -165,27 +121,27 @@ func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
 }
 
 func TestBootstrapWithoutTheFlagKeepsWhatIsThere(t *testing.T) {
-	root, journal, d := setUpEdgeFixture(t, "")
-	t.Setenv(fakeEnabledFeaturesEnvVar, "isr")
+	root, journal, d := clitest.SetUpEdgeFixture(t, "")
+	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 
 	var stdout, stderr bytes.Buffer
-	if err := runBootstrap(context.Background(), d, root, bootstrapOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := bootstrap.Run(context.Background(), d, root, environmentv1.Tier_TIER_PRODUCTION, bootstrap.Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	got := readJournal(t, journal)
+	got := clitest.ReadJournal(t, journal)
 	if len(got) != 1 || got[0] != "features=isr force=false" {
 		t.Errorf("provider saw %v, want the set the account already carries", got)
 	}
 }
 
 func TestBootstrapRefusesADropItCannotAskAbout(t *testing.T) {
-	root, journal, d := setUpEdgeFixture(t, "")
-	t.Setenv(fakeEnabledFeaturesEnvVar, "isr,image-optimization")
+	root, journal, d := clitest.SetUpEdgeFixture(t, "")
+	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
 
 	var stdout, stderr bytes.Buffer
-	opts := bootstrapOptions{yes: true, features: "isr", declared: true}
-	err := runBootstrap(context.Background(), d, root, opts, &stdout, &stderr, strings.NewReader(""))
+	opts := bootstrap.Options{Yes: true, Features: "isr", Declared: true}
+	err := bootstrap.Run(context.Background(), d, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runBootstrap err = nil, want the unattended drop refused; stdout=%s", stdout.String())
 	}
@@ -195,20 +151,20 @@ func TestBootstrapRefusesADropItCannotAskAbout(t *testing.T) {
 		}
 	}
 	if _, statErr := os.Stat(journal); statErr == nil {
-		t.Errorf("the provider was reached despite the refusal: %v", readJournal(t, journal))
+		t.Errorf("the provider was reached despite the refusal: %v", clitest.ReadJournal(t, journal))
 	}
 }
 
 func TestBootstrapForcesADropWhenTold(t *testing.T) {
-	root, journal, d := setUpEdgeFixture(t, "")
-	t.Setenv(fakeEnabledFeaturesEnvVar, "isr,image-optimization")
+	root, journal, d := clitest.SetUpEdgeFixture(t, "")
+	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
 
 	var stdout, stderr bytes.Buffer
-	opts := bootstrapOptions{yes: true, features: "isr", declared: true, force: true}
-	if err := runBootstrap(context.Background(), d, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+	opts := bootstrap.Options{Yes: true, Features: "isr", Declared: true, Force: true}
+	if err := bootstrap.Run(context.Background(), d, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	got := readJournal(t, journal)
+	got := clitest.ReadJournal(t, journal)
 	if len(got) != 1 || got[0] != "features=isr force=true" {
 		t.Errorf("provider saw %v, want the forced drop carried through", got)
 	}
@@ -227,15 +183,15 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, d := setUpEdgeFixture(t, tc.declaration)
+			root, journal, d := clitest.SetUpEdgeFixture(t, tc.declaration)
 
 			var stdout, stderr bytes.Buffer
-			opts := bootstrapOptions{destroy: true, yes: true}
-			if err := runBootstrap(context.Background(), d, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			opts := bootstrap.Options{Yes: true}
+			if err := bootstrap.RunDestroy(context.Background(), d, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+				t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
-			got := readJournal(t, journal)
+			got := clitest.ReadJournal(t, journal)
 			if len(got) != 2 {
 				t.Fatalf("destroy reached the provider %d times, want the plan and the teardown: %v", len(got), got)
 			}
@@ -265,17 +221,17 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, d := setUpEdgeFixture(t, tc.declaration)
-			t.Setenv(fakeInfraClassEnvVar, "production")
-			t.Setenv(fakeInfraPresentEnvVar, "1")
-			t.Setenv(destroyBypassEnv, "test-app")
+			root, journal, d := clitest.SetUpEdgeFixture(t, tc.declaration)
+			t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+			t.Setenv(removalplan.BypassEnv, "test-app")
 
 			var stdout, stderr bytes.Buffer
 			if err := runDestroy(context.Background(), d, root, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
-			got := readJournal(t, journal)
+			got := clitest.ReadJournal(t, journal)
 			if len(got) != 2 {
 				t.Fatalf("destroy reached the provider %d times, want the plan and the teardown: %v", len(got), got)
 			}

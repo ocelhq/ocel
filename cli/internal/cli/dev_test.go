@@ -22,8 +22,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/provision"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestMergeEnv(t *testing.T) {
@@ -100,17 +103,17 @@ func TestReportLiveValues(t *testing.T) {
 
 func TestRunDev(t *testing.T) {
 	t.Run("not logged in returns an exit error pointing at `ocel login`", func(t *testing.T) {
-		d := defaultDeps()
-		d.loadCredentials = func() (credentials.Credentials, error) {
+		d := newSession()
+		d.LoadCredentials = func() (credentials.Credentials, error) {
 			return credentials.Credentials{}, credentials.ErrNotLoggedIn
 		}
 
 		var stderr bytes.Buffer
 		err := runDev(context.Background(), d, nil, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("runDev err = %v (%T), want *ExitError", err, err)
+			t.Fatalf("runDev err = %v (%T), want *exitsig.ExitError", err, err)
 		}
 		if exitErr.Code == 0 {
 			t.Fatalf("ExitError.Code = 0, want non-zero")
@@ -121,8 +124,8 @@ func TestRunDev(t *testing.T) {
 	})
 
 	t.Run("an unlinked directory with no terminal errors toward `ocel console link`", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 
 		var stdout, stderr bytes.Buffer
 		err := runDev(context.Background(), d, nil, t.TempDir(), []string{"true"}, &stdout, &stderr, strings.NewReader(""))
@@ -136,8 +139,8 @@ func TestRunDev(t *testing.T) {
 	})
 
 	t.Run("a directory linked to another control plane errors toward `ocel console link`", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 
 		root := t.TempDir()
 		writeLink(t, root, "https://elsewhere.example.com", "proj_elsewhere")
@@ -157,14 +160,14 @@ func TestRunDev(t *testing.T) {
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -173,9 +176,9 @@ func TestRunDev(t *testing.T) {
 		err := runDev(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		t.Run("the child's exit code becomes the command's", func(t *testing.T) {
-			var exitErr *ExitError
+			var exitErr *exitsig.ExitError
 			if !errors.As(err, &exitErr) {
-				t.Fatalf("runDev err = %v, want *ExitError; stderr=%s", err, stderr.String())
+				t.Fatalf("runDev err = %v, want *exitsig.ExitError; stderr=%s", err, stderr.String())
 			}
 			if exitErr.Code != 7 {
 				t.Fatalf("ExitError.Code = %d, want 7", exitErr.Code)
@@ -207,17 +210,17 @@ func TestRunDev(t *testing.T) {
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -234,14 +237,14 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		followerAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
 		subdir := filepath.Join(root, "apps", "web")
-		writeFile(t, filepath.Join(subdir, "index.ts"), "export {};\n")
+		clitest.WriteFile(t, filepath.Join(subdir, "index.ts"), "export {};\n")
 
 		var followerStdout, followerStderr bytes.Buffer
 		err := runDev(context.Background(), d, nil, subdir, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("follower runDev err = %v, want *ExitError; stderr=%s", err, followerStderr.String())
+			t.Fatalf("follower runDev err = %v, want *exitsig.ExitError; stderr=%s", err, followerStderr.String())
 		}
 		if exitErr.Code != 9 {
 			t.Fatalf("follower ExitError.Code = %d, want 9", exitErr.Code)
@@ -281,7 +284,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 
 		projectID := "proj_" + t.Name()
@@ -289,12 +292,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		firstClone := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(firstClone) })
 		writeLink(t, firstClone, resolveServer.URL, projectID)
-		writeFile(t, filepath.Join(firstClone, "ocel", "main.ts"), declareResourceScript("first"))
+		clitest.WriteFile(t, filepath.Join(firstClone, "ocel", "main.ts"), declareResourceScript("first"))
 
 		secondClone := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(secondClone) })
 		writeLink(t, secondClone, resolveServer.URL, projectID)
-		writeFile(t, filepath.Join(secondClone, "ocel", "main.ts"), declareResourceScript("second"))
+		clitest.WriteFile(t, filepath.Join(secondClone, "ocel", "main.ts"), declareResourceScript("second"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -313,9 +316,9 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), d, nil, secondClone, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("second clone runDev err = %v, want *ExitError; stderr=%s", err, stderr.String())
+			t.Fatalf("second clone runDev err = %v, want *exitsig.ExitError; stderr=%s", err, stderr.String())
 		}
 		if exitErr.Code != 9 {
 			t.Fatalf("second clone ExitError.Code = %d, want 9", exitErr.Code)
@@ -354,17 +357,17 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -391,7 +394,7 @@ export default { slug: "test-app" };
 
 		waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_main")
 
-		writeFile(t, filepath.Join(root, "ocel", "second.ts"), declareResourceScript("second"))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "second.ts"), declareResourceScript("second"))
 
 		waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_second")
 
@@ -425,14 +428,14 @@ export default { slug: "test-app" };
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
-		writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -458,7 +461,7 @@ export default { slug: "test-app" };
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
 
-		writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=second\n")
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=second\n")
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "second")
 
@@ -492,14 +495,14 @@ export default { slug: "test-app" };
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
-		writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -525,13 +528,13 @@ export default { slug: "test-app" };
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
 
-		writeFile(t, filepath.Join(root, dotenv.FileName), "# the value the run needs, deleted\n")
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "# the value the run needs, deleted\n")
 		waitForOutput(t, &leaderStderr, "API_TOKEN")
 		if got := leaderStderr.String(); !strings.Contains(got, dotenv.FileName) {
 			t.Errorf("stderr = %q, want the mid-session refusal to name %s", got, dotenv.FileName)
 		}
 
-		writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=restored\n")
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=restored\n")
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "restored")
 
 		cancelFollower()
@@ -564,14 +567,14 @@ export default { slug: "test-app" };
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
-		writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -585,7 +588,7 @@ export default { slug: "test-app" };
 		waitForLockfile(t, root)
 
 		waitForOutputAfter(t, &leaderStdout, "line 2", func() {
-			writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\nnot a pair\n")
+			clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\nnot a pair\n")
 		})
 
 		cancelLeader()
@@ -601,8 +604,8 @@ export default { slug: "test-app" };
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -623,7 +626,7 @@ export default { slug: "test-app" };
 			t.Fatalf("lockfile.Create: %v", err)
 		}
 
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, apiURL, projectID)
@@ -645,9 +648,9 @@ export default { slug: "test-app" };
 
 		select {
 		case err := <-followerDone:
-			var exitErr *ExitError
+			var exitErr *exitsig.ExitError
 			if !errors.As(err, &exitErr) {
-				t.Fatalf("follower runDev err = %v, want *ExitError; stderr=%s", err, stderr.String())
+				t.Fatalf("follower runDev err = %v, want *exitsig.ExitError; stderr=%s", err, stderr.String())
 			}
 			if exitErr.Code == 0 {
 				t.Fatalf("follower ExitError.Code = 0, want non-zero")
@@ -830,15 +833,5 @@ func writeLink(t *testing.T, dir, apiURL, projectID string) {
 	link := consolebinding.Binding{APIURL: apiURL, OrganizationID: "org_1", ProjectID: projectID, ProjectName: "Test"}
 	if err := consolebinding.Write(dir, link); err != nil {
 		t.Fatalf("write link: %v", err)
-	}
-}
-
-func writeFile(t *testing.T, path, contents string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir for %s: %v", path, err)
-	}
-	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
 	}
 }

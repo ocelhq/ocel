@@ -72,7 +72,7 @@ func (a Artifacts) bucket(ctx context.Context, class kit.Class, store string) (s
 	}
 	if name == "" {
 		return "", kit.Refuse(kit.CodeNotReady,
-			"this account has no %s store yet.\nRun `ocel bootstrap` to create it, then try again", store)
+			"this account has no %s store yet.\nRun `%s` to create it, then try again", store, providerkit.BootstrapCommand(class))
 	}
 	return name, nil
 }

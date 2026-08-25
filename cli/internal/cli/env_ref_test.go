@@ -8,16 +8,18 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func ownedElsewhere(t *testing.T, key, value string) {
 	t.Helper()
-	store, err := loadFakeStore()
+	store, err := clitest.LoadFakeStore()
 	if err != nil {
 		t.Fatalf("load the fake store: %v", err)
 	}
 	c := &envvarsv1.Coordinate{Slug: "platform", Key: key}
-	if err := store.write(environmentv1.Tier_TIER_PRODUCTION, c, fakeCellData{Value: value}); err != nil {
+	if err := store.Write(environmentv1.Tier_TIER_PRODUCTION, c, clitest.FakeCellData{Value: value}); err != nil {
 		t.Fatalf("seed %s: %v", key, err)
 	}
 }
@@ -25,7 +27,7 @@ func ownedElsewhere(t *testing.T, key, value string) {
 func envRef(t *testing.T, root, key string, opts envOptions, ref envRefOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runEnvRef(context.Background(), defaultDeps(), root, key, opts, ref, &stdout, &stderr); err != nil {
+	if err := runEnvRef(context.Background(), newSession(), root, key, opts, ref, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvRef(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
@@ -34,7 +36,7 @@ func envRef(t *testing.T, root, key string, opts envOptions, ref envRefOptions) 
 func envGet(t *testing.T, root, key string, opts envOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runEnvGet(context.Background(), defaultDeps(), root, key, opts, &stdout, &stderr); err != nil {
+	if err := runEnvGet(context.Background(), newSession(), root, key, opts, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvGet(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
@@ -66,7 +68,7 @@ func TestRunEnvRef(t *testing.T) {
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvRef(context.Background(), defaultDeps(), root, "POSTHOG_ID", envOptions{}, envRefOptions{key: "STRIPE_API_KEY"}, &stdout, &stderr)
+		err := runEnvRef(context.Background(), newSession(), root, "POSTHOG_ID", envOptions{}, envRefOptions{key: "STRIPE_API_KEY"}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvRef at a reference err = nil, want a refusal")
 		}
@@ -79,12 +81,12 @@ func TestRunEnvRef(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRef(context.Background(), defaultDeps(), root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"}, &stdout, &stderr); err != nil {
+		if err := runEnvRef(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRef at a cell not set yet err = %v; stderr=%s", err, stderr.String())
 		}
 
 		var out, errs bytes.Buffer
-		err := runEnvGet(context.Background(), defaultDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &out, &errs)
+		err := runEnvGet(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &out, &errs)
 		if err == nil {
 			t.Fatal("runEnvGet through a reference to nothing err = nil, want a failure")
 		}
@@ -104,19 +106,19 @@ func TestRunEnvRefs(t *testing.T) {
 		root := setUpEnvFixture(t)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
-		store, err := loadFakeStore()
+		store, err := clitest.LoadFakeStore()
 		if err != nil {
 			t.Fatalf("load the fake store: %v", err)
 		}
 		target := &envvarsv1.Coordinate{Slug: "test-app", Key: "STRIPE_API_KEY"}
 		consumer := &envvarsv1.Coordinate{Slug: "billing", Folder: "/api", Key: "STRIPE_API_KEY"}
-		pointer := coordinateOf(target)
-		if err := store.write(environmentv1.Tier_TIER_PRODUCTION, consumer, fakeCellData{Target: &pointer}); err != nil {
+		pointer := clitest.CoordinateOf(target)
+		if err := store.Write(environmentv1.Tier_TIER_PRODUCTION, consumer, clitest.FakeCellData{Target: &pointer}); err != nil {
 			t.Fatalf("seed the consumer: %v", err)
 		}
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRefs(context.Background(), defaultDeps(), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvRefs(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRefs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -130,7 +132,7 @@ func TestRunEnvRefs(t *testing.T) {
 		}
 
 		var none bytes.Buffer
-		if err := runEnvRefs(context.Background(), defaultDeps(), root, "POSTHOG_ID", envOptions{}, &none, &stderr); err != nil {
+		if err := runEnvRefs(context.Background(), newSession(), root, "POSTHOG_ID", envOptions{}, &none, &stderr); err != nil {
 			t.Fatalf("runEnvRefs err = %v", err)
 		}
 		if !strings.Contains(none.String(), "Nothing references") {
@@ -160,7 +162,7 @@ func TestEnvReferences(t *testing.T) {
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), defaultDeps(), root, "STRIPE_API_KEY", "an edit in the wrong place", envOptions{}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newSession(), root, "STRIPE_API_KEY", "an edit in the wrong place", envOptions{}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet through a reference err = nil, want a refusal")
 		}
@@ -178,22 +180,22 @@ func TestEnvReferences(t *testing.T) {
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRm(context.Background(), defaultDeps(), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvRm(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Removed") {
 			t.Errorf("rm stdout = %q, want the reference removed in one step", stdout.String())
 		}
 
-		store, err := loadFakeStore()
+		store, err := clitest.LoadFakeStore()
 		if err != nil {
 			t.Fatalf("load the fake store: %v", err)
 		}
-		source := store[fakeCoordinateID(environmentv1.Tier_TIER_PRODUCTION, &envvarsv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"})]
-		if source.liveVersion() == 0 {
+		source := store[clitest.FakeCoordinateID(environmentv1.Tier_TIER_PRODUCTION, &envvarsv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"})]
+		if source.LiveVersion() == 0 {
 			t.Fatal("the source value went with the reference, want removing a consumer to leave it alone")
 		}
-		if got, err := store.resolve(environmentv1.Tier_TIER_PRODUCTION, source); err != nil || got != "sk_live_secret" {
+		if got, err := store.Resolve(environmentv1.Tier_TIER_PRODUCTION, source); err != nil || got != "sk_live_secret" {
 			t.Errorf("source value = %q (err %v), want it untouched", got, err)
 		}
 	})
@@ -204,7 +206,7 @@ func TestEnvReferences(t *testing.T) {
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvLs(context.Background(), defaultDeps(), root, envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvLs(context.Background(), newSession(), root, envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()

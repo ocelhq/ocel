@@ -16,7 +16,7 @@ func (r *Releaser) Preflight(ctx context.Context, pre providerkit.DeployPrefligh
 	if err != nil {
 		return err
 	}
-	if err := checkISRWriterAgrees(cfg.objectStores(), cfg.isrWriter()); err != nil {
+	if err := checkISRWriterAgrees(cfg.Class, cfg.objectStores(), cfg.isrWriter()); err != nil {
 		return err
 	}
 	sessions := newSessionScope(naming.Sanitize(pre.Plan.Slug), pre.Plan.Env, cfg.StateTableARN)

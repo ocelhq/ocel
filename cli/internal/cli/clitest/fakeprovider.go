@@ -1,4 +1,4 @@
-package cli
+package clitest
 
 import (
 	"bytes"
@@ -31,77 +31,77 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const deployFakeProviderEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER"
+const FakeProviderEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER"
 
-const deployFakeProviderSockEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_SOCK"
+const fakeProviderSockEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_SOCK"
 
-const deployFakeProviderModeEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_MODE"
+const FakeProviderModeEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_MODE"
 
 const (
-	fakeInfraClassEnvVar   = "OCEL_TEST_FAKE_INFRA_CLASS"
-	fakeInfraPresentEnvVar = "OCEL_TEST_FAKE_INFRA_PRESENT"
+	FakeInfraClassEnvVar   = "OCEL_TEST_FAKE_INFRA_CLASS"
+	FakeInfraPresentEnvVar = "OCEL_TEST_FAKE_INFRA_PRESENT"
 )
 
 const (
-	fakeIDProviderEnvVar  = "OCEL_TEST_FAKE_ID_PROVIDER"
-	fakeIDAccountEnvVar   = "OCEL_TEST_FAKE_ID_ACCOUNT"
-	fakeIDProfileEnvVar   = "OCEL_TEST_FAKE_ID_PROFILE"
-	fakeIDRegionEnvVar    = "OCEL_TEST_FAKE_ID_REGION"
-	fakeIDEdgeScopeEnvVar = "OCEL_TEST_FAKE_ID_EDGE_SCOPE"
-	fakeCredProblemEnvVar = "OCEL_TEST_FAKE_CRED_PROBLEM"
+	FakeIDProviderEnvVar  = "OCEL_TEST_FAKE_ID_PROVIDER"
+	FakeIDAccountEnvVar   = "OCEL_TEST_FAKE_ID_ACCOUNT"
+	FakeIDProfileEnvVar   = "OCEL_TEST_FAKE_ID_PROFILE"
+	FakeIDRegionEnvVar    = "OCEL_TEST_FAKE_ID_REGION"
+	FakeIDEdgeScopeEnvVar = "OCEL_TEST_FAKE_ID_EDGE_SCOPE"
+	FakeCredProblemEnvVar = "OCEL_TEST_FAKE_CRED_PROBLEM"
 )
 
-const fakeFlipBoundEnvVar = "OCEL_TEST_FAKE_FLIP_BOUND"
+const FakeFlipBoundEnvVar = "OCEL_TEST_FAKE_FLIP_BOUND"
 
-const fakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
+const FakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
 
-const fakePublishedLinksEnvVar = "OCEL_TEST_FAKE_PUBLISHED_LINKS"
+const FakePublishedLinksEnvVar = "OCEL_TEST_FAKE_PUBLISHED_LINKS"
 
-const fakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
+const FakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
 
 const fakeEdgeJournalEnvVar = "OCEL_TEST_FAKE_EDGE_JOURNAL"
 
-const fakeConfigureJournalEnvVar = "OCEL_TEST_FAKE_CONFIGURE_JOURNAL"
+const FakeConfigureJournalEnvVar = "OCEL_TEST_FAKE_CONFIGURE_JOURNAL"
 
-const fakeEnabledFeaturesEnvVar = "OCEL_TEST_FAKE_ENABLED_FEATURES"
+const FakeEnabledFeaturesEnvVar = "OCEL_TEST_FAKE_ENABLED_FEATURES"
 
-const fakeBootstrapEnvVar = "OCEL_TEST_FAKE_BOOTSTRAP"
+const FakeBootstrapEnvVar = "OCEL_TEST_FAKE_BOOTSTRAP"
 
-const fakeDescribeJournalEnvVar = "OCEL_TEST_FAKE_DESCRIBE_JOURNAL"
+const FakeDescribeJournalEnvVar = "OCEL_TEST_FAKE_DESCRIBE_JOURNAL"
 
-const fakeEdgeRefusalEnvVar = "OCEL_TEST_FAKE_EDGE_REFUSAL"
+const FakeEdgeRefusalEnvVar = "OCEL_TEST_FAKE_EDGE_REFUSAL"
 
-const fakeNeedsRefusalEnvVar = "OCEL_TEST_FAKE_NEEDS_REFUSAL"
+const FakeNeedsRefusalEnvVar = "OCEL_TEST_FAKE_NEEDS_REFUSAL"
 
-const fakeDegradedEnvVar = "OCEL_TEST_FAKE_DEGRADED"
+const FakeDegradedEnvVar = "OCEL_TEST_FAKE_DEGRADED"
 
-const fakeDomainOwnerEnvVar = "OCEL_TEST_FAKE_DOMAIN_OWNER"
+const FakeDomainOwnerEnvVar = "OCEL_TEST_FAKE_DOMAIN_OWNER"
 
 const (
-	fakeGlobalDomainEnvVar         = "OCEL_TEST_FAKE_GLOBAL_DOMAIN"
-	fakeGlobalDomainAccountEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CF_ACCOUNT"
+	FakeGlobalDomainEnvVar         = "OCEL_TEST_FAKE_GLOBAL_DOMAIN"
+	FakeGlobalDomainAccountEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CF_ACCOUNT"
 	fakeGlobalDomainRouteEnvVar    = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_ROUTE"
 	fakeGlobalDomainGrammarEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_GRAMMAR"
-	fakeGlobalDomainProjectsEnvVar = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROJECTS"
-	fakeGlobalDomainCertEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CERT"
-	fakeGlobalDomainRecordsEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RECORDS"
-	fakeGlobalDomainOwedEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_OWED"
-	fakeGlobalDomainProbeEnvVar    = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROBE"
+	FakeGlobalDomainProjectsEnvVar = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROJECTS"
+	FakeGlobalDomainCertEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CERT"
+	FakeGlobalDomainRecordsEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RECORDS"
+	FakeGlobalDomainOwedEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_OWED"
+	FakeGlobalDomainProbeEnvVar    = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROBE"
 )
 
 const (
-	fakeAppURL      = "https://fake-app.example.com"
-	fakePromotionID = "prm_fake_1234"
-	fakeLinkSecret  = "pw-do-not-publish-9f2c"
+	FakeAppURL      = "https://fake-app.example.com"
+	FakePromotionID = "prm_fake_1234"
+	FakeLinkSecret  = "pw-do-not-publish-9f2c"
 )
 
-func fixtureDeploymentID(app string) string {
+func FixtureDeploymentID(app string) string {
 	sum := sha256.Sum256([]byte("ocel-test-deployment/" + app))
 	return hex.EncodeToString(sum[:])[:32]
 }
 
-func runDeployFakeProvider() int {
-	sockPath := os.Getenv(deployFakeProviderSockEnvVar)
+func RunFakeProvider() int {
+	sockPath := os.Getenv(fakeProviderSockEnvVar)
 	if sockPath == "" {
 		fmt.Fprintln(os.Stderr, "fake provider: missing socket path")
 		return 1
@@ -117,7 +117,7 @@ func runDeployFakeProvider() int {
 
 	fake := &deployFakeProviderServer{
 		token: os.Getenv(channel.SessionTokenEnvVar),
-		mode:  os.Getenv(deployFakeProviderModeEnvVar),
+		mode:  os.Getenv(FakeProviderModeEnvVar),
 	}
 
 	mux := http.NewServeMux()
@@ -181,7 +181,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 			return err
 		}
 	}
-	if refusal := os.Getenv(fakeNeedsRefusalEnvVar); refusal != "" {
+	if refusal := os.Getenv(FakeNeedsRefusalEnvVar); refusal != "" {
 		return stream.Send(&progressv1.OperationEvent{
 			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: refusal}},
 		})
@@ -259,8 +259,8 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 	return stream.Send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 			Success:     true,
-			AppUrls:     []string{fakeAppURL},
-			PromotionId: fakePromotionID,
+			AppUrls:     []string{FakeAppURL},
+			PromotionId: FakePromotionID,
 			FlipBound:   fakeFlipBound(),
 			Links:       fakeLinks(req.GetManifest()),
 		}},
@@ -268,7 +268,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 }
 
 func fakeFlipBound() *progressv1.FlipBound {
-	spec := os.Getenv(fakeFlipBoundEnvVar)
+	spec := os.Getenv(FakeFlipBoundEnvVar)
 	if spec == "" {
 		return nil
 	}
@@ -282,7 +282,7 @@ func fakeFlipBound() *progressv1.FlipBound {
 
 func fakePublishedLinks() []string {
 	var out []string
-	for _, name := range strings.Split(os.Getenv(fakePublishedLinksEnvVar), ",") {
+	for _, name := range strings.Split(os.Getenv(FakePublishedLinksEnvVar), ",") {
 		if name = strings.TrimSpace(name); name != "" {
 			out = append(out, name)
 		}
@@ -336,13 +336,13 @@ func fakeLinks(m *contractv1.Manifest) []*linksv1.Link {
 		}
 		switch r.GetResource().GetType() {
 		case linksv1.LinkType_LINK_TYPE_BUCKET:
-			link.Properties = &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: r.GetResource().GetName() + "-" + fakeLinkSecret}}
+			link.Properties = &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: r.GetResource().GetName() + "-" + FakeLinkSecret}}
 		default:
 			link.Properties = &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
 				Host:     "db.fake.internal",
 				Port:     5432,
 				Username: "app",
-				Password: fakeLinkSecret,
+				Password: FakeLinkSecret,
 				Database: r.GetResource().GetName(),
 			}}
 		}
@@ -355,7 +355,7 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *c
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	enabled := strings.Split(os.Getenv(fakeEnabledFeaturesEnvVar), ",")
+	enabled := strings.Split(os.Getenv(FakeEnabledFeaturesEnvVar), ",")
 	feature := func(name, summary string, dependsOn ...string) *contractv1.Feature {
 		return &contractv1.Feature{
 			Name:      name,
@@ -376,7 +376,7 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *c
 }
 
 func journalDescribeBootstrap(req *contractv1.DescribeBootstrapRequest) {
-	path := os.Getenv(fakeDescribeJournalEnvVar)
+	path := os.Getenv(FakeDescribeJournalEnvVar)
 	if path == "" {
 		return
 	}
@@ -390,7 +390,7 @@ func journalDescribeBootstrap(req *contractv1.DescribeBootstrapRequest) {
 }
 
 func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
-	shape := os.Getenv(fakeBootstrapEnvVar)
+	shape := os.Getenv(FakeBootstrapEnvVar)
 	if shape == "" || tier == environmentv1.Tier_TIER_PREVIEW {
 		return &contractv1.BootstrapStatus{Tier: tier, RequiredSchema: 1, Writer: "1.4.0"}
 	}
@@ -502,26 +502,26 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 	s.recordPreflight(req.GetSlug(), req.GetDomains(), req.GetRequiredTier())
 	journalPreflight(req)
 	resp := &contractv1.PreflightResponse{
-		InfraTier:             parseInfraTier(os.Getenv(fakeInfraClassEnvVar)),
-		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
+		InfraTier:             parseInfraTier(os.Getenv(FakeInfraClassEnvVar)),
+		InfrastructurePresent: os.Getenv(FakeInfraPresentEnvVar) != "0",
 		Identity: &contractv1.Identity{
-			Provider:  os.Getenv(fakeIDProviderEnvVar),
-			Account:   os.Getenv(fakeIDAccountEnvVar),
-			EdgeScope: os.Getenv(fakeIDEdgeScopeEnvVar),
+			Provider:  os.Getenv(FakeIDProviderEnvVar),
+			Account:   os.Getenv(FakeIDAccountEnvVar),
+			EdgeScope: os.Getenv(FakeIDEdgeScopeEnvVar),
 			Details: []*contractv1.Detail{
-				{Label: "region", Value: os.Getenv(fakeIDRegionEnvVar)},
-				{Label: "profile", Value: os.Getenv(fakeIDProfileEnvVar)},
+				{Label: "region", Value: os.Getenv(FakeIDRegionEnvVar)},
+				{Label: "profile", Value: os.Getenv(FakeIDProfileEnvVar)},
 			},
 		},
 	}
 	if req.GetSlug() != "" && req.GetRequiredTier() == environmentv1.Tier_TIER_PRODUCTION {
-		for _, s := range strings.Split(os.Getenv(fakeKnownSlugsEnvVar), ",") {
+		for _, s := range strings.Split(os.Getenv(FakeKnownSlugsEnvVar), ",") {
 			if s = strings.TrimSpace(s); s != "" {
 				resp.KnownSlugs = append(resp.KnownSlugs, s)
 			}
 		}
 	}
-	owner := os.Getenv(fakeDomainOwnerEnvVar)
+	owner := os.Getenv(FakeDomainOwnerEnvVar)
 	for _, host := range req.GetDomains() {
 		claim := &contractv1.DomainClaim{Hostname: host, Status: contractv1.DomainClaim_STATUS_UNCLAIMED}
 		if owner != "" {
@@ -531,7 +531,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 	}
 	resp.Bootstrap = fakeBootstrap(req.GetRequiredTier())
 	resp.PreviewWildcard = fakeGlobalDomain()
-	if p := os.Getenv(fakeCredProblemEnvVar); p != "" {
+	if p := os.Getenv(FakeCredProblemEnvVar); p != "" {
 		resp.CredentialProblems = append(resp.CredentialProblems, &contractv1.CredentialProblem{
 			Provider: p,
 			Message:  "could not authenticate",
@@ -542,7 +542,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 }
 
 func journalPreflight(req *contractv1.PreflightRequest) {
-	path := os.Getenv(fakePreflightJournalEnvVar)
+	path := os.Getenv(FakePreflightJournalEnvVar)
 	if path == "" {
 		return
 	}
@@ -584,7 +584,7 @@ func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	path := os.Getenv(fakeConfigureJournalEnvVar)
+	path := os.Getenv(FakeConfigureJournalEnvVar)
 	if path == "" {
 		return &contractv1.ConfigureResponse{}, nil
 	}
@@ -641,7 +641,7 @@ func journalBootstrap(req *contractv1.BootstrapRequest) {
 
 func fakeDegradedEvents() []*progressv1.OperationEvent {
 	var events []*progressv1.OperationEvent
-	for _, entry := range strings.Split(os.Getenv(fakeDegradedEnvVar), ";") {
+	for _, entry := range strings.Split(os.Getenv(FakeDegradedEnvVar), ";") {
 		need, detail, ok := strings.Cut(entry, "=")
 		if !ok || need == "" {
 			continue
@@ -654,7 +654,7 @@ func fakeDegradedEvents() []*progressv1.OperationEvent {
 }
 
 func refuseEdge() error {
-	msg := os.Getenv(fakeEdgeRefusalEnvVar)
+	msg := os.Getenv(FakeEdgeRefusalEnvVar)
 	if msg == "" {
 		return nil
 	}
@@ -662,7 +662,7 @@ func refuseEdge() error {
 }
 
 func fakeGlobalDomain() *contractv1.PreviewWildcard {
-	base := os.Getenv(fakeGlobalDomainEnvVar)
+	base := os.Getenv(FakeGlobalDomainEnvVar)
 	if base == "" {
 		return nil
 	}
@@ -671,19 +671,19 @@ func fakeGlobalDomain() *contractv1.PreviewWildcard {
 		lo, hi, _ := strings.Cut(g, "-")
 		grammarMin, grammarMax = parseGrammar(lo), parseGrammar(hi)
 	}
-	status, certID, _ := strings.Cut(os.Getenv(fakeGlobalDomainCertEnvVar), " ")
+	status, certID, _ := strings.Cut(os.Getenv(FakeGlobalDomainCertEnvVar), " ")
 	probeAt, probeEdge, probeOK := fakeGlobalDomainProbe()
 	return &contractv1.PreviewWildcard{
 		BaseDomain:     base,
-		EdgeScope:      os.Getenv(fakeGlobalDomainAccountEnvVar),
+		EdgeScope:      os.Getenv(FakeGlobalDomainAccountEnvVar),
 		GrammarMin:     grammarMin,
 		GrammarMax:     grammarMax,
 		RouteInstalled: os.Getenv(fakeGlobalDomainRouteEnvVar) != "0",
 		Certificate: &contractv1.CertificateState{
 			CertificateId:     certID,
 			CertificateStatus: status,
-			RecordsWritten:    splitList(os.Getenv(fakeGlobalDomainRecordsEnvVar)),
-			RecordsOwed:       splitList(os.Getenv(fakeGlobalDomainOwedEnvVar)),
+			RecordsWritten:    splitList(os.Getenv(FakeGlobalDomainRecordsEnvVar)),
+			RecordsOwed:       splitList(os.Getenv(FakeGlobalDomainOwedEnvVar)),
 			LastProbeAt:       probeAt,
 			LastProbeEdge:     probeEdge,
 			LastProbeOk:       probeOK,
@@ -702,7 +702,7 @@ func splitList(raw string) []string {
 }
 
 func fakeGlobalDomainProbe() (int64, string, bool) {
-	fields := strings.Fields(os.Getenv(fakeGlobalDomainProbeEnvVar))
+	fields := strings.Fields(os.Getenv(FakeGlobalDomainProbeEnvVar))
 	if len(fields) < 2 {
 		return 0, "", false
 	}
@@ -750,21 +750,21 @@ func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *
 	})
 }
 
-const fakeServedPreviewsEnvVar = "OCEL_TEST_FAKE_SERVED_PREVIEWS"
+const FakeServedPreviewsEnvVar = "OCEL_TEST_FAKE_SERVED_PREVIEWS"
 
-const fakeEmptyRemovalPlanEnvVar = "OCEL_TEST_FAKE_EMPTY_REMOVAL_PLAN"
+const FakeEmptyRemovalPlanEnvVar = "OCEL_TEST_FAKE_EMPTY_REMOVAL_PLAN"
 
 func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.RemovalPlan, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	base := os.Getenv(fakeGlobalDomainEnvVar)
+	base := os.Getenv(FakeGlobalDomainEnvVar)
 	if base == "" {
 		return &contractv1.RemovalPlan{}, nil
 	}
-	if served := os.Getenv(fakeServedPreviewsEnvVar); served != "" {
+	if served := os.Getenv(FakeServedPreviewsEnvVar); served != "" {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"*.%s still carries live preview pointers for %s — run `ocel preview rm` or `ocel destroy --preview` in each of them first",
+			"*.%s still carries live preview pointers for %s — run `ocel preview rm` or `ocel destroy preview` in each of them first",
 			base, served,
 		))
 	}
@@ -802,7 +802,7 @@ func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, re
 	})
 }
 
-const fakeDomainTimeoutEnvVar = "OCEL_TEST_FAKE_DOMAIN_TIMEOUT"
+const FakeDomainTimeoutEnvVar = "OCEL_TEST_FAKE_DOMAIN_TIMEOUT"
 
 func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
@@ -845,7 +845,7 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 				return err
 			}
 		}
-		if outstanding := os.Getenv(fakeDomainTimeoutEnvVar); outstanding != "" {
+		if outstanding := os.Getenv(FakeDomainTimeoutEnvVar); outstanding != "" {
 			return stream.Send(&progressv1.OperationEvent{
 				Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 					Success: false,
@@ -892,11 +892,11 @@ func fakeDomainTargets(configured []string, host string) []string {
 }
 
 const (
-	fakeDomainReadyAfterEnvVar = "OCEL_TEST_FAKE_DOMAIN_READY_AFTER"
-	fakeDomainCertEnvVar       = "OCEL_TEST_FAKE_DOMAIN_CERT"
+	FakeDomainReadyAfterEnvVar = "OCEL_TEST_FAKE_DOMAIN_READY_AFTER"
+	FakeDomainCertEnvVar       = "OCEL_TEST_FAKE_DOMAIN_CERT"
 	fakeDomainRenewalEnvVar    = "OCEL_TEST_FAKE_DOMAIN_RENEWAL"
-	fakeDomainExpiresEnvVar    = "OCEL_TEST_FAKE_DOMAIN_EXPIRES"
-	fakeDomainFailUntilEnvVar  = "OCEL_TEST_FAKE_DOMAIN_FAIL_UNTIL"
+	FakeDomainExpiresEnvVar    = "OCEL_TEST_FAKE_DOMAIN_EXPIRES"
+	FakeDomainFailUntilEnvVar  = "OCEL_TEST_FAKE_DOMAIN_FAIL_UNTIL"
 )
 
 func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *contractv1.HostnameRequest) (*contractv1.GetHostnameStatusResponse, error) {
@@ -908,13 +908,13 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *c
 	call := s.domainStatusCalls
 	s.mu.Unlock()
 
-	if failUntil, _ := strconv.Atoi(os.Getenv(fakeDomainFailUntilEnvVar)); call > 1 && call <= failUntil {
+	if failUntil, _ := strconv.Atoi(os.Getenv(FakeDomainFailUntilEnvVar)); call > 1 && call <= failUntil {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("the provider is briefly unreachable"))
 	}
-	readyAfter, _ := strconv.Atoi(os.Getenv(fakeDomainReadyAfterEnvVar))
+	readyAfter, _ := strconv.Atoi(os.Getenv(FakeDomainReadyAfterEnvVar))
 	ready := call > readyAfter
-	status, certID, _ := strings.Cut(os.Getenv(fakeDomainCertEnvVar), " ")
-	expires, _ := strconv.ParseInt(os.Getenv(fakeDomainExpiresEnvVar), 10, 64)
+	status, certID, _ := strings.Cut(os.Getenv(FakeDomainCertEnvVar), " ")
+	expires, _ := strconv.ParseInt(os.Getenv(FakeDomainExpiresEnvVar), 10, 64)
 
 	resp := &contractv1.GetHostnameStatusResponse{Ready: ready && len(req.GetConfigured()) > 0}
 	for _, host := range req.GetConfigured() {
@@ -925,7 +925,7 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *c
 				CertificateId:     certID,
 				CertificateStatus: status,
 				RecordsWritten:    []string{host + " AAAA 100::"},
-				RecordsOwed:       splitList(os.Getenv(fakeGlobalDomainOwedEnvVar)),
+				RecordsOwed:       splitList(os.Getenv(FakeGlobalDomainOwedEnvVar)),
 				LastProbeAt:       1755500000,
 				LastProbeOk:       ready,
 				LastProbeEdge:     "cloudflare",
@@ -949,7 +949,7 @@ func (s *deployFakeProviderServer) GetPreviewWildcard(ctx context.Context, req *
 		return nil, err
 	}
 	resp := &contractv1.GetPreviewWildcardResponse{Wildcard: fakeGlobalDomain()}
-	for _, p := range strings.Split(os.Getenv(fakeGlobalDomainProjectsEnvVar), ",") {
+	for _, p := range strings.Split(os.Getenv(FakeGlobalDomainProjectsEnvVar), ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			resp.Projects = append(resp.Projects, p)
 		}
@@ -977,7 +977,7 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *c
 	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	slug := req.GetSlug()
-	if os.Getenv(fakeEmptyRemovalPlanEnvVar) != "" {
+	if os.Getenv(FakeEmptyRemovalPlanEnvVar) != "" {
 		return &contractv1.RemovalPlan{
 			EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 			Subject:  slug,
@@ -1064,13 +1064,13 @@ func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *contr
 	})
 }
 
-const fakeEnvironmentsEnvVar = "OCEL_TEST_FAKE_ENVIRONMENTS"
+const FakeEnvironmentsEnvVar = "OCEL_TEST_FAKE_ENVIRONMENTS"
 
 func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *contractv1.ListEnvironmentsRequest) (*contractv1.ListEnvironmentsResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	if scripted := os.Getenv(fakeEnvironmentsEnvVar); scripted != "" {
+	if scripted := os.Getenv(FakeEnvironmentsEnvVar); scripted != "" {
 		resp := &contractv1.ListEnvironmentsResponse{}
 		if scripted == "none" {
 			return resp, nil

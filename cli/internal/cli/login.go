@@ -45,7 +45,7 @@ func resolveAPIURL() string {
 
 func runLogin(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
-	apiURL := strings.TrimRight(effectiveAPIURL(cmd, ""), "/")
+	apiURL := strings.TrimRight(effectiveAPIURL(""), "/")
 
 	if !loginForce {
 		if existing, err := credentials.Load(); err == nil {
@@ -160,5 +160,5 @@ func pollForToken(ctx context.Context, client *authclient.Client, device *authcl
 }
 
 func describeConnError(err error, apiURL string) error {
-	return fmt.Errorf("%w (target: %s, override with --api-url)", err, apiURL)
+	return fmt.Errorf("%w (target: %s, override with $OCEL_API_URL)", err, apiURL)
 }

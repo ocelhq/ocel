@@ -14,17 +14,19 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestServiceMap(t *testing.T) {
 	t.Run("a deploy publishes a map whose edges are the manifest's usages", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, []manifestbuilder.Function{
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, []manifestbuilder.Function{
 			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
-		root, sockPath := setUpDeployFixture(t)
-		writeUsageMonorepo(t, root)
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteUsageMonorepo(t, root)
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true, tag: "v9"}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -39,7 +41,7 @@ func TestServiceMap(t *testing.T) {
 		if got.SchemaVersion != servicemap.SchemaVersion {
 			t.Errorf("schemaVersion = %d, want %d", got.SchemaVersion, servicemap.SchemaVersion)
 		}
-		if got.Slug != "test-app" || got.Environment.Class != "production" || got.PromotionID != fakePromotionID || got.Tag != "v9" {
+		if got.Slug != "test-app" || got.Environment.Class != "production" || got.PromotionID != clitest.FakePromotionID || got.Tag != "v9" {
 			t.Errorf("record = %+v, want the deploy's own context", got)
 		}
 		if got.DeployedAt.IsZero() {
@@ -50,13 +52,13 @@ func TestServiceMap(t *testing.T) {
 	})
 
 	t.Run("var keys and grant verbs come from the link, and no property value does", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, []manifestbuilder.Function{
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, []manifestbuilder.Function{
 			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
-		root, sockPath := setUpDeployFixture(t)
-		writeUsageMonorepo(t, root)
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteUsageMonorepo(t, root)
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -67,7 +69,7 @@ func TestServiceMap(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read service map: %v", err)
 		}
-		if strings.Contains(string(raw), fakeLinkSecret) {
+		if strings.Contains(string(raw), clitest.FakeLinkSecret) {
 			t.Errorf("service map = %s, want no property value in it", raw)
 		}
 
@@ -86,14 +88,14 @@ func TestServiceMap(t *testing.T) {
 	})
 
 	t.Run("a failed deploy leaves no stale map behind", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		root, _ := setUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		root, _ := clitest.SetUpDeployFixture(t)
 		if err := servicemap.Publish(root, servicemap.Record{PromotionID: "prm_previous_run"}); err != nil {
 			t.Fatalf("seed stale map: %v", err)
 		}
-		t.Setenv(deployFakeProviderModeEnvVar, "fail")
+		t.Setenv(clitest.FakeProviderModeEnvVar, "fail")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {

@@ -81,11 +81,12 @@ func revalidateQueueResources(class string) string {
 		revalidateVisibilityTimeoutSeconds, revalidateRetentionSeconds, revalidateMaxReceiveCount)
 }
 
-func revalidatorResources(code payloads.Placement) string {
+func revalidatorResources(code payloads.Placement, class string) string {
+	command := classCommand(class)
 	return fmt.Sprintf(`  RevalidatorRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this bootstrap's ISR revalidator. Grants it the revalidation queue, the origin descriptors in the asset bucket and invoke on app functions only, so it can re-render an app but cannot touch state, variables or any other function Ocel runs in this account. Managed by ocel bootstrap; deleting it leaves the queue undrained."
+      Description: "Execution role for this bootstrap's ISR revalidator. Grants it the revalidation queue, the origin descriptors in the asset bucket and invoke on app functions only, so it can re-render an app but cannot touch state, variables or any other function Ocel runs in this account. Managed by %s; deleting it leaves the queue undrained."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -126,7 +127,7 @@ func revalidatorResources(code payloads.Placement) string {
   Revalidator:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel ISR revalidator - drains this bootstrap's revalidation queue, turning one deduplicated message into one signed render at the app's own origin. Managed by ocel bootstrap; delete it and stale pages stay stale."
+      Description: "Ocel ISR revalidator - drains this bootstrap's revalidation queue, turning one deduplicated message into one signed render at the app's own origin. Managed by %s; delete it and stale pages stay stale."
       Runtime: %s
       Architectures:
         - %s
@@ -152,7 +153,7 @@ func revalidatorResources(code payloads.Placement) string {
         - ReportBatchItemFailures
       ScalingConfig:
         MaximumConcurrency: %d
-`, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
+`, command, command, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		revalidatorAssetBucketEnvVar,
 		revalidatorBatchSize, revalidatorMaxConcurrency)

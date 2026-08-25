@@ -280,10 +280,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 }
 
 func (p *Provider) standing(held bootstrap.Deployed, class providerkit.Class) error {
-	command := "ocel bootstrap"
-	if class == providerkit.ClassPreview {
-		command = "ocel bootstrap --preview"
-	}
+	command := providerkit.BootstrapCommand(class)
 	for _, missing := range []struct {
 		held string
 		what string

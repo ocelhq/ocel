@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 type traceSpan struct {
@@ -114,7 +116,7 @@ func rootSpan(t *testing.T, spans []traceSpan) traceSpan {
 func TestGateRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	problems := problemsFile(t, missingStripeKey)
-	d := defaultDeps()
+	d := newSession()
 	terminalStdin(&d)
 	var mu sync.Mutex
 	var opened []string
@@ -129,7 +131,7 @@ func TestGateRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
 
 	address, token := awaitVarsUI(t, &out, 1)
 	setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
-	writeFile(t, problems, "[]")
+	clitest.WriteFile(t, problems, "[]")
 	markDone(t, address, token)
 
 	select {

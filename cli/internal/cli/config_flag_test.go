@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestExplicitConfigPath(t *testing.T) {
@@ -56,12 +58,12 @@ func TestConfigFlagPathThatNamesNothingRefuses(t *testing.T) {
 	t.Cleanup(func() { configFlag = orig })
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 
 	configFlag = filepath.Join(".", "nope.ts")
-	err := runBuild(context.Background(), defaultDeps(), root, io.Discard, io.Discard)
+	err := runBuild(context.Background(), newSession(), root, io.Discard, io.Discard)
 	if err == nil {
 		t.Fatal("runBuild err = nil, want a refusal for a --config path that names nothing")
 	}

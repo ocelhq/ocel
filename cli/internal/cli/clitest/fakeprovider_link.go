@@ -1,4 +1,4 @@
-package cli
+package clitest
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
-const linkFakeStoreEnvVar = "OCEL_TEST_FAKE_LINKS_STORE"
+const LinkFakeStoreEnvVar = "OCEL_TEST_FAKE_LINKS_STORE"
 
 const fakeLinkOwnerOcel = "OCEL"
 
@@ -40,7 +40,7 @@ func fakeLinkID(tier environmentv1.Tier, slug, environment, name string) string 
 
 func loadFakeLinkStore() (fakeLinkStore, error) {
 	store := fakeLinkStore{}
-	raw, err := os.ReadFile(os.Getenv(linkFakeStoreEnvVar))
+	raw, err := os.ReadFile(os.Getenv(LinkFakeStoreEnvVar))
 	if errors.Is(err, os.ErrNotExist) {
 		return store, nil
 	}
@@ -55,7 +55,7 @@ func saveFakeLinkStore(store fakeLinkStore) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(os.Getenv(linkFakeStoreEnvVar), raw, 0o600)
+	return os.WriteFile(os.Getenv(LinkFakeStoreEnvVar), raw, 0o600)
 }
 
 func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *envvarsv1.SetLinkRequest) (*envvarsv1.SetLinkResponse, error) {

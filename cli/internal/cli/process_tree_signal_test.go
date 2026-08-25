@@ -16,6 +16,10 @@ import (
 
 	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
+
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 const procTreeModeEnvVar = "OCEL_TEST_PROCTREE_MODE"
@@ -37,7 +41,7 @@ func runProcessTreeSubprocess() int {
 	if err == nil {
 		return 0
 	}
-	var exitErr *ExitError
+	var exitErr *exitsig.ExitError
 	if errors.As(err, &exitErr) {
 		return exitErr.Code
 	}
@@ -69,11 +73,11 @@ func setUpProcTreeFixtureProject(t *testing.T) (root, apiURL string) {
 	t.Cleanup(resolveServer.Close)
 
 	root = t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 	writeLink(t, root, resolveServer.URL, testProjectID(t))
-	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+	clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 	return root, resolveServer.URL
 }
 
@@ -337,8 +341,8 @@ func TestProcessTreeNonOrphanedCtrlCReachesCLIAndApp(t *testing.T) {
 	select {
 	case err := <-waitDone:
 		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) || exitErr.ExitCode() != interruptExitCode {
-			t.Fatalf("CLI exit error = %v, want exit code %d after a Ctrl-C", err, interruptExitCode)
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != exitsig.InterruptCode {
+			t.Fatalf("CLI exit error = %v, want exit code %d after a Ctrl-C", err, exitsig.InterruptCode)
 		}
 		if out := tty(); strings.Contains(out, "did not finish") || strings.Contains(out, "Interrupted again") {
 			t.Fatalf("tty output = %q, want a single Ctrl-C to take the graceful path, not the force-kill one", out)
@@ -384,8 +388,8 @@ func TestProcessTreeNonOrphanedSecondCtrlCIsFatal(t *testing.T) {
 		if !errors.As(err, &exitErr) {
 			t.Fatalf("session harness wait error = %v, want an *exec.ExitError carrying the CLI's exit code", err)
 		}
-		if code := exitErr.ExitCode(); code != interruptExitCode {
-			t.Fatalf("CLI exit code = %d, want %d (forced exit on the second Ctrl-C)", code, interruptExitCode)
+		if code := exitErr.ExitCode(); code != exitsig.InterruptCode {
+			t.Fatalf("CLI exit code = %d, want %d (forced exit on the second Ctrl-C)", code, exitsig.InterruptCode)
 		}
 	case <-time.After(appChildGracePeriod + 3*time.Second):
 		_ = cmd.Process.Kill()

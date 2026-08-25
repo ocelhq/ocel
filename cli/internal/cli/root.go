@@ -1,15 +1,28 @@
 package cli
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"strings"
 
+	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
+
+	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/deploycollector"
+	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/providerlocator"
+	"github.com/ocelhq/ocel/cli/internal/provision"
 )
 
 var version = "dev"
-
-var apiURLFlag string
 
 var verboseFlag bool
 
@@ -45,7 +58,7 @@ func logFormat() string {
 }
 
 var rootCmd = &cobra.Command{
-	Use:           "ocel",
+	Use:           "ocel <command>",
 	Short:         "Ocel CLI",
 	Long:          "Ocel CLI\n\nocel deploys apps to your own cloud",
 	Version:       version,
@@ -58,10 +71,11 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&apiURLFlag, "api-url", "", "Base URL of the Ocel server (defaults to $OCEL_API_URL, else https://ocel.app)")
-	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full deploy logs to the terminal instead of the phased progress view (also OCEL_DEBUG)")
-	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Path to the project config file, resolved relative to the working directory (defaults to $OCEL_CONFIG, else the nearest ocel.config.ts)")
-	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", logFormatHuman, "Output format for command logs: human or json")
+	s := newSession()
+
+	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
+	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else nearest ocel.config.ts)")
+	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", logFormatHuman, "Log output format: human or json")
 
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(runCmd)
@@ -72,14 +86,71 @@ func init() {
 	rootCmd.AddCommand(previewCmd)
 	rootCmd.AddCommand(rollbackCmd)
 	rootCmd.AddCommand(deploymentsCmd)
-	rootCmd.AddCommand(bootstrapCmd)
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(logoutCmd)
+
+	rootCmd.AddCommand(bootstrap.NewCommand(s))
+
+	installHelpStyle(rootCmd)
 }
 
-func effectiveAPIURL(cmd *cobra.Command, credsURL string) string {
-	if cmd != nil && cmd.Flags().Changed("api-url") {
-		return strings.TrimRight(apiURLFlag, "/")
+func newSession() session.Session {
+	return session.Session{
+		LoadCredentials:      credentials.Load,
+		FetchProjectConfig:   provision.FetchProjectConfig,
+		LocateProviderBinary: providerlocator.Locate,
+		BuildApp:             appbuilder.Build,
+		CollectAppFunctions:  appbuilder.CollectFunctions,
+		DeploymentID:         appbuilder.DeploymentID,
+		CollectDeclarations:  deploycollector.Collect,
+		OpenBrowser:          browser.OpenURL,
+		ServeVarsUI:          startVarsUI,
+		CurrentGitBranch:     gitBranch,
+		DiscoverPRNumber:     prNumberFromEnv,
+		RunPackageManager:    runPackageManagerCommand,
+		StdinIsTerminal:      isReaderTTY,
+		StdoutIsTerminal:     deployui.IsTerminal,
+		ConfigPath:           explicitConfigPath,
+		Verbose:              verboseEnabled,
+		Format:               sessionFormat,
+		Interrupt:            installInterruptHandler,
+	}
+}
+
+func gitBranch(dir string) (string, error) {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return "", fmt.Errorf("determine current git branch: %w", err)
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch == "" {
+		return "", errors.New("determine current git branch: empty ref")
+	}
+	return branch, nil
+}
+
+func prNumberFromEnv() string {
+	return os.Getenv("OCEL_PR_NUMBER")
+}
+
+func runPackageManagerCommand(ctx context.Context, dir string, argv []string, output io.Writer) error {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = dir
+	cmd.Stdout = output
+	cmd.Stderr = output
+	return cmd.Run()
+}
+
+func sessionFormat() deployui.Format {
+	if logFormat() == logFormatJSON {
+		return deployui.FormatJSON
+	}
+	return deployui.FormatHuman
+}
+
+func effectiveAPIURL(credsURL string) string {
+	if v := strings.TrimSpace(os.Getenv("OCEL_API_URL")); v != "" {
+		return strings.TrimRight(v, "/")
 	}
 	if credsURL != "" {
 		return credsURL

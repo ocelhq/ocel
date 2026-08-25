@@ -74,21 +74,21 @@ export function writePolicyParts(tier, dir) {
 }
 
 export function printPolicy(tier) {
-  const res = ocel(["bootstrap", "--print-policy", tier], {
+  const res = ocel(["bootstrap", "policy", tier], {
     cwd: configuredDir(`policy-${tier}`),
     stdio: ["ignore", "pipe", "inherit"],
     timeout: POLICY_TIMEOUT_MS,
   });
   const document = res.stdout.toString().trim();
   if (!document.startsWith("{")) {
-    throw new Error(`ocel bootstrap --print-policy ${tier} wrote no policy document, only: ${document || "(nothing)"}`);
+    throw new Error(`ocel bootstrap policy ${tier} wrote no policy document, only: ${document || "(nothing)"}`);
   }
   return document;
 }
 
 function runTier(tier) {
   if (tier === "bootstrap") {
-    ocel(["bootstrap", "--preview", "--yes"], {
+    ocel(["bootstrap", "preview", "--yes"], {
       cwd: configuredDir("bootstrap"),
       stdio: ["ignore", "inherit", "inherit"],
       timeout: BOOTSTRAP_TIMEOUT_MS,

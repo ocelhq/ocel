@@ -108,7 +108,7 @@ func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, values
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:        aws.String(names.valuesParam),
-		Description: aws.String(fmt.Sprintf("Ocel: everything the %s edge handed back when it was bootstrapped, read on every deploy into this bootstrap to reach it. Rewritten in full by each bootstrap of this class, so deleting it costs a re-run of ocel bootstrap and nothing more.", class)),
+		Description: aws.String(fmt.Sprintf("Ocel: everything the %s edge handed back when it was bootstrapped, read on every deploy into this bootstrap to reach it. Rewritten in full by each bootstrap of this class, so deleting it costs a re-run of %s and nothing more.", class, classCommand(class))),
 		Value:       aws.String(string(payload)),
 		Type:        ssmtypes.ParameterTypeSecureString,
 		Overwrite:   aws.Bool(true),
@@ -276,7 +276,7 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, class string, 
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:        aws.String(paramName),
-		Description: aws.String(fmt.Sprintf("Ocel: endpoint and bootstrap credential for the %s edge's deployments store, the worker that tells the edge which build a request belongs to. Every deploy into this bootstrap publishes its routing through it. Re-adopted whole by ocel bootstrap, so deleting it costs a re-run.", class)),
+		Description: aws.String(fmt.Sprintf("Ocel: endpoint and bootstrap credential for the %s edge's deployments store, the worker that tells the edge which build a request belongs to. Every deploy into this bootstrap publishes its routing through it. Re-adopted whole by %s, so deleting it costs a re-run.", class, classCommand(class))),
 		Value:       aws.String(string(payload)),
 		Type:        ssmtypes.ParameterTypeSecureString,
 		Overwrite:   aws.Bool(true),
@@ -330,7 +330,7 @@ func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, class string, values 
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:        aws.String(paramName),
-		Description: aws.String(fmt.Sprintf("Ocel: endpoint and bootstrap credential for the %s edge's ISR writer, the worker the tag publisher pushes tag snapshots into so the edge learns a cached page has gone stale. Read at runtime by the tag publisher. Re-adopted whole by ocel bootstrap, so deleting it costs a re-run.", class)),
+		Description: aws.String(fmt.Sprintf("Ocel: endpoint and bootstrap credential for the %s edge's ISR writer, the worker the tag publisher pushes tag snapshots into so the edge learns a cached page has gone stale. Read at runtime by the tag publisher. Re-adopted whole by %s, so deleting it costs a re-run.", class, classCommand(class))),
 		Value:       aws.String(string(payload)),
 		Type:        ssmtypes.ParameterTypeSecureString,
 		Overwrite:   aws.Bool(true),

@@ -78,9 +78,10 @@ func Partition(name kit.RecordName) (string, error) {
 	return pk, err
 }
 
-func unbootstrapped() error {
+func unbootstrapped(name kit.RecordName) error {
+	class, _ := providerkit.ClassOf(name)
 	return kit.Refuse(kit.CodeNotReady,
-		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `ocel bootstrap` to create it, then try again")
+		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `%s` to create it, then try again", providerkit.BootstrapCommand(class))
 }
 
 func (r Records) Read(ctx context.Context, name kit.RecordName) (kit.Record, error) {
@@ -115,7 +116,7 @@ func (r Records) Write(ctx context.Context, record kit.Record) (kit.Revision, er
 		return "", err
 	}
 	if table == "" {
-		return "", unbootstrapped()
+		return "", unbootstrapped(record.Name)
 	}
 	written, err := writingOf(record)
 	if err != nil {
@@ -144,7 +145,7 @@ func (r Records) WritePair(ctx context.Context, first, second kit.Record) error 
 		return err
 	}
 	if table == "" {
-		return unbootstrapped()
+		return unbootstrapped(first.Name)
 	}
 	beside, err := r.table(ctx, second.Name)
 	if err != nil {

@@ -54,7 +54,7 @@ func TestCheckTier_ErrorNamesTheCommandAndInfra(t *testing.T) {
 	if !strings.Contains(msg, "preview infrastructure") {
 		t.Errorf("error should name preview infrastructure, got %q", msg)
 	}
-	if !strings.Contains(msg, "ocel bootstrap --preview") {
+	if !strings.Contains(msg, "ocel bootstrap preview") {
 		t.Errorf("error should tell the user how to fix it, got %q", msg)
 	}
 

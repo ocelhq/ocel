@@ -140,7 +140,7 @@ func TestCompatibilityExplain(t *testing.T) {
 	t.Run("a compatible bootstrap explains nothing", func(t *testing.T) {
 		t.Parallel()
 
-		if err := compatible.explain(6, 6, "ocel bootstrap"); err != nil {
+		if err := compatible.explain(6, 6, "ocel bootstrap production"); err != nil {
 			t.Errorf("compatible.explain() = %v, want nil", err)
 		}
 	})
@@ -148,13 +148,13 @@ func TestCompatibilityExplain(t *testing.T) {
 	t.Run("it names the command it was given", func(t *testing.T) {
 		t.Parallel()
 
-		const previewCommand = "ocel bootstrap --preview"
+		const previewCommand = "ocel bootstrap preview"
 		for _, c := range []compatibility{needsBootstrapInit, needsBootstrapUpgrade} {
 			message := c.explain(4, 6, previewCommand).Error()
 			if !strings.Contains(message, "`"+previewCommand+"`") {
 				t.Errorf("%v.explain() = %q, want it to suggest %q", c, message, previewCommand)
 			}
-			if strings.Contains(message, "`ocel bootstrap`") {
+			if strings.Contains(message, "`ocel bootstrap production`") {
 				t.Errorf("%v.explain() = %q, must not suggest the bare production command", c, message)
 			}
 		}
@@ -173,7 +173,7 @@ func TestCompatibilityExplain(t *testing.T) {
 			{"newer names deployed and required", needsCLIUpgrade, 7, []string{"schema 7", "schema 6"}},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				message := tc.compat.explain(tc.deployed, 6, "ocel bootstrap").Error()
+				message := tc.compat.explain(tc.deployed, 6, "ocel bootstrap production").Error()
 				for _, want := range tc.want {
 					if !strings.Contains(message, want) {
 						t.Errorf("explain() = %q, want it to contain %q", message, want)
@@ -186,7 +186,7 @@ func TestCompatibilityExplain(t *testing.T) {
 	t.Run("a bootstrap predating schema tracking reports no fabricated zero", func(t *testing.T) {
 		t.Parallel()
 
-		message := needsBootstrapUpgrade.explain(0, 6, "ocel bootstrap").Error()
+		message := needsBootstrapUpgrade.explain(0, 6, "ocel bootstrap production").Error()
 		if strings.Contains(message, "schema 0") {
 			t.Errorf("explain() = %q, must not report a fabricated schema 0", message)
 		}
@@ -199,7 +199,7 @@ func TestCompatibilityExplain(t *testing.T) {
 		t.Parallel()
 
 		for _, c := range []compatibility{needsBootstrapInit, needsBootstrapUpgrade, needsCLIUpgrade} {
-			message := c.explain(4, 6, "ocel bootstrap").Error()
+			message := c.explain(4, 6, "ocel bootstrap production").Error()
 			if got := strings.Count(message, "\n"); got != 1 {
 				t.Errorf("%v.explain() = %q, want exactly two lines", c, message)
 			}
@@ -211,7 +211,7 @@ func TestCompatibilityExplain(t *testing.T) {
 
 		for _, c := range []compatibility{needsBootstrapInit, needsBootstrapUpgrade, needsCLIUpgrade} {
 			var refusal Refusal
-			if err := c.explain(4, 6, "ocel bootstrap"); !errors.As(err, &refusal) || refusal.Code != CodeNotReady {
+			if err := c.explain(4, 6, "ocel bootstrap production"); !errors.As(err, &refusal) || refusal.Code != CodeNotReady {
 				t.Errorf("%v.explain() = %v, want a %s refusal", c, err, CodeNotReady)
 			}
 		}

@@ -7,50 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/removalplan"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
-
-func TestConfirmPhrase(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name   string
-		label  string
-		phrase string
-		input  string
-		want   bool
-		prompt string
-	}{
-		{"the exact project name proceeds", "project name", "proj_shop", "proj_shop\n", true, "Type the project name (proj_shop) to confirm:"},
-		{"surrounding space is trimmed", "project name", "proj_shop", "  proj_shop  \n", true, "Type the project name (proj_shop) to confirm:"},
-		{"a near miss aborts", "project name", "proj_shop", "proj_shopp\n", false, "Type the project name (proj_shop) to confirm:"},
-		{"reflexive yes aborts", "project name", "proj_shop", "y\n", false, "Type the project name (proj_shop) to confirm:"},
-		{"empty aborts", "project name", "proj_shop", "\n", false, "Type the project name (proj_shop) to confirm:"},
-		{"closed stdin aborts", "project name", "proj_shop", "", false, "Type the project name (proj_shop) to confirm:"},
-		{"the base domain is its own scope", "domain", "preview.acme.com", "preview.acme.com\n", true, "Type the domain (preview.acme.com) to confirm:"},
-		{"another scope's phrase does not carry", "domain", "preview.acme.com", "proj_shop\n", false, "Type the domain (preview.acme.com) to confirm:"},
-		{"the class name is the bootstrap's phrase", "class name", "preview", "preview\n", true, "Type the class name (preview) to confirm:"},
-		{"the other class does not confirm this one", "class name", "preview", "production\n", false, "Type the class name (preview) to confirm:"},
-		{"a phrase the provider never sent confirms nothing", "project name", "", "\n", false, "Type the project name () to confirm:"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			var stdout bytes.Buffer
-			got, err := confirmPhrase(context.Background(), tc.label, tc.phrase, &stdout, strings.NewReader(tc.input))
-			if err != nil {
-				t.Fatalf("confirmPhrase() error = %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("confirmPhrase(%q, %q) = %v, want %v", tc.phrase, tc.input, got, tc.want)
-			}
-			if !strings.Contains(stdout.String(), tc.prompt) {
-				t.Errorf("stdout = %q, want the prompt %q", stdout.String(), tc.prompt)
-			}
-		})
-	}
-}
 
 func TestPrintDestroyPlan(t *testing.T) {
 	t.Parallel()
@@ -118,50 +79,25 @@ func TestPrintDestroyPlan(t *testing.T) {
 	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
 		t.Parallel()
 
-		got := removalItemLine(&contractv1.RemovalItem{
+		got := removalplan.ItemLine(&contractv1.RemovalItem{
 			Kind:   "certificate",
 			Name:   "shop.example.com",
 			Action: contractv1.RemovalItem_Action(97),
 		})
 		if !strings.Contains(got, "an action this CLI does not know") || !strings.HasSuffix(got, "certificate shop.example.com") {
-			t.Errorf("removalItemLine() = %q, want the unknown action named before the resource", got)
-		}
-	})
-}
-
-func TestCheckDestroyFlags(t *testing.T) {
-	t.Parallel()
-
-	t.Run("--yes is accepted only alongside --preview", func(t *testing.T) {
-		t.Parallel()
-
-		if err := checkDestroyFlags(true, true); err != nil {
-			t.Errorf("--preview --yes rejected: %v", err)
-		}
-		if err := checkDestroyFlags(true, false); err != nil {
-			t.Errorf("--preview rejected: %v", err)
-		}
-		if err := checkDestroyFlags(false, false); err != nil {
-			t.Errorf("bare destroy rejected: %v", err)
-		}
-		err := checkDestroyFlags(false, true)
-		if err == nil {
-			t.Fatal("`ocel destroy --yes` accepted for production, want a refusal")
-		}
-		if !strings.Contains(err.Error(), "--preview") {
-			t.Errorf("err = %v, want it to say --yes is only accepted with --preview", err)
+			t.Errorf("removalplan.ItemLine() = %q, want the unknown action named before the resource", got)
 		}
 	})
 }
 
 func TestRunDestroyPreviewProject(t *testing.T) {
 	t.Run("--yes skips the terminal check and the typed name", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDestroyPreviewProject(context.Background(), d, root, true, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -195,8 +131,8 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 	})
 
 	t.Run("the dns descriptor rides along so the teardown can delete what it wrote", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, _ := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -204,11 +140,11 @@ export default {
   dns: { kind: "route53" },
 };
 `)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDestroyPreviewProject(context.Background(), d, root, true, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -221,7 +157,7 @@ export default {
 
 	t.Run("without --yes it refuses without a terminal", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		err := runDestroyPreviewProject(context.Background(), defaultDeps(), t.TempDir(), false, &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyPreviewProject(context.Background(), newSession(), t.TempDir(), false, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyPreviewProject without a TTY err = nil, want a refusal")
 		}
@@ -234,7 +170,7 @@ export default {
 func TestRunDestroy(t *testing.T) {
 	t.Run("it refuses without a terminal", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		err := runDestroy(context.Background(), defaultDeps(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
+		err := runDestroy(context.Background(), newSession(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroy without a TTY err = nil, want a refusal")
 		}
@@ -244,11 +180,11 @@ func TestRunDestroy(t *testing.T) {
 	})
 
 	t.Run("the project name gets past the terminal requirement and says so", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(destroyBypassEnv, "test-app")
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(removalplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
 		err := runDestroy(context.Background(), d, root, &stdout, &stderr, strings.NewReader(""))
@@ -258,19 +194,19 @@ func TestRunDestroy(t *testing.T) {
 		if strings.Contains(stdout.String(), "Type the project name") {
 			t.Errorf("stdout = %q, want the bypass to skip the typed-name confirmation", stdout.String())
 		}
-		if !strings.Contains(stderr.String(), destroyBypassEnv) {
-			t.Errorf("stderr = %q, want it to name %s so an unconfirmed destroy is never silent", stderr.String(), destroyBypassEnv)
+		if !strings.Contains(stderr.String(), removalplan.BypassEnv) {
+			t.Errorf("stderr = %q, want it to name %s so an unconfirmed destroy is never silent", stderr.String(), removalplan.BypassEnv)
 		}
 	})
 
 	t.Run("it renders the plan the provider sent, kept items included", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(destroyBypassEnv, "test-app")
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(removalplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDestroy(context.Background(), d, root, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -294,14 +230,14 @@ func TestRunDestroy(t *testing.T) {
 	})
 
 	t.Run("an empty plan destroys nothing and never asks for the project name", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeEmptyRemovalPlanEnvVar, "1")
-		t.Setenv(destroyBypassEnv, "test-app")
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeEmptyRemovalPlanEnvVar, "1")
+		t.Setenv(removalplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDestroy(context.Background(), d, root, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -320,28 +256,69 @@ func TestRunDestroy(t *testing.T) {
 	})
 
 	t.Run("a value that is not this project's name is refused without a terminal", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(destroyBypassEnv, "1")
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(removalplan.BypassEnv, "1")
 
 		var stdout, stderr bytes.Buffer
 		err := runDestroy(context.Background(), d, root, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
-			t.Fatalf("runDestroy err = nil, want an ambient %s=1 refused; stdout=%s", destroyBypassEnv, stdout.String())
+			t.Fatalf("runDestroy err = nil, want an ambient %s=1 refused; stdout=%s", removalplan.BypassEnv, stdout.String())
 		}
-		if !strings.Contains(err.Error(), destroyBypassEnv) || !strings.Contains(err.Error(), "test-app") {
-			t.Errorf("err = %v, want it to name %s and the project", err, destroyBypassEnv)
+		if !strings.Contains(err.Error(), removalplan.BypassEnv) || !strings.Contains(err.Error(), "test-app") {
+			t.Errorf("err = %v, want it to name %s and the project", err, removalplan.BypassEnv)
 		}
 	})
 
 	t.Run("an unset bypass is not a bypass", func(t *testing.T) {
-		t.Setenv(destroyBypassEnv, "")
+		t.Setenv(removalplan.BypassEnv, "")
 		var stdout, stderr bytes.Buffer
-		err := runDestroy(context.Background(), defaultDeps(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
+		err := runDestroy(context.Background(), newSession(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), "interactive terminal") {
 			t.Errorf("err = %v, want the no-TTY refusal", err)
 		}
 	})
+}
+
+func TestDestroyNeedsAClass(t *testing.T) {
+	var out bytes.Buffer
+	destroyCmd.SetOut(&out)
+	destroyCmd.SetErr(&out)
+	t.Cleanup(func() { destroyCmd.SetOut(nil); destroyCmd.SetErr(nil) })
+
+	if err := destroyCmd.RunE(destroyCmd, nil); err == nil {
+		t.Fatal("bare destroy err = nil, want destroy without a class to be a failure")
+	}
+	for _, want := range []string{"production", "preview"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output = %q, want the help to list %q", out.String(), want)
+		}
+	}
+}
+
+func TestDestroyClassCommands(t *testing.T) {
+	for typed, want := range map[string]string{
+		"production": "production",
+		"prod":       "production",
+		"preview":    "preview",
+	} {
+		found, _, err := destroyCmd.Find([]string{typed})
+		if err != nil {
+			t.Fatalf("Find(%q) err = %v", typed, err)
+		}
+		if found.Name() != want {
+			t.Errorf("Find(%q) = %q, want %q", typed, found.Name(), want)
+		}
+	}
+
+	production, _, _ := destroyCmd.Find([]string{"production"})
+	if production.Flags().Lookup("yes") != nil {
+		t.Error("destroy production carries --yes; production is confirmed by the typed project name alone")
+	}
+	preview, _, _ := destroyCmd.Find([]string{"preview"})
+	if preview.Flags().Lookup("yes") == nil {
+		t.Error("destroy preview carries no --yes")
+	}
 }

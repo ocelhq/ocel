@@ -1,4 +1,4 @@
-package cli
+package prompt
 
 import (
 	"bytes"
@@ -33,21 +33,21 @@ func TestConfirmYNCancelledContextReturnsPromptly(t *testing.T) {
 	var got bool
 	var err error
 	go func() {
-		got, err = confirmYN(ctx, "Proceed?", &stdout, reader)
+		got, err = New(&stdout, reader).Confirm(ctx, "Proceed?")
 		close(done)
 	}()
 
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("confirmYN did not return after context cancellation; it is still blocked in the stdin read")
+		t.Fatal("Confirm did not return after context cancellation; it is still blocked in the stdin read")
 	}
 
 	if err == nil {
-		t.Fatal("confirmYN() error = nil, want the context's cancellation error")
+		t.Fatal("Confirm() error = nil, want the context's cancellation error")
 	}
 	if got {
-		t.Errorf("confirmYN() = true, want false on cancellation")
+		t.Errorf("Confirm() = true, want false on cancellation")
 	}
 }
 
@@ -64,7 +64,7 @@ func TestConfirmYNCancelledDuringReadDoesNotReportDecline(t *testing.T) {
 		err     error
 	}, 1)
 	go func() {
-		proceed, err := confirmYN(ctx, "Proceed?", &stdout, reader)
+		proceed, err := New(&stdout, reader).Confirm(ctx, "Proceed?")
 		resultCh <- struct {
 			proceed bool
 			err     error
@@ -76,10 +76,10 @@ func TestConfirmYNCancelledDuringReadDoesNotReportDecline(t *testing.T) {
 	select {
 	case r := <-resultCh:
 		if r.err == nil {
-			t.Fatal("confirmYN() error = nil, want an error so the caller never treats this as a genuine decline")
+			t.Fatal("Confirm() error = nil, want an error so the caller never treats this as a genuine decline")
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("confirmYN did not return after context cancellation")
+		t.Fatal("Confirm did not return after context cancellation")
 	}
 }
 
@@ -87,12 +87,12 @@ func TestConfirmYNStillReadsARealAnswer(t *testing.T) {
 	t.Parallel()
 
 	var stdout bytes.Buffer
-	got, err := confirmYN(context.Background(), "Proceed?", &stdout, strings.NewReader("y\n"))
+	got, err := New(&stdout, strings.NewReader("y\n")).Confirm(context.Background(), "Proceed?")
 	if err != nil {
-		t.Fatalf("confirmYN() error = %v", err)
+		t.Fatalf("Confirm() error = %v", err)
 	}
 	if !got {
-		t.Error("confirmYN() = false, want true for a y answer")
+		t.Error("Confirm() = false, want true for a y answer")
 	}
 	if !strings.Contains(stdout.String(), "Proceed? [y/N]") {
 		t.Errorf("stdout = %q, want it to contain the prompt", stdout.String())
@@ -108,7 +108,7 @@ func TestReadLineSecondCallWhileFirstStillAbandonedReturnsPromptly(t *testing.T)
 		err  error
 	}, 1)
 	go func() {
-		line, err := readLine(context.Background(), os.Stdin)
+		line, err := New(io.Discard, os.Stdin).readLine(context.Background())
 		done <- struct {
 			line string
 			err  error
@@ -134,7 +134,7 @@ func TestReadLineCancelledContextReturnsPromptly(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		if _, err := readLine(ctx, reader); err == nil {
+		if _, err := New(io.Discard, reader).readLine(ctx); err == nil {
 			t.Error("readLine() error = nil, want the context's cancellation error")
 		}
 		close(done)

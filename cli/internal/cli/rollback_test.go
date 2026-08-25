@@ -5,16 +5,18 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestRunRollback(t *testing.T) {
 	t.Run("with no argument it rolls back to the immediately previous promotion", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runRollback(context.Background(), d, root, rollbackOptions{}, &stdout, &stderr); err != nil {
@@ -29,12 +31,12 @@ func TestRunRollback(t *testing.T) {
 	})
 
 	t.Run("--to rolls back to the named promotion", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runRollback(context.Background(), d, root, rollbackOptions{to: "promo-2"}, &stdout, &stderr); err != nil {
@@ -49,12 +51,12 @@ func TestRunRollback(t *testing.T) {
 	})
 
 	t.Run("--tag rolls back to the tagged promotion and echoes the tag", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runRollback(context.Background(), d, root, rollbackOptions{tag: "v1.0.0"}, &stdout, &stderr); err != nil {
@@ -73,10 +75,10 @@ func TestRunRollback(t *testing.T) {
 	})
 
 	t.Run("--to and --tag are mutually exclusive", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
 
 		var stdout, stderr bytes.Buffer
 		err := runRollback(context.Background(), d, root, rollbackOptions{to: "promo-1", tag: "v1.0.0"}, &stdout, &stderr)
@@ -89,10 +91,10 @@ func TestRunRollback(t *testing.T) {
 	})
 
 	t.Run("an invalid tag errors", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
 
 		var stdout, stderr bytes.Buffer
 		err := runRollback(context.Background(), d, root, rollbackOptions{tag: "feature/x"}, &stdout, &stderr)
@@ -105,12 +107,12 @@ func TestRunRollback(t *testing.T) {
 	})
 
 	t.Run("an unknown --to names the promotion it could not find", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		err := runRollback(context.Background(), d, root, rollbackOptions{to: "no-such-promotion"}, &stdout, &stderr)
@@ -123,12 +125,12 @@ func TestRunRollback(t *testing.T) {
 	})
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		err := runRollback(context.Background(), d, root, rollbackOptions{}, &stdout, &stderr)
@@ -144,20 +146,20 @@ func TestRunRollback(t *testing.T) {
 	})
 
 	t.Run("it refuses when the infrastructure is absent", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "0")
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
 
 		var stdout, stderr bytes.Buffer
 		err := runRollback(context.Background(), d, root, rollbackOptions{}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runRollback err = nil, want a missing-infrastructure error")
 		}
-		if !strings.Contains(err.Error(), "ocel bootstrap") {
-			t.Errorf("err = %v, want it to direct the user to `ocel bootstrap`", err)
+		if !strings.Contains(err.Error(), "ocel bootstrap production") {
+			t.Errorf("err = %v, want it to direct the user to `ocel bootstrap production`", err)
 		}
 		if strings.Contains(stdout.String(), "Rolled back") {
 			t.Errorf("stdout = %q, want no rollback to have been driven", stdout.String())

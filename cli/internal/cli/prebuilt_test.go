@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -17,6 +18,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func newBuildManifestSession(t *testing.T) (*deployui.Session, *bytes.Buffer) {
@@ -53,10 +56,10 @@ func writePrebuiltFunction(t *testing.T, root, app, route string) {
 	}
 }
 
-func recordBuildApp(d *deps) *bool {
-	stubRecordedDeploymentIDs(d)
+func recordBuildApp(d *session.Session) *bool {
+	clitest.StubRecordedDeploymentIDs(d)
 	ran := false
-	d.buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+	d.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		ran = true
 		return nil
 	}
@@ -129,7 +132,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt skips the build and carries the prebuilt tree's function", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := defaultDeps()
+		d := newSession()
 		ran := recordBuildApp(&d)
 
 		s, out := newBuildManifestSession(t)
@@ -160,7 +163,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("without --prebuilt the build runs", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := defaultDeps()
+		d := newSession()
 		ran := recordBuildApp(&d)
 
 		s, _ := newBuildManifestSession(t)
@@ -174,7 +177,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	})
 
 	t.Run("--prebuilt with no build output errors", func(t *testing.T) {
-		d := defaultDeps()
+		d := newSession()
 		recordBuildApp(&d)
 
 		s, _ := newBuildManifestSession(t)
@@ -192,8 +195,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
 		recorded := "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
-		writeFile(t, filepath.Join(root, ".ocel", "output", "apps", "api", "deployment-id"), recorded+"\n")
-		d := defaultDeps()
+		clitest.WriteFile(t, filepath.Join(root, ".ocel", "output", "apps", "api", "deployment-id"), recorded+"\n")
+		d := newSession()
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
@@ -210,7 +213,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt refuses an app the output tree recorded no id for", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := defaultDeps()
+		d := newSession()
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
@@ -227,9 +230,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
 		generated := ""
-		d := defaultDeps()
-		stubRecordedDeploymentIDs(&d)
-		d.buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+		d := newSession()
+		clitest.StubRecordedDeploymentIDs(&d)
+		d.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 			data, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
 			if err != nil {
 				return err
@@ -255,7 +258,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt refuses a stale client value", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := defaultDeps()
+		d := newSession()
 		recordBuildApp(&d)
 		cfg := prebuiltConfig(root)
 
@@ -280,7 +283,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt names an `ocel build` output for what it is", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := defaultDeps()
+		d := newSession()
 		recordBuildApp(&d)
 		cfg := prebuiltConfig(root)
 		if err := clientenv.RecordUnresolved(root); err != nil {
@@ -305,7 +308,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt proceeds when the client value is unchanged", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := defaultDeps()
+		d := newSession()
 		recordBuildApp(&d)
 		cfg := prebuiltConfig(root)
 
@@ -348,12 +351,12 @@ func TestPrebuiltFlag(t *testing.T) {
 
 func TestPrebuiltDeploy(t *testing.T) {
 	t.Run("no build output aborts before the provider is spawned", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
+		root, _ := clitest.SetUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
 		if err := os.RemoveAll(filepath.Join(root, ".ocel", "output")); err != nil {
 			t.Fatalf("drop the fixture's build output: %v", err)
 		}
-		d := defaultDeps()
+		d := newSession()
 		recordBuildApp(&d)
 
 		var stdout, stderr bytes.Buffer

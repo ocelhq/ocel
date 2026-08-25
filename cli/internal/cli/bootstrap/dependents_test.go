@@ -1,4 +1,4 @@
-package cli
+package bootstrap
 
 import (
 	"bytes"
@@ -7,29 +7,33 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func describeJournal(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "describe.journal")
-	t.Setenv(fakeDescribeJournalEnvVar, path)
+	t.Setenv(clitest.FakeDescribeJournalEnvVar, path)
 	return path
 }
 
 func TestOnlyTheCommandThatRendersDependentsAsksForThem(t *testing.T) {
 	t.Run("status reads the bootstrap and nothing that grows with the account", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		t.Setenv(fakeBootstrapEnvVar, "current")
+		root, _ := clitest.SetUpDeployFixture(t)
+		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
 		journal := describeJournal(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
+		d := clitest.NewSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := runBootstrapStatus(context.Background(), d, root, bootstrapStatusOptions{}, &stdout, &stderr); err != nil {
+		if err := RunStatus(context.Background(), d, root, StatusOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runBootstrapStatus err = %v; stderr=%s", err, stderr.String())
 		}
-		got := readJournal(t, journal)
+		got := clitest.ReadJournal(t, journal)
 		if len(got) != 2 {
 			t.Fatalf("the provider was asked %d times, want once per class: %v", len(got), got)
 		}
@@ -39,15 +43,15 @@ func TestOnlyTheCommandThatRendersDependentsAsksForThem(t *testing.T) {
 	})
 
 	t.Run("bootstrap asks, because it names who breaks when a feature goes", func(t *testing.T) {
-		root, _, d := setUpEdgeFixture(t, "")
+		root, _, d := clitest.SetUpEdgeFixture(t, "")
 		journal := describeJournal(t)
-		t.Setenv(fakeEnabledFeaturesEnvVar, "isr")
+		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 
 		var stdout, stderr bytes.Buffer
-		if err := runBootstrap(context.Background(), d, root, bootstrapOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := Run(context.Background(), d, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stderr=%s", err, stderr.String())
 		}
-		got := readJournal(t, journal)
+		got := clitest.ReadJournal(t, journal)
 		if len(got) != 1 || !strings.Contains(got[0], "withDependents=true") {
 			t.Errorf("the provider was asked %v, want the one ask to carry the dependents this command prints", got)
 		}

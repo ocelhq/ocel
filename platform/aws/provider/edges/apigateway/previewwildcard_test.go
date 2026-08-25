@@ -231,7 +231,7 @@ func TestReconcilePreviewWildcardRefusesAnAbsentBootstrap(t *testing.T) {
 	if err == nil {
 		t.Fatal("ReconcilePreviewWildcard succeeded without the not-found API every unclaimed host answers from")
 	}
-	if !strings.Contains(err.Error(), "ocel bootstrap --preview") {
+	if !strings.Contains(err.Error(), "ocel bootstrap preview") {
 		t.Errorf("error = %v, want it to name the command that raises the bootstrap", err)
 	}
 	if len(w.gateway.mutations()) != 0 {

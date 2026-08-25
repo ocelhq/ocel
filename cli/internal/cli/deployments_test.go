@@ -5,16 +5,18 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestRunDeploymentsLs(t *testing.T) {
 	t.Run("it renders promotions newest first with the active marker", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploymentsLs(context.Background(), d, root, &stdout, &stderr); err != nil {
@@ -38,12 +40,12 @@ func TestRunDeploymentsLs(t *testing.T) {
 	})
 
 	t.Run("it shows each app's shipped identity under an aligned column", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploymentsLs(context.Background(), d, root, &stdout, &stderr); err != nil {
@@ -69,12 +71,12 @@ func TestRunDeploymentsLs(t *testing.T) {
 	})
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		err := runDeploymentsLs(context.Background(), d, root, &stdout, &stderr)
@@ -97,12 +99,12 @@ func runeIndex(line, substr string) int {
 
 func TestRunDeploymentsPrune(t *testing.T) {
 	t.Run("it reports the reclaimed and the kept promotions", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploymentsPrune(context.Background(), d, root, 10, &stdout, &stderr); err != nil {
@@ -121,12 +123,12 @@ func TestRunDeploymentsPrune(t *testing.T) {
 	})
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		err := runDeploymentsPrune(context.Background(), d, root, 10, &stdout, &stderr)

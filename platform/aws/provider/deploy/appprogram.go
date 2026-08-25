@@ -226,8 +226,8 @@ func (r *release) originGuard(plan providerkit.StackPlan) (*originGuard, error) 
 	}
 	if r.cfg.OriginSecret == "" {
 		return nil, fmt.Errorf(
-			"the edge reaches %s over a Function URL no signature guards, and this bootstrap holds no secret for the entry function to demand of it; re-run `ocel bootstrap`",
-			plan.App.App)
+			"the edge reaches %s over a Function URL no signature guards, and this bootstrap holds no secret for the entry function to demand of it; re-run `%s`",
+			plan.App.App, providerkit.BootstrapCommand(r.cfg.Class))
 	}
 	return &originGuard{Entry: guard.Entry, Secret: r.cfg.OriginSecret}, nil
 }

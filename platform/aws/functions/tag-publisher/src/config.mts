@@ -32,7 +32,7 @@ async function read(ssm: SSMClient): Promise<Config> {
   ]);
   const { endpoint } = JSON.parse(writer) as { endpoint?: string };
   if (endpoint === undefined || endpoint === "") {
-    throw new Error("the adopted ISR writer has no endpoint; re-run `ocel bootstrap`");
+    throw new Error("the adopted ISR writer has no endpoint; re-run `ocel bootstrap production`");
   }
   return { assetBucket: required("OCEL_ASSET_BUCKET"), endpoint, seed };
 }

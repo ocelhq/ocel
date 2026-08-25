@@ -42,7 +42,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		}
 		if pointer == ProductionEnv {
 			return Refuse(CodeInvalid,
-				"production is not an environment to remove; `ocel destroy` removes the project's production footprint")
+				"production is not an environment to remove; `ocel destroy production` removes the project's production footprint")
 		}
 		session, err := h.openStack(ctx, ClassPreview, req.GetSlug(), req.GetEdge())
 		if err != nil {

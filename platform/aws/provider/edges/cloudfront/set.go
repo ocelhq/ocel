@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -112,7 +113,7 @@ func findEdgeSet(ctx context.Context, c Clients, class edge.Class, held edgeSet)
 }
 
 func unbootstrapped(class edge.Class) error {
-	return fmt.Errorf("the %q edge has nothing to front %s deployments with in this account: its CloudFront function, key value store and cache policies are missing. Run `ocel bootstrap` against this account, then deploy again", Kind, class)
+	return fmt.Errorf("the %q edge has nothing to front %s deployments with in this account: its CloudFront function, key value store and cache policies are missing. Run `%s` against this account, then deploy again", Kind, class, providerkit.BootstrapCommand(class))
 }
 
 func ensureKeyValueStore(ctx context.Context, c Clients, class edge.Class) (string, error) {

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestRequirePreviewClass(t *testing.T) {
@@ -60,7 +62,7 @@ func TestGlobalPreviewBaseDomain(t *testing.T) {
 
 func writeProductionConfig(t *testing.T, root string) {
 	t.Helper()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -78,15 +80,15 @@ func quickDomainWait(t *testing.T) {
 }
 
 func TestRunDomainStatusJSON(t *testing.T) {
-	root, sockPath := setUpDeployFixture(t)
+	root, sockPath := clitest.SetUpDeployFixture(t)
 	writeProductionConfig(t, root)
 	jsonOutput(t)
-	d := defaultDeps()
-	setLoggedIn(&d)
-	t.Setenv(fakeInfraClassEnvVar, "production")
-	t.Setenv(fakeInfraPresentEnvVar, "1")
-	t.Setenv(fakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
-	t.Setenv(fakeDomainExpiresEnvVar, "1757000000")
+	d := newSession()
+	clitest.SetLoggedIn(&d)
+	t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+	t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
+	t.Setenv(clitest.FakeDomainExpiresEnvVar, "1757000000")
 
 	var stdout, stderr bytes.Buffer
 	if err := runDomainStatus(context.Background(), d, root, domainOptions{}, &stdout, &stderr); err != nil {
@@ -126,9 +128,9 @@ func TestRunDomainStatusJSON(t *testing.T) {
 
 func TestRunDomain(t *testing.T) {
 	t.Run("every subcommand refuses without --preview", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 
 		var stdout, stderr bytes.Buffer
 		runs := map[string]error{
@@ -148,11 +150,11 @@ func TestRunDomain(t *testing.T) {
 	})
 
 	t.Run("use claims the wildcard's base domain", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainUse(context.Background(), d, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
@@ -168,11 +170,11 @@ func TestRunDomain(t *testing.T) {
 	})
 
 	t.Run("use without a dns prints the record to add", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainUse(context.Background(), d, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
@@ -191,8 +193,8 @@ func TestRunDomain(t *testing.T) {
 	})
 
 	t.Run("use with cloudflareDns writes the record", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -200,10 +202,10 @@ export default {
   dns: { kind: "cloudflare" },
 };
 `)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainUse(context.Background(), d, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
@@ -219,9 +221,9 @@ export default {
 	})
 
 	t.Run("use refuses an argument that is not a leading wildcard", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 
 		var stdout, stderr bytes.Buffer
 		err := runDomainUse(context.Background(), d, root, "preview.acme.com", domainOptions{preview: true}, &stdout, &stderr)
@@ -234,14 +236,14 @@ export default {
 	})
 
 	t.Run("ls names the domain and the projects served on it", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeGlobalDomainEnvVar, "preview.acme.com")
-		t.Setenv(fakeGlobalDomainAccountEnvVar, "cf-1")
-		t.Setenv(fakeGlobalDomainProjectsEnvVar, "shop,blog")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
+		t.Setenv(clitest.FakeGlobalDomainAccountEnvVar, "cf-1")
+		t.Setenv(clitest.FakeGlobalDomainProjectsEnvVar, "shop,blog")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainLs(context.Background(), d, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
@@ -257,16 +259,16 @@ export default {
 	})
 
 	t.Run("ls shows the certificate, the records and the last probe", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeGlobalDomainEnvVar, "preview.acme.com")
-		t.Setenv(fakeGlobalDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
-		t.Setenv(fakeGlobalDomainRecordsEnvVar, "*.preview.acme.com AAAA 100::")
-		t.Setenv(fakeGlobalDomainOwedEnvVar, "_ocel.preview.acme.com CNAME _target.acm-validations.aws")
-		t.Setenv(fakeGlobalDomainProbeEnvVar, "1755500000 cloudflare")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
+		t.Setenv(clitest.FakeGlobalDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
+		t.Setenv(clitest.FakeGlobalDomainRecordsEnvVar, "*.preview.acme.com AAAA 100::")
+		t.Setenv(clitest.FakeGlobalDomainOwedEnvVar, "_ocel.preview.acme.com CNAME _target.acm-validations.aws")
+		t.Setenv(clitest.FakeGlobalDomainProbeEnvVar, "1755500000 cloudflare")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainLs(context.Background(), d, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
@@ -287,12 +289,12 @@ export default {
 	})
 
 	t.Run("ls says an unprobed domain has never been probed", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeGlobalDomainEnvVar, "preview.acme.com")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainLs(context.Background(), d, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
@@ -314,11 +316,11 @@ export default {
 	})
 
 	t.Run("ls says so when no global domain is configured", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainLs(context.Background(), d, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
@@ -334,20 +336,20 @@ export default {
 	})
 
 	t.Run("release refuses while projects still hold previews on the wildcard", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeGlobalDomainEnvVar, "preview.acme.com")
-		t.Setenv(fakeServedPreviewsEnvVar, "shop, blog")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
+		t.Setenv(clitest.FakeServedPreviewsEnvVar, "shop, blog")
 
 		var stdout, stderr bytes.Buffer
 		err := runDomainRelease(context.Background(), d, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDomainRelease err = nil, want the release refused; stdout=%s", stdout.String())
 		}
-		for _, want := range []string{"shop", "blog", "ocel preview rm", "ocel destroy --preview"} {
+		for _, want := range []string{"shop", "blog", "ocel preview rm", "ocel destroy preview"} {
 			if !strings.Contains(stdout.String(), want) {
 				t.Errorf("stdout = %q, want the refusal to contain %q", stdout.String(), want)
 			}
@@ -359,12 +361,12 @@ export default {
 	})
 
 	t.Run("release plans, then releases with --yes once nothing is served", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeGlobalDomainEnvVar, "preview.acme.com")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainRelease(context.Background(), d, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -392,8 +394,8 @@ export default {
 	})
 
 	t.Run("add renders every step over the configured hosts", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -401,10 +403,10 @@ export default {
   dns: { kind: "cloudflare" },
 };
 `)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runAddDomain(context.Background(), d, root, "", &stdout, &stderr); err != nil {
@@ -428,18 +430,18 @@ export default {
 	})
 
 	t.Run("add with a host settles only that one", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { production: ["shop.app.com", "www.app.com"] },
 };
 `)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runAddDomain(context.Background(), d, root, "www.app.com", &stdout, &stderr); err != nil {
@@ -458,19 +460,19 @@ export default {
 	})
 
 	t.Run("add exits non-zero when a wait times out, naming what is outstanding", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { production: "shop.app.com" },
 };
 `)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeDomainTimeoutEnvVar, "add a proxied (orange cloud) DNS record at shop.app.com")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainTimeoutEnvVar, "add a proxied (orange cloud) DNS record at shop.app.com")
 
 		var stdout, stderr bytes.Buffer
 		err := runAddDomain(context.Background(), d, root, "", &stdout, &stderr)
@@ -487,16 +489,16 @@ export default {
 	})
 
 	t.Run("add refuses a host the config does not declare", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, _ := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { production: "shop.app.com" },
 };
 `)
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 
 		var stdout, stderr bytes.Buffer
 		err := runAddDomain(context.Background(), d, root, "other.app.com", &stdout, &stderr)
@@ -512,9 +514,9 @@ export default {
 	})
 
 	t.Run("add refuses a project that declares no production hostname", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 
 		var stdout, stderr bytes.Buffer
 		err := runAddDomain(context.Background(), d, root, "", &stdout, &stderr)
@@ -527,8 +529,8 @@ export default {
 	})
 
 	t.Run("rm carries the configured set so the provider knows what was dropped", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -536,10 +538,10 @@ export default {
   dns: { kind: "cloudflare" },
 };
 `)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainRm(context.Background(), d, root, "", &stdout, &stderr); err != nil {
@@ -558,11 +560,11 @@ export default {
 	})
 
 	t.Run("rm with a host unbinds it", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainRm(context.Background(), d, root, "old.app.com", &stdout, &stderr); err != nil {
@@ -578,15 +580,15 @@ export default {
 	})
 
 	t.Run("status shows the certificate, the records, the probe and what serves each host", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
+		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeProductionConfig(t, root)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
-		t.Setenv(fakeDomainExpiresEnvVar, "1757000000")
-		t.Setenv(fakeGlobalDomainOwedEnvVar, "_ocel.shop.app.com CNAME _target.acm-validations.aws")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
+		t.Setenv(clitest.FakeDomainExpiresEnvVar, "1757000000")
+		t.Setenv(clitest.FakeGlobalDomainOwedEnvVar, "_ocel.shop.app.com CNAME _target.acm-validations.aws")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainStatus(context.Background(), d, root, domainOptions{}, &stdout, &stderr); err != nil {
@@ -610,13 +612,13 @@ export default {
 	})
 
 	t.Run("status --wait polls until every hostname is ready", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
+		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeProductionConfig(t, root)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeDomainReadyAfterEnvVar, "2")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "2")
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
@@ -634,13 +636,13 @@ export default {
 	})
 
 	t.Run("status without --wait renders what is outstanding and does not poll", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
+		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeProductionConfig(t, root)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeDomainReadyAfterEnvVar, "5")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "5")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainStatus(context.Background(), d, root, domainOptions{}, &stdout, &stderr); err != nil {
@@ -656,11 +658,11 @@ export default {
 	})
 
 	t.Run("status says so when the project declares no production hostname", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainStatus(context.Background(), d, root, domainOptions{}, &stdout, &stderr); err != nil {
@@ -673,14 +675,14 @@ export default {
 	})
 
 	t.Run("status --wait rides out a provider that is briefly unreachable", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
+		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeProductionConfig(t, root)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeDomainReadyAfterEnvVar, "3")
-		t.Setenv(fakeDomainFailUntilEnvVar, "3")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "3")
+		t.Setenv(clitest.FakeDomainFailUntilEnvVar, "3")
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
@@ -694,14 +696,14 @@ export default {
 	})
 
 	t.Run("status --wait gives up once the provider keeps failing", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
+		root, sockPath := clitest.SetUpDeployFixture(t)
 		writeProductionConfig(t, root)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeDomainReadyAfterEnvVar, "99")
-		t.Setenv(fakeDomainFailUntilEnvVar, "99")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "99")
+		t.Setenv(clitest.FakeDomainFailUntilEnvVar, "99")
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
@@ -713,11 +715,11 @@ export default {
 	})
 
 	t.Run("status --wait fails fast when the project declares no production hostname", func(t *testing.T) {
-		root, sockPath := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
-		t.Setenv(fakeInfraClassEnvVar, "production")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
@@ -729,9 +731,9 @@ export default {
 	})
 
 	t.Run("release refuses non-interactively without --yes", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		d := defaultDeps()
-		setLoggedIn(&d)
+		root, _ := clitest.SetUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 
 		var stdout, stderr bytes.Buffer
 		err := runDomainRelease(context.Background(), d, root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader(""))

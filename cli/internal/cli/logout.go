@@ -32,7 +32,7 @@ func runLogout(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not read stored credentials: %w", err)
 	}
 
-	if apiURL := effectiveAPIURL(cmd, creds.APIURL); apiURL != "" {
+	if apiURL := effectiveAPIURL(creds.APIURL); apiURL != "" {
 		ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
 		defer cancel()
 		client := authclient.New(apiURL)

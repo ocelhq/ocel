@@ -10,11 +10,13 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/declcache"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
+	"github.com/ocelhq/ocel/cli/internal/providersession"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -71,7 +73,7 @@ var envLsCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvLs(ctx, defaultDeps(), cwd, envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvLs(ctx, newSession(), cwd, envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -82,7 +84,7 @@ var envSetCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvSet(ctx, defaultDeps(), cwd, args[0], args[1], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvSet(ctx, newSession(), cwd, args[0], args[1], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -93,7 +95,7 @@ var envGetCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvGet(ctx, defaultDeps(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvGet(ctx, newSession(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -104,7 +106,7 @@ var envRmCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvRm(ctx, defaultDeps(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvRm(ctx, newSession(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -120,7 +122,7 @@ var envRefCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvRef(ctx, defaultDeps(), cwd, args[0], envOpts, envRefOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvRef(ctx, newSession(), cwd, args[0], envOpts, envRefOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -131,7 +133,7 @@ var envRefsCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvRefs(ctx, defaultDeps(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvRefs(ctx, newSession(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -142,7 +144,7 @@ var envHistoryCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvHistory(ctx, defaultDeps(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvHistory(ctx, newSession(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -175,7 +177,7 @@ func withEnvCommand(cmd *cobra.Command, run func(context.Context, string) error)
 	return run(ctx, cwd)
 }
 
-func envSession(ctx context.Context, d deps, cwd string, opts envOptions, stdout, stderr io.Writer, drive func(*providerrunner.Runner, *projectconfig.Config, *projectconfig.ProviderDescriptor) error) error {
+func envSession(ctx context.Context, d session.Session, cwd string, opts envOptions, stdout, stderr io.Writer, drive func(*providerrunner.Runner, *projectconfig.Config, *projectconfig.ProviderDescriptor) error) error {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -188,12 +190,12 @@ func envSession(ctx context.Context, d deps, cwd string, opts envOptions, stdout
 		return err
 	}
 
-	tier, hint := environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap"
+	tier, hint := environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"
 	if opts.preview {
-		tier, hint = environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap --preview"
+		tier, hint = environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview"
 	}
 
-	return runProviderSession(ctx, d, cfg, provider, stderr, stderr, func(runner *providerrunner.Runner) error {
+	return providersession.Drive(ctx, d.LocateProviderBinary, cfg, provider, stderr, stderr, func(runner *providerrunner.Runner) error {
 		if err := preflightSchema(ctx, d, runner, cfg, tier, hint, stderr); err != nil {
 			return err
 		}
@@ -230,7 +232,7 @@ func namedEnvironments(ctx context.Context, runner *providerrunner.Runner, slug 
 	return names, nil
 }
 
-func runEnvSet(ctx context.Context, d deps, cwd, key, value string, opts envOptions, stdout, stderr io.Writer) error {
+func runEnvSet(ctx context.Context, d session.Session, cwd, key, value string, opts envOptions, stdout, stderr io.Writer) error {
 	if opts.folder != "" {
 		if err := envgate.ValidateFolder(opts.folder); err != nil {
 			return err
@@ -261,7 +263,7 @@ func runEnvSet(ctx context.Context, d deps, cwd, key, value string, opts envOpti
 	})
 }
 
-func declaredVariables(ctx context.Context, d deps, cfg *projectconfig.Config, runner *providerrunner.Runner, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, error) {
+func declaredVariables(ctx context.Context, d session.Session, cfg *projectconfig.Config, runner *providerrunner.Runner, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, error) {
 	entry, err := deploycollector.Bundle(cfg)
 	if err != nil {
 		return nil, err
@@ -290,7 +292,7 @@ func declaredVariables(ctx context.Context, d deps, cfg *projectconfig.Config, r
 	return definitions, nil
 }
 
-func runEnvLs(ctx context.Context, d deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
+func runEnvLs(ctx context.Context, d session.Session, cwd string, opts envOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		vars, err := runner.Vars()
 		if err != nil {
@@ -320,7 +322,7 @@ func overridden(values []*envvarsv1.ValueMetadata) bool {
 	})
 }
 
-func runEnvGet(ctx context.Context, d deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+func runEnvGet(ctx context.Context, d session.Session, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		vars, err := runner.Vars()
 		if err != nil {
@@ -354,7 +356,7 @@ func runEnvGet(ctx context.Context, d deps, cwd, key string, opts envOptions, st
 	})
 }
 
-func runEnvRm(ctx context.Context, d deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+func runEnvRm(ctx context.Context, d session.Session, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		vars, err := runner.Vars()
 		if err != nil {
@@ -376,7 +378,7 @@ func runEnvRm(ctx context.Context, d deps, cwd, key string, opts envOptions, std
 	})
 }
 
-func runEnvRef(ctx context.Context, d deps, cwd, key string, opts envOptions, ref envRefOptions, stdout, stderr io.Writer) error {
+func runEnvRef(ctx context.Context, d session.Session, cwd, key string, opts envOptions, ref envRefOptions, stdout, stderr io.Writer) error {
 	for _, folder := range []string{opts.folder, ref.folder} {
 		if folder == "" {
 			continue
@@ -411,7 +413,7 @@ func runEnvRef(ctx context.Context, d deps, cwd, key string, opts envOptions, re
 	})
 }
 
-func runEnvRefs(ctx context.Context, d deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+func runEnvRefs(ctx context.Context, d session.Session, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		vars, err := runner.Vars()
 		if err != nil {
@@ -429,7 +431,7 @@ func runEnvRefs(ctx context.Context, d deps, cwd, key string, opts envOptions, s
 	})
 }
 
-func runEnvHistory(ctx context.Context, d deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+func runEnvHistory(ctx context.Context, d session.Session, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		vars, err := runner.Vars()
 		if err != nil {

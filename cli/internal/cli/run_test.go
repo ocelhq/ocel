@@ -16,22 +16,25 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestRunRun(t *testing.T) {
 	t.Run("not logged in returns an exit error pointing at `ocel login`", func(t *testing.T) {
-		d := defaultDeps()
-		d.loadCredentials = func() (credentials.Credentials, error) {
+		d := newSession()
+		d.LoadCredentials = func() (credentials.Credentials, error) {
 			return credentials.Credentials{}, credentials.ErrNotLoggedIn
 		}
 
 		var stderr bytes.Buffer
 		err := runRun(context.Background(), d, nil, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("runRun err = %v (%T), want *ExitError", err, err)
+			t.Fatalf("runRun err = %v (%T), want *exitsig.ExitError", err, err)
 		}
 		if exitErr.Code == 0 {
 			t.Fatalf("ExitError.Code = 0, want non-zero")
@@ -49,17 +52,17 @@ func TestRunRun(t *testing.T) {
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -68,9 +71,9 @@ export default { slug: "test-app" };
 		err := runRun(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		t.Run("the child's exit code becomes the command's", func(t *testing.T) {
-			var exitErr *ExitError
+			var exitErr *exitsig.ExitError
 			if !errors.As(err, &exitErr) {
-				t.Fatalf("runRun err = %v, want *ExitError; stderr=%s", err, stderr.String())
+				t.Fatalf("runRun err = %v, want *exitsig.ExitError; stderr=%s", err, stderr.String())
 			}
 			if exitErr.Code != 7 {
 				t.Fatalf("ExitError.Code = %d, want 7", exitErr.Code)
@@ -108,17 +111,17 @@ export default { slug: "test-app" };
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -137,9 +140,9 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		err := runRun(context.Background(), d, nil, root, runAppArgs, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("runRun err = %v, want *ExitError; stderr=%s", err, stderr.String())
+			t.Fatalf("runRun err = %v, want *exitsig.ExitError; stderr=%s", err, stderr.String())
 		}
 		if exitErr.Code != 9 {
 			t.Fatalf("ExitError.Code = %d, want 9", exitErr.Code)
@@ -172,8 +175,8 @@ export default { slug: "test-app" };
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -195,7 +198,7 @@ export default { slug: "test-app" };
 			t.Fatalf("lockfile.Write: %v", err)
 		}
 
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, apiURL, projectID)

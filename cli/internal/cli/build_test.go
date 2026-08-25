@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestRunBuild(t *testing.T) {
@@ -20,7 +22,7 @@ func TestRunBuild(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   apps: [{ name: "api", path: ".", framework: "express" }],
@@ -28,8 +30,8 @@ export default {
 `)
 
 		var built *projectconfig.Config
-		d := defaultDeps()
-		d.buildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ io.Writer) error {
+		d := newSession()
+		d.BuildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ io.Writer) error {
 			built = cfg
 			writePrebuiltFunction(t, cfg.Dir, "api", "index")
 			return nil
@@ -60,12 +62,12 @@ export default {
 		t.Parallel()
 
 		root := t.TempDir()
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 
-		d := defaultDeps()
-		d.buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+		d := newSession()
+		d.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 			return errors.New("boom: app build failed")
 		}
 

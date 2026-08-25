@@ -3,21 +3,23 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func setUpProviderFixture(t *testing.T, options string) (root, journal string, d deps) {
+func setUpProviderFixture(t *testing.T, options string) (root, journal string, d session.Session) {
 	t.Helper()
 
-	root, _ = setUpDeployFixture(t)
-	writeUsageMonorepo(t, root)
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+	root, _ = clitest.SetUpDeployFixture(t)
+	clitest.WriteUsageMonorepo(t, root)
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: `+options+` },
@@ -27,11 +29,11 @@ export default {
 `)
 
 	journal = filepath.Join(t.TempDir(), "configure.journal")
-	t.Setenv(fakeConfigureJournalEnvVar, journal)
+	t.Setenv(clitest.FakeConfigureJournalEnvVar, journal)
 
-	d = defaultDeps()
-	setLoggedIn(&d)
-	stubAppFunctions(&d, []manifestbuilder.Function{
+	d = newSession()
+	clitest.SetLoggedIn(&d)
+	clitest.StubAppFunctions(&d, []manifestbuilder.Function{
 		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 	})
 	return root, journal, d
@@ -45,7 +47,7 @@ func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	got := readJournal(t, journal)
+	got := clitest.ReadJournal(t, journal)
 	if len(got) != 1 {
 		t.Fatalf("the provider was configured %d times, want exactly 1 for the session: %v", len(got), got)
 	}
@@ -74,44 +76,5 @@ func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
 	}
 	if strings.Contains(rendered, "invalid_argument:") {
 		t.Errorf("rendered output = %q, want no raw connect code prefix", rendered)
-	}
-}
-
-func TestProviderConfigCarriesTheDescriptorOptionsOpaquely(t *testing.T) {
-	config, err := providerConfig(&projectconfig.ProviderDescriptor{
-		Package: "@ocel/provider-aws",
-		Options: json.RawMessage(`{"region":"us-east-1"}`),
-	})
-	if err != nil {
-		t.Fatalf("providerConfig: %v", err)
-	}
-	if got := config.GetOptions().GetFields()["region"].GetStringValue(); got != "us-east-1" {
-		t.Errorf("region = %q, want us-east-1", got)
-	}
-}
-
-func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
-	_, err := providerConfig(&projectconfig.ProviderDescriptor{
-		Package: "@ocel/provider-aws",
-		Options: json.RawMessage(`["us-east-1"]`),
-	})
-	if err == nil {
-		t.Fatal("providerConfig err = nil, want a non-object options value refused")
-	}
-	if !strings.Contains(err.Error(), "not a JSON object") {
-		t.Errorf("err = %v, want it to say the options are not a JSON object", err)
-	}
-}
-
-func TestProviderConfigLeavesAnUnconfiguredProviderWithoutOptions(t *testing.T) {
-	config, err := providerConfig(&projectconfig.ProviderDescriptor{
-		Package: "@ocel/provider-aws",
-		Options: json.RawMessage(`{}`),
-	})
-	if err != nil {
-		t.Fatalf("providerConfig: %v", err)
-	}
-	if len(config.GetOptions().GetFields()) != 0 {
-		t.Errorf("options = %v, want none for a descriptor carrying no options", config.GetOptions())
 	}
 }

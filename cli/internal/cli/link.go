@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -65,7 +66,7 @@ var linkSetCmd = &cobra.Command{
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkSet(ctx, defaultDeps(), cwd, cmd.InOrStdin(), linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runLinkSet(ctx, newSession(), cwd, cmd.InOrStdin(), linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -76,7 +77,7 @@ var linkRmCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkRm(ctx, defaultDeps(), cwd, args[0], linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runLinkRm(ctx, newSession(), cwd, args[0], linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -87,7 +88,7 @@ var linkLsCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkLs(ctx, defaultDeps(), cwd, linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runLinkLs(ctx, newSession(), cwd, linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -105,7 +106,7 @@ var linkGenerateCmd = &cobra.Command{
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkGenerate(ctx, defaultDeps(), cwd, linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runLinkGenerate(ctx, newSession(), cwd, linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -120,7 +121,7 @@ func init() {
 	rootCmd.AddCommand(linkCmd)
 }
 
-func runLinkSet(ctx context.Context, d deps, cwd string, stdin io.Reader, opts linkOptions, stdout, stderr io.Writer) error {
+func runLinkSet(ctx context.Context, d session.Session, cwd string, stdin io.Reader, opts linkOptions, stdout, stderr io.Writer) error {
 	link, err := decodeLink(stdin)
 	if err != nil {
 		return err
@@ -164,7 +165,7 @@ func decodeLink(stdin io.Reader) (*linksv1.Link, error) {
 	return link, nil
 }
 
-func runLinkRm(ctx context.Context, d deps, cwd, name string, opts linkOptions, stdout, stderr io.Writer) error {
+func runLinkRm(ctx context.Context, d session.Session, cwd, name string, opts linkOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		client, err := runner.Vars()
 		if err != nil {
@@ -191,7 +192,7 @@ func runLinkRm(ctx context.Context, d deps, cwd, name string, opts linkOptions, 
 	})
 }
 
-func runLinkLs(ctx context.Context, d deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
+func runLinkLs(ctx context.Context, d session.Session, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		client, err := runner.Vars()
 		if err != nil {
@@ -213,7 +214,7 @@ func runLinkLs(ctx context.Context, d deps, cwd string, opts linkOptions, stdout
 	})
 }
 
-func runLinkGenerate(ctx context.Context, d deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
+func runLinkGenerate(ctx context.Context, d session.Session, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		client, err := runner.Vars()
 		if err != nil {

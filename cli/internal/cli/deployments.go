@@ -13,9 +13,13 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/edgewire"
+	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
+	"github.com/ocelhq/ocel/cli/internal/providersession"
 	"github.com/ocelhq/ocel/cli/node"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -38,7 +42,7 @@ var deploymentsLsCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runDeploymentsLs(ctx, defaultDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDeploymentsLs(ctx, newSession(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -57,7 +61,7 @@ var deploymentsPruneCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runDeploymentsPrune(ctx, defaultDeps(), cwd, pruneKeepN, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDeploymentsPrune(ctx, newSession(), cwd, pruneKeepN, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -67,7 +71,7 @@ func init() {
 	deploymentsCmd.AddCommand(deploymentsPruneCmd)
 }
 
-func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer) error {
+func runDeploymentsLs(ctx context.Context, d session.Session, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -81,8 +85,8 @@ func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io
 		return err
 	}
 
-	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+	return providersession.Drive(ctx, d.LocateProviderBinary, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -92,7 +96,7 @@ func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io
 		}
 		resp, err := client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
 			Slug: cfg.Slug,
-			Edge: edgeSelection(cfg),
+			Edge: edgewire.Selection(cfg),
 		})
 		if err != nil {
 			return err
@@ -102,7 +106,7 @@ func runDeploymentsLs(ctx context.Context, d deps, cwd string, stdout, stderr io
 	})
 }
 
-func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, stdout, stderr io.Writer) error {
+func runDeploymentsPrune(ctx context.Context, d session.Session, cwd string, keepN int, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -116,7 +120,7 @@ func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, std
 		return err
 	}
 
-	ctx, run, err := startRun(ctx, cfg, "ocel deployments prune")
+	ctx, run, err := obs.Start(ctx, cfg.Dir, "ocel deployments prune")
 	if err != nil {
 		return err
 	}
@@ -126,15 +130,15 @@ func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, std
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+	err = providersession.Drive(ctx, d.LocateProviderBinary, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
 		req := &contractv1.RemoveStalePromotionsRequest{
 			Slug:  cfg.Slug,
 			KeepN: int32(keepN),
-			Edge:  edgeSelection(cfg),
+			Edge:  edgewire.Selection(cfg),
 		}
 		if err := providerrunner.Stream(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
 			return err
@@ -143,7 +147,7 @@ func runDeploymentsPrune(ctx context.Context, d deps, cwd string, keepN int, std
 		return nil
 	})
 	if err != nil {
-		return failSession(ctx, ui, err)
+		return providersession.Fail(ctx, ui, err)
 	}
 	return nil
 }
