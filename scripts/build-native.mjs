@@ -50,17 +50,35 @@ const PLATFORM_MATRIX = [
   },
   { nodePlatform: "darwin", nodeArch: "x64", goos: "darwin", goarch: "amd64" },
   { nodePlatform: "linux", nodeArch: "x64", goos: "linux", goarch: "amd64" },
+  { nodePlatform: "linux", nodeArch: "arm64", goos: "linux", goarch: "arm64" },
   { nodePlatform: "win32", nodeArch: "x64", goos: "windows", goarch: "amd64" },
 ];
 
-function findByGo(goos, goarch) {
-  return PLATFORM_MATRIX.find(
+function packageDir(buildTarget, platform) {
+  return join(
+    REPO_ROOT,
+    "packages",
+    "native-lib",
+    `${buildTarget.pkgPrefix}-${platform.nodePlatform}-${platform.nodeArch}`,
+  );
+}
+
+function ships(buildTarget, platform) {
+  return existsSync(join(packageDir(buildTarget, platform), "package.json"));
+}
+
+function supportedPlatforms(buildTarget) {
+  return PLATFORM_MATRIX.filter((entry) => ships(buildTarget, entry));
+}
+
+function findByGo(buildTarget, goos, goarch) {
+  return supportedPlatforms(buildTarget).find(
     (entry) => entry.goos === goos && entry.goarch === goarch,
   );
 }
 
-function findByNode(nodePlatform, nodeArch) {
-  return PLATFORM_MATRIX.find(
+function findByNode(buildTarget, nodePlatform, nodeArch) {
+  return supportedPlatforms(buildTarget).find(
     (entry) =>
       entry.nodePlatform === nodePlatform && entry.nodeArch === nodeArch,
   );
@@ -101,13 +119,17 @@ function parseArgs(argv) {
   return args;
 }
 
-function resolveTarget(args) {
+function unshipped(target, nodePlatform, nodeArch) {
+  return new Error(
+    `no native package for ${target} on ${nodePlatform}-${nodeArch}`,
+  );
+}
+
+function resolveTarget(args, buildTarget) {
   if (args.host) {
-    const entry = findByNode(process.platform, process.arch);
+    const entry = findByNode(buildTarget, process.platform, process.arch);
     if (!entry) {
-      throw new Error(
-        `Unsupported host platform: ${process.platform}-${process.arch}`,
-      );
+      throw unshipped(args.target, process.platform, process.arch);
     }
     return entry;
   }
@@ -118,19 +140,25 @@ function resolveTarget(args) {
     );
   }
 
-  const entry = findByGo(args.goos, args.goarch);
-  if (!entry) {
+  const known = PLATFORM_MATRIX.find(
+    (entry) => entry.goos === args.goos && entry.goarch === args.goarch,
+  );
+  if (!known) {
     throw new Error(
       `Unsupported GOOS/GOARCH combination: ${args.goos}/${args.goarch}`,
     );
+  }
+
+  const entry = findByGo(buildTarget, args.goos, args.goarch);
+  if (!entry) {
+    throw unshipped(args.target, known.nodePlatform, known.nodeArch);
   }
   return entry;
 }
 
 function binaryOutPath(buildTarget, binary, platform) {
-  const pkgDir = `${buildTarget.pkgPrefix}-${platform.nodePlatform}-${platform.nodeArch}`;
   const name = exeName(binary.name, platform.goos);
-  const parts = [REPO_ROOT, "packages", "native-lib", pkgDir, "bin"];
+  const parts = [packageDir(buildTarget, platform), "bin"];
   if (binary.subdir) parts.push(binary.subdir);
   parts.push(name);
   return join(...parts);
@@ -146,7 +174,11 @@ function generate(buildTarget) {
   }
 }
 
-function buildOne(buildTarget, binary, platform, outPath, version) {
+function buildOne(target, buildTarget, binary, platform, outPath, version) {
+  if (!ships(buildTarget, platform)) {
+    throw unshipped(target, platform.nodePlatform, platform.nodeArch);
+  }
+
   mkdirSync(dirname(outPath), { recursive: true });
 
   const buildArgs = ["build", "-o", outPath];
@@ -182,8 +214,8 @@ function buildOne(buildTarget, binary, platform, outPath, version) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const platform = resolveTarget(args);
   const buildTarget = TARGETS[args.target];
+  const platform = resolveTarget(args, buildTarget);
 
   if (args.out && buildTarget.binaries.length > 1) {
     throw new Error(
@@ -199,7 +231,7 @@ function main() {
     const outPath = args.out
       ? resolve(args.out)
       : binaryOutPath(buildTarget, binary, platform);
-    buildOne(buildTarget, binary, platform, outPath, args.version);
+    buildOne(args.target, buildTarget, binary, platform, outPath, args.version);
   }
 }
 

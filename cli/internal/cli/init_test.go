@@ -182,6 +182,24 @@ func TestRunInit(t *testing.T) {
 		}
 	})
 
+	t.Run("a provider that needs options is scaffolded with a placeholder", func(t *testing.T) {
+		t.Parallel()
+
+		deps := newDeps()
+		stubPackageManager(&deps, nil)
+		dir := initTestDir(t, "proj")
+
+		opts := initOptions{provider: "@ocel/provider-vps"}
+		if err := runInit(context.Background(), deps, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+			t.Fatalf("runInit err = %v", err)
+		}
+
+		content := readConfig(t, dir)
+		if !strings.Contains(content, `provider: vpsProvider({ ssh: "my-vps" })`) {
+			t.Fatalf("config = %q, want the vps provider given a destination to edit", content)
+		}
+	})
+
 	t.Run("it installs the SDK alongside the provider", func(t *testing.T) {
 		t.Parallel()
 

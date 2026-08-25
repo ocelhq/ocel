@@ -1,0 +1,22 @@
+{
+  "name": "@ocel/provider-vps-linux-x64",
+  "version": "0.0.1-alpha.0",
+  "description": "Ocel VPS provider prebuilt binary for linux-x64",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "bin": {
+    "ocel-provider-vps-deploy": "bin/deploy"
+  },
+  "files": [
+    "bin"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

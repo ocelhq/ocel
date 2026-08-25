@@ -119,6 +119,10 @@ func resolveSlug(projectDir, requested string) (string, error) {
 	return requested, nil
 }
 
+var providerPlaceholders = map[string]string{
+	"@ocel/provider-vps": `{ ssh: "my-vps" }`,
+}
+
 func configTemplate(slug, providerPkg string) string {
 	provider := providerIdentifier(providerPkg)
 	return fmt.Sprintf(`import { defineConfig } from "ocel/config";
@@ -126,9 +130,9 @@ import %s from %q;
 
 export default defineConfig({
   slug: %q,
-  provider: %s(),
+  provider: %s(%s),
 });
-`, provider, providerPkg, slug, provider)
+`, provider, providerPkg, slug, provider, providerPlaceholders[providerPkg])
 }
 
 func providerIdentifier(pkg string) string {
