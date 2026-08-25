@@ -105,6 +105,7 @@ func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootst
 			Name:       f.Name,
 			Summary:    f.Summary,
 			DependsOn:  f.DependsOn,
+			Needs:      f.Needs,
 			Enabled:    slices.Contains(standing.Features, f.Name),
 			Dependents: ProjectsDependingOn(recorded, []string{f.Name}),
 		})

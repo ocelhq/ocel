@@ -607,3 +607,46 @@ func TestRunBootstrapStatus(t *testing.T) {
 		}
 	})
 }
+
+func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
+	t.Run("a cloudflare project told to apply nothing is told what its edge pulls in", func(t *testing.T) {
+		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\" },\n")
+
+		var stdout, stderr bytes.Buffer
+		opts := Options{Yes: true, Dry: true, Features: noFeatures, FeaturesDeclared: true}
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		want := "Also: cloudflare-edge (required by this project's edge), isr (needed by cloudflare-edge)\n"
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want it to carry %q", stdout.String(), want)
+		}
+	})
+
+	t.Run("a bare run on the default edge is told its edge feature too", func(t *testing.T) {
+		root, _, deps := clitest.SetUpEdgeFixture(t, "")
+
+		var stdout, stderr bytes.Buffer
+		opts := Options{Yes: true, Dry: true}
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		want := "Also: cloudfront-edge (required by this project's edge)\n"
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want it to carry %q", stdout.String(), want)
+		}
+	})
+
+	t.Run("a set that names everything applied says nothing", func(t *testing.T) {
+		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\" },\n")
+
+		var stdout, stderr bytes.Buffer
+		opts := Options{Yes: true, Dry: true, Features: "isr,cloudflare-edge", FeaturesDeclared: true}
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if strings.Contains(stdout.String(), "Also:") {
+			t.Errorf("stdout = %q, want nothing said where the set named everything applied", stdout.String())
+		}
+	})
+}

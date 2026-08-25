@@ -92,7 +92,7 @@ func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
 		want        string
 	}{
 		{"a named set reaches the provider whole", "  edge: { kind: \"cloudflare\", options: {} },\n", "isr,image-optimization", "features=isr,image-optimization force=false acceptReplacements=true"},
-		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,cloudflare-edge force=false acceptReplacements=true"},
+		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,cloudflare-edge,cloudfront-edge force=false acceptReplacements=true"},
 		{"none leaves the core alone", "", "none", "features= force=false acceptReplacements=true"},
 	}
 	for _, tc := range cases {

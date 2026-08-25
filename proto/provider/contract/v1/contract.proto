@@ -321,6 +321,8 @@ message Feature {
   bool enabled = 4;
 
   repeated string dependents = 5;
+
+  repeated string needs = 6;
 }
 
 message Dns {
