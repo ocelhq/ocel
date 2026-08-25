@@ -42,6 +42,10 @@ const RESERVED_PREFIXES = ["OCEL_"];
 
 const KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 
+export function isUsableKey(key: string): boolean {
+  return KEY_PATTERN.test(key);
+}
+
 const owner = new Map<string, string>();
 
 export function validateDefinitions(

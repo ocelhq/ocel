@@ -14,6 +14,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 
+	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -267,7 +268,7 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, fmt.Errorf("could not read %s: %w — %s", configPath, err, initHint)
+		return nil, fmt.Errorf("%s failed to evaluate: %w", configPath, err)
 	}
 
 	var raw rawConfig
@@ -505,6 +506,16 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 	return apps, nil
 }
 
+var reportedErrorKinds = []string{"BuildEnvError", "EnvDefinitionError"}
+
+func recognizedErrorKinds() string {
+	encoded, err := json.Marshal(reportedErrorKinds)
+	if err != nil {
+		return "[]"
+	}
+	return string(encoded)
+}
+
 func buildAndRun(ctx context.Context, configPath string) ([]byte, error) {
 	dir := filepath.Dir(configPath)
 	outDir := filepath.Join(dir, scratchDirName)
@@ -513,7 +524,18 @@ func buildAndRun(ctx context.Context, configPath string) ([]byte, error) {
 	}
 	outfile := filepath.Join(outDir, bundleName(configPath))
 
-	entry := fmt.Sprintf("import config from %q;\nprocess.stdout.write(JSON.stringify(config));\n", configPath)
+	entry := fmt.Sprintf(`const kinds = %s;
+try {
+  const module = await import(%q);
+  process.stdout.write(JSON.stringify(module.default));
+} catch (error) {
+  if (error instanceof Error && kinds.includes(error.name)) {
+    console.error(error.name + ": " + error.message);
+    process.exit(1);
+  }
+  throw error;
+}
+`, recognizedErrorKinds(), configPath)
 
 	result := api.Build(api.BuildOptions{
 		Stdin: &api.StdinOptions{
@@ -537,7 +559,13 @@ func buildAndRun(ctx context.Context, configPath string) ([]byte, error) {
 		return nil, fmt.Errorf("node not found on PATH: %w", err)
 	}
 
+	environment, err := configEnv(dir)
+	if err != nil {
+		return nil, err
+	}
+
 	cmd := exec.CommandContext(ctx, "node", outfile)
+	cmd.Env = environment
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	procgroup.Guard(cmd)
@@ -550,6 +578,22 @@ func buildAndRun(ctx context.Context, configPath string) ([]byte, error) {
 	}
 
 	return stdout, nil
+}
+
+func configEnv(dir string) ([]string, error) {
+	file, err := dotenv.Load(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	environment := os.Environ()
+	for key, value := range file.Values {
+		if _, set := os.LookupEnv(key); set {
+			continue
+		}
+		environment = append(environment, key+"="+value)
+	}
+	return environment, nil
 }
 
 func bundleName(configPath string) string {
