@@ -25,6 +25,12 @@ func contractServed(t *testing.T, version string) (contractv1connect.ProviderSer
 	t.Helper()
 
 	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
+	return servedProvider(t, version, provider), provider
+}
+
+func servedProvider(t *testing.T, version string, provider providerkit.Provider) contractv1connect.ProviderServiceClient {
+	t.Helper()
+
 	spec := providerkit.Spec{
 		Version: version,
 		New: func(context.Context, providerkit.Options) (providerkit.Provider, error) {
@@ -39,7 +45,7 @@ func contractServed(t *testing.T, version string) (contractv1connect.ProviderSer
 	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
-	return client, provider
+	return client
 }
 
 type bearer string
@@ -495,8 +501,15 @@ func TestGetCredentialPermissionsRendersEitherTier(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetCredentialPermissions(%v) error = %v", tier, err)
 		}
-		if !strings.Contains(permissions.GetDocument(), want) {
-			t.Errorf("GetCredentialPermissions(%v) = %q, want it to render the %s tier", tier, permissions.GetDocument(), want)
+		groups := permissions.GetGroups()
+		if len(groups) != 1 {
+			t.Fatalf("GetCredentialPermissions(%v) rendered %d groups, want only the vendor's", tier, len(groups))
+		}
+		if got := groups[0].GetHeading(); got != "fake credentials" {
+			t.Errorf("GetCredentialPermissions(%v) heading = %q, want the vendor's own heading", tier, got)
+		}
+		if !strings.Contains(groups[0].GetDocument(), want) {
+			t.Errorf("GetCredentialPermissions(%v) = %q, want it to render the %s tier", tier, groups[0].GetDocument(), want)
 		}
 	}
 
@@ -504,6 +517,61 @@ func TestGetCredentialPermissionsRendersEitherTier(t *testing.T) {
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 		t.Fatalf("GetCredentialPermissions() naming no tier: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
+}
+
+func TestGetCredentialPermissionsAppendsWhatTheEdgeDocuments(t *testing.T) {
+	t.Parallel()
+
+	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedProvider(t, "1.2.3", documentingProvider{Provider: provider})
+
+	permissions, err := client.GetCredentialPermissions(context.Background(), &contractv1.CredentialPermissionsRequest{
+		Tier: contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY,
+		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+	})
+	if err != nil {
+		t.Fatalf("GetCredentialPermissions() error = %v", err)
+	}
+	groups := permissions.GetGroups()
+	if len(groups) != 2 {
+		t.Fatalf("GetCredentialPermissions() rendered %d groups, want the vendor's and the edge's", len(groups))
+	}
+	if got := groups[1].GetHeading(); got != documentedHeading {
+		t.Errorf("GetCredentialPermissions() second heading = %q, want %q", got, documentedHeading)
+	}
+	if got := groups[1].GetDocument(); got != string(edge.TierDeploy) {
+		t.Errorf("GetCredentialPermissions() second document = %q, want the edge asked for the %s tier", got, edge.TierDeploy)
+	}
+}
+
+const documentedHeading = "an edge token"
+
+type documentingProvider struct {
+	providerkit.Provider
+}
+
+func (p documentingProvider) Edges() providerkit.EdgeRegistry {
+	return documentingEdges{EdgeRegistry: p.Provider.Edges()}
+}
+
+type documentingEdges struct {
+	providerkit.EdgeRegistry
+}
+
+func (e documentingEdges) Open(kind edge.Kind) (edge.Edge, error) {
+	front, err := e.EdgeRegistry.Open(kind)
+	if err != nil {
+		return nil, err
+	}
+	return documentingEdge{Edge: front}, nil
+}
+
+type documentingEdge struct {
+	edge.Edge
+}
+
+func (documentingEdge) CredentialPermissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
+	return edge.CredentialDocument{Heading: documentedHeading, Document: string(tier)}, nil
 }
 
 func TestPlanRemoveBootstrapNamesTheClassAndWhatGoes(t *testing.T) {

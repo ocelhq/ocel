@@ -74,5 +74,27 @@ func TestRunPermissions(t *testing.T) {
 		if !strings.Contains(stdout.String(), "CREDENTIAL_TIER_DEPLOY") {
 			t.Errorf("stdout = %q, want the deploy tier's document", stdout.String())
 		}
+		if strings.Contains(stdout.String(), "AWS credentials") {
+			t.Errorf("stdout = %q, want a lone group to print pipeable, without its heading", stdout.String())
+		}
+	})
+
+	t.Run("it heads each group where the edge carries credentials of its own", func(t *testing.T) {
+		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\", options: {} },\n")
+
+		var stdout, stderr bytes.Buffer
+		if err := RunPermissions(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout, &stderr); err != nil {
+			t.Fatalf("RunPermissions err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		for _, want := range []string{
+			"AWS credentials",
+			"CREDENTIAL_TIER_DEPLOY",
+			"Cloudflare API token",
+			"Account · Workers Scripts · Edit",
+		} {
+			if !strings.Contains(stdout.String(), want) {
+				t.Errorf("stdout = %q, want it to carry %q", stdout.String(), want)
+			}
+		}
 	})
 }

@@ -305,10 +305,18 @@ enum CredentialTier {
 
 message CredentialPermissionsRequest {
   CredentialTier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  EdgeSelection edge = 2;
 }
 
 message CredentialPermissionsResponse {
-  string document = 1;
+  repeated CredentialGroup groups = 1;
+}
+
+message CredentialGroup {
+  string heading = 1;
+
+  string document = 2;
 }
 
 message Feature {

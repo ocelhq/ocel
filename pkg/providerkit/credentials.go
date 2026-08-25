@@ -1,18 +1,22 @@
 package providerkit
 
-import "context"
+import (
+	"context"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+)
 
 type Credentials interface {
 	Whoami(ctx context.Context) (Identity, error)
 
-	Permissions(tier CredentialTier) (string, error)
+	Permissions(tier CredentialTier) (edge.CredentialDocument, error)
 }
 
-type CredentialTier string
+type CredentialTier = edge.CredentialTier
 
 const (
-	TierBootstrap CredentialTier = "bootstrap"
-	TierDeploy    CredentialTier = "deploy"
+	TierBootstrap = edge.TierBootstrap
+	TierDeploy    = edge.TierDeploy
 )
 
 type Identity struct {

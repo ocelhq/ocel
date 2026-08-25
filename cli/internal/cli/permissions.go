@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -57,16 +58,40 @@ func RunPermissions(ctx context.Context, deps cmddeps.Deps, cwd string, tier con
 		if err != nil {
 			return err
 		}
-		permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{Tier: tier})
+		permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{
+			Tier: tier,
+			Edge: edgewire.Selection(cfg),
+		})
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				return fmt.Errorf("%s cannot say what permissions these credentials need; it predates them. Upgrade the provider pinned in this project and try again", runner.Package())
+				return predatesPermissions(runner.Package())
 			}
 			return err
 		}
-		fmt.Fprintln(stdout, permissions.GetDocument())
+		groups := permissions.GetGroups()
+		if len(groups) == 0 {
+			return predatesPermissions(runner.Package())
+		}
+		if len(groups) == 1 {
+			fmt.Fprintln(stdout, groups[0].GetDocument())
+			return nil
+		}
+		for i, group := range groups {
+			if i > 0 {
+				fmt.Fprintln(stdout)
+			}
+			if heading := group.GetHeading(); heading != "" {
+				fmt.Fprintln(stdout, heading)
+				fmt.Fprintln(stdout)
+			}
+			fmt.Fprintln(stdout, group.GetDocument())
+		}
 		return nil
 	})
+}
+
+func predatesPermissions(pkg string) error {
+	return fmt.Errorf("%s cannot say what permissions these credentials need; it predates them. Upgrade the provider pinned in this project and try again", pkg)
 }
 
 func credentialTierArg(args []string) (contractv1.CredentialTier, error) {

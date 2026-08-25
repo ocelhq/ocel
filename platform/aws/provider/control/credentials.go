@@ -10,9 +10,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const Vendor providerkit.Vendor = "AWS"
+
+const credentialHeading = "AWS credentials"
 
 const credentialHint = "configure AWS credentials (set AWS_PROFILE, run `aws sso login`, or export access keys)"
 
@@ -48,16 +51,24 @@ func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 	}, nil
 }
 
-func (c Credentials) Permissions(tier providerkit.CredentialTier) (string, error) {
+func (c Credentials) Permissions(tier providerkit.CredentialTier) (edge.CredentialDocument, error) {
+	var (
+		document string
+		err      error
+	)
 	switch tier {
 	case providerkit.TierBootstrap:
-		return bootstrap.BootstrapCredentialPermissions()
+		document, err = bootstrap.BootstrapCredentialPermissions()
 	case providerkit.TierDeploy:
-		return bootstrap.DeployCredentialPermissions()
+		document, err = bootstrap.DeployCredentialPermissions()
 	default:
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return edge.CredentialDocument{}, providerkit.Refuse(providerkit.CodeInvalid,
 			"credential permissions are rendered for the bootstrap tier or the deploy tier; this request named neither")
 	}
+	if err != nil {
+		return edge.CredentialDocument{}, err
+	}
+	return edge.CredentialDocument{Heading: credentialHeading, Document: document}, nil
 }
 
 func principalOf(arn string) string {

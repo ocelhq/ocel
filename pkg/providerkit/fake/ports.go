@@ -354,6 +354,9 @@ func (c *Credentials) Whoami(context.Context) (providerkit.Identity, error) {
 	}, nil
 }
 
-func (c *Credentials) Permissions(tier providerkit.CredentialTier) (string, error) {
-	return "fake permissions for " + string(tier), nil
+func (c *Credentials) Permissions(tier providerkit.CredentialTier) (edge.CredentialDocument, error) {
+	return edge.CredentialDocument{
+		Heading:  "fake credentials",
+		Document: "fake permissions for " + string(tier),
+	}, nil
 }

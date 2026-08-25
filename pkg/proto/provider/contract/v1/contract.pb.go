@@ -133,7 +133,7 @@ func (x Change_Action) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Change_Action.Descriptor instead.
 func (Change_Action) EnumDescriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{33, 0}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{34, 0}
 }
 
 type DomainClaim_Status int32
@@ -182,7 +182,7 @@ func (x DomainClaim_Status) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DomainClaim_Status.Descriptor instead.
 func (DomainClaim_Status) EnumDescriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{40, 0}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{41, 0}
 }
 
 type ProviderConfig struct {
@@ -1854,6 +1854,7 @@ func (x *BootstrapStatus) GetDowngrade() bool {
 type CredentialPermissionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tier          CredentialTier         `protobuf:"varint,1,opt,name=tier,proto3,enum=provider.contract.v1.CredentialTier" json:"tier,omitempty"`
+	Edge          *EdgeSelection         `protobuf:"bytes,2,opt,name=edge,proto3" json:"edge,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1895,9 +1896,16 @@ func (x *CredentialPermissionsRequest) GetTier() CredentialTier {
 	return CredentialTier_CREDENTIAL_TIER_UNSPECIFIED
 }
 
+func (x *CredentialPermissionsRequest) GetEdge() *EdgeSelection {
+	if x != nil {
+		return x.Edge
+	}
+	return nil
+}
+
 type CredentialPermissionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Document      string                 `protobuf:"bytes,1,opt,name=document,proto3" json:"document,omitempty"`
+	Groups        []*CredentialGroup     `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1932,7 +1940,59 @@ func (*CredentialPermissionsResponse) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *CredentialPermissionsResponse) GetDocument() string {
+func (x *CredentialPermissionsResponse) GetGroups() []*CredentialGroup {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+type CredentialGroup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Heading       string                 `protobuf:"bytes,1,opt,name=heading,proto3" json:"heading,omitempty"`
+	Document      string                 `protobuf:"bytes,2,opt,name=document,proto3" json:"document,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CredentialGroup) Reset() {
+	*x = CredentialGroup{}
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CredentialGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CredentialGroup) ProtoMessage() {}
+
+func (x *CredentialGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CredentialGroup.ProtoReflect.Descriptor instead.
+func (*CredentialGroup) Descriptor() ([]byte, []int) {
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *CredentialGroup) GetHeading() string {
+	if x != nil {
+		return x.Heading
+	}
+	return ""
+}
+
+func (x *CredentialGroup) GetDocument() string {
 	if x != nil {
 		return x.Document
 	}
@@ -1953,7 +2013,7 @@ type Feature struct {
 
 func (x *Feature) Reset() {
 	*x = Feature{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[25]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1965,7 +2025,7 @@ func (x *Feature) String() string {
 func (*Feature) ProtoMessage() {}
 
 func (x *Feature) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[25]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1978,7 +2038,7 @@ func (x *Feature) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Feature.ProtoReflect.Descriptor instead.
 func (*Feature) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{25}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Feature) GetName() string {
@@ -2033,7 +2093,7 @@ type Dns struct {
 
 func (x *Dns) Reset() {
 	*x = Dns{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[26]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2045,7 +2105,7 @@ func (x *Dns) String() string {
 func (*Dns) ProtoMessage() {}
 
 func (x *Dns) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[26]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2058,7 +2118,7 @@ func (x *Dns) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Dns.ProtoReflect.Descriptor instead.
 func (*Dns) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{26}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *Dns) GetKind() string {
@@ -2086,7 +2146,7 @@ type EdgeSelection struct {
 
 func (x *EdgeSelection) Reset() {
 	*x = EdgeSelection{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[27]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2098,7 +2158,7 @@ func (x *EdgeSelection) String() string {
 func (*EdgeSelection) ProtoMessage() {}
 
 func (x *EdgeSelection) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[27]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2111,7 +2171,7 @@ func (x *EdgeSelection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EdgeSelection.ProtoReflect.Descriptor instead.
 func (*EdgeSelection) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{27}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *EdgeSelection) GetKind() string {
@@ -2145,7 +2205,7 @@ type BootstrapScope struct {
 
 func (x *BootstrapScope) Reset() {
 	*x = BootstrapScope{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[28]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2157,7 +2217,7 @@ func (x *BootstrapScope) String() string {
 func (*BootstrapScope) ProtoMessage() {}
 
 func (x *BootstrapScope) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[28]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2170,7 +2230,7 @@ func (x *BootstrapScope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapScope.ProtoReflect.Descriptor instead.
 func (*BootstrapScope) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{28}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *BootstrapScope) GetTier() v1.Tier {
@@ -2198,7 +2258,7 @@ type RemoveEnvironmentRequest struct {
 
 func (x *RemoveEnvironmentRequest) Reset() {
 	*x = RemoveEnvironmentRequest{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[29]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2210,7 +2270,7 @@ func (x *RemoveEnvironmentRequest) String() string {
 func (*RemoveEnvironmentRequest) ProtoMessage() {}
 
 func (x *RemoveEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[29]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2223,7 +2283,7 @@ func (x *RemoveEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*RemoveEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{29}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *RemoveEnvironmentRequest) GetEnvironment() *v1.Environment {
@@ -2258,7 +2318,7 @@ type ProjectRequest struct {
 
 func (x *ProjectRequest) Reset() {
 	*x = ProjectRequest{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[30]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2270,7 +2330,7 @@ func (x *ProjectRequest) String() string {
 func (*ProjectRequest) ProtoMessage() {}
 
 func (x *ProjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[30]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2283,7 +2343,7 @@ func (x *ProjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectRequest.ProtoReflect.Descriptor instead.
 func (*ProjectRequest) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{30}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ProjectRequest) GetSlug() string {
@@ -2318,7 +2378,7 @@ type ChangePlan struct {
 
 func (x *ChangePlan) Reset() {
 	*x = ChangePlan{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[31]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2330,7 +2390,7 @@ func (x *ChangePlan) String() string {
 func (*ChangePlan) ProtoMessage() {}
 
 func (x *ChangePlan) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[31]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2343,7 +2403,7 @@ func (x *ChangePlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangePlan.ProtoReflect.Descriptor instead.
 func (*ChangePlan) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{31}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ChangePlan) GetSubject() string {
@@ -2382,7 +2442,7 @@ type ChangeGroup struct {
 
 func (x *ChangeGroup) Reset() {
 	*x = ChangeGroup{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[32]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2394,7 +2454,7 @@ func (x *ChangeGroup) String() string {
 func (*ChangeGroup) ProtoMessage() {}
 
 func (x *ChangeGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[32]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2407,7 +2467,7 @@ func (x *ChangeGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangeGroup.ProtoReflect.Descriptor instead.
 func (*ChangeGroup) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{32}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ChangeGroup) GetKind() string {
@@ -2472,7 +2532,7 @@ type Change struct {
 
 func (x *Change) Reset() {
 	*x = Change{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[33]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2484,7 +2544,7 @@ func (x *Change) String() string {
 func (*Change) ProtoMessage() {}
 
 func (x *Change) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[33]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2497,7 +2557,7 @@ func (x *Change) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Change.ProtoReflect.Descriptor instead.
 func (*Change) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{33}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *Change) GetKind() string {
@@ -2544,7 +2604,7 @@ type ListEnvironmentsRequest struct {
 
 func (x *ListEnvironmentsRequest) Reset() {
 	*x = ListEnvironmentsRequest{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[34]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2556,7 +2616,7 @@ func (x *ListEnvironmentsRequest) String() string {
 func (*ListEnvironmentsRequest) ProtoMessage() {}
 
 func (x *ListEnvironmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[34]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2569,7 +2629,7 @@ func (x *ListEnvironmentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvironmentsRequest.ProtoReflect.Descriptor instead.
 func (*ListEnvironmentsRequest) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{34}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListEnvironmentsRequest) GetSlug() string {
@@ -2588,7 +2648,7 @@ type ListEnvironmentsResponse struct {
 
 func (x *ListEnvironmentsResponse) Reset() {
 	*x = ListEnvironmentsResponse{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[35]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2600,7 +2660,7 @@ func (x *ListEnvironmentsResponse) String() string {
 func (*ListEnvironmentsResponse) ProtoMessage() {}
 
 func (x *ListEnvironmentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[35]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2613,7 +2673,7 @@ func (x *ListEnvironmentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvironmentsResponse.ProtoReflect.Descriptor instead.
 func (*ListEnvironmentsResponse) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{35}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListEnvironmentsResponse) GetEnvironments() []*PreviewEnvironment {
@@ -2636,7 +2696,7 @@ type PreviewEnvironment struct {
 
 func (x *PreviewEnvironment) Reset() {
 	*x = PreviewEnvironment{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[36]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2648,7 +2708,7 @@ func (x *PreviewEnvironment) String() string {
 func (*PreviewEnvironment) ProtoMessage() {}
 
 func (x *PreviewEnvironment) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[36]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2661,7 +2721,7 @@ func (x *PreviewEnvironment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewEnvironment.ProtoReflect.Descriptor instead.
 func (*PreviewEnvironment) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{36}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *PreviewEnvironment) GetIdentity() string {
@@ -2712,7 +2772,7 @@ type PreflightRequest struct {
 
 func (x *PreflightRequest) Reset() {
 	*x = PreflightRequest{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[37]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2724,7 +2784,7 @@ func (x *PreflightRequest) String() string {
 func (*PreflightRequest) ProtoMessage() {}
 
 func (x *PreflightRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[37]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2737,7 +2797,7 @@ func (x *PreflightRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreflightRequest.ProtoReflect.Descriptor instead.
 func (*PreflightRequest) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{37}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *PreflightRequest) GetRequiredTier() v1.Tier {
@@ -2791,7 +2851,7 @@ type PreflightResponse struct {
 
 func (x *PreflightResponse) Reset() {
 	*x = PreflightResponse{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[38]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2803,7 +2863,7 @@ func (x *PreflightResponse) String() string {
 func (*PreflightResponse) ProtoMessage() {}
 
 func (x *PreflightResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[38]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2816,7 +2876,7 @@ func (x *PreflightResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreflightResponse.ProtoReflect.Descriptor instead.
 func (*PreflightResponse) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{38}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *PreflightResponse) GetInfraTier() v1.Tier {
@@ -2889,7 +2949,7 @@ type PreviewWildcard struct {
 
 func (x *PreviewWildcard) Reset() {
 	*x = PreviewWildcard{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[39]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2901,7 +2961,7 @@ func (x *PreviewWildcard) String() string {
 func (*PreviewWildcard) ProtoMessage() {}
 
 func (x *PreviewWildcard) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[39]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2914,7 +2974,7 @@ func (x *PreviewWildcard) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewWildcard.ProtoReflect.Descriptor instead.
 func (*PreviewWildcard) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{39}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *PreviewWildcard) GetBaseDomain() string {
@@ -2970,7 +3030,7 @@ type DomainClaim struct {
 
 func (x *DomainClaim) Reset() {
 	*x = DomainClaim{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[40]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2982,7 +3042,7 @@ func (x *DomainClaim) String() string {
 func (*DomainClaim) ProtoMessage() {}
 
 func (x *DomainClaim) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[40]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2995,7 +3055,7 @@ func (x *DomainClaim) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainClaim.ProtoReflect.Descriptor instead.
 func (*DomainClaim) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{40}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *DomainClaim) GetHostname() string {
@@ -3032,7 +3092,7 @@ type Identity struct {
 
 func (x *Identity) Reset() {
 	*x = Identity{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[41]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3044,7 +3104,7 @@ func (x *Identity) String() string {
 func (*Identity) ProtoMessage() {}
 
 func (x *Identity) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[41]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3057,7 +3117,7 @@ func (x *Identity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Identity.ProtoReflect.Descriptor instead.
 func (*Identity) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{41}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *Identity) GetProvider() string {
@@ -3105,7 +3165,7 @@ type Detail struct {
 
 func (x *Detail) Reset() {
 	*x = Detail{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[42]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3117,7 +3177,7 @@ func (x *Detail) String() string {
 func (*Detail) ProtoMessage() {}
 
 func (x *Detail) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[42]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3130,7 +3190,7 @@ func (x *Detail) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Detail.ProtoReflect.Descriptor instead.
 func (*Detail) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{42}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *Detail) GetLabel() string {
@@ -3158,7 +3218,7 @@ type CredentialProblem struct {
 
 func (x *CredentialProblem) Reset() {
 	*x = CredentialProblem{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[43]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3170,7 +3230,7 @@ func (x *CredentialProblem) String() string {
 func (*CredentialProblem) ProtoMessage() {}
 
 func (x *CredentialProblem) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[43]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3183,7 +3243,7 @@ func (x *CredentialProblem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialProblem.ProtoReflect.Descriptor instead.
 func (*CredentialProblem) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{43}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *CredentialProblem) GetProvider() string {
@@ -3220,7 +3280,7 @@ type Promotion struct {
 
 func (x *Promotion) Reset() {
 	*x = Promotion{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[44]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3232,7 +3292,7 @@ func (x *Promotion) String() string {
 func (*Promotion) ProtoMessage() {}
 
 func (x *Promotion) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[44]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3245,7 +3305,7 @@ func (x *Promotion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Promotion.ProtoReflect.Descriptor instead.
 func (*Promotion) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{44}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *Promotion) GetPromotionId() string {
@@ -3293,7 +3353,7 @@ type PromotionHistoryEntry struct {
 
 func (x *PromotionHistoryEntry) Reset() {
 	*x = PromotionHistoryEntry{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[45]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3305,7 +3365,7 @@ func (x *PromotionHistoryEntry) String() string {
 func (*PromotionHistoryEntry) ProtoMessage() {}
 
 func (x *PromotionHistoryEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[45]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3318,7 +3378,7 @@ func (x *PromotionHistoryEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromotionHistoryEntry.ProtoReflect.Descriptor instead.
 func (*PromotionHistoryEntry) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{45}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *PromotionHistoryEntry) GetPromotion() *Promotion {
@@ -3345,7 +3405,7 @@ type ListPromotionsRequest struct {
 
 func (x *ListPromotionsRequest) Reset() {
 	*x = ListPromotionsRequest{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[46]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3357,7 +3417,7 @@ func (x *ListPromotionsRequest) String() string {
 func (*ListPromotionsRequest) ProtoMessage() {}
 
 func (x *ListPromotionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[46]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3370,7 +3430,7 @@ func (x *ListPromotionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPromotionsRequest.ProtoReflect.Descriptor instead.
 func (*ListPromotionsRequest) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{46}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ListPromotionsRequest) GetSlug() string {
@@ -3396,7 +3456,7 @@ type ListPromotionsResponse struct {
 
 func (x *ListPromotionsResponse) Reset() {
 	*x = ListPromotionsResponse{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[47]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3408,7 +3468,7 @@ func (x *ListPromotionsResponse) String() string {
 func (*ListPromotionsResponse) ProtoMessage() {}
 
 func (x *ListPromotionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[47]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3421,7 +3481,7 @@ func (x *ListPromotionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPromotionsResponse.ProtoReflect.Descriptor instead.
 func (*ListPromotionsResponse) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{47}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ListPromotionsResponse) GetPromotions() []*PromotionHistoryEntry {
@@ -3443,7 +3503,7 @@ type RollbackRequest struct {
 
 func (x *RollbackRequest) Reset() {
 	*x = RollbackRequest{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[48]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3455,7 +3515,7 @@ func (x *RollbackRequest) String() string {
 func (*RollbackRequest) ProtoMessage() {}
 
 func (x *RollbackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[48]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3468,7 +3528,7 @@ func (x *RollbackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackRequest.ProtoReflect.Descriptor instead.
 func (*RollbackRequest) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{48}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *RollbackRequest) GetSlug() string {
@@ -3508,7 +3568,7 @@ type RollbackResponse struct {
 
 func (x *RollbackResponse) Reset() {
 	*x = RollbackResponse{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[49]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3520,7 +3580,7 @@ func (x *RollbackResponse) String() string {
 func (*RollbackResponse) ProtoMessage() {}
 
 func (x *RollbackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[49]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3533,7 +3593,7 @@ func (x *RollbackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackResponse.ProtoReflect.Descriptor instead.
 func (*RollbackResponse) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{49}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *RollbackResponse) GetPromoted() *Promotion {
@@ -3555,7 +3615,7 @@ type RemoveStalePromotionsRequest struct {
 
 func (x *RemoveStalePromotionsRequest) Reset() {
 	*x = RemoveStalePromotionsRequest{}
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[50]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3567,7 +3627,7 @@ func (x *RemoveStalePromotionsRequest) String() string {
 func (*RemoveStalePromotionsRequest) ProtoMessage() {}
 
 func (x *RemoveStalePromotionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_contract_v1_contract_proto_msgTypes[50]
+	mi := &file_provider_contract_v1_contract_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3580,7 +3640,7 @@ func (x *RemoveStalePromotionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveStalePromotionsRequest.ProtoReflect.Descriptor instead.
 func (*RemoveStalePromotionsRequest) Descriptor() ([]byte, []int) {
-	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{50}
+	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *RemoveStalePromotionsRequest) GetSlug() string {
@@ -3748,11 +3808,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\tauto_heal\x18\x05 \x01(\bR\bautoHeal\x12<\n" +
 	"\x06stacks\x18\x06 \x03(\v2$.provider.contract.v1.BootstrapStackR\x06stacks\x12\x16\n" +
 	"\x06writer\x18\a \x01(\tR\x06writer\x12\x1c\n" +
-	"\tdowngrade\x18\b \x01(\bR\tdowngrade\"b\n" +
+	"\tdowngrade\x18\b \x01(\bR\tdowngrade\"\x9b\x01\n" +
 	"\x1cCredentialPermissionsRequest\x12B\n" +
-	"\x04tier\x18\x01 \x01(\x0e2$.provider.contract.v1.CredentialTierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\";\n" +
-	"\x1dCredentialPermissionsResponse\x12\x1a\n" +
-	"\bdocument\x18\x01 \x01(\tR\bdocument\"\xa6\x01\n" +
+	"\x04tier\x18\x01 \x01(\x0e2$.provider.contract.v1.CredentialTierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x127\n" +
+	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"^\n" +
+	"\x1dCredentialPermissionsResponse\x12=\n" +
+	"\x06groups\x18\x01 \x03(\v2%.provider.contract.v1.CredentialGroupR\x06groups\"G\n" +
+	"\x0fCredentialGroup\x12\x18\n" +
+	"\aheading\x18\x01 \x01(\tR\aheading\x12\x1a\n" +
+	"\bdocument\x18\x02 \x01(\tR\bdocument\"\xa6\x01\n" +
 	"\aFeature\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12\x1d\n" +
@@ -3945,7 +4009,7 @@ func file_provider_contract_v1_contract_proto_rawDescGZIP() []byte {
 }
 
 var file_provider_contract_v1_contract_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_provider_contract_v1_contract_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_provider_contract_v1_contract_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
 var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(CredentialTier)(0),                   // 0: provider.contract.v1.CredentialTier
 	(Change_Action)(0),                    // 1: provider.contract.v1.Change.Action
@@ -3975,53 +4039,54 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*BootstrapStatus)(nil),               // 25: provider.contract.v1.BootstrapStatus
 	(*CredentialPermissionsRequest)(nil),  // 26: provider.contract.v1.CredentialPermissionsRequest
 	(*CredentialPermissionsResponse)(nil), // 27: provider.contract.v1.CredentialPermissionsResponse
-	(*Feature)(nil),                       // 28: provider.contract.v1.Feature
-	(*Dns)(nil),                           // 29: provider.contract.v1.Dns
-	(*EdgeSelection)(nil),                 // 30: provider.contract.v1.EdgeSelection
-	(*BootstrapScope)(nil),                // 31: provider.contract.v1.BootstrapScope
-	(*RemoveEnvironmentRequest)(nil),      // 32: provider.contract.v1.RemoveEnvironmentRequest
-	(*ProjectRequest)(nil),                // 33: provider.contract.v1.ProjectRequest
-	(*ChangePlan)(nil),                    // 34: provider.contract.v1.ChangePlan
-	(*ChangeGroup)(nil),                   // 35: provider.contract.v1.ChangeGroup
-	(*Change)(nil),                        // 36: provider.contract.v1.Change
-	(*ListEnvironmentsRequest)(nil),       // 37: provider.contract.v1.ListEnvironmentsRequest
-	(*ListEnvironmentsResponse)(nil),      // 38: provider.contract.v1.ListEnvironmentsResponse
-	(*PreviewEnvironment)(nil),            // 39: provider.contract.v1.PreviewEnvironment
-	(*PreflightRequest)(nil),              // 40: provider.contract.v1.PreflightRequest
-	(*PreflightResponse)(nil),             // 41: provider.contract.v1.PreflightResponse
-	(*PreviewWildcard)(nil),               // 42: provider.contract.v1.PreviewWildcard
-	(*DomainClaim)(nil),                   // 43: provider.contract.v1.DomainClaim
-	(*Identity)(nil),                      // 44: provider.contract.v1.Identity
-	(*Detail)(nil),                        // 45: provider.contract.v1.Detail
-	(*CredentialProblem)(nil),             // 46: provider.contract.v1.CredentialProblem
-	(*Promotion)(nil),                     // 47: provider.contract.v1.Promotion
-	(*PromotionHistoryEntry)(nil),         // 48: provider.contract.v1.PromotionHistoryEntry
-	(*ListPromotionsRequest)(nil),         // 49: provider.contract.v1.ListPromotionsRequest
-	(*ListPromotionsResponse)(nil),        // 50: provider.contract.v1.ListPromotionsResponse
-	(*RollbackRequest)(nil),               // 51: provider.contract.v1.RollbackRequest
-	(*RollbackResponse)(nil),              // 52: provider.contract.v1.RollbackResponse
-	(*RemoveStalePromotionsRequest)(nil),  // 53: provider.contract.v1.RemoveStalePromotionsRequest
-	nil,                                   // 54: provider.contract.v1.Promotion.BuildsEntry
-	(*structpb.Struct)(nil),               // 55: google.protobuf.Struct
-	(v1.Tier)(0),                          // 56: common.environment.v1.Tier
-	(v11.VariableClass)(0),                // 57: app.resources.v1.VariableClass
-	(*v11.ResourceIdentifier)(nil),        // 58: app.resources.v1.ResourceIdentifier
-	(*v11.PostgresConfig)(nil),            // 59: app.resources.v1.PostgresConfig
-	(*v11.BucketConfig)(nil),              // 60: app.resources.v1.BucketConfig
-	(*v1.Environment)(nil),                // 61: common.environment.v1.Environment
-	(v1.Lifecycle)(0),                     // 62: common.environment.v1.Lifecycle
-	(*v12.FlipBound)(nil),                 // 63: common.progress.v1.FlipBound
-	(*v12.OperationEvent)(nil),            // 64: common.progress.v1.OperationEvent
+	(*CredentialGroup)(nil),               // 28: provider.contract.v1.CredentialGroup
+	(*Feature)(nil),                       // 29: provider.contract.v1.Feature
+	(*Dns)(nil),                           // 30: provider.contract.v1.Dns
+	(*EdgeSelection)(nil),                 // 31: provider.contract.v1.EdgeSelection
+	(*BootstrapScope)(nil),                // 32: provider.contract.v1.BootstrapScope
+	(*RemoveEnvironmentRequest)(nil),      // 33: provider.contract.v1.RemoveEnvironmentRequest
+	(*ProjectRequest)(nil),                // 34: provider.contract.v1.ProjectRequest
+	(*ChangePlan)(nil),                    // 35: provider.contract.v1.ChangePlan
+	(*ChangeGroup)(nil),                   // 36: provider.contract.v1.ChangeGroup
+	(*Change)(nil),                        // 37: provider.contract.v1.Change
+	(*ListEnvironmentsRequest)(nil),       // 38: provider.contract.v1.ListEnvironmentsRequest
+	(*ListEnvironmentsResponse)(nil),      // 39: provider.contract.v1.ListEnvironmentsResponse
+	(*PreviewEnvironment)(nil),            // 40: provider.contract.v1.PreviewEnvironment
+	(*PreflightRequest)(nil),              // 41: provider.contract.v1.PreflightRequest
+	(*PreflightResponse)(nil),             // 42: provider.contract.v1.PreflightResponse
+	(*PreviewWildcard)(nil),               // 43: provider.contract.v1.PreviewWildcard
+	(*DomainClaim)(nil),                   // 44: provider.contract.v1.DomainClaim
+	(*Identity)(nil),                      // 45: provider.contract.v1.Identity
+	(*Detail)(nil),                        // 46: provider.contract.v1.Detail
+	(*CredentialProblem)(nil),             // 47: provider.contract.v1.CredentialProblem
+	(*Promotion)(nil),                     // 48: provider.contract.v1.Promotion
+	(*PromotionHistoryEntry)(nil),         // 49: provider.contract.v1.PromotionHistoryEntry
+	(*ListPromotionsRequest)(nil),         // 50: provider.contract.v1.ListPromotionsRequest
+	(*ListPromotionsResponse)(nil),        // 51: provider.contract.v1.ListPromotionsResponse
+	(*RollbackRequest)(nil),               // 52: provider.contract.v1.RollbackRequest
+	(*RollbackResponse)(nil),              // 53: provider.contract.v1.RollbackResponse
+	(*RemoveStalePromotionsRequest)(nil),  // 54: provider.contract.v1.RemoveStalePromotionsRequest
+	nil,                                   // 55: provider.contract.v1.Promotion.BuildsEntry
+	(*structpb.Struct)(nil),               // 56: google.protobuf.Struct
+	(v1.Tier)(0),                          // 57: common.environment.v1.Tier
+	(v11.VariableClass)(0),                // 58: app.resources.v1.VariableClass
+	(*v11.ResourceIdentifier)(nil),        // 59: app.resources.v1.ResourceIdentifier
+	(*v11.PostgresConfig)(nil),            // 60: app.resources.v1.PostgresConfig
+	(*v11.BucketConfig)(nil),              // 61: app.resources.v1.BucketConfig
+	(*v1.Environment)(nil),                // 62: common.environment.v1.Environment
+	(v1.Lifecycle)(0),                     // 63: common.environment.v1.Lifecycle
+	(*v12.FlipBound)(nil),                 // 64: common.progress.v1.FlipBound
+	(*v12.OperationEvent)(nil),            // 65: common.progress.v1.OperationEvent
 }
 var file_provider_contract_v1_contract_proto_depIdxs = []int32{
-	55, // 0: provider.contract.v1.ProviderConfig.options:type_name -> google.protobuf.Struct
+	56, // 0: provider.contract.v1.ProviderConfig.options:type_name -> google.protobuf.Struct
 	3,  // 1: provider.contract.v1.ConfigureRequest.config:type_name -> provider.contract.v1.ProviderConfig
-	56, // 2: provider.contract.v1.UsePreviewWildcardRequest.tier:type_name -> common.environment.v1.Tier
-	30, // 3: provider.contract.v1.UsePreviewWildcardRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	56, // 4: provider.contract.v1.PreviewWildcardRequest.tier:type_name -> common.environment.v1.Tier
-	30, // 5: provider.contract.v1.PreviewWildcardRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	42, // 6: provider.contract.v1.GetPreviewWildcardResponse.wildcard:type_name -> provider.contract.v1.PreviewWildcard
-	30, // 7: provider.contract.v1.HostnameRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	57, // 2: provider.contract.v1.UsePreviewWildcardRequest.tier:type_name -> common.environment.v1.Tier
+	31, // 3: provider.contract.v1.UsePreviewWildcardRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	57, // 4: provider.contract.v1.PreviewWildcardRequest.tier:type_name -> common.environment.v1.Tier
+	31, // 5: provider.contract.v1.PreviewWildcardRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	43, // 6: provider.contract.v1.GetPreviewWildcardResponse.wildcard:type_name -> provider.contract.v1.PreviewWildcard
+	31, // 7: provider.contract.v1.HostnameRequest.edge:type_name -> provider.contract.v1.EdgeSelection
 	12, // 8: provider.contract.v1.GetHostnameStatusResponse.hostnames:type_name -> provider.contract.v1.ProductionHostname
 	11, // 9: provider.contract.v1.ProductionHostname.certificate:type_name -> provider.contract.v1.CertificateState
 	19, // 10: provider.contract.v1.Manifest.resources:type_name -> provider.contract.v1.ManifestResource
@@ -4029,109 +4094,111 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	15, // 12: provider.contract.v1.Manifest.domains:type_name -> provider.contract.v1.TierDomains
 	16, // 13: provider.contract.v1.Manifest.apps:type_name -> provider.contract.v1.ManifestApp
 	14, // 14: provider.contract.v1.Manifest.usages:type_name -> provider.contract.v1.ManifestUsage
-	56, // 15: provider.contract.v1.TierDomains.tier:type_name -> common.environment.v1.Tier
+	57, // 15: provider.contract.v1.TierDomains.tier:type_name -> common.environment.v1.Tier
 	15, // 16: provider.contract.v1.ManifestApp.domains:type_name -> provider.contract.v1.TierDomains
 	17, // 17: provider.contract.v1.ManifestApp.variables:type_name -> provider.contract.v1.ManifestVariable
-	57, // 18: provider.contract.v1.ManifestVariable.class:type_name -> app.resources.v1.VariableClass
-	58, // 19: provider.contract.v1.ManifestResource.resource:type_name -> app.resources.v1.ResourceIdentifier
-	59, // 20: provider.contract.v1.ManifestResource.postgres:type_name -> app.resources.v1.PostgresConfig
-	60, // 21: provider.contract.v1.ManifestResource.bucket:type_name -> app.resources.v1.BucketConfig
+	58, // 18: provider.contract.v1.ManifestVariable.class:type_name -> app.resources.v1.VariableClass
+	59, // 19: provider.contract.v1.ManifestResource.resource:type_name -> app.resources.v1.ResourceIdentifier
+	60, // 20: provider.contract.v1.ManifestResource.postgres:type_name -> app.resources.v1.PostgresConfig
+	61, // 21: provider.contract.v1.ManifestResource.bucket:type_name -> app.resources.v1.BucketConfig
 	13, // 22: provider.contract.v1.DeployRequest.manifest:type_name -> provider.contract.v1.Manifest
-	61, // 23: provider.contract.v1.DeployRequest.environment:type_name -> common.environment.v1.Environment
-	30, // 24: provider.contract.v1.DeployRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	56, // 25: provider.contract.v1.BootstrapRequest.tier:type_name -> common.environment.v1.Tier
-	30, // 26: provider.contract.v1.BootstrapRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	56, // 27: provider.contract.v1.PlanBootstrapRequest.tier:type_name -> common.environment.v1.Tier
+	62, // 23: provider.contract.v1.DeployRequest.environment:type_name -> common.environment.v1.Environment
+	31, // 24: provider.contract.v1.DeployRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	57, // 25: provider.contract.v1.BootstrapRequest.tier:type_name -> common.environment.v1.Tier
+	31, // 26: provider.contract.v1.BootstrapRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	57, // 27: provider.contract.v1.PlanBootstrapRequest.tier:type_name -> common.environment.v1.Tier
 	21, // 28: provider.contract.v1.PlanBootstrapRequest.intent:type_name -> provider.contract.v1.BootstrapRequest
-	30, // 29: provider.contract.v1.PlanBootstrapRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	28, // 30: provider.contract.v1.PlanBootstrapResponse.features:type_name -> provider.contract.v1.Feature
+	31, // 29: provider.contract.v1.PlanBootstrapRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	29, // 30: provider.contract.v1.PlanBootstrapResponse.features:type_name -> provider.contract.v1.Feature
 	25, // 31: provider.contract.v1.PlanBootstrapResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
-	34, // 32: provider.contract.v1.PlanBootstrapResponse.plan:type_name -> provider.contract.v1.ChangePlan
-	56, // 33: provider.contract.v1.BootstrapStatus.tier:type_name -> common.environment.v1.Tier
+	35, // 32: provider.contract.v1.PlanBootstrapResponse.plan:type_name -> provider.contract.v1.ChangePlan
+	57, // 33: provider.contract.v1.BootstrapStatus.tier:type_name -> common.environment.v1.Tier
 	24, // 34: provider.contract.v1.BootstrapStatus.stacks:type_name -> provider.contract.v1.BootstrapStack
 	0,  // 35: provider.contract.v1.CredentialPermissionsRequest.tier:type_name -> provider.contract.v1.CredentialTier
-	29, // 36: provider.contract.v1.EdgeSelection.dns:type_name -> provider.contract.v1.Dns
-	56, // 37: provider.contract.v1.BootstrapScope.tier:type_name -> common.environment.v1.Tier
-	30, // 38: provider.contract.v1.BootstrapScope.edge:type_name -> provider.contract.v1.EdgeSelection
-	61, // 39: provider.contract.v1.RemoveEnvironmentRequest.environment:type_name -> common.environment.v1.Environment
-	30, // 40: provider.contract.v1.RemoveEnvironmentRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	61, // 41: provider.contract.v1.ProjectRequest.environment:type_name -> common.environment.v1.Environment
-	30, // 42: provider.contract.v1.ProjectRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	35, // 43: provider.contract.v1.ChangePlan.groups:type_name -> provider.contract.v1.ChangeGroup
-	1,  // 44: provider.contract.v1.ChangeGroup.action:type_name -> provider.contract.v1.Change.Action
-	36, // 45: provider.contract.v1.ChangeGroup.changes:type_name -> provider.contract.v1.Change
-	1,  // 46: provider.contract.v1.Change.action:type_name -> provider.contract.v1.Change.Action
-	39, // 47: provider.contract.v1.ListEnvironmentsResponse.environments:type_name -> provider.contract.v1.PreviewEnvironment
-	62, // 48: provider.contract.v1.PreviewEnvironment.lifecycle:type_name -> common.environment.v1.Lifecycle
-	56, // 49: provider.contract.v1.PreflightRequest.required_tier:type_name -> common.environment.v1.Tier
-	30, // 50: provider.contract.v1.PreflightRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	56, // 51: provider.contract.v1.PreflightResponse.infra_tier:type_name -> common.environment.v1.Tier
-	44, // 52: provider.contract.v1.PreflightResponse.identity:type_name -> provider.contract.v1.Identity
-	46, // 53: provider.contract.v1.PreflightResponse.credential_problems:type_name -> provider.contract.v1.CredentialProblem
-	43, // 54: provider.contract.v1.PreflightResponse.domain_claims:type_name -> provider.contract.v1.DomainClaim
-	42, // 55: provider.contract.v1.PreflightResponse.preview_wildcard:type_name -> provider.contract.v1.PreviewWildcard
-	25, // 56: provider.contract.v1.PreflightResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
-	11, // 57: provider.contract.v1.PreviewWildcard.certificate:type_name -> provider.contract.v1.CertificateState
-	2,  // 58: provider.contract.v1.DomainClaim.status:type_name -> provider.contract.v1.DomainClaim.Status
-	45, // 59: provider.contract.v1.Identity.details:type_name -> provider.contract.v1.Detail
-	54, // 60: provider.contract.v1.Promotion.builds:type_name -> provider.contract.v1.Promotion.BuildsEntry
-	63, // 61: provider.contract.v1.Promotion.flip_bound:type_name -> common.progress.v1.FlipBound
-	47, // 62: provider.contract.v1.PromotionHistoryEntry.promotion:type_name -> provider.contract.v1.Promotion
-	30, // 63: provider.contract.v1.ListPromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	48, // 64: provider.contract.v1.ListPromotionsResponse.promotions:type_name -> provider.contract.v1.PromotionHistoryEntry
-	30, // 65: provider.contract.v1.RollbackRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	47, // 66: provider.contract.v1.RollbackResponse.promoted:type_name -> provider.contract.v1.Promotion
-	61, // 67: provider.contract.v1.RemoveStalePromotionsRequest.environment:type_name -> common.environment.v1.Environment
-	30, // 68: provider.contract.v1.RemoveStalePromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
-	4,  // 69: provider.contract.v1.ProviderService.Configure:input_type -> provider.contract.v1.ConfigureRequest
-	20, // 70: provider.contract.v1.ProviderService.Deploy:input_type -> provider.contract.v1.DeployRequest
-	21, // 71: provider.contract.v1.ProviderService.Bootstrap:input_type -> provider.contract.v1.BootstrapRequest
-	22, // 72: provider.contract.v1.ProviderService.PlanBootstrap:input_type -> provider.contract.v1.PlanBootstrapRequest
-	26, // 73: provider.contract.v1.ProviderService.GetCredentialPermissions:input_type -> provider.contract.v1.CredentialPermissionsRequest
-	31, // 74: provider.contract.v1.ProviderService.RemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
-	31, // 75: provider.contract.v1.ProviderService.PlanRemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
-	32, // 76: provider.contract.v1.ProviderService.RemoveEnvironment:input_type -> provider.contract.v1.RemoveEnvironmentRequest
-	33, // 77: provider.contract.v1.ProviderService.RemoveProject:input_type -> provider.contract.v1.ProjectRequest
-	33, // 78: provider.contract.v1.ProviderService.PlanRemoveProject:input_type -> provider.contract.v1.ProjectRequest
-	37, // 79: provider.contract.v1.ProviderService.ListEnvironments:input_type -> provider.contract.v1.ListEnvironmentsRequest
-	40, // 80: provider.contract.v1.ProviderService.Preflight:input_type -> provider.contract.v1.PreflightRequest
-	49, // 81: provider.contract.v1.ProviderService.ListPromotions:input_type -> provider.contract.v1.ListPromotionsRequest
-	51, // 82: provider.contract.v1.ProviderService.Rollback:input_type -> provider.contract.v1.RollbackRequest
-	53, // 83: provider.contract.v1.ProviderService.RemoveStalePromotions:input_type -> provider.contract.v1.RemoveStalePromotionsRequest
-	6,  // 84: provider.contract.v1.ProviderService.UsePreviewWildcard:input_type -> provider.contract.v1.UsePreviewWildcardRequest
-	7,  // 85: provider.contract.v1.ProviderService.GetPreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
-	7,  // 86: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
-	7,  // 87: provider.contract.v1.ProviderService.RemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
-	9,  // 88: provider.contract.v1.ProviderService.AddHostname:input_type -> provider.contract.v1.HostnameRequest
-	9,  // 89: provider.contract.v1.ProviderService.RemoveHostname:input_type -> provider.contract.v1.HostnameRequest
-	9,  // 90: provider.contract.v1.ProviderService.GetHostnameStatus:input_type -> provider.contract.v1.HostnameRequest
-	5,  // 91: provider.contract.v1.ProviderService.Configure:output_type -> provider.contract.v1.ConfigureResponse
-	64, // 92: provider.contract.v1.ProviderService.Deploy:output_type -> common.progress.v1.OperationEvent
-	64, // 93: provider.contract.v1.ProviderService.Bootstrap:output_type -> common.progress.v1.OperationEvent
-	23, // 94: provider.contract.v1.ProviderService.PlanBootstrap:output_type -> provider.contract.v1.PlanBootstrapResponse
-	27, // 95: provider.contract.v1.ProviderService.GetCredentialPermissions:output_type -> provider.contract.v1.CredentialPermissionsResponse
-	64, // 96: provider.contract.v1.ProviderService.RemoveBootstrap:output_type -> common.progress.v1.OperationEvent
-	34, // 97: provider.contract.v1.ProviderService.PlanRemoveBootstrap:output_type -> provider.contract.v1.ChangePlan
-	64, // 98: provider.contract.v1.ProviderService.RemoveEnvironment:output_type -> common.progress.v1.OperationEvent
-	64, // 99: provider.contract.v1.ProviderService.RemoveProject:output_type -> common.progress.v1.OperationEvent
-	34, // 100: provider.contract.v1.ProviderService.PlanRemoveProject:output_type -> provider.contract.v1.ChangePlan
-	38, // 101: provider.contract.v1.ProviderService.ListEnvironments:output_type -> provider.contract.v1.ListEnvironmentsResponse
-	41, // 102: provider.contract.v1.ProviderService.Preflight:output_type -> provider.contract.v1.PreflightResponse
-	50, // 103: provider.contract.v1.ProviderService.ListPromotions:output_type -> provider.contract.v1.ListPromotionsResponse
-	52, // 104: provider.contract.v1.ProviderService.Rollback:output_type -> provider.contract.v1.RollbackResponse
-	64, // 105: provider.contract.v1.ProviderService.RemoveStalePromotions:output_type -> common.progress.v1.OperationEvent
-	64, // 106: provider.contract.v1.ProviderService.UsePreviewWildcard:output_type -> common.progress.v1.OperationEvent
-	8,  // 107: provider.contract.v1.ProviderService.GetPreviewWildcard:output_type -> provider.contract.v1.GetPreviewWildcardResponse
-	34, // 108: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:output_type -> provider.contract.v1.ChangePlan
-	64, // 109: provider.contract.v1.ProviderService.RemovePreviewWildcard:output_type -> common.progress.v1.OperationEvent
-	64, // 110: provider.contract.v1.ProviderService.AddHostname:output_type -> common.progress.v1.OperationEvent
-	64, // 111: provider.contract.v1.ProviderService.RemoveHostname:output_type -> common.progress.v1.OperationEvent
-	10, // 112: provider.contract.v1.ProviderService.GetHostnameStatus:output_type -> provider.contract.v1.GetHostnameStatusResponse
-	91, // [91:113] is the sub-list for method output_type
-	69, // [69:91] is the sub-list for method input_type
-	69, // [69:69] is the sub-list for extension type_name
-	69, // [69:69] is the sub-list for extension extendee
-	0,  // [0:69] is the sub-list for field type_name
+	31, // 36: provider.contract.v1.CredentialPermissionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	28, // 37: provider.contract.v1.CredentialPermissionsResponse.groups:type_name -> provider.contract.v1.CredentialGroup
+	30, // 38: provider.contract.v1.EdgeSelection.dns:type_name -> provider.contract.v1.Dns
+	57, // 39: provider.contract.v1.BootstrapScope.tier:type_name -> common.environment.v1.Tier
+	31, // 40: provider.contract.v1.BootstrapScope.edge:type_name -> provider.contract.v1.EdgeSelection
+	62, // 41: provider.contract.v1.RemoveEnvironmentRequest.environment:type_name -> common.environment.v1.Environment
+	31, // 42: provider.contract.v1.RemoveEnvironmentRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	62, // 43: provider.contract.v1.ProjectRequest.environment:type_name -> common.environment.v1.Environment
+	31, // 44: provider.contract.v1.ProjectRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	36, // 45: provider.contract.v1.ChangePlan.groups:type_name -> provider.contract.v1.ChangeGroup
+	1,  // 46: provider.contract.v1.ChangeGroup.action:type_name -> provider.contract.v1.Change.Action
+	37, // 47: provider.contract.v1.ChangeGroup.changes:type_name -> provider.contract.v1.Change
+	1,  // 48: provider.contract.v1.Change.action:type_name -> provider.contract.v1.Change.Action
+	40, // 49: provider.contract.v1.ListEnvironmentsResponse.environments:type_name -> provider.contract.v1.PreviewEnvironment
+	63, // 50: provider.contract.v1.PreviewEnvironment.lifecycle:type_name -> common.environment.v1.Lifecycle
+	57, // 51: provider.contract.v1.PreflightRequest.required_tier:type_name -> common.environment.v1.Tier
+	31, // 52: provider.contract.v1.PreflightRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	57, // 53: provider.contract.v1.PreflightResponse.infra_tier:type_name -> common.environment.v1.Tier
+	45, // 54: provider.contract.v1.PreflightResponse.identity:type_name -> provider.contract.v1.Identity
+	47, // 55: provider.contract.v1.PreflightResponse.credential_problems:type_name -> provider.contract.v1.CredentialProblem
+	44, // 56: provider.contract.v1.PreflightResponse.domain_claims:type_name -> provider.contract.v1.DomainClaim
+	43, // 57: provider.contract.v1.PreflightResponse.preview_wildcard:type_name -> provider.contract.v1.PreviewWildcard
+	25, // 58: provider.contract.v1.PreflightResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
+	11, // 59: provider.contract.v1.PreviewWildcard.certificate:type_name -> provider.contract.v1.CertificateState
+	2,  // 60: provider.contract.v1.DomainClaim.status:type_name -> provider.contract.v1.DomainClaim.Status
+	46, // 61: provider.contract.v1.Identity.details:type_name -> provider.contract.v1.Detail
+	55, // 62: provider.contract.v1.Promotion.builds:type_name -> provider.contract.v1.Promotion.BuildsEntry
+	64, // 63: provider.contract.v1.Promotion.flip_bound:type_name -> common.progress.v1.FlipBound
+	48, // 64: provider.contract.v1.PromotionHistoryEntry.promotion:type_name -> provider.contract.v1.Promotion
+	31, // 65: provider.contract.v1.ListPromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	49, // 66: provider.contract.v1.ListPromotionsResponse.promotions:type_name -> provider.contract.v1.PromotionHistoryEntry
+	31, // 67: provider.contract.v1.RollbackRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	48, // 68: provider.contract.v1.RollbackResponse.promoted:type_name -> provider.contract.v1.Promotion
+	62, // 69: provider.contract.v1.RemoveStalePromotionsRequest.environment:type_name -> common.environment.v1.Environment
+	31, // 70: provider.contract.v1.RemoveStalePromotionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	4,  // 71: provider.contract.v1.ProviderService.Configure:input_type -> provider.contract.v1.ConfigureRequest
+	20, // 72: provider.contract.v1.ProviderService.Deploy:input_type -> provider.contract.v1.DeployRequest
+	21, // 73: provider.contract.v1.ProviderService.Bootstrap:input_type -> provider.contract.v1.BootstrapRequest
+	22, // 74: provider.contract.v1.ProviderService.PlanBootstrap:input_type -> provider.contract.v1.PlanBootstrapRequest
+	26, // 75: provider.contract.v1.ProviderService.GetCredentialPermissions:input_type -> provider.contract.v1.CredentialPermissionsRequest
+	32, // 76: provider.contract.v1.ProviderService.RemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
+	32, // 77: provider.contract.v1.ProviderService.PlanRemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
+	33, // 78: provider.contract.v1.ProviderService.RemoveEnvironment:input_type -> provider.contract.v1.RemoveEnvironmentRequest
+	34, // 79: provider.contract.v1.ProviderService.RemoveProject:input_type -> provider.contract.v1.ProjectRequest
+	34, // 80: provider.contract.v1.ProviderService.PlanRemoveProject:input_type -> provider.contract.v1.ProjectRequest
+	38, // 81: provider.contract.v1.ProviderService.ListEnvironments:input_type -> provider.contract.v1.ListEnvironmentsRequest
+	41, // 82: provider.contract.v1.ProviderService.Preflight:input_type -> provider.contract.v1.PreflightRequest
+	50, // 83: provider.contract.v1.ProviderService.ListPromotions:input_type -> provider.contract.v1.ListPromotionsRequest
+	52, // 84: provider.contract.v1.ProviderService.Rollback:input_type -> provider.contract.v1.RollbackRequest
+	54, // 85: provider.contract.v1.ProviderService.RemoveStalePromotions:input_type -> provider.contract.v1.RemoveStalePromotionsRequest
+	6,  // 86: provider.contract.v1.ProviderService.UsePreviewWildcard:input_type -> provider.contract.v1.UsePreviewWildcardRequest
+	7,  // 87: provider.contract.v1.ProviderService.GetPreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
+	7,  // 88: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
+	7,  // 89: provider.contract.v1.ProviderService.RemovePreviewWildcard:input_type -> provider.contract.v1.PreviewWildcardRequest
+	9,  // 90: provider.contract.v1.ProviderService.AddHostname:input_type -> provider.contract.v1.HostnameRequest
+	9,  // 91: provider.contract.v1.ProviderService.RemoveHostname:input_type -> provider.contract.v1.HostnameRequest
+	9,  // 92: provider.contract.v1.ProviderService.GetHostnameStatus:input_type -> provider.contract.v1.HostnameRequest
+	5,  // 93: provider.contract.v1.ProviderService.Configure:output_type -> provider.contract.v1.ConfigureResponse
+	65, // 94: provider.contract.v1.ProviderService.Deploy:output_type -> common.progress.v1.OperationEvent
+	65, // 95: provider.contract.v1.ProviderService.Bootstrap:output_type -> common.progress.v1.OperationEvent
+	23, // 96: provider.contract.v1.ProviderService.PlanBootstrap:output_type -> provider.contract.v1.PlanBootstrapResponse
+	27, // 97: provider.contract.v1.ProviderService.GetCredentialPermissions:output_type -> provider.contract.v1.CredentialPermissionsResponse
+	65, // 98: provider.contract.v1.ProviderService.RemoveBootstrap:output_type -> common.progress.v1.OperationEvent
+	35, // 99: provider.contract.v1.ProviderService.PlanRemoveBootstrap:output_type -> provider.contract.v1.ChangePlan
+	65, // 100: provider.contract.v1.ProviderService.RemoveEnvironment:output_type -> common.progress.v1.OperationEvent
+	65, // 101: provider.contract.v1.ProviderService.RemoveProject:output_type -> common.progress.v1.OperationEvent
+	35, // 102: provider.contract.v1.ProviderService.PlanRemoveProject:output_type -> provider.contract.v1.ChangePlan
+	39, // 103: provider.contract.v1.ProviderService.ListEnvironments:output_type -> provider.contract.v1.ListEnvironmentsResponse
+	42, // 104: provider.contract.v1.ProviderService.Preflight:output_type -> provider.contract.v1.PreflightResponse
+	51, // 105: provider.contract.v1.ProviderService.ListPromotions:output_type -> provider.contract.v1.ListPromotionsResponse
+	53, // 106: provider.contract.v1.ProviderService.Rollback:output_type -> provider.contract.v1.RollbackResponse
+	65, // 107: provider.contract.v1.ProviderService.RemoveStalePromotions:output_type -> common.progress.v1.OperationEvent
+	65, // 108: provider.contract.v1.ProviderService.UsePreviewWildcard:output_type -> common.progress.v1.OperationEvent
+	8,  // 109: provider.contract.v1.ProviderService.GetPreviewWildcard:output_type -> provider.contract.v1.GetPreviewWildcardResponse
+	35, // 110: provider.contract.v1.ProviderService.PlanRemovePreviewWildcard:output_type -> provider.contract.v1.ChangePlan
+	65, // 111: provider.contract.v1.ProviderService.RemovePreviewWildcard:output_type -> common.progress.v1.OperationEvent
+	65, // 112: provider.contract.v1.ProviderService.AddHostname:output_type -> common.progress.v1.OperationEvent
+	65, // 113: provider.contract.v1.ProviderService.RemoveHostname:output_type -> common.progress.v1.OperationEvent
+	10, // 114: provider.contract.v1.ProviderService.GetHostnameStatus:output_type -> provider.contract.v1.GetHostnameStatusResponse
+	93, // [93:115] is the sub-list for method output_type
+	71, // [71:93] is the sub-list for method input_type
+	71, // [71:71] is the sub-list for extension type_name
+	71, // [71:71] is the sub-list for extension extendee
+	0,  // [0:71] is the sub-list for field type_name
 }
 
 func init() { file_provider_contract_v1_contract_proto_init() }
@@ -4150,7 +4217,7 @@ func file_provider_contract_v1_contract_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_provider_contract_v1_contract_proto_rawDesc), len(file_provider_contract_v1_contract_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   52,
+			NumMessages:   53,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
