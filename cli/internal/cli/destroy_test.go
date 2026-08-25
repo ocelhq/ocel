@@ -137,7 +137,7 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 			"– aws/test-app--pr-2--infra  [infra]",
 			"– aws/test-app--pr-1--web--b1  [web]",
 			"– cloudfront/edge",
-			"    – test-app  Cloudflare::Worker",
+			"    – test-app  AWS::CloudFront::Distribution",
 			"every preview variable value",
 			"The account-level preview bootstrap is left intact. This cannot be undone.",
 			"Left in place:",
