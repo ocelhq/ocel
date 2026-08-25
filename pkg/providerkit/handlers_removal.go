@@ -85,10 +85,14 @@ func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.Projec
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	return removal.plan(), nil
+	plan, err := removal.plan()
+	if err != nil {
+		return nil, RefusalError(err)
+	}
+	return plan, nil
 }
 
-func (r *projectRemoval) plan() *contractv1.ChangePlan {
+func (r *projectRemoval) plan() (*contractv1.ChangePlan, error) {
 	plan := &contractv1.ChangePlan{EdgeKind: string(r.front.Kind()), Subject: r.slug}
 	vendor := string(r.provider.Vendor())
 	for _, stack := range r.apps {
@@ -116,7 +120,11 @@ func (r *projectRemoval) plan() *contractv1.ChangePlan {
 		Hostnames: r.state.Hostnames(),
 		Front:     r.state.Edge.Front,
 	}) {
-		plan.Groups = append(plan.Groups, edgeGroupProto(group))
+		converted, err := edgeGroupProto(group)
+		if err != nil {
+			return nil, err
+		}
+		plan.Groups = append(plan.Groups, converted)
 	}
 	plan.Groups = append(plan.Groups, r.recordGroups()...)
 	plan.Groups = append(plan.Groups,
@@ -132,7 +140,7 @@ func (r *projectRemoval) plan() *contractv1.ChangePlan {
 			Action: contractv1.Change_ACTION_DELETE,
 			Reason: "the artifacts, assets and cache entries every release of this project wrote",
 		})
-	return plan
+	return plan, nil
 }
 
 func (r *projectRemoval) recordGroups() []*contractv1.ChangeGroup {
