@@ -703,6 +703,13 @@ func resolvedEdgeKind(kind string) string {
 	return kind
 }
 
+func edgeRowKind(kind string) string {
+	if resolvedEdgeKind(kind) == "cloudflare" {
+		return "Cloudflare::Worker"
+	}
+	return "AWS::CloudFront::Distribution"
+}
+
 func journalEdge(kind string, dns *contractv1.Dns, allowDegraded []string) {
 	path := os.Getenv(fakeEdgeJournalEnvVar)
 	if path == "" {
@@ -1141,7 +1148,7 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *c
 					Name:   resolvedEdgeKind(req.GetEdge().GetKind()) + "/edge",
 					Action: contractv1.Change_ACTION_DELETE,
 					Changes: []*contractv1.Change{
-						{Kind: "Cloudflare::Worker", Name: slug, Action: contractv1.Change_ACTION_DELETE},
+						{Kind: edgeRowKind(req.GetEdge().GetKind()), Name: slug, Action: contractv1.Change_ACTION_DELETE},
 					},
 				},
 				{
