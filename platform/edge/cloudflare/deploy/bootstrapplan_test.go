@@ -304,6 +304,68 @@ func TestBootstrapConverges(t *testing.T) {
 	})
 }
 
+func missingSecret(script string) []edge.PlanChange {
+	want := productionPlan(edge.PlanKeep, reasonCurrent)
+	for i, change := range want {
+		if change.Kind == kindWorkerSecret && change.Name == script+"/"+bootstrapSecretBinding {
+			want[i].Action, want[i].Reason = edge.PlanCreate, ""
+		}
+	}
+	return want
+}
+
+func TestBootstrapWithTheCredentialGone(t *testing.T) {
+	t.Run("a worker that lost its secret is planned and settled by setting the secret alone", func(t *testing.T) {
+		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
+		m := bootstrapMock(t, true)
+		p := m.provider(t)
+		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		uploads := len(m.putScripts)
+		m.scriptSecrets[sharedStoreScriptName] = nil
+
+		changes, err := p.PlanBootstrap(t.Context(), edge.ClassProduction)
+		if err != nil {
+			t.Fatalf("PlanBootstrap: %v", err)
+		}
+		if want := missingSecret(sharedStoreScriptName); !reflect.DeepEqual(changes, want) {
+			t.Errorf("plan = %+v, want %+v", changes, want)
+		}
+
+		out, err := p.Bootstrap(t.Context(), edge.ClassProduction)
+		if err != nil {
+			t.Fatalf("re-run Bootstrap: %v", err)
+		}
+		if got := m.putScripts[uploads:]; len(got) != 0 {
+			t.Errorf("uploads = %v, want the standing script left where it is", got)
+		}
+		if len(m.putSecrets) != 1 || m.putSecrets[0].script != sharedStoreScriptName || m.putSecrets[0].name != bootstrapSecretBinding {
+			t.Errorf("secrets set = %+v, want %s alone on %s", m.putSecrets, bootstrapSecretBinding, sharedStoreScriptName)
+		}
+		for _, offer := range out.Offers {
+			switch {
+			case offer.Kind == edge.OfferDeploymentsStore:
+				if cred := credOf(t, offer); cred != m.putSecrets[0].text {
+					t.Errorf("offered credential = %q, want the %q that was set on the worker", cred, m.putSecrets[0].text)
+				}
+			case offer.Kind == edge.OfferISRWriter:
+				if cred := credOf(t, offer); cred != "" {
+					t.Errorf("the isr writer was reoffered %q, want the credential it still holds left alone", cred)
+				}
+			}
+		}
+
+		settled, err := p.PlanBootstrap(t.Context(), edge.ClassProduction)
+		if err != nil {
+			t.Fatalf("PlanBootstrap after the secret was set: %v", err)
+		}
+		if want := productionPlan(edge.PlanKeep, reasonCurrent); !reflect.DeepEqual(settled, want) {
+			t.Errorf("plan after the secret was set = %+v, want everything kept", settled)
+		}
+	})
+}
+
 func credOf(t *testing.T, offer edge.Offer) string {
 	t.Helper()
 	switch offer.Kind {
