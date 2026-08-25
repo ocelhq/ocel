@@ -470,7 +470,7 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, runner *provider
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return err
 	}
-	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, deps.StdinIsTerminal(stdin), out); err != nil {
+	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, edgewire.Selection(cfg), deps.StdinIsTerminal(stdin), out); err != nil {
 		return err
 	}
 	return requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, out)
@@ -489,7 +489,7 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, runner *provider.Ru
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return nil, err
 	}
-	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, interactive, out); err != nil {
+	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, edgewire.Selection(cfg), interactive, out); err != nil {
 		return nil, err
 	}
 	return resp.GetKnownSlugs(), nil

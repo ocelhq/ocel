@@ -112,8 +112,8 @@ func (p *Printer) GroupLine(group *contractv1.ChangeGroup) string {
 		b.WriteString(kind + " ")
 	}
 	b.WriteString(p.style(color.Bold).Sprint(group.GetName()))
-	if named {
-		b.WriteString(gutter + p.faint("["+groupTag(group)+"]"))
+	if tag := groupTag(group); named && tag != "" {
+		b.WriteString(gutter + p.faint("["+tag+"]"))
 	}
 	b.WriteString(p.trail(gutter, group.GetReason(), group.GetSlow()))
 	return b.String()
@@ -148,6 +148,9 @@ var bootstrapKinds = map[string]bool{stackKind: true, edgeKind: true}
 func groupTag(group *contractv1.ChangeGroup) string {
 	if feature := group.GetFeature(); feature != "" {
 		return feature
+	}
+	if group.GetKind() == edgeKind {
+		return ""
 	}
 	return baselineTag
 }

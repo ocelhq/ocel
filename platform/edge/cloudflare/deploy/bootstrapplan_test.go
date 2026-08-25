@@ -2,10 +2,17 @@ package cloudflare
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
+
+	cf "github.com/cloudflare/cloudflare-go/v4"
+	"github.com/cloudflare/cloudflare-go/v4/option"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -50,6 +57,32 @@ func productionPlan(action edge.PlanAction, reason string) []edge.PlanChange {
 		)
 	}
 	return changes
+}
+
+func driftedWorker(script, reason string) []edge.PlanChange {
+	want := productionPlan(edge.PlanKeep, reasonCurrent)
+	for i, change := range want {
+		if change.Kind == kindWorker && change.Name == script {
+			want[i].Action, want[i].Reason = edge.PlanUpdate, reason
+		}
+	}
+	return want
+}
+
+func stripBinding(t *testing.T, m *cfMock, script, kind string) {
+	t.Helper()
+	bindings, _ := m.scriptSettings[script]["bindings"].([]any)
+	kept := make([]any, 0, len(bindings))
+	for _, b := range bindings {
+		if held, ok := b.(map[string]any); ok && held["type"] == kind {
+			continue
+		}
+		kept = append(kept, b)
+	}
+	if len(kept) == len(bindings) {
+		t.Fatalf("worker %q carries no %s binding to strip; it has %v", script, kind, bindings)
+	}
+	m.scriptSettings[script]["bindings"] = kept
 }
 
 func planner(t *testing.T, m *cfMock) edge.BootstrapPlanner {
@@ -107,14 +140,66 @@ func TestPlanBootstrap(t *testing.T) {
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
-		want := productionPlan(edge.PlanKeep, reasonCurrent)
-		for i, change := range want {
-			if change.Kind == kindWorker && change.Name == sharedStoreScriptName {
-				want[i].Action, want[i].Reason = edge.PlanUpdate, reasonScriptDrift
-			}
-		}
-		if !reflect.DeepEqual(changes, want) {
+		if want := driftedWorker(sharedStoreScriptName, reasonScriptDrift); !reflect.DeepEqual(changes, want) {
 			t.Errorf("plan = %+v, want %+v", changes, want)
+		}
+	})
+
+	t.Run("a compatibility bump plans and applies an update to a script that has not changed", func(t *testing.T) {
+		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
+		m := bootstrapMock(t, true)
+		p := m.provider(t)
+		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		uploads := len(m.putScripts)
+		m.scriptSettings[sharedStoreScriptName]["compatibility_date"] = "2020-01-01"
+
+		changes, err := p.PlanBootstrap(t.Context(), edge.ClassProduction)
+		if err != nil {
+			t.Fatalf("PlanBootstrap: %v", err)
+		}
+		if !reflect.DeepEqual(changes, driftedWorker(sharedStoreScriptName, reasonMetadataDrift)) {
+			t.Errorf("plan = %+v, want the store worker updated for metadata drift", changes)
+		}
+
+		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+			t.Fatalf("re-run Bootstrap: %v", err)
+		}
+		if got := m.putScripts[uploads:]; !reflect.DeepEqual(got, []string{sharedStoreScriptName}) {
+			t.Errorf("uploads = %v, want the store worker alone re-uploaded", got)
+		}
+		if got := m.scriptSettings[sharedStoreScriptName]["compatibility_date"]; got != compatDate {
+			t.Errorf("deployed compatibility date = %v, want this build's %q", got, compatDate)
+		}
+	})
+
+	t.Run("a binding the deployed worker no longer carries plans as an update", func(t *testing.T) {
+		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
+		m := bootstrapMock(t, true)
+		p := m.provider(t)
+		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		uploads := len(m.putScripts)
+		stripBinding(t, m, isrWriterScriptName, "r2_bucket")
+
+		changes, err := p.PlanBootstrap(t.Context(), edge.ClassProduction)
+		if err != nil {
+			t.Fatalf("PlanBootstrap: %v", err)
+		}
+		if !reflect.DeepEqual(changes, driftedWorker(isrWriterScriptName, reasonMetadataDrift)) {
+			t.Errorf("plan = %+v, want the isr writer updated for the binding it lost", changes)
+		}
+
+		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+			t.Fatalf("re-run Bootstrap: %v", err)
+		}
+		if got := m.putScripts[uploads:]; !reflect.DeepEqual(got, []string{isrWriterScriptName}) {
+			t.Errorf("uploads = %v, want the isr writer alone re-uploaded", got)
+		}
+		if len(bindingsByType(uploadedMetadata(t, m, isrWriterScriptName), "r2_bucket")) != 1 {
+			t.Error("the re-upload does not restore the cache store binding it was missing")
 		}
 	})
 
@@ -208,7 +293,7 @@ func TestBootstrapConverges(t *testing.T) {
 		if len(inherited) != 1 || inherited[0]["name"] != bootstrapSecretBinding {
 			t.Errorf("inherited bindings = %v, want %s alone", inherited, bootstrapSecretBinding)
 		}
-		if !slicesContainsSecret(m.scriptSecrets[sharedStoreScriptName]) {
+		if !slices.Contains(m.scriptSecrets[sharedStoreScriptName], bootstrapSecretBinding) {
 			t.Errorf("secrets after re-upload = %v, want %s held", m.scriptSecrets[sharedStoreScriptName], bootstrapSecretBinding)
 		}
 		for _, offer := range out.Offers {
@@ -217,15 +302,6 @@ func TestBootstrapConverges(t *testing.T) {
 			}
 		}
 	})
-}
-
-func slicesContainsSecret(names []string) bool {
-	for _, name := range names {
-		if name == bootstrapSecretBinding {
-			return true
-		}
-	}
-	return false
 }
 
 func credOf(t *testing.T, offer edge.Offer) string {
@@ -252,4 +328,31 @@ func endpoints(out edge.BootstrapOutput) map[edge.OfferKind]string {
 		}
 	}
 	return found
+}
+
+func TestDeployedScriptWithoutTheModuleItExpected(t *testing.T) {
+	body, contentType, err := buildScriptMultipart(edge.Worker{Main: edge.WorkerModule{
+		Name:        "worker.js",
+		ContentType: "application/javascript+module",
+		Content:     []byte("export default {}"),
+	}}, "")
+	if err != nil {
+		t.Fatalf("buildScriptMultipart: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", contentType)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	p := &provider{client: cf.NewClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
+
+	content, present, err := p.deployedScript(t.Context(), "acct", sharedStoreScriptName, "index.js")
+	if err == nil {
+		t.Fatalf("deployedScript = (%q, %v, nil), want a response missing the main module to be an error rather than drift", content, present)
+	}
+	for _, want := range []string{sharedStoreScriptName, "index.js"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %v does not name %q", err, want)
+		}
+	}
 }

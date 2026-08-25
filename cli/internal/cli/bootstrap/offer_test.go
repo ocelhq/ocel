@@ -107,6 +107,19 @@ func TestPlanBootstrap(t *testing.T) {
 	}
 }
 
+func TestOfferedBootstrapCarriesTheEdgeTheProjectChose(t *testing.T) {
+	plan := Plan{Features: []string{"isr"}, Missing: []string{"isr"}}
+	front := &contractv1.EdgeSelection{Kind: "cloudflare"}
+
+	req := plan.Request(environmentv1.Tier_TIER_PREVIEW, front)
+	if req.GetEdge().GetKind() != "cloudflare" {
+		t.Errorf("request edge = %q, want the edge the project chose", req.GetEdge().GetKind())
+	}
+	if req.GetTier() != environmentv1.Tier_TIER_PREVIEW || !slices.Equal(req.GetFeatures(), plan.Features) {
+		t.Errorf("request = %v, want the offered plan's own tier and features", req)
+	}
+}
+
 func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 	core := &contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true}
 
@@ -116,7 +129,7 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
 		)
 		var out bytes.Buffer
-		err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, false, &out)
+		err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, &out)
 		if err == nil {
 			t.Fatal("a deploy against a bootstrap missing a feature it needs was allowed through")
 		}
@@ -130,7 +143,7 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
 		)
 		var out bytes.Buffer
-		if err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PREVIEW, false, &out); err != nil {
+		if err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PREVIEW, nil, false, &out); err != nil {
 			t.Fatalf("a bootstrap that is merely behind stopped the deploy: %v", err)
 		}
 		for _, want := range []string{"ocel-bootstrap-isr", "ocel bootstrap preview --features isr"} {
@@ -145,7 +158,7 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
 		)
 		var out bytes.Buffer
-		if err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, false, &out); err != nil {
+		if err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, &out); err != nil {
 			t.Fatalf("offerBootstrap err = %v", err)
 		}
 		if out.Len() != 0 {

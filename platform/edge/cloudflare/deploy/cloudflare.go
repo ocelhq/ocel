@@ -147,29 +147,25 @@ func (p *provider) SharedPreviewSurface() edge.Surface {
 func (p *provider) CodeRuntime() (string, []string) { return compatDate, compatFlags }
 
 func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return edge.BootstrapOutput{}, fmt.Errorf("%s is not set; it is required to bootstrap the Cloudflare edge", envAccountID)
+	accountID, err := bootstrapCredentials()
+	if err != nil {
+		return edge.BootstrapOutput{}, err
 	}
-	out, err := newCacheStore(p.client).bootstrap(ctx, accountID, class)
+	state, err := p.readState(ctx, accountID, class)
+	if err != nil {
+		return edge.BootstrapOutput{}, err
+	}
+	out, err := newCacheStore(p.client).bootstrap(ctx, accountID, state.store)
 	if err != nil {
 		return out, err
 	}
-	scriptName, err := storeScriptNameFor(class)
-	if err != nil {
-		return out, err
+	for _, settling := range state.workers {
+		offer, err := p.settleWorker(ctx, accountID, settling)
+		if err != nil {
+			return out, fmt.Errorf("bootstrap %s: %w", settling.what, err)
+		}
+		out.Offers = append(out.Offers, offer)
 	}
-	storeOffer, err := p.bootstrapStore(ctx, accountID, scriptName)
-	if err != nil {
-		return out, fmt.Errorf("bootstrap deployments-store worker: %w", err)
-	}
-	out.Offers = append(out.Offers, storeOffer)
-
-	writerOffer, err := p.bootstrapISRWriter(ctx, accountID, class)
-	if err != nil {
-		return out, fmt.Errorf("bootstrap isr-writer worker: %w", err)
-	}
-	out.Offers = append(out.Offers, writerOffer)
 	return out, nil
 }
 
@@ -198,116 +194,118 @@ func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
 	return errors.Join(errs...)
 }
 
-func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, class edge.Class) (edge.Offer, error) {
-	scriptName, err := isrWriterScriptNameFor(class)
-	if err != nil {
-		return edge.Offer{}, err
-	}
-	worker, err := isrWriterBundle()
-	if err != nil {
-		return edge.Offer{}, err
-	}
-	worker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(class)}
-
-	settled, err := p.settleDurableObjectWorker(ctx, accountID, bootstrapWorker{
-		scriptName: scriptName,
-		worker:     worker,
-		do:         isrWriterWorker,
-		what:       "isr-writer worker",
-	})
-	if err != nil {
-		return edge.Offer{}, err
-	}
-
-	values := map[string]string{
-		edge.OfferKeyISRWriterEndpoint:   settled.endpoint,
-		edge.OfferKeyISRWriterScriptName: scriptName,
-	}
-	if settled.cred != "" {
-		values[edge.OfferKeyISRWriterBootstrapCred] = settled.cred
-	}
-	return edge.Offer{Kind: edge.OfferISRWriter, Values: values}, nil
-}
-
-func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName string) (edge.Offer, error) {
-	worker, err := storeWorkerBundle()
-	if err != nil {
-		return edge.Offer{}, err
-	}
-
-	settled, err := p.settleDurableObjectWorker(ctx, accountID, bootstrapWorker{
-		scriptName: scriptName,
-		worker:     worker,
-		do:         deploymentsStoreWorker,
-		what:       "deployments-store worker",
-	})
-	if err != nil {
-		return edge.Offer{}, err
-	}
-
-	values := map[string]string{
-		edge.OfferKeyStoreEndpoint:   settled.endpoint,
-		edge.OfferKeyStoreScriptName: scriptName,
-	}
-	if settled.cred != "" {
-		values[edge.OfferKeyStoreBootstrapCred] = settled.cred
-	}
-	return edge.Offer{Kind: edge.OfferDeploymentsStore, Values: values}, nil
-}
-
 type bootstrapWorker struct {
 	scriptName string
 	worker     edge.Worker
 	do         durableObjectWorker
 	what       string
+	offer      edge.OfferKind
+	keys       offerKeys
 }
 
-type settledWorker struct {
-	endpoint string
-	cred     string
+type offerKeys struct {
+	endpoint   string
+	scriptName string
+	cred       string
 }
 
-func (p *provider) settleDurableObjectWorker(ctx context.Context, accountID string, b bootstrapWorker) (settledWorker, error) {
-	state, err := p.readWorkerState(ctx, accountID, b.scriptName, b.worker.Main)
+func bootstrapWorkers(class edge.Class) ([]bootstrapWorker, error) {
+	storeScript, err := storeScriptNameFor(class)
 	if err != nil {
-		return settledWorker{}, err
+		return nil, err
 	}
+	storeWorker, err := storeWorkerBundle()
+	if err != nil {
+		return nil, err
+	}
+	writerScript, err := isrWriterScriptNameFor(class)
+	if err != nil {
+		return nil, err
+	}
+	writerWorker, err := isrWriterBundle()
+	if err != nil {
+		return nil, err
+	}
+	writerWorker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(class)}
 
+	return []bootstrapWorker{
+		{
+			scriptName: storeScript,
+			worker:     storeWorker,
+			do:         deploymentsStoreWorker,
+			what:       "deployments-store worker",
+			offer:      edge.OfferDeploymentsStore,
+			keys: offerKeys{
+				endpoint:   edge.OfferKeyStoreEndpoint,
+				scriptName: edge.OfferKeyStoreScriptName,
+				cred:       edge.OfferKeyStoreBootstrapCred,
+			},
+		},
+		{
+			scriptName: writerScript,
+			worker:     writerWorker,
+			do:         isrWriterWorker,
+			what:       "isr-writer worker",
+			offer:      edge.OfferISRWriter,
+			keys: offerKeys{
+				endpoint:   edge.OfferKeyISRWriterEndpoint,
+				scriptName: edge.OfferKeyISRWriterScriptName,
+				cred:       edge.OfferKeyISRWriterBootstrapCred,
+			},
+		},
+	}, nil
+}
+
+func (p *provider) settleWorker(ctx context.Context, accountID string, state workerState) (edge.Offer, error) {
+	b := state.bootstrapWorker
 	up := upload{accountID: accountID, scriptName: b.scriptName, worker: b.worker}
 	var cred string
 	var inherited []string
 	if state.secretHeld {
 		inherited = []string{bootstrapSecretBinding}
 	} else {
-		cred, err = mintSecret()
+		minted, err := mintSecret()
 		if err != nil {
-			return settledWorker{}, fmt.Errorf("mint bootstrap credential: %w", err)
+			return edge.Offer{}, fmt.Errorf("mint bootstrap credential: %w", err)
 		}
+		cred = minted
 		up.worker = withSecret(b.worker, bootstrapSecretBinding, cred)
 	}
 
-	if !state.present || !state.current || cred != "" {
-		deployed, err := p.deployedClasses(ctx, b.scriptName)
-		if err != nil {
-			return settledWorker{}, fmt.Errorf("read %s Durable Object classes: %w", b.what, err)
-		}
-		if err := p.putDurableObjectScript(ctx, up, b.do, deployed, inherited); err != nil {
-			return settledWorker{}, fmt.Errorf("put %s: %w", b.what, err)
+	if !state.settled() || cred != "" {
+		if err := p.putDurableObjectScript(ctx, up, b.do, state.classes, inherited); err != nil {
+			return edge.Offer{}, fmt.Errorf("put %s: %w", b.what, err)
 		}
 	}
 
-	if !state.subdomainOn {
+	endpoint, err := p.settleSubdomain(ctx, up, state.subdomainOn, b.what)
+	if err != nil {
+		return edge.Offer{}, err
+	}
+
+	values := map[string]string{
+		b.keys.endpoint:   endpoint,
+		b.keys.scriptName: b.scriptName,
+	}
+	if cred != "" {
+		values[b.keys.cred] = cred
+	}
+	return edge.Offer{Kind: b.offer, Values: values}, nil
+}
+
+func (p *provider) settleSubdomain(ctx context.Context, up upload, on bool, what string) (string, error) {
+	if !on {
 		endpoint, err := p.setSubdomain(ctx, up, true)
 		if err != nil {
-			return settledWorker{}, fmt.Errorf("set %s subdomain: %w", b.what, err)
+			return "", fmt.Errorf("set %s subdomain: %w", what, err)
 		}
-		return settledWorker{endpoint: endpoint, cred: cred}, nil
+		return endpoint, nil
 	}
-	endpoint, err := p.subdomainURL(ctx, accountID, b.scriptName)
+	endpoint, err := p.subdomainURL(ctx, up.accountID, up.scriptName)
 	if err != nil {
-		return settledWorker{}, fmt.Errorf("read %s subdomain: %w", b.what, err)
+		return "", fmt.Errorf("read %s subdomain: %w", what, err)
 	}
-	return settledWorker{endpoint: endpoint, cred: cred}, nil
+	return endpoint, nil
 }
 
 func storeWorkerBundle() (edge.Worker, error) {
@@ -344,30 +342,6 @@ func readWorkerBundle(path string) (edge.Worker, error) {
 		ContentType: "application/javascript+module",
 		Content:     main,
 	}}, nil
-}
-
-func (p *provider) deployedClasses(ctx context.Context, name string) ([]string, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return nil, fmt.Errorf("%s is not set; it is required to query the Cloudflare edge", envAccountID)
-	}
-	settings, err := p.client.Workers.Scripts.ScriptAndVersionSettings.Get(ctx, name, workers.ScriptScriptAndVersionSettingGetParams{
-		AccountID: cf.F(accountID),
-	})
-	var apiErr *cf.Error
-	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var classes []string
-	for _, binding := range settings.Bindings {
-		if binding.Type == durableObjectBindingType && binding.ClassName != "" && binding.ScriptName == "" {
-			classes = append(classes, binding.ClassName)
-		}
-	}
-	return classes, nil
 }
 
 func (p *provider) FindApp(ctx context.Context, name string) (bool, error) {

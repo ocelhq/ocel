@@ -144,7 +144,10 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			group := providerkit.EdgeGroup("cloudflare", "cloudflare-edge", tc.planned)
+			group, err := providerkit.EdgeGroup("cloudflare", "cloudflare-edge", tc.planned)
+			if err != nil {
+				t.Fatalf("EdgeGroup() error = %v", err)
+			}
 			if group.Kind != providerkit.EdgeGroupKind || group.Name != "cloudflare/edge" {
 				t.Errorf("group = %+v, want the cloudflare edge named under its own vendor", group)
 			}
@@ -166,6 +169,37 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestEdgeGroupRefusesAnActionNoRendererKnows(t *testing.T) {
+	t.Parallel()
+
+	_, err := providerkit.EdgeGroup("cloudflare", "cloudflare-edge", []edge.PlanChange{
+		{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanAction("recreate")},
+	})
+	if err == nil {
+		t.Fatal("EdgeGroup() took an action no renderer knows, which the CLI draws as a bare ?")
+	}
+	for _, want := range []string{"recreate", "ocel-isr-writer"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %v does not name %q", err, want)
+		}
+	}
+}
+
+func TestEdgeGroupThatAccountsForNothingIsNotCalledCurrent(t *testing.T) {
+	t.Parallel()
+
+	group, err := providerkit.EdgeGroup("cloudflare", "cloudflare-edge", nil)
+	if err != nil {
+		t.Fatalf("EdgeGroup() error = %v", err)
+	}
+	if group.Action == providerkit.ActionKeep {
+		t.Errorf("group = %+v, want an edge that listed no resource not to claim it is current", group)
+	}
+	if group.Reason != providerkit.DetailUnavailable {
+		t.Errorf("group reason = %q, want %q", group.Reason, providerkit.DetailUnavailable)
 	}
 }
 

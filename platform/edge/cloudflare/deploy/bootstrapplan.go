@@ -9,10 +9,10 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
-	"github.com/cloudflare/cloudflare-go/v4/r2"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -27,8 +27,9 @@ const (
 )
 
 const (
-	reasonCurrent     = "already current"
-	reasonScriptDrift = "the deployed script differs from this build's bundle"
+	reasonCurrent       = "already current"
+	reasonScriptDrift   = "the deployed script differs from this build's bundle"
+	reasonMetadataDrift = "the deployed worker's compatibility settings or bindings differ from this build's"
 )
 
 var _ edge.BootstrapPlanner = (*provider)(nil)
@@ -38,38 +39,11 @@ func (p *provider) PlanBootstrap(ctx context.Context, class edge.Class) ([]edge.
 	if err != nil {
 		return nil, err
 	}
-	changes, err := newCacheStore(p.client).plan(ctx, accountID, class)
+	state, err := p.readState(ctx, accountID, class)
 	if err != nil {
 		return nil, err
 	}
-
-	storeScript, err := storeScriptNameFor(class)
-	if err != nil {
-		return nil, err
-	}
-	storeWorker, err := storeWorkerBundle()
-	if err != nil {
-		return nil, err
-	}
-	storeChanges, err := p.planWorker(ctx, accountID, storeScript, storeWorker.Main)
-	if err != nil {
-		return nil, fmt.Errorf("plan deployments-store worker: %w", err)
-	}
-
-	writerScript, err := isrWriterScriptNameFor(class)
-	if err != nil {
-		return nil, err
-	}
-	writerWorker, err := isrWriterBundle()
-	if err != nil {
-		return nil, err
-	}
-	writerChanges, err := p.planWorker(ctx, accountID, writerScript, writerWorker.Main)
-	if err != nil {
-		return nil, fmt.Errorf("plan isr-writer worker: %w", err)
-	}
-
-	return append(append(changes, storeChanges...), writerChanges...), nil
+	return state.changes(), nil
 }
 
 func bootstrapCredentials() (string, error) {
@@ -83,47 +57,40 @@ func bootstrapCredentials() (string, error) {
 	return accountID, nil
 }
 
-func (p *provider) planWorker(ctx context.Context, accountID, scriptName string, main edge.WorkerModule) ([]edge.PlanChange, error) {
-	state, err := p.readWorkerState(ctx, accountID, scriptName, main)
-	if err != nil {
-		return nil, err
-	}
-	return []edge.PlanChange{
-		{Kind: kindWorker, Name: scriptName, Action: state.scriptAction(), Reason: state.scriptReason()},
-		{Kind: kindWorkerSecret, Name: scriptName + "/" + bootstrapSecretBinding, Action: presence(state.secretHeld), Reason: keptReason(state.secretHeld)},
-		{Kind: kindWorkerSubdomain, Name: scriptName, Action: presence(state.subdomainOn), Reason: keptReason(state.subdomainOn)},
-	}, nil
+type bootstrapState struct {
+	store   cacheStoreState
+	workers []workerState
 }
 
-func (s cacheStore) plan(ctx context.Context, accountID string, class edge.Class) ([]edge.PlanChange, error) {
-	name, ok := cacheStoreNameByClass[class]
-	if !ok {
-		return nil, fmt.Errorf("cloudflare: unknown class %q", class)
-	}
-	bucketHeld, err := s.bucketPresent(ctx, accountID, name)
+func (p *provider) readState(ctx context.Context, accountID string, class edge.Class) (bootstrapState, error) {
+	store, err := newCacheStore(p.client).read(ctx, accountID, class)
 	if err != nil {
-		return nil, err
+		return bootstrapState{}, err
 	}
-	_, tokenHeld, err := s.findToken(ctx, name)
+	planned, err := bootstrapWorkers(class)
 	if err != nil {
-		return nil, err
+		return bootstrapState{}, err
 	}
-	return []edge.PlanChange{
-		{Kind: kindR2Bucket, Name: name, Action: presence(bucketHeld), Reason: keptReason(bucketHeld)},
-		{Kind: kindAPIToken, Name: name, Action: presence(tokenHeld), Reason: keptReason(tokenHeld)},
-	}, nil
+	state := bootstrapState{store: store}
+	for _, b := range planned {
+		read, err := p.readWorkerState(ctx, accountID, b)
+		if err != nil {
+			return bootstrapState{}, fmt.Errorf("read %s: %w", b.what, err)
+		}
+		state.workers = append(state.workers, read)
+	}
+	return state, nil
 }
 
-func (s cacheStore) bucketPresent(ctx context.Context, accountID, name string) (bool, error) {
-	_, err := s.buckets.Get(ctx, name, r2.BucketGetParams{AccountID: cf.F(accountID)})
-	switch {
-	case err == nil:
-		return true, nil
-	case hasStatus(err, http.StatusNotFound):
-		return false, nil
-	default:
-		return false, fmt.Errorf("look up R2 bucket %q: %w", name, err)
+func (s bootstrapState) changes() []edge.PlanChange {
+	changes := []edge.PlanChange{
+		{Kind: kindR2Bucket, Name: s.store.name, Action: presence(s.store.bucketHeld), Reason: keptReason(s.store.bucketHeld)},
+		{Kind: kindAPIToken, Name: s.store.name, Action: presence(s.store.tokenHeld), Reason: keptReason(s.store.tokenHeld)},
 	}
+	for _, worker := range s.workers {
+		changes = append(changes, worker.changes()...)
+	}
+	return changes
 }
 
 func presence(held bool) edge.PlanAction {
@@ -141,17 +108,33 @@ func keptReason(held bool) string {
 }
 
 type workerState struct {
-	present     bool
-	current     bool
-	secretHeld  bool
-	subdomainOn bool
+	bootstrapWorker
+	present         bool
+	scriptCurrent   bool
+	metadataCurrent bool
+	secretHeld      bool
+	subdomainOn     bool
+	classes         []string
+}
+
+func (w workerState) changes() []edge.PlanChange {
+	name := w.scriptName
+	return []edge.PlanChange{
+		{Kind: kindWorker, Name: name, Action: w.scriptAction(), Reason: w.scriptReason()},
+		{Kind: kindWorkerSecret, Name: name + "/" + bootstrapSecretBinding, Action: presence(w.secretHeld), Reason: keptReason(w.secretHeld)},
+		{Kind: kindWorkerSubdomain, Name: name, Action: presence(w.subdomainOn), Reason: keptReason(w.subdomainOn)},
+	}
+}
+
+func (w workerState) settled() bool {
+	return w.present && w.scriptCurrent && w.metadataCurrent
 }
 
 func (w workerState) scriptAction() edge.PlanAction {
 	switch {
 	case !w.present:
 		return edge.PlanCreate
-	case !w.current:
+	case !w.settled():
 		return edge.PlanUpdate
 	default:
 		return edge.PlanKeep
@@ -162,44 +145,157 @@ func (w workerState) scriptReason() string {
 	switch {
 	case !w.present:
 		return ""
-	case !w.current:
+	case !w.scriptCurrent:
 		return reasonScriptDrift
+	case !w.metadataCurrent:
+		return reasonMetadataDrift
 	default:
 		return reasonCurrent
 	}
 }
 
-func (p *provider) readWorkerState(ctx context.Context, accountID, scriptName string, main edge.WorkerModule) (workerState, error) {
-	deployed, present, err := p.deployedScript(ctx, accountID, scriptName, main.Name)
+func (p *provider) readWorkerState(ctx context.Context, accountID string, b bootstrapWorker) (workerState, error) {
+	deployed, present, err := p.deployedScript(ctx, accountID, b.scriptName, b.worker.Main.Name)
 	if err != nil || !present {
+		return workerState{bootstrapWorker: b}, err
+	}
+	state := workerState{bootstrapWorker: b, present: true, scriptCurrent: bytes.Equal(deployed, b.worker.Main.Content)}
+
+	settings, err := p.scriptSettings(ctx, accountID, b.scriptName)
+	if err != nil {
 		return workerState{}, err
 	}
-	state := workerState{present: true, current: bytes.Equal(deployed, main.Content)}
+	state.metadataCurrent = settingsCurrent(settings, b)
+	state.classes = deployedClasses(settings)
 
-	secrets, err := p.client.Workers.Scripts.Secrets.List(ctx, scriptName, workers.ScriptSecretListParams{
+	secrets, err := p.client.Workers.Scripts.Secrets.List(ctx, b.scriptName, workers.ScriptSecretListParams{
 		AccountID: cf.F(accountID),
 	})
 	if err != nil && !hasStatus(err, http.StatusNotFound) {
-		return workerState{}, fmt.Errorf("list the secrets of worker %q: %w", scriptName, err)
+		return workerState{}, fmt.Errorf("list the secrets of worker %q: %w", b.scriptName, err)
 	}
 	if secrets != nil {
-		for _, secret := range secrets.Result {
-			if secret.Name == bootstrapSecretBinding {
-				state.secretHeld = true
-			}
-		}
+		state.secretHeld = slices.ContainsFunc(secrets.Result, func(secret workers.ScriptSecretListResponse) bool {
+			return secret.Name == bootstrapSecretBinding
+		})
 	}
 
-	subdomain, err := p.client.Workers.Scripts.Subdomain.Get(ctx, scriptName, workers.ScriptSubdomainGetParams{
+	subdomain, err := p.client.Workers.Scripts.Subdomain.Get(ctx, b.scriptName, workers.ScriptSubdomainGetParams{
 		AccountID: cf.F(accountID),
 	})
 	if err != nil && !hasStatus(err, http.StatusNotFound) {
-		return workerState{}, fmt.Errorf("read the workers.dev subdomain of worker %q: %w", scriptName, err)
+		return workerState{}, fmt.Errorf("read the workers.dev subdomain of worker %q: %w", b.scriptName, err)
 	}
 	if subdomain != nil {
 		state.subdomainOn = subdomain.Enabled
 	}
 	return state, nil
+}
+
+func (p *provider) scriptSettings(ctx context.Context, accountID, scriptName string) (*workers.ScriptScriptAndVersionSettingGetResponse, error) {
+	settings, err := p.client.Workers.Scripts.ScriptAndVersionSettings.Get(ctx, scriptName, workers.ScriptScriptAndVersionSettingGetParams{
+		AccountID: cf.F(accountID),
+	})
+	if hasStatus(err, http.StatusNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read the settings of worker %q: %w", scriptName, err)
+	}
+	return settings, nil
+}
+
+func settingsCurrent(settings *workers.ScriptScriptAndVersionSettingGetResponse, b bootstrapWorker) bool {
+	if settings == nil {
+		return false
+	}
+	if settings.CompatibilityDate != compatDate {
+		return false
+	}
+	deployed := slices.Clone(settings.CompatibilityFlags)
+	slices.Sort(deployed)
+	wanted := slices.Clone(compatFlags)
+	slices.Sort(wanted)
+	if !slices.Equal(deployed, wanted) {
+		return false
+	}
+	held := deployedBindings(settings)
+	for _, want := range b.bindings() {
+		if !slices.Contains(held, want) {
+			return false
+		}
+	}
+	return true
+}
+
+type binding struct {
+	kind  string
+	name  string
+	value string
+}
+
+func (b bootstrapWorker) bindings() []binding {
+	var wanted []binding
+	for _, declared := range scriptBindings(b.worker, false) {
+		if ref, ok := comparableBinding(fmt.Sprint(declared["type"]), declared); ok {
+			wanted = append(wanted, ref)
+		}
+	}
+	for _, class := range b.do.classes {
+		wanted = append(wanted, binding{kind: durableObjectBindingType, name: class.binding, value: class.className})
+	}
+	return wanted
+}
+
+func comparableBinding(kind string, declared map[string]any) (binding, bool) {
+	ref := binding{kind: kind, name: fmt.Sprint(declared["name"])}
+	switch kind {
+	case "r2_bucket":
+		ref.value = fmt.Sprint(declared["bucket_name"])
+	case "service":
+		ref.value = fmt.Sprint(declared["service"])
+	case "plain_text":
+		ref.value = fmt.Sprint(declared["text"])
+	case "worker_loader":
+	default:
+		return binding{}, false
+	}
+	return ref, true
+}
+
+func deployedBindings(settings *workers.ScriptScriptAndVersionSettingGetResponse) []binding {
+	var held []binding
+	for _, deployed := range settings.Bindings {
+		ref := binding{kind: string(deployed.Type), name: deployed.Name}
+		switch ref.kind {
+		case "r2_bucket":
+			ref.value = deployed.BucketName
+		case "service":
+			ref.value = deployed.Service
+		case "plain_text":
+			ref.value = deployed.Text
+		case durableObjectBindingType:
+			ref.value = deployed.ClassName
+		case "worker_loader":
+		default:
+			continue
+		}
+		held = append(held, ref)
+	}
+	return held
+}
+
+func deployedClasses(settings *workers.ScriptScriptAndVersionSettingGetResponse) []string {
+	if settings == nil {
+		return nil
+	}
+	var classes []string
+	for _, deployed := range settings.Bindings {
+		if string(deployed.Type) == durableObjectBindingType && deployed.ClassName != "" && deployed.ScriptName == "" {
+			classes = append(classes, deployed.ClassName)
+		}
+	}
+	return classes
 }
 
 func (p *provider) deployedScript(ctx context.Context, accountID, scriptName, moduleName string) ([]byte, bool, error) {
@@ -229,17 +325,14 @@ func moduleContent(res *http.Response, moduleName string) ([]byte, error) {
 	for {
 		part, err := mr.NextPart()
 		if err == io.EOF {
-			return nil, nil
+			return nil, fmt.Errorf("no part is named %q; the deployed script carries modules this build does not", moduleName)
 		}
 		if err != nil {
 			return nil, err
 		}
-		content, err := io.ReadAll(part)
-		if err != nil {
-			return nil, err
+		if part.FormName() != moduleName && part.FileName() != moduleName {
+			continue
 		}
-		if part.FormName() == moduleName || part.FileName() == moduleName {
-			return content, nil
-		}
+		return io.ReadAll(part)
 	}
 }

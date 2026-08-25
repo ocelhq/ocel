@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -88,12 +89,7 @@ func CrossesMembrane(kind LinkType) bool {
 }
 
 func crossesMembrane(crosses func(LinkType) bool, grants []Link) bool {
-	for _, link := range grants {
-		if crosses(link.Type) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(grants, func(link Link) bool { return crosses(link.Type) })
 }
 
 func routingFor(q ServingQuery) (*RoutingPlan, error) {

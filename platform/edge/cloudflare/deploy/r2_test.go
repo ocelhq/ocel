@@ -188,6 +188,15 @@ func offerValues(t *testing.T, out edge.BootstrapOutput) map[string]string {
 	return nil
 }
 
+func storeBootstrap(t *testing.T, ctx context.Context, s cacheStore, class edge.Class) (edge.BootstrapOutput, error) {
+	t.Helper()
+	state, err := s.read(ctx, testAccountID, class)
+	if err != nil {
+		return edge.BootstrapOutput{}, err
+	}
+	return s.bootstrap(ctx, testAccountID, state)
+}
+
 func TestCacheStoreBootstrap(t *testing.T) {
 	t.Parallel()
 
@@ -198,7 +207,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 		tokens := &fakeTokens{value: "token-value"}
 		store := newTestStore(buckets, tokens, &fakeGroups{})
 
-		out, err := store.bootstrap(t.Context(), testAccountID, edge.ClassProduction)
+		out, err := storeBootstrap(t, t.Context(), store, edge.ClassProduction)
 		if err != nil {
 			t.Fatalf("bootstrap: %v", err)
 		}
@@ -256,7 +265,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 		for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 			buckets := &fakeBuckets{}
 			tokens := &fakeTokens{value: "token-value"}
-			out, err := newTestStore(buckets, tokens, &fakeGroups{}).bootstrap(t.Context(), testAccountID, class)
+			out, err := storeBootstrap(t, t.Context(), newTestStore(buckets, tokens, &fakeGroups{}), class)
 			if err != nil {
 				t.Fatalf("bootstrap %s: %v", class, err)
 			}
@@ -277,7 +286,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 		buckets := &fakeBuckets{existing: map[string]bool{name: true}}
 		tokens := &fakeTokens{existing: []shared.Token{{ID: "already-minted", Name: name}}}
 
-		out, err := newTestStore(buckets, tokens, &fakeGroups{}).bootstrap(t.Context(), testAccountID, edge.ClassProduction)
+		out, err := storeBootstrap(t, t.Context(), newTestStore(buckets, tokens, &fakeGroups{}), edge.ClassProduction)
 		if err != nil {
 			t.Fatalf("bootstrap: %v", err)
 		}
@@ -302,7 +311,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 
 		tokens := &fakeTokens{value: "token-value", newErr: &cf.Error{StatusCode: http.StatusForbidden}}
 
-		_, err := newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}).bootstrap(t.Context(), testAccountID, edge.ClassProduction)
+		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), edge.ClassProduction)
 		if err == nil {
 			t.Fatal("expected an error when the operator's token cannot mint")
 		}
@@ -318,7 +327,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 
 		tokens := &fakeTokens{value: "token-value", verifyFails: 2}
 
-		out, err := newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}).bootstrap(t.Context(), testAccountID, edge.ClassProduction)
+		out, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), edge.ClassProduction)
 		if err != nil {
 			t.Fatalf("a 403 while a freshly minted token propagates is not fatal: %v", err)
 		}
@@ -335,7 +344,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 
 		tokens := &fakeTokens{value: "token-value", verifyFails: tokenPropagationAttempts + 5}
 
-		_, err := newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}).bootstrap(t.Context(), testAccountID, edge.ClassProduction)
+		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), edge.ClassProduction)
 		if err == nil {
 			t.Fatal("expected an error once the attempt budget is spent")
 		}
@@ -350,7 +359,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 		name := cacheStoreName(edge.ClassProduction)
 		tokens := &fakeTokens{value: "token-value", verifyFails: tokenPropagationAttempts}
 
-		_, err := newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}).bootstrap(t.Context(), testAccountID, edge.ClassProduction)
+		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), edge.ClassProduction)
 		if err == nil {
 			t.Fatal("expected an error when the minted token never becomes usable")
 		}
@@ -374,7 +383,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
-		_, err := store.bootstrap(ctx, testAccountID, edge.ClassProduction)
+		_, err := storeBootstrap(t, ctx, store, edge.ClassProduction)
 		if err == nil {
 			t.Fatal("expected an error once the caller has given up")
 		}
@@ -386,7 +395,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 	t.Run("a class with no cache store is an error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := newTestStore(&fakeBuckets{}, &fakeTokens{}, &fakeGroups{}).bootstrap(t.Context(), testAccountID, edge.Class("staging"))
+		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, &fakeTokens{}, &fakeGroups{}), edge.Class("staging"))
 		if err == nil {
 			t.Fatal("expected an error for a class with no cache store")
 		}

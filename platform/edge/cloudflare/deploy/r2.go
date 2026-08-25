@@ -107,18 +107,56 @@ func s3Objects(endpoint string, creds r2.TemporaryCredentialNewResponse) objectA
 	})
 }
 
-func (s cacheStore) bootstrap(ctx context.Context, accountID string, class edge.Class) (edge.BootstrapOutput, error) {
+type cacheStoreState struct {
+	name       string
+	bucketHeld bool
+	token      shared.Token
+	tokenHeld  bool
+}
+
+func (s cacheStore) read(ctx context.Context, accountID string, class edge.Class) (cacheStoreState, error) {
 	name, ok := cacheStoreNameByClass[class]
 	if !ok {
-		return edge.BootstrapOutput{}, fmt.Errorf("cloudflare: unknown class %q", class)
+		return cacheStoreState{}, fmt.Errorf("cloudflare: unknown class %q", class)
 	}
-	if err := s.ensureBucket(ctx, accountID, name); err != nil {
-		return edge.BootstrapOutput{}, err
+	bucketHeld, err := s.bucketPresent(ctx, accountID, name)
+	if err != nil {
+		return cacheStoreState{}, err
+	}
+	token, tokenHeld, err := s.findToken(ctx, name)
+	if err != nil {
+		return cacheStoreState{}, err
+	}
+	return cacheStoreState{name: name, bucketHeld: bucketHeld, token: token, tokenHeld: tokenHeld}, nil
+}
+
+func (s cacheStore) bucketPresent(ctx context.Context, accountID, name string) (bool, error) {
+	_, err := s.buckets.Get(ctx, name, r2.BucketGetParams{AccountID: cf.F(accountID)})
+	switch {
+	case err == nil:
+		return true, nil
+	case hasStatus(err, http.StatusNotFound):
+		return false, nil
+	default:
+		return false, fmt.Errorf("look up R2 bucket %q: %w", name, err)
+	}
+}
+
+func (s cacheStore) bootstrap(ctx context.Context, accountID string, state cacheStoreState) (edge.BootstrapOutput, error) {
+	name := state.name
+	if !state.bucketHeld {
+		if err := s.createBucket(ctx, accountID, name); err != nil {
+			return edge.BootstrapOutput{}, err
+		}
 	}
 
-	token, err := s.ensureToken(ctx, accountID, name)
-	if err != nil {
-		return edge.BootstrapOutput{}, err
+	token := mintedToken{ID: state.token.ID}
+	if !state.tokenHeld {
+		minted, err := s.mintToken(ctx, accountID, name)
+		if err != nil {
+			return edge.BootstrapOutput{}, err
+		}
+		token = minted
 	}
 
 	values := map[string]string{
@@ -270,14 +308,7 @@ func bucketGone(err error) bool {
 	return errors.As(err, &apiErr) && (apiErr.ErrorCode() == "NoSuchBucket" || apiErr.ErrorCode() == "NotFound")
 }
 
-func (s cacheStore) ensureBucket(ctx context.Context, accountID, name string) error {
-	_, err := s.buckets.Get(ctx, name, r2.BucketGetParams{AccountID: cf.F(accountID)})
-	if err == nil {
-		return nil
-	}
-	if !hasStatus(err, http.StatusNotFound) {
-		return fmt.Errorf("look up R2 bucket %q: %w", name, err)
-	}
+func (s cacheStore) createBucket(ctx context.Context, accountID, name string) error {
 	if _, err := s.buckets.New(ctx, r2.BucketNewParams{
 		AccountID: cf.F(accountID),
 		Name:      cf.F(name),
@@ -285,17 +316,6 @@ func (s cacheStore) ensureBucket(ctx context.Context, accountID, name string) er
 		return fmt.Errorf("create R2 bucket %q: %w", name, err)
 	}
 	return nil
-}
-
-func (s cacheStore) ensureToken(ctx context.Context, accountID, name string) (mintedToken, error) {
-	existing, found, err := s.findToken(ctx, name)
-	if err != nil {
-		return mintedToken{}, err
-	}
-	if found {
-		return mintedToken{ID: existing.ID}, nil
-	}
-	return s.mintToken(ctx, accountID, name)
 }
 
 func (s cacheStore) findToken(ctx context.Context, name string) (shared.Token, bool, error) {

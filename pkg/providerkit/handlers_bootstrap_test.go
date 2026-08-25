@@ -387,6 +387,54 @@ func TestPlanBootstrapRefusesAnIntentAimedElsewhere(t *testing.T) {
 	}
 }
 
+func TestPlanBootstrapRefusesAnIntentAimedAtAnotherEdge(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		asked   *contractv1.EdgeSelection
+		aimed   *contractv1.EdgeSelection
+		refused bool
+	}{
+		{
+			name:    "the intent names an edge the question did not",
+			aimed:   &contractv1.EdgeSelection{Kind: string(fake.KindRelay)},
+			refused: true,
+		},
+		{
+			name:    "the question names an edge the intent did not",
+			asked:   &contractv1.EdgeSelection{Kind: string(fake.KindRelay)},
+			refused: true,
+		},
+		{
+			name:  "both name the same edge",
+			asked: &contractv1.EdgeSelection{Kind: string(fake.KindRelay)},
+			aimed: &contractv1.EdgeSelection{Kind: string(fake.KindRelay)},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			client, _ := contractServed(t, "1.2.3")
+			_, err := client.PlanBootstrap(context.Background(), &contractv1.PlanBootstrapRequest{
+				Tier: environmentv1.Tier_TIER_PRODUCTION,
+				Edge: tc.asked,
+				Intent: &contractv1.BootstrapRequest{
+					Tier:     environmentv1.Tier_TIER_PRODUCTION,
+					Features: []string{fake.FeatureCache},
+					Edge:     tc.aimed,
+				},
+			})
+			if tc.refused && connect.CodeOf(err) != connect.CodeInvalidArgument {
+				t.Fatalf("PlanBootstrap() = %v, want an intent aimed at another edge refused rather than planned against this one", err)
+			}
+			if !tc.refused && err != nil {
+				t.Fatalf("PlanBootstrap() error = %v, want a plan where question and intent name one edge", err)
+			}
+		})
+	}
+}
+
 func TestPlanBootstrapReportsADowngrade(t *testing.T) {
 	t.Parallel()
 
