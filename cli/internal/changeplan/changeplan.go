@@ -17,6 +17,7 @@ const BypassEnv = "OCEL_DESTROY_BYPASS_CONFIRMATION"
 
 const (
 	stackKind   = "stack"
+	edgeKind    = "edge"
 	baselineTag = "core"
 	gutter      = "  "
 	typeGutter  = "   "
@@ -106,11 +107,12 @@ func (p *Printer) GroupLine(group *contractv1.ChangeGroup) string {
 	if words := actionWords(group.GetAction()); words != "" {
 		b.WriteString(words + " ")
 	}
-	if kind := group.GetKind(); kind != "" && kind != stackKind {
+	named := bootstrapKinds[group.GetKind()]
+	if kind := group.GetKind(); kind != "" && !named {
 		b.WriteString(kind + " ")
 	}
 	b.WriteString(p.style(color.Bold).Sprint(group.GetName()))
-	if group.GetKind() == stackKind {
+	if named {
 		b.WriteString(gutter + p.faint("["+groupTag(group)+"]"))
 	}
 	b.WriteString(p.trail(gutter, group.GetReason(), group.GetSlow()))
@@ -140,6 +142,8 @@ func changeLabel(change *contractv1.Change) string {
 	}
 	return change.GetName()
 }
+
+var bootstrapKinds = map[string]bool{stackKind: true, edgeKind: true}
 
 func groupTag(group *contractv1.ChangeGroup) string {
 	if feature := group.GetFeature(); feature != "" {

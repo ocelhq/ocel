@@ -367,6 +367,9 @@ func (s *deployFakeProviderServer) PlanBootstrap(ctx context.Context, req *contr
 		}
 	}
 	journalPlanBootstrap(req)
+	if err := refuseBootstrapPlan(req); err != nil {
+		return nil, err
+	}
 	return &contractv1.PlanBootstrapResponse{
 		Features: []*contractv1.Feature{
 			feature("isr", "incremental static regeneration"),
@@ -387,10 +390,11 @@ func fakeChangePlan(req *contractv1.PlanBootstrapRequest) *contractv1.ChangePlan
 		return nil
 	}
 	class := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
-	core := &contractv1.ChangeGroup{Kind: "stack", Name: "ocel-" + class + "-core"}
+	core := &contractv1.ChangeGroup{Kind: "stack", Name: "aws/ocel-" + class + "-core"}
 	plan := &contractv1.ChangePlan{
-		Subject: class,
-		Groups:  []*contractv1.ChangeGroup{core},
+		Subject:  class,
+		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
+		Groups:   []*contractv1.ChangeGroup{core},
 	}
 	switch shape {
 	case "keep":
@@ -409,7 +413,7 @@ func fakeChangePlan(req *contractv1.PlanBootstrapRequest) *contractv1.ChangePlan
 	plan.Groups = append(plan.Groups,
 		&contractv1.ChangeGroup{
 			Kind:    "stack",
-			Name:    "ocel-" + class + "-image-optimization",
+			Name:    "aws/ocel-" + class + "-image-optimization",
 			Feature: "image-optimization",
 			Action:  contractv1.Change_ACTION_CREATE,
 			Changes: []*contractv1.Change{
@@ -418,7 +422,7 @@ func fakeChangePlan(req *contractv1.PlanBootstrapRequest) *contractv1.ChangePlan
 		},
 		&contractv1.ChangeGroup{
 			Kind:    "stack",
-			Name:    "ocel-" + class + "-isr",
+			Name:    "aws/ocel-" + class + "-isr",
 			Feature: "isr",
 			Action:  contractv1.Change_ACTION_DELETE,
 			Reason:  "web, api were deployed against it",
@@ -429,13 +433,44 @@ func fakeChangePlan(req *contractv1.PlanBootstrapRequest) *contractv1.ChangePlan
 		},
 		&contractv1.ChangeGroup{
 			Kind:    "stack",
-			Name:    "ocel-" + class + "-secrets",
+			Name:    "aws/ocel-" + class + "-secrets",
 			Feature: "secrets",
 			Action:  contractv1.Change_ACTION_KEEP,
 			Reason:  "already current",
 		},
 	)
+	if front := fakeEdgeGroup(req, class); front != nil {
+		plan.Groups = append(plan.Groups, front)
+	}
 	return plan
+}
+
+func fakeEdgeGroup(req *contractv1.PlanBootstrapRequest, class string) *contractv1.ChangeGroup {
+	if resolvedEdgeKind(req.GetEdge().GetKind()) != "cloudflare" {
+		return nil
+	}
+	store := "ocel-deployments-store"
+	if class == "preview" {
+		store += "-preview"
+	}
+	return &contractv1.ChangeGroup{
+		Kind:    "edge",
+		Name:    "cloudflare/edge",
+		Feature: "cloudflare-edge",
+		Action:  contractv1.Change_ACTION_CREATE,
+		Changes: []*contractv1.Change{
+			{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: contractv1.Change_ACTION_CREATE},
+			{Kind: "Cloudflare::Worker", Name: store, Action: contractv1.Change_ACTION_CREATE},
+		},
+	}
+}
+
+func refuseBootstrapPlan(req *contractv1.PlanBootstrapRequest) error {
+	if req.GetIntent() == nil || os.Getenv(FakeBootstrapPlanEnvVar) != "edge-credentials" {
+		return nil
+	}
+	return connect.NewError(connect.CodeInvalidArgument, errors.New(
+		"plan the cloudflare edge bootstrap: CLOUDFLARE_ACCOUNT_ID is not set; export it and re-run"))
 }
 
 func journalPlanBootstrap(req *contractv1.PlanBootstrapRequest) {
