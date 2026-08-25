@@ -1,4 +1,4 @@
-package devserver
+package blob
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 
 const detectInterval = 500 * time.Millisecond
 
-type detector struct {
+type Detector struct {
 	apiURL     string
 	token      string
 	projectID  string
@@ -20,8 +20,8 @@ type detector struct {
 	interval   time.Duration
 }
 
-func newDetector(apiURL, token, projectID string) *detector {
-	return &detector{
+func NewDetector(apiURL, token, projectID string) *Detector {
+	return &Detector{
 		apiURL:     apiURL,
 		token:      token,
 		projectID:  projectID,
@@ -30,22 +30,22 @@ func newDetector(apiURL, token, projectID string) *detector {
 	}
 }
 
-type detectRequestBody struct {
+type DetectRequestBody struct {
 	ProjectID string `json:"projectId"`
 }
 
-type completion struct {
+type Completion struct {
 	CallbackBaseURL string        `json:"callbackBaseUrl"`
 	SessionID       string        `json:"sessionId"`
-	File            completedFile `json:"file"`
+	File            CompletedFile `json:"file"`
 	Signature       string        `json:"signature"`
 }
 
-type detectResponseBody struct {
-	Completions []completion `json:"completions"`
+type DetectResponseBody struct {
+	Completions []Completion `json:"completions"`
 }
 
-func (d *detector) run(ctx context.Context, reportErr func(error)) {
+func (d *Detector) Run(ctx context.Context, reportErr func(error)) {
 	ticker := time.NewTicker(d.interval)
 	defer ticker.Stop()
 	for {
@@ -60,7 +60,7 @@ func (d *detector) run(ctx context.Context, reportErr func(error)) {
 	}
 }
 
-func (d *detector) sweep(ctx context.Context) error {
+func (d *Detector) sweep(ctx context.Context) error {
 	completions, err := d.detect(ctx)
 	if err != nil {
 		return err
@@ -73,8 +73,8 @@ func (d *detector) sweep(ctx context.Context) error {
 	return nil
 }
 
-func (d *detector) detect(ctx context.Context) ([]completion, error) {
-	body, err := json.Marshal(detectRequestBody{ProjectID: d.projectID})
+func (d *Detector) detect(ctx context.Context) ([]Completion, error) {
+	body, err := json.Marshal(DetectRequestBody{ProjectID: d.projectID})
 	if err != nil {
 		return nil, err
 	}
@@ -94,15 +94,15 @@ func (d *detector) detect(ctx context.Context) ([]completion, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("detect: unexpected status %d", resp.StatusCode)
 	}
-	var decoded detectResponseBody
+	var decoded DetectResponseBody
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, err
 	}
 	return decoded.Completions, nil
 }
 
-func (d *detector) postCallback(ctx context.Context, c completion) error {
-	body, err := json.Marshal(signedCompletion{
+func (d *Detector) postCallback(ctx context.Context, c Completion) error {
+	body, err := json.Marshal(SignedCompletion{
 		SessionID: c.SessionID,
 		Signature: c.Signature,
 		File:      c.File,

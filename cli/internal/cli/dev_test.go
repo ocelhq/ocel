@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/consolebinding"
-	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console/binding"
+	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
@@ -830,8 +830,8 @@ func waitForFile(t *testing.T, path string) {
 
 func writeLink(t *testing.T, dir, apiURL, projectID string) {
 	t.Helper()
-	link := consolebinding.Binding{APIURL: apiURL, OrganizationID: "org_1", ProjectID: projectID, ProjectName: "Test"}
-	if err := consolebinding.Write(dir, link); err != nil {
+	link := binding.Binding{APIURL: apiURL, OrganizationID: "org_1", ProjectID: projectID, ProjectName: "Test"}
+	if err := binding.Write(dir, link); err != nil {
 		t.Fatalf("write link: %v", err)
 	}
 }

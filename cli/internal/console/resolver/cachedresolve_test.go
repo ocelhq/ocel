@@ -1,4 +1,4 @@
-package resolve
+package resolver
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/resolvecache"
+	"github.com/ocelhq/ocel/cli/internal/console/resolvecache"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
@@ -19,7 +19,7 @@ import (
 func cachingResolver(t *testing.T) (*Resolver, string) {
 	t.Helper()
 	dir := t.TempDir()
-	r := NewResolver()
+	r := New()
 	r.OpenCache = func() (*resolvecache.Cache, error) { return resolvecache.OpenAt(dir) }
 	return r, dir
 }

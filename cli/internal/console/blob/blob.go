@@ -1,4 +1,4 @@
-package devserver
+package blob
 
 import (
 	"bytes"
@@ -15,15 +15,15 @@ import (
 	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
 )
 
-type blobProxy struct {
+type Proxy struct {
 	apiURL     string
 	token      string
 	projectID  string
 	httpClient *http.Client
 }
 
-func newBlobProxy(apiURL, token, projectID string) *blobProxy {
-	return &blobProxy{
+func NewProxy(apiURL, token, projectID string) *Proxy {
+	return &Proxy{
 		apiURL:     apiURL,
 		token:      token,
 		projectID:  projectID,
@@ -31,38 +31,38 @@ func newBlobProxy(apiURL, token, projectID string) *blobProxy {
 	}
 }
 
-type presignFile struct {
+type PresignFile struct {
 	Key      string `json:"key"`
 	Name     string `json:"name"`
 	Size     int64  `json:"size"`
 	MimeType string `json:"mimeType"`
 }
 
-type presignRequestBody struct {
+type PresignRequestBody struct {
 	ProjectID          string        `json:"projectId"`
 	Bucket             string        `json:"bucket"`
 	Metadata           []byte        `json:"metadata"`
-	Files              []presignFile `json:"files"`
+	Files              []PresignFile `json:"files"`
 	ContentDisposition string        `json:"contentDisposition"`
 	CallbackBaseURL    string        `json:"callbackBaseUrl"`
 }
 
-type presignedTarget struct {
+type PresignedTarget struct {
 	URL                string `json:"url"`
 	Key                string `json:"key"`
 	Name               string `json:"name"`
 	ContentDisposition string `json:"contentDisposition"`
 }
 
-type presignResponseBody struct {
+type PresignResponseBody struct {
 	SessionID string            `json:"sessionId"`
-	Files     []presignedTarget `json:"files"`
+	Files     []PresignedTarget `json:"files"`
 }
 
-func (s *blobProxy) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRequest) (*blobv1.PresignUploadResponse, error) {
-	files := make([]presignFile, 0, len(req.GetFiles()))
+func (s *Proxy) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRequest) (*blobv1.PresignUploadResponse, error) {
+	files := make([]PresignFile, 0, len(req.GetFiles()))
 	for _, f := range req.GetFiles() {
-		files = append(files, presignFile{
+		files = append(files, PresignFile{
 			Key:      f.GetKey(),
 			Name:     f.GetName(),
 			Size:     f.GetSize(),
@@ -70,7 +70,7 @@ func (s *blobProxy) PresignUpload(ctx context.Context, req *blobv1.PresignUpload
 		})
 	}
 
-	body, err := json.Marshal(presignRequestBody{
+	body, err := json.Marshal(PresignRequestBody{
 		ProjectID:          s.projectID,
 		Bucket:             req.GetBucket(),
 		Metadata:           req.GetMetadata(),
@@ -98,7 +98,7 @@ func (s *blobProxy) PresignUpload(ctx context.Context, req *blobv1.PresignUpload
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("presign upload: unexpected status %d", resp.StatusCode))
 	}
 
-	var decoded presignResponseBody
+	var decoded PresignResponseBody
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode presign response: %w", err))
 	}
@@ -111,30 +111,30 @@ func (s *blobProxy) PresignUpload(ctx context.Context, req *blobv1.PresignUpload
 	return &blobv1.PresignUploadResponse{SessionId: decoded.SessionID, Files: targets}, nil
 }
 
-type signedCompletion struct {
+type SignedCompletion struct {
 	SessionID string        `json:"sessionId"`
 	Signature string        `json:"signature"`
-	File      completedFile `json:"file"`
+	File      CompletedFile `json:"file"`
 }
 
-type completedFile struct {
+type CompletedFile struct {
 	Key      string `json:"key"`
 	Name     string `json:"name"`
 	Size     int64  `json:"size"`
 	MimeType string `json:"mimeType"`
 }
 
-type verifyResponseBody struct {
+type VerifyResponseBody struct {
 	Valid    bool   `json:"valid"`
 	Metadata []byte `json:"metadata"`
 }
 
-func (s *blobProxy) VerifyUploadSignature(ctx context.Context, req *blobv1.VerifyUploadSignatureRequest) (*blobv1.VerifyUploadSignatureResponse, error) {
+func (s *Proxy) VerifyUploadSignature(ctx context.Context, req *blobv1.VerifyUploadSignatureRequest) (*blobv1.VerifyUploadSignatureResponse, error) {
 	f := req.GetFile()
-	body, err := json.Marshal(signedCompletion{
+	body, err := json.Marshal(SignedCompletion{
 		SessionID: req.GetSessionId(),
 		Signature: req.GetSignature(),
-		File: completedFile{
+		File: CompletedFile{
 			Key:      f.GetKey(),
 			Name:     f.GetName(),
 			Size:     f.GetSize(),
@@ -160,19 +160,19 @@ func (s *blobProxy) VerifyUploadSignature(ctx context.Context, req *blobv1.Verif
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("verify upload signature: unexpected status %d", resp.StatusCode))
 	}
 
-	var decoded verifyResponseBody
+	var decoded VerifyResponseBody
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode verify response: %w", err))
 	}
 	return &blobv1.VerifyUploadSignatureResponse{Valid: decoded.Valid, Metadata: decoded.Metadata}, nil
 }
 
-type statusResponseBody struct {
+type StatusResponseBody struct {
 	State string `json:"state"`
 	Error string `json:"error"`
 }
 
-func (s *blobProxy) GetUploadStatus(ctx context.Context, req *blobv1.GetUploadStatusRequest) (*blobv1.GetUploadStatusResponse, error) {
+func (s *Proxy) GetUploadStatus(ctx context.Context, req *blobv1.GetUploadStatusRequest) (*blobv1.GetUploadStatusResponse, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, s.apiEndpoint("/api/blob/status")+"?sessionId="+url.QueryEscape(req.GetSessionId()), nil)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build status request: %w", err))
@@ -188,7 +188,7 @@ func (s *blobProxy) GetUploadStatus(ctx context.Context, req *blobv1.GetUploadSt
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get upload status: unexpected status %d", resp.StatusCode))
 	}
 
-	var decoded statusResponseBody
+	var decoded StatusResponseBody
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode status response: %w", err))
 	}
@@ -208,7 +208,7 @@ func uploadStateFromString(s string) blobv1.UploadState {
 	}
 }
 
-func (s *blobProxy) apiEndpoint(path string) string {
+func (s *Proxy) apiEndpoint(path string) string {
 	return endpoint(s.apiURL, path)
 }
 
@@ -216,7 +216,7 @@ func endpoint(base, path string) string {
 	return strings.TrimRight(base, "/") + path
 }
 
-func (s *blobProxy) authorize(req *http.Request) {
+func (s *Proxy) authorize(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	if s.token != "" {
 		req.Header.Set("Authorization", "Bearer "+s.token)

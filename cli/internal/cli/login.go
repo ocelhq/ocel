@@ -4,18 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/authclient"
-	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/console/auth"
+	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 )
-
-const defaultAPIURL = "https://ocel.app"
 
 var loginForce bool
 
@@ -33,19 +31,9 @@ func init() {
 	loginCmd.Flags().BoolVar(&loginForce, "force", false, "Re-authenticate even if already logged in")
 }
 
-func resolveAPIURL() string {
-	if v := strings.TrimSpace(os.Getenv("OCEL_API_URL")); v != "" {
-		return v
-	}
-	if os.Getenv("OCEL_DEV") != "" {
-		return "http://localhost:3000"
-	}
-	return defaultAPIURL
-}
-
 func runLogin(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
-	apiURL := strings.TrimRight(effectiveAPIURL(""), "/")
+	apiURL := strings.TrimRight(console.EffectiveBaseURL(""), "/")
 
 	if !loginForce {
 		if existing, err := credentials.Load(); err == nil {
@@ -62,7 +50,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 	defer stop()
 
-	client := authclient.New(apiURL)
+	client := auth.New(apiURL)
 
 	device, err := client.RequestDeviceCode(ctx)
 	if err != nil {
@@ -125,7 +113,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func pollForToken(ctx context.Context, client *authclient.Client, device *authclient.DeviceCode) (*authclient.TokenResult, error) {
+func pollForToken(ctx context.Context, client *auth.Client, device *auth.DeviceCode) (*auth.TokenResult, error) {
 	interval := time.Duration(device.Interval) * time.Second
 	if interval <= 0 {
 		interval = 5 * time.Second
@@ -144,14 +132,14 @@ func pollForToken(ctx context.Context, client *authclient.Client, device *authcl
 		}
 
 		switch {
-		case authclient.IsPending(err):
+		case auth.IsPending(err):
 			continue
-		case authclient.IsSlowDown(err):
+		case auth.IsSlowDown(err):
 			interval += 5 * time.Second
 			continue
-		case authclient.IsAccessDenied(err):
+		case auth.IsAccessDenied(err):
 			return nil, errors.New("login request was denied")
-		case authclient.IsExpired(err):
+		case auth.IsExpired(err):
 			return nil, errors.New("the login code expired before it was confirmed — run `ocel login` again")
 		default:
 			return nil, fmt.Errorf("login failed: %w", err)

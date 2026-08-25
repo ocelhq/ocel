@@ -1,4 +1,4 @@
-package projectclient
+package project
 
 import (
 	"context"

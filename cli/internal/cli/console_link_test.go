@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/consolebinding"
-	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console/binding"
+	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -65,15 +65,15 @@ func newCloudServer(t *testing.T, projects ...map[string]string) *cloudServer {
 	return c
 }
 
-func project(id, name, slug string) map[string]string {
+func projectRow(id, name, slug string) map[string]string {
 	return map[string]string{"id": id, "organizationId": "org_1", "name": name, "slug": slug}
 }
 
-func readLink(t *testing.T, dir, apiURL string) *consolebinding.Binding {
+func readLink(t *testing.T, dir, apiURL string) *binding.Binding {
 	t.Helper()
-	link, err := consolebinding.Read(dir, apiURL)
+	link, err := binding.Read(dir, apiURL)
 	if err != nil {
-		t.Fatalf("consolebinding.Read: %v", err)
+		t.Fatalf("binding.Read: %v", err)
 	}
 	return link
 }
@@ -106,7 +106,7 @@ func TestRunLink(t *testing.T) {
 
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
-		srv := newCloudServer(t, project("p1", "My App", "my-app"), project("p2", "Other", "other"))
+		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other", "other"))
 		dir := t.TempDir()
 
 		opts := consoleLinkOptions{apiURL: srv.URL}
@@ -118,7 +118,7 @@ func TestRunLink(t *testing.T) {
 		if link == nil {
 			t.Fatal("no link written")
 		}
-		want := consolebinding.Binding{APIURL: srv.URL, OrganizationID: "org_1", ProjectID: "p2", ProjectName: "Other"}
+		want := binding.Binding{APIURL: srv.URL, OrganizationID: "org_1", ProjectID: "p2", ProjectName: "Other"}
 		if *link != want {
 			t.Fatalf("link = %+v, want %+v", *link, want)
 		}
@@ -135,7 +135,7 @@ func TestRunLink(t *testing.T) {
 
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
-		srv := newCloudServer(t, project("p1", "My App", "my-app"))
+		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"))
 
 		opts := consoleLinkOptions{apiURL: srv.URL}
 		err := runConsoleLink(context.Background(), deps, t.TempDir(), "nope", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
@@ -152,7 +152,7 @@ func TestRunLink(t *testing.T) {
 
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
-		srv := newCloudServer(t, project("p1", "My App", "my-app"))
+		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"))
 
 		dir := t.TempDir()
 		opts := consoleLinkOptions{apiURL: srv.URL}
@@ -281,10 +281,10 @@ func TestRunLink(t *testing.T) {
 
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
-		srv := newCloudServer(t, project("p1", "My App", "my-app"), project("p2", "Other", "other"))
+		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other", "other"))
 
 		dir := t.TempDir()
-		if err := consolebinding.Write(dir, consolebinding.Binding{
+		if err := binding.Write(dir, binding.Binding{
 			APIURL: srv.URL, OrganizationID: "org_1", ProjectID: "p1", ProjectName: "My App",
 		}); err != nil {
 			t.Fatalf("seed link: %v", err)
@@ -308,10 +308,10 @@ func TestRunLink(t *testing.T) {
 
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
-		srv := newCloudServer(t, project("p1", "My App", "my-app"))
+		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"))
 
 		dir := t.TempDir()
-		if err := consolebinding.Write(dir, consolebinding.Binding{
+		if err := binding.Write(dir, binding.Binding{
 			APIURL: "https://elsewhere.example.com", OrganizationID: "org_9", ProjectID: "p9", ProjectName: "Elsewhere",
 		}); err != nil {
 			t.Fatalf("seed link: %v", err)
@@ -341,7 +341,7 @@ func TestRunUnlink(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		if err := consolebinding.Write(dir, consolebinding.Binding{APIURL: "https://ocel.app", ProjectID: "p1"}); err != nil {
+		if err := binding.Write(dir, binding.Binding{APIURL: "https://ocel.app", ProjectID: "p1"}); err != nil {
 			t.Fatalf("seed link: %v", err)
 		}
 

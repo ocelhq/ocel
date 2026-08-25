@@ -12,6 +12,8 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
+	"github.com/ocelhq/ocel/cli/internal/console/blob"
+	"github.com/ocelhq/ocel/cli/internal/console/resolver"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -43,8 +45,8 @@ type Server struct {
 	token         string
 	projectID     string
 	devServerAddr string
-	blob          *blobProxy
-	detector      *detector
+	blob          *blob.Proxy
+	detector      *blob.Detector
 	syncCh        chan SyncResult
 
 	fetchAccount    func(ctx context.Context, apiURL, token, projectID string) (resolve.Account, error)
@@ -64,11 +66,11 @@ func New(apiURL, token, projectID, devServerAddr string) *Server {
 		token:           token,
 		projectID:       projectID,
 		devServerAddr:   devServerAddr,
-		blob:            newBlobProxy(apiURL, token, projectID),
-		detector:        newDetector(apiURL, token, projectID),
+		blob:            blob.NewProxy(apiURL, token, projectID),
+		detector:        blob.NewDetector(apiURL, token, projectID),
 		syncCh:          make(chan SyncResult, 1),
 		fetchAccount:    resolve.StubAccount,
-		resolve:         resolve.Resolve,
+		resolve:         resolver.Resolve,
 		fetchLiveValues: resolve.StubLiveValues,
 		config:          newConfigCache(),
 		live:            newLiveKeys(),
@@ -78,7 +80,7 @@ func New(apiURL, token, projectID, devServerAddr string) *Server {
 }
 
 func (s *Server) RunDetector(ctx context.Context, reportErr func(error)) {
-	s.detector.run(ctx, reportErr)
+	s.detector.Run(ctx, reportErr)
 }
 
 func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*resourcesv1.DeclareResponse, error) {

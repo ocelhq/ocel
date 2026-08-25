@@ -1,4 +1,4 @@
-package resolve
+package resolver
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "ocel-resolve-test-config-")
+	dir, err := os.MkdirTemp("", "ocel-resolver-test-config-")
 	if err != nil {
 		panic(err)
 	}
