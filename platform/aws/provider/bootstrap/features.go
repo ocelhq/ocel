@@ -60,7 +60,6 @@ type feature struct {
 	template   func(featureInputs) featureStack
 	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
 	placements func(string) stackPayloads
-	before     func(context.Context, stepDeps) error
 	after      func(context.Context, stepDeps) error
 	drop       func(context.Context, stepDeps) error
 }

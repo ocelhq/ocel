@@ -217,16 +217,8 @@ func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (
 	return bootstrap.CheckDeployed(ctx, c.CFN, p)
 }
 
-func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
-	c, err := p.clientsFor(ctx)
-	if err != nil {
-		return edge.BootstrapOutput{}, err
-	}
-	deployed, err := p.bootstrap(ctx, c, class)
-	if err != nil {
-		return edge.BootstrapOutput{}, err
-	}
-	if _, err := edgeSetOf(deployed, class); err != nil {
+func (p *provider) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
+	if err := knownClass(class); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
 	return edge.BootstrapOutput{Trust: edge.TrustInternal}, nil

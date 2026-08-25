@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	mathrand "math/rand/v2"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -127,6 +128,28 @@ func CheckDeployedFor(ctx context.Context, api CFNDescriber, class string, front
 	return deployed, err
 }
 
+type Reading struct {
+	Deployed Deployed
+	class    string
+	refs     stackRefs
+}
+
+func Read(ctx context.Context, api CFNDescriber, class string, front edge.Edge) (Reading, error) {
+	deployed, refs, err := readBootstrap(ctx, api, class, front)
+	if err != nil {
+		return Reading{}, err
+	}
+	return Reading{Deployed: deployed, class: class, refs: refs}, nil
+}
+
+func CoreOutputs(ctx context.Context, api CFNDescriber, class string) (map[string]string, error) {
+	stackName, err := StackNameFor(class)
+	if err != nil {
+		return nil, err
+	}
+	return stackOutputs(ctx, api, stackName)
+}
+
 func readBootstrap(ctx context.Context, api CFNDescriber, class string, front edge.Edge) (Deployed, stackRefs, error) {
 	coreStack, err := StackNameFor(class)
 	if err != nil {
@@ -173,7 +196,7 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string, front ed
 		Present:   true,
 		Schema:    coreStamp.Schema,
 		Digest:    coreStamp.Digest,
-		Intended:  TemplateDigest(target.template(coreFragment(front, class))),
+		Intended:  TemplateDigest(target.core(coreFragment(front, class))),
 		WrittenBy: coreStamp.WrittenBy,
 	})
 	for _, f := range featureRegistry {
@@ -298,15 +321,15 @@ type spec struct {
 	class     string
 	stackName string
 	stackStep string
-	template  func(CoreFragment) string
 }
+
+func (s spec) core(front CoreFragment) string { return coreStackTemplate(s.class, front) }
 
 func productionBootstrap() spec {
 	return spec{
 		class:     ClassProduction,
 		stackName: StackName,
 		stackStep: "Ensuring Pulumi state bucket and state table (CloudFormation)",
-		template:  stackTemplate,
 	}
 }
 
@@ -315,7 +338,6 @@ func previewBootstrap() spec {
 		class:     ClassPreview,
 		stackName: PreviewStackName,
 		stackStep: "Ensuring preview infrastructure (CloudFormation)",
-		template:  previewStackTemplate,
 	}
 }
 
@@ -374,9 +396,16 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	}
 
 	progressf(target.stackStep)
+	standing, err := standingCore(ctx, apis.CFN, target)
+	if err != nil {
+		return err
+	}
+	if err := refuseEdgeSwitch(target, apis.Edge, standing); err != nil {
+		return err
+	}
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	review := admitReplacements(req.AcceptReplacements, logf)
-	coreBody := target.template(coreFragment(apis.Edge, target.class))
+	coreBody := target.core(coreFragment(apis.Edge, target.class))
 	coreTags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
 	if err := upsertCFNStack(ctx, apis.CFN, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
@@ -386,7 +415,11 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 		return err
 	}
 	steps := stepDeps{class: target.class, ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
-	if err := bootstrapEdge(ctx, steps, apis.Edge); err != nil {
+	if droppingEdge(apis.Edge, req) {
+		if err := tearDownEdge(ctx, steps, apis.Edge); err != nil {
+			return err
+		}
+	} else if err := bootstrapEdge(ctx, steps, apis.Edge); err != nil {
 		return err
 	}
 
@@ -411,16 +444,6 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	}
 
 	for _, level := range levels {
-		for _, name := range level {
-			f, _ := featureNamed(name)
-			if f.before == nil {
-				continue
-			}
-			if err := f.before(ctx, steps); err != nil {
-				return fmt.Errorf("%s: %w", name, err)
-			}
-		}
-
 		progressf(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(featureStackNames(level, target.class), ", ")))
 		produced := make([]map[string]string, len(level))
 		group, gctx := errgroup.WithContext(ctx)
@@ -487,6 +510,27 @@ func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, class string,
 		}
 	}
 	return deleteFeatureStacks(ctx, cfn, class, dropOrder, logf)
+}
+
+func standingCore(ctx context.Context, api CFNDescriber, target spec) (Deployed, error) {
+	core, err := describeStack(ctx, api, target.stackName)
+	if err != nil || core == nil || stackUnusable(core.StackStatus) {
+		return Deployed{}, err
+	}
+	return Deployed{Present: true, CoreOutputs: outputsOf(core)}, nil
+}
+
+func droppingEdge(front edge.Edge, req Request) bool {
+	name := providerkit.FeatureNeedingEdge(Catalogue(), front.Kind())
+	return name != "" && slices.Contains(req.Drop, name) && !slices.Contains(req.Features, name)
+}
+
+func tearDownEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
+	d.progress(fmt.Sprintf("Tearing the %s edge down", front.Kind()))
+	if err := front.Teardown(ctx, edge.Class(d.class)); err != nil {
+		return fmt.Errorf("tear down %s edge: %w", front.Kind(), err)
+	}
+	return nil
 }
 
 func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
@@ -864,39 +908,39 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func stackTemplate(front CoreFragment) string {
+func coreStackTemplate(class string, front CoreFragment) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap (production) - the account-global core every production app Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store and whatever the selected edge fronts them with."
+Description: %q
 Resources:
 %s%s%s%s%s%s%s%sOutputs:
   %s:
-    Description: "S3 bucket holding the Pulumi state Ocel plans every production deploy and teardown from. One versioned object per app stack."
+    Description: "S3 bucket holding the Pulumi state Ocel plans every %s deploy and teardown from. One versioned object per %s stack."
     Value: !Ref StateBucket
 %s%s%s%s%s%s  %s:
     Description: "Class this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
     Value: '%s'
-`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), appBoundaryResource(ClassProduction), front.Resources, outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), front.Outputs, outputInfraClass, ClassProduction)
+`, coreStackDescription(class),
+		stateBucketResource(class), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(class), appBoundaryResource(class), front.Resources,
+		outputStateBucket, class, scopeOf(class),
+		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), front.Outputs, outputInfraClass, class)
 }
 
-func previewStackTemplate(front CoreFragment) string {
-	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap (preview) - the account-global core every preview environment Ocel deploys here is carved from, kept apart from the production bootstrap so a per-PR preview never reaches production state, variables or caches."
-Resources:
-%s%s%s%s%s%s%s%sOutputs:
-  %s:
-    Description: "S3 bucket holding the Pulumi state Ocel plans every preview deploy and teardown from. One versioned object per preview stack."
-    Value: !Ref StateBucket
-%s%s%s%s%s%s  %s:
-    Description: "Class this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
-    Value: '%s'
-`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), appBoundaryResource(ClassPreview), front.Resources, outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), front.Outputs, outputInfraClass, ClassPreview)
+func coreStackDescription(class string) string {
+	apart := ""
+	if class == ClassPreview {
+		apart = " It is kept apart from the production bootstrap so a per-PR preview never reaches production state, variables or caches."
+	}
+	return fmt.Sprintf("Ocel bootstrap (%s) - the account-global core every %s Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store and whatever the selected edge fronts them with.%s", class, scopeOf(class), apart)
+}
+
+func scopeOf(class string) string {
+	if class == ClassPreview {
+		return "preview environment"
+	}
+	return "production app"
 }
 
 func stateBucketResource(class string) string {
-	scope := "production app"
-	if class == ClassPreview {
-		scope = "preview environment"
-	}
 	return fmt.Sprintf(`  StateBucket:
     Type: AWS::S3::Bucket
     Metadata:
@@ -924,7 +968,7 @@ func stateBucketResource(class string) string {
           - Id: expire-state-delete-markers
             Status: Enabled
             ExpiredObjectDeleteMarker: true
-`, scope, stateNoncurrentDays, stateAbortMultipartDays)
+`, scopeOf(class), stateNoncurrentDays, stateAbortMultipartDays)
 }
 
 func stateTableResource() string {

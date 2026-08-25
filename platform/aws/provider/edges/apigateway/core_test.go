@@ -12,16 +12,18 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+func coreSection(t *testing.T, name, body string) map[string]map[string]any {
+	t.Helper()
+	var parsed map[string]map[string]map[string]any
+	if err := yaml.Unmarshal([]byte(name+":\n"+body), &parsed); err != nil {
+		t.Fatalf("the fragment is spliced into the core template and parsed by the plan renderer, so it has to be YAML: %v\n%s", err, body)
+	}
+	return parsed[name]
+}
+
 func coreResources(t *testing.T, class edge.Class) map[string]map[string]any {
 	t.Helper()
-	fragment := newWorld().edge().CoreStack(string(class))
-	var parsed struct {
-		Resources map[string]map[string]any `yaml:"Resources"`
-	}
-	if err := yaml.Unmarshal([]byte("Resources:\n"+fragment.Resources), &parsed); err != nil {
-		t.Fatalf("the fragment is spliced into the core template and parsed by the plan renderer, so it has to be YAML: %v\n%s", err, fragment.Resources)
-	}
-	return parsed.Resources
+	return coreSection(t, "Resources", newWorld().edge().CoreStack(string(class)).Resources)
 }
 
 func TestCoreStackCarriesEverythingBootstrapUsedToCreate(t *testing.T) {
@@ -38,7 +40,7 @@ func TestCoreStackCarriesEverythingBootstrapUsedToCreate(t *testing.T) {
 				"EdgeNotFoundProxy",
 				"EdgeNotFoundRootMethod",
 				"EdgeNotFoundProxyMethod",
-				"EdgeNotFoundDeployment",
+				deploymentOf(t, resources),
 				"EdgeNotFoundStage",
 			}
 			assertSet(t, "the resources the fragment carries", slices.Collect(maps.Keys(resources)), want)
@@ -110,10 +112,40 @@ func TestTheNotFoundMethodsAnswer404WithTheEdgeHeader(t *testing.T) {
 		}
 	}
 
-	deployment := resources["EdgeNotFoundDeployment"]
+	deployment := resources[deploymentOf(t, resources)]
 	assertSet(t, "what the deployment waits on", toStrings(deployment["DependsOn"]), []string{
 		"EdgeNotFoundRootMethod", "EdgeNotFoundProxyMethod",
 	})
+}
+
+func deploymentOf(t *testing.T, resources map[string]map[string]any) string {
+	t.Helper()
+	for id, resource := range resources {
+		if resource["Type"] == "AWS::ApiGateway::Deployment" {
+			return id
+		}
+	}
+	t.Fatal("the fragment declares no deployment, so the 404 responder's methods are never published")
+	return ""
+}
+
+func TestAChangedResponderIsPublishedRatherThanLeftOnTheOldDeployment(t *testing.T) {
+	resources := coreResources(t, edge.ClassProduction)
+	deployment := deploymentOf(t, resources)
+
+	stage, _ := resources["EdgeNotFoundStage"]["Properties"].(map[string]any)
+	if got := stage["DeploymentId"]; got != deployment {
+		t.Errorf("the stage serves %v, want %s; a stage pointed elsewhere serves whatever was published last", got, deployment)
+	}
+
+	held := notFoundContentTypes
+	t.Cleanup(func() { notFoundContentTypes = held })
+	notFoundContentTypes = append(slices.Clone(held), "application/xml")
+
+	moved := deploymentOf(t, coreResources(t, edge.ClassProduction))
+	if moved == deployment {
+		t.Errorf("a changed responder kept deployment %s, so the stage goes on serving the methods published before the change", deployment)
+	}
 }
 
 func TestTheInvokeRoleReachesOnlyThisAccountsFunctionsAndTheAssetBucket(t *testing.T) {
@@ -163,17 +195,11 @@ func TestTheInvokeRoleReachesOnlyThisAccountsFunctionsAndTheAssetBucket(t *testi
 func TestCoreStackNamesTheOutputsTheEdgeReadsBack(t *testing.T) {
 	t.Parallel()
 
-	fragment := newWorld().edge().CoreStack(string(edge.ClassProduction))
-	var parsed struct {
-		Outputs map[string]map[string]any `yaml:"Outputs"`
-	}
-	if err := yaml.Unmarshal([]byte("Outputs:\n"+fragment.Outputs), &parsed); err != nil {
-		t.Fatalf("the outputs are spliced into the core template, so they have to be YAML: %v\n%s", err, fragment.Outputs)
-	}
-	assertSet(t, "the outputs the fragment carries", slices.Collect(maps.Keys(parsed.Outputs)), []string{
+	outputs := coreSection(t, "Outputs", newWorld().edge().CoreStack(string(edge.ClassProduction)).Outputs)
+	assertSet(t, "the outputs the fragment carries", slices.Collect(maps.Keys(outputs)), []string{
 		OutputInvokeRoleARN, OutputNotFoundAPIID,
 	})
-	for key, output := range parsed.Outputs {
+	for key, output := range outputs {
 		if output["Description"] == "" || output["Value"] == nil {
 			t.Errorf("output %s = %v, want a description and a value", key, output)
 		}

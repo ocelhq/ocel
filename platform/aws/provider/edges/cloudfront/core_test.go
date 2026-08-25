@@ -1,6 +1,8 @@
 package cloudfront
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -46,9 +48,7 @@ func TestCoreStackCarriesTheSetTheEdgeRoutesWith(t *testing.T) {
 				"EdgeHeadersPolicy": "AWS::CloudFront::ResponseHeadersPolicy",
 				"EdgeAssetAccess":   "AWS::CloudFront::OriginAccessControl",
 			}
-			if len(resources) != len(want) {
-				t.Errorf("the fragment declares %d resources, want %d", len(resources), len(want))
-			}
+			assertSet(t, "the resources the fragment carries", slices.Collect(maps.Keys(resources)), slices.Sorted(maps.Keys(want)))
 			for id, kind := range want {
 				held, ok := resources[id].(map[string]any)
 				if !ok {
@@ -60,11 +60,8 @@ func TestCoreStackCarriesTheSetTheEdgeRoutesWith(t *testing.T) {
 			}
 
 			outputs := section(t, parsed, "Outputs")
-			for _, key := range []string{outputRoutesStoreARN, outputResolverARN, outputCachePolicy, outputHeadersPolicy, outputAssetAccess} {
-				if _, ok := outputs[key]; !ok {
-					t.Errorf("the fragment publishes no %s, so a deploy cannot reach what bootstrap made", key)
-				}
-			}
+			assertSet(t, "the outputs the fragment publishes", slices.Collect(maps.Keys(outputs)),
+				[]string{outputRoutesStoreARN, outputResolverARN, outputCachePolicy, outputHeadersPolicy, outputAssetAccess})
 
 			named := []struct{ id, under, want string }{
 				{"EdgeRoutes", "", keyValueStoreName(class)},
@@ -130,7 +127,7 @@ func TestTheFrontKeepsTheOriginsCacheTagsOffTheWire(t *testing.T) {
 		held, _ := item.(map[string]any)
 		dropped = append(dropped, held["Header"].(string))
 	}
-	if !contains(dropped, cacheTagHeader) {
+	if !slices.Contains(dropped, cacheTagHeader) {
 		t.Errorf("the response headers policy removes %v, want %q among them, or every viewer is told the tags of the page it was served", dropped, cacheTagHeader)
 	}
 
@@ -145,15 +142,6 @@ func TestTheFrontKeepsTheOriginsCacheTagsOffTheWire(t *testing.T) {
 	if !marked {
 		t.Errorf("no response headers policy sets %s: %s, so a liveness probe cannot tell which front answered", edge.HeaderEdge, Kind)
 	}
-}
-
-func contains(held []string, want string) bool {
-	for _, name := range held {
-		if name == want {
-			return true
-		}
-	}
-	return false
 }
 
 func TestAnUnknownClassCarriesNothingIntoTheCoreStack(t *testing.T) {

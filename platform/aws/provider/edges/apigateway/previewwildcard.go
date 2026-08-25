@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -24,11 +25,11 @@ func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.Previ
 	if err != nil {
 		return "", err
 	}
-	deployed, err := p.bootstrap(ctx, c, edge.ClassPreview)
+	outputs, err := bootstrap.CoreOutputs(ctx, c.CFN, string(edge.ClassPreview))
 	if err != nil {
 		return "", err
 	}
-	notFound := deployed.CoreOutputs[OutputNotFoundAPIID]
+	notFound := outputs[OutputNotFoundAPIID]
 	if notFound == "" {
 		return "", fmt.Errorf("the preview bootstrap has no not-found API, so nothing would answer a hostname on %s that no preview claims; run `ocel bootstrap preview` first", wildcard)
 	}

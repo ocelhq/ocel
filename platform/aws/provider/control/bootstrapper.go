@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -50,10 +51,14 @@ func BootstrapperFor(cfg aws.Config, front edge.Edge) Bootstrapper {
 func (b Bootstrapper) Catalogue() []providerkit.Feature { return bootstrap.Catalogue() }
 
 func (b Bootstrapper) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
-	deployed, err := bootstrap.CheckDeployedFor(ctx, b.CFN, string(class), b.Edge)
+	read, err := bootstrap.Read(ctx, b.CFN, string(class), b.Edge)
 	if err != nil {
 		return providerkit.Bootstrap{}, err
 	}
+	return described(class, read.Deployed), nil
+}
+
+func described(class providerkit.Class, deployed bootstrap.Deployed) providerkit.Bootstrap {
 	described := providerkit.Bootstrap{Class: class, Present: deployed.Present}
 	for _, stack := range deployed.Stacks {
 		described.Stacks = append(described.Stacks, providerkit.BootstrapStack{
@@ -65,22 +70,22 @@ func (b Bootstrapper) Describe(ctx context.Context, class providerkit.Class) (pr
 			Writer:        stack.WrittenBy,
 		})
 	}
-	return described, nil
+	return described
 }
 
 func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
-	described, err := b.Describe(ctx, req.Class)
+	read, err := bootstrap.Read(ctx, b.CFN, string(req.Class), b.Edge)
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
-	groups, err := bootstrap.PlanChanges(ctx, b.CFN, string(req.Class), b.Edge,
+	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read, b.Edge,
 		bootstrap.Request{Features: req.Features, Drop: req.Drop, Writer: req.Writer},
-		providerkit.DeriveGroups(bootstrap.NameStacks(described), bootstrap.Catalogue(), req))
+		providerkit.DeriveGroups(bootstrap.NameStacks(described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
 	plan := providerkit.BootstrapPlan{Groups: providerkit.Vendored(groupVendor, groups)}
-	front, err := b.edgeGroup(ctx, req.Class)
+	front, err := b.edgeGroup(ctx, req)
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
@@ -90,21 +95,52 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	return plan, nil
 }
 
-func (b Bootstrapper) edgeGroup(ctx context.Context, class providerkit.Class) (*providerkit.ChangeGroup, error) {
+func (b Bootstrapper) edgeGroup(ctx context.Context, req providerkit.BootstrapRequest) (*providerkit.ChangeGroup, error) {
 	planner, ok := b.Edge.(edge.BootstrapPlanner)
 	if !ok {
 		return nil, nil
 	}
-	planned, err := planner.PlanBootstrap(ctx, edge.Class(class))
+	planned, err := planner.PlanBootstrap(ctx, edge.Class(req.Class))
 	if err != nil {
 		return nil, fmt.Errorf("plan the %s edge bootstrap: %w", b.Edge.Kind(), err)
 	}
 	if len(planned) == 0 {
 		return nil, nil
 	}
-	group := providerkit.EdgeGroup(b.Edge.Kind(),
-		providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), b.Edge.Kind()), planned)
+	feature := providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), b.Edge.Kind())
+	if dropping(feature, req) {
+		return severedEdge(b.Edge.Kind(), feature, planned), nil
+	}
+	group := providerkit.EdgeGroup(b.Edge.Kind(), feature, planned)
 	return &group, nil
+}
+
+func dropping(feature string, req providerkit.BootstrapRequest) bool {
+	return feature != "" && slices.Contains(req.Drop, feature) && !slices.Contains(req.Features, feature)
+}
+
+func severedEdge(kind edge.Kind, feature string, planned []edge.PlanChange) *providerkit.ChangeGroup {
+	group := providerkit.ChangeGroup{
+		Kind:    providerkit.EdgeGroupKind,
+		Name:    string(kind) + "/edge",
+		Feature: feature,
+		Action:  providerkit.ActionDelete,
+		Reason:  fmt.Sprintf("dropping %s tears the %s edge down; nothing is fronted with it afterwards", feature, kind),
+	}
+	for _, change := range planned {
+		if change.Action == edge.PlanCreate {
+			continue
+		}
+		group.Changes = append(group.Changes, providerkit.Change{
+			Kind:   change.Kind,
+			Name:   change.Name,
+			Action: providerkit.ActionDelete,
+		})
+	}
+	if len(group.Changes) == 0 {
+		return nil
+	}
+	return &group
 }
 
 func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
