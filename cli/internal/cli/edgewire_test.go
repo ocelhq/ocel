@@ -227,7 +227,7 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 			t.Setenv(changeplan.BypassEnv, "test-app")
 
 			var stdout, stderr bytes.Buffer
-			if err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := runDestroyProduction(context.Background(), deps, root, false, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
