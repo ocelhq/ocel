@@ -2,11 +2,15 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/prompt"
+	"charm.land/huh/v2"
+
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -15,7 +19,7 @@ const (
 	noFeatures  = "none"
 )
 
-func chooseFeatures(ctx context.Context, prompter prompt.Prompter, opts Options, catalogue []*contractv1.Feature, interactive bool) ([]string, bool, error) {
+func chooseFeatures(ctx context.Context, opts Options, tier environmentv1.Tier, catalogue []*contractv1.Feature, interactive bool, stdout io.Writer) ([]string, bool, error) {
 	if opts.FeaturesDeclared {
 		requested, err := parseFeatureFlag(opts.Features, catalogue)
 		return requested, err == nil, err
@@ -23,25 +27,59 @@ func chooseFeatures(ctx context.Context, prompter prompt.Prompter, opts Options,
 	if !interactive {
 		return enabledFeatures(catalogue), true, nil
 	}
-	return pickFeatures(ctx, prompter, catalogue)
+	return pickFeatures(ctx, tier, catalogue, stdout)
 }
 
-func pickFeatures(ctx context.Context, prompter prompt.Prompter, catalogue []*contractv1.Feature) ([]string, bool, error) {
-	enabled := enabledFeatures(catalogue)
-	options := make([]prompt.Option, 0, len(catalogue))
-	for _, f := range catalogue {
-		options = append(options, prompt.Option{
-			Name:     f.GetName(),
-			Summary:  f.GetSummary(),
-			Selected: slices.Contains(enabled, f.GetName()),
-		})
+func pickFeatures(ctx context.Context, tier environmentv1.Tier, catalogue []*contractv1.Feature, stdout io.Writer) ([]string, bool, error) {
+	if len(catalogue) == 0 {
+		return nil, true, nil
 	}
 
-	chosen, selected, err := prompter.MultiSelect(ctx, "Features to keep", options)
-	if err != nil || !selected {
+	printCatalogue(stdout, tier, catalogue)
+
+	enabled := enabledFeatures(catalogue)
+	options := make([]huh.Option[string], 0, len(catalogue))
+	for _, f := range catalogue {
+		options = append(options, huh.NewOption(f.GetName(), f.GetName()).Selected(slices.Contains(enabled, f.GetName())))
+	}
+
+	chosen := slices.Clone(enabled)
+	field := huh.NewMultiSelect[string]().
+		Title("Features to keep").
+		Options(options...).
+		// FIXME: huh v2.0.3 subtracts the title height from the multiselect viewport
+		// instead of the frame, so an unset Height scrolls one option at a time.
+		// Drop this once the viewport sizing is fixed upstream.
+		Height(len(options) + 1).
+		Value(&chosen)
+
+	err := huh.NewForm(huh.NewGroup(field)).
+		WithTheme(huh.ThemeFunc(huh.ThemeDracula)).
+		RunWithContext(ctx)
+	if errors.Is(err, huh.ErrUserAborted) {
+		return nil, false, nil
+	}
+	if err != nil {
 		return nil, false, err
 	}
 	return withDependencies(catalogue, chosen), true, nil
+}
+
+func printCatalogue(stdout io.Writer, tier environmentv1.Tier, catalogue []*contractv1.Feature) {
+	width := 0
+	for _, f := range catalogue {
+		width = max(width, len(f.GetName()))
+	}
+
+	fmt.Fprintf(stdout, "The %s bootstrap offers:\n\n", Name(tier))
+	for _, f := range catalogue {
+		fmt.Fprintf(stdout, "  %-*s   %s", width, f.GetName(), f.GetSummary())
+		if deps := f.GetDependsOn(); len(deps) > 0 {
+			fmt.Fprintf(stdout, "  (needs %s)", strings.Join(deps, ", "))
+		}
+		fmt.Fprintln(stdout)
+	}
+	fmt.Fprintln(stdout)
 }
 
 func catalogueNames(catalogue []*contractv1.Feature) []string {

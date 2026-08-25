@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"charm.land/huh/v2"
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -190,7 +190,6 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return err
 	}
 
-	prompter := prompt.New(stdout, stdin)
 	return providerui.Run(ctx, deps, cfg, "ocel bootstrap "+Name(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
 		client, err := runner.Client()
 		if err != nil {
@@ -209,7 +208,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		catalogue := described.GetFeatures()
 
 		interactive := !opts.Yes && deps.StdinIsTerminal(stdin)
-		requested, selected, err := chooseFeatures(ctx, prompter, opts, catalogue, interactive)
+		requested, selected, err := chooseFeatures(ctx, opts, tier, catalogue, interactive, stdout)
 		if err != nil {
 			return err
 		}
@@ -225,7 +224,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 				return fmt.Errorf("this would remove %s from the %s bootstrap; projects deployed against it break when it goes, so re-run with --force to remove it anyway",
 					strings.Join(dropped, ", "), Name(tier))
 			}
-			confirmed, err := confirmDrop(ctx, prompter, tier, dropped, dependentProjects(catalogue, dropped), stdout)
+			confirmed, err := confirmDrop(ctx, tier, dropped, dependentProjects(catalogue, dropped), stdout)
 			if err != nil {
 				return err
 			}
@@ -239,11 +238,18 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		if status := described.GetBootstrap(); status.GetDowngrade() {
 			fmt.Fprintln(stdout, downgradeWarning(tier, status))
 			if interactive {
-				proceed, err := prompter.Confirm(ctx, "Write the older content anyway?")
-				if err != nil {
+				var proceed bool
+				err := huh.NewForm(huh.NewGroup(
+					huh.NewConfirm().
+						Title("Write the older content anyway?").
+						Affirmative("Yes").
+						Negative("No").
+						Value(&proceed),
+				)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).RunWithContext(ctx)
+				if err != nil && !errors.Is(err, huh.ErrUserAborted) {
 					return err
 				}
-				if !proceed {
+				if errors.Is(err, huh.ErrUserAborted) || !proceed {
 					fmt.Fprintln(stdout, "Aborted.")
 					return nil
 				}
@@ -251,11 +257,18 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		}
 
 		if interactive {
-			proceed, err := prompter.Confirm(ctx, fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package()))
-			if err != nil {
+			var proceed bool
+			err := huh.NewForm(huh.NewGroup(
+				huh.NewConfirm().
+					Title(fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package())).
+					Affirmative("Yes").
+					Negative("No").
+					Value(&proceed),
+			)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).RunWithContext(ctx)
+			if err != nil && !errors.Is(err, huh.ErrUserAborted) {
 				return err
 			}
-			if !proceed {
+			if errors.Is(err, huh.ErrUserAborted) || !proceed {
 				fmt.Fprintln(stdout, "Aborted.")
 				return nil
 			}
@@ -321,14 +334,25 @@ func credentialTier(requested string) (contractv1.CredentialTier, error) {
 	}
 }
 
-func confirmDrop(ctx context.Context, prompter prompt.Prompter, tier environmentv1.Tier, dropped, dependents []string, stdout io.Writer) (bool, error) {
+func confirmDrop(ctx context.Context, tier environmentv1.Tier, dropped, dependents []string, stdout io.Writer) (bool, error) {
 	fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(dropped, ", "), Name(tier))
 	if len(dependents) > 0 {
 		fmt.Fprintf(stdout, "These projects were deployed against it and break when it goes: %s\n", strings.Join(dependents, ", "))
 	} else {
 		fmt.Fprintln(stdout, "No project deployed here has recorded needing it, but anything relying on it breaks.")
 	}
-	return prompter.Confirm(ctx, "Remove it anyway?")
+	var answer bool
+	err := huh.NewForm(huh.NewGroup(
+		huh.NewConfirm().
+			Title("Remove it anyway?").
+			Affirmative("Yes").
+			Negative("No").
+			Value(&answer),
+	)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).RunWithContext(ctx)
+	if errors.Is(err, huh.ErrUserAborted) {
+		return false, nil
+	}
+	return answer, err
 }
 
 func downgradeWarning(tier environmentv1.Tier, status *contractv1.BootstrapStatus) string {

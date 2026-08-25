@@ -2,12 +2,14 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/prompt"
+	"charm.land/huh/v2"
+
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -87,7 +89,7 @@ func (p Plan) Advise(tier environmentv1.Tier, out io.Writer) error {
 	return nil
 }
 
-func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, interactive bool, out io.Writer, stdin io.Reader) error {
+func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, interactive bool, out io.Writer) error {
 	plan := PlanFor(status)
 	if plan.Empty() {
 		return nil
@@ -97,11 +99,18 @@ func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.Boot
 	}
 
 	fmt.Fprintf(out, "The %s bootstrap is not what this project needs: %s.\n", Name(tier), plan.summary())
-	proceed, err := prompt.New(out, stdin).Confirm(ctx, fmt.Sprintf("Run `%s` now?", plan.Command(tier)))
-	if err != nil {
+	var proceed bool
+	err := huh.NewForm(huh.NewGroup(
+		huh.NewConfirm().
+			Title(fmt.Sprintf("Run `%s` now?", plan.Command(tier))).
+			Affirmative("Yes").
+			Negative("No").
+			Value(&proceed),
+	)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).RunWithContext(ctx)
+	if err != nil && !errors.Is(err, huh.ErrUserAborted) {
 		return err
 	}
-	if !proceed {
+	if errors.Is(err, huh.ErrUserAborted) || !proceed {
 		return plan.Advise(tier, out)
 	}
 	req := &contractv1.BootstrapRequest{
