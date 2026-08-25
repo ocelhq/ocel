@@ -27,7 +27,7 @@ func setUpEnvFixture(t *testing.T) string {
 func envSet(t *testing.T, root, key, value string, opts envOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runEnvSet(context.Background(), newSession(), root, key, value, opts, &stdout, &stderr); err != nil {
+	if err := runEnvSet(context.Background(), newDeps(), root, key, value, opts, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvSet(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
@@ -100,7 +100,7 @@ func TestRunEnvSet(t *testing.T) {
 
 		t.Run("the value is withheld without --reveal", func(t *testing.T) {
 			var plain bytes.Buffer
-			if err := runEnvGet(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{}, &plain, &plain); err != nil {
+			if err := runEnvGet(context.Background(), newDeps(), root, "STRIPE_API_KEY", envOptions{}, &plain, &plain); err != nil {
 				t.Fatalf("runEnvGet err = %v; out=%s", err, plain.String())
 			}
 			if strings.Contains(plain.String(), "sk_live_secret") {
@@ -113,7 +113,7 @@ func TestRunEnvSet(t *testing.T) {
 
 		t.Run("--reveal prints exactly the value so it is scriptable", func(t *testing.T) {
 			var revealed bytes.Buffer
-			if err := runEnvGet(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &revealed, &revealed); err != nil {
+			if err := runEnvGet(context.Background(), newDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &revealed, &revealed); err != nil {
 				t.Fatalf("runEnvGet --reveal err = %v; out=%s", err, revealed.String())
 			}
 			if strings.TrimSpace(revealed.String()) != "sk_live_secret" {
@@ -142,7 +142,7 @@ func TestRunEnvSet(t *testing.T) {
 				opts := tc.opts
 				opts.reveal = true
 				var stdout bytes.Buffer
-				if err := runEnvGet(context.Background(), newSession(), root, "STRIPE_API_KEY", opts, &stdout, &stdout); err != nil {
+				if err := runEnvGet(context.Background(), newDeps(), root, "STRIPE_API_KEY", opts, &stdout, &stdout); err != nil {
 					t.Fatalf("runEnvGet err = %v; out=%s", err, stdout.String())
 				}
 				if got := strings.TrimSpace(stdout.String()); got != tc.want {
@@ -157,7 +157,7 @@ func TestRunEnvSet(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), newSession(), root, "STRIPE_API_KEY", "sk_typo", envOptions{preview: true, environment: "stagng"}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newDeps(), root, "STRIPE_API_KEY", "sk_typo", envOptions{preview: true, environment: "stagng"}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet against an environment that does not exist err = nil, want a refusal")
 		}
@@ -166,7 +166,7 @@ func TestRunEnvSet(t *testing.T) {
 		}
 
 		var get bytes.Buffer
-		if err := runEnvGet(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "stagng", reveal: true}, &get, &get); err == nil {
+		if err := runEnvGet(context.Background(), newDeps(), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "stagng", reveal: true}, &get, &get); err == nil {
 			t.Errorf("the refused write landed anyway: get = %q", get.String())
 		}
 	})
@@ -175,7 +175,7 @@ func TestRunEnvSet(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), newSession(), root, "STRIPE_API_KEY", "sk_live", envOptions{environment: "staging"}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newDeps(), root, "STRIPE_API_KEY", "sk_live", envOptions{environment: "staging"}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet --environment against production err = nil, want a refusal")
 		}
@@ -189,7 +189,7 @@ func TestRunEnvSet(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), newSession(), root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newDeps(), root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet against preview infrastructure err = nil, want a class-mismatch refusal")
 		}
@@ -199,7 +199,7 @@ func TestRunEnvSet(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), newSession(), root, "POSTHOG_ID", "ph_root", envOptions{}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newDeps(), root, "POSTHOG_ID", "ph_root", envOptions{}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want a root value for a scoped key refused: nothing could ever read it")
 		}
@@ -214,7 +214,7 @@ func TestRunEnvSet(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), newSession(), root, "POSTHOG_ID", "ph", envOptions{folder: "/admin"}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newDeps(), root, "POSTHOG_ID", "ph", envOptions{folder: "/admin"}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want a folder outside the key's scope refused")
 		}
@@ -249,7 +249,7 @@ func TestRunEnvSet(t *testing.T) {
 		}
 
 		var out bytes.Buffer
-		if err := runEnvGet(context.Background(), newSession(), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &out, &out); err != nil {
+		if err := runEnvGet(context.Background(), newDeps(), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &out, &out); err != nil {
 			t.Fatalf("runEnvGet err = %v; out=%s", err, out.String())
 		}
 		if strings.TrimSpace(out.String()) != "ph_two" {
@@ -266,7 +266,7 @@ func TestRunEnvSet(t *testing.T) {
 			envDeclaringScript(`[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`))
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), newSession(), root, "POSTHOG_ID", "ph_root_again", envOptions{}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newDeps(), root, "POSTHOG_ID", "ph_root_again", envOptions{}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want the scope the code now declares to refuse a root write")
 		}
@@ -286,7 +286,7 @@ func TestRunEnvSet(t *testing.T) {
 		t.Setenv("OCEL_TEST_ENV_DEFINITIONS", `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), newSession(), root, "POSTHOG_ID", "ph_root", envOptions{}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), newDeps(), root, "POSTHOG_ID", "ph_root", envOptions{}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want a root value for a scoped key refused: a cached set that never mentioned the key cannot say it is unscoped")
 		}
@@ -295,7 +295,7 @@ func TestRunEnvSet(t *testing.T) {
 		}
 
 		var out bytes.Buffer
-		if err := runEnvGet(context.Background(), newSession(), root, "POSTHOG_ID", envOptions{reveal: true}, &out, &out); err == nil {
+		if err := runEnvGet(context.Background(), newDeps(), root, "POSTHOG_ID", envOptions{reveal: true}, &out, &out); err == nil {
 			t.Errorf("runEnvGet at root err = nil (out=%q), want no root cell written", out.String())
 		}
 	})
@@ -306,7 +306,7 @@ func TestRunEnvGet(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvGet(context.Background(), newSession(), root, "NEVER_SET", envOptions{reveal: true}, &stdout, &stderr)
+		err := runEnvGet(context.Background(), newDeps(), root, "NEVER_SET", envOptions{reveal: true}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvGet on an unset key err = nil, want a failure rather than an empty value")
 		}
@@ -320,12 +320,12 @@ func TestRunEnvGet(t *testing.T) {
 		envSet(t, root, "POSTHOG_ID", "web-id", envOptions{folder: "/web"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvGet(context.Background(), newSession(), root, "POSTHOG_ID", envOptions{reveal: true}, &stdout, &stderr); err == nil {
+		if err := runEnvGet(context.Background(), newDeps(), root, "POSTHOG_ID", envOptions{reveal: true}, &stdout, &stderr); err == nil {
 			t.Fatalf("runEnvGet at root err = nil (out=%q), want the root cell to be unset", stdout.String())
 		}
 
 		var folder bytes.Buffer
-		if err := runEnvGet(context.Background(), newSession(), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &folder, &folder); err != nil {
+		if err := runEnvGet(context.Background(), newDeps(), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &folder, &folder); err != nil {
 			t.Fatalf("runEnvGet in /web err = %v", err)
 		}
 		if strings.TrimSpace(folder.String()) != "web-id" {
@@ -340,12 +340,12 @@ func TestRunEnvGet(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var get bytes.Buffer
-		if err := runEnvGet(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{preview: true, reveal: true}, &get, &get); err == nil {
+		if err := runEnvGet(context.Background(), newDeps(), root, "STRIPE_API_KEY", envOptions{preview: true, reveal: true}, &get, &get); err == nil {
 			t.Errorf("preview get err = nil (out=%q), want the production value unreadable from preview", get.String())
 		}
 
 		var ls bytes.Buffer
-		if err := runEnvLs(context.Background(), newSession(), root, envOptions{preview: true}, &ls, &ls); err != nil {
+		if err := runEnvLs(context.Background(), newDeps(), root, envOptions{preview: true}, &ls, &ls); err != nil {
 			t.Fatalf("runEnvLs --preview err = %v; out=%s", err, ls.String())
 		}
 		if strings.Contains(ls.String(), "STRIPE_API_KEY") {
@@ -357,7 +357,7 @@ func TestRunEnvGet(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 
 		var production bytes.Buffer
-		if err := runEnvGet(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &production, &production); err != nil {
+		if err := runEnvGet(context.Background(), newDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &production, &production); err != nil {
 			t.Fatalf("runEnvGet err = %v; out=%s", err, production.String())
 		}
 		if got := strings.TrimSpace(production.String()); got != "sk_live_secret" {
@@ -373,7 +373,7 @@ func TestRunEnvLs(t *testing.T) {
 		envSet(t, root, "POSTHOG_ID", "ph_public_id", envOptions{folder: "/web"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvLs(context.Background(), newSession(), root, envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvLs(context.Background(), newDeps(), root, envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -394,7 +394,7 @@ func TestRunEnvLs(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvLs(context.Background(), newSession(), root, envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvLs(context.Background(), newDeps(), root, envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvLs err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "ocel env set") {
@@ -409,7 +409,7 @@ func TestRunEnvLs(t *testing.T) {
 		t.Setenv(clitest.FakeEnvironmentsEnvVar, "staging")
 
 		var ls bytes.Buffer
-		if err := runEnvLs(context.Background(), newSession(), root, envOptions{}, &ls, &ls); err != nil {
+		if err := runEnvLs(context.Background(), newDeps(), root, envOptions{}, &ls, &ls); err != nil {
 			t.Fatalf("runEnvLs err = %v; out=%s", err, ls.String())
 		}
 		if !strings.Contains(ls.String(), "orphaned") {
@@ -424,7 +424,7 @@ func TestRunEnvRm(t *testing.T) {
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRm(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvRm(context.Background(), newDeps(), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRm err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "STRIPE_API_KEY") {
@@ -432,7 +432,7 @@ func TestRunEnvRm(t *testing.T) {
 		}
 
 		var after bytes.Buffer
-		if err := runEnvLs(context.Background(), newSession(), root, envOptions{}, &after, &after); err != nil {
+		if err := runEnvLs(context.Background(), newDeps(), root, envOptions{}, &after, &after); err != nil {
 			t.Fatalf("runEnvLs err = %v", err)
 		}
 		if strings.Contains(after.String(), "STRIPE_API_KEY") {
@@ -444,7 +444,7 @@ func TestRunEnvRm(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRm(context.Background(), newSession(), root, "NEVER_SET", envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvRm(context.Background(), newDeps(), root, "NEVER_SET", envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRm err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "No value") {
@@ -460,7 +460,7 @@ func TestRunEnvRm(t *testing.T) {
 		t.Setenv(clitest.FakeEnvironmentsEnvVar, "none")
 
 		var ls bytes.Buffer
-		if err := runEnvLs(context.Background(), newSession(), root, envOptions{preview: true}, &ls, &ls); err != nil {
+		if err := runEnvLs(context.Background(), newDeps(), root, envOptions{preview: true}, &ls, &ls); err != nil {
 			t.Fatalf("runEnvLs err = %v; out=%s", err, ls.String())
 		}
 		if !strings.Contains(ls.String(), "orphaned") {
@@ -468,7 +468,7 @@ func TestRunEnvRm(t *testing.T) {
 		}
 
 		var rm bytes.Buffer
-		if err := runEnvRm(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "staging"}, &rm, &rm); err != nil {
+		if err := runEnvRm(context.Background(), newDeps(), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "staging"}, &rm, &rm); err != nil {
 			t.Fatalf("runEnvRm err = %v; out=%s", err, rm.String())
 		}
 		if !strings.Contains(rm.String(), "Removed") {
@@ -476,7 +476,7 @@ func TestRunEnvRm(t *testing.T) {
 		}
 
 		var after bytes.Buffer
-		if err := runEnvLs(context.Background(), newSession(), root, envOptions{preview: true}, &after, &after); err != nil {
+		if err := runEnvLs(context.Background(), newDeps(), root, envOptions{preview: true}, &after, &after); err != nil {
 			t.Fatalf("runEnvLs err = %v; out=%s", err, after.String())
 		}
 		if strings.Contains(after.String(), "STRIPE_API_KEY") {
@@ -499,7 +499,7 @@ func TestRunEnvHistory(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				var stdout bytes.Buffer
-				if err := runEnvHistory(context.Background(), newSession(), root, "STRIPE_API_KEY", opts, &stdout, &stdout); err != nil {
+				if err := runEnvHistory(context.Background(), newDeps(), root, "STRIPE_API_KEY", opts, &stdout, &stdout); err != nil {
 					t.Fatalf("runEnvHistory(reveal=%v) err = %v; out=%s", opts.reveal, err, stdout.String())
 				}
 				out := stdout.String()

@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/authclient"
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/consolebinding"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectclient"
@@ -49,17 +49,17 @@ var consoleLinkCmd = &cobra.Command{
 			project = args[0]
 		}
 
-		sess := newSession()
+		deps := newDeps()
 		opts := consoleLinkOpts
-		creds, _ := sess.LoadCredentials()
+		creds, _ := deps.LoadCredentials()
 		opts.apiURL = effectiveAPIURL(creds.APIURL)
 
-		return runConsoleLink(cmd.Context(), sess, cwd, project, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runConsoleLink(cmd.Context(), deps, cwd, project, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-func runConsoleLink(ctx context.Context, sess session.Session, projectDir, project string, opts consoleLinkOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	creds, err := sess.LoadCredentials()
+func runConsoleLink(ctx context.Context, deps cmddeps.Deps, projectDir, project string, opts consoleLinkOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+	creds, err := deps.LoadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
 		return &exitsig.ExitError{Code: 1}
@@ -122,7 +122,7 @@ func runConsoleLink(ctx context.Context, sess session.Session, projectDir, proje
 	return nil
 }
 
-func ensureConsoleBinding(ctx context.Context, sess session.Session, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*consolebinding.Binding, error) {
+func ensureConsoleBinding(ctx context.Context, deps cmddeps.Deps, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*consolebinding.Binding, error) {
 	binding, err := consolebinding.Read(projectDir, apiURL)
 	if err != nil {
 		return nil, err
@@ -136,7 +136,7 @@ func ensureConsoleBinding(ctx context.Context, sess session.Session, projectDir,
 	}
 
 	fmt.Fprintln(stdout, "This directory isn't linked to a console project yet.")
-	if err := runConsoleLink(ctx, sess, projectDir, "", consoleLinkOptions{apiURL: apiURL}, stdout, stderr, stdin); err != nil {
+	if err := runConsoleLink(ctx, deps, projectDir, "", consoleLinkOptions{apiURL: apiURL}, stdout, stderr, stdin); err != nil {
 		return nil, err
 	}
 

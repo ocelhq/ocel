@@ -12,7 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
@@ -51,7 +51,7 @@ var initCmd = &cobra.Command{
 		opts := initOpts
 		opts.configPath = explicitConfigPath()
 
-		return runInit(cmd.Context(), newSession(), cwd, slug, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runInit(cmd.Context(), newDeps(), cwd, slug, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -59,7 +59,7 @@ func init() {
 	initCmd.Flags().StringVar(&initOpts.provider, "provider", defaultProviderPackage, "Provider package to scaffold with")
 }
 
-func runInit(ctx context.Context, sess session.Session, cwd, slug string, opts initOptions, stdout, stderr io.Writer) error {
+func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts initOptions, stdout, stderr io.Writer) error {
 	configPath := filepath.Join(cwd, projectconfig.ConfigFileName)
 	if opts.configPath != "" {
 		configPath = opts.configPath
@@ -94,7 +94,7 @@ func runInit(ctx context.Context, sess session.Session, cwd, slug string, opts i
 	}
 	fmt.Fprintf(stdout, "✓ Wrote %s (slug: %s)\n", name, slug)
 
-	addDependencies(ctx, sess, projectDir, []string{sdkPackage, providerPkg}, stdout, stderr)
+	addDependencies(ctx, deps, projectDir, []string{sdkPackage, providerPkg}, stdout, stderr)
 
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Run `ocel deploy` to deploy to your own cloud, or `ocel dev` to develop against the Ocel console.")
@@ -170,7 +170,7 @@ func detectPackageManager(dir string) packageManager {
 	return npmPackageManager
 }
 
-func addDependencies(ctx context.Context, sess session.Session, dir string, pkgs []string, stdout, stderr io.Writer) {
+func addDependencies(ctx context.Context, deps cmddeps.Deps, dir string, pkgs []string, stdout, stderr io.Writer) {
 	pm := detectPackageManager(dir)
 	argv := append([]string{pm.name, pm.addCommand}, pkgs...)
 	command := strings.Join(argv, " ")
@@ -182,7 +182,7 @@ func addDependencies(ctx context.Context, sess session.Session, dir string, pkgs
 	}
 
 	err := withSpinner(stdout, fmt.Sprintf("Adding %s...", added), func() error {
-		return sess.RunPackageManager(ctx, dir, argv, stderr)
+		return deps.RunPackageManager(ctx, dir, argv, stderr)
 	})
 	if err != nil {
 		fmt.Fprintf(stdout, "! Could not add %s (%v) — run `%s` yourself.\n", added, err, command)

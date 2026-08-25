@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
-func Run(ctx context.Context, sess session.Session, cfg *projectconfig.Config, command string, stdout io.Writer, fn func(context.Context, *provider.Runner, *deployui.Session) error) error {
+func Run(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, command string, stdout io.Writer, fn func(context.Context, *provider.Runner, *deployui.Session) error) error {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
@@ -23,7 +23,7 @@ func Run(ctx context.Context, sess session.Session, cfg *projectconfig.Config, c
 	}
 	defer run.Close()
 
-	ui := deployui.New(stdout, run, sess.Format(), sess.Verbose())
+	ui := deployui.New(stdout, run, deps.Format(), deps.Verbose())
 	defer ui.Close()
 
 	provW := ui.BuildWriter()

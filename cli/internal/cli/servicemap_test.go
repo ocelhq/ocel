@@ -20,16 +20,16 @@ import (
 
 func TestServiceMap(t *testing.T) {
 	t.Run("a deploy publishes a map whose edges are the manifest's usages", func(t *testing.T) {
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, []manifestbuilder.Function{
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, []manifestbuilder.Function{
 			{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true, tag: "v9"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, tag: "v9"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -52,16 +52,16 @@ func TestServiceMap(t *testing.T) {
 	})
 
 	t.Run("var keys and grant verbs come from the link, and no property value does", func(t *testing.T) {
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, []manifestbuilder.Function{
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, []manifestbuilder.Function{
 			{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -88,9 +88,9 @@ func TestServiceMap(t *testing.T) {
 	})
 
 	t.Run("a failed deploy leaves no stale map behind", func(t *testing.T) {
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		root, _ := clitest.SetUpDeployFixture(t)
 		if err := servicemap.Write(root, servicemap.Record{PromotionID: "prm_previous_run"}); err != nil {
 			t.Fatalf("seed stale map: %v", err)
@@ -98,7 +98,7 @@ func TestServiceMap(t *testing.T) {
 		t.Setenv(clitest.FakeProviderModeEnvVar, "fail")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
 			t.Fatalf("runDeploy err = nil, want the simulated failure; stdout=%s", stdout.String())
 		}
 

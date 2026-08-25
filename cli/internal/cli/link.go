@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -66,7 +66,7 @@ var linkSetCmd = &cobra.Command{
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkSet(ctx, newSession(), cwd, cmd.InOrStdin(), linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runLinkSet(ctx, newDeps(), cwd, cmd.InOrStdin(), linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -77,7 +77,7 @@ var linkRmCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkRm(ctx, newSession(), cwd, args[0], linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runLinkRm(ctx, newDeps(), cwd, args[0], linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -88,7 +88,7 @@ var linkLsCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkLs(ctx, newSession(), cwd, linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runLinkLs(ctx, newDeps(), cwd, linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -106,7 +106,7 @@ var linkGenerateCmd = &cobra.Command{
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkGenerate(ctx, newSession(), cwd, linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runLinkGenerate(ctx, newDeps(), cwd, linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -121,13 +121,13 @@ func init() {
 	rootCmd.AddCommand(linkCmd)
 }
 
-func runLinkSet(ctx context.Context, sess session.Session, cwd string, stdin io.Reader, opts linkOptions, stdout, stderr io.Writer) error {
+func runLinkSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io.Reader, opts linkOptions, stdout, stderr io.Writer) error {
 	link, err := decodeLink(stdin)
 	if err != nil {
 		return err
 	}
 	owner := opts.ownerOrDefault()
-	return withEnvProvider(ctx, sess, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, deps, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
@@ -165,8 +165,8 @@ func decodeLink(stdin io.Reader) (*linksv1.Link, error) {
 	return link, nil
 }
 
-func runLinkRm(ctx context.Context, sess session.Session, cwd, name string, opts linkOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, sess, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+func runLinkRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opts linkOptions, stdout, stderr io.Writer) error {
+	return withEnvProvider(ctx, deps, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
@@ -192,8 +192,8 @@ func runLinkRm(ctx context.Context, sess session.Session, cwd, name string, opts
 	})
 }
 
-func runLinkLs(ctx context.Context, sess session.Session, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, sess, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+func runLinkLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
+	return withEnvProvider(ctx, deps, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
@@ -214,8 +214,8 @@ func runLinkLs(ctx context.Context, sess session.Session, cwd string, opts linkO
 	})
 }
 
-func runLinkGenerate(ctx context.Context, sess session.Session, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, sess, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+func runLinkGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
+	return withEnvProvider(ctx, deps, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err

@@ -13,8 +13,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -40,7 +40,7 @@ var deploymentsLsCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runPromotionsLs(ctx, newSession(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runPromotionsLs(ctx, newDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -59,7 +59,7 @@ var deploymentsPruneCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runPromotionsPrune(ctx, newSession(), cwd, pruneKeepN, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runPromotionsPrune(ctx, newDeps(), cwd, pruneKeepN, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -69,14 +69,14 @@ func init() {
 	deploymentsCmd.AddCommand(deploymentsPruneCmd)
 }
 
-func runPromotionsLs(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer) error {
+func runPromotionsLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
 	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
-		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -96,14 +96,14 @@ func runPromotionsLs(ctx context.Context, sess session.Session, cwd string, stdo
 	})
 }
 
-func runPromotionsPrune(ctx context.Context, sess session.Session, cwd string, keepN int, stdout, stderr io.Writer) error {
+func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keepN int, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
-	return providerui.Run(ctx, sess, cfg, "ocel deployments prune", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+	return providerui.Run(ctx, deps, cfg, "ocel deployments prune", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 

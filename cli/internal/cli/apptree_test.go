@@ -87,8 +87,8 @@ func TestProcessTreeDiesWithTheCLI(t *testing.T) {
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -107,7 +107,7 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runRun(ctx, sess, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			done <- runRun(ctx, deps, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForFile(t, startedPath)
@@ -126,8 +126,8 @@ export default { slug: "test-app" };
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -146,7 +146,7 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runRun(ctx, sess, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			done <- runRun(ctx, deps, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForFile(t, startedPath)
@@ -165,8 +165,8 @@ export default { slug: "test-app" };
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -185,7 +185,7 @@ export default { slug: "test-app" };
 		var stdout, stderr syncBuffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runDev(ctx, sess, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			done <- runDev(ctx, deps, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -202,8 +202,8 @@ export default { slug: "test-app" };
 	})
 
 	t.Run("a follower `ocel dev` kills its app's grandchildren", func(t *testing.T) {
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -238,7 +238,7 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runDev(ctx, sess, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			done <- runDev(ctx, deps, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForFile(t, startedPath)

@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
@@ -35,7 +35,7 @@ var rollbackCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runRollback(ctx, newSession(), cwd, rollbackOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runRollback(ctx, newDeps(), cwd, rollbackOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -44,7 +44,7 @@ func init() {
 	rollbackCmd.Flags().StringVar(&rollbackOpts.tag, "tag", "", "Roll back to the promotion carrying this tag (mutually exclusive with --to)")
 }
 
-func runRollback(ctx context.Context, sess session.Session, cwd string, opts rollbackOptions, stdout, stderr io.Writer) error {
+func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollbackOptions, stdout, stderr io.Writer) error {
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
 	}
@@ -60,7 +60,7 @@ func runRollback(ctx context.Context, sess session.Session, cwd string, opts rol
 	defer run.Close()
 
 	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
-		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 

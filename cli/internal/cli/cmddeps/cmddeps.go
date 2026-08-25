@@ -1,4 +1,4 @@
-package session
+package cmddeps
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 )
 
-type Session struct {
+type Deps struct {
 	LoadCredentials     func() (credentials.Credentials, error)
 	FetchAccount        func(ctx context.Context, apiURL, token, projectID string) (resolve.Account, error)
 	BuildApp            func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out io.Writer) error

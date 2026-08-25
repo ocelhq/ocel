@@ -30,15 +30,15 @@ export default {
 `)
 
 		var built *projectconfig.Config
-		sess := newSession()
-		sess.BuildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ io.Writer) error {
+		deps := newDeps()
+		deps.BuildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ io.Writer) error {
 			built = cfg
 			writePrebuiltFunction(t, cfg.Dir, "api", "index")
 			return nil
 		}
 
 		var stdout, stderr bytes.Buffer
-		if err := runBuild(context.Background(), sess, root, &stdout, &stderr); err != nil {
+		if err := runBuild(context.Background(), deps, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runBuild: %v", err)
 		}
 
@@ -66,12 +66,12 @@ export default {
 export default { slug: "test-app" };
 `)
 
-		sess := newSession()
-		sess.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+		deps := newDeps()
+		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 			return errors.New("boom: app build failed")
 		}
 
-		err := runBuild(context.Background(), sess, root, io.Discard, io.Discard)
+		err := runBuild(context.Background(), deps, root, io.Discard, io.Discard)
 		if err == nil || !strings.Contains(err.Error(), "boom: app build failed") {
 			t.Fatalf("runBuild err = %v, want the build failure surfaced", err)
 		}

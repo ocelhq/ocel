@@ -27,10 +27,10 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, sess := clitest.SetUpEdgeFixture(t, tc.declaration)
+			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
 
 			var stdout, stderr bytes.Buffer
-			if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
@@ -46,10 +46,10 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 }
 
 func TestDeployCarriesTheEdgeSettingsUnchanged(t *testing.T) {
-	root, journal, sess := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\", options: { zone: \"acme.com\" } },\n  dns: { kind: \"cloudflare\", zone: \"acme.com\" },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\", options: { zone: \"acme.com\" } },\n  dns: { kind: \"cloudflare\", zone: \"acme.com\" },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
 
 	var stdout, stderr bytes.Buffer
-	if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -67,11 +67,11 @@ func TestDeployCarriesTheEdgeSettingsUnchanged(t *testing.T) {
 func TestDeployRendersAnEdgeTheOriginRefuses(t *testing.T) {
 	const refusal = `this provider cannot front deployments with the "fastly" edge; it supports cloudflare`
 
-	root, _, sess := clitest.SetUpEdgeFixture(t, "")
+	root, _, deps := clitest.SetUpEdgeFixture(t, "")
 	t.Setenv(clitest.FakeEdgeRefusalEnvVar, refusal)
 
 	var stdout, stderr bytes.Buffer
-	err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the refused edge to fail the deploy; stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
@@ -98,11 +98,11 @@ func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, sess := clitest.SetUpEdgeFixture(t, tc.declaration)
+			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
 
 			var stdout, stderr bytes.Buffer
 			opts := bootstrap.Options{Yes: true, Features: tc.features, FeaturesDeclared: true}
-			if err := bootstrap.Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := bootstrap.Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
@@ -121,11 +121,11 @@ func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
 }
 
 func TestBootstrapWithoutTheFlagKeepsWhatIsThere(t *testing.T) {
-	root, journal, sess := clitest.SetUpEdgeFixture(t, "")
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 
 	var stdout, stderr bytes.Buffer
-	if err := bootstrap.Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, bootstrap.Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := bootstrap.Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, bootstrap.Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -136,12 +136,12 @@ func TestBootstrapWithoutTheFlagKeepsWhatIsThere(t *testing.T) {
 }
 
 func TestBootstrapRefusesADropItCannotAskAbout(t *testing.T) {
-	root, journal, sess := clitest.SetUpEdgeFixture(t, "")
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
 
 	var stdout, stderr bytes.Buffer
 	opts := bootstrap.Options{Yes: true, Features: "isr", FeaturesDeclared: true}
-	err := bootstrap.Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
+	err := bootstrap.Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runBootstrap err = nil, want the unattended drop refused; stdout=%s", stdout.String())
 	}
@@ -156,12 +156,12 @@ func TestBootstrapRefusesADropItCannotAskAbout(t *testing.T) {
 }
 
 func TestBootstrapForcesADropWhenTold(t *testing.T) {
-	root, journal, sess := clitest.SetUpEdgeFixture(t, "")
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
 
 	var stdout, stderr bytes.Buffer
 	opts := bootstrap.Options{Yes: true, Features: "isr", FeaturesDeclared: true, Force: true}
-	if err := bootstrap.Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := bootstrap.Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	got := clitest.ReadJournal(t, journal)
@@ -183,11 +183,11 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, sess := clitest.SetUpEdgeFixture(t, tc.declaration)
+			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
 
 			var stdout, stderr bytes.Buffer
 			opts := bootstrap.Options{Yes: true}
-			if err := bootstrap.RunDestroy(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := bootstrap.RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
@@ -221,13 +221,13 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, journal, sess := clitest.SetUpEdgeFixture(t, tc.declaration)
+			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
 			t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 			t.Setenv(removalplan.BypassEnv, "test-app")
 
 			var stdout, stderr bytes.Buffer
-			if err := runDestroyProduction(context.Background(), sess, root, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 

@@ -103,13 +103,13 @@ func TestReportLiveValues(t *testing.T) {
 
 func TestRunDev(t *testing.T) {
 	t.Run("not logged in returns an exit error pointing at `ocel login`", func(t *testing.T) {
-		sess := newSession()
-		sess.LoadCredentials = func() (credentials.Credentials, error) {
+		deps := newDeps()
+		deps.LoadCredentials = func() (credentials.Credentials, error) {
 			return credentials.Credentials{}, credentials.ErrNotLoggedIn
 		}
 
 		var stderr bytes.Buffer
-		err := runDev(context.Background(), sess, nil, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, nil, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -124,11 +124,11 @@ func TestRunDev(t *testing.T) {
 	})
 
 	t.Run("an unlinked directory with no terminal errors toward `ocel console link`", func(t *testing.T) {
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
 
 		var stdout, stderr bytes.Buffer
-		err := runDev(context.Background(), sess, nil, t.TempDir(), []string{"true"}, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, nil, t.TempDir(), []string{"true"}, &stdout, &stderr, strings.NewReader(""))
 
 		if err == nil {
 			t.Fatal("runDev: expected an error for an unlinked directory, got nil")
@@ -139,13 +139,13 @@ func TestRunDev(t *testing.T) {
 	})
 
 	t.Run("a directory linked to another control plane errors toward `ocel console link`", func(t *testing.T) {
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
 		writeLink(t, root, "https://elsewhere.example.com", "proj_elsewhere")
 
-		err := runDev(context.Background(), sess, nil, root, []string{"true"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runDev(context.Background(), deps, nil, root, []string{"true"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 
 		if err == nil || !strings.Contains(err.Error(), "ocel console link") {
 			t.Fatalf("runDev err = %v, want it to point at `ocel console link`", err)
@@ -160,8 +160,8 @@ func TestRunDev(t *testing.T) {
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -173,7 +173,7 @@ func TestRunDev(t *testing.T) {
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), sess, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		t.Run("the child's exit code becomes the command's", func(t *testing.T) {
 			var exitErr *exitsig.ExitError
@@ -210,8 +210,8 @@ func TestRunDev(t *testing.T) {
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -228,7 +228,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		leaderDone := make(chan error, 1)
 		var leaderStdout, leaderStderr syncBuffer
 		go func() {
-			leaderDone <- runDev(leaderCtx, sess, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -240,7 +240,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		clitest.WriteFile(t, filepath.Join(subdir, "index.ts"), "export {};\n")
 
 		var followerStdout, followerStderr bytes.Buffer
-		err := runDev(context.Background(), sess, nil, subdir, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, nil, subdir, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -284,8 +284,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 
 		projectID := "proj_" + t.Name()
 
@@ -305,7 +305,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		leaderDone := make(chan error, 1)
 		var leaderStdout, leaderStderr syncBuffer
 		go func() {
-			leaderDone <- runDev(leaderCtx, sess, nil, firstClone, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, nil, firstClone, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, firstClone)
@@ -314,7 +314,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), sess, nil, secondClone, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, nil, secondClone, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -357,8 +357,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -376,7 +376,7 @@ export default { slug: "test-app" };
 
 		leaderDone := make(chan error, 1)
 		go func() {
-			leaderDone <- runDev(leaderCtx, sess, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -389,7 +389,7 @@ export default { slug: "test-app" };
 		followerDone := make(chan error, 1)
 		var followerStdout, followerStderr bytes.Buffer
 		go func() {
-			followerDone <- runDev(followerCtx, sess, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+			followerDone <- runDev(followerCtx, deps, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 		}()
 
 		waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_main")
@@ -428,8 +428,8 @@ export default { slug: "test-app" };
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -443,7 +443,7 @@ export default { slug: "test-app" };
 		var leaderStdout, leaderStderr syncBuffer
 		leaderDone := make(chan error, 1)
 		go func() {
-			leaderDone <- runDev(leaderCtx, sess, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -456,7 +456,7 @@ export default { slug: "test-app" };
 		followerDone := make(chan error, 1)
 		var followerStdout, followerStderr bytes.Buffer
 		go func() {
-			followerDone <- runDev(followerCtx, sess, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+			followerDone <- runDev(followerCtx, deps, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 		}()
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
@@ -495,8 +495,8 @@ export default { slug: "test-app" };
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -510,7 +510,7 @@ export default { slug: "test-app" };
 		var leaderStdout, leaderStderr syncBuffer
 		leaderDone := make(chan error, 1)
 		go func() {
-			leaderDone <- runDev(leaderCtx, sess, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -523,7 +523,7 @@ export default { slug: "test-app" };
 		followerDone := make(chan error, 1)
 		var followerStdout, followerStderr bytes.Buffer
 		go func() {
-			followerDone <- runDev(followerCtx, sess, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+			followerDone <- runDev(followerCtx, deps, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 		}()
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
@@ -567,8 +567,8 @@ export default { slug: "test-app" };
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -582,7 +582,7 @@ export default { slug: "test-app" };
 		var leaderStdout, leaderStderr syncBuffer
 		leaderDone := make(chan error, 1)
 		go func() {
-			leaderDone <- runDev(leaderCtx, sess, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -604,8 +604,8 @@ export default { slug: "test-app" };
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -637,7 +637,7 @@ export default { slug: "test-app" };
 		followerDone := make(chan error, 1)
 		var stdout, stderr bytes.Buffer
 		go func() {
-			followerDone <- runDev(context.Background(), sess, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			followerDone <- runDev(context.Background(), deps, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForFile(t, startedPath)

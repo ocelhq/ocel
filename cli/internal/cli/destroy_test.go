@@ -93,14 +93,14 @@ func TestPrintDestroyPlan(t *testing.T) {
 func TestRunDestroyPreviewProject(t *testing.T) {
 	t.Run("--yes skips the terminal check and the typed name", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDestroyPreviewProject(context.Background(), sess, root, true, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDestroyPreviewProject(context.Background(), deps, root, true, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -140,14 +140,14 @@ export default {
   dns: { kind: "route53" },
 };
 `)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDestroyPreviewProject(context.Background(), sess, root, true, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDestroyPreviewProject(context.Background(), deps, root, true, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if out := stdout.String(); !strings.Contains(out, "DESTROY PROJECT project=test-app dns=route53") {
@@ -157,7 +157,7 @@ export default {
 
 	t.Run("without --yes it refuses without a terminal", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		err := runDestroyPreviewProject(context.Background(), newSession(), t.TempDir(), false, &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyPreviewProject(context.Background(), newDeps(), t.TempDir(), false, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyPreviewProject without a TTY err = nil, want a refusal")
 		}
@@ -170,7 +170,7 @@ export default {
 func TestRunDestroy(t *testing.T) {
 	t.Run("it refuses without a terminal", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		err := runDestroyProduction(context.Background(), newSession(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), newDeps(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyProduction without a TTY err = nil, want a refusal")
 		}
@@ -181,13 +181,13 @@ func TestRunDestroy(t *testing.T) {
 
 	t.Run("the project name gets past the terminal requirement and says so", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		t.Setenv(removalplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
-		err := runDestroyProduction(context.Background(), sess, root, &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader(""))
 		if err != nil && strings.Contains(err.Error(), "interactive terminal") {
 			t.Errorf("err = %v, want the bypass to get past the TTY requirement", err)
 		}
@@ -201,15 +201,15 @@ func TestRunDestroy(t *testing.T) {
 
 	t.Run("it renders the plan the provider sent, kept items included", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(removalplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDestroyProduction(context.Background(), sess, root, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -231,16 +231,16 @@ func TestRunDestroy(t *testing.T) {
 
 	t.Run("an empty plan destroys nothing and never asks for the project name", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeEmptyRemovalPlanEnvVar, "1")
 		t.Setenv(removalplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDestroyProduction(context.Background(), sess, root, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -257,13 +257,13 @@ func TestRunDestroy(t *testing.T) {
 
 	t.Run("a value that is not this project's name is refused without a terminal", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		t.Setenv(removalplan.BypassEnv, "1")
 
 		var stdout, stderr bytes.Buffer
-		err := runDestroyProduction(context.Background(), sess, root, &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDestroyProduction err = nil, want an ambient %s=1 refused; stdout=%s", removalplan.BypassEnv, stdout.String())
 		}
@@ -275,7 +275,7 @@ func TestRunDestroy(t *testing.T) {
 	t.Run("an unset bypass is not a bypass", func(t *testing.T) {
 		t.Setenv(removalplan.BypassEnv, "")
 		var stdout, stderr bytes.Buffer
-		err := runDestroyProduction(context.Background(), newSession(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), newDeps(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), "interactive terminal") {
 			t.Errorf("err = %v, want the no-TTY refusal", err)
 		}

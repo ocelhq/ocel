@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -20,7 +20,7 @@ import (
 )
 
 type gateRecovery struct {
-	sess    session.Session
+	deps    cmddeps.Deps
 	cfg     *projectconfig.Config
 	runner  *provider.Runner
 	preview bool
@@ -43,7 +43,7 @@ func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contra
 		if run != nil {
 			attemptCtx, span = run.StartSpan(ctx, "build", runtrace.AttrRetryCount.Int(attempt))
 		}
-		manifest, err := collectAndBuildManifest(attemptCtx, r.sess, r.cfg, gate, prebuilt, r.ui)
+		manifest, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.ui)
 		endAttemptSpan(span, err)
 
 		var refusal *envgate.Refusal
@@ -57,14 +57,14 @@ func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contra
 }
 
 func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *envgate.Refusal) error {
-	varsSession, err := r.sess.ServeVarsUI(ctx, r.cfg, r.runner, r.preview, gate)
+	varsSession, err := r.deps.ServeVarsUI(ctx, r.cfg, r.runner, r.preview, gate)
 	if err != nil {
 		return err
 	}
 	defer varsSession.Close()
 
 	r.ui.Waiting(refusal.Owed(), varsSession.URL)
-	if err := r.sess.OpenBrowser(varsSession.URL); err != nil {
+	if err := r.deps.OpenBrowser(varsSession.URL); err != nil {
 		fmt.Fprintln(r.stdout, "  Couldn't open your browser automatically — open the link above yourself.")
 	}
 

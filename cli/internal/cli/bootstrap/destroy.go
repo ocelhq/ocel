@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -18,19 +18,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func RunDestroy(ctx context.Context, sess session.Session, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := resolveProject(ctx, sess, cwd)
+func RunDestroy(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
+	cfg, err := resolveProject(ctx, deps, cwd)
 	if err != nil {
 		return err
 	}
-	return runDestroy(ctx, sess, cfg, tier, opts, stdout, stderr, stdin)
+	return runDestroy(ctx, deps, cfg, tier, opts, stdout, stderr, stdin)
 }
 
-func runDestroy(ctx context.Context, sess session.Session, cfg *projectconfig.Config, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
 	name := Name(tier)
 	requested := removalplan.BypassRequest()
 	bypass := requested == name
-	tty := sess.StdinIsTerminal(stdin)
+	tty := deps.StdinIsTerminal(stdin)
 	switch {
 	case bypass:
 		fmt.Fprintf(stderr, "%s=%s: removing the %s bootstrap without confirmation\n", removalplan.BypassEnv, name, name)
@@ -47,7 +47,7 @@ func runDestroy(ctx context.Context, sess session.Session, cfg *projectconfig.Co
 	}
 
 	prompter := prompt.New(stdout, stdin)
-	return providerui.Run(ctx, sess, cfg, destroyCommand(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+	return providerui.Run(ctx, deps, cfg, destroyCommand(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
 		client, err := runner.Client()
 		if err != nil {
 			return err

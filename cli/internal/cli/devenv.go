@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -31,8 +31,8 @@ func storeValues(projectEnv, dotfile map[string]string) map[string]string {
 	return values
 }
 
-func resolveAccount(ctx context.Context, sess session.Session, apiURL, token, projectID string, stderr io.Writer) resolve.Account {
-	cfg, err := sess.FetchAccount(ctx, apiURL, token, projectID)
+func resolveAccount(ctx context.Context, deps cmddeps.Deps, apiURL, token, projectID string, stderr io.Writer) resolve.Account {
+	cfg, err := deps.FetchAccount(ctx, apiURL, token, projectID)
 	if err == nil {
 		return cfg
 	}

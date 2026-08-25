@@ -19,7 +19,7 @@ import (
 func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, runner *provider.Runner, values runnerValues) error) {
 	t.Helper()
 	ctx := context.Background()
-	err := withEnvProvider(ctx, newSession(), root, opts, io.Discard, io.Discard, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	err := withEnvProvider(ctx, newDeps(), root, opts, io.Discard, io.Discard, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		return drive(ctx, cfg.Slug, runner, runnerValues{
 			runner: runner,
 			slug:   cfg.Slug,

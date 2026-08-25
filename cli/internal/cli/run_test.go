@@ -24,13 +24,13 @@ import (
 
 func TestRunRun(t *testing.T) {
 	t.Run("not logged in returns an exit error pointing at `ocel login`", func(t *testing.T) {
-		sess := newSession()
-		sess.LoadCredentials = func() (credentials.Credentials, error) {
+		deps := newDeps()
+		deps.LoadCredentials = func() (credentials.Credentials, error) {
 			return credentials.Credentials{}, credentials.ErrNotLoggedIn
 		}
 
 		var stderr bytes.Buffer
-		err := runRun(context.Background(), sess, nil, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, nil, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -52,8 +52,8 @@ func TestRunRun(t *testing.T) {
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -68,7 +68,7 @@ export default { slug: "test-app" };
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), sess, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		t.Run("the child's exit code becomes the command's", func(t *testing.T) {
 			var exitErr *exitsig.ExitError
@@ -111,8 +111,8 @@ export default { slug: "test-app" };
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		sess := newSession()
-		withCredentials(&sess, resolveServer.URL)
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -129,7 +129,7 @@ export default { slug: "test-app" };
 		leaderDone := make(chan error, 1)
 		var leaderStdout, leaderStderr syncBuffer
 		go func() {
-			leaderDone <- runDev(leaderCtx, sess, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -138,7 +138,7 @@ export default { slug: "test-app" };
 		runAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), sess, nil, root, runAppArgs, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, nil, root, runAppArgs, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -175,8 +175,8 @@ export default { slug: "test-app" };
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -206,7 +206,7 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runRun(context.Background(), sess, nil, root, []string{"true"}, &stdout, &stderr, strings.NewReader(""))
+			done <- runRun(context.Background(), deps, nil, root, []string{"true"}, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		select {

@@ -17,8 +17,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/attribution"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
@@ -40,11 +40,11 @@ import (
 
 const noBrowserEnvVar = "OCEL_NO_BROWSER"
 
-func canOpenVarsUI(sess session.Session, stdin io.Reader, noUI bool) bool {
+func canOpenVarsUI(deps cmddeps.Deps, stdin io.Reader, noUI bool) bool {
 	if noUI || os.Getenv(noBrowserEnvVar) != "" {
 		return false
 	}
-	return sess.StdinIsTerminal(stdin)
+	return deps.StdinIsTerminal(stdin)
 }
 
 const noUIFlagUsage = "Never pause to open the variables UI; fail on a missing or invalid variable instead"
@@ -71,7 +71,7 @@ var deployCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runDeploy(ctx, newSession(), cwd, deployOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDeploy(ctx, newDeps(), cwd, deployOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -84,7 +84,7 @@ func init() {
 
 const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building the apps first (produce it with ocel build)"
 
-func runDeploy(ctx context.Context, sess session.Session, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -97,9 +97,9 @@ func runDeploy(ctx context.Context, sess session.Session, cwd string, opts deplo
 		return err
 	}
 
-	return providerui.Run(ctx, sess, cfg, "ocel deploy", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		willConfirm := !opts.yes && sess.StdinIsTerminal(stdin)
-		knownSlugs, err := preflightDeploy(ctx, sess, runner, cfg, willConfirm, stdout, stdin)
+	return providerui.Run(ctx, deps, cfg, "ocel deploy", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		willConfirm := !opts.yes && deps.StdinIsTerminal(stdin)
+		knownSlugs, err := preflightDeploy(ctx, deps, runner, cfg, willConfirm, stdout, stdin)
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func runDeploy(ctx context.Context, sess session.Session, cwd string, opts deplo
 
 		ui.Building()
 		recovery := gateRecovery{
-			sess:   sess,
+			deps:   deps,
 			cfg:    cfg,
 			runner: runner,
 			newGate: func() *envgate.Gate {
@@ -129,7 +129,7 @@ func runDeploy(ctx context.Context, sess session.Session, cwd string, opts deplo
 			},
 			ui:      ui,
 			stdout:  stdout,
-			enabled: canOpenVarsUI(sess, stdin, opts.noUI),
+			enabled: canOpenVarsUI(deps, stdin, opts.noUI),
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
@@ -168,7 +168,7 @@ func runDeploy(ctx context.Context, sess session.Session, cwd string, opts deplo
 	})
 }
 
-func collectAndBuildManifest(ctx context.Context, sess session.Session, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *deployui.Session) (*contractv1.Manifest, error) {
+func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *deployui.Session) (*contractv1.Manifest, error) {
 	buildOut := ui.BuildWriter()
 
 	captured := &boundedCapture{}
@@ -205,7 +205,7 @@ func collectAndBuildManifest(ctx context.Context, sess session.Session, cfg *pro
 		if err := clientenv.Generate(clients); err != nil {
 			return nil, err
 		}
-		if err := sess.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
+		if err := deps.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
 			return nil, err
 		}
 		if err := clientenv.Record(cfg.Dir, clients); err != nil {
@@ -213,7 +213,7 @@ func collectAndBuildManifest(ctx context.Context, sess session.Session, cfg *pro
 		}
 	}
 
-	functions, err := sess.CollectAppFunctions(cfg.Dir)
+	functions, err := deps.CollectAppFunctions(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +247,7 @@ func collectAndBuildManifest(ctx context.Context, sess session.Session, cfg *pro
 		return nil, err
 	}
 	for _, app := range manifest.GetApps() {
-		id, err := sess.DeploymentID(cfg.Dir, app.GetName())
+		id, err := deps.DeploymentID(cfg.Dir, app.GetName())
 		if err != nil {
 			return nil, err
 		}

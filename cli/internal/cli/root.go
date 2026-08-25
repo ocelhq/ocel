@@ -14,7 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
@@ -70,7 +70,7 @@ func Execute() error {
 }
 
 func init() {
-	s := newSession()
+	s := newDeps()
 
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
 	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else nearest ocel.config.ts)")
@@ -93,8 +93,8 @@ func init() {
 	installHelpStyle(rootCmd)
 }
 
-func newSession() session.Session {
-	return session.Session{
+func newDeps() cmddeps.Deps {
+	return cmddeps.Deps{
 		LoadCredentials:     credentials.Load,
 		FetchAccount:        resolve.StubAccount,
 		BuildApp:            appbuilder.Build,

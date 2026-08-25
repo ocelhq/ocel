@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -53,7 +53,7 @@ var destroyProductionCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runDestroyProduction(ctx, newSession(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDestroyProduction(ctx, newDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -75,7 +75,7 @@ func init() {
 			ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
 
-			return runDestroyPreviewProject(ctx, newSession(), cwd, destroyYes, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDestroyPreviewProject(ctx, newDeps(), cwd, destroyYes, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	previewCmd.Flags().BoolVarP(&destroyYes, "yes", "y", false, "Destroy the whole preview footprint with no confirmation and no terminal, for CI. Skips both the typed-name confirmation and the interactive-terminal requirement")
@@ -84,7 +84,7 @@ func init() {
 	rootCmd.AddCommand(destroyCmd)
 }
 
-func runDestroyProduction(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
 	requested := removalplan.BypassRequest()
 	tty := isReaderTTY(stdin)
 	if requested == "" && !tty {
@@ -106,8 +106,8 @@ func runDestroyProduction(ctx context.Context, sess session.Session, cwd string,
 		fmt.Fprintf(stderr, "%s is set to %q, not this project (%s); confirming interactively instead\n", removalplan.BypassEnv, requested, cfg.Slug)
 	}
 
-	return providerui.Run(ctx, sess, cfg, "ocel destroy production", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+	return providerui.Run(ctx, deps, cfg, "ocel destroy production", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -154,7 +154,7 @@ func runDestroyProduction(ctx context.Context, sess session.Session, cwd string,
 	})
 }
 
-func runDestroyPreviewProject(ctx context.Context, sess session.Session, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	if !yes && !isReaderTTY(stdin) {
 		return errors.New("`ocel destroy preview` needs an interactive terminal to confirm the project name; re-run with --yes to tear the preview footprint down non-interactively")
 	}
@@ -164,8 +164,8 @@ func runDestroyPreviewProject(ctx context.Context, sess session.Session, cwd str
 		return err
 	}
 
-	return providerui.Run(ctx, sess, cfg, "ocel destroy preview", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
+	return providerui.Run(ctx, deps, cfg, "ocel destroy preview", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
 			return err
 		}
 
