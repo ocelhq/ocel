@@ -12,15 +12,15 @@ import (
 func TestRunDeploymentsLs(t *testing.T) {
 	t.Run("it renders promotions newest first with the active marker", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		d := newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
 		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploymentsLs(context.Background(), d, root, &stdout, &stderr); err != nil {
-			t.Fatalf("runDeploymentsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := runPromotionsLs(context.Background(), sess, root, &stdout, &stderr); err != nil {
+			t.Fatalf("runPromotionsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
 		out := stdout.String()
@@ -41,15 +41,15 @@ func TestRunDeploymentsLs(t *testing.T) {
 
 	t.Run("it shows each app's shipped identity under an aligned column", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		d := newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
 		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploymentsLs(context.Background(), d, root, &stdout, &stderr); err != nil {
-			t.Fatalf("runDeploymentsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := runPromotionsLs(context.Background(), sess, root, &stdout, &stderr); err != nil {
+			t.Fatalf("runPromotionsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
 		out := stdout.String()
@@ -72,16 +72,16 @@ func TestRunDeploymentsLs(t *testing.T) {
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		d := newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
 		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploymentsLs(context.Background(), d, root, &stdout, &stderr)
+		err := runPromotionsLs(context.Background(), sess, root, &stdout, &stderr)
 		if err == nil {
-			t.Fatal("runDeploymentsLs err = nil, want a class-mismatch error")
+			t.Fatal("runPromotionsLs err = nil, want a class-mismatch error")
 		}
 		if !strings.Contains(err.Error(), "ocel deploy can only run against production infrastructure") {
 			t.Errorf("err = %v, want the concrete class-mismatch message", err)
@@ -100,15 +100,15 @@ func runeIndex(line, substr string) int {
 func TestRunDeploymentsPrune(t *testing.T) {
 	t.Run("it reports the reclaimed and the kept promotions", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		d := newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
 		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploymentsPrune(context.Background(), d, root, 10, &stdout, &stderr); err != nil {
-			t.Fatalf("runDeploymentsPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := runPromotionsPrune(context.Background(), sess, root, 10, &stdout, &stderr); err != nil {
+			t.Fatalf("runPromotionsPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
 		out := stdout.String()
@@ -124,16 +124,16 @@ func TestRunDeploymentsPrune(t *testing.T) {
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		d := newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
 		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploymentsPrune(context.Background(), d, root, 10, &stdout, &stderr)
+		err := runPromotionsPrune(context.Background(), sess, root, 10, &stdout, &stderr)
 		if err == nil {
-			t.Fatal("runDeploymentsPrune err = nil, want a class-mismatch failure")
+			t.Fatal("runPromotionsPrune err = nil, want a class-mismatch failure")
 		}
 		out := stdout.String()
 		if !strings.Contains(out, "ocel deploy can only run against production infrastructure") {

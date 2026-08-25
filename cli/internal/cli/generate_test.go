@@ -61,11 +61,11 @@ export default {
 };
 `, "{\n  \"compilerOptions\": {}\n}\n")
 
-		d := newSession()
-		declaring(&d, plainClient("NEXT_PUBLIC_SITE_URL"), plainClient("NEXT_PUBLIC_APP_ID"))
+		sess := newSession()
+		declaring(&sess, plainClient("NEXT_PUBLIC_SITE_URL"), plainClient("NEXT_PUBLIC_APP_ID"))
 
 		var stdout, stderr bytes.Buffer
-		if err := runGenerate(context.Background(), d, root, &stdout, &stderr); err != nil {
+		if err := runGenerate(context.Background(), sess, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runGenerate: %v", err)
 		}
 
@@ -98,11 +98,11 @@ export default {
 	t.Run("generates for declarations no value backs", func(t *testing.T) {
 		root := setUpGenerateFixture(t, generateSoloConfig, "{}\n")
 
-		d := newSession()
-		declaring(&d, plainClient("NEXT_PUBLIC_SITE_URL"))
+		sess := newSession()
+		declaring(&sess, plainClient("NEXT_PUBLIC_SITE_URL"))
 
 		var stdout, stderr bytes.Buffer
-		if err := runGenerate(context.Background(), d, root, &stdout, &stderr); err != nil {
+		if err := runGenerate(context.Background(), sess, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runGenerate refused a declaration nothing has a value for: %v", err)
 		}
 		if _, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts")); err != nil {
@@ -113,8 +113,8 @@ export default {
 	t.Run("names only client-accessible plaintext", func(t *testing.T) {
 		root := setUpGenerateFixture(t, generateSoloConfig, "{}\n")
 
-		d := newSession()
-		declaring(&d,
+		sess := newSession()
+		declaring(&sess,
 			plainClient("NEXT_PUBLIC_SITE_URL"),
 			&resourcesv1.VariableDefinition{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
 			&resourcesv1.VariableDefinition{Key: "API_TOKEN", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, ClientAccessible: true},
@@ -122,7 +122,7 @@ export default {
 		)
 
 		var stdout, stderr bytes.Buffer
-		if err := runGenerate(context.Background(), d, root, &stdout, &stderr); err != nil {
+		if err := runGenerate(context.Background(), sess, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runGenerate: %v", err)
 		}
 
@@ -140,11 +140,11 @@ export default {
 	t.Run("writes nothing for a project with no client-accessible variable", func(t *testing.T) {
 		root := setUpGenerateFixture(t, generateSoloConfig, "{}\n")
 
-		d := newSession()
-		declaring(&d, &resourcesv1.VariableDefinition{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN})
+		sess := newSession()
+		declaring(&sess, &resourcesv1.VariableDefinition{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN})
 
 		var stdout, stderr bytes.Buffer
-		if err := runGenerate(context.Background(), d, root, &stdout, &stderr); err != nil {
+		if err := runGenerate(context.Background(), sess, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runGenerate: %v", err)
 		}
 
@@ -166,13 +166,13 @@ export default {
 	t.Run("surfaces a discovery failure", func(t *testing.T) {
 		root := setUpGenerateFixture(t, generateSoloConfig, "")
 
-		d := newSession()
-		d.CollectDeclarations = func(context.Context, *projectconfig.Config, *envgate.Gate, io.Writer, io.Writer) ([]declare.Resource, error) {
+		sess := newSession()
+		sess.CollectDeclarations = func(context.Context, *projectconfig.Config, *envgate.Gate, io.Writer, io.Writer) ([]declare.Resource, error) {
 			return nil, errors.New("discovery blew up")
 		}
 
 		var stdout, stderr bytes.Buffer
-		err := runGenerate(context.Background(), d, root, &stdout, &stderr)
+		err := runGenerate(context.Background(), sess, root, &stdout, &stderr)
 		if err == nil || !strings.Contains(err.Error(), "discovery blew up") {
 			t.Fatalf("runGenerate = %v, want the discovery failure", err)
 		}

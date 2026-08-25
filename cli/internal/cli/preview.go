@@ -206,7 +206,7 @@ func runPreviewUp(ctx context.Context, sess session.Session, cwd string, opts pr
 		}
 
 		var out deployOutcome
-		if err := provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.render(ui)); err != nil {
+		if err := provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.collect(ui)); err != nil {
 			return err
 		}
 
@@ -544,7 +544,7 @@ func preflightTier(ctx context.Context, sess session.Session, runner *provider.R
 	return bootstrap.PlanFor(resp.GetBootstrap()).Refusal(required)
 }
 
-func preflightSchema(ctx context.Context, sess session.Session, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
+func preflightCredentials(ctx context.Context, sess session.Session, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
 	_, err := preflight(ctx, sess, runner, cfg, required, "", nil, nil, bootstrapHint, out)
 	return err
 }
@@ -642,8 +642,8 @@ func renderEnvironments(stdout io.Writer, envs []*contractv1.PreviewEnvironment)
 			e.GetIdentity(),
 			lifecycleTag(e.GetLifecycle()),
 			labelOrDash(e.GetLabel()),
-			epochOrDash(e.GetCreatedAt()),
-			epochOrDash(e.GetExpiresAt()),
+			epochDate(e.GetCreatedAt()),
+			epochDate(e.GetExpiresAt()),
 		)
 	}
 }
@@ -666,7 +666,7 @@ func labelOrDash(label string) string {
 	return label
 }
 
-func epochOrDash(sec int64) string {
+func epochDate(sec int64) string {
 	if sec == 0 {
 		return "—"
 	}

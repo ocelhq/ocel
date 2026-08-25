@@ -53,7 +53,7 @@ var destroyProductionCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runDestroy(ctx, newSession(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDestroyProduction(ctx, newSession(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -84,7 +84,7 @@ func init() {
 	rootCmd.AddCommand(destroyCmd)
 }
 
-func runDestroy(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroyProduction(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
 	requested := removalplan.BypassRequest()
 	tty := isReaderTTY(stdin)
 	if requested == "" && !tty {

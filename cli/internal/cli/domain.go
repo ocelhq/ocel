@@ -103,7 +103,7 @@ var domainAddCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runAddDomain(ctx, newSession(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainAdd(ctx, newSession(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -286,7 +286,7 @@ func runDomainRelease(ctx context.Context, sess session.Session, cwd string, opt
 	})
 }
 
-func runAddDomain(ctx context.Context, sess session.Session, cwd, host string, stdout, stderr io.Writer) error {
+func runDomainAdd(ctx context.Context, sess session.Session, cwd, host string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -413,7 +413,7 @@ func lastProbe(cert *contractv1.CertificateState, never string) string {
 	if cert.GetLastProbeAt() == 0 {
 		return never
 	}
-	at := stamp(cert.GetLastProbeAt())
+	at := epochRFC3339(cert.GetLastProbeAt())
 	if !cert.GetLastProbeOk() {
 		return fmt.Sprintf("%s  FAILED — nothing answered as the %s edge", at, cert.GetLastProbeEdge())
 	}
@@ -441,10 +441,10 @@ func wildcardOf(base string) string {
 }
 
 type domainWaitSchedule struct {
-	first, most, cap time.Duration
+	initialInterval, maxInterval, deadline time.Duration
 }
 
-var domainWait = domainWaitSchedule{first: 2 * time.Second, most: 30 * time.Second, cap: 15 * time.Minute}
+var domainWait = domainWaitSchedule{initialInterval: 2 * time.Second, maxInterval: 30 * time.Second, deadline: 15 * time.Minute}
 
 func runDomainStatus(ctx context.Context, sess session.Session, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
@@ -492,15 +492,15 @@ func awaitDomainStatus(ctx context.Context, client contractv1connect.ProviderSer
 	spinner := deployui.StartSpinner(out, "Waiting for every declared hostname to answer")
 	defer spinner.Stop()
 
-	giveUp := time.Now().Add(domainWait.cap)
-	every := domainWait.first
+	giveUp := time.Now().Add(domainWait.deadline)
+	every := domainWait.initialInterval
 	var failures int
 	var lastErr error
 	for {
 		if err := holdFor(ctx, jittered(every)); err != nil {
 			return nil, err
 		}
-		every = min(every*2, domainWait.most)
+		every = min(every*2, domainWait.maxInterval)
 		next, err := client.GetHostnameStatus(ctx, req)
 		switch {
 		case err != nil:
@@ -516,9 +516,9 @@ func awaitDomainStatus(ctx context.Context, client contractv1connect.ProviderSer
 		}
 		if time.Now().After(giveUp) {
 			if lastErr != nil {
-				return resp, fmt.Errorf("gave up after %s waiting for every production hostname to answer; the last check failed: %w", domainWait.cap, lastErr)
+				return resp, fmt.Errorf("gave up after %s waiting for every production hostname to answer; the last check failed: %w", domainWait.deadline, lastErr)
 			}
-			return resp, fmt.Errorf("gave up after %s waiting for every production hostname to answer; still outstanding: %s", domainWait.cap, outstandingHosts(resp))
+			return resp, fmt.Errorf("gave up after %s waiting for every production hostname to answer; still outstanding: %s", domainWait.deadline, outstandingHosts(resp))
 		}
 	}
 }
@@ -603,11 +603,11 @@ func writeDomainStatusJSON(out io.Writer, resp *contractv1.GetHostnameStatusResp
 			Certificate:    cert.GetCertificateId(),
 			CertStatus:     cert.GetCertificateStatus(),
 			Renewal:        host.GetRenewalStatus(),
-			ExpiresAt:      stamp(host.GetExpiresAt()),
+			ExpiresAt:      epochRFC3339(host.GetExpiresAt()),
 			ExpiringSoon:   host.GetExpiringSoon(),
 			RecordsWritten: cert.GetRecordsWritten(),
 			RecordsOwed:    cert.GetRecordsOwed(),
-			LastProbeAt:    stamp(cert.GetLastProbeAt()),
+			LastProbeAt:    epochRFC3339(cert.GetLastProbeAt()),
 			LastProbeOk:    cert.GetLastProbeOk(),
 			LastProbeEdge:  cert.GetLastProbeEdge(),
 			ServingPointer: host.GetServingPointer(),
@@ -618,7 +618,7 @@ func writeDomainStatusJSON(out io.Writer, resp *contractv1.GetHostnameStatusResp
 	return enc.Encode(report)
 }
 
-func stamp(unix int64) string {
+func epochRFC3339(unix int64) string {
 	if unix == 0 {
 		return ""
 	}
@@ -670,7 +670,7 @@ func domainHostState(host *contractv1.ProductionHostname) string {
 func domainRenewal(host *contractv1.ProductionHostname) string {
 	expiry := "no expiry reported"
 	if at := host.GetExpiresAt(); at != 0 {
-		expiry = "expires " + stamp(at)
+		expiry = "expires " + epochRFC3339(at)
 	}
 	status := host.GetRenewalStatus()
 	if status == "" {

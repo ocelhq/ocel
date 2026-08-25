@@ -40,7 +40,7 @@ var deploymentsLsCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runDeploymentsLs(ctx, newSession(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runPromotionsLs(ctx, newSession(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -59,7 +59,7 @@ var deploymentsPruneCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runDeploymentsPrune(ctx, newSession(), cwd, pruneKeepN, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runPromotionsPrune(ctx, newSession(), cwd, pruneKeepN, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -69,7 +69,7 @@ func init() {
 	deploymentsCmd.AddCommand(deploymentsPruneCmd)
 }
 
-func runDeploymentsLs(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer) error {
+func runPromotionsLs(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -96,7 +96,7 @@ func runDeploymentsLs(ctx context.Context, sess session.Session, cwd string, std
 	})
 }
 
-func runDeploymentsPrune(ctx context.Context, sess session.Session, cwd string, keepN int, stdout, stderr io.Writer) error {
+func runPromotionsPrune(ctx context.Context, sess session.Session, cwd string, keepN int, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -143,7 +143,7 @@ func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistor
 		if entry.GetActive() {
 			status = activeStatus
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, epochTimestamp(p.GetTs()), deployedIdentities(p.GetBuilds()), status)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, epochDateTime(p.GetTs()), deployedIdentities(p.GetBuilds()), status)
 	}
 	_ = tw.Flush()
 }
@@ -165,7 +165,7 @@ func deployedIdentities(identityByApp map[string]string) string {
 	return strings.Join(pairs, " ")
 }
 
-func epochTimestamp(sec int64) string {
+func epochDateTime(sec int64) string {
 	if sec == 0 {
 		return "—"
 	}

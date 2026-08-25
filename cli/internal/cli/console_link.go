@@ -104,7 +104,7 @@ func runConsoleLink(ctx context.Context, sess session.Session, projectDir, proje
 		return fmt.Errorf("failed to list projects: %w", err)
 	}
 
-	selected, err := selectProject(ctx, projectClient, creds.AccessToken, projectDir, project, opts, projects, org, stdout, stdin, scanner)
+	selected, err := selectOrCreateProject(ctx, projectClient, creds.AccessToken, projectDir, project, opts, projects, org, stdout, stdin, scanner)
 	if err != nil {
 		return err
 	}
@@ -150,7 +150,7 @@ func ensureConsoleBinding(ctx context.Context, sess session.Session, projectDir,
 	return binding, nil
 }
 
-func selectProject(
+func selectOrCreateProject(
 	ctx context.Context,
 	client *projectclient.Client,
 	accessToken, projectDir, project string,
@@ -282,7 +282,7 @@ func pickOrganization(ctx context.Context, client *authclient.Client, accessToke
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve organization: %w", err)
+		return nil, fmt.Errorf("failed to list organizations: %w", err)
 	}
 
 	if len(orgs) == 0 {

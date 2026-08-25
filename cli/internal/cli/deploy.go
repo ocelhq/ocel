@@ -153,7 +153,7 @@ func runDeploy(ctx context.Context, sess session.Session, cwd string, opts deplo
 		}
 
 		var out deployOutcome
-		if err := provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.render(ui)); err != nil {
+		if err := provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.collect(ui)); err != nil {
 			return err
 		}
 

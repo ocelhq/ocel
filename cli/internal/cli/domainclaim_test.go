@@ -147,14 +147,14 @@ export default {
   domains: { preview: "*.preview.acme.com" },
 };
 `)
-		d := newSession()
-		stubGit(&d, "feature/login", "")
+		sess := newSession()
+		stubGit(&sess, "feature/login", "")
 		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainOwnerEnvVar, "ocel-other-preview")
 
 		var stdout, stderr bytes.Buffer
-		err := runPreviewUp(context.Background(), d, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+		err := runPreviewUp(context.Background(), sess, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a domain-claim refusal")
 		}
@@ -215,11 +215,11 @@ export default {
 };
 `)
 		writeAppSource(t, root, "api")
-		d := newSession()
-		clitest.StubAppFunctions(&d, nil)
+		sess := newSession()
+		clitest.StubAppFunctions(&sess, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app domains=acme.com,api.acme.com") {
