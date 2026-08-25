@@ -57,7 +57,7 @@ func revalidateQueueResources(class string) string {
 	return fmt.Sprintf(`  RevalidateDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
-      Description: "Where an ISR refresh lands once the revalidator has failed it enough times. Anything in here is a page that was asked to re-render and never did, so a filling queue points at a broken origin rather than a broken queue."
+      Description: "ISR refreshes the revalidator gave up on. Anything in here is a page that was asked to re-render and never did, which points at the origin."
     Properties:
       QueueName: %s
       FifoQueue: true
@@ -66,7 +66,7 @@ func revalidateQueueResources(class string) string {
   RevalidateQueue:
     Type: AWS::SQS::Queue
     Metadata:
-      Description: "The queue the edge sends admitted ISR refreshes to and the revalidator drains, FIFO and explicitly deduplicated so a stampede on one page renders once. Shared by every app in this bootstrap; delete it and background revalidation stops for all of them."
+      Description: "The queue the edge sends admitted ISR refreshes to and the revalidator drains, FIFO and explicitly deduplicated so a stampede on one page renders once. Shared by every app in this bootstrap."
     Properties:
       QueueName: %s
       FifoQueue: true
@@ -81,12 +81,11 @@ func revalidateQueueResources(class string) string {
 		revalidateVisibilityTimeoutSeconds, revalidateRetentionSeconds, revalidateMaxReceiveCount)
 }
 
-func revalidatorResources(code payloads.Placement, class string) string {
-	command := classCommand(class)
+func revalidatorResources(code payloads.Placement) string {
 	return fmt.Sprintf(`  RevalidatorRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this bootstrap's ISR revalidator. Grants it the revalidation queue, the origin descriptors in the asset bucket and invoke on app functions only, so it can re-render an app but cannot touch state, variables or any other function Ocel runs in this account. Managed by %s; deleting it leaves the queue undrained."
+      Description: "Execution role for this bootstrap's ISR revalidator: the revalidation queue, the origin descriptors in the asset bucket and invoke on app functions, and nothing else."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -127,7 +126,7 @@ func revalidatorResources(code payloads.Placement, class string) string {
   Revalidator:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel ISR revalidator - drains this bootstrap's revalidation queue, turning one deduplicated message into one signed render at the app's own origin. Managed by %s; delete it and stale pages stay stale."
+      Description: "Ocel ISR revalidator - drains this bootstrap's revalidation queue, turning one deduplicated message into one signed render at the app's own origin."
       Runtime: %s
       Architectures:
         - %s
@@ -144,7 +143,7 @@ func revalidatorResources(code payloads.Placement, class string) string {
   RevalidatorQueueConsumer:
     Type: AWS::Lambda::EventSourceMapping
     Metadata:
-      Description: "Binds the revalidator to the revalidation queue under a concurrency cap, so a burst of expiring pages cannot crowd out live traffic at the apps' own origins. Delete it and messages accumulate until they age out - the queue stays healthy while nothing re-renders."
+      Description: "Binds the revalidator to the revalidation queue under a concurrency cap, so a burst of expiring pages cannot crowd out live traffic at the apps' own origins."
     Properties:
       EventSourceArn: !GetAtt RevalidateQueue.Arn
       FunctionName: !GetAtt Revalidator.Arn
@@ -153,7 +152,7 @@ func revalidatorResources(code payloads.Placement, class string) string {
         - ReportBatchItemFailures
       ScalingConfig:
         MaximumConcurrency: %d
-`, command, command, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
+`, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		revalidatorAssetBucketEnvVar,
 		revalidatorBatchSize, revalidatorMaxConcurrency)
@@ -164,7 +163,7 @@ func revalidateQueueOutputs() string {
     Description: "URL of this bootstrap's ISR revalidation queue. The edge sends admitted refreshes to it and the revalidator drains it."
     Value: !Ref RevalidateQueue
   %s:
-    Description: "ARN of this bootstrap's ISR revalidation queue, handed to whichever feature stack has to grant send on it."
+    Description: "ARN of this bootstrap's ISR revalidation queue, handed to whichever feature stack grants send on it."
     Value: !GetAtt RevalidateQueue.Arn
 `, outputRevalidateQueueURL, outputRevalidateQueueARN)
 }

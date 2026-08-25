@@ -163,7 +163,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		Handler:     pulumi.String(args.UploadCompleterHandler),
 		Role:        completerRole.Arn,
 		Timeout:     pulumi.Int(args.UploadCompleterTimeoutSeconds),
-		Description: pulumi.String(at.Description("upload completer for the " + at.Name + " bucket")),
+		Description: capDescription(at.Description("upload completer for the "+at.Name+" bucket"), maxDescriptionLen),
 		Tags:        resourceTags(naming.KindUploadCompleter, "", args.Tags),
 		S3Bucket:    pulumi.String(completerCode.Bucket),
 		S3Key:       pulumi.String(completerCode.Key),

@@ -55,10 +55,10 @@ func cloudflareEdgeTemplate(in featureInputs) featureStack {
 	return featureStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to the assets, tag items, app functions and revalidation queue of this bootstrap alone, and the publisher that carries each build's tag snapshot from the state table stream out to the edge's ISR writer. Created and updated by %s. Deleting this stack severs the Cloudflare front from this account."
+Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to this bootstrap alone, and the publisher that carries each build's tag snapshot out to the edge's ISR writer."
 %sResources:
 %s%s`,
-			FeatureCloudflareEdge, in.class, classFeaturesCommand(in.class), params,
+			FeatureCloudflareEdge, in.class, params,
 			edgeUserResource(userName, in.class, optimizer),
 			tagPublisherResources(in.code.publisher, in.class)),
 	}
@@ -72,7 +72,7 @@ func edgeUserResource(userName, class string, optimizer bool) string {
 	return fmt.Sprintf(`  EdgeUser:
     Type: AWS::IAM::User
     Metadata:
-      Description: "The identity the %s edge signs its calls into this account with, from outside the trust boundary: it reads the asset bucket, writes the fetch cache back, reads and updates tag items, invokes the app functions Ocel deploys and enqueues ISR revalidations. Nothing else in this account assumes it. Its access key is the only credential the edge holds; delete the user or its key and the edge is severed from this account, and bootstrap only mints a replacement once the SSM parameter holding the old one is gone too."
+      Description: "The identity the %s edge signs its calls into this account with: it reads the asset bucket, writes the fetch cache back, reads and updates tag items, invokes app functions and enqueues ISR revalidations."
     Properties:
       UserName: %s
       Policies:

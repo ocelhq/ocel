@@ -33,12 +33,12 @@ func imageOptimizationTemplate(in featureInputs) featureStack {
 	return featureStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - the shared image optimizer every app in this bootstrap serves transformed images through, and the IAM-authenticated Function URL the fronts call it on. Created and updated by %s. Deleting this stack makes optimized image requests answer 502 across this bootstrap until it is bootstrapped again."
+Description: "Ocel bootstrap feature (%s, %s) - the shared image optimizer every app in this bootstrap serves transformed images through, and the IAM-authenticated Function URL the fronts call it on."
 %sResources:
 %sOutputs:
 %s`,
-			FeatureImageOptimization, in.class, classFeaturesCommand(in.class), params,
-			imageOptimizerResources(in.code.optimizer, in.class),
+			FeatureImageOptimization, in.class, params,
+			imageOptimizerResources(in.code.optimizer),
 			imageOptimizerOutputs()),
 	}
 }

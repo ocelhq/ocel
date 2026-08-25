@@ -38,12 +38,11 @@ func ensureOptimizerPayload(ctx context.Context, store ObjectStore, bucket strin
 	return payloads.Place(ctx, store, bucket, optimizerKeyPrefix, optimizerLabel, payloads.ImageOptimizer())
 }
 
-func imageOptimizerResources(code payloads.Placement, class string) string {
-	command := classCommand(class)
+func imageOptimizerResources(code payloads.Placement) string {
 	return fmt.Sprintf(`  ImageOptimizerRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this bootstrap's shared image optimizer. Grants read on the asset bucket's assets and image-config prefixes and nothing else, so a compromised optimizer cannot reach state, variables or another app's data. Managed by %s; deleting it breaks /_next/image for every app in this bootstrap."
+      Description: "Execution role for this bootstrap's shared image optimizer: read on the asset bucket's assets and image-config prefixes, and nothing else."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -66,7 +65,7 @@ func imageOptimizerResources(code payloads.Placement, class string) string {
   ImageOptimizer:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel image optimizer - one shared function transforming /_next/image for every app in this bootstrap, invoked by the edge. Managed by %s; delete it and /_next/image answers 502 everywhere here."
+      Description: "Ocel image optimizer - one shared function transforming /_next/image for every app in this bootstrap, invoked by the edge."
       Runtime: %s
       Architectures:
         - %s
@@ -87,12 +86,12 @@ func imageOptimizerResources(code payloads.Placement, class string) string {
   ImageOptimizerUrl:
     Type: AWS::Lambda::Url
     Metadata:
-      Description: "The edge's entry point to the image optimizer, IAM-authenticated so only the edge user can call it and response-streaming so a large image does not buffer. Its URL is a stack output the edge is given at bootstrap; recreate this and the edge keeps calling the old URL until bootstrap runs again."
+      Description: "The edge's entry point to the image optimizer, IAM-authenticated so only the edge user may call it and response-streaming so a large image does not buffer."
     Properties:
       TargetFunctionArn: !GetAtt ImageOptimizer.Arn
       AuthType: AWS_IAM
       InvokeMode: RESPONSE_STREAM
-`, command, command, optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
+`, optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
 		code.Bucket, code.Key, optimizerBucketEnvVar, optimizerThreadpoolSize,
 		optimizerComponentTagKey, optimizerComponentTagValue)
 }
@@ -102,7 +101,7 @@ func imageOptimizerOutputs() string {
     Description: "Function URL of this bootstrap's shared image optimizer. The edge calls it with requests signed by the edge user."
     Value: !GetAtt ImageOptimizerUrl.FunctionUrl
   %s:
-    Description: "ARN of this bootstrap's shared image optimizer, handed to whichever feature stack has to grant invoke on it."
+    Description: "ARN of this bootstrap's shared image optimizer, handed to whichever feature stack grants invoke on it."
     Value: !GetAtt ImageOptimizer.Arn
 `, outputImageOptimizerURL, outputImageOptimizerARN)
 }

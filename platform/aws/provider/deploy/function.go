@@ -336,9 +336,12 @@ func resourceTags(kind naming.Kind, route string, extra map[string]string) pulum
 }
 
 func describe(c naming.Coordinate, detail string) pulumi.String {
-	described := c.Description(detail + " - release " + c.Release.String())
-	if len(described) > maxDescriptionLen {
-		described = strings.ToValidUTF8(described[:maxDescriptionLen], "")
+	return capDescription(c.Description(detail+" - release "+c.Release.String()), maxDescriptionLen)
+}
+
+func capDescription(described string, limit int) pulumi.String {
+	if len(described) > limit {
+		described = strings.ToValidUTF8(described[:limit], "")
 	}
 	return pulumi.String(described)
 }

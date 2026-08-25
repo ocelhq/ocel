@@ -46,6 +46,30 @@ func TestPostgresComponentTags(t *testing.T) {
 	}
 }
 
+func TestPostgresDescriptionsFitAWSLimits(t *testing.T) {
+	long := strings.Repeat("storefront-", 40)
+	rec := recordTags(t, func(ctx *pulumi.Context) error {
+		return registerPostgres(ctx, long, "prod", "db--main", translatePostgres(&providerkit.PostgresSpec{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
+	}, masterUserSecret)
+
+	sg := rec.inputsOf(t, "aws:ec2/securityGroup:SecurityGroup", "db-main-security-group")
+	if got := sg["description"].StringValue(); len(got) != maxSecurityGroupDescriptionLen {
+		t.Errorf("security group description is %d chars, want it clamped to the %d EC2 accepts", len(got), maxSecurityGroupDescriptionLen)
+	}
+	for _, rules := range []string{"ingress", "egress"} {
+		for _, rule := range sg[resource.PropertyKey(rules)].ArrayValue() {
+			if got := rule.ObjectValue()["description"].StringValue(); len(got) != maxSecurityGroupDescriptionLen {
+				t.Errorf("%s rule description is %d chars, want it clamped to the %d EC2 accepts", rules, len(got), maxSecurityGroupDescriptionLen)
+			}
+		}
+	}
+
+	subnets := rec.inputsOf(t, "aws:rds/subnetGroup:SubnetGroup", "db-main-subnet-group")
+	if got := subnets["description"].StringValue(); len(got) != maxSubnetGroupDescriptionLen {
+		t.Errorf("subnet group description is %d chars, want it clamped to the %d RDS accepts", len(got), maxSubnetGroupDescriptionLen)
+	}
+}
+
 func TestPostgresResourceIDs(t *testing.T) {
 	t.Parallel()
 

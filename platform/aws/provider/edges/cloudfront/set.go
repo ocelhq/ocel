@@ -21,6 +21,13 @@ const (
 	rscQueryParameter = "_rsc"
 
 	listPageCeiling = 200
+
+	keyValueStoreReady = "READY"
+)
+
+var (
+	keyValueStoreEvery  = 5 * time.Second
+	keyValueStoreWithin = 3 * time.Minute
 )
 
 type edgeSet struct {
@@ -120,6 +127,9 @@ func ensureKeyValueStore(ctx context.Context, c Clients, class edge.Class) (stri
 	name := keyValueStoreName(class)
 	out, err := c.CloudFront.DescribeKeyValueStore(ctx, &cloudfront.DescribeKeyValueStoreInput{Name: aws.String(name)})
 	if err == nil {
+		if err := awaitKeyValueStore(ctx, c, name, aws.ToString(out.KeyValueStore.Status)); err != nil {
+			return "", err
+		}
 		return aws.ToString(out.KeyValueStore.ARN), nil
 	}
 	if !isNotFound(err) {
@@ -132,7 +142,31 @@ func ensureKeyValueStore(ctx context.Context, c Clients, class edge.Class) (stri
 	if err != nil {
 		return "", createError("key value store", name, err)
 	}
+	if err := awaitKeyValueStore(ctx, c, name, aws.ToString(created.KeyValueStore.Status)); err != nil {
+		return "", err
+	}
 	return aws.ToString(created.KeyValueStore.ARN), nil
+}
+
+func awaitKeyValueStore(ctx context.Context, c Clients, name, status string) error {
+	for waited := time.Duration(0); status != keyValueStoreReady; waited += keyValueStoreEvery {
+		if waited >= keyValueStoreWithin {
+			return stillProvisioning(name, waited)
+		}
+		if err := waitFor(ctx, keyValueStoreEvery); err != nil {
+			return err
+		}
+		out, err := c.CloudFront.DescribeKeyValueStore(ctx, &cloudfront.DescribeKeyValueStoreInput{Name: aws.String(name)})
+		if err != nil {
+			return fmt.Errorf("read the key value store %q: %w", name, err)
+		}
+		status = aws.ToString(out.KeyValueStore.Status)
+	}
+	return nil
+}
+
+func stillProvisioning(name string, waited time.Duration) error {
+	return fmt.Errorf("wait for the key value store %q to finish provisioning: CloudFront held it out of %s for %s, and it cannot be attached to the resolver function until it is ready. Wait a minute and run the same command again; if it keeps happening, this is an AWS-side fault and nothing in your account needs changing", name, keyValueStoreReady, waited)
 }
 
 func ensureResolver(ctx context.Context, c Clients, class edge.Class, kvsARN string) (string, error) {

@@ -148,8 +148,16 @@ func (f *fakeSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ .
 }
 
 type fakeStore struct {
-	arn  string
-	etag string
+	arn          string
+	etag         string
+	provisioning int
+}
+
+func (s *fakeStore) status() string {
+	if s.provisioning > 0 {
+		return "PROVISIONING"
+	}
+	return keyValueStoreReady
 }
 
 type fakeFunction struct {
@@ -193,6 +201,7 @@ type fakeCloudFront struct {
 	statusThrottles       int
 	rollout               int
 	cachePolicyPageSize   int
+	storeProvisions       int
 }
 
 func newFakeCloudFront(shared *trail) *fakeCloudFront {
@@ -270,10 +279,11 @@ func (f *fakeCloudFront) CreateKeyValueStore(_ context.Context, in *cloudfront.C
 		return nil, err
 	}
 	arn := "arn:aws:cloudfront::123456789012:key-value-store/" + name
-	f.stores[name] = &fakeStore{arn: arn, etag: "kvs-1"}
+	held := &fakeStore{arn: arn, etag: "kvs-1", provisioning: f.storeProvisions}
+	f.stores[name] = held
 	return &cloudfront.CreateKeyValueStoreOutput{
 		ETag:          aws.String("kvs-1"),
-		KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(arn), Name: in.Name},
+		KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(arn), Name: in.Name, Status: aws.String(held.status())},
 	}, nil
 }
 
@@ -286,9 +296,12 @@ func (f *fakeCloudFront) DescribeKeyValueStore(_ context.Context, in *cloudfront
 	if !ok {
 		return nil, &cftypes.EntityNotFound{Message: aws.String("no key value store " + name)}
 	}
+	if held.provisioning > 0 {
+		held.provisioning--
+	}
 	return &cloudfront.DescribeKeyValueStoreOutput{
 		ETag:          aws.String(held.etag),
-		KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(held.arn), Name: in.Name},
+		KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(held.arn), Name: in.Name, Status: aws.String(held.status())},
 	}, nil
 }
 

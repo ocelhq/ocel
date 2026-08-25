@@ -26,9 +26,7 @@ func ensureOriginSecret(ctx context.Context, ssmClient SSMAPI, class string) (st
 		return "", err
 	}
 	return ensureSecret(ctx, ssmClient, paramName, fmt.Sprintf(
-		"Ocel: the shared secret every %s release Lambda demands of the front that reaches it, because those Function URLs answer without SigV4. "+
-			"Generated once; a release learns it as environment at deploy and the front learns it at promote, so rotating it means deleting it, "+
-			"deploying every release that must keep serving, and promoting again.",
+		"Ocel: the shared secret every %s release Lambda demands of the front that reaches it, because those Function URLs answer without SigV4.",
 		class,
 	))
 }

@@ -23,6 +23,9 @@ const (
 	postgresPort                 = 5432
 	postgresMasterUsername       = "ocel"
 	postgresDatabaseName         = "ocel"
+
+	maxSecurityGroupDescriptionLen = 255
+	maxSubnetGroupDescriptionLen   = 255
 )
 
 type postgresArgs struct {
@@ -76,7 +79,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 	at := resourceCoordinate(project, env, logicalName, naming.KindDatabase)
 
 	sg, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(at.Kind, at.Name, "security-group"), &ec2.SecurityGroupArgs{
-		Description: pulumi.String(at.Description("security group for the " + at.Name + " database")),
+		Description: capDescription(at.Description("security group for the "+at.Name+" database"), maxSecurityGroupDescriptionLen),
 		VpcId:       pulumi.String(vpcID),
 		Ingress: ec2.SecurityGroupIngressArray{
 			&ec2.SecurityGroupIngressArgs{
@@ -84,7 +87,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 				FromPort:    pulumi.Int(args.Port),
 				ToPort:      pulumi.Int(args.Port),
 				CidrBlocks:  pulumi.StringArray{pulumi.String(vpcCIDR)},
-				Description: pulumi.String(at.Description("Postgres access to the " + at.Name + " database from within the VPC")),
+				Description: capDescription(at.Description("Postgres access to the "+at.Name+" database from within the VPC"), maxSecurityGroupDescriptionLen),
 			},
 		},
 		Egress: ec2.SecurityGroupEgressArray{
@@ -93,7 +96,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 				FromPort:    pulumi.Int(0),
 				ToPort:      pulumi.Int(0),
 				CidrBlocks:  pulumi.StringArray{pulumi.String("0.0.0.0/0")},
-				Description: pulumi.String(at.Description("outbound access for the " + at.Name + " database")),
+				Description: capDescription(at.Description("outbound access for the "+at.Name+" database"), maxSecurityGroupDescriptionLen),
 			},
 		},
 		Tags: resourceTags(at.Kind, "", args.Tags),
@@ -104,7 +107,7 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 
 	subnetGroup, err := rds.NewSubnetGroup(ctx, naming.ResourceID(at.Kind, at.Name, "subnet-group"), &rds.SubnetGroupArgs{
 		NamePrefix:  pulumi.String(rdsIdentifierPrefix(at, "subnets")),
-		Description: pulumi.String(at.Description("subnet group placing the " + at.Name + " database in the VPC's subnets")),
+		Description: capDescription(at.Description("subnet group placing the "+at.Name+" database in the VPC's subnets"), maxSubnetGroupDescriptionLen),
 		SubnetIds:   pulumi.ToStringArray(subnetIDs),
 		Tags:        resourceTags(at.Kind, "", args.Tags),
 	})

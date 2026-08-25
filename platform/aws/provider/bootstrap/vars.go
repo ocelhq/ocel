@@ -24,7 +24,7 @@ func varsResources(class string) string {
 	return fmt.Sprintf(`  VarsKey:
     Type: AWS::KMS::Key
     Properties:
-      Description: "Ocel: the key every encrypted variable of the %s class is encrypted under. Ocel encrypts a value here when it is set, a deploy decrypts the ones it bakes into an app, and a running function decrypts the ones it reads live. Nothing else in this account uses it. Scheduling its deletion does not remove the values, it strands them: every encrypted variable of this class becomes unreadable to Ocel and to the apps holding live references, and each has to be set again against a new key."
+      Description: "Ocel: the key every encrypted variable of the %s class is encrypted under, written when a value is set and read by deploys and running functions. Scheduling its deletion strands those values - each has to be set again under a new key."
       EnableKeyRotation: true
       Tags:
         - Key: %s
@@ -40,14 +40,14 @@ func varsResources(class string) string {
   VarsKeyAlias:
     Type: AWS::KMS::Alias
     Metadata:
-      Description: "Stable name for the %s class's variable key, so an operator reading a key policy or a CloudTrail entry can tell which key this is without resolving its id. Nothing reads variables through the alias - Ocel is handed the key ARN by the stack output. Deleting the alias leaves the key and every value encrypted under it intact, and the next bootstrap recreates it."
+      Description: "Stable name for the %s class's variable key, so an operator reading a key policy or a CloudTrail entry can tell which key it is without resolving the id."
     Properties:
       AliasName: %s
       TargetKeyId: !Ref VarsKey
   VarsTable:
     Type: AWS::DynamoDB::Table
     Metadata:
-      Description: "Every variable Ocel holds for the %s class, keyed by pk/sk: the current value of each variable and the recent versions behind it, plaintext for plain values and ciphertext for encrypted ones, which only VarsKey can open. A deploy reads it to resolve the variables an app references, and a function reads the ones declared live on every invocation. Deleting this table loses every variable set for this class - already-deployed apps keep the values baked into them, but a live read starts failing and no deploy can resolve a reference until each value is set again."
+      Description: "Every variable Ocel holds for the %s class, keyed by pk/sk, with the recent versions behind each value. Deleting it means every variable has to be set again."
     Properties:
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
@@ -78,10 +78,10 @@ func varsResources(class string) string {
 
 func varsOutputs() string {
 	return fmt.Sprintf(`  %s:
-    Description: "DynamoDB table holding every variable set for this class, with its history: the values a deploy resolves references against and a function reads live. Kept apart from the state table so a variable read never touches deploy state."
+    Description: "DynamoDB table holding every variable set for this class, with its history. Kept apart from the state table so a variable read never touches deploy state."
     Value: !Ref VarsTable
   %s:
-    Description: "KMS key every encrypted value of this class is encrypted under. Ocel decrypts through it to bake a value into a deploy, and each app's execution role is granted it so a function can open the values it reads live."
+    Description: "KMS key every encrypted value of this class is encrypted under. A deploy decrypts through it, and so does each app's execution role."
     Value: !GetAtt VarsKey.Arn
 `, outputVarsTable, outputVarsKeyARN)
 }

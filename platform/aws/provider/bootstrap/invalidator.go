@@ -37,18 +37,17 @@ func ensureTagInvalidatorPayload(ctx context.Context, store ObjectStore, bucket 
 }
 
 func tagInvalidatorResources(code payloads.Placement, class string) string {
-	command := classCommand(class)
 	return fmt.Sprintf(`  TagInvalidatorDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
-      Description: "Where a batch of tag raises lands after the invalidator has exhausted its retries. Anything in here is a page the origin has already re-rendered that the fronts are still serving the old copy of, until its cache-control window ends. Draining it by hand is a diagnosis, not a repair."
+      Description: "Tag raises the invalidator gave up on. Anything in here is a page the origin has re-rendered that the fronts still serve the old copy of."
     Properties:
       MessageRetentionPeriod: %d
       SqsManagedSseEnabled: true
   TagInvalidatorRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this bootstrap's tag invalidator. Grants it the state table's stream, the ledger items naming which distributions to reach, and invalidation on this account's distributions - and nothing else. Managed by %s; deleting it leaves every front serving pages the origin already considers stale."
+      Description: "Execution role for this bootstrap's tag invalidator: the state table's stream, the ledger items naming which distributions to reach, and invalidation on those distributions."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -84,7 +83,7 @@ func tagInvalidatorResources(code payloads.Placement, class string) string {
   TagInvalidator:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel tag invalidator - turns each build's tag raises, read from the state table stream, into cache-tag invalidations on the distributions the ledger names for that project. Managed by %s; delete it and on-demand revalidation stops reaching the fronts."
+      Description: "Ocel tag invalidator - turns tag raises read off the state table stream into cache-tag invalidations on the distributions the ledger names."
       Runtime: %s
       Architectures:
         - %s
@@ -102,7 +101,7 @@ func tagInvalidatorResources(code payloads.Placement, class string) string {
   TagInvalidatorStream:
     Type: AWS::Lambda::EventSourceMapping
     Metadata:
-      Description: "Binds the invalidator to the state table's stream, filtered to tag metadata items so unrelated writes cost nothing. This is the only trigger it has: delete it and invalidation goes quiet rather than failing - the table keeps accepting raises and no front hears about them."
+      Description: "Binds the invalidator to the state table's stream, filtered to tag metadata items so unrelated writes cost nothing. Its only trigger."
     Properties:
       EventSourceArn: !Ref StateTableStreamArn
       FunctionName: !GetAtt TagInvalidator.Arn
@@ -119,7 +118,7 @@ func tagInvalidatorResources(code payloads.Placement, class string) string {
         Filters:
           - Pattern: '%s'
 `, tagInvalidatorDLQRetentionSeconds,
-		command, command, tagInvalidatorRuntime, tagInvalidatorArchitecture, tagInvalidatorHandler, tagInvalidatorMemoryMB, tagInvalidatorTimeoutSeconds,
+		tagInvalidatorRuntime, tagInvalidatorArchitecture, tagInvalidatorHandler, tagInvalidatorMemoryMB, tagInvalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		tagInvalidatorStateTableEnvVar, tagInvalidatorClassEnvVar, class,
 		tagInvalidatorBatchSize, tagInvalidatorRetries, tagRecordStreamFilter)

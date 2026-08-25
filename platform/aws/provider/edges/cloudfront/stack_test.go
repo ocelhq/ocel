@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -190,6 +192,43 @@ func TestDestroyHoldsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
 	held := slices.Index(steps[disabled:], "hold")
 	if held < 0 || disabled+held > polled {
 		t.Errorf("the calls were %v, want a hold between disabling the distribution and asking whether it settled", steps)
+	}
+}
+
+func TestADistributionNamedPastTheCommentCeilingIsStillFoundByName(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	name := strings.Repeat("storefront-", 20)
+	plan := distributionPlan{
+		name:          name,
+		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
+		function:      "arn:aws:cloudfront::111122223333:function/resolver",
+		cachePolicy:   "cache-policy",
+		headersPolicy: "headers-policy",
+		oac:           "origin-access-control",
+	}
+
+	raised, err := createDistribution(context.Background(), w.clients(), plan, nil, "")
+	if err != nil {
+		t.Fatalf("createDistribution: %v", err)
+	}
+	held := w.front.distributions[raised.id]
+	for field, value := range map[string]string{
+		"comment":          aws.ToString(held.config.Comment),
+		"caller reference": aws.ToString(held.config.CallerReference),
+	} {
+		if len(value) != maxDistributionNameLen {
+			t.Errorf("%s is %d characters, want it clamped to the %d CloudFront accepts", field, len(value), maxDistributionNameLen)
+		}
+	}
+
+	found, ok, err := findDistribution(context.Background(), w.clients(), name)
+	if err != nil {
+		t.Fatalf("findDistribution: %v", err)
+	}
+	if !ok || found.id != raised.id {
+		t.Errorf("findDistribution(%q) = %+v, %v, want the distribution just raised (%q)", name, found, ok, raised.id)
 	}
 }
 

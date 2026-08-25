@@ -40,19 +40,18 @@ func ensureTagPublisherPayload(ctx context.Context, store ObjectStore, bucket st
 }
 
 func tagPublisherResources(code payloads.Placement, class string) string {
-	command := classCommand(class)
 	writerParam, seedParam := isrWriterParamNames(class)
 	return fmt.Sprintf(`  TagPublisherDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
-      Description: "Where a batch of tag snapshots lands after the publisher has exhausted its retries. Anything in here is a cache invalidation that never reached the edge, so a non-empty queue means some builds are serving pages the origin already considers stale. Draining it by hand is a diagnosis, not a repair."
+      Description: "Tag snapshots the publisher gave up on. Anything in here is an invalidation that never reached the edge, so those builds serve pages the origin calls stale."
     Properties:
       MessageRetentionPeriod: %d
       SqsManagedSseEnabled: true
   TagPublisherRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this bootstrap's tag-snapshot publisher. Grants it the state table's stream, the asset bucket and the two ISR writer parameters, and nothing else. Managed by %s; deleting it stops every origin-raised invalidation before it reaches the edge."
+      Description: "Execution role for this bootstrap's tag-snapshot publisher: the state table's stream, the asset bucket and the two ISR writer parameters, and nothing else."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -100,7 +99,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
   TagPublisher:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel tag-snapshot publisher - the single writer of every build's tag clock in this bootstrap, fed by the state table stream. Managed by %s; delete it and origin-raised invalidations never reach the edge."
+      Description: "Ocel tag-snapshot publisher - the single writer of every build's tag clock at the edge, fed by the state table stream."
       Runtime: %s
       Architectures:
         - %s
@@ -119,7 +118,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
   TagPublisherStream:
     Type: AWS::Lambda::EventSourceMapping
     Metadata:
-      Description: "Binds the publisher to the state table's stream, filtered to tag metadata items so unrelated writes cost nothing. This is the only trigger the publisher has: delete it and invalidation goes quiet rather than failing - the table keeps accepting writes and nothing publishes them onward."
+      Description: "Binds the publisher to the state table's stream, filtered to tag metadata items so unrelated writes cost nothing. Its only trigger."
     Properties:
       EventSourceArn: !Ref StateTableStreamArn
       FunctionName: !GetAtt TagPublisher.Arn
@@ -136,9 +135,8 @@ func tagPublisherResources(code payloads.Placement, class string) string {
         Filters:
           - Pattern: '%s'
 `, tagPublisherDLQRetentionSeconds,
-		command,
 		writerParam, seedParam, writerParam, seedParam,
-		command, tagPublisherRuntime, tagPublisherArchitecture, tagPublisherHandler, tagPublisherMemoryMB, tagPublisherTimeoutSeconds,
+		tagPublisherRuntime, tagPublisherArchitecture, tagPublisherHandler, tagPublisherMemoryMB, tagPublisherTimeoutSeconds,
 		code.Bucket, code.Key,
 		tagPublisherAssetBucketEnvVar, tagPublisherWriterParamEnvVar, writerParam, tagPublisherSeedParamEnvVar, seedParam,
 		tagPublisherBatchSize, tagPublisherRetries, tagRecordStreamFilter)

@@ -834,7 +834,7 @@ func ensurePassphrase(ctx context.Context, ssmClient SSMAPI) (created bool, err 
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:        aws.String(PassphraseParamName),
-		Description: aws.String("Ocel: the passphrase every Pulumi stack in this account is encrypted under, production and preview alike. Generated once by Ocel's first bootstrap of this account and never rotated. It is the only copy - delete it and the state in the Pulumi state buckets can never be decrypted again, stranding every app Ocel has deployed here."),
+		Description: aws.String("Ocel: the passphrase every Pulumi stack in this account is encrypted under, production and preview alike. This is the only copy - delete it and that state can never be decrypted again."),
 		Value:       aws.String(passphrase),
 		Type:        ssmtypes.ParameterTypeSecureString,
 		Overwrite:   aws.Bool(false),
@@ -863,40 +863,32 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func classCommand(class string) string {
-	return providerkit.BootstrapCommand(providerkit.Class(class))
-}
-
-func classFeaturesCommand(class string) string {
-	return providerkit.BootstrapFeaturesCommand(providerkit.Class(class))
-}
-
 func stackTemplate() string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap (production) - the account-global core every production app Ocel deploys into this AWS account is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store. Created and updated by %s; each optional feature it can carry is a stack of its own beside this one. It holds no app of its own. Deleting this stack orphans every app deployed from it: the Pulumi state describing them goes with its bucket, and no deploy or teardown can run until it is recreated."
+Description: "Ocel bootstrap (production) - the account-global core every production app Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store."
 Resources:
 %s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket holding the Pulumi state Ocel plans every production deploy and teardown from. One versioned object per app stack."
     Value: !Ref StateBucket
 %s%s%s%s%s  %s:
-    Description: "Class this bootstrap is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
+    Description: "Class this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
     Value: '%s'
-`, classCommand(ClassProduction), stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), appBoundaryResource(ClassProduction), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassProduction)
+`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), appBoundaryResource(ClassProduction), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassProduction)
 }
 
 func previewStackTemplate() string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap (preview) - the account-global core every preview environment Ocel deploys into this AWS account is carved from, deliberately separate from the production bootstrap so a per-PR preview can never reach production state, variables or caches. Created and updated by %s; each optional feature it can carry is a stack of its own beside this one. Deleting this stack orphans every live preview: the Pulumi state describing them goes with its bucket, and no preview deploy or teardown can run until it is recreated."
+Description: "Ocel bootstrap (preview) - the account-global core every preview environment Ocel deploys here is carved from, kept apart from the production bootstrap so a per-PR preview never reaches production state, variables or caches."
 Resources:
 %s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket holding the Pulumi state Ocel plans every preview deploy and teardown from. One versioned object per preview stack."
     Value: !Ref StateBucket
 %s%s%s%s%s  %s:
-    Description: "Class this bootstrap is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
+    Description: "Class this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
     Value: '%s'
-`, classCommand(ClassPreview), stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), appBoundaryResource(ClassPreview), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassPreview)
+`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), appBoundaryResource(ClassPreview), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassPreview)
 }
 
 func stateBucketResource(class string) string {
@@ -907,7 +899,7 @@ func stateBucketResource(class string) string {
 	return fmt.Sprintf(`  StateBucket:
     Type: AWS::S3::Bucket
     Metadata:
-      Description: "Pulumi state for every %s Ocel has deployed into this account, one versioned object per stack. Ocel reads it to plan a deploy and to tear one down, so emptying or deleting this bucket strands what is already deployed: the infrastructure keeps running and Ocel can no longer describe, update or remove it."
+      Description: "Pulumi state for every %s Ocel has deployed here, one versioned object per stack, read to plan a deploy and to tear one down. Emptying it strands what is already deployed."
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -938,7 +930,7 @@ func stateTableResource() string {
 	return fmt.Sprintf(`  StateTable:
     Type: AWS::DynamoDB::Table
     Metadata:
-      Description: "Account-global Ocel state, keyed by pk/sk: the index of every stack this bootstrap has deployed, which prune and teardown walk, and the tag clock the edge reads and updates to decide whether a cached page is still fresh. Deleting it loses both - Ocel forgets what it deployed here, and every tag's invalidation history starts over."
+      Description: "Account-global Ocel state, keyed by pk/sk: the index of every stack this bootstrap has deployed, which prune and teardown walk, and the tag clock the edge reads and updates."
     Properties:
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
@@ -978,10 +970,10 @@ func stateTableResource() string {
 
 func stateTableOutputs() string {
 	return fmt.Sprintf(`  %s:
-    Description: "DynamoDB table holding account-global Ocel state keyed by pk/sk: the stack index prune and teardown walk, and the ISR tag clock every app in this bootstrap shares with the edge."
+    Description: "DynamoDB table holding account-global Ocel state: the stack index prune and teardown walk, and the ISR tag clock the edge shares."
     Value: !Ref StateTable
   %s:
-    Description: "ARN of that table, handed to every feature stack that has to grant an item read or write on it."
+    Description: "ARN of that table, handed to every feature stack that grants an item read or write on it."
     Value: !GetAtt StateTable.Arn
   %s:
     Description: "ARN of that table's stream, handed to every feature stack that reads tag writes off it."
@@ -993,7 +985,7 @@ func artifactBucketResource() string {
 	return fmt.Sprintf(`  ArtifactBucket:
     Type: AWS::S3::Bucket
     Metadata:
-      Description: "Staging area for the Lambda code Ocel uploads before a stack references it. A deployed function holds its own copy and these objects age out on a lifecycle rule, so deleting this bucket costs the next bootstrap and the next deploy a re-upload, not a running app."
+      Description: "Staging area for the Lambda code Ocel uploads before a stack references it. A deployed function holds its own copy, and these objects age out on a lifecycle rule."
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -1016,7 +1008,7 @@ func artifactBucketResource() string {
 
 func artifactBucketOutput() string {
 	return fmt.Sprintf(`  %s:
-    Description: "S3 bucket Ocel stages function code in before a stack references it. Objects age out on a lifecycle rule; a deployed function keeps its own copy."
+    Description: "S3 bucket Ocel stages function code in before a stack references it. Objects age out on a lifecycle rule."
     Value: !Ref ArtifactBucket
 `, outputArtifactBucket)
 }
@@ -1025,7 +1017,7 @@ func assetBucketResource() string {
 	return fmt.Sprintf(`  AssetBucket:
     Type: AWS::S3::Bucket
     Metadata:
-      Description: "Per-build static assets, prerender fallbacks, image-optimizer config and the edge's fetch cache, keyed by build id. The edge, the image optimizer, the tag publisher and the revalidator all read it directly, so deleting it breaks static assets and image optimization for every app in this bootstrap until each is redeployed."
+      Description: "Per-build static assets, prerender fallbacks, image-optimizer config and the edge's fetch cache, keyed by build id. Read directly by the edge, the optimizer, the publisher and the revalidator."
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -1049,7 +1041,7 @@ func assetBucketPolicyResource() string {
 	return `  AssetBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Metadata:
-      Description: "The only grant on the asset bucket. It lets CloudFront distributions in this account, and no one else, read objects out of it over an origin access control; the bucket itself stays closed to the public. One statement for the whole account, so no deploy ever rewrites it and concurrent deploys cannot clobber each other."
+      Description: "The only grant on the asset bucket: CloudFront distributions in this account, and no one else, read objects out of it over an origin access control. One statement for the whole account, so no deploy rewrites it."
     Properties:
       Bucket: !Ref AssetBucket
       PolicyDocument:
@@ -1069,10 +1061,10 @@ func assetBucketPolicyResource() string {
 
 func assetBucketOutputs() string {
 	return fmt.Sprintf(`  %s:
-    Description: "S3 bucket holding per-build static assets, prerender fallbacks, image-optimizer config and the edge fetch cache, keyed by build id. Read directly by the edge."
+    Description: "S3 bucket holding per-build static assets, prerender fallbacks, image-optimizer config and the edge fetch cache. Read directly by the edge."
     Value: !Ref AssetBucket
   %s:
-    Description: "ARN of that bucket, handed to every feature stack that has to grant a read or a write inside it."
+    Description: "ARN of that bucket, handed to every feature stack that grants a read or a write inside it."
     Value: !GetAtt AssetBucket.Arn
 `, outputAssetBucket, outputAssetBucketARN)
 }

@@ -18,11 +18,14 @@ import (
 )
 
 type fakeSSM struct {
-	params map[string]string
-	puts   int
+	params       map[string]string
+	descriptions map[string]string
+	puts         int
 }
 
-func newFakeSSM() *fakeSSM { return &fakeSSM{params: map[string]string{}} }
+func newFakeSSM() *fakeSSM {
+	return &fakeSSM{params: map[string]string{}, descriptions: map[string]string{}}
+}
 
 func (f *fakeSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {
 	v, ok := f.params[aws.ToString(in.Name)]
@@ -38,6 +41,7 @@ func (f *fakeSSM) PutParameter(_ context.Context, in *ssm.PutParameterInput, _ .
 		return nil, &ssmtypes.ParameterAlreadyExists{}
 	}
 	f.params[aws.ToString(in.Name)] = aws.ToString(in.Value)
+	f.descriptions[aws.ToString(in.Name)] = aws.ToString(in.Description)
 	return &ssm.PutParameterOutput{}, nil
 }
 

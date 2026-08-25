@@ -19,6 +19,7 @@ import (
 type tagRecorder struct {
 	mu      sync.Mutex
 	tags    map[string]map[string]string
+	inputs  map[string]resource.PropertyMap
 	outputs func(pulumi.MockResourceArgs) resource.PropertyMap
 }
 
@@ -27,7 +28,9 @@ func (r *tagRecorder) NewResource(args pulumi.MockResourceArgs) (string, resourc
 	defer r.mu.Unlock()
 	if r.tags == nil {
 		r.tags = map[string]map[string]string{}
+		r.inputs = map[string]resource.PropertyMap{}
 	}
+	r.inputs[args.TypeToken+"::"+args.Name] = args.Inputs
 	recorded := map[string]string{}
 	if raw, ok := args.Inputs["tags"]; ok && raw.IsObject() {
 		for key, value := range raw.ObjectValue() {
@@ -59,6 +62,17 @@ func (r *tagRecorder) component(t *testing.T, typeToken, name string) string {
 		t.Fatalf("no %s named %q was registered", typeToken, name)
 	}
 	return tags[tagComponent]
+}
+
+func (r *tagRecorder) inputsOf(t *testing.T, typeToken, name string) resource.PropertyMap {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	inputs, ok := r.inputs[typeToken+"::"+name]
+	if !ok {
+		t.Fatalf("no %s named %q was registered", typeToken, name)
+	}
+	return inputs
 }
 
 func recordTags(t *testing.T, program pulumi.RunFunc, outputs ...func(pulumi.MockResourceArgs) resource.PropertyMap) *tagRecorder {
@@ -100,6 +114,18 @@ func TestBucketComponentTags(t *testing.T) {
 		if got := rec.component(t, tc.typeToken, tc.name); got != tc.want {
 			t.Errorf("%s on %s = %q, want %q", tagComponent, tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestBucketUploadCompleterDescriptionFitsLambda(t *testing.T) {
+	long := strings.Repeat("storefront-", 40)
+	rec := recordTags(t, func(ctx *pulumi.Context) error {
+		return registerBucket(ctx, long, "prod", "bucket--uploads", translateBucket(&providerkit.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope(long, "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+	})
+
+	got := rec.inputsOf(t, "aws:lambda/function:Function", "bucket-uploads-upload-completer")["description"].StringValue()
+	if len(got) != maxDescriptionLen {
+		t.Errorf("upload completer description is %d chars, want it clamped to the %d Lambda accepts", len(got), maxDescriptionLen)
 	}
 }
 
