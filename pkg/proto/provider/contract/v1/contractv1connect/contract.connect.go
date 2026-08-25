@@ -45,9 +45,9 @@ const (
 	// ProviderServicePlanBootstrapProcedure is the fully-qualified name of the ProviderService's
 	// PlanBootstrap RPC.
 	ProviderServicePlanBootstrapProcedure = "/provider.contract.v1.ProviderService/PlanBootstrap"
-	// ProviderServiceGetCredentialPolicyProcedure is the fully-qualified name of the ProviderService's
-	// GetCredentialPolicy RPC.
-	ProviderServiceGetCredentialPolicyProcedure = "/provider.contract.v1.ProviderService/GetCredentialPolicy"
+	// ProviderServiceGetCredentialPermissionsProcedure is the fully-qualified name of the
+	// ProviderService's GetCredentialPermissions RPC.
+	ProviderServiceGetCredentialPermissionsProcedure = "/provider.contract.v1.ProviderService/GetCredentialPermissions"
 	// ProviderServiceRemoveBootstrapProcedure is the fully-qualified name of the ProviderService's
 	// RemoveBootstrap RPC.
 	ProviderServiceRemoveBootstrapProcedure = "/provider.contract.v1.ProviderService/RemoveBootstrap"
@@ -107,7 +107,7 @@ type ProviderServiceClient interface {
 	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	PlanBootstrap(context.Context, *v1.PlanBootstrapRequest) (*v1.PlanBootstrapResponse, error)
-	GetCredentialPolicy(context.Context, *v1.CredentialPolicyRequest) (*v1.CredentialPolicyResponse, error)
+	GetCredentialPermissions(context.Context, *v1.CredentialPermissionsRequest) (*v1.CredentialPermissionsResponse, error)
 	RemoveBootstrap(context.Context, *v1.BootstrapScope) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	PlanRemoveBootstrap(context.Context, *v1.BootstrapScope) (*v1.ChangePlan, error)
 	RemoveEnvironment(context.Context, *v1.RemoveEnvironmentRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
@@ -162,10 +162,10 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("PlanBootstrap")),
 			connect.WithClientOptions(opts...),
 		),
-		getCredentialPolicy: connect.NewClient[v1.CredentialPolicyRequest, v1.CredentialPolicyResponse](
+		getCredentialPermissions: connect.NewClient[v1.CredentialPermissionsRequest, v1.CredentialPermissionsResponse](
 			httpClient,
-			baseURL+ProviderServiceGetCredentialPolicyProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("GetCredentialPolicy")),
+			baseURL+ProviderServiceGetCredentialPermissionsProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("GetCredentialPermissions")),
 			connect.WithClientOptions(opts...),
 		),
 		removeBootstrap: connect.NewClient[v1.BootstrapScope, v11.OperationEvent](
@@ -279,7 +279,7 @@ type providerServiceClient struct {
 	deploy                    *connect.Client[v1.DeployRequest, v11.OperationEvent]
 	bootstrap                 *connect.Client[v1.BootstrapRequest, v11.OperationEvent]
 	planBootstrap             *connect.Client[v1.PlanBootstrapRequest, v1.PlanBootstrapResponse]
-	getCredentialPolicy       *connect.Client[v1.CredentialPolicyRequest, v1.CredentialPolicyResponse]
+	getCredentialPermissions  *connect.Client[v1.CredentialPermissionsRequest, v1.CredentialPermissionsResponse]
 	removeBootstrap           *connect.Client[v1.BootstrapScope, v11.OperationEvent]
 	planRemoveBootstrap       *connect.Client[v1.BootstrapScope, v1.ChangePlan]
 	removeEnvironment         *connect.Client[v1.RemoveEnvironmentRequest, v11.OperationEvent]
@@ -327,9 +327,9 @@ func (c *providerServiceClient) PlanBootstrap(ctx context.Context, req *v1.PlanB
 	return nil, err
 }
 
-// GetCredentialPolicy calls provider.contract.v1.ProviderService.GetCredentialPolicy.
-func (c *providerServiceClient) GetCredentialPolicy(ctx context.Context, req *v1.CredentialPolicyRequest) (*v1.CredentialPolicyResponse, error) {
-	response, err := c.getCredentialPolicy.CallUnary(ctx, connect.NewRequest(req))
+// GetCredentialPermissions calls provider.contract.v1.ProviderService.GetCredentialPermissions.
+func (c *providerServiceClient) GetCredentialPermissions(ctx context.Context, req *v1.CredentialPermissionsRequest) (*v1.CredentialPermissionsResponse, error) {
+	response, err := c.getCredentialPermissions.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -463,7 +463,7 @@ type ProviderServiceHandler interface {
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v11.OperationEvent]) error
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v11.OperationEvent]) error
 	PlanBootstrap(context.Context, *v1.PlanBootstrapRequest) (*v1.PlanBootstrapResponse, error)
-	GetCredentialPolicy(context.Context, *v1.CredentialPolicyRequest) (*v1.CredentialPolicyResponse, error)
+	GetCredentialPermissions(context.Context, *v1.CredentialPermissionsRequest) (*v1.CredentialPermissionsResponse, error)
 	RemoveBootstrap(context.Context, *v1.BootstrapScope, *connect.ServerStream[v11.OperationEvent]) error
 	PlanRemoveBootstrap(context.Context, *v1.BootstrapScope) (*v1.ChangePlan, error)
 	RemoveEnvironment(context.Context, *v1.RemoveEnvironmentRequest, *connect.ServerStream[v11.OperationEvent]) error
@@ -514,10 +514,10 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("PlanBootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceGetCredentialPolicyHandler := connect.NewUnaryHandlerSimple(
-		ProviderServiceGetCredentialPolicyProcedure,
-		svc.GetCredentialPolicy,
-		connect.WithSchema(providerServiceMethods.ByName("GetCredentialPolicy")),
+	providerServiceGetCredentialPermissionsHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceGetCredentialPermissionsProcedure,
+		svc.GetCredentialPermissions,
+		connect.WithSchema(providerServiceMethods.ByName("GetCredentialPermissions")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServiceRemoveBootstrapHandler := connect.NewServerStreamHandlerSimple(
@@ -632,8 +632,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceBootstrapHandler.ServeHTTP(w, r)
 		case ProviderServicePlanBootstrapProcedure:
 			providerServicePlanBootstrapHandler.ServeHTTP(w, r)
-		case ProviderServiceGetCredentialPolicyProcedure:
-			providerServiceGetCredentialPolicyHandler.ServeHTTP(w, r)
+		case ProviderServiceGetCredentialPermissionsProcedure:
+			providerServiceGetCredentialPermissionsHandler.ServeHTTP(w, r)
 		case ProviderServiceRemoveBootstrapProcedure:
 			providerServiceRemoveBootstrapHandler.ServeHTTP(w, r)
 		case ProviderServicePlanRemoveBootstrapProcedure:
@@ -693,8 +693,8 @@ func (UnimplementedProviderServiceHandler) PlanBootstrap(context.Context, *v1.Pl
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.PlanBootstrap is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) GetCredentialPolicy(context.Context, *v1.CredentialPolicyRequest) (*v1.CredentialPolicyResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetCredentialPolicy is not implemented"))
+func (UnimplementedProviderServiceHandler) GetCredentialPermissions(context.Context, *v1.CredentialPermissionsRequest) (*v1.CredentialPermissionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetCredentialPermissions is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) RemoveBootstrap(context.Context, *v1.BootstrapScope, *connect.ServerStream[v11.OperationEvent]) error {

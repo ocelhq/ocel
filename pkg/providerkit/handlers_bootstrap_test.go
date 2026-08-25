@@ -481,7 +481,7 @@ func TestPlanBootstrapReportsADowngrade(t *testing.T) {
 	}
 }
 
-func TestGetCredentialPolicyRendersEitherTier(t *testing.T) {
+func TestGetCredentialPermissionsRendersEitherTier(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -491,18 +491,18 @@ func TestGetCredentialPolicyRendersEitherTier(t *testing.T) {
 		contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP: string(providerkit.TierBootstrap),
 		contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY:    string(providerkit.TierDeploy),
 	} {
-		policy, err := client.GetCredentialPolicy(ctx, &contractv1.CredentialPolicyRequest{Tier: tier})
+		permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{Tier: tier})
 		if err != nil {
-			t.Fatalf("GetCredentialPolicy(%v) error = %v", tier, err)
+			t.Fatalf("GetCredentialPermissions(%v) error = %v", tier, err)
 		}
-		if !strings.Contains(policy.GetDocument(), want) {
-			t.Errorf("GetCredentialPolicy(%v) = %q, want it to render the %s tier", tier, policy.GetDocument(), want)
+		if !strings.Contains(permissions.GetDocument(), want) {
+			t.Errorf("GetCredentialPermissions(%v) = %q, want it to render the %s tier", tier, permissions.GetDocument(), want)
 		}
 	}
 
-	_, err := client.GetCredentialPolicy(ctx, &contractv1.CredentialPolicyRequest{})
+	_, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{})
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
-		t.Fatalf("GetCredentialPolicy() naming no tier: code = %v, want %v", got, connect.CodeInvalidArgument)
+		t.Fatalf("GetCredentialPermissions() naming no tier: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
 }
 

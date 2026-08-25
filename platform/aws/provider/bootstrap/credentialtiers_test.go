@@ -133,13 +133,13 @@ func actionsOf(t *testing.T, document string) map[string]bool {
 
 func renderedTiers(t *testing.T) (string, string) {
 	t.Helper()
-	bootstrapDoc, err := BootstrapCredentialPolicy()
+	bootstrapDoc, err := BootstrapCredentialPermissions()
 	if err != nil {
-		t.Fatalf("BootstrapCredentialPolicy() error = %v", err)
+		t.Fatalf("BootstrapCredentialPermissions() error = %v", err)
 	}
-	deployDoc, err := DeployCredentialPolicy()
+	deployDoc, err := DeployCredentialPermissions()
 	if err != nil {
-		t.Fatalf("DeployCredentialPolicy() error = %v", err)
+		t.Fatalf("DeployCredentialPermissions() error = %v", err)
 	}
 	return bootstrapDoc, deployDoc
 }
@@ -247,7 +247,7 @@ func TestNoTierMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
 }
 
 func TestNoTierRepointsTheTrustPolicyOfAnAppRole(t *testing.T) {
-	deployActions := actionsOf(t, mustRender(t, DeployCredentialPolicy))
+	deployActions := actionsOf(t, mustRender(t, DeployCredentialPermissions))
 	if deployActions["iam:UpdateAssumeRolePolicy"] {
 		t.Error("the deploy tier grants iam:UpdateAssumeRolePolicy, which hands an app role's trust policy to whoever holds the credential")
 	}
@@ -308,7 +308,7 @@ func TestOnlyTheEdgeUserIsMintedAndItCarriesNoManagedPolicy(t *testing.T) {
 		}
 	}
 
-	bootstrapActions := actionsOf(t, mustRender(t, BootstrapCredentialPolicy))
+	bootstrapActions := actionsOf(t, mustRender(t, BootstrapCredentialPermissions))
 	for _, action := range []string{
 		"iam:CreateUser",
 		"iam:PutUserPolicy",

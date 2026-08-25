@@ -89,6 +89,7 @@ func init() {
 	rootCmd.AddCommand(logoutCmd)
 
 	rootCmd.AddCommand(bootstrap.NewCommand(s))
+	rootCmd.AddCommand(newPermissionsCommand(s))
 
 	installHelpStyle(rootCmd)
 }

@@ -56,7 +56,6 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		newProvisionCommand(deps, environmentv1.Tier_TIER_PRODUCTION, []string{"prod"}),
 		newProvisionCommand(deps, environmentv1.Tier_TIER_PREVIEW, nil),
 		newDestroyCommand(deps),
-		newPolicyCommand(deps),
 		newStatusCommand(deps),
 	)
 
@@ -146,35 +145,6 @@ func newDestroyCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func newPolicyCommand(deps cmddeps.Deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "policy <bootstrap|deploy>",
-		Short: "Print the permissions bootstrap or deploy credentials need",
-		Long: "Print the permissions bootstrap or deploy credentials need.\n\n" +
-			"`bootstrap` is what bootstrapping runs under, `deploy` the smaller set deploys and " +
-			"previews run under.",
-		Example: "  $ ocel bootstrap policy deploy",
-		Args:    cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			tier, err := credentialTierArg(args)
-			if err != nil {
-				_ = cmd.Help()
-				return err
-			}
-
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("determine working directory: %w", err)
-			}
-
-			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-			defer stop()
-
-			return RunPolicy(ctx, deps, cwd, tier, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		},
-	}
-}
-
 func environmentArg(args []string) (environmentv1.Tier, error) {
 	if len(args) == 0 {
 		return environmentv1.Tier_TIER_UNSPECIFIED, errors.New("name the environment to tear down, production or preview")
@@ -188,14 +158,6 @@ func environmentArg(args []string) (environmentv1.Tier, error) {
 		return environmentv1.Tier_TIER_UNSPECIFIED,
 			fmt.Errorf("the environment to tear down is production or preview, not %q", args[0])
 	}
-}
-
-func credentialTierArg(args []string) (contractv1.CredentialTier, error) {
-	if len(args) == 0 {
-		return contractv1.CredentialTier_CREDENTIAL_TIER_UNSPECIFIED,
-			errors.New("name the credentials to print, bootstrap or deploy")
-	}
-	return credentialTier(args[0])
 }
 
 func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
@@ -345,41 +307,6 @@ func resolveProject(ctx context.Context, deps cmddeps.Deps, cwd string) (*projec
 		return nil, err
 	}
 	return cfg, nil
-}
-
-func RunPolicy(ctx context.Context, deps cmddeps.Deps, cwd string, tier contractv1.CredentialTier, stdout, stderr io.Writer) error {
-	cfg, err := resolveProject(ctx, deps, cwd)
-	if err != nil {
-		return err
-	}
-
-	return provider.Drive(ctx, cfg, stderr, stderr, func(runner *provider.Runner) error {
-		client, err := runner.Client()
-		if err != nil {
-			return err
-		}
-		policy, err := client.GetCredentialPolicy(ctx, &contractv1.CredentialPolicyRequest{Tier: tier})
-		if err != nil {
-			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				return fmt.Errorf("%s cannot say what permissions these credentials need; it predates them. Upgrade the provider pinned in this project and try again", runner.Package())
-			}
-			return err
-		}
-		fmt.Fprintln(stdout, policy.GetDocument())
-		return nil
-	})
-}
-
-func credentialTier(requested string) (contractv1.CredentialTier, error) {
-	switch requested {
-	case "bootstrap":
-		return contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP, nil
-	case "deploy":
-		return contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, nil
-	default:
-		return contractv1.CredentialTier_CREDENTIAL_TIER_UNSPECIFIED,
-			fmt.Errorf("the credentials to print are bootstrap or deploy, not %q", requested)
-	}
 }
 
 func confirm(ctx context.Context, title string, stdin io.Reader) (bool, error) {

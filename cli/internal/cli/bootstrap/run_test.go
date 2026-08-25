@@ -11,7 +11,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -509,23 +508,6 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 		}
 		if !strings.Contains(stdout.String(), "the same shape, older content") {
 			t.Errorf("stdout = %q, want --dry to warn about the downgrade it already knows about", stdout.String())
-		}
-	})
-}
-
-func TestRunBootstrapPolicy(t *testing.T) {
-	t.Run("it writes the document the provider renders for the tier", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-
-		var stdout, stderr bytes.Buffer
-		if err := RunPolicy(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout, &stderr); err != nil {
-			t.Fatalf("RunPolicy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-		if !strings.Contains(stdout.String(), "CREDENTIAL_TIER_DEPLOY") {
-			t.Errorf("stdout = %q, want the deploy tier's document", stdout.String())
 		}
 	})
 }

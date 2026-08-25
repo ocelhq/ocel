@@ -286,7 +286,7 @@ func edgeKind(provider Provider, requested string) edge.Kind {
 	return provider.Edges().Default()
 }
 
-func (h *handlers) GetCredentialPolicy(_ context.Context, req *contractv1.CredentialPolicyRequest) (*contractv1.CredentialPolicyResponse, error) {
+func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.CredentialPermissionsRequest) (*contractv1.CredentialPermissionsResponse, error) {
 	provider, err := h.session.use()
 	if err != nil {
 		return nil, err
@@ -295,11 +295,11 @@ func (h *handlers) GetCredentialPolicy(_ context.Context, req *contractv1.Creden
 	if err != nil {
 		return nil, err
 	}
-	document, err := provider.Credentials().Policy(tier)
+	document, err := provider.Credentials().Permissions(tier)
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	return &contractv1.CredentialPolicyResponse{Document: document}, nil
+	return &contractv1.CredentialPermissionsResponse{Document: document}, nil
 }
 
 func CredentialTierOf(tier contractv1.CredentialTier) (CredentialTier, error) {
@@ -310,6 +310,6 @@ func CredentialTierOf(tier contractv1.CredentialTier) (CredentialTier, error) {
 		return TierDeploy, nil
 	default:
 		return "", connect.NewError(connect.CodeInvalidArgument, errors.New(
-			"a credential policy is rendered for the bootstrap tier or the deploy tier; this request named neither"))
+			"credential permissions are rendered for the bootstrap tier or the deploy tier; this request named neither"))
 	}
 }

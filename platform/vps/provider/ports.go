@@ -51,7 +51,7 @@ func (credentials) Whoami(context.Context) (providerkit.Identity, error) {
 	return providerkit.Identity{Provider: Vendor}, nil
 }
 
-func (credentials) Policy(providerkit.CredentialTier) (string, error) { return "", nil }
+func (credentials) Permissions(providerkit.CredentialTier) (string, error) { return "", nil }
 
 type edges struct{}
 

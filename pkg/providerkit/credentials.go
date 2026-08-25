@@ -5,7 +5,7 @@ import "context"
 type Credentials interface {
 	Whoami(ctx context.Context) (Identity, error)
 
-	Policy(tier CredentialTier) (string, error)
+	Permissions(tier CredentialTier) (string, error)
 }
 
 type CredentialTier string
