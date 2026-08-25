@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestFeatureStackName(t *testing.T) {
@@ -21,6 +22,18 @@ func TestFeatureStackName(t *testing.T) {
 		}
 		if got := f.stackName(tc.class); got != tc.want {
 			t.Errorf("stackName(%q) = %q, want %q", tc.class, got, tc.want)
+		}
+	}
+}
+
+func TestEveryEdgeKindHasAFeatureOfItsOwn(t *testing.T) {
+	for kind, want := range map[edge.Kind]string{
+		KindCloudflare: FeatureCloudflareEdge,
+		KindCloudFront: FeatureCloudFrontEdge,
+		KindAPIGateway: FeatureAPIGatewayEdge,
+	} {
+		if got := providerkit.FeatureNeedingEdge(Catalogue(), kind); got != want {
+			t.Errorf("FeatureNeedingEdge(%q) = %q, want %q: nothing else tells a run which stack the edge it fronts with stands in", kind, got, want)
 		}
 	}
 }
@@ -53,9 +66,22 @@ func TestWhatThisCatalogueSaysAProjectNeeds(t *testing.T) {
 			want:       []string{FeatureISR, FeatureImageOptimization, FeatureCloudflareEdge},
 		},
 		{
-			name:       "a CloudFront-fronted project needs no edge feature",
+			name:       "a CloudFront-fronted project needs the CloudFront edge feature",
 			frameworks: []string{"express"},
 			edge:       "cloudfront",
+			want:       []string{FeatureCloudFrontEdge},
+		},
+		{
+			name:       "an API Gateway-fronted project needs the API Gateway edge feature",
+			frameworks: []string{"express"},
+			edge:       "api-gateway",
+			want:       []string{FeatureAPIGatewayEdge},
+		},
+		{
+			name:       "a CloudFront-fronted Next project needs its edge and what Next asks for",
+			frameworks: []string{"next"},
+			edge:       "cloudfront",
+			want:       []string{FeatureISR, FeatureImageOptimization, FeatureCloudFrontEdge},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

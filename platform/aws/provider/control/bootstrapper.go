@@ -51,7 +51,7 @@ func BootstrapperFor(cfg aws.Config, front edge.Edge) Bootstrapper {
 func (b Bootstrapper) Catalogue() []providerkit.Feature { return bootstrap.Catalogue() }
 
 func (b Bootstrapper) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
-	read, err := bootstrap.Read(ctx, b.CFN, string(class), b.Edge)
+	read, err := bootstrap.Read(ctx, b.CFN, string(class))
 	if err != nil {
 		return providerkit.Bootstrap{}, err
 	}
@@ -74,11 +74,11 @@ func described(class providerkit.Class, deployed bootstrap.Deployed) providerkit
 }
 
 func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
-	read, err := bootstrap.Read(ctx, b.CFN, string(req.Class), b.Edge)
+	read, err := bootstrap.Read(ctx, b.CFN, string(req.Class))
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
-	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read, b.Edge,
+	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read,
 		bootstrap.Request{Features: req.Features, Drop: req.Drop, Writer: req.Writer},
 		providerkit.DeriveGroups(bootstrap.NameStacks(described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
 	if err != nil {
@@ -174,7 +174,7 @@ func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest
 }
 
 func (b Bootstrapper) Removals(ctx context.Context, class providerkit.Class) ([]providerkit.Removal, error) {
-	deployed, err := bootstrap.CheckDeployedFor(ctx, b.CFN, string(class), b.Edge)
+	deployed, err := bootstrap.CheckDeployedFor(ctx, b.CFN, string(class))
 	if err != nil {
 		return nil, err
 	}

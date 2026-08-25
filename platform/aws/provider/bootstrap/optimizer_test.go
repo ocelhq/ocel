@@ -322,8 +322,8 @@ func TestRunOptimizer(t *testing.T) {
 		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap()); err != nil {
 			t.Fatalf("run: %v", err)
 		}
-		if cfn.creates != 4 || cfn.updates != 0 {
-			t.Errorf("settled the bootstrap in %d creates + %d updates, want one create each for core and its three features", cfn.creates, cfn.updates)
+		if want := 1 + len(featureNames()); cfn.creates != want || cfn.updates != 0 {
+			t.Errorf("settled the bootstrap in %d creates + %d updates, want one create each for core and its %d features", cfn.creates, cfn.updates, len(featureNames()))
 		}
 		final := cfn.template(optStack(ClassProduction))
 		if !strings.Contains(final, "AWS::Lambda::Url") {
@@ -354,7 +354,7 @@ func TestCheckDeployedOptimizer(t *testing.T) {
 		cfn.seed(StackName, "Outputs:\n")
 		cfn.seed(optStack(ClassProduction), "Outputs:\n  "+outputImageOptimizerURL+":\n    Value: 'https://abc.lambda-url.us-east-1.on.aws/'\n")
 
-		deployed, err := CheckDeployed(context.Background(), cfn, nil)
+		deployed, err := CheckDeployed(context.Background(), cfn)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
@@ -364,7 +364,7 @@ func TestCheckDeployedOptimizer(t *testing.T) {
 
 		bare := newFakeCFN()
 		bare.seed(StackName, "Outputs:\n")
-		deployed, err = CheckDeployed(context.Background(), bare, nil)
+		deployed, err = CheckDeployed(context.Background(), bare)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}

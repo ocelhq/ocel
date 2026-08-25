@@ -131,7 +131,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func
 	if log == nil {
 		log = func(string) {}
 	}
-	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.class, apis.Edge)
+	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.class)
 	if err != nil {
 		return false, err
 	}

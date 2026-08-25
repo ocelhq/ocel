@@ -175,7 +175,7 @@ func (p *provider) forgetPreviewWildcardTarget(ctx context.Context, c Clients, d
 
 func sweepPreviewRoutes(ctx context.Context, c Clients, baseDomain string) error {
 	store, err := c.CloudFront.DescribeKeyValueStore(ctx, &cloudfront.DescribeKeyValueStoreInput{
-		Name: aws.String(keyValueStoreName(edge.ClassPreview)),
+		Name: aws.String(bootstrap.EdgeRoutesStoreName(edge.ClassPreview)),
 	})
 	if err != nil {
 		if isNotFound(err) {

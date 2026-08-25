@@ -13,11 +13,11 @@ import (
 )
 
 func OriginSecretParamFor(class string) (string, error) {
-	names, err := edgeNamesFor(class)
-	if err != nil {
-		return "", err
+	secret, ok := originSecretByClass[class]
+	if !ok {
+		return "", fmt.Errorf("edge: unknown class %q", class)
 	}
-	return names.originSecretParam, nil
+	return secret, nil
 }
 
 func ensureOriginSecret(ctx context.Context, ssmClient SSMAPI, class string) (string, error) {

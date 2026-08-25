@@ -24,7 +24,7 @@ func TestAFeatureIsDroppedBeforeWhatRendersAgainstIt(t *testing.T) {
 		t.Errorf("%s was rewritten before %s went, so an interrupted run leaves it reading against a set that no longer stands", edge, dropped)
 	}
 
-	deployed, err := CheckDeployed(context.Background(), cfn, nil)
+	deployed, err := CheckDeployed(context.Background(), cfn)
 	if err != nil {
 		t.Fatalf("CheckDeployed: %v", err)
 	}

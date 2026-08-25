@@ -1,4 +1,4 @@
-package apigateway
+package bootstrap
 
 import (
 	"crypto/sha256"
@@ -6,16 +6,28 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
-	OutputInvokeRoleARN = "EdgeInvokeRoleArn"
-	OutputNotFoundAPIID = "EdgeNotFoundApiId"
+	KindAPIGateway = "api-gateway"
+
+	OutputEdgeInvokeRoleARN = "EdgeInvokeRoleArn"
+	OutputEdgeNotFoundAPIID = "EdgeNotFoundApiId"
+
+	EdgeStageName = "live"
+
+	edgeInvokePolicyName = "ocel-edge-invoke"
+
+	edgeAnyMethod = "ANY"
+
+	edgeRootPath = "/"
+
+	edgeProxyPathPart = "{proxy+}"
 )
 
-var notFoundContentTypes = []string{
+var edgeNotFoundContentTypes = []string{
 	"application/json",
 	"text/plain",
 	"text/html",
@@ -24,24 +36,49 @@ var notFoundContentTypes = []string{
 	"application/octet-stream",
 }
 
-var _ bootstrap.CoreFront = (*provider)(nil)
+var apiGatewayEdgeFeature = feature{
+	name:       FeatureAPIGatewayEdge,
+	summary:    "API Gateway as the front — invoke role, 404 responder for unclaimed hosts",
+	needs:      []string{needsEdgePrefix + KindAPIGateway},
+	template:   apiGatewayEdgeTemplate,
+	payloads:   noPayloads,
+	placements: noPlacements,
+}
 
-func (p *provider) CoreStack(class string) bootstrap.CoreFragment {
-	c := edge.Class(class)
-	if knownClass(c) != nil {
-		return bootstrap.CoreFragment{}
+func EdgeInvokeRoleName(class edge.Class) string {
+	if class == edge.ClassPreview {
+		return edgeInvokePolicyName + "-preview"
 	}
-	responder := notFoundAPIResource(c) +
+	return edgeInvokePolicyName
+}
+
+func EdgeNotFoundAPIName(class edge.Class) string {
+	return naming.Join(naming.WordSeparator, edgeNamespace, "not-found", string(class))
+}
+
+func apiGatewayEdgeTemplate(in featureInputs) featureStack {
+	params, values := crossStack([]crossStackParam{
+		{paramAssetBucketARN, "ARN of the core bootstrap's asset bucket, so the role API Gateway assumes reads a release's static assets out of it and nothing else.", in.refs.assetBucketARN},
+	})
+	held := edge.Class(in.class)
+	responder := notFoundAPIResource(held) +
 		notFoundProxyResource() +
-		notFoundMethodResource("EdgeNotFoundRootMethod", "!GetAtt EdgeNotFoundApi.RootResourceId", rootPath) +
-		notFoundMethodResource("EdgeNotFoundProxyMethod", "!Ref EdgeNotFoundProxy", rootPath+proxyPathPart)
+		notFoundMethodResource("EdgeNotFoundRootMethod", "!GetAtt EdgeNotFoundApi.RootResourceId", edgeRootPath) +
+		notFoundMethodResource("EdgeNotFoundProxyMethod", "!Ref EdgeNotFoundProxy", edgeRootPath+edgeProxyPathPart)
 	published := notFoundDeploymentID(responder)
-	return bootstrap.CoreFragment{
-		Resources: invokeRoleResource(c) +
-			responder +
-			notFoundDeploymentResource(published) +
+	return featureStack{
+		params: values,
+		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
+Description: "Ocel bootstrap feature (%s, %s) - what an API Gateway front needs in this account before any deployment is fronted with it: the role every REST API assumes to invoke an entry function and read a release's assets, and the REST API that answers 404 for every host pointed here that no deployment claims."
+%sResources:
+%s%s%s%sOutputs:
+%s`,
+			FeatureAPIGatewayEdge, in.class, params,
+			invokeRoleResource(held),
+			responder,
+			notFoundDeploymentResource(published),
 			notFoundStageResource(published),
-		Outputs: edgeOutputs(),
+			apiGatewayEdgeOutputs()),
 	}
 }
 
@@ -75,8 +112,8 @@ func invokeRoleResource(class edge.Class) string {
                 Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*'
               - Effect: Allow
                 Action: s3:GetObject
-                Resource: !Sub '${AssetBucket.Arn}/*'
-`, class, invokeRoleName(class), invokePolicyName)
+                Resource: !Sub '${%s}/*'
+`, class, EdgeInvokeRoleName(class), edgeInvokePolicyName, paramAssetBucketARN)
 }
 
 func notFoundAPIResource(class edge.Class) string {
@@ -90,7 +127,7 @@ func notFoundAPIResource(class edge.Class) string {
       EndpointConfiguration:
         Types:
           - REGIONAL
-`, class, notFoundAPIName(class))
+`, class, EdgeNotFoundAPIName(class))
 }
 
 func notFoundProxyResource() string {
@@ -102,14 +139,15 @@ func notFoundProxyResource() string {
       RestApiId: !Ref EdgeNotFoundApi
       ParentId: !GetAtt EdgeNotFoundApi.RootResourceId
       PathPart: '%s'
-`, proxyPathPart)
+`, edgeProxyPathPart)
 }
 
 func notFoundMethodResource(logical, resourceID, path string) string {
 	var templates strings.Builder
-	for _, contentType := range notFoundContentTypes {
+	for _, contentType := range edgeNotFoundContentTypes {
 		fmt.Fprintf(&templates, "          '%s': '{\"statusCode\": 404}'\n", contentType)
 	}
+	parameter := "method.response.header." + edge.HeaderEdge
 	return fmt.Sprintf(`  %s:
     Type: AWS::ApiGateway::Method
     Metadata:
@@ -133,7 +171,7 @@ func notFoundMethodResource(logical, resourceID, path string) string {
         - StatusCode: '404'
           ResponseParameters:
             %s: true
-`, logical, path, EdgeHeader, resourceID, anyMethod, templates.String(), edgeHeaderParameter, edgeHeaderValue, edgeHeaderParameter)
+`, logical, path, edge.HeaderEdge, resourceID, edgeAnyMethod, templates.String(), parameter, KindAPIGateway, parameter)
 }
 
 func notFoundDeploymentResource(logical string) string {
@@ -158,15 +196,15 @@ func notFoundStageResource(deployment string) string {
       RestApiId: !Ref EdgeNotFoundApi
       DeploymentId: !Ref %s
       StageName: %s
-`, deployment, stageName)
+`, deployment, EdgeStageName)
 }
 
-func edgeOutputs() string {
+func apiGatewayEdgeOutputs() string {
 	return fmt.Sprintf(`  %s:
     Description: "ARN of the role API Gateway assumes to invoke this account's entry functions and read a release's static assets. Every deploy reads it and names it on the integrations it raises."
     Value: !GetAtt EdgeInvokeRole.Arn
   %s:
     Description: "Id of the REST API answering 404 for every host pointed at this account that no deployment claims, which the preview wildcard's catch-all routing rule points at."
     Value: !Ref EdgeNotFoundApi
-`, OutputInvokeRoleARN, OutputNotFoundAPIID)
+`, OutputEdgeInvokeRoleARN, OutputEdgeNotFoundAPIID)
 }

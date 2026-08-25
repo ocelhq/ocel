@@ -62,19 +62,27 @@ func SiblingClassOf(class string) (string, error) {
 }
 
 func EdgeUserNameFor(class string) (string, error) {
-	names, err := edgeNamesFor(class)
-	if err != nil {
-		return "", err
+	user, ok := edgeUserByClass[class]
+	if !ok {
+		return "", fmt.Errorf("edge: unknown class %q", class)
 	}
-	return names.user, nil
+	return user, nil
 }
 
 func ClassParamNames(class string) ([]string, error) {
-	names, err := edgeNamesFor(class)
-	if err != nil {
-		return nil, err
+	secret, ok := originSecretByClass[class]
+	if !ok {
+		return nil, fmt.Errorf("edge: unknown class %q", class)
 	}
-	return append(names.edgeParams(), names.originSecretParam), nil
+	var params []string
+	for _, kind := range edgeKinds() {
+		names, err := edgeNamesFor(class, kind)
+		if err != nil {
+			return nil, err
+		}
+		params = append(params, names.edgeParams()...)
+	}
+	return append(params, secret), nil
 }
 
 func PassphraseHeldBySibling(ctx context.Context, api CFNDescriber, class string) (bool, error) {
@@ -157,7 +165,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, class string, progress, lo
 		return err
 	}
 
-	deployed, _, err := readBootstrap(ctx, apis.CFN, class, nil)
+	deployed, _, err := readBootstrap(ctx, apis.CFN, class)
 	if err != nil {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -49,10 +50,17 @@ type Provider struct {
 	aws     aws.Config
 
 	deployed memo[providerkit.Class, bootstrap.Deployed]
-	params   memo[providerkit.Class, bootstrap.ClassParams]
+	params   memo[classEdge, bootstrap.ClassParams]
 	account  memo[struct{}, string]
 
+	front atomic.Pointer[edge.Kind]
+
 	releases *deploy.Releaser
+}
+
+type classEdge struct {
+	class providerkit.Class
+	kind  edge.Kind
 }
 
 func New(ctx context.Context, options providerkit.Options) (providerkit.Provider, error) {
@@ -80,7 +88,7 @@ func (p *Provider) Serves() []providerkit.LinkType { return deploy.Serves() }
 func (p *Provider) Region() string { return p.aws.Region }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
-	front, err := p.edges().Open(kind)
+	front, err := p.Edges().Open(kind)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +116,32 @@ func (p *Provider) Sealer() providerkit.Sealer {
 
 func (p *Provider) Credentials() providerkit.Credentials { return control.CredentialsFor(p.aws) }
 
-func (p *Provider) Edges() providerkit.EdgeRegistry { return p.edges() }
+func (p *Provider) Edges() providerkit.EdgeRegistry {
+	return fronted{Registry: p.edges(), note: p.noteFront}
+}
+
+type fronted struct {
+	edges.Registry
+	note func(edge.Kind)
+}
+
+func (f fronted) Open(kind edge.Kind) (edge.Edge, error) {
+	front, err := f.Registry.Open(kind)
+	if err != nil {
+		return nil, err
+	}
+	f.note(front.Kind())
+	return front, nil
+}
+
+func (p *Provider) noteFront(kind edge.Kind) { p.front.Store(&kind) }
+
+func (p *Provider) frontKind() edge.Kind {
+	if held := p.front.Load(); held != nil {
+		return *held
+	}
+	return edges.DefaultKind
+}
 
 func (p *Provider) DNS() providerkit.DNSRegistry {
 	return dns.Registry{Deps: dns.Deps{AWS: p.aws}}
@@ -181,13 +214,14 @@ func (p *Provider) Buckets(ctx context.Context, class providerkit.Class) (awspor
 
 func (p *Provider) bootstrapped(ctx context.Context, class providerkit.Class) (bootstrap.Deployed, error) {
 	return p.deployed.resolve(class, func() (bootstrap.Deployed, error) {
-		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), string(class), nil)
+		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), string(class))
 	})
 }
 
 func (p *Provider) classParams(ctx context.Context, class providerkit.Class) (bootstrap.ClassParams, error) {
-	return p.params.resolve(class, func() (bootstrap.ClassParams, error) {
-		return bootstrap.ReadClassParams(ctx, ssm.NewFromConfig(p.aws), string(class), "")
+	kind := p.frontKind()
+	return p.params.resolve(classEdge{class: class, kind: kind}, func() (bootstrap.ClassParams, error) {
+		return bootstrap.ReadClassParams(ctx, ssm.NewFromConfig(p.aws), string(class), kind)
 	})
 }
 

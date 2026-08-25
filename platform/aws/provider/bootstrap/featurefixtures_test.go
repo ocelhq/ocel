@@ -1,5 +1,17 @@
 package bootstrap
 
+import edge "github.com/ocelhq/ocel/platform/edge/contract"
+
+func namesFor(class string, kind edge.Kind) edgeNames {
+	names, err := edgeNamesFor(class, kind)
+	if err != nil {
+		panic("no edge parameter names for class " + class + " and kind " + string(kind))
+	}
+	return names
+}
+
+func cloudflareNames(class string) edgeNames { return namesFor(class, KindCloudflare) }
+
 func fixtureRefs() stackRefs {
 	return stackRefs{
 		assetBucket:         "ocel-assets",

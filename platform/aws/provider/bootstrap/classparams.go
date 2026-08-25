@@ -7,6 +7,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const getParametersLimit = 10
@@ -31,8 +33,8 @@ type ClassParams struct {
 	OriginSecret     string
 }
 
-func ReadClassParams(ctx context.Context, api SSMBatchAPI, class, slug string) (ClassParams, error) {
-	names, err := edgeNamesFor(class)
+func ReadClassParams(ctx context.Context, api SSMBatchAPI, class string, kind edge.Kind) (ClassParams, error) {
+	names, err := edgeNamesFor(class, kind)
 	if err != nil {
 		return ClassParams{}, err
 	}
@@ -104,8 +106,8 @@ type TeardownParams struct {
 	ISRWriter  ISRWriter
 }
 
-func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, class, slug string) (TeardownParams, error) {
-	names, err := edgeNamesFor(class)
+func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, class string, kind edge.Kind) (TeardownParams, error) {
+	names, err := edgeNamesFor(class, kind)
 	if err != nil {
 		return TeardownParams{}, err
 	}

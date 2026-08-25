@@ -201,8 +201,8 @@ func TestTagPublisher(t *testing.T) {
 			seedParam  string
 			otherParam string
 		}{
-			{"production", featureTemplate(FeatureCloudflareEdge, ClassProduction), ISRWriterSeedParamName, ISRWriterSeedPreviewParamName},
-			{"preview", featureTemplate(FeatureCloudflareEdge, ClassPreview), ISRWriterSeedPreviewParamName, ISRWriterSeedParamName},
+			{"production", featureTemplate(FeatureCloudflareEdge, ClassProduction), cloudflareNames(ClassProduction).isrWriterSeedParam, cloudflareNames(ClassPreview).isrWriterSeedParam},
+			{"preview", featureTemplate(FeatureCloudflareEdge, ClassPreview), cloudflareNames(ClassPreview).isrWriterSeedParam, cloudflareNames(ClassProduction).isrWriterSeedParam},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parsePublisherTemplate(t, tc.template)

@@ -25,13 +25,13 @@ func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.Previ
 	if err != nil {
 		return "", err
 	}
-	outputs, err := bootstrap.CoreOutputs(ctx, c.CFN, string(edge.ClassPreview))
+	outputs, err := bootstrap.FeatureOutputs(ctx, c.CFN, string(edge.ClassPreview), bootstrap.FeatureAPIGatewayEdge)
 	if err != nil {
 		return "", err
 	}
-	notFound := outputs[OutputNotFoundAPIID]
+	notFound := outputs[bootstrap.OutputEdgeNotFoundAPIID]
 	if notFound == "" {
-		return "", fmt.Errorf("the preview bootstrap has no not-found API, so nothing would answer a hostname on %s that no preview claims; run `ocel bootstrap preview` first", wildcard)
+		return "", fmt.Errorf("the preview bootstrap carries no %s stack, so nothing would answer a hostname on %s that no preview claims; run `ocel bootstrap preview` with this edge selected first", bootstrap.FeatureAPIGatewayEdge, wildcard)
 	}
 	front, err := ensurePreviewDomain(ctx, c, wildcard, spec.Certificate)
 	if err != nil {

@@ -143,6 +143,9 @@ func tagPublisherResources(code payloads.Placement, class string) string {
 }
 
 func isrWriterParamNames(class string) (writer, seed string) {
-	names := edgeNamesByClass[class]
+	names, err := edgeNamesFor(class, KindCloudflare)
+	if err != nil {
+		return "", ""
+	}
 	return names.isrWriterParam, names.isrWriterSeedParam
 }

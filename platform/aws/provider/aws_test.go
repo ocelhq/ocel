@@ -57,7 +57,7 @@ func primed(t *testing.T, p *Provider, table string) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.params.resolve(providerkit.ClassProduction, func() (bootstrap.ClassParams, error) {
+	if _, err := p.params.resolve(classEdge{class: providerkit.ClassProduction, kind: edges.DefaultKind}, func() (bootstrap.ClassParams, error) {
 		return bootstrap.ClassParams{Passphrase: table}, nil
 	}); err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func standing(t *testing.T, p *Provider) (string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	params, err := p.params.resolve(providerkit.ClassProduction, func() (bootstrap.ClassParams, error) {
+	params, err := p.params.resolve(classEdge{class: providerkit.ClassProduction, kind: edges.DefaultKind}, func() (bootstrap.ClassParams, error) {
 		return bootstrap.ClassParams{Passphrase: "after"}, nil
 	})
 	if err != nil {

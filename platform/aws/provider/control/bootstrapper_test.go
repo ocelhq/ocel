@@ -213,7 +213,11 @@ func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
 	if !slices.Equal(iamfake.deletedKeys, []string{"AKIAOLD"}) {
 		t.Errorf("deleted access keys = %v, want the edge reader's", iamfake.deletedKeys)
 	}
-	for _, name := range []string{bootstrap.EdgeCredentialsParamName, bootstrap.EdgeValuesParamName, bootstrap.PassphraseParamName} {
+	for _, name := range []string{
+		edgeParam(t, bootstrap.ClassProduction, "/credentials"),
+		edgeParam(t, bootstrap.ClassProduction, "/values"),
+		bootstrap.PassphraseParamName,
+	} {
 		if _, still := b.SSM.(*teardownSSM).params[name]; still {
 			t.Errorf("parameter %s survived the teardown", name)
 		}
@@ -232,7 +236,7 @@ func TestRemoveKeepsThePassphraseABootstrappedSiblingStillNeeds(t *testing.T) {
 	if _, held := b.SSM.(*teardownSSM).params[bootstrap.PassphraseParamName]; !held {
 		t.Error("the passphrase the production bootstrap still needs was deleted")
 	}
-	if _, held := b.SSM.(*teardownSSM).params[bootstrap.EdgeCredentialsPreviewParamName]; held {
+	if _, held := b.SSM.(*teardownSSM).params[edgeParam(t, bootstrap.ClassPreview, "/credentials")]; held {
 		t.Error("the preview bootstrap's own parameters must go")
 	}
 }

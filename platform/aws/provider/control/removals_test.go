@@ -10,6 +10,15 @@ import (
 
 const cloudflareKind edge.Kind = "cloudflare"
 
+func edgeParam(t *testing.T, class, leaf string) string {
+	t.Helper()
+	prefix, err := bootstrap.EdgeParamPrefix(class, cloudflareKind)
+	if err != nil {
+		t.Fatalf("EdgeParamPrefix(%s): %v", class, err)
+	}
+	return prefix + leaf
+}
+
 func TestRemovals(t *testing.T) {
 	t.Parallel()
 
@@ -39,7 +48,7 @@ func TestRemovals(t *testing.T) {
 			"ocel-vars",
 			bootstrap.EdgeUserName,
 			bootstrap.StackName,
-			bootstrap.EdgeCredentialsParamName,
+			edgeParam(t, bootstrap.ClassProduction, "/credentials"),
 			bootstrap.PassphraseParamName,
 		} {
 			if surfaceNamed(surfaces, want) == nil {
@@ -123,7 +132,7 @@ func TestRemovals(t *testing.T) {
 		if surfaceNamed(surfaces, bootstrap.StackName) != nil {
 			t.Error("no stack is deployed, so none is planned for deletion")
 		}
-		if surfaceNamed(surfaces, bootstrap.EdgeCredentialsParamName) == nil {
+		if surfaceNamed(surfaces, edgeParam(t, bootstrap.ClassProduction, "/credentials")) == nil {
 			t.Error("the parameters the bootstrap left behind are still planned")
 		}
 	})

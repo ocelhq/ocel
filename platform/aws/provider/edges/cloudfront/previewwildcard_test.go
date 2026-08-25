@@ -66,7 +66,7 @@ func previewing(t *testing.T, w *world) (*provider, edge.EdgeStack) {
 
 func previewRoutes(t *testing.T, w *world) map[string]route {
 	t.Helper()
-	arn := "arn:aws:cloudfront::123456789012:key-value-store/" + keyValueStoreName(edge.ClassPreview)
+	arn := fakeRoutesARN(edge.ClassPreview)
 	held := map[string]route{}
 	for key, value := range w.store.held(arn) {
 		var published route
@@ -119,7 +119,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if associated.Items[0].EventType != cftypes.EventTypeViewerRequest {
 			t.Errorf("function association = %s, want it on the viewer request", associated.Items[0].EventType)
 		}
-		if arn := aws.ToString(associated.Items[0].FunctionARN); arn != "arn:aws:cloudfront::123456789012:function/"+functionName(edge.ClassPreview) {
+		if arn := aws.ToString(associated.Items[0].FunctionARN); arn != fakeResolverARN(edge.ClassPreview) {
 			t.Errorf("function association = %q, want the preview resolver", arn)
 		}
 		if origin := aws.ToString(held.config.Origins.Items[0].DomainName); origin != assetOriginDomain(fakeAssetBucket, fakeRegion) {
@@ -339,7 +339,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		e, stack := previewing(t, w)
 		promotePreview(t, stack, previewPointer)
 		promotePreview(t, stack, "pr2")
-		arn := "arn:aws:cloudfront::123456789012:key-value-store/" + keyValueStoreName(edge.ClassPreview)
+		arn := fakeRoutesARN(edge.ClassPreview)
 		w.store.items[arn]["other-project--pr7."+previewBase] = `{"origin":"stale"}`
 		w.store.items[arn]["www.unrelated.example"] = `{"origin":"kept"}`
 		w.store.listPage = 1

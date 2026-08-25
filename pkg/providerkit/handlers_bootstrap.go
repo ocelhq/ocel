@@ -33,7 +33,8 @@ func (h *handlers) gate(requested string) (Provider, Gate, error) {
 	if err != nil {
 		return nil, Gate{}, err
 	}
-	bootstrapper, err := provider.Bootstrap(edgeKind(provider, requested))
+	kind := edgeKind(provider, requested)
+	bootstrapper, err := provider.Bootstrap(kind)
 	if err != nil {
 		return nil, Gate{}, RefusalError(err)
 	}
@@ -41,6 +42,7 @@ func (h *handlers) gate(requested string) (Provider, Gate, error) {
 		Bootstrapper: bootstrapper,
 		Records:      provider.Records(),
 		Writer:       h.session.writer,
+		Edge:         kind,
 	}, nil
 }
 
