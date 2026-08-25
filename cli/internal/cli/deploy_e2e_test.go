@@ -161,7 +161,7 @@ func installRealProvider(t *testing.T, repoRoot, root string) (binPath string) {
 		t.Fatalf("symlink ocel package: %v", err)
 	}
 
-	binDir := filepath.Join(nodeModules, "@ocel", "provider-aws-"+nodePlatformSuffix(t), "bin")
+	binDir := filepath.Join(nodeModules, "@ocel", "provider-aws-"+clitest.NodePlatformSuffix(t), "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", binDir, err)
 	}
