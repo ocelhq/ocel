@@ -23,11 +23,11 @@ func TestBootstrapCarriesAutoHeal(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			root, journal, d := clitest.SetUpEdgeFixture(t, "")
+			root, journal, sess := clitest.SetUpEdgeFixture(t, "")
 			t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 
 			var stdout, stderr bytes.Buffer
-			if err := Run(context.Background(), d, root, environmentv1.Tier_TIER_PRODUCTION, tt.opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, tt.opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 			got := clitest.ReadJournal(t, journal)
@@ -42,12 +42,12 @@ func TestRunBootstrapStatus(t *testing.T) {
 	t.Run("it reports both classes", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		d := clitest.NewSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
+		sess := clitest.NewSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := RunStatus(context.Background(), d, root, StatusOptions{}, &stdout, &stderr); err != nil {
+		if err := RunStatus(context.Background(), sess, root, StatusOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runBootstrapStatus err = %v; stderr=%s", err, stderr.String())
 		}
 		out := stdout.String()
@@ -61,12 +61,12 @@ func TestRunBootstrapStatus(t *testing.T) {
 	t.Run("--check fails on stale content", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeBootstrapEnvVar, "stale")
-		d := clitest.NewSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
+		sess := clitest.NewSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
 
 		var stdout, stderr bytes.Buffer
-		err := RunStatus(context.Background(), d, root, StatusOptions{Check: true}, &stdout, &stderr)
+		err := RunStatus(context.Background(), sess, root, StatusOptions{Check: true}, &stdout, &stderr)
 		if err == nil {
 			t.Fatalf("--check passed a bootstrap carrying stale content; stdout=%s", stdout.String())
 		}
@@ -78,12 +78,12 @@ func TestRunBootstrapStatus(t *testing.T) {
 	t.Run("--check passes a bootstrap this build wrote", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		d := clitest.NewSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
+		sess := clitest.NewSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := RunStatus(context.Background(), d, root, StatusOptions{Check: true}, &stdout, &stderr); err != nil {
+		if err := RunStatus(context.Background(), sess, root, StatusOptions{Check: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("--check = %v, want it to pass; stdout=%s", err, stdout.String())
 		}
 	})
@@ -93,14 +93,14 @@ func TestRunBootstrapDowngrade(t *testing.T) {
 	t.Run("it warns and takes a confirmation before writing older content", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeBootstrapEnvVar, "downgrade")
-		d := clitest.NewSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
-		d.StdinIsTerminal = func(io.Reader) bool { return true }
+		sess := clitest.NewSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
+		sess.StdinIsTerminal = func(io.Reader) bool { return true }
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Features: "none", Declared: true}
-		if err := Run(context.Background(), d, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
+		if err := Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()

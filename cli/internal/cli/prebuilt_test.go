@@ -132,12 +132,12 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt skips the build and carries the prebuilt tree's function", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := newSession()
-		ran := recordBuildApp(&d)
+		sess := newSession()
+		ran := recordBuildApp(&sess)
 
 		s, out := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		manifest, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), true, s)
+		manifest, err := collectAndBuildManifest(context.Background(), sess, cfg, noGate(cfg), true, s)
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
@@ -163,12 +163,12 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("without --prebuilt the build runs", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := newSession()
-		ran := recordBuildApp(&d)
+		sess := newSession()
+		ran := recordBuildApp(&sess)
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		if _, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), false, s); err != nil {
+		if _, err := collectAndBuildManifest(context.Background(), sess, cfg, noGate(cfg), false, s); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 		if !*ran {
@@ -177,12 +177,12 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	})
 
 	t.Run("--prebuilt with no build output errors", func(t *testing.T) {
-		d := newSession()
-		recordBuildApp(&d)
+		sess := newSession()
+		recordBuildApp(&sess)
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(t.TempDir())
-		_, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), true, s)
+		_, err := collectAndBuildManifest(context.Background(), sess, cfg, noGate(cfg), true, s)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest succeeded with no build output, want error")
 		}
@@ -196,11 +196,11 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		writePrebuiltFunction(t, root, "api", "index")
 		recorded := "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
 		clitest.WriteFile(t, filepath.Join(root, ".ocel", "output", "apps", "api", "deployment-id"), recorded+"\n")
-		d := newSession()
+		sess := newSession()
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		manifest, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), true, s)
+		manifest, err := collectAndBuildManifest(context.Background(), sess, cfg, noGate(cfg), true, s)
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
@@ -213,11 +213,11 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt refuses an app the output tree recorded no id for", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := newSession()
+		sess := newSession()
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		_, err := collectAndBuildManifest(context.Background(), d, cfg, noGate(cfg), true, s)
+		_, err := collectAndBuildManifest(context.Background(), sess, cfg, noGate(cfg), true, s)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest succeeded for an app no build stamped, want error")
 		}
@@ -230,9 +230,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
 		generated := ""
-		d := newSession()
-		clitest.StubRecordedDeploymentIDs(&d)
-		d.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+		sess := newSession()
+		clitest.StubRecordedDeploymentIDs(&sess)
+		sess.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 			data, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
 			if err != nil {
 				return err
@@ -243,7 +243,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		if _, err := collectAndBuildManifest(context.Background(), d, cfg, clientValueGate(t, cfg, "https://example.com"), false, s); err != nil {
+		if _, err := collectAndBuildManifest(context.Background(), sess, cfg, clientValueGate(t, cfg, "https://example.com"), false, s); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 
@@ -258,8 +258,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt refuses a stale client value", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := newSession()
-		recordBuildApp(&d)
+		sess := newSession()
+		recordBuildApp(&sess)
 		cfg := prebuiltConfig(root)
 
 		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}); err != nil {
@@ -268,7 +268,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		gate := clientValueGate(t, cfg, "https://rotated.example.com")
-		_, err := collectAndBuildManifest(context.Background(), d, cfg, gate, true, s)
+		_, err := collectAndBuildManifest(context.Background(), sess, cfg, gate, true, s)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for a build predating the client value, want a refusal")
 		}
@@ -283,15 +283,15 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt names an `ocel build` output for what it is", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := newSession()
-		recordBuildApp(&d)
+		sess := newSession()
+		recordBuildApp(&sess)
 		cfg := prebuiltConfig(root)
 		if err := clientenv.RecordUnresolved(root); err != nil {
 			t.Fatal(err)
 		}
 
 		s, _ := newBuildManifestSession(t)
-		_, err := collectAndBuildManifest(context.Background(), d, cfg, clientValueGate(t, cfg, "https://example.com"), true, s)
+		_, err := collectAndBuildManifest(context.Background(), sess, cfg, clientValueGate(t, cfg, "https://example.com"), true, s)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for an `ocel build` output, want a refusal")
 		}
@@ -308,8 +308,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 	t.Run("--prebuilt proceeds when the client value is unchanged", func(t *testing.T) {
 		root := t.TempDir()
 		writePrebuiltFunction(t, root, "api", "index")
-		d := newSession()
-		recordBuildApp(&d)
+		sess := newSession()
+		recordBuildApp(&sess)
 		cfg := prebuiltConfig(root)
 
 		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}); err != nil {
@@ -318,7 +318,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		gate := clientValueGate(t, cfg, "https://example.com")
-		if _, err := collectAndBuildManifest(context.Background(), d, cfg, gate, true, s); err != nil {
+		if _, err := collectAndBuildManifest(context.Background(), sess, cfg, gate, true, s); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 	})
@@ -356,11 +356,11 @@ func TestPrebuiltDeploy(t *testing.T) {
 		if err := os.RemoveAll(filepath.Join(root, ".ocel", "output")); err != nil {
 			t.Fatalf("drop the fixture's build output: %v", err)
 		}
-		d := newSession()
-		recordBuildApp(&d)
+		sess := newSession()
+		recordBuildApp(&sess)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), d, root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), sess, root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the missing build output reported")
 		}

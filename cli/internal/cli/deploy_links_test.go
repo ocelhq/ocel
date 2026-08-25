@@ -30,15 +30,15 @@ export default {
 func deployLinked(t *testing.T, links string) (root string, stdout, stderr bytes.Buffer, err error) {
 	t.Helper()
 
-	d := newSession()
-	clitest.SetLoggedIn(&d)
-	clitest.StubAppFunctions(&d, []manifestbuilder.Function{
+	sess := newSession()
+	clitest.SetLoggedIn(&sess)
+	clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
 		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 	})
 	root, _ = clitest.SetUpDeployFixture(t)
 	writeLinkedMonorepo(t, root, links)
 
-	err = runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err = runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	return root, stdout, stderr, err
 }
 

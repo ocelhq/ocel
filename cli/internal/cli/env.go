@@ -191,7 +191,7 @@ func withEnvProvider(ctx context.Context, sess session.Session, cwd string, opts
 	}
 
 	return provider.Drive(ctx, cfg, stderr, stderr, func(runner *provider.Runner) error {
-		if err := preflightSchema(ctx, sess, runner, cfg, tier, hint, stderr); err != nil {
+		if err := preflightCredentials(ctx, sess, runner, cfg, tier, hint, stderr); err != nil {
 			return err
 		}
 		return drive(runner, cfg)
@@ -341,11 +341,11 @@ func runEnvGet(ctx context.Context, sess session.Session, cwd, key string, opts 
 		}
 		m := resp.GetMetadata()
 		if target := m.GetTarget(); target != nil {
-			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), epochOrDash(m.GetUpdatedAt()))
+			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), epochDate(m.GetUpdatedAt()))
 			fmt.Fprintln(stdout, "Pass --reveal to print the value it reads. Edit that value where it is set.")
 			return nil
 		}
-		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), epochOrDash(m.GetUpdatedAt()))
+		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), epochDate(m.GetUpdatedAt()))
 		fmt.Fprintln(stdout, "Pass --reveal to print the value.")
 		return nil
 	})
@@ -504,7 +504,7 @@ func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environme
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
 			c.GetKey(), folderOrRoot(c.GetFolder()), environment,
-			v.GetVersion(), size, epochOrDash(v.GetUpdatedAt()), source)
+			v.GetVersion(), size, epochDate(v.GetUpdatedAt()), source)
 	}
 	_ = tw.Flush()
 
@@ -521,7 +521,7 @@ func renderVersions(stdout io.Writer, cell string, versions []*envvarsv1.Version
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "VERSION\tCREATED\tBYTES")
 	for _, v := range versions {
-		fmt.Fprintf(tw, "%d\t%s\t%d\n", v.GetVersion(), epochOrDash(v.GetCreatedAt()), v.GetSize())
+		fmt.Fprintf(tw, "%d\t%s\t%d\n", v.GetVersion(), epochDate(v.GetCreatedAt()), v.GetSize())
 	}
 	_ = tw.Flush()
 }

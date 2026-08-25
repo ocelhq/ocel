@@ -87,7 +87,7 @@ func runDev(ctx context.Context, sess session.Session, cmd *cobra.Command, cwd s
 	return errors.New("determine leader/follower role: repeatedly lost the leader election; try again")
 }
 
-func runLeader(ctx context.Context, sess session.Session, role election.Result, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runLeader(ctx context.Context, sess session.Session, result election.Result, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return err
@@ -114,10 +114,10 @@ func runLeader(ctx context.Context, sess session.Session, role election.Result, 
 		fmt.Fprintln(stderr, "upload detection:", err)
 	})
 
-	if err := role.Claim(addr); err != nil {
+	if err := result.Claim(addr); err != nil {
 		return err
 	}
-	defer role.Release()
+	defer result.Release()
 
 	resolved, err := resolveOnce(ctx, srv, cfg, projectCfg.EnvVars, stdout, stderr)
 	if err != nil {

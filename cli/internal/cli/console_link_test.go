@@ -84,13 +84,13 @@ func TestRunLink(t *testing.T) {
 	t.Run("not logged in returns an exit error pointing at `ocel login`", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		d.LoadCredentials = func() (credentials.Credentials, error) {
+		sess := newSession()
+		sess.LoadCredentials = func() (credentials.Credentials, error) {
 			return credentials.Credentials{}, credentials.ErrNotLoggedIn
 		}
 
 		var stderr bytes.Buffer
-		err := runConsoleLink(context.Background(), d, t.TempDir(), "", consoleLinkOptions{}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+		err := runConsoleLink(context.Background(), sess, t.TempDir(), "", consoleLinkOptions{}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -104,13 +104,13 @@ func TestRunLink(t *testing.T) {
 	t.Run("it selects an existing project by slug", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		clitest.SetLoggedIn(&d)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
 		srv := newCloudServer(t, project("p1", "My App", "my-app"), project("p2", "Other", "other"))
 		dir := t.TempDir()
 
 		opts := consoleLinkOptions{apiURL: srv.URL}
-		if err := runConsoleLink(context.Background(), d, dir, "other", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runConsoleLink(context.Background(), sess, dir, "other", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("runConsoleLink err = %v", err)
 		}
 
@@ -133,12 +133,12 @@ func TestRunLink(t *testing.T) {
 	t.Run("an unknown slug errors listing the available projects", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		clitest.SetLoggedIn(&d)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
 		srv := newCloudServer(t, project("p1", "My App", "my-app"))
 
 		opts := consoleLinkOptions{apiURL: srv.URL}
-		err := runConsoleLink(context.Background(), d, t.TempDir(), "nope", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runConsoleLink(context.Background(), sess, t.TempDir(), "nope", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runConsoleLink err = nil, want error")
 		}
@@ -150,13 +150,13 @@ func TestRunLink(t *testing.T) {
 	t.Run("without a terminal and without a project or --create it errors about the flags", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		clitest.SetLoggedIn(&d)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
 		srv := newCloudServer(t, project("p1", "My App", "my-app"))
 
 		dir := t.TempDir()
 		opts := consoleLinkOptions{apiURL: srv.URL}
-		err := runConsoleLink(context.Background(), d, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runConsoleLink(context.Background(), sess, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runConsoleLink err = nil, want error")
 		}
@@ -171,8 +171,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("--create without a name uses the directory name", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		clitest.SetLoggedIn(&d)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
 		srv := newCloudServer(t)
 
 		dir := filepath.Join(t.TempDir(), "my-fresh-app")
@@ -181,7 +181,7 @@ func TestRunLink(t *testing.T) {
 		}
 
 		opts := consoleLinkOptions{apiURL: srv.URL, create: true}
-		if err := runConsoleLink(context.Background(), d, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runConsoleLink(context.Background(), sess, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("runConsoleLink err = %v", err)
 		}
 
@@ -197,12 +197,12 @@ func TestRunLink(t *testing.T) {
 	t.Run("--create with a name slugifies it", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		clitest.SetLoggedIn(&d)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
 		srv := newCloudServer(t)
 
 		opts := consoleLinkOptions{apiURL: srv.URL, create: true}
-		if err := runConsoleLink(context.Background(), d, t.TempDir(), "My Cool App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runConsoleLink(context.Background(), sess, t.TempDir(), "My Cool App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("runConsoleLink err = %v", err)
 		}
 		if len(srv.created) != 1 || srv.created[0]["slug"] != "my-cool-app" || srv.created[0]["name"] != "My Cool App" {
@@ -213,13 +213,13 @@ func TestRunLink(t *testing.T) {
 	t.Run("a create conflict points at linking to the existing project", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		clitest.SetLoggedIn(&d)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
 		srv := newCloudServer(t)
 		srv.createConflict = true
 
 		opts := consoleLinkOptions{apiURL: srv.URL, create: true}
-		err := runConsoleLink(context.Background(), d, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runConsoleLink(context.Background(), sess, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runConsoleLink err = nil, want error")
 		}
@@ -231,13 +231,13 @@ func TestRunLink(t *testing.T) {
 	t.Run("several organizations without a terminal require --org", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		clitest.SetLoggedIn(&d)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
 		srv := newCloudServer(t)
 		srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
 
 		opts := consoleLinkOptions{apiURL: srv.URL, create: true}
-		err := runConsoleLink(context.Background(), d, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runConsoleLink(context.Background(), sess, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), "--org") {
 			t.Fatalf("runConsoleLink err = %v, want it to mention --org", err)
 		}
@@ -246,14 +246,14 @@ func TestRunLink(t *testing.T) {
 	t.Run("--org selects among several", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		clitest.SetLoggedIn(&d)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
 		srv := newCloudServer(t)
 		srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
 
 		dir := t.TempDir()
 		opts := consoleLinkOptions{apiURL: srv.URL, create: true, org: "other-co"}
-		if err := runConsoleLink(context.Background(), d, dir, "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runConsoleLink(context.Background(), sess, dir, "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("runConsoleLink err = %v", err)
 		}
 		link := readLink(t, dir, srv.URL)
@@ -265,12 +265,12 @@ func TestRunLink(t *testing.T) {
 	t.Run("an unknown --org errors listing the available org slugs", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		clitest.SetLoggedIn(&d)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
 		srv := newCloudServer(t)
 
 		opts := consoleLinkOptions{apiURL: srv.URL, create: true, org: "nope"}
-		err := runConsoleLink(context.Background(), d, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runConsoleLink(context.Background(), sess, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), "acme-inc") {
 			t.Fatalf("runConsoleLink err = %v, want it to list the available org slugs", err)
 		}
@@ -279,8 +279,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("relinking reports the previous link and replaces it", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		clitest.SetLoggedIn(&d)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
 		srv := newCloudServer(t, project("p1", "My App", "my-app"), project("p2", "Other", "other"))
 
 		dir := t.TempDir()
@@ -292,7 +292,7 @@ func TestRunLink(t *testing.T) {
 
 		var stdout bytes.Buffer
 		opts := consoleLinkOptions{apiURL: srv.URL}
-		if err := runConsoleLink(context.Background(), d, dir, "other", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runConsoleLink(context.Background(), sess, dir, "other", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("runConsoleLink err = %v", err)
 		}
 		if !strings.Contains(stdout.String(), "linked to My App") {
@@ -306,8 +306,8 @@ func TestRunLink(t *testing.T) {
 	t.Run("it ignores a record from another control plane", func(t *testing.T) {
 		t.Parallel()
 
-		d := newSession()
-		clitest.SetLoggedIn(&d)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
 		srv := newCloudServer(t, project("p1", "My App", "my-app"))
 
 		dir := t.TempDir()
@@ -319,7 +319,7 @@ func TestRunLink(t *testing.T) {
 
 		var stdout bytes.Buffer
 		opts := consoleLinkOptions{apiURL: srv.URL}
-		if err := runConsoleLink(context.Background(), d, dir, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		if err := runConsoleLink(context.Background(), sess, dir, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("runConsoleLink err = %v", err)
 		}
 		if strings.Contains(stdout.String(), "Elsewhere") {

@@ -31,11 +31,11 @@ type linkOptions struct {
 	owner       string
 }
 
-func (o linkOptions) bootstrap() envOptions {
+func (o linkOptions) asEnvOptions() envOptions {
 	return envOptions{preview: o.preview, environment: o.environment}
 }
 
-func (o linkOptions) publisher() string {
+func (o linkOptions) ownerOrDefault() string {
 	if o.owner == "" {
 		return defaultLinkOwner
 	}
@@ -126,15 +126,15 @@ func runLinkSet(ctx context.Context, sess session.Session, cwd string, stdin io.
 	if err != nil {
 		return err
 	}
-	owner := opts.publisher()
-	return withEnvProvider(ctx, sess, cwd, opts.bootstrap(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	owner := opts.ownerOrDefault()
+	return withEnvProvider(ctx, sess, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := client.SetLink(ctx, &envvarsv1.SetLinkRequest{
 			Slug:        cfg.Slug,
-			Tier:        envTier(opts.bootstrap()),
+			Tier:        envTier(opts.asEnvOptions()),
 			Environment: opts.environment,
 			Link:        link,
 			Owner:       owner,
@@ -166,14 +166,14 @@ func decodeLink(stdin io.Reader) (*linksv1.Link, error) {
 }
 
 func runLinkRm(ctx context.Context, sess session.Session, cwd, name string, opts linkOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, sess, cwd, opts.bootstrap(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, sess, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := client.RemoveLink(ctx, &envvarsv1.RemoveLinkRequest{
 			Slug:        cfg.Slug,
-			Tier:        envTier(opts.bootstrap()),
+			Tier:        envTier(opts.asEnvOptions()),
 			Environment: opts.environment,
 			Name:        name,
 		})
@@ -193,14 +193,14 @@ func runLinkRm(ctx context.Context, sess session.Session, cwd, name string, opts
 }
 
 func runLinkLs(ctx context.Context, sess session.Session, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, sess, cwd, opts.bootstrap(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, sess, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := client.ListLinks(ctx, &envvarsv1.ListLinksRequest{
 			Slug:        cfg.Slug,
-			Tier:        envTier(opts.bootstrap()),
+			Tier:        envTier(opts.asEnvOptions()),
 			Environment: opts.environment,
 		})
 		if err != nil {
@@ -215,14 +215,14 @@ func runLinkLs(ctx context.Context, sess session.Session, cwd string, opts linkO
 }
 
 func runLinkGenerate(ctx context.Context, sess session.Session, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, sess, cwd, opts.bootstrap(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, sess, cwd, opts.asEnvOptions(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
 		resp, err := client.ListLinks(ctx, &envvarsv1.ListLinksRequest{
 			Slug:        cfg.Slug,
-			Tier:        envTier(opts.bootstrap()),
+			Tier:        envTier(opts.asEnvOptions()),
 			Environment: opts.environment,
 		})
 		if err != nil {

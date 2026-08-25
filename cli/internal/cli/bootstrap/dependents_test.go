@@ -25,12 +25,12 @@ func TestOnlyTheCommandThatRendersDependentsAsksForThem(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
 		journal := describeJournal(t)
-		d := clitest.NewSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
+		sess := clitest.NewSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := RunStatus(context.Background(), d, root, StatusOptions{}, &stdout, &stderr); err != nil {
+		if err := RunStatus(context.Background(), sess, root, StatusOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runBootstrapStatus err = %v; stderr=%s", err, stderr.String())
 		}
 		got := clitest.ReadJournal(t, journal)
@@ -43,12 +43,12 @@ func TestOnlyTheCommandThatRendersDependentsAsksForThem(t *testing.T) {
 	})
 
 	t.Run("bootstrap asks, because it names who breaks when a feature goes", func(t *testing.T) {
-		root, _, d := clitest.SetUpEdgeFixture(t, "")
+		root, _, sess := clitest.SetUpEdgeFixture(t, "")
 		journal := describeJournal(t)
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 
 		var stdout, stderr bytes.Buffer
-		if err := Run(context.Background(), d, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stderr=%s", err, stderr.String())
 		}
 		got := clitest.ReadJournal(t, journal)

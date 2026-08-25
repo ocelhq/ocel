@@ -14,16 +14,16 @@ import (
 
 func TestDeployUsageEdges(t *testing.T) {
 	t.Run("an app that uses a shared resource lands a usage edge naming the files it reaches through", func(t *testing.T) {
-		d := newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, []manifestbuilder.Function{
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
 			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -37,13 +37,13 @@ func TestDeployUsageEdges(t *testing.T) {
 	})
 
 	t.Run("a resource no app uses still provisions and carries no edge", func(t *testing.T) {
-		d := newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -60,9 +60,9 @@ func TestDeployUsageEdges(t *testing.T) {
 	})
 
 	t.Run("a runtime-computed import in an app fails the deploy closed", func(t *testing.T) {
-		d := newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
 		root, _ := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
 		clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "late.ts"), `
@@ -74,7 +74,7 @@ export async function late() {
 `)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want the deploy refused; stdout=%s", stdout.String())
 		}
@@ -86,9 +86,9 @@ export async function late() {
 }
 
 func TestDeployScopesDeliveryToTheUsingApps(t *testing.T) {
-	d := newSession()
-	clitest.SetLoggedIn(&d)
-	clitest.StubAppFunctions(&d, []manifestbuilder.Function{
+	sess := newSession()
+	clitest.SetLoggedIn(&sess)
+	clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
 		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		{Name: "web", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
 	})
@@ -96,7 +96,7 @@ func TestDeployScopesDeliveryToTheUsingApps(t *testing.T) {
 	writeSharedResourceMonorepo(t, root)
 
 	var stdout, stderr bytes.Buffer
-	err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -118,15 +118,15 @@ func TestDeployScopesDeliveryToTheUsingApps(t *testing.T) {
 }
 
 func TestDeployAttributesAnUnconfiguredProjectToItsOnlyApp(t *testing.T) {
-	d := newSession()
-	clitest.SetLoggedIn(&d)
-	clitest.StubAppFunctions(&d, []manifestbuilder.Function{
+	sess := newSession()
+	clitest.SetLoggedIn(&sess)
+	clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
 		{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output", Framework: "express", App: "web"},
 	})
 	root, sockPath := clitest.SetUpDeployFixture(t)
 
 	var stdout, stderr bytes.Buffer
-	err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -141,16 +141,16 @@ func TestDeployAttributesAnUnconfiguredProjectToItsOnlyApp(t *testing.T) {
 
 func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 	t.Run("a project that builds two apps and names neither", func(t *testing.T) {
-		d := newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, []manifestbuilder.Function{
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
 			{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 			{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
 		})
 		root, _ := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want the deploy refused; stdout=%s", stdout.String())
 		}
@@ -163,9 +163,9 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 	})
 
 	t.Run("a built app the config names nothing of", func(t *testing.T) {
-		d := newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, []manifestbuilder.Function{
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
 			{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 			{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/legacy", Framework: "express", App: "legacy"},
 		})
@@ -173,7 +173,7 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		clitest.WriteUsageMonorepo(t, root)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want the app no configured app covers to refuse the deploy; stdout=%s", stdout.String())
 		}
@@ -184,9 +184,9 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 	})
 
 	t.Run("a configured path that names no directory", func(t *testing.T) {
-		d := newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, []manifestbuilder.Function{
+		sess := newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
 			{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 		root, _ := clitest.SetUpDeployFixture(t)
@@ -201,7 +201,7 @@ export default {
 `)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want a path naming nothing to refuse the deploy rather than ship an app no resource reaches; stdout=%s", stdout.String())
 		}

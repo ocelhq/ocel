@@ -40,10 +40,10 @@ export default {
 }
 
 func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
-	root, journal, d := setUpProviderFixture(t, `{ region: "eu-west-2", transforms: ["./infra/net.transform.ts"], certificates: { "app.acme.com": "arn:aws:acm:eu-west-2:1:certificate/x" } }`)
+	root, journal, sess := setUpProviderFixture(t, `{ region: "eu-west-2", transforms: ["./infra/net.transform.ts"], certificates: { "app.acme.com": "arn:aws:acm:eu-west-2:1:certificate/x" } }`)
 
 	var stdout, stderr bytes.Buffer
-	if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -58,10 +58,10 @@ func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
 }
 
 func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
-	root, _, d := setUpProviderFixture(t, `{ regionn: "eu-west-2" }`)
+	root, _, sess := setUpProviderFixture(t, `{ regionn: "eu-west-2" }`)
 
 	var stdout, stderr bytes.Buffer
-	err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want options the provider refuses reported; stdout=%s", stdout.String())
 	}

@@ -87,7 +87,7 @@ func runRollback(ctx context.Context, sess session.Session, cwd string, opts rol
 		if note := flipNote(promoted.GetFlipBound()); note != "" {
 			flipSuffix = "; " + note
 		}
-		fmt.Fprintf(stdout, "Rolled back to promotion %s (created %s%s)%s\n", promoted.GetPromotionId(), epochOrDash(promoted.GetTs()), tagSuffix, flipSuffix)
+		fmt.Fprintf(stdout, "Rolled back to promotion %s (created %s%s)%s\n", promoted.GetPromotionId(), epochDate(promoted.GetTs()), tagSuffix, flipSuffix)
 		return nil
 	})
 }
