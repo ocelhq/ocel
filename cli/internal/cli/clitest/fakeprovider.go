@@ -558,7 +558,7 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 	}
 	class := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
 	return &contractv1.ChangePlan{
-		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
+		EdgeKind: "cloudflare",
 		Subject:  class,
 		Groups: []*contractv1.ChangeGroup{
 			{
@@ -601,7 +601,7 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 			},
 			{
 				Kind:    "edge",
-				Name:    resolvedEdgeKind(req.GetEdge().GetKind()) + "/edge",
+				Name:    "cloudflare/edge",
 				Feature: "cloudflare-edge",
 				Action:  contractv1.Change_ACTION_DELETE,
 				Changes: []*contractv1.Change{

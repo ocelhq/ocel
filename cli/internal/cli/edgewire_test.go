@@ -169,11 +169,10 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		name        string
 		declaration string
 		want        string
-		planned     string
 	}{
-		{"an omitted edge names none, leaving the provider to choose", "", "kind= ", "cloudfront"},
-		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\", options: {} },\n", "kind=api-gateway", "api-gateway"},
-		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare", "cloudflare"},
+		{"an omitted edge names none, leaving the provider to choose", "", "kind= "},
+		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\", options: {} },\n", "kind=api-gateway"},
+		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -194,8 +193,8 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 					t.Errorf("provider saw %q, want %q", line, tc.want)
 				}
 			}
-			if !strings.Contains(stdout.String(), "fronted by the "+tc.planned+" edge") {
-				t.Errorf("stdout = %q, want the plan to name the edge it planned", stdout.String())
+			if !strings.Contains(stdout.String(), "fronted by the cloudflare edge") {
+				t.Errorf("stdout = %q, want the plan to name the edge left standing in the account, not the one this run selected", stdout.String())
 			}
 		})
 	}

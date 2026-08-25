@@ -233,7 +233,7 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	if err != nil {
 		return nil, err
 	}
-	provider, gate, err := h.gate(req.GetEdge().GetKind())
+	_, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +244,23 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	return ChangePlanProto(plan, string(class), string(edgeKind(provider, req.GetEdge().GetKind()))), nil
+	return ChangePlanProto(plan, string(class), soleStandingEdge(plan)), nil
+}
+
+func soleStandingEdge(plan BootstrapPlan) string {
+	var kinds []edge.Kind
+	for _, group := range plan.Groups {
+		if group.Kind != EdgeGroupKind {
+			continue
+		}
+		if kind, ok := edge.EdgeGroupKindOf(group.Name); ok && !slices.Contains(kinds, kind) {
+			kinds = append(kinds, kind)
+		}
+	}
+	if len(kinds) != 1 {
+		return ""
+	}
+	return string(kinds[0])
 }
 
 func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope, stream *connect.ServerStream[progressv1.OperationEvent]) error {

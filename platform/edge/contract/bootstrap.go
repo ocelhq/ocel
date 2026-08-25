@@ -1,6 +1,9 @@
 package edge
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 type BootstrapOutput struct {
 	Trust  TrustBoundary
@@ -64,6 +67,14 @@ func ValidPlanAction(action PlanAction) bool {
 const EdgeGroupKind = "edge"
 
 func EdgeGroupName(kind Kind) string { return string(kind) + "/edge" }
+
+func EdgeGroupKindOf(name string) (Kind, bool) {
+	kind, ok := strings.CutSuffix(name, "/edge")
+	if !ok || kind == "" {
+		return "", false
+	}
+	return Kind(kind), true
+}
 
 type Class string
 

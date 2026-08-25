@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func contractServed(t *testing.T, version string) (contractv1connect.ProviderServiceClient, *fake.Provider) {
@@ -523,8 +524,8 @@ func TestPlanRemoveBootstrapNamesTheClassAndWhatGoes(t *testing.T) {
 	if plan.GetSubject() != string(providerkit.ClassPreview) {
 		t.Errorf("subject = %q, want the class the CLI asks the user to type back", plan.GetSubject())
 	}
-	if len(plan.GetGroups()) != 2 {
-		t.Fatalf("PlanRemoveBootstrap() planned %d items, want the feature stack and the core", len(plan.GetGroups()))
+	if len(plan.GetGroups()) != 3 {
+		t.Fatalf("PlanRemoveBootstrap() planned %d items, want the feature stack, the core and the edge", len(plan.GetGroups()))
 	}
 	for _, item := range plan.GetGroups() {
 		if item.GetAction() != contractv1.Change_ACTION_DELETE {
@@ -646,6 +647,47 @@ func TestPlanRemoveBootstrapPlansTheEdgeItWasAsked(t *testing.T) {
 	}
 	if fronting := provider.Bootstrapper().Fronting(); fronting != fake.KindDirect {
 		t.Errorf("PlanRemoveBootstrap() asked the provider for the %q edge, want the %q the request named", fronting, fake.KindDirect)
+	}
+}
+
+func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenMoreThanOneEdgeStands(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client, provider := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	provider.Bootstrapper().Standing(fake.KindRelay, fake.KindDirect)
+
+	plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	if err != nil {
+		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
+	}
+	if plan.GetEdgeKind() != "" {
+		t.Errorf("PlanRemoveBootstrap() says this account is fronted by the %q edge, want no single edge named where two stand", plan.GetEdgeKind())
+	}
+	for _, kind := range []edge.Kind{fake.KindRelay, fake.KindDirect} {
+		if !slices.ContainsFunc(plan.GetGroups(), func(g *contractv1.ChangeGroup) bool {
+			return g.GetName() == string(kind)+"/edge"
+		}) {
+			t.Errorf("plan groups = %+v, want a group named for the %q edge that stands", plan.GetGroups(), kind)
+		}
+	}
+}
+
+func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenNoEdgeStands(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client, provider := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	provider.Bootstrapper().Standing()
+
+	plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	if err != nil {
+		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
+	}
+	if plan.GetEdgeKind() != "" {
+		t.Errorf("PlanRemoveBootstrap() says this account is fronted by the %q edge, want none named where none stands", plan.GetEdgeKind())
 	}
 }
 

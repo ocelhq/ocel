@@ -3,6 +3,8 @@ package control
 import (
 	"context"
 	"errors"
+	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -51,13 +53,43 @@ func standingBootstrapper(t *testing.T, class string) Bootstrapper {
 		StateTable:     "ocel-state-table",
 		VarsTable:      "ocel-vars",
 	}
+	front := &teardownEdge{}
 	return Bootstrapper{
 		CFN:     &teardownCFN{present: map[string]bootstrap.Deployed{stackName: deployed}},
 		SSM:     &teardownSSM{params: stored},
 		IAM:     &teardownIAM{keys: map[string][]string{userName: {"AKIAOLD"}}},
 		Buckets: &teardownBuckets{},
-		Edge:    &teardownEdge{},
+		Edge:    front,
+		Edges:   registryOf(front),
 	}
+}
+
+func registryOf(fronts ...edge.Edge) edgeRegistry {
+	held := make(map[edge.Kind]edge.Edge, len(fronts))
+	for _, front := range fronts {
+		held[front.Kind()] = front
+	}
+	return edgeRegistry{held: held}
+}
+
+type edgeRegistry struct {
+	held map[edge.Kind]edge.Edge
+}
+
+func (r edgeRegistry) Supported() []edge.Kind {
+	kinds := slices.Collect(maps.Keys(r.held))
+	slices.Sort(kinds)
+	return kinds
+}
+
+func (r edgeRegistry) Default() edge.Kind { return cloudfrontKind }
+
+func (r edgeRegistry) Open(kind edge.Kind) (edge.Edge, error) {
+	front, ok := r.held[kind]
+	if !ok {
+		return nil, fmt.Errorf("no %s edge here", kind)
+	}
+	return front, nil
 }
 
 func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
@@ -178,10 +210,11 @@ func TestPlanCarriesTheEdgesRefusalOut(t *testing.T) {
 
 func planningBootstrapper(front edge.Edge) Bootstrapper {
 	return Bootstrapper{
-		CFN:  &teardownCFN{present: map[string]bootstrap.Deployed{}},
-		SSM:  &teardownSSM{params: map[string]string{}},
-		IAM:  &teardownIAM{keys: map[string][]string{}},
-		Edge: front,
+		CFN:   &teardownCFN{present: map[string]bootstrap.Deployed{}},
+		SSM:   &teardownSSM{params: map[string]string{}},
+		IAM:   &teardownIAM{keys: map[string][]string{}},
+		Edge:  front,
+		Edges: registryOf(front),
 	}
 }
 
@@ -258,10 +291,16 @@ func TestRemoveKeepsThePassphraseABootstrappedSiblingStillNeeds(t *testing.T) {
 
 type teardownEdge struct {
 	edge.Edge
+	kind     edge.Kind
 	torndown []edge.Class
 }
 
-func (e *teardownEdge) Kind() edge.Kind { return cloudflareKind }
+func (e *teardownEdge) Kind() edge.Kind {
+	if e.kind == "" {
+		return cloudflareKind
+	}
+	return e.kind
+}
 
 func (e *teardownEdge) Teardown(_ context.Context, class edge.Class) error {
 	e.torndown = append(e.torndown, class)

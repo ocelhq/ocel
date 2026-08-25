@@ -92,7 +92,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
 	if err != nil {
 		return nil, err
 	}
-	return settling{Bootstrapper: control.BootstrapperFor(p.aws, front), settled: p.forget}, nil
+	return settling{Bootstrapper: control.BootstrapperFor(p.aws, front, p.edges()), settled: p.forget}, nil
 }
 
 func (p *Provider) forget() {
