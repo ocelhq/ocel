@@ -589,13 +589,13 @@ export default {
 		wantErr []string
 	}{
 		{
-			name: "rejects an unparseable config and points at ocel init",
+			name: "rejects an unparseable config",
 			config: `
 export default {
   slug: "test-app",
   this is not valid typescript +++
 `,
-			wantErr: []string{"ocel init"},
+			wantErr: []string{"failed to evaluate"},
 		},
 		{
 			name: "names the missing slug",
@@ -772,6 +772,75 @@ export default {
 			}
 		})
 	}
+
+	t.Run("a recognized thrown error reads as one line without a stack", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeConfig(t, root, `
+class BuildEnvError extends Error {
+  name = "BuildEnvError";
+}
+throw new BuildEnvError("'VPS_HOST' missing — set it");
+export default { slug: "test-app" };
+`)
+
+		_, err := Resolve(context.Background(), root, "")
+		if err == nil {
+			t.Fatal("Resolve: expected error, got nil")
+		}
+		message := err.Error()
+		for _, want := range []string{"failed to evaluate", "BuildEnvError: 'VPS_HOST' missing"} {
+			if !strings.Contains(message, want) {
+				t.Errorf("err = %q, want it to contain %q", message, want)
+			}
+		}
+		for _, unwanted := range []string{"ocel init", "at ", ".ocel/config.mjs"} {
+			if strings.Contains(message, unwanted) {
+				t.Errorf("err = %q, want it free of %q", message, unwanted)
+			}
+		}
+	})
+
+	t.Run("an unrecognized thrown error keeps its stack", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeConfig(t, root, `
+throw new RangeError("boom");
+export default { slug: "test-app" };
+`)
+
+		_, err := Resolve(context.Background(), root, "")
+		if err == nil {
+			t.Fatal("Resolve: expected error, got nil")
+		}
+		message := err.Error()
+		if !strings.Contains(message, "boom") {
+			t.Errorf("err = %q, want it to contain %q", message, "boom")
+		}
+		if !strings.Contains(message, "at ") && !strings.Contains(message, "config.mjs") {
+			t.Errorf("err = %q, want it to carry the node stack", message)
+		}
+	})
+
+	t.Run("a thrown non-error still reaches the user", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeConfig(t, root, `
+throw "plain string";
+export default { slug: "test-app" };
+`)
+
+		_, err := Resolve(context.Background(), root, "")
+		if err == nil {
+			t.Fatal("Resolve: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "plain string") {
+			t.Errorf("err = %q, want it to contain %q", err.Error(), "plain string")
+		}
+	})
 
 	t.Run("missing config points at ocel init", func(t *testing.T) {
 		t.Parallel()
@@ -1406,5 +1475,43 @@ func TestEdgeKind(t *testing.T) {
 				t.Errorf("EdgeKind() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func writeDotenv(t *testing.T, dir, contents string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(contents), 0o644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+}
+
+const slugFromEnv = "export default { slug: process.env.FROM_DOTENV ?? \"unset\" };"
+
+func TestConfigEvalReadsDotenv(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, slugFromEnv)
+	writeDotenv(t, root, "FROM_DOTENV=from-file\n")
+
+	cfg, err := Resolve(context.Background(), root, "")
+	if err != nil {
+		t.Fatalf("Resolve() err = %v", err)
+	}
+	if cfg.Slug != "from-file" {
+		t.Errorf("Slug = %q, want the value the .env supplies", cfg.Slug)
+	}
+}
+
+func TestConfigEvalPrefersProcessEnvOverDotenv(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, slugFromEnv)
+	writeDotenv(t, root, "FROM_DOTENV=from-file\n")
+	t.Setenv("FROM_DOTENV", "from-process")
+
+	cfg, err := Resolve(context.Background(), root, "")
+	if err != nil {
+		t.Fatalf("Resolve() err = %v", err)
+	}
+	if cfg.Slug != "from-process" {
+		t.Errorf("Slug = %q, want the real environment to win over the .env", cfg.Slug)
 	}
 }

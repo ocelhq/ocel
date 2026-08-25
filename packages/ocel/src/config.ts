@@ -1,3 +1,5 @@
+export { buildEnv, BuildEnvError, type BuildEnv } from "./build-env.js";
+
 export interface ProviderDescriptor {
   package: string;
   options: unknown;
