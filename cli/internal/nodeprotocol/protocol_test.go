@@ -142,7 +142,7 @@ func TestProcessorErrReturnsTheLastErrorRecord(t *testing.T) {
 
 	send(p, ctx, record{Type: typeError, App: "api", Stage: "build", Message: "no entrypoint resolved"})
 
-	if got, want := p.Err(), "no entrypoint resolved"; got != want {
+	if got, want := p.Failure(), "no entrypoint resolved"; got != want {
 		t.Errorf("Err() = %q, want %q", got, want)
 	}
 }
@@ -205,7 +205,7 @@ func TestProcessorRecoversARecordGluedToAPrecedingUnterminatedLine(t *testing.T)
 	}
 	p.Scan(ctx, strings.NewReader("Compiling..."+"\n"+Prefix+string(raw)+"\n"))
 
-	if got, want := p.Err(), "no entrypoint resolved"; got != want {
+	if got, want := p.Failure(), "no entrypoint resolved"; got != want {
 		t.Errorf("Err() = %q, want %q (a record led by its own newline must survive a preceding partial line)", got, want)
 	}
 	if !strings.Contains(out.String(), "Compiling...") {

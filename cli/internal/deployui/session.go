@@ -176,9 +176,9 @@ func (s *Session) now() time.Time {
 	return s.r.plan.now().UTC()
 }
 
-func (s *Session) Deployed(headline string, appURLs []string, note string, flip Flip, links []*linksv1.Link, functions []*progressv1.FunctionOutput) {
+func (s *Session) Deployed(headline string, appURLs []string, urlNote string, flip Flip, links []*linksv1.Link, functions []*progressv1.FunctionOutput) {
 	s.logOutputs(links, functions)
-	s.r.Deployed(headline, appURLs, note, flip, s.logPath)
+	s.r.Deployed(headline, appURLs, urlNote, flip, s.logPath)
 }
 
 func (s *Session) Finish(headline string) {

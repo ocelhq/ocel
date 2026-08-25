@@ -122,7 +122,7 @@ func TestRunEnvSet(t *testing.T) {
 		})
 	})
 
-	t.Run("an override is its own cell beside the class-wide value", func(t *testing.T) {
+	t.Run("an override is its own cell beside the value bound to all environments", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 

@@ -15,15 +15,15 @@ import (
 	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
 )
 
-type runtimeShim struct {
+type blobProxy struct {
 	apiURL     string
 	token      string
 	projectID  string
 	httpClient *http.Client
 }
 
-func newRuntimeShim(apiURL, token, projectID string) *runtimeShim {
-	return &runtimeShim{
+func newBlobProxy(apiURL, token, projectID string) *blobProxy {
+	return &blobProxy{
 		apiURL:     apiURL,
 		token:      token,
 		projectID:  projectID,
@@ -59,7 +59,7 @@ type presignResponseBody struct {
 	Files     []presignedTarget `json:"files"`
 }
 
-func (s *runtimeShim) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRequest) (*blobv1.PresignUploadResponse, error) {
+func (s *blobProxy) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRequest) (*blobv1.PresignUploadResponse, error) {
 	files := make([]presignFile, 0, len(req.GetFiles()))
 	for _, f := range req.GetFiles() {
 		files = append(files, presignFile{
@@ -129,7 +129,7 @@ type verifyResponseBody struct {
 	Metadata []byte `json:"metadata"`
 }
 
-func (s *runtimeShim) VerifyUploadSignature(ctx context.Context, req *blobv1.VerifyUploadSignatureRequest) (*blobv1.VerifyUploadSignatureResponse, error) {
+func (s *blobProxy) VerifyUploadSignature(ctx context.Context, req *blobv1.VerifyUploadSignatureRequest) (*blobv1.VerifyUploadSignatureResponse, error) {
 	f := req.GetFile()
 	body, err := json.Marshal(signedCompletion{
 		SessionID: req.GetSessionId(),
@@ -172,7 +172,7 @@ type statusResponseBody struct {
 	Error string `json:"error"`
 }
 
-func (s *runtimeShim) GetUploadStatus(ctx context.Context, req *blobv1.GetUploadStatusRequest) (*blobv1.GetUploadStatusResponse, error) {
+func (s *blobProxy) GetUploadStatus(ctx context.Context, req *blobv1.GetUploadStatusRequest) (*blobv1.GetUploadStatusResponse, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, s.apiEndpoint("/api/blob/status")+"?sessionId="+url.QueryEscape(req.GetSessionId()), nil)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build status request: %w", err))
@@ -208,7 +208,7 @@ func uploadStateFromString(s string) blobv1.UploadState {
 	}
 }
 
-func (s *runtimeShim) apiEndpoint(path string) string {
+func (s *blobProxy) apiEndpoint(path string) string {
 	return endpoint(s.apiURL, path)
 }
 
@@ -216,7 +216,7 @@ func endpoint(base, path string) string {
 	return strings.TrimRight(base, "/") + path
 }
 
-func (s *runtimeShim) authorize(req *http.Request) {
+func (s *blobProxy) authorize(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	if s.token != "" {
 		req.Header.Set("Authorization", "Bearer "+s.token)

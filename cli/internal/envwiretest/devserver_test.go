@@ -1,4 +1,4 @@
-package envwire
+package envwiretest
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func TestDevserverDiscover(t *testing.T) {
 		}})
 
 		cfg := &projectconfig.Config{
-			Slug:      "devwire",
+			Slug:      "devserver",
 			Dir:       root,
 			Discovery: projectconfig.Discovery{Paths: []string{"ocel"}},
 		}

@@ -249,7 +249,7 @@ func (p *Processor) Abort() {
 	}
 }
 
-func (p *Processor) Err() string {
+func (p *Processor) Failure() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.err

@@ -23,7 +23,7 @@ func cellsOf(held heldCells, key string) []Cell {
 	return out
 }
 
-func (g *Gate) classWideCells() heldCells {
+func (g *Gate) baseCells() heldCells {
 	cells := make(heldCells, len(g.cells))
 	for _, row := range g.cells {
 		cells[row.Cell] = row.Version
@@ -32,7 +32,7 @@ func (g *Gate) classWideCells() heldCells {
 }
 
 func (g *Gate) resolvedCells() heldCells {
-	cells := g.classWideCells()
+	cells := g.baseCells()
 	if g.scope.Environment == "" {
 		return cells
 	}

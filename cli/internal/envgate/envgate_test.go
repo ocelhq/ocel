@@ -302,7 +302,7 @@ func TestCheck(t *testing.T) {
 
 		err := g.Check()
 		if err == nil {
-			t.Fatal("Check err = nil, want a refusal — pr-42 holds a value the deploy never resolves, so the class-wide cell is still empty")
+			t.Fatal("Check err = nil, want a refusal — pr-42 holds a value the deploy never resolves, so the cell every environment reads is still empty")
 		}
 		for _, want := range []string{"STRIPE_API_KEY", "no value is set"} {
 			if !strings.Contains(err.Error(), want) {
@@ -443,7 +443,7 @@ func TestDeclareEnv(t *testing.T) {
 		declare(t, g, def("ANALYTICS_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
 		if len(values.revealed) != 0 {
-			t.Errorf("revealed = %+v, want nothing decrypted for a cell the class-wide set does not hold", values.revealed)
+			t.Errorf("revealed = %+v, want nothing decrypted for a cell the base set does not hold", values.revealed)
 		}
 	})
 
@@ -453,13 +453,13 @@ func TestDeclareEnv(t *testing.T) {
 		want        string
 	}{
 		{"the run's own environment resolves its override", "pr-42", "override"},
-		{"another environment resolves class-wide", "pr-7", "class-wide"},
-		{"a run bound to no environment resolves class-wide", "", "class-wide"},
+		{"another environment resolves the base value", "pr-7", "base"},
+		{"a run bound to no environment resolves the base value", "", "base"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			values := newFakeValues()
-			values.set("ANALYTICS_ID", "", "class-wide")
+			values.set("ANALYTICS_ID", "", "base")
 			values.override("ANALYTICS_ID", "", "pr-42", "override")
 
 			g := prefetched(t, values, envgate.Scope{Preview: true, Environment: tc.environment})

@@ -386,7 +386,7 @@ func TestRecord(t *testing.T) {
 			t.Fatalf("Record: %v", err)
 		}
 
-		if got := read(t, filepath.Join(root, ".ocel", "output", "client-values.json")); strings.Contains(got, "https://example.com") {
+		if got := read(t, filepath.Join(root, ".ocel", "output", "client-digests.json")); strings.Contains(got, "https://example.com") {
 			t.Errorf("record carries the value itself: %s", got)
 		}
 	})

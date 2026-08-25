@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 )
 
-func serveRuntime(t *testing.T, handler http.HandlerFunc) blobv1connect.BucketServiceClient {
+func serveBlob(t *testing.T, handler http.HandlerFunc) blobv1connect.BucketServiceClient {
 	t.Helper()
 	api := httptest.NewServer(handler)
 	t.Cleanup(api.Close)
@@ -32,7 +32,7 @@ func TestPresignUpload(t *testing.T) {
 	t.Run("refuses a key that climbs out of the tenant prefix", func(t *testing.T) {
 		t.Parallel()
 		reached := false
-		client := serveRuntime(t, func(w http.ResponseWriter, r *http.Request) {
+		client := serveBlob(t, func(w http.ResponseWriter, r *http.Request) {
 			reached = true
 			json.NewEncoder(w).Encode(presignResponseBody{SessionID: "sess_123"})
 		})
@@ -58,7 +58,7 @@ func TestPresignUpload(t *testing.T) {
 		var gotAuth, gotPath string
 		var gotBody presignRequestBody
 
-		client := serveRuntime(t, func(w http.ResponseWriter, r *http.Request) {
+		client := serveBlob(t, func(w http.ResponseWriter, r *http.Request) {
 			gotAuth = r.Header.Get("Authorization")
 			gotPath = r.URL.Path
 			if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
@@ -121,7 +121,7 @@ func TestPresignUpload(t *testing.T) {
 
 	t.Run("propagates an API error", func(t *testing.T) {
 		t.Parallel()
-		client := serveRuntime(t, func(w http.ResponseWriter, _ *http.Request) {
+		client := serveBlob(t, func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 		})
 
@@ -144,7 +144,7 @@ func TestVerifyUploadSignature(t *testing.T) {
 		var gotBody signedCompletion
 		rawMetadata := []byte(`{"uploader":"avatar","metadata":{"userId":"u1"}}`)
 
-		client := serveRuntime(t, func(w http.ResponseWriter, r *http.Request) {
+		client := serveBlob(t, func(w http.ResponseWriter, r *http.Request) {
 			gotAuth, gotPath = r.Header.Get("Authorization"), r.URL.Path
 			_ = json.NewDecoder(r.Body).Decode(&gotBody)
 			json.NewEncoder(w).Encode(verifyResponseBody{Valid: true, Metadata: rawMetadata})
@@ -171,7 +171,7 @@ func TestVerifyUploadSignature(t *testing.T) {
 
 	t.Run("propagates an API error", func(t *testing.T) {
 		t.Parallel()
-		client := serveRuntime(t, func(w http.ResponseWriter, _ *http.Request) {
+		client := serveBlob(t, func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "boom", http.StatusInternalServerError)
 		})
 
@@ -193,7 +193,7 @@ func TestGetUploadStatus(t *testing.T) {
 	t.Run("forwards to the Ocel API", func(t *testing.T) {
 		t.Parallel()
 		var gotPath, gotQuery string
-		client := serveRuntime(t, func(w http.ResponseWriter, r *http.Request) {
+		client := serveBlob(t, func(w http.ResponseWriter, r *http.Request) {
 			gotPath, gotQuery = r.URL.Path, r.URL.Query().Get("sessionId")
 			json.NewEncoder(w).Encode(statusResponseBody{State: "succeeded"})
 		})

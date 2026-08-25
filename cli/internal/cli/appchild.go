@@ -56,7 +56,7 @@ func spawnAppChild(ctx context.Context, cmd *exec.Cmd, stdin io.Reader, isTermin
 		snap = snapshotTerminal(stdin)
 		cmd.Cancel = func() error { return terminateAppTree(cmd) }
 	} else {
-		procgroup.New(cmd)
+		procgroup.Isolate(cmd)
 		cmd.Cancel = func() error { return procgroup.Terminate(cmd) }
 	}
 	cmd.WaitDelay = appChildWaitDelay

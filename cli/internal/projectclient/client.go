@@ -3,6 +3,7 @@ package projectclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,12 +55,7 @@ func IsUnauthorized(err error) bool {
 }
 
 func asAPIError(err error, target **APIError) bool {
-	apiErr, ok := err.(*APIError)
-	if !ok {
-		return false
-	}
-	*target = apiErr
-	return true
+	return errors.As(err, target)
 }
 
 func (c *Client) postJSON(ctx context.Context, path, accessToken string, body, out any) error {

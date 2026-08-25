@@ -12,7 +12,7 @@ func TestKillOnAlreadyGoneGroupReturnsNil(t *testing.T) {
 	t.Parallel()
 
 	cmd := exec.Command("sleep", "5")
-	New(cmd)
+	Isolate(cmd)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestTerminateOnAlreadyGoneGroupReturnsNil(t *testing.T) {
 	t.Parallel()
 
 	cmd := exec.Command("sleep", "5")
-	New(cmd)
+	Isolate(cmd)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}

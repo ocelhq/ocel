@@ -33,7 +33,7 @@ func Run(ctx context.Context, entry, resourceServerURL string, stdout, stderr io
 
 	if runErr != nil {
 		proc.Abort()
-		if msg := proc.Err(); msg != "" {
+		if msg := proc.Failure(); msg != "" {
 			return fmt.Errorf("discovery failed (%w): %s", runErr, msg)
 		}
 		return fmt.Errorf("discovery failed: %w", runErr)

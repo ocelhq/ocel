@@ -176,7 +176,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 	}
 
 	reportLiveValues(stdout, syncResult.LiveKeys)
-	return resolvedEnv(syncResult.Account.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, syncResult.RuntimeAddress, appFolder), nil
+	return resolvedEnv(syncResult.Account.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, syncResult.DevServerAddress, appFolder), nil
 }
 
 func reportLiveValues(stdout io.Writer, liveKeys []string) {
