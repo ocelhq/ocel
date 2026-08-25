@@ -203,88 +203,135 @@ func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, cla
 	if err != nil {
 		return edge.Offer{}, err
 	}
-	bundles, err := edge.LoadISRWriterBundleManifest()
+	worker, err := isrWriterBundle()
 	if err != nil {
 		return edge.Offer{}, err
 	}
-	path, err := bundles.Path(Kind)
-	if err != nil {
-		return edge.Offer{}, err
-	}
-	worker, err := readWorkerBundle(path)
-	if err != nil {
-		return edge.Offer{}, err
-	}
-
-	deployed, err := p.deployedClasses(ctx, scriptName)
-	if err != nil {
-		return edge.Offer{}, fmt.Errorf("read isr-writer worker Durable Object classes: %w", err)
-	}
-	cred, err := mintSecret()
-	if err != nil {
-		return edge.Offer{}, fmt.Errorf("mint bootstrap credential: %w", err)
-	}
-
 	worker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(class)}
-	up := upload{accountID: accountID, scriptName: scriptName, worker: withSecret(worker, bootstrapSecretBinding, cred)}
-	if err := p.putDurableObjectScript(ctx, up, isrWriterWorker, deployed); err != nil {
-		return edge.Offer{}, fmt.Errorf("put isr-writer worker: %w", err)
-	}
-	endpoint, err := p.setSubdomain(ctx, up, true)
+
+	settled, err := p.settleDurableObjectWorker(ctx, accountID, bootstrapWorker{
+		scriptName: scriptName,
+		worker:     worker,
+		do:         isrWriterWorker,
+		what:       "isr-writer worker",
+	})
 	if err != nil {
-		return edge.Offer{}, fmt.Errorf("set isr-writer worker subdomain: %w", err)
+		return edge.Offer{}, err
 	}
 
-	return edge.Offer{
-		Kind: edge.OfferISRWriter,
-		Values: map[string]string{
-			edge.OfferKeyISRWriterEndpoint:      endpoint,
-			edge.OfferKeyISRWriterScriptName:    scriptName,
-			edge.OfferKeyISRWriterBootstrapCred: cred,
-		},
-	}, nil
+	values := map[string]string{
+		edge.OfferKeyISRWriterEndpoint:   settled.endpoint,
+		edge.OfferKeyISRWriterScriptName: scriptName,
+	}
+	if settled.cred != "" {
+		values[edge.OfferKeyISRWriterBootstrapCred] = settled.cred
+	}
+	return edge.Offer{Kind: edge.OfferISRWriter, Values: values}, nil
 }
 
 func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName string) (edge.Offer, error) {
+	worker, err := storeWorkerBundle()
+	if err != nil {
+		return edge.Offer{}, err
+	}
+
+	settled, err := p.settleDurableObjectWorker(ctx, accountID, bootstrapWorker{
+		scriptName: scriptName,
+		worker:     worker,
+		do:         deploymentsStoreWorker,
+		what:       "deployments-store worker",
+	})
+	if err != nil {
+		return edge.Offer{}, err
+	}
+
+	values := map[string]string{
+		edge.OfferKeyStoreEndpoint:   settled.endpoint,
+		edge.OfferKeyStoreScriptName: scriptName,
+	}
+	if settled.cred != "" {
+		values[edge.OfferKeyStoreBootstrapCred] = settled.cred
+	}
+	return edge.Offer{Kind: edge.OfferDeploymentsStore, Values: values}, nil
+}
+
+type bootstrapWorker struct {
+	scriptName string
+	worker     edge.Worker
+	do         durableObjectWorker
+	what       string
+}
+
+type settledWorker struct {
+	endpoint string
+	cred     string
+}
+
+func (p *provider) settleDurableObjectWorker(ctx context.Context, accountID string, b bootstrapWorker) (settledWorker, error) {
+	state, err := p.readWorkerState(ctx, accountID, b.scriptName, b.worker.Main)
+	if err != nil {
+		return settledWorker{}, err
+	}
+
+	up := upload{accountID: accountID, scriptName: b.scriptName, worker: b.worker}
+	var cred string
+	var inherited []string
+	if state.secretHeld {
+		inherited = []string{bootstrapSecretBinding}
+	} else {
+		cred, err = mintSecret()
+		if err != nil {
+			return settledWorker{}, fmt.Errorf("mint bootstrap credential: %w", err)
+		}
+		up.worker = withSecret(b.worker, bootstrapSecretBinding, cred)
+	}
+
+	if !state.present || !state.current || cred != "" {
+		deployed, err := p.deployedClasses(ctx, b.scriptName)
+		if err != nil {
+			return settledWorker{}, fmt.Errorf("read %s Durable Object classes: %w", b.what, err)
+		}
+		if err := p.putDurableObjectScript(ctx, up, b.do, deployed, inherited); err != nil {
+			return settledWorker{}, fmt.Errorf("put %s: %w", b.what, err)
+		}
+	}
+
+	if !state.subdomainOn {
+		endpoint, err := p.setSubdomain(ctx, up, true)
+		if err != nil {
+			return settledWorker{}, fmt.Errorf("set %s subdomain: %w", b.what, err)
+		}
+		return settledWorker{endpoint: endpoint, cred: cred}, nil
+	}
+	endpoint, err := p.subdomainURL(ctx, accountID, b.scriptName)
+	if err != nil {
+		return settledWorker{}, fmt.Errorf("read %s subdomain: %w", b.what, err)
+	}
+	return settledWorker{endpoint: endpoint, cred: cred}, nil
+}
+
+func storeWorkerBundle() (edge.Worker, error) {
 	bundles, err := edge.LoadStoreBundleManifest()
 	if err != nil {
-		return edge.Offer{}, err
+		return edge.Worker{}, err
 	}
+	return bundleWorker(bundles)
+}
+
+func isrWriterBundle() (edge.Worker, error) {
+	bundles, err := edge.LoadISRWriterBundleManifest()
+	if err != nil {
+		return edge.Worker{}, err
+	}
+	return bundleWorker(bundles)
+}
+
+func bundleWorker(bundles edge.KindBundleManifest) (edge.Worker, error) {
 	path, err := bundles.Path(Kind)
 	if err != nil {
-		return edge.Offer{}, err
+		return edge.Worker{}, err
 	}
-	worker, err := readWorkerBundle(path)
-	if err != nil {
-		return edge.Offer{}, err
-	}
-
-	deployed, err := p.deployedClasses(ctx, scriptName)
-	if err != nil {
-		return edge.Offer{}, fmt.Errorf("read deployments-store worker Durable Object classes: %w", err)
-	}
-	cred, err := mintSecret()
-	if err != nil {
-		return edge.Offer{}, fmt.Errorf("mint bootstrap credential: %w", err)
-	}
-
-	up := upload{accountID: accountID, scriptName: scriptName, worker: withSecret(worker, bootstrapSecretBinding, cred)}
-	if err := p.putDurableObjectScript(ctx, up, deploymentsStoreWorker, deployed); err != nil {
-		return edge.Offer{}, fmt.Errorf("put deployments-store worker: %w", err)
-	}
-	endpoint, err := p.setSubdomain(ctx, up, true)
-	if err != nil {
-		return edge.Offer{}, fmt.Errorf("set deployments-store worker subdomain: %w", err)
-	}
-
-	return edge.Offer{
-		Kind: edge.OfferDeploymentsStore,
-		Values: map[string]string{
-			edge.OfferKeyStoreEndpoint:      endpoint,
-			edge.OfferKeyStoreScriptName:    scriptName,
-			edge.OfferKeyStoreBootstrapCred: cred,
-		},
-	}, nil
+	return readWorkerBundle(path)
 }
 
 func readWorkerBundle(path string) (edge.Worker, error) {
@@ -646,12 +693,15 @@ func (p *provider) setSubdomain(ctx context.Context, up upload, enabled bool) (s
 	if !enabled {
 		return "", nil
 	}
+	return p.subdomainURL(ctx, up.accountID, up.scriptName)
+}
 
+func (p *provider) subdomainURL(ctx context.Context, accountID, scriptName string) (string, error) {
 	account, err := p.client.Workers.Subdomains.Get(ctx, workers.SubdomainGetParams{
-		AccountID: cf.F(up.accountID),
+		AccountID: cf.F(accountID),
 	})
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("https://%s.%s.workers.dev", up.scriptName, account.Subdomain), nil
+	return fmt.Sprintf("https://%s.%s.workers.dev", scriptName, account.Subdomain), nil
 }

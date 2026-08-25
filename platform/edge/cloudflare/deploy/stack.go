@@ -58,6 +58,8 @@ type durableObjectClass struct {
 
 const durableObjectBindingType = "durable_object_namespace"
 
+const inheritedBindingType = "inherit"
+
 type migrationStep struct {
 	tag           string
 	sqliteClasses []string
@@ -358,8 +360,8 @@ func (p *provider) destroyWorkers(ctx context.Context, names []string) error {
 	return errors.Join(errs...)
 }
 
-func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do durableObjectWorker, deployedClasses []string) error {
-	body, contentType, err := buildDurableObjectScriptMultipart(up.worker, do, deployedClasses)
+func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do durableObjectWorker, deployedClasses, inherited []string) error {
+	body, contentType, err := buildDurableObjectScriptMultipart(up.worker, do, deployedClasses, inherited)
 	if err != nil {
 		return err
 	}
@@ -369,13 +371,19 @@ func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do dur
 	return err
 }
 
-func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectWorker, deployedClasses []string) ([]byte, string, error) {
+func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectWorker, deployedClasses, inherited []string) ([]byte, string, error) {
 	bindings := scriptBindings(worker, false)
 	for _, class := range do.classes {
 		bindings = append(bindings, map[string]any{
 			"type":       durableObjectBindingType,
 			"name":       class.binding,
 			"class_name": class.className,
+		})
+	}
+	for _, name := range inherited {
+		bindings = append(bindings, map[string]any{
+			"type": inheritedBindingType,
+			"name": name,
 		})
 	}
 	metadata := map[string]any{
