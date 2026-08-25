@@ -81,6 +81,121 @@ func TestRender(t *testing.T) {
 	}
 }
 
+func bootstrapPlan() *contractv1.ChangePlan {
+	return &contractv1.ChangePlan{
+		Subject: "production",
+		Groups: []*contractv1.ChangeGroup{
+			{
+				Kind:   "stack",
+				Name:   "aws/ocel-bootstrap",
+				Action: contractv1.Change_ACTION_UPDATE,
+				Changes: []*contractv1.Change{
+					{Kind: "AWS::Lambda::Function", Name: "OcelRouterFunction", Action: contractv1.Change_ACTION_UPDATE},
+				},
+			},
+			{
+				Kind:    "stack",
+				Name:    "aws/ocel-bootstrap-cloudflare-edge",
+				Feature: "cloudflare-edge",
+				Action:  contractv1.Change_ACTION_CREATE,
+				Changes: []*contractv1.Change{
+					{Kind: "AWS::IAM::User", Name: "EdgeUser", Action: contractv1.Change_ACTION_CREATE},
+					{Kind: "AWS::Lambda::Function", Name: "TagPublisher", Action: contractv1.Change_ACTION_CREATE},
+				},
+			},
+			{
+				Kind:    "stack",
+				Name:    "aws/ocel-bootstrap-isr",
+				Feature: "isr",
+				Action:  contractv1.Change_ACTION_KEEP,
+				Reason:  "already current",
+			},
+			{
+				Kind:    "edge",
+				Name:    "cloudflare/edge",
+				Feature: "cloudflare-edge",
+				Action:  contractv1.Change_ACTION_CREATE,
+				Changes: []*contractv1.Change{
+					{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: contractv1.Change_ACTION_CREATE},
+					{Kind: "Cloudflare::APIToken", Name: "ocel-edge-cache", Action: contractv1.Change_ACTION_CREATE},
+					{Kind: "Cloudflare::Worker", Name: "ocel-deployments-store", Action: contractv1.Change_ACTION_CREATE},
+					{Kind: "Cloudflare::WorkerSecret", Name: "ocel-deployments-store/BOOTSTRAP_SECRET", Action: contractv1.Change_ACTION_CREATE},
+					{Kind: "Cloudflare::WorkerSubdomain", Name: "ocel-deployments-store", Action: contractv1.Change_ACTION_CREATE},
+				},
+			},
+		},
+	}
+}
+
+func TestRenderNamesTheVendorAndLeavesTheKindUnsaid(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	changeplan.NewPrinter(&out).Render("Proposed changes to the production bootstrap", bootstrapPlan())
+
+	want := `Proposed changes to the production bootstrap:
+
+~ aws/ocel-bootstrap  [core]
+    ~ OcelRouterFunction  AWS::Lambda::Function
+
++ aws/ocel-bootstrap-cloudflare-edge  [cloudflare-edge]
+    + EdgeUser      AWS::IAM::User
+    + TagPublisher  AWS::Lambda::Function
+
+  aws/ocel-bootstrap-isr  [isr]  — already current
+
++ cloudflare/edge  [cloudflare-edge]
+    + ocel-edge-cache                          Cloudflare::R2Bucket
+    + ocel-edge-cache                          Cloudflare::APIToken
+    + ocel-deployments-store                   Cloudflare::Worker
+    + ocel-deployments-store/BOOTSTRAP_SECRET  Cloudflare::WorkerSecret
+    + ocel-deployments-store                   Cloudflare::WorkerSubdomain
+
+7 to create, 1 to update.
+`
+	if out.String() != want {
+		t.Errorf("Render() =\n%s\nwant\n%s", out.String(), want)
+	}
+	if changeplan.AllKeep(bootstrapPlan()) {
+		t.Error("AllKeep() = true for a plan holding creates and an update")
+	}
+	if got := changeplan.ConfirmVerb(bootstrapPlan()); got != "Apply these changes" {
+		t.Errorf("ConfirmVerb() = %q, want a plan mixing creates and an update to read as one", got)
+	}
+}
+
+func TestRenderKeepsAnEdgeThatIsAlreadyCurrent(t *testing.T) {
+	t.Parallel()
+
+	plan := &contractv1.ChangePlan{Groups: []*contractv1.ChangeGroup{
+		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: contractv1.Change_ACTION_KEEP, Reason: "already current"},
+		{
+			Kind:    "edge",
+			Name:    "cloudflare/edge",
+			Feature: "cloudflare-edge",
+			Action:  contractv1.Change_ACTION_KEEP,
+			Reason:  "already current",
+			Changes: []*contractv1.Change{
+				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: contractv1.Change_ACTION_KEEP, Reason: "already current"},
+			},
+		},
+	}}
+	var out bytes.Buffer
+	changeplan.NewPrinter(&out).Render("Proposed changes to the production bootstrap", plan)
+
+	want := `Proposed changes to the production bootstrap:
+
+  aws/ocel-bootstrap  [core]  — already current
+  cloudflare/edge  [cloudflare-edge]  — already current
+`
+	if out.String() != want {
+		t.Errorf("Render() =\n%s\nwant\n%s", out.String(), want)
+	}
+	if !changeplan.AllKeep(plan) {
+		t.Error("AllKeep() = false for a plan whose stacks and edge are both current")
+	}
+}
+
 func TestRenderCountsAChildlessGroupAsOneItem(t *testing.T) {
 	t.Parallel()
 

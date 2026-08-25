@@ -75,10 +75,10 @@ func (p *provider) PlanBootstrap(ctx context.Context, class edge.Class) ([]edge.
 func bootstrapCredentials() (string, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
-		return "", fmt.Errorf("%s is not set; it is required to plan the Cloudflare edge bootstrap", envAccountID)
+		return "", fmt.Errorf("%s is not set; export it and re-run", envAccountID)
 	}
 	if os.Getenv(envAPIToken) == "" {
-		return "", fmt.Errorf("%s is not set; it is required to plan the Cloudflare edge bootstrap", envAPIToken)
+		return "", fmt.Errorf("%s is not set; export it and re-run", envAPIToken)
 	}
 	return accountID, nil
 }
