@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/removalplan"
+	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -36,8 +36,8 @@ func TestPrintDestroyPlan(t *testing.T) {
 		for _, want := range []string{
 			`production project "proj_shop"`,
 			"fronted by the cloudflare edge",
-			"delete edge stack shop",
-			"disable, then delete distribution E1SHOP (this one is slow)",
+			"– edge stack shop",
+			"– disable, then delete distribution E1SHOP (this one is slow)",
 			"infra stack shop--infra",
 			"INCLUDING ALL DATA",
 			"app stack shop--web--b1",
@@ -45,13 +45,13 @@ func TestPrintDestroyPlan(t *testing.T) {
 			"every production variable value",
 			"This cannot be undone.",
 			"Left in place:",
-			"keep certificate shop.example.com — you pinned this certificate",
+			"  certificate shop.example.com — you pinned this certificate",
 		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("printDestroyPlan output missing %q; got:\n%s", want, got)
 			}
 		}
-		if strings.Index(got, "keep certificate") < strings.Index(got, "This cannot be undone.") {
+		if strings.Index(got, "  certificate") < strings.Index(got, "This cannot be undone.") {
 			t.Errorf("printDestroyPlan listed a kept item among the doomed ones; got:\n%s", got)
 		}
 	})
@@ -68,10 +68,10 @@ func TestPrintDestroyPlan(t *testing.T) {
 			},
 		})
 		got := out.String()
-		if !strings.Contains(got, "delete REST APIs shop (this one is slow)") {
+		if !strings.Contains(got, "– REST APIs shop (this one is slow)") {
 			t.Errorf("printDestroyPlan output missing the slow REST APIs line; got:\n%s", got)
 		}
-		if !strings.Contains(got, "delete domain names shop.example.com\n") {
+		if !strings.Contains(got, "– domain names shop.example.com\n") {
 			t.Errorf("printDestroyPlan marked an unpaced item slow; got:\n%s", got)
 		}
 	})
@@ -79,13 +79,13 @@ func TestPrintDestroyPlan(t *testing.T) {
 	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
 		t.Parallel()
 
-		got := removalplan.GroupLine(&contractv1.ChangeGroup{
+		got := changeplan.GroupLine(&contractv1.ChangeGroup{
 			Kind:   "certificate",
 			Name:   "shop.example.com",
 			Action: contractv1.Change_Action(97),
 		})
 		if !strings.Contains(got, "an action this CLI does not know") || !strings.HasSuffix(got, "certificate shop.example.com") {
-			t.Errorf("removalplan.GroupLine() = %q, want the unknown action named before the resource", got)
+			t.Errorf("changeplan.GroupLine() = %q, want the unknown action named before the resource", got)
 		}
 	})
 }
@@ -108,21 +108,21 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 		for _, want := range []string{
 			`ENTIRE preview footprint of project "test-app"`,
 			"fronted by the cloudfront edge",
-			"delete edge workers test-app",
-			"infra stack test-app--pr-1--infra — databases and buckets, INCLUDING ALL DATA",
+			"– edge workers test-app",
+			"– infra stack test-app--pr-1--infra — databases and buckets, INCLUDING ALL DATA",
 			"infra stack test-app--pr-2--infra",
 			"app stack test-app--pr-1--web--b1",
 			"every preview variable value",
 			"The account-level preview bootstrap is left intact. This cannot be undone.",
 			"Left in place:",
-			"keep preview wildcard *.preview.acme.com — bootstrap-scoped",
+			"  preview wildcard *.preview.acme.com — bootstrap-scoped",
 			"DESTROY PROJECT project=test-app dns= tier=TIER_PREVIEW",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		if strings.Index(out, "keep preview wildcard") < strings.Index(out, "This cannot be undone.") {
+		if strings.Index(out, "  preview wildcard") < strings.Index(out, "This cannot be undone.") {
 			t.Errorf("stdout listed a kept item among the doomed ones:\n%s", out)
 		}
 		if strings.Contains(out, "Type the project name") {
@@ -184,7 +184,7 @@ func TestRunDestroy(t *testing.T) {
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
-		t.Setenv(removalplan.BypassEnv, "test-app")
+		t.Setenv(changeplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
 		err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader(""))
@@ -194,8 +194,8 @@ func TestRunDestroy(t *testing.T) {
 		if strings.Contains(stdout.String(), "Type the project name") {
 			t.Errorf("stdout = %q, want the bypass to skip the typed-name confirmation", stdout.String())
 		}
-		if !strings.Contains(stderr.String(), removalplan.BypassEnv) {
-			t.Errorf("stderr = %q, want it to name %s so an unconfirmed destroy is never silent", stderr.String(), removalplan.BypassEnv)
+		if !strings.Contains(stderr.String(), changeplan.BypassEnv) {
+			t.Errorf("stderr = %q, want it to name %s so an unconfirmed destroy is never silent", stderr.String(), changeplan.BypassEnv)
 		}
 	})
 
@@ -206,7 +206,7 @@ func TestRunDestroy(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(removalplan.BypassEnv, "test-app")
+		t.Setenv(changeplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -216,9 +216,9 @@ func TestRunDestroy(t *testing.T) {
 		out := stdout.String()
 		for _, want := range []string{
 			"fronted by the cloudfront edge",
-			"delete edge stack test-app",
-			"disable, then delete distribution E1test-app (this one is slow)",
-			"keep certificate test-app.example.com — you pinned this certificate; Ocel never deletes one it did not request",
+			"– edge stack test-app",
+			"– disable, then delete distribution E1test-app (this one is slow)",
+			"  certificate test-app.example.com — you pinned this certificate; Ocel never deletes one it did not request",
 			"infra stack test-app--infra",
 			"app stack test-app--web--b1",
 			"DESTROY PROJECT project=test-app",
@@ -237,7 +237,7 @@ func TestRunDestroy(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeEmptyRemovalPlanEnvVar, "1")
-		t.Setenv(removalplan.BypassEnv, "test-app")
+		t.Setenv(changeplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -260,20 +260,20 @@ func TestRunDestroy(t *testing.T) {
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
-		t.Setenv(removalplan.BypassEnv, "1")
+		t.Setenv(changeplan.BypassEnv, "1")
 
 		var stdout, stderr bytes.Buffer
 		err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
-			t.Fatalf("runDestroyProduction err = nil, want an ambient %s=1 refused; stdout=%s", removalplan.BypassEnv, stdout.String())
+			t.Fatalf("runDestroyProduction err = nil, want an ambient %s=1 refused; stdout=%s", changeplan.BypassEnv, stdout.String())
 		}
-		if !strings.Contains(err.Error(), removalplan.BypassEnv) || !strings.Contains(err.Error(), "test-app") {
-			t.Errorf("err = %v, want it to name %s and the project", err, removalplan.BypassEnv)
+		if !strings.Contains(err.Error(), changeplan.BypassEnv) || !strings.Contains(err.Error(), "test-app") {
+			t.Errorf("err = %v, want it to name %s and the project", err, changeplan.BypassEnv)
 		}
 	})
 
 	t.Run("an unset bypass is not a bypass", func(t *testing.T) {
-		t.Setenv(removalplan.BypassEnv, "")
+		t.Setenv(changeplan.BypassEnv, "")
 		var stdout, stderr bytes.Buffer
 		err := runDestroyProduction(context.Background(), newDeps(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), "interactive terminal") {

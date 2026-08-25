@@ -20,7 +20,7 @@ func describeJournal(t *testing.T) string {
 	return path
 }
 
-func TestOnlyTheCommandThatRendersDependentsAsksForThem(t *testing.T) {
+func TestNothingPaysForDependentsTheCommandsNoLongerRender(t *testing.T) {
 	t.Run("status reads the bootstrap and nothing that grows with the account", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
@@ -42,7 +42,7 @@ func TestOnlyTheCommandThatRendersDependentsAsksForThem(t *testing.T) {
 		}
 	})
 
-	t.Run("bootstrap asks, because it names who breaks when a feature goes", func(t *testing.T) {
+	t.Run("bootstrap reads the catalogue, then plans the apply it is about to send", func(t *testing.T) {
 		root, _, deps := clitest.SetUpEdgeFixture(t, "")
 		journal := describeJournal(t)
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
@@ -52,8 +52,14 @@ func TestOnlyTheCommandThatRendersDependentsAsksForThem(t *testing.T) {
 			t.Fatalf("runBootstrap err = %v; stderr=%s", err, stderr.String())
 		}
 		got := clitest.ReadJournal(t, journal)
-		if len(got) != 1 || !strings.Contains(got[0], "withDependents=true") {
-			t.Errorf("the provider was asked %v, want the one ask to carry the dependents this command prints", got)
+		if len(got) != 2 {
+			t.Fatalf("the provider was asked %d times, want the catalogue and then the plan: %v", len(got), got)
+		}
+		if slices.ContainsFunc(got, func(line string) bool { return strings.Contains(line, "withDependents=true") }) {
+			t.Errorf("bootstrap asked %v; the plan's own delete reasons name who breaks, and reading them costs one query per project in the account", got)
+		}
+		if strings.Contains(got[0], "intent=") || !strings.Contains(got[1], "intent=features=isr,force=false") {
+			t.Errorf("the provider was asked %v, want the second ask to carry the apply it would send", got)
 		}
 	})
 }

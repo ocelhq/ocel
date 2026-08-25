@@ -376,10 +376,10 @@ export default {
 		for _, want := range []string{
 			"This will release *.preview.acme.com",
 			"fronted by the cloudflare edge",
-			"delete preview entry worker *.preview.acme.com",
+			"– preview entry worker *.preview.acme.com",
 			"This cannot be undone.",
 			"Left in place:",
-			"keep DNS record *.preview.acme.com CNAME you.example.com — you created it yourself; ocel never wrote it",
+			"  DNS record *.preview.acme.com CNAME you.example.com — you created it yourself; ocel never wrote it",
 			"RELEASE DOMAIN tier=TIER_PREVIEW",
 			"Released *.preview.acme.com",
 		} {
@@ -387,7 +387,7 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		if strings.Index(out, "keep DNS record") < strings.Index(out, "This cannot be undone.") {
+		if strings.Index(out, "  DNS record") < strings.Index(out, "This cannot be undone.") {
 			t.Errorf("stdout listed a kept item among the doomed ones:\n%s", out)
 		}
 		waitForNoStaleSocket(t, sockPath)

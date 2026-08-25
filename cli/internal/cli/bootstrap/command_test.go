@@ -67,7 +67,7 @@ func TestBootstrapClassCommands(t *testing.T) {
 		if found.Name() != tc.want {
 			t.Errorf("Find(%q) = %q, want %q", tc.typed, found.Name(), tc.want)
 		}
-		for _, flag := range []string{"yes", "features", "force", "auto-heal"} {
+		for _, flag := range []string{"yes", "dry", "features", "force", "auto-heal"} {
 			if found.Flags().Lookup(flag) == nil {
 				t.Errorf("%s carries no --%s", found.Name(), flag)
 			}

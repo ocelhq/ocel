@@ -214,19 +214,3 @@ func droppedFeatures(enabled, requested []string) []string {
 	}
 	return dropped
 }
-
-func dependentProjects(catalogue []*contractv1.Feature, dropped []string) []string {
-	var projects []string
-	for _, f := range catalogue {
-		if !slices.Contains(dropped, f.GetName()) {
-			continue
-		}
-		for _, project := range f.GetDependents() {
-			if !slices.Contains(projects, project) {
-				projects = append(projects, project)
-			}
-		}
-	}
-	slices.Sort(projects)
-	return projects
-}
