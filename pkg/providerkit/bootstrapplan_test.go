@@ -240,6 +240,60 @@ func TestEdgeGroupThatAccountsForNothingIsNotCalledCurrent(t *testing.T) {
 	}
 }
 
+func TestEdgeGroupOf(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a group carrying nothing is a group all the same", func(t *testing.T) {
+		t.Parallel()
+
+		converted, err := providerkit.EdgeGroupOf(edge.PlanGroup{
+			Kind:   providerkit.EdgeGroupKind,
+			Name:   "cloudflare/edge",
+			Action: edge.PlanKeep,
+			Reason: "bootstrap-scoped",
+		})
+		if err != nil {
+			t.Fatalf("EdgeGroupOf() error = %v", err)
+		}
+		if converted.Action != providerkit.ActionKeep || converted.Reason != "bootstrap-scoped" {
+			t.Errorf("group = %+v, want the kept group and the reason it is kept for", converted)
+		}
+		if len(converted.Changes) != 0 {
+			t.Errorf("group carries %+v, want the rows it was given: none", converted.Changes)
+		}
+	})
+
+	t.Run("an unnamed action is refused rather than left in place", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := providerkit.EdgeGroupOf(edge.PlanGroup{})
+		if err == nil {
+			t.Fatal("EdgeGroupOf() took a group naming no action, which reads as kept while the removal deletes it")
+		}
+	})
+
+	t.Run("a group whose rows name an action no renderer knows is refused", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := providerkit.EdgeGroupOf(edge.PlanGroup{
+			Kind:   providerkit.EdgeGroupKind,
+			Name:   "cloudflare/edge",
+			Action: edge.PlanDelete,
+			Changes: []edge.PlanChange{
+				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanAction("recreate")},
+			},
+		})
+		if err == nil {
+			t.Fatal("EdgeGroupOf() took a row action no renderer knows")
+		}
+		for _, want := range []string{"recreate", "ocel-isr-writer"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %v does not name %q", err, want)
+			}
+		}
+	})
+}
+
 func TestVendoredNamesEveryGroupUnderTheVendorThatHoldsIt(t *testing.T) {
 	t.Parallel()
 

@@ -539,11 +539,27 @@ func (f *fakeEdge) DestroyPreviewWildcard(context.Context, string) error {
 
 func (f *fakeEdge) ProjectRemovals(edge.ProjectScope) []edge.PlanGroup { return nil }
 
-func (f *fakeEdge) PreviewWildcardRemovals(string) (edge.PlanGroup, edge.PlanGroup) {
-	return edge.PlanGroup{}, edge.PlanGroup{}
+func (f *fakeEdge) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+	return edge.PlanGroup{
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(f.kind),
+		Action: edge.PlanDelete,
+		Changes: []edge.PlanChange{{
+			Kind:   "Fake::PreviewEntry",
+			Name:   wildcard,
+			Action: edge.PlanDelete,
+		}},
+	}, f.SharedPreviewRemoval()
 }
 
-func (f *fakeEdge) SharedPreviewRemoval() edge.PlanGroup { return edge.PlanGroup{} }
+func (f *fakeEdge) SharedPreviewRemoval() edge.PlanGroup {
+	return edge.PlanGroup{
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(f.kind),
+		Action: edge.PlanKeep,
+		Reason: "bootstrap-scoped: " + edge.PreviewEntryOwner,
+	}
+}
 
 func (f *fakeEdge) DomainOwner(context.Context, string) (string, error) {
 	return "", errors.New("bootstrap never reads a domain owner")

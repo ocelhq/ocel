@@ -178,7 +178,17 @@ func EdgeChanges(kind edge.Kind, planned []edge.PlanChange) ([]Change, error) {
 	return changes, nil
 }
 
-func EdgeGroupOf(group edge.PlanGroup) ChangeGroup {
+func EdgeGroupOf(group edge.PlanGroup) (ChangeGroup, error) {
+	kind, _ := edge.EdgeGroupKindOf(group.Name)
+	if !edge.ValidPlanAction(group.Action) {
+		return ChangeGroup{}, fmt.Errorf(
+			"the %s edge plans %q on the group %q, and %q is not an action a plan can render",
+			kind, group.Action, group.Name, group.Action)
+	}
+	changes, err := EdgeChanges(kind, group.Changes)
+	if err != nil {
+		return ChangeGroup{}, err
+	}
 	converted := ChangeGroup{
 		Kind:    group.Kind,
 		Name:    group.Name,
@@ -187,16 +197,10 @@ func EdgeGroupOf(group edge.PlanGroup) ChangeGroup {
 		Reason:  group.Reason,
 		Slow:    group.Slow,
 	}
-	for _, change := range group.Changes {
-		converted.Changes = append(converted.Changes, Change{
-			Kind:   change.Kind,
-			Name:   change.Name,
-			Action: EdgeAction(change.Action),
-			Reason: change.Reason,
-			Slow:   change.Slow,
-		})
+	if len(changes) > 0 {
+		converted.Changes = changes
 	}
-	return converted
+	return converted, nil
 }
 
 func EdgeAction(action edge.PlanAction) ChangeAction {
@@ -209,8 +213,10 @@ func EdgeAction(action edge.PlanAction) ChangeAction {
 		return ActionDelete
 	case edge.PlanDisableThenDelete:
 		return ActionDisableThenDelete
-	default:
+	case edge.PlanKeep:
 		return ActionKeep
+	default:
+		return ChangeAction(action)
 	}
 }
 

@@ -326,16 +326,24 @@ func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv
 	if err := w.releasable(ctx); err != nil {
 		return nil, RefusalError(err)
 	}
+	groups, err := w.releaseGroups(front)
+	if err != nil {
+		return nil, RefusalError(err)
+	}
 	return &contractv1.ChangePlan{
 		EdgeKind: string(front.Kind()),
-		Groups:   w.releaseGroups(front),
+		Groups:   groups,
 		Subject:  w.held.BaseDomain,
 	}, nil
 }
 
-func (w *wildcards) releaseGroups(front edge.Edge) []*contractv1.ChangeGroup {
+func (w *wildcards) releaseGroups(front edge.Edge) ([]*contractv1.ChangeGroup, error) {
 	removed, kept := front.PreviewWildcardRemovals(w.held.Hostname())
-	groups := []*contractv1.ChangeGroup{edgeGroupProto(removed)}
+	removedGroup, err := edgeGroupProto(removed)
+	if err != nil {
+		return nil, err
+	}
+	groups := []*contractv1.ChangeGroup{removedGroup}
 	for _, cert := range w.held.Settled.certificates() {
 		groups = append(groups, certificateGroup(cert))
 	}
@@ -355,11 +363,19 @@ func (w *wildcards) releaseGroups(front edge.Edge) []*contractv1.ChangeGroup {
 			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
 		})
 	}
-	return append(groups, edgeGroupProto(kept))
+	keptGroup, err := edgeGroupProto(kept)
+	if err != nil {
+		return nil, err
+	}
+	return append(groups, keptGroup), nil
 }
 
-func edgeGroupProto(group edge.PlanGroup) *contractv1.ChangeGroup {
-	return GroupProto(EdgeGroupOf(group))
+func edgeGroupProto(group edge.PlanGroup) (*contractv1.ChangeGroup, error) {
+	converted, err := EdgeGroupOf(group)
+	if err != nil {
+		return nil, err
+	}
+	return GroupProto(converted), nil
 }
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
