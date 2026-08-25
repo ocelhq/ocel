@@ -91,17 +91,17 @@ func setUpEnvGateFixtureWith(t *testing.T, definitions, script string) string {
 	return root
 }
 
-func stubAppBuildRecorder(d *session.Session, built *bool) {
-	d.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+func stubAppBuildRecorder(sess *session.Session, built *bool) {
+	sess.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		*built = true
 		return nil
 	}
 }
 
-func captureBuildEnv(d *session.Session) *map[string]map[string]string {
-	clitest.StubRecordedDeploymentIDs(d)
+func captureBuildEnv(sess *session.Session) *map[string]map[string]string {
+	clitest.StubRecordedDeploymentIDs(sess)
 	var got map[string]map[string]string
-	d.BuildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
+	sess.BuildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
 		got = envByApp
 		return nil
 	}

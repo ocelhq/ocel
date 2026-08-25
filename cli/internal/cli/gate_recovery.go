@@ -57,14 +57,14 @@ func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contra
 }
 
 func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *envgate.Refusal) error {
-	session, err := r.sess.ServeVarsUI(ctx, r.cfg, r.runner, r.preview, gate)
+	varsSession, err := r.sess.ServeVarsUI(ctx, r.cfg, r.runner, r.preview, gate)
 	if err != nil {
 		return err
 	}
-	defer session.Close()
+	defer varsSession.Close()
 
-	r.ui.Waiting(refusal.Owed(), session.URL)
-	if err := r.sess.OpenBrowser(session.URL); err != nil {
+	r.ui.Waiting(refusal.Owed(), varsSession.URL)
+	if err := r.sess.OpenBrowser(varsSession.URL); err != nil {
 		fmt.Fprintln(r.stdout, "  Couldn't open your browser automatically — open the link above yourself.")
 	}
 
@@ -74,7 +74,7 @@ func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *env
 	if run != nil {
 		waitCtx, span = run.StartSpan(ctx, "await_human_input")
 	}
-	waitErr := session.Wait(waitCtx)
+	waitErr := varsSession.Wait(waitCtx)
 	endAttemptSpan(span, waitErr)
 
 	switch {

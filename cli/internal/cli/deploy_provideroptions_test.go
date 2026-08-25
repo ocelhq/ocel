@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func setUpProviderFixture(t *testing.T, options string) (root, journal string, d session.Session) {
+func setUpProviderFixture(t *testing.T, options string) (root, journal string, sess session.Session) {
 	t.Helper()
 
 	root, _ = clitest.SetUpDeployFixture(t)
@@ -31,12 +31,12 @@ export default {
 	journal = filepath.Join(t.TempDir(), "configure.journal")
 	t.Setenv(clitest.FakeConfigureJournalEnvVar, journal)
 
-	d = newSession()
-	clitest.SetLoggedIn(&d)
-	clitest.StubAppFunctions(&d, []manifestbuilder.Function{
+	sess = newSession()
+	clitest.SetLoggedIn(&sess)
+	clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
 		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 	})
-	return root, journal, d
+	return root, journal, sess
 }
 
 func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {

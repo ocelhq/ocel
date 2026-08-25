@@ -44,7 +44,7 @@ func init() {
 	rollbackCmd.Flags().StringVar(&rollbackOpts.tag, "tag", "", "Roll back to the promotion carrying this tag (mutually exclusive with --to)")
 }
 
-func runRollback(ctx context.Context, d session.Session, cwd string, opts rollbackOptions, stdout, stderr io.Writer) error {
+func runRollback(ctx context.Context, sess session.Session, cwd string, opts rollbackOptions, stdout, stderr io.Writer) error {
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
 	}
@@ -60,7 +60,7 @@ func runRollback(ctx context.Context, d session.Session, cwd string, opts rollba
 	defer run.Close()
 
 	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
-		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 

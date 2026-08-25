@@ -56,10 +56,10 @@ func writePrebuiltFunction(t *testing.T, root, app, route string) {
 	}
 }
 
-func recordBuildApp(d *session.Session) *bool {
-	clitest.StubRecordedDeploymentIDs(d)
+func recordBuildApp(sess *session.Session) *bool {
+	clitest.StubRecordedDeploymentIDs(sess)
 	ran := false
-	d.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+	sess.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		ran = true
 		return nil
 	}

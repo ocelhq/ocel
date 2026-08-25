@@ -84,7 +84,7 @@ func init() {
 	rootCmd.AddCommand(destroyCmd)
 }
 
-func runDestroy(ctx context.Context, d session.Session, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroy(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
 	requested := removalplan.BypassRequest()
 	tty := isReaderTTY(stdin)
 	if requested == "" && !tty {
@@ -106,8 +106,8 @@ func runDestroy(ctx context.Context, d session.Session, cwd string, stdout, stde
 		fmt.Fprintf(stderr, "%s is set to %q, not this project (%s); confirming interactively instead\n", removalplan.BypassEnv, requested, cfg.Slug)
 	}
 
-	return providerui.Run(ctx, d, cfg, "ocel destroy production", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+	return providerui.Run(ctx, sess, cfg, "ocel destroy production", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -154,7 +154,7 @@ func runDestroy(ctx context.Context, d session.Session, cwd string, stdout, stde
 	})
 }
 
-func runDestroyPreviewProject(ctx context.Context, d session.Session, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroyPreviewProject(ctx context.Context, sess session.Session, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	if !yes && !isReaderTTY(stdin) {
 		return errors.New("`ocel destroy preview` needs an interactive terminal to confirm the project name; re-run with --yes to tear the preview footprint down non-interactively")
 	}
@@ -164,8 +164,8 @@ func runDestroyPreviewProject(ctx context.Context, d session.Session, cwd string
 		return err
 	}
 
-	return providerui.Run(ctx, d, cfg, "ocel destroy preview", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
+	return providerui.Run(ctx, sess, cfg, "ocel destroy preview", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
 			return err
 		}
 

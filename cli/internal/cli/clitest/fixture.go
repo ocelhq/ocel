@@ -125,18 +125,18 @@ func nodePlatformSuffix(t *testing.T) string {
 	return nodePlatform + "-" + nodeArch
 }
 
-func StubAppFunctions(d *session.Session, functions []manifestbuilder.Function) {
-	d.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+func StubAppFunctions(sess *session.Session, functions []manifestbuilder.Function) {
+	sess.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		return nil
 	}
-	d.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
+	sess.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
 		return functions, nil
 	}
-	StubRecordedDeploymentIDs(d)
+	StubRecordedDeploymentIDs(sess)
 }
 
-func StubRecordedDeploymentIDs(d *session.Session) {
-	d.DeploymentID = func(_, app string) (string, error) { return FixtureDeploymentID(app), nil }
+func StubRecordedDeploymentIDs(sess *session.Session) {
+	sess.DeploymentID = func(_, app string) (string, error) { return FixtureDeploymentID(app), nil }
 }
 
 func WriteFile(t *testing.T, path, contents string) {
@@ -235,7 +235,7 @@ func ReadJournal(t *testing.T, path string) []string {
 	return lines
 }
 
-func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, d session.Session) {
+func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, sess session.Session) {
 	t.Helper()
 
 	root, _ = SetUpDeployFixture(t)
@@ -245,16 +245,16 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, d
 	journal = filepath.Join(t.TempDir(), "edge.journal")
 	t.Setenv(fakeEdgeJournalEnvVar, journal)
 
-	d = NewSession()
-	SetLoggedIn(&d)
-	StubAppFunctions(&d, []manifestbuilder.Function{
+	sess = NewSession()
+	SetLoggedIn(&sess)
+	StubAppFunctions(&sess, []manifestbuilder.Function{
 		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 	})
-	return root, journal, d
+	return root, journal, sess
 }
 
-func SetLoggedIn(d *session.Session) {
-	d.LoadCredentials = func() (credentials.Credentials, error) {
+func SetLoggedIn(sess *session.Session) {
+	sess.LoadCredentials = func() (credentials.Credentials, error) {
 		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
 	}
 }

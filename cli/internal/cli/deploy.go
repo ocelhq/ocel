@@ -40,11 +40,11 @@ import (
 
 const noBrowserEnvVar = "OCEL_NO_BROWSER"
 
-func canOpenVarsUI(d session.Session, stdin io.Reader, noUI bool) bool {
+func canOpenVarsUI(sess session.Session, stdin io.Reader, noUI bool) bool {
 	if noUI || os.Getenv(noBrowserEnvVar) != "" {
 		return false
 	}
-	return d.StdinIsTerminal(stdin)
+	return sess.StdinIsTerminal(stdin)
 }
 
 const noUIFlagUsage = "Never pause to open the variables UI; fail on a missing or invalid variable instead"
@@ -84,7 +84,7 @@ func init() {
 
 const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building the apps first (produce it with ocel build)"
 
-func runDeploy(ctx context.Context, d session.Session, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDeploy(ctx context.Context, sess session.Session, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -97,9 +97,9 @@ func runDeploy(ctx context.Context, d session.Session, cwd string, opts deployOp
 		return err
 	}
 
-	return providerui.Run(ctx, d, cfg, "ocel deploy", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		willConfirm := !opts.yes && d.StdinIsTerminal(stdin)
-		knownSlugs, err := preflightDeploy(ctx, d, runner, cfg, willConfirm, stdout, stdin)
+	return providerui.Run(ctx, sess, cfg, "ocel deploy", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		willConfirm := !opts.yes && sess.StdinIsTerminal(stdin)
+		knownSlugs, err := preflightDeploy(ctx, sess, runner, cfg, willConfirm, stdout, stdin)
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func runDeploy(ctx context.Context, d session.Session, cwd string, opts deployOp
 
 		ui.Building()
 		recovery := gateRecovery{
-			sess:   d,
+			sess:   sess,
 			cfg:    cfg,
 			runner: runner,
 			newGate: func() *envgate.Gate {
@@ -129,7 +129,7 @@ func runDeploy(ctx context.Context, d session.Session, cwd string, opts deployOp
 			},
 			ui:      ui,
 			stdout:  stdout,
-			enabled: canOpenVarsUI(d, stdin, opts.noUI),
+			enabled: canOpenVarsUI(sess, stdin, opts.noUI),
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
@@ -168,7 +168,7 @@ func runDeploy(ctx context.Context, d session.Session, cwd string, opts deployOp
 	})
 }
 
-func collectAndBuildManifest(ctx context.Context, d session.Session, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *deployui.Session) (*contractv1.Manifest, error) {
+func collectAndBuildManifest(ctx context.Context, sess session.Session, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *deployui.Session) (*contractv1.Manifest, error) {
 	buildOut := ui.BuildWriter()
 
 	captured := &boundedCapture{}
@@ -205,7 +205,7 @@ func collectAndBuildManifest(ctx context.Context, d session.Session, cfg *projec
 		if err := clientenv.Generate(clients); err != nil {
 			return nil, err
 		}
-		if err := d.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
+		if err := sess.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
 			return nil, err
 		}
 		if err := clientenv.Record(cfg.Dir, clients); err != nil {
@@ -213,7 +213,7 @@ func collectAndBuildManifest(ctx context.Context, d session.Session, cfg *projec
 		}
 	}
 
-	functions, err := d.CollectAppFunctions(cfg.Dir)
+	functions, err := sess.CollectAppFunctions(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +247,7 @@ func collectAndBuildManifest(ctx context.Context, d session.Session, cfg *projec
 		return nil, err
 	}
 	for _, app := range manifest.GetApps() {
-		id, err := d.DeploymentID(cfg.Dir, app.GetName())
+		id, err := sess.DeploymentID(cfg.Dir, app.GetName())
 		if err != nil {
 			return nil, err
 		}

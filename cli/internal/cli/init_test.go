@@ -15,9 +15,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/session"
 )
 
-func stubPackageManager(d *session.Session, result error) *[]string {
+func stubPackageManager(sess *session.Session, result error) *[]string {
 	var argv []string
-	d.RunPackageManager = func(_ context.Context, _ string, cmd []string, _ io.Writer) error {
+	sess.RunPackageManager = func(_ context.Context, _ string, cmd []string, _ io.Writer) error {
 		argv = cmd
 		return result
 	}

@@ -102,7 +102,7 @@ func newSession() session.Session {
 		DeploymentID:        appbuilder.DeploymentID,
 		CollectDeclarations: deploycollector.Collect,
 		OpenBrowser:         browser.OpenURL,
-		ServeVarsUI:         startVarsUI,
+		ServeVarsUI:         serveVarsUI,
 		CurrentGitBranch:    gitBranch,
 		DiscoverPRNumber:    prNumberFromEnv,
 		RunPackageManager:   runPackageManagerCommand,

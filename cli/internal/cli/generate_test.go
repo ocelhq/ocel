@@ -20,8 +20,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func declaring(d *session.Session, definitions ...*resourcesv1.VariableDefinition) {
-	d.CollectDeclarations = func(ctx context.Context, _ *projectconfig.Config, gate *envgate.Gate, _, _ io.Writer) ([]declare.Resource, error) {
+func declaring(sess *session.Session, definitions ...*resourcesv1.VariableDefinition) {
+	sess.CollectDeclarations = func(ctx context.Context, _ *projectconfig.Config, gate *envgate.Gate, _, _ io.Writer) ([]declare.Resource, error) {
 		if _, err := gate.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: definitions}); err != nil {
 			return nil, err
 		}

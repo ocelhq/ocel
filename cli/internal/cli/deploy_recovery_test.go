@@ -26,12 +26,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func terminalStdin(d *session.Session) {
-	d.StdinIsTerminal = func(io.Reader) bool { return true }
+func terminalStdin(sess *session.Session) {
+	sess.StdinIsTerminal = func(io.Reader) bool { return true }
 }
 
-func recordBrowser(d *session.Session, opened *[]string, mu *sync.Mutex) {
-	d.OpenBrowser = func(url string) error {
+func recordBrowser(sess *session.Session, opened *[]string, mu *sync.Mutex) {
+	sess.OpenBrowser = func(url string) error {
 		mu.Lock()
 		defer mu.Unlock()
 		*opened = append(*opened, url)
@@ -44,10 +44,10 @@ type varsUISessions struct {
 	all []*varsui.Session
 }
 
-func captureVarsUI(d *session.Session) *varsUISessions {
+func captureVarsUI(sess *session.Session) *varsUISessions {
 	sessions := &varsUISessions{}
-	prev := d.ServeVarsUI
-	d.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
+	prev := sess.ServeVarsUI
+	sess.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
 		session, err := prev(ctx, cfg, runner, preview, gate)
 		if err == nil {
 			sessions.mu.Lock()
