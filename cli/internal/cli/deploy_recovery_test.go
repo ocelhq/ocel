@@ -140,7 +140,7 @@ func problemsFile(t *testing.T, problems string) string {
 	return path
 }
 
-func varsUIBootstrap(t *testing.T, address, token string) string {
+func varsUITier(t *testing.T, address, token string) string {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, address+"/api/state", nil)
 	if err != nil {
@@ -153,12 +153,12 @@ func varsUIBootstrap(t *testing.T, address, token string) string {
 	}
 	defer res.Body.Close()
 	var state struct {
-		Bootstrap string `json:"bootstrap"`
+		Tier string `json:"tier"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&state); err != nil {
 		t.Fatalf("decode the page's state: %v", err)
 	}
-	return state.Bootstrap
+	return state.Tier
 }
 
 const missingStripeKey = `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`
@@ -562,7 +562,7 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 		}()
 
 		address, token := awaitVarsUI(t, &out, 1)
-		if got := varsUIBootstrap(t, address, token); got != "preview" {
+		if got := varsUITier(t, address, token); got != "preview" {
 			t.Errorf("bootstrap = %q, want the preview's own", got)
 		}
 		setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")

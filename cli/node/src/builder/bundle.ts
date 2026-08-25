@@ -1,17 +1,17 @@
 import { functionRel } from "./layout.js";
-import { resolveEntrypoint, type TraceSpec } from "./trace.js";
-import type { AppInput, FunctionSummary } from "./types.js";
+import { resolveEntrypoint } from "./trace.js";
+import type { AppInput, FrameworkSpec, FunctionSummary } from "./types.js";
 
 export const BUNDLE_HANDLER = "index.mjs";
 
-export function bundlePlan(input: AppInput, fw: TraceSpec): FunctionSummary {
+export function bundleSummary(input: AppInput, spec: FrameworkSpec): FunctionSummary {
   return {
     name: input.name,
-    runtime: fw.runtime,
+    runtime: spec.runtime,
     handler: BUNDLE_HANDLER,
     artifactPath: functionRel(input.name),
-    framework: fw.name,
+    framework: spec.name,
     strategy: "bundle",
-    entrypoint: resolveEntrypoint(input, fw),
+    entrypoint: resolveEntrypoint(input, spec),
   };
 }

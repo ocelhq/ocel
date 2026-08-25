@@ -12,13 +12,7 @@ import {
   appOutDir,
   functionRel,
 } from "./layout.js";
-import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
-
-export interface TraceSpec {
-  name: string;
-  runtime: string;
-  entrypointCandidates: string[];
-}
+import type { AppInput, BuildOptions, FrameworkSpec, FunctionSummary } from "./types.js";
 
 const TS_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
 
@@ -36,7 +30,7 @@ function transpileTs(source: string, ext: string): string {
 
 const RESOLVE_EXT = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
-export function resolveEntrypoint(input: AppInput, fw: TraceSpec): string {
+export function resolveEntrypoint(input: AppInput, spec: FrameworkSpec): string {
   if (input.entrypoint) {
     const abs = path.resolve(input.cwd, input.entrypoint);
     if (!existsSync(abs)) {
@@ -44,12 +38,12 @@ export function resolveEntrypoint(input: AppInput, fw: TraceSpec): string {
     }
     return abs;
   }
-  for (const candidate of fw.entrypointCandidates) {
+  for (const candidate of spec.entrypointCandidates) {
     const abs = path.resolve(input.cwd, candidate);
     if (existsSync(abs)) return abs;
   }
   throw new Error(
-    `ocel: no entrypoint found in ${input.cwd}; tried: ${fw.entrypointCandidates.join(", ")}`,
+    `ocel: no entrypoint found in ${input.cwd}; tried: ${spec.entrypointCandidates.join(", ")}`,
   );
 }
 
@@ -248,9 +242,9 @@ export async function writeServeDescriptor(
 export async function traceBuild(
   input: AppInput,
   options: BuildOptions,
-  fw: TraceSpec,
+  spec: FrameworkSpec,
 ): Promise<FunctionSummary> {
-  const entrypoint = resolveEntrypoint(input, fw);
+  const entrypoint = resolveEntrypoint(input, spec);
 
   const funcRel = functionRel(input.name);
   const funcDir = path.join(options.outDir, funcRel);
@@ -281,11 +275,11 @@ export async function traceBuild(
   const handler = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest).split(path.sep).join("/");
   await writeFile(
     path.join(funcDir, "config.json"),
-    `${JSON.stringify({ runtime: fw.runtime, handler, framework: fw.name, id: NODE_ENTRY_ROUTE_ID, app: input.name }, null, 2)}\n`,
+    `${JSON.stringify({ runtime: spec.runtime, handler, framework: spec.name, id: NODE_ENTRY_ROUTE_ID, app: input.name }, null, 2)}\n`,
   );
 
   await writeServeDescriptor(options.outDir, input.name, {
-    framework: fw.name,
+    framework: spec.name,
     buildId: await artifactHash(funcDir),
     edgeRouting: false,
     entry: NODE_ENTRY_ROUTE_ID,
@@ -294,10 +288,10 @@ export async function traceBuild(
 
   return {
     name: input.name,
-    runtime: fw.runtime,
+    runtime: spec.runtime,
     handler,
     artifactPath: funcRel,
-    framework: fw.name,
+    framework: spec.name,
     strategy: "trace",
   };
 }

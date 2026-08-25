@@ -1,8 +1,8 @@
-import { bundlePlan } from "./bundle.js";
+import { bundleSummary } from "./bundle.js";
 import { hasDep } from "./detect.js";
 import { buildNext } from "./next.js";
-import { traceBuild, type TraceSpec } from "./trace.js";
-import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
+import { traceBuild } from "./trace.js";
+import type { AppInput, BuildOptions, FrameworkSpec, FunctionSummary } from "./types.js";
 
 export interface Framework {
   name: string;
@@ -18,22 +18,22 @@ const NODE_ENTRYPOINTS = [
   "server.ts", "server.js", "app.ts", "app.js",
 ];
 
-function traced(name: string, dep: string): Framework {
-  const spec: TraceSpec = { name, runtime: RUNTIME, entrypointCandidates: NODE_ENTRYPOINTS };
+function nodeFramework(name: string, dep: string): Framework {
+  const spec: FrameworkSpec = { name, runtime: RUNTIME, entrypointCandidates: NODE_ENTRYPOINTS };
   return {
     name,
     detect: (dir) => hasDep(dir, dep),
     build: async (input, options) => [
       process.env.OCEL_BUILD_PREFER_TRACING === "1"
         ? await traceBuild(input, options, spec)
-        : bundlePlan(input, spec),
+        : bundleSummary(input, spec),
     ],
   };
 }
 
-export const express = traced("express", "express");
-export const fastify = traced("fastify", "fastify");
-export const hono = traced("hono", "hono");
+export const express = nodeFramework("express", "express");
+export const fastify = nodeFramework("fastify", "fastify");
+export const hono = nodeFramework("hono", "hono");
 export const next: Framework = {
   name: "next",
   detect: (dir) => hasDep(dir, "next"),

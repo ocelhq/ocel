@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { sanitizeName } from "./detect.js";
-import { BUILD_PLAN_FILE } from "./layout.js";
+import { BUILD_PLAN_FILE, sanitizeName } from "./layout.js";
 import { withSpan } from "./protocol.js";
 import { detectFramework, resolveFramework } from "./registry.js";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
