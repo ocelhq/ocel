@@ -379,7 +379,7 @@ export default {
 			"– preview entry worker *.preview.acme.com",
 			"This cannot be undone.",
 			"Left in place:",
-			"  DNS record *.preview.acme.com CNAME you.example.com — you created it yourself; ocel never wrote it",
+			"  DNS record *.preview.acme.com CNAME you.example.com  — you created it yourself; ocel never wrote it",
 			"RELEASE DOMAIN tier=TIER_PREVIEW",
 			"Released *.preview.acme.com",
 		} {

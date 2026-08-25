@@ -42,8 +42,8 @@ func TestPlanOnAFreshAccountCreatesTheBaselineAndEveryFeature(t *testing.T) {
 			t.Errorf("Plan() returned %+v, and a plan renders a kind and a name", group)
 		}
 	}
-	if reason := groupFor(t, plan, fake.FeatureCache).Reason; !strings.Contains(reason, fake.FeatureCache) {
-		t.Errorf("the cache group reads %q, want it to say the feature joins the set", reason)
+	if reason := groupFor(t, plan, fake.FeatureCache).Reason; reason != "" {
+		t.Errorf("the cache group reads %q, want a create to say nothing the sigil has not already said", reason)
 	}
 }
 
