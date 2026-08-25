@@ -93,7 +93,7 @@ func (b classBuckets) Buckets(_ context.Context, class providerkit.Class) (ports
 		Assets:    "ocel-assets-" + string(class),
 	}
 	if !b.cacheless {
-		held.Cache = "ocel-cache-" + string(class)
+		held.Caches = []string{"ocel-cache-" + string(class)}
 	}
 	return held, nil
 }

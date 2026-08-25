@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -36,7 +37,7 @@ type Stores interface {
 type Buckets struct {
 	Functions string
 	Assets    string
-	Cache     string
+	Caches    []string
 }
 
 func (b Buckets) Buckets(context.Context, kit.Class) (Buckets, error) { return b, nil }
@@ -64,7 +65,13 @@ func (a Artifacts) bucket(ctx context.Context, class kit.Class, store string) (s
 	case providerkit.StoreAssets:
 		name = held.Assets
 	case providerkit.StoreCache:
-		name = held.Cache
+		if len(held.Caches) > 1 {
+			return "", kit.Refuse(kit.CodeInvalid,
+				"this account keeps %d cache stores, one for each edge it fronts, and an artifact names no edge", len(held.Caches))
+		}
+		if len(held.Caches) == 1 {
+			name = held.Caches[0]
+		}
 	default:
 		return "", kit.Refuse(kit.CodeInvalid,
 			"this provider keeps no %q store; it keeps %q, %q and %q",
@@ -150,7 +157,7 @@ func (a Artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, pr
 		return err
 	}
 	var errs []error
-	for _, bucket := range []string{held.Functions, held.Assets, held.Cache} {
+	for _, bucket := range slices.Concat([]string{held.Functions, held.Assets}, held.Caches) {
 		if bucket == "" {
 			continue
 		}

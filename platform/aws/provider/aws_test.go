@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -11,6 +12,9 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type stubBootstrapper struct{ err error }
@@ -144,5 +148,63 @@ func TestBootstrapFrontsTheEdgeItWasAsked(t *testing.T) {
 	}
 	if _, err := p.Bootstrap("nowhere"); err == nil {
 		t.Error("Bootstrap() accepted an edge this provider cannot front with")
+	}
+}
+
+func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
+	p := NewProvider(Options{}, aws.Config{})
+	wanted := classEdge{class: providerkit.ClassProduction, kind: cloudflare.Kind}
+	if _, err := p.params.resolve(wanted, func() (bootstrap.ClassParams, error) {
+		return bootstrap.ClassParams{Passphrase: string(cloudflare.Kind)}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, opened := range edges.SupportedEdges() {
+		if _, err := p.Edges().Open(opened); err != nil {
+			t.Fatalf("Open(%q) error = %v", opened, err)
+		}
+	}
+
+	params, err := p.classParams(context.Background(), providerkit.ClassProduction, cloudflare.Kind)
+	if err != nil {
+		t.Fatalf("classParams error = %v", err)
+	}
+	if params.Passphrase != string(cloudflare.Kind) {
+		t.Fatalf("classParams read the %q namespace after other edges were opened, want %q",
+			params.Passphrase, cloudflare.Kind)
+	}
+}
+
+func TestBucketsSweepTheCacheStoreOfEveryStandingEdge(t *testing.T) {
+	p := NewProvider(Options{}, aws.Config{})
+	if _, err := p.deployed.resolve(providerkit.ClassProduction, func() (bootstrap.Deployed, error) {
+		return bootstrap.Deployed{
+			ArtifactBucket: "functions",
+			AssetBucket:    "assets",
+			Features: bootstrap.FeatureSet{
+				bootstrap.FeatureCloudflareEdge: true,
+				bootstrap.FeatureCloudFrontEdge: true,
+			},
+		}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for kind, bucket := range map[edge.Kind]string{cloudflare.Kind: "cache-cloudflare", cloudfront.Kind: "cache-cloudfront"} {
+		if _, err := p.params.resolve(classEdge{class: providerkit.ClassProduction, kind: kind}, func() (bootstrap.ClassParams, error) {
+			return bootstrap.ClassParams{CacheStore: bootstrap.CacheStore{Bucket: bucket}}, nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	held, err := p.Buckets(context.Background(), providerkit.ClassProduction)
+	if err != nil {
+		t.Fatalf("Buckets error = %v", err)
+	}
+	got := slices.Clone(held.Caches)
+	slices.Sort(got)
+	if !slices.Equal(got, []string{"cache-cloudflare", "cache-cloudfront"}) {
+		t.Fatalf("Buckets() carries caches %v, want one for each edge standing in the account", got)
 	}
 }

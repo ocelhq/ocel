@@ -24,7 +24,7 @@ func releasing(t *testing.T, cfg Config) *release {
 
 func releasingOn(t *testing.T, cfg Config, engine kitpulumi.Engine) *release {
 	t.Helper()
-	held, err := newReleaser(fixed(cfg), &Realized{}, engine).at(context.Background(), providerkit.StackRef{})
+	held, err := newReleaser(fixed(cfg), &Realized{}, engine).at(context.Background(), providerkit.StackRef{}, "")
 	if err != nil {
 		t.Fatalf("open a release: %v", err)
 	}

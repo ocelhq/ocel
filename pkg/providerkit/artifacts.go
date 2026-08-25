@@ -49,6 +49,7 @@ type ArtifactPacker interface {
 
 type AppPacking struct {
 	Ref    StackRef
+	Edge   edge.Kind
 	App    string
 	Values AppValues
 }
@@ -82,6 +83,7 @@ func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, 
 	}
 	pack, err := packer.PackApp(ctx, AppPacking{
 		Ref:    r.ref(entry.Stack),
+		Edge:   r.front.Kind(),
 		App:    entry.App,
 		Values: values,
 	}, report)
