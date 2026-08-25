@@ -157,7 +157,7 @@ func init() {
 		c.Flags().StringVar(&envOpts.folder, "folder", "", "Address the value in this folder (e.g. /checkout) instead of the project root")
 	}
 	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd, envRefCmd} {
-		c.Flags().StringVar(&envOpts.environment, "environment", "", "Address the override this named preview environment holds instead of the class-wide value")
+		c.Flags().StringVar(&envOpts.environment, "environment", "", "Address the override this named preview environment holds instead of the value bound to all environments")
 	}
 	envRefCmd.Flags().StringVar(&envRefOpts.project, "target-project", "", "Read the value owned by this project instead of this one")
 	envRefCmd.Flags().StringVar(&envRefOpts.folder, "target-folder", "", "Read the value in this folder of the target project instead of its root")
@@ -476,7 +476,7 @@ func renderReferences(stdout io.Writer, cell string, references []*envvarsv1.Coo
 	fmt.Fprintln(tw, "PROJECT\tKEY\tFOLDER\tENVIRONMENT")
 	for _, c := range references {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
-			c.GetSlug(), c.GetKey(), folderOrRoot(c.GetFolder()), environmentOrClassWide(c.GetEnvironment()))
+			c.GetSlug(), c.GetKey(), folderOrRoot(c.GetFolder()), environmentOrAll(c.GetEnvironment()))
 	}
 	_ = tw.Flush()
 	fmt.Fprintln(stdout, "\nEditing this value changes what every one of them reads.")
@@ -492,7 +492,7 @@ func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environme
 	fmt.Fprintln(tw, "KEY\tFOLDER\tENVIRONMENT\tVERSION\tBYTES\tUPDATED\tSOURCE")
 	for _, v := range values {
 		c := v.GetCoordinate()
-		environment := environmentOrClassWide(c.GetEnvironment())
+		environment := environmentOrAll(c.GetEnvironment())
 		if envgate.Orphaned(environments, c.GetEnvironment()) {
 			environment += " (orphaned)"
 			orphans = true
@@ -533,7 +533,7 @@ func folderOrRoot(folder string) string {
 	return folder
 }
 
-func environmentOrClassWide(environment string) string {
+func environmentOrAll(environment string) string {
 	if environment == "" {
 		return "—"
 	}

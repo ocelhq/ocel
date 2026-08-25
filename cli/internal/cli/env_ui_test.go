@@ -81,12 +81,12 @@ func TestRunnerValues(t *testing.T) {
 				t.Fatalf("List: %v", err)
 			}
 			if len(rows) != 2 {
-				t.Fatalf("List returned %+v, want both the class-wide value and the override", rows)
+				t.Fatalf("List returned %+v, want both the value bound to all environments and the override", rows)
 			}
 
-			classWide := stored(t, rows, "API_URL")
-			if classWide.Environment != "" || classWide.Version != 1 {
-				t.Errorf("API_URL = %+v, want no environment and version 1", classWide)
+			base := stored(t, rows, "API_URL")
+			if base.Environment != "" || base.Version != 1 {
+				t.Errorf("API_URL = %+v, want no environment and version 1", base)
 			}
 			override := stored(t, rows, "STRIPE_API_KEY")
 			if override.Environment != "staging" {

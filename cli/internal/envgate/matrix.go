@@ -55,7 +55,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	g.mu.Lock()
 	definitions := slices.Clone(g.definitions)
 	apps := slices.Clone(g.scope.Apps)
-	classWide := g.classWideCells()
+	base := g.baseCells()
 	resolved := g.resolvedCells()
 	overrides := make(map[Cell][]Override, len(g.overrides))
 	for cell, forCell := range g.overrides {
@@ -72,7 +72,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	}
 	g.mu.Unlock()
 
-	columns := columns(definitions, apps, classWide, overrides)
+	columns := columns(definitions, apps, base, overrides)
 	m := Matrix{Columns: columns}
 	for _, definition := range definitions {
 		row := MatrixRow{
@@ -85,8 +85,8 @@ func (g *Gate) Matrix(environments []string) Matrix {
 			row.Cells = append(row.Cells, MatrixCell{
 				Folder:    folder,
 				State:     state(definition, folder),
-				Set:       classWide.has(cell),
-				Version:   classWide[cell],
+				Set:       base.has(cell),
+				Version:   base[cell],
 				Overrides: overrides[cell],
 				Problem:   complaints[cell],
 			})

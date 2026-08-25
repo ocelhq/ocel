@@ -110,7 +110,7 @@ func (s *fakeStore) Delete(_ context.Context, at envgate.Address, expected *int6
 
 func (s *fakeStore) History(_ context.Context, at envgate.Address) ([]varsui.Version, error) {
 	_, held := s.held[at]
-	if _, classWide := s.cells[at.Cell]; !held && !(classWide && at.Environment == "") {
+	if _, base := s.cells[at.Cell]; !held && !(base && at.Environment == "") {
 		return nil, nil
 	}
 	return []varsui.Version{{Version: 2, CreatedAt: 200}, {Version: 1, CreatedAt: 100}}, nil
@@ -537,7 +537,7 @@ func TestPutValue(t *testing.T) {
 		}
 	})
 
-	t.Run("an override is written beside the class-wide value rather than over it", func(t *testing.T) {
+	t.Run("an override is written beside the value bound to all environments rather than over it", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
 		store.environments = []string{"staging"}
@@ -556,7 +556,7 @@ func TestPutValue(t *testing.T) {
 			t.Errorf("staging holds %q, want the override that was written", got)
 		}
 		if got := store.cells[envgate.Cell{Key: "API_URL"}]; got != "https://shared.example" {
-			t.Errorf("the class-wide value is %q, want it untouched", got)
+			t.Errorf("the value bound to all environments is %q, want it untouched", got)
 		}
 	})
 

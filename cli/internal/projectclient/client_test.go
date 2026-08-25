@@ -3,6 +3,7 @@ package projectclient
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -110,6 +111,25 @@ func TestCreateProject(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("a wrapped conflict is still a conflict", func(t *testing.T) {
+		t.Parallel()
+
+		srv := statusServer(t, http.StatusConflict, `{"error":"slug taken"}`)
+
+		client := New(srv.URL)
+		_, err := client.CreateProject(context.Background(), "tok", "My App", "my-app")
+		if err == nil {
+			t.Fatal("CreateProject err = nil, want error")
+		}
+		wrapped := fmt.Errorf("create project: %w", err)
+		if !IsConflict(wrapped) {
+			t.Errorf("IsConflict(%v) = false, want true", wrapped)
+		}
+		if IsUnauthorized(wrapped) {
+			t.Errorf("IsUnauthorized(%v) = true, want false", wrapped)
+		}
+	})
 }
 
 func TestListProjects(t *testing.T) {

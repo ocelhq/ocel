@@ -487,7 +487,7 @@ func runNode(ctx context.Context, scriptPath string, env []string, request []byt
 
 	if runErr != nil {
 		proc.Abort()
-		if msg := proc.Err(); msg != "" {
+		if msg := proc.Failure(); msg != "" {
 			return fmt.Errorf("node-builder failed (%w): %s", runErr, msg)
 		}
 		if summary := failureSummary(captured.String()); summary != "" {

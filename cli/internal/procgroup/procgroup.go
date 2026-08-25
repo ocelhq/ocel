@@ -7,12 +7,12 @@ import (
 
 const GuardWaitDelay = 5 * time.Second
 
-func New(cmd *exec.Cmd) {
+func Isolate(cmd *exec.Cmd) {
 	newGroup(cmd)
 }
 
 func Guard(cmd *exec.Cmd) {
-	New(cmd)
+	Isolate(cmd)
 	cmd.Cancel = func() error { return Kill(cmd) }
 	cmd.WaitDelay = GuardWaitDelay
 }

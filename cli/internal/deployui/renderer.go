@@ -434,7 +434,7 @@ type Flip struct {
 	Bound *progressv1.FlipBound
 }
 
-func (r *Renderer) Deployed(headline string, appURLs []string, note string, flip Flip, logPath string) {
+func (r *Renderer) Deployed(headline string, appURLs []string, urlNote string, flip Flip, logPath string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.finishAllLocked(r.okColor(), okMark, "")
@@ -446,8 +446,8 @@ func (r *Renderer) Deployed(headline string, appURLs []string, note string, flip
 			"durationMs": time.Since(r.start).Milliseconds(),
 			"logPath":    logPath,
 		}
-		if note != "" {
-			fields["urlNote"] = note
+		if urlNote != "" {
+			fields["urlNote"] = urlNote
 		}
 		if flip.Bound != nil {
 			fields["flipBound"] = map[string]any{
@@ -468,9 +468,9 @@ func (r *Renderer) Deployed(headline string, appURLs []string, note string, flip
 		for _, u := range appURLs {
 			url.Fprintf(r.w, "  %s\n", u)
 		}
-	case note != "":
+	case urlNote != "":
 		fmt.Fprintln(r.w)
-		r.colorFor(color.FgYellow).Fprintf(r.w, "  %s\n", note)
+		r.colorFor(color.FgYellow).Fprintf(r.w, "  %s\n", urlNote)
 	}
 	if flip.Note != "" {
 		fmt.Fprintln(r.w)

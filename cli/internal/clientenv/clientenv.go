@@ -22,7 +22,7 @@ var accessorPath = filepath.Join(".ocel", "env-client.ts")
 
 var configFiles = []string{"tsconfig.json", "jsconfig.json"}
 
-var recordPath = filepath.Join(".ocel", "output", "client-values.json")
+var recordPath = filepath.Join(".ocel", "output", "client-digests.json")
 
 type App struct {
 	Name      string
@@ -108,13 +108,13 @@ func mapSpecifier(dir string) error {
 
 type buildRecord struct {
 	Resolved bool                         `json:"resolved"`
-	Inlined  map[string]map[string]string `json:"inlined,omitempty"`
+	Digests  map[string]map[string]string `json:"digests,omitempty"`
 }
 
 func Record(projectDir string, apps []App) error {
-	record := buildRecord{Resolved: true, Inlined: make(map[string]map[string]string, len(apps))}
+	record := buildRecord{Resolved: true, Digests: make(map[string]map[string]string, len(apps))}
 	for _, app := range apps {
-		record.Inlined[app.Name] = digests(app)
+		record.Digests[app.Name] = digests(app)
 	}
 	return writeRecord(projectDir, record)
 }
@@ -143,9 +143,9 @@ func CheckFresh(projectDir string, apps []App) error {
 
 	var missing, changed []string
 	for _, app := range apps {
-		inlined := record.Inlined[app.Name]
+		recorded := record.Digests[app.Name]
 		for key, digest := range digests(app) {
-			built, ok := inlined[key]
+			built, ok := recorded[key]
 			switch {
 			case !record.Resolved || !ok:
 				missing = append(missing, key)

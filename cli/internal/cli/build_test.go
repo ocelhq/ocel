@@ -49,12 +49,12 @@ export default {
 			t.Errorf("stdout = %q, want %q", got, want)
 		}
 
-		record, err := os.ReadFile(filepath.Join(root, ".ocel", "output", "client-values.json"))
+		record, err := os.ReadFile(filepath.Join(root, ".ocel", "output", "client-digests.json"))
 		if err != nil {
 			t.Fatalf("the build recorded nothing about its client values: %v", err)
 		}
 		if !strings.Contains(string(record), `"resolved":false`) {
-			t.Errorf("client-values.json = %s, want it to state that the build resolved no values", record)
+			t.Errorf("client-digests.json = %s, want it to state that the build resolved no values", record)
 		}
 	})
 

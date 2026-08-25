@@ -114,7 +114,7 @@ var linkGenerateCmd = &cobra.Command{
 func init() {
 	for _, c := range []*cobra.Command{linkSetCmd, linkRmCmd, linkLsCmd, linkGenerateCmd} {
 		c.Flags().BoolVar(&linkOpts.preview, "preview", false, "Act on the preview bootstrap instead of production")
-		c.Flags().StringVar(&linkOpts.environment, "environment", "", "Address the link this named preview environment holds instead of the class-wide one")
+		c.Flags().StringVar(&linkOpts.environment, "environment", "", "Address the link this named preview environment holds instead of the one bound to all environments")
 		linkCmd.AddCommand(c)
 	}
 	linkSetCmd.Flags().StringVar(&linkOpts.owner, "owner", defaultLinkOwner, "Publish under this publisher's name")

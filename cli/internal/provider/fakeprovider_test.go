@@ -170,7 +170,7 @@ func spawnGrandchildSurvivor(holdPipe, ownGroup bool) error {
 		cmd.Stdout = os.Stdout
 	}
 	if ownGroup {
-		procgroup.New(cmd)
+		procgroup.Isolate(cmd)
 	}
 	if err := cmd.Start(); err != nil {
 		return err

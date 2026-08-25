@@ -29,12 +29,12 @@ import (
 )
 
 type SyncResult struct {
-	Account        resolve.Account
-	Resources      []resolve.Resource
-	RuntimeAddress string
-	LiveValues     map[string]string
-	LiveKeys       []string
-	Err            error
+	Account          resolve.Account
+	Resources        []resolve.Resource
+	DevServerAddress string
+	LiveValues       map[string]string
+	LiveKeys         []string
+	Err              error
 }
 
 type Server struct {
@@ -43,7 +43,7 @@ type Server struct {
 	token         string
 	projectID     string
 	devServerAddr string
-	runtime       *runtimeShim
+	blob          *blobProxy
 	detector      *detector
 	syncCh        chan SyncResult
 
@@ -64,7 +64,7 @@ func New(apiURL, token, projectID, devServerAddr string) *Server {
 		token:           token,
 		projectID:       projectID,
 		devServerAddr:   devServerAddr,
-		runtime:         newRuntimeShim(apiURL, token, projectID),
+		blob:            newBlobProxy(apiURL, token, projectID),
 		detector:        newDetector(apiURL, token, projectID),
 		syncCh:          make(chan SyncResult, 1),
 		fetchAccount:    resolve.StubAccount,
@@ -166,8 +166,8 @@ func (s *Server) Mux() *http.ServeMux {
 	mux.Handle(resourcePath, resourceHandler)
 	devPath, devHandler := watchv1connect.NewDevServiceHandler(s, interceptors)
 	mux.Handle(devPath, devHandler)
-	runtimePath, runtimeHandler := blobv1connect.NewBucketServiceHandler(s.runtime, interceptors)
-	mux.Handle(runtimePath, runtimeHandler)
+	blobPath, blobHandler := blobv1connect.NewBucketServiceHandler(s.blob, interceptors)
+	mux.Handle(blobPath, blobHandler)
 	mux.HandleFunc("/sync", s.handleSync)
 	return mux
 }
@@ -249,7 +249,7 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.deliverSync(SyncResult{Account: cfg, Resources: resolved, RuntimeAddress: s.devServerAddr, LiveValues: liveValues, LiveKeys: liveKeys})
+	s.deliverSync(SyncResult{Account: cfg, Resources: resolved, DevServerAddress: s.devServerAddr, LiveValues: liveValues, LiveKeys: liveKeys})
 	w.WriteHeader(http.StatusOK)
 }
 

@@ -428,7 +428,7 @@ func TestTeardownReapIsBounded(t *testing.T) {
 
 	cmd := exec.Command(os.Args[0])
 	cmd.Env = append(os.Environ(), fakeProviderEnvVar+"=1", fakeProviderModeEnvVar+"=never-ready")
-	procgroup.New(cmd)
+	procgroup.Isolate(cmd)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start process: %v", err)
 	}

@@ -136,7 +136,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 
 	cmd := exec.Command(cfg.BinaryPath, cfg.Args...)
 	cmd.Env = env
-	procgroup.New(cmd)
+	procgroup.Isolate(cmd)
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
