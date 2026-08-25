@@ -67,7 +67,8 @@ func spelledProblem(err error) string {
 
 type Provider struct {
 	options   Options
-	records   *fake.Records
+	machine   *host
+	records   hostRecords
 	artifacts *fake.Artifacts
 	sealer    *fake.Sealer
 }
@@ -87,9 +88,11 @@ func New(_ context.Context, options providerkit.Options) (providerkit.Provider, 
 }
 
 func NewProvider(options Options) *Provider {
+	machine := &host{target: options.SSH}
 	return &Provider{
 		options:   options,
-		records:   fake.NewRecords(),
+		machine:   machine,
+		records:   hostRecords{machine: machine},
 		artifacts: fake.NewArtifacts(),
 		sealer:    fake.NewSealer(),
 	}
@@ -102,7 +105,7 @@ func (p *Provider) Target() Target { return p.options.SSH }
 func (p *Provider) Serves() []providerkit.LinkType { return nil }
 
 func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
-	return bootstrapper{}, nil
+	return hostBootstrapper{machine: p.machine}, nil
 }
 
 func (p *Provider) Releases() providerkit.Releaser { return releaser{} }
@@ -113,7 +116,7 @@ func (p *Provider) Records() providerkit.RecordStore { return p.records }
 
 func (p *Provider) Sealer() providerkit.Sealer { return p.sealer }
 
-func (p *Provider) Credentials() providerkit.Credentials { return credentials{} }
+func (p *Provider) Credentials() providerkit.Credentials { return hostCredentials{machine: p.machine} }
 
 func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{} }
 
