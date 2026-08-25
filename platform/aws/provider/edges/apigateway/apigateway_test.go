@@ -629,40 +629,6 @@ func TestBootstrapWritesNothing(t *testing.T) {
 	}
 }
 
-func TestBootstrapRefusesAnAccountTheCoreStackDoesNotFront(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-
-	t.Run("without the core stack", func(t *testing.T) {
-		t.Parallel()
-
-		w := newWorld()
-		w.cfn.absent = true
-		_, err := w.edge().Bootstrap(ctx, edge.ClassProduction)
-		if err == nil {
-			t.Fatal("Bootstrap reported success against an account with no core stack")
-		}
-		if !strings.Contains(err.Error(), "ocel bootstrap production") {
-			t.Errorf("error = %v, want it to name the command that raises the stack", err)
-		}
-	})
-
-	t.Run("bootstrapped against another edge", func(t *testing.T) {
-		t.Parallel()
-
-		w := newWorld()
-		w.cfn.otherEdge = true
-		_, err := w.edge().Bootstrap(ctx, edge.ClassPreview)
-		if err == nil {
-			t.Fatal("Bootstrap reported success against a stack carrying none of this edge's outputs")
-		}
-		if !strings.Contains(err.Error(), "ocel bootstrap destroy preview") {
-			t.Errorf("error = %v, want it to name the destroy this move goes through", err)
-		}
-	})
-}
-
 func TestReconcileRefusesAnAccountThatWasNeverBootstrapped(t *testing.T) {
 	t.Parallel()
 

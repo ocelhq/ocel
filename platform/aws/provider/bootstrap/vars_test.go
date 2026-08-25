@@ -81,8 +81,8 @@ func varsBootstraps() []struct {
 		class    string
 		template string
 	}{
-		{"production", ClassProduction, stackTemplate(CoreFragment{})},
-		{"preview", ClassPreview, previewStackTemplate(CoreFragment{})},
+		{"production", ClassProduction, coreStackTemplate(ClassProduction, CoreFragment{})},
+		{"preview", ClassPreview, coreStackTemplate(ClassPreview, CoreFragment{})},
 	}
 }
 
@@ -333,7 +333,7 @@ func TestRunVars(t *testing.T) {
 
 func preStoreTemplate(t *testing.T) string {
 	t.Helper()
-	tmpl := stackTemplate(CoreFragment{})
+	tmpl := coreStackTemplate(ClassProduction, CoreFragment{})
 	for _, block := range []string{varsResources(ClassProduction), varsOutputs()} {
 		if block == "" || !strings.Contains(tmpl, block) {
 			t.Fatalf("cannot derive a pre-store template: the current one has no\n%s", block)

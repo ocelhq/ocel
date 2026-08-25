@@ -1,9 +1,12 @@
 package bootstrap
 
 import (
+	"context"
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type edgeUserTemplate struct {
@@ -110,5 +113,64 @@ func TestEdgeUser(t *testing.T) {
 				t.Error("lambda:Invoke* grant must be gated on ocel:component being function, so it reaches no listener or other Ocel-run function")
 			}
 		})
+	}
+}
+
+type mintingEdge struct {
+	*fakeEdge
+	holds bool
+	torn  int
+}
+
+func (e *mintingEdge) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
+	e.bootstraps++
+	e.class = class
+	cred := ""
+	if !e.holds {
+		cred, e.holds = "bootstrap-secret", true
+	}
+	return edge.BootstrapOutput{Offers: []edge.Offer{{
+		Kind: edge.OfferDeploymentsStore,
+		Values: map[string]string{
+			edge.OfferKeyStoreEndpoint:      "https://deployments.example",
+			edge.OfferKeyStoreScriptName:    "ocel-deployments",
+			edge.OfferKeyStoreBootstrapCred: cred,
+		},
+	}}}, nil
+}
+
+func (e *mintingEdge) Teardown(context.Context, edge.Class) error {
+	e.holds = false
+	e.torn++
+	return nil
+}
+
+func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
+	ctx := context.Background()
+	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	front := &mintingEdge{fakeEdge: &fakeEdge{kind: "cloudflare"}}
+	apis := apisFronting(cfn, ssmc, iamc, preloadedStore(), front)
+	fronted := Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}
+
+	if err := Run(ctx, apis, ClassProduction, fronted, nil, nil); err != nil {
+		t.Fatalf("the bootstrap that stands the edge up: %v", err)
+	}
+
+	drop := Request{Features: []string{FeatureISR}, Drop: []string{FeatureCloudflareEdge}}
+	if err := Run(ctx, apis, ClassProduction, drop, nil, nil); err != nil {
+		t.Fatalf("dropping %s: %v", FeatureCloudflareEdge, err)
+	}
+	if front.torn != 1 {
+		t.Errorf("the edge was torn down %d times, want once: the account fronts nothing with it after the drop", front.torn)
+	}
+	if front.bootstraps != 1 {
+		t.Errorf("the edge was bootstrapped %d times, want once: a drop re-adopting what it is about to sever leaves the two disagreeing", front.bootstraps)
+	}
+	if _, held := ssmc.params[DeploymentsStoreParamName]; held {
+		t.Error("the deployments store parameter outlived the drop, so the next bootstrap reads a store nothing stands behind")
+	}
+
+	if err := Run(ctx, apis, ClassProduction, fronted, nil, nil); err != nil {
+		t.Fatalf("a plain bootstrap straight after the drop: %v", err)
 	}
 }

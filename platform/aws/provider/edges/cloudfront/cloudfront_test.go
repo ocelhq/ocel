@@ -165,20 +165,6 @@ func TestBootstrap(t *testing.T) {
 		assertSet(t, "the mutations bootstrap made", w.front.mutations(), nil)
 	})
 
-	t.Run("an account fronted by another edge is refused by name", func(t *testing.T) {
-		t.Parallel()
-
-		w := newWorld()
-		w.cfn.otherEdge = true
-		_, err := w.edge().Bootstrap(context.Background(), edge.ClassProduction)
-		if err == nil {
-			t.Fatal("Bootstrap error = nil, want a refusal: the bootstrap stack carries no cloudfront set")
-		}
-		if !strings.Contains(err.Error(), "ocel bootstrap production") {
-			t.Errorf("Bootstrap error = %v, want it to name the command that writes the set", err)
-		}
-	})
-
 	t.Run("an unknown class is refused", func(t *testing.T) {
 		t.Parallel()
 

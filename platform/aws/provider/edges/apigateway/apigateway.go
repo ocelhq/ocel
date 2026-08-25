@@ -16,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -218,29 +217,11 @@ func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (
 	return bootstrap.CheckDeployed(ctx, c.CFN, p)
 }
 
-func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
-	c, err := p.clientsFor(ctx)
-	if err != nil {
-		return edge.BootstrapOutput{}, err
-	}
-	deployed, err := p.bootstrap(ctx, c, class)
-	if err != nil {
-		return edge.BootstrapOutput{}, err
-	}
-	if err := carriesEdge(deployed, class); err != nil {
+func (p *provider) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
+	if err := knownClass(class); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
 	return edge.BootstrapOutput{Trust: edge.TrustInternal}, nil
-}
-
-func carriesEdge(deployed bootstrap.Deployed, class edge.Class) error {
-	if !deployed.Present {
-		return fmt.Errorf("the %s bootstrap stack is not standing, so the account holds none of what the %q edge fronts deployments with: the role API Gateway invokes functions through, and the API answering every host no deployment claims. Both are part of that stack: run `%s`", class, Kind, providerkit.BootstrapCommand(class))
-	}
-	if deployed.CoreOutputs[OutputInvokeRoleARN] == "" || deployed.CoreOutputs[OutputNotFoundAPIID] == "" {
-		return fmt.Errorf("the %s bootstrap stack is standing but carries nothing the %q edge needs, so this account was bootstrapped against a different edge. An account fronts its deployments with one edge, and moving it to another is a destroy and a fresh bootstrap, not an upgrade: tear the deployments down, run `ocel bootstrap destroy %s`, then `%s` with this edge selected", class, Kind, class, providerkit.BootstrapCommand(class))
-	}
-	return nil
 }
 
 func (p *provider) Teardown(ctx context.Context, class edge.Class) error {

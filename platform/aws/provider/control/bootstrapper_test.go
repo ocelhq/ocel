@@ -105,6 +105,46 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	}
 }
 
+func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.T) {
+	t.Parallel()
+
+	front := &planningEdge{planned: []edge.PlanChange{
+		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanKeep},
+		{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanUpdate},
+		{Kind: "Cloudflare::Worker", Name: "ocel-deployments", Action: edge.PlanCreate},
+	}}
+	b := Bootstrapper{CFN: &teardownCFN{present: map[string]bootstrap.Deployed{}}, Edge: front}
+
+	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
+		Class: providerkit.ClassProduction,
+		Drop:  []string{bootstrap.FeatureCloudflareEdge},
+	})
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+
+	var edgeGroup providerkit.ChangeGroup
+	for _, group := range plan.Groups {
+		if group.Kind == providerkit.EdgeGroupKind {
+			edgeGroup = group
+		}
+	}
+	if edgeGroup.Name == "" {
+		t.Fatal("the plan says nothing about the edge it is dropping")
+	}
+	if edgeGroup.Action != providerkit.ActionDelete {
+		t.Errorf("the edge group is %q, want it deleted: the feature it fronts through is being dropped", edgeGroup.Action)
+	}
+	for _, change := range edgeGroup.Changes {
+		if change.Action != providerkit.ActionDelete {
+			t.Errorf("the drop plan carries %+v, want every edge row a delete", change)
+		}
+		if change.Name == "ocel-deployments" {
+			t.Error("the drop plan names a worker that does not stand yet among what it deletes")
+		}
+	}
+}
+
 func TestPlanLeavesOutAnEdgeThatCannotPlanItsOwnBootstrap(t *testing.T) {
 	t.Parallel()
 
@@ -234,6 +274,10 @@ func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 		StackStatus: cfntypes.StackStatusCreateComplete,
 		Outputs:     outputs,
 	}}}, nil
+}
+
+func (c *teardownCFN) ListStackResources(_ context.Context, _ *cloudformation.ListStackResourcesInput, _ ...func(*cloudformation.Options)) (*cloudformation.ListStackResourcesOutput, error) {
+	return &cloudformation.ListStackResourcesOutput{}, nil
 }
 
 func (c *teardownCFN) DeleteStack(_ context.Context, in *cloudformation.DeleteStackInput, _ ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error) {

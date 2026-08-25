@@ -27,13 +27,13 @@ func NameStacks(described providerkit.Bootstrap) providerkit.Bootstrap {
 	})
 }
 
-func PlanChanges(ctx context.Context, cfn CFNAPI, class string, front edge.Edge, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
-	target, err := bootstrapFor(class)
+func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, front edge.Edge, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
+	target, err := bootstrapFor(read.class)
 	if err != nil {
 		return nil, err
 	}
-	deployed, refs, err := readBootstrap(ctx, cfn, class, front)
-	if err != nil {
+	deployed, refs, class := read.Deployed, read.refs, read.class
+	if err := refuseEdgeSwitch(target, front, deployed); err != nil {
 		return nil, err
 	}
 	alongside := FeatureSet{}
@@ -63,7 +63,7 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, class string, front edge.Edge,
 
 func renderGroup(target spec, feature, class string, front edge.Edge, artifactBucket string, refs stackRefs, alongside FeatureSet) (featureStack, bool) {
 	if feature == "" {
-		return featureStack{body: target.template(coreFragment(front, class))}, true
+		return featureStack{body: target.core(coreFragment(front, class))}, true
 	}
 	f, ok := featureNamed(feature)
 	if !ok {
@@ -198,12 +198,20 @@ type templateResource struct {
 	kind string
 }
 
-func templateResources(body string) []templateResource {
-	var doc yaml.Node
-	if err := yaml.Unmarshal([]byte(body), &doc); err != nil || len(doc.Content) == 0 {
+func templateOutputKeys(body string) []string {
+	outputs := templateSection(body, "Outputs")
+	if outputs == nil {
 		return nil
 	}
-	resources := mappingValue(doc.Content[0], "Resources")
+	keys := make([]string, 0, len(outputs.Content)/2)
+	for i := 0; i+1 < len(outputs.Content); i += 2 {
+		keys = append(keys, outputs.Content[i].Value)
+	}
+	return keys
+}
+
+func templateResources(body string) []templateResource {
+	resources := templateSection(body, "Resources")
 	if resources == nil {
 		return nil
 	}
@@ -216,6 +224,14 @@ func templateResources(body string) []templateResource {
 		out = append(out, resource)
 	}
 	return out
+}
+
+func templateSection(body, name string) *yaml.Node {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(body), &doc); err != nil || len(doc.Content) == 0 {
+		return nil
+	}
+	return mappingValue(doc.Content[0], name)
 }
 
 func mappingValue(node *yaml.Node, key string) *yaml.Node {

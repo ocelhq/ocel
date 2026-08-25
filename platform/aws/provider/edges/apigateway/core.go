@@ -1,6 +1,8 @@
 package apigateway
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -29,16 +31,23 @@ func (p *provider) CoreStack(class string) bootstrap.CoreFragment {
 	if knownClass(c) != nil {
 		return bootstrap.CoreFragment{}
 	}
+	responder := notFoundAPIResource(c) +
+		notFoundProxyResource() +
+		notFoundMethodResource("EdgeNotFoundRootMethod", "!GetAtt EdgeNotFoundApi.RootResourceId", rootPath) +
+		notFoundMethodResource("EdgeNotFoundProxyMethod", "!Ref EdgeNotFoundProxy", rootPath+proxyPathPart)
+	published := notFoundDeploymentID(responder)
 	return bootstrap.CoreFragment{
 		Resources: invokeRoleResource(c) +
-			notFoundAPIResource(c) +
-			notFoundProxyResource() +
-			notFoundMethodResource("EdgeNotFoundRootMethod", "!GetAtt EdgeNotFoundApi.RootResourceId", rootPath) +
-			notFoundMethodResource("EdgeNotFoundProxyMethod", "!Ref EdgeNotFoundProxy", rootPath+proxyPathPart) +
-			notFoundDeploymentResource() +
-			notFoundStageResource(),
+			responder +
+			notFoundDeploymentResource(published) +
+			notFoundStageResource(published),
 		Outputs: edgeOutputs(),
 	}
+}
+
+func notFoundDeploymentID(responder string) string {
+	sum := sha256.Sum256([]byte(responder))
+	return "EdgeNotFoundDeployment" + hex.EncodeToString(sum[:6])
 }
 
 func invokeRoleResource(class edge.Class) string {
@@ -127,29 +136,29 @@ func notFoundMethodResource(logical, resourceID, path string) string {
 `, logical, path, EdgeHeader, resourceID, anyMethod, templates.String(), edgeHeaderParameter, edgeHeaderValue, edgeHeaderParameter)
 }
 
-func notFoundDeploymentResource() string {
-	return `  EdgeNotFoundDeployment:
+func notFoundDeploymentResource(logical string) string {
+	return fmt.Sprintf(`  %s:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
       - EdgeNotFoundRootMethod
       - EdgeNotFoundProxyMethod
     Metadata:
-      Description: "Publishes the 404 responder's two methods; without it the API stands but serves nothing."
+      Description: "Publishes the 404 responder's two methods; without it the API stands but serves nothing. Named for what it publishes, so a changed responder is published rather than left behind."
     Properties:
       RestApiId: !Ref EdgeNotFoundApi
-`
+`, logical)
 }
 
-func notFoundStageResource() string {
+func notFoundStageResource(deployment string) string {
 	return fmt.Sprintf(`  EdgeNotFoundStage:
     Type: AWS::ApiGateway::Stage
     Metadata:
       Description: "The stage routing rules name when they send an unclaimed host to the 404 responder; every Ocel REST API serves from a stage of this name."
     Properties:
       RestApiId: !Ref EdgeNotFoundApi
-      DeploymentId: !Ref EdgeNotFoundDeployment
+      DeploymentId: !Ref %s
       StageName: %s
-`, stageName)
+`, deployment, stageName)
 }
 
 func edgeOutputs() string {
