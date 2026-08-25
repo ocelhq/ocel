@@ -107,6 +107,7 @@ type APIs struct {
 	IAM   IAMAPI
 	Store ObjectStore
 	Edge  edge.Edge
+	Edges providerkit.EdgeRegistry
 }
 
 type Request struct {
@@ -410,12 +411,12 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	if err != nil {
 		return err
 	}
-	steps := stepDeps{class: target.class, kind: apis.Edge.Kind(), ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
-	if droppingEdge(apis.Edge.Kind(), req) {
-		if err := tearDownEdge(ctx, steps, apis.Edge); err != nil {
-			return err
-		}
-	} else if err := bootstrapEdge(ctx, steps, apis.Edge); err != nil {
+	steps := stepDeps{class: target.class, ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
+	dropped := Removing(req.Features, req.Remove)
+	if err := tearDownEdges(ctx, apis, steps, dropped); err != nil {
+		return err
+	}
+	if err := bootstrapEdges(ctx, apis, steps, req.Features, dropped); err != nil {
 		return err
 	}
 
@@ -508,9 +509,49 @@ func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, class string,
 	return deleteFeatureStacks(ctx, cfn, class, dropOrder, logf)
 }
 
-func droppingEdge(kind edge.Kind, req Request) bool {
-	name := providerkit.FeatureNeedingEdge(Catalogue(), kind)
-	return name != "" && slices.Contains(req.Remove, name) && !slices.Contains(req.Features, name)
+func openEdge(apis APIs, kind edge.Kind) (edge.Edge, error) {
+	if apis.Edge != nil && apis.Edge.Kind() == kind {
+		return apis.Edge, nil
+	}
+	if apis.Edges == nil {
+		return nil, fmt.Errorf("bootstrap: this run holds no edge registry, so it cannot reach the %s edge its features stand on", kind)
+	}
+	return apis.Edges.Open(kind)
+}
+
+func bootstrapEdges(ctx context.Context, apis APIs, d stepDeps, features, dropped []string) error {
+	torn := EdgeKindsFor(dropped)
+	if !slices.Contains(torn, apis.Edge.Kind()) {
+		if err := bootstrapEdge(ctx, d, apis.Edge); err != nil {
+			return err
+		}
+	}
+	for _, kind := range EdgeKindsFor(features) {
+		if kind == apis.Edge.Kind() || slices.Contains(torn, kind) {
+			continue
+		}
+		front, err := openEdge(apis, kind)
+		if err != nil {
+			return err
+		}
+		if err := bootstrapEdge(ctx, d, front); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func tearDownEdges(ctx context.Context, apis APIs, d stepDeps, dropped []string) error {
+	for _, kind := range EdgeKindsFor(dropped) {
+		front, err := openEdge(apis, kind)
+		if err != nil {
+			return err
+		}
+		if err := tearDownEdge(ctx, d, front); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func tearDownEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
@@ -544,7 +585,7 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 			if err := adoptISRWriter(ctx, d.ssm, d.class, front.Kind(), offer.Values); err != nil {
 				return err
 			}
-			if _, err := ensureISRWriterSeed(ctx, d.ssm, d.class, d.kind); err != nil {
+			if _, err := ensureISRWriterSeed(ctx, d.ssm, d.class, front.Kind()); err != nil {
 				return err
 			}
 		default:

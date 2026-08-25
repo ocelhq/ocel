@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -32,7 +33,7 @@ func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 	}
 
 	plan := providerkit.BootstrapPlan{Groups: providerkit.Vendored(groupVendor, stacks)}
-	fronts, err := b.standingEdges(ctx, class)
+	fronts, err := b.standingEdges(ctx, class, read.Deployed)
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
@@ -48,15 +49,19 @@ func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 	return plan, nil
 }
 
-func (b Bootstrapper) standingEdges(ctx context.Context, class providerkit.Class) ([]edge.Edge, error) {
+func (b Bootstrapper) standingEdges(ctx context.Context, class providerkit.Class, deployed bootstrap.Deployed) ([]edge.Edge, error) {
+	held := bootstrap.EdgeKindsFor(deployed.Features.Names())
 	fronts := []edge.Edge{b.Edge}
 	for _, kind := range b.Edges.Supported() {
 		if kind == b.Edge.Kind() {
 			continue
 		}
-		standing, err := bootstrap.EdgeStanding(ctx, b.SSM, string(class), kind)
-		if err != nil {
-			return nil, err
+		standing := slices.Contains(held, kind)
+		if !standing {
+			var err error
+			if standing, err = bootstrap.EdgeStanding(ctx, b.SSM, string(class), kind); err != nil {
+				return nil, err
+			}
 		}
 		if !standing {
 			continue

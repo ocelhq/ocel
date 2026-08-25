@@ -290,6 +290,52 @@ func TestPlanRemovalLeavesOutAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
 	}
 }
 
+func TestPlanRemovalStillSeesAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
+	t.Parallel()
+
+	b, _, _ := frontedBootstrapper(t, bootstrap.ClassProduction)
+	severed(t, b, bootstrap.ClassProduction)
+
+	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
+	if err != nil {
+		t.Fatalf("PlanRemoval: %v", err)
+	}
+	if groupNamed(plan, string(cloudflareKind)+"/edge") == nil {
+		t.Errorf("plan groups = %s, want the edge whose feature stack still stands: its externals are live and nothing else would take them", groupNames(plan))
+	}
+}
+
+func TestRemoveTearsDownAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
+	t.Parallel()
+
+	b, _, standing := frontedBootstrapper(t, bootstrap.ClassProduction)
+	severed(t, b, bootstrap.ClassProduction)
+
+	if err := b.Remove(context.Background(), providerkit.ClassProduction, nil); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if len(standing.torndown) == 0 {
+		t.Error("the cloudflare edge was left standing, so a run that severed its parameters and stopped orphans them for good")
+	}
+}
+
+func severed(t *testing.T, b Bootstrapper, class string) {
+	t.Helper()
+
+	b.CFN.(*teardownCFN).present[bootstrap.FeatureStackName(bootstrap.FeatureCloudflareEdge, class)] =
+		bootstrap.Deployed{Present: true}
+	prefix, err := bootstrap.EdgeParamPrefix(class, cloudflareKind)
+	if err != nil {
+		t.Fatalf("EdgeParamPrefix(%s): %v", class, err)
+	}
+	held := b.SSM.(*teardownSSM).params
+	for name := range held {
+		if strings.HasPrefix(name, prefix+"/") {
+			delete(held, name)
+		}
+	}
+}
+
 func TestRemoveTearsDownEveryEdgeThePlanShowed(t *testing.T) {
 	t.Parallel()
 

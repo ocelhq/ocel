@@ -48,7 +48,6 @@ type featureStack struct {
 
 type stepDeps struct {
 	class    string
-	kind     edge.Kind
 	ssm      SSMAPI
 	iam      IAMAPI
 	progress func(string)
@@ -75,6 +74,15 @@ func (f feature) render(class, artifactBucket string, refs stackRefs, alongside 
 		refs:      refs,
 		alongside: alongside,
 	})
+}
+
+func (f feature) edgeKind() (edge.Kind, bool) {
+	for _, need := range f.needs {
+		if kind, ok := strings.CutPrefix(need, needsEdgePrefix); ok {
+			return edge.Kind(kind), true
+		}
+	}
+	return "", false
 }
 
 func (f feature) stackName(class string) string {
@@ -114,16 +122,31 @@ func featureNamed(name string) (feature, bool) {
 	return feature{}, false
 }
 
-func edgeKinds() []edge.Kind {
+func edgeKinds() []edge.Kind { return EdgeKindsFor(featureNames()) }
+
+func EdgeKindsFor(names []string) []edge.Kind {
 	var kinds []edge.Kind
-	for _, f := range featureRegistry {
-		for _, need := range f.needs {
-			if kind, ok := strings.CutPrefix(need, needsEdgePrefix); ok {
-				kinds = append(kinds, edge.Kind(kind))
-			}
+	for _, name := range names {
+		f, ok := featureNamed(name)
+		if !ok {
+			continue
+		}
+		kind, needed := f.edgeKind()
+		if needed && !slices.Contains(kinds, kind) {
+			kinds = append(kinds, kind)
 		}
 	}
 	return kinds
+}
+
+func Removing(features, remove []string) []string {
+	var out []string
+	for _, name := range remove {
+		if !slices.Contains(features, name) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func featureNames() []string {
