@@ -156,7 +156,7 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 		t.Fatalf("the bootstrap that stands the edge up: %v", err)
 	}
 
-	drop := Request{Features: []string{FeatureISR}, Drop: []string{FeatureCloudflareEdge}}
+	drop := Request{Features: []string{FeatureISR}, Remove: []string{FeatureCloudflareEdge}}
 	if err := Run(ctx, apis, ClassProduction, drop, nil, nil); err != nil {
 		t.Fatalf("dropping %s: %v", FeatureCloudflareEdge, err)
 	}

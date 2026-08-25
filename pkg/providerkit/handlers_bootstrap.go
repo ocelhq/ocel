@@ -64,6 +64,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 func applyRequestOf(req *contractv1.BootstrapRequest) ApplyRequest {
 	return ApplyRequest{
 		Features:           req.GetFeatures(),
+		Remove:             req.GetRemove(),
 		Force:              req.GetForce(),
 		AutoHeal:           req.AutoHeal,
 		AcceptReplacements: req.GetAcceptReplacements(),

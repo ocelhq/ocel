@@ -51,7 +51,7 @@ type BootstrapRequest struct {
 
 	Features []string
 
-	Drop []string
+	Remove []string
 
 	Unattended bool
 

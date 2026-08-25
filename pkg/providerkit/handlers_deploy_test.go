@@ -753,14 +753,18 @@ func TestDeployRecordsTheFeaturesItsProjectDependsOn(t *testing.T) {
 		}
 	}
 
-	stream, err := client.Bootstrap(ctx, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	stream, err := client.Bootstrap(ctx, &contractv1.BootstrapRequest{
+		Tier:   environmentv1.Tier_TIER_PRODUCTION,
+		Edge:   &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+		Remove: []string{fake.FeatureCache},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	result, err := drain(stream)
 	said := result.GetError() + connectMessage(err)
 	if !strings.Contains(said, "shop") {
-		t.Fatalf("dropping every feature = %q, want it refused for the project that depends on them", said)
+		t.Fatalf("removing every feature = %q, want it refused for the project that depends on them", said)
 	}
 }
 

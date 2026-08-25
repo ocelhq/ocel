@@ -142,50 +142,65 @@ func TestFeatureDeleteOrder(t *testing.T) {
 	}
 }
 
-func TestFeatureDrop(t *testing.T) {
+func TestFeatureRemoval(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name      string
-		standing  []string
-		requested []string
-		want      []string
+		name     string
+		standing []string
+		named    []string
+		want     []string
+		wantErr  bool
 	}{
 		{
-			name:      "a re-run of the same set drops nothing",
-			standing:  []string{"isr"},
-			requested: []string{"isr"},
+			name:     "a run that names nothing removes nothing",
+			standing: []string{"isr", "image-optimization"},
 		},
 		{
-			name:      "a name left out of the set is a drop",
-			standing:  []string{"isr", "image-optimization"},
-			requested: []string{"isr"},
-			want:      []string{"image-optimization"},
+			name:     "a standing name left out is left alone",
+			standing: []string{"isr", "image-optimization"},
+			named:    []string{"image-optimization"},
+			want:     []string{"image-optimization"},
 		},
 		{
-			name:      "what stands on a dropped feature goes with it",
-			standing:  []string{"isr", "cloudflare-edge"},
-			requested: nil,
-			want:      []string{"isr", "cloudflare-edge"},
+			name:     "what stands on a removed feature goes with it",
+			standing: []string{"isr", "cloudflare-edge"},
+			named:    []string{"isr"},
+			want:     []string{"isr", "cloudflare-edge"},
 		},
 		{
-			name:      "dropping the dependency takes the dependent it holds up",
-			standing:  []string{"isr", "cloudflare-edge"},
-			requested: []string{"cloudflare-edge"},
-			want:      []string{"isr", "cloudflare-edge"},
+			name:     "a name that is not standing is nothing to remove",
+			standing: []string{"isr"},
+			named:    []string{"image-optimization"},
 		},
 		{
-			name:      "a dependent that was never there is left alone",
-			standing:  []string{"isr"},
-			requested: nil,
-			want:      []string{"isr"},
+			name:     "a dependent that was never there is not conjured up",
+			standing: []string{"isr"},
+			named:    []string{"isr"},
+			want:     []string{"isr"},
+		},
+		{
+			name:     "a name no catalogue offers is refused",
+			standing: []string{"isr"},
+			named:    []string{"nonesuch"},
+			wantErr:  true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := featureDrop(testCatalogue, tc.standing, tc.requested); !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("featureDrop() = %v, want %v", got, tc.want)
+			got, err := featureRemoval(testCatalogue, tc.standing, tc.named)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("featureRemoval() = %v, want a refusal naming what this provider does not offer", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("featureRemoval() = %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("featureRemoval() = %v, want %v", got, tc.want)
 			}
 		})
 	}

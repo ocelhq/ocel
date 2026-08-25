@@ -149,7 +149,7 @@ func TestAdmitRefusesASchemaThisBuildCannotRead(t *testing.T) {
 	}
 }
 
-func TestAdmitRefusesAMissingFeatureAndOffersTheFullSet(t *testing.T) {
+func TestAdmitRefusesAMissingFeatureAndOffersTheOneCommandThatAddsIt(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := gated(t, "2.0.0")
@@ -162,7 +162,7 @@ func TestAdmitRefusesAMissingFeatureAndOffersTheFullSet(t *testing.T) {
 	}
 	for _, want := range []string{
 		"lacks the features this project needs: " + fake.FeatureImages,
-		"`ocel bootstrap production --features " + fake.FeatureCache + "," + fake.FeatureImages + "`",
+		"`ocel bootstrap production --features " + fake.FeatureImages + "`",
 	} {
 		if !strings.Contains(refusal.Message, want) {
 			t.Errorf("Admit() = %q, want it to contain %q", refusal.Message, want)

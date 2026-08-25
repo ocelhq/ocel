@@ -73,7 +73,7 @@ func TestPlanSeparatesTheStaleFromTheCurrent(t *testing.T) {
 	}
 }
 
-func TestPlanShowsADropItRefusesToApply(t *testing.T) {
+func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -81,20 +81,57 @@ func TestPlanShowsADropItRefusesToApply(t *testing.T) {
 	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 	recordProject(t, provider, "shop", fake.FeatureImages)
 
-	req := providerkit.ApplyRequest{Features: []string{fake.FeatureCache}}
+	req := providerkit.ApplyRequest{Remove: []string{fake.FeatureImages}}
 	plan, err := gate.Plan(ctx, providerkit.ClassProduction, req)
 	if err != nil {
-		t.Fatalf("Plan() error = %v, want a plan that shows the drop rather than refusing it", err)
+		t.Fatalf("Plan() error = %v, want a plan that shows the removal rather than refusing it", err)
 	}
-	dropped := groupFor(t, plan, fake.FeatureImages)
-	if dropped.Action != providerkit.ActionDelete {
-		t.Errorf("the images group is %q, want it deleted where it left the set", dropped.Action)
+	removed := groupFor(t, plan, fake.FeatureImages)
+	if removed.Action != providerkit.ActionDelete {
+		t.Errorf("the images group is %q, want it deleted where the run named it for removal", removed.Action)
 	}
-	if !strings.Contains(dropped.Reason, "shop") {
-		t.Errorf("the images group reads %q, want it to name the project deployed against it", dropped.Reason)
+	if !strings.Contains(removed.Reason, "shop") {
+		t.Errorf("the images group reads %q, want it to name the project deployed against it", removed.Reason)
 	}
 	if err := gate.Apply(ctx, providerkit.ClassProduction, req, nil); err == nil {
-		t.Error("Apply() took the drop the plan warned about without --force")
+		t.Error("Apply() took the removal the plan warned about without --force")
+	}
+}
+
+func TestPlanLeavesAStandingFeatureNoRunNamed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gate, provider := gated(t, "1.2.3")
+	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+
+	plan, err := gate.Plan(ctx, providerkit.ClassProduction, providerkit.ApplyRequest{Features: []string{fake.FeatureCache}})
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	for _, group := range plan.Groups {
+		if group.Feature == fake.FeatureImages {
+			t.Fatalf("a run naming only %s plans %+v for %s, want a feature it never mentioned left out of the plan entirely",
+				fake.FeatureCache, group, fake.FeatureImages)
+		}
+	}
+}
+
+func TestPlanRefusesToEnsureAndRemoveTheSameFeature(t *testing.T) {
+	t.Parallel()
+
+	gate, provider := gated(t, "1.2.3")
+	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+
+	_, err := gate.Plan(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
+		Features: []string{fake.FeatureCache},
+		Remove:   []string{fake.FeatureCache},
+	})
+	if err == nil {
+		t.Fatal("Plan() took a run that both stands a feature up and takes it down")
+	}
+	if !strings.Contains(err.Error(), fake.FeatureCache) {
+		t.Errorf("err = %v, want it to name the feature asked for both ways", err)
 	}
 }
 
@@ -245,7 +282,7 @@ func TestDeriveGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 	groups := providerkit.DeriveGroups(described, fake.NewBootstrapper().Catalogue(), providerkit.BootstrapRequest{
 		Class:    providerkit.ClassPreview,
 		Features: []string{fake.FeatureCache},
-		Drop:     []string{fake.FeatureImages},
+		Remove:   []string{fake.FeatureImages},
 	})
 	if len(groups) != 3 {
 		t.Fatalf("DeriveGroups() = %v, want the baseline, the kept feature and the dropped one", groups)

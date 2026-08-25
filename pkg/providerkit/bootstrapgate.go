@@ -88,6 +88,8 @@ func (s Standing) healable(required []string) []string {
 type ApplyRequest struct {
 	Features []string
 
+	Remove []string
+
 	Force bool
 
 	AutoHeal *bool
@@ -98,7 +100,7 @@ type ApplyRequest struct {
 type intent struct {
 	standing  Standing
 	requested []string
-	drop      []string
+	removing  []string
 	ordered   []string
 }
 
@@ -111,21 +113,27 @@ func (g Gate) intended(ctx context.Context, class Class, req ApplyRequest) (inte
 	if err := RefuseSchemaAhead(standing.Schema, standing.Present, class); err != nil {
 		return intent{}, err
 	}
-	requested, err := featureClosure(catalogue, g.ensuringEdge(catalogue, standing, req.Features))
+	requested, err := featureClosure(catalogue, g.ensuringEdge(catalogue, req.Features))
 	if err != nil {
 		return intent{}, err
 	}
-	drop := featureDrop(catalogue, standing.Features, requested)
-	ordered, err := featureDeleteOrder(catalogue, drop)
+	removing, err := featureRemoval(catalogue, standing.Features, req.Remove)
 	if err != nil {
 		return intent{}, err
 	}
-	return intent{standing: standing, requested: requested, drop: drop, ordered: ordered}, nil
+	if err := refuseBothWays(requested, removing); err != nil {
+		return intent{}, err
+	}
+	ordered, err := featureDeleteOrder(catalogue, removing)
+	if err != nil {
+		return intent{}, err
+	}
+	return intent{standing: standing, requested: requested, removing: removing, ordered: ordered}, nil
 }
 
-func (g Gate) ensuringEdge(catalogue []Feature, standing Standing, requested []string) []string {
+func (g Gate) ensuringEdge(catalogue []Feature, requested []string) []string {
 	fronting := FeatureNeedingEdge(catalogue, g.Edge)
-	if fronting == "" || slices.Contains(requested, fronting) || slices.Contains(standing.Features, fronting) {
+	if fronting == "" || slices.Contains(requested, fronting) {
 		return requested
 	}
 	return append(slices.Clone(requested), fronting)
@@ -135,7 +143,7 @@ func (i intent) request(class Class, req ApplyRequest, writer Writer) BootstrapR
 	return BootstrapRequest{
 		Class:      class,
 		Features:   i.requested,
-		Drop:       i.ordered,
+		Remove:     i.ordered,
 		Unattended: !req.AcceptReplacements,
 		Writer:     writer,
 	}
@@ -185,7 +193,7 @@ func (g Gate) Apply(ctx context.Context, class Class, req ApplyRequest, report R
 	if err != nil {
 		return err
 	}
-	if err := g.admitDrops(ctx, class, intended.drop, req.Force); err != nil {
+	if err := g.admitRemovals(ctx, class, intended.removing, req.Force); err != nil {
 		return err
 	}
 
@@ -220,21 +228,21 @@ func (g Gate) Vacant(ctx context.Context, class Class) error {
 	return occupancy.Refuse(class)
 }
 
-func (g Gate) admitDrops(ctx context.Context, class Class, drop []string, force bool) error {
-	if len(drop) == 0 || force {
+func (g Gate) admitRemovals(ctx context.Context, class Class, removing []string, force bool) error {
+	if len(removing) == 0 || force {
 		return nil
 	}
 	recorded, err := g.RecordedFeatures(ctx, class)
 	if err != nil {
 		return err
 	}
-	dependents := ProjectsDependingOn(recorded, drop)
+	dependents := ProjectsDependingOn(recorded, removing)
 	if len(dependents) == 0 {
 		return nil
 	}
 	return Refuse(CodeNotReady,
-		"dropping %s would break %d project(s) already deployed here: %s — re-run with --force to drop it anyway, or leave the feature in the set",
-		strings.Join(drop, ", "), len(dependents), strings.Join(dependents, ", "))
+		"removing %s would break %d project(s) already deployed here: %s — re-run with --force to remove it anyway, or leave it standing",
+		strings.Join(removing, ", "), len(dependents), strings.Join(dependents, ", "))
 }
 
 func (g Gate) RecordedFeatures(ctx context.Context, class Class) (map[string][]string, error) {
@@ -301,11 +309,9 @@ func (s Standing) lacking(required []string, command string) error {
 	if len(missing) == 0 {
 		return nil
 	}
-	full := append(slices.Clone(s.Features), missing...)
-	slices.Sort(full)
 	return Refuse(CodeNotReady,
 		"this account's Ocel bootstrap lacks the features this project needs: %s.\nRun `%s --features %s` and try again",
-		strings.Join(missing, ", "), command, strings.Join(slices.Compact(full), ","))
+		strings.Join(missing, ", "), command, strings.Join(missing, ","))
 }
 
 func (g Gate) heal(ctx context.Context, standing Standing, required []string, report Reporter) bool {

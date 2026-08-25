@@ -32,6 +32,7 @@ type Options struct {
 	Dry              bool
 	Force            bool
 	Features         string
+	Remove           string
 	FeaturesDeclared bool
 	AutoHealDeclared bool
 	AutoHeal         bool
@@ -71,11 +72,12 @@ func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []s
 		Aliases: aliases,
 		Short:   fmt.Sprintf("Set up or update the %s environment", name),
 		Long: fmt.Sprintf("Set up or update the %s environment.\n\n", name) +
-			"Interactive runs pick features from a list; --features sets the exact list to keep, " +
-			"and anything left out is removed.\n\n" +
+			"A bootstrap only ever builds up: --features and the interactive picker add and refresh, " +
+			"and a feature they leave out is left standing. --remove is the only way anything goes.\n\n" +
 			"Every run prints the changes it would make before asking; --dry prints them and stops.",
 		Example: fmt.Sprintf("  $ ocel bootstrap %s\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --features core,queues\n", name) +
+			fmt.Sprintf("  $ ocel bootstrap %s --remove queues\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --dry\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --auto-heal", name),
 		Args: cobra.NoArgs,
@@ -98,7 +100,8 @@ func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []s
 
 	cmd.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "Skip confirmation")
 	cmd.Flags().BoolVar(&opts.Dry, "dry", false, "Print the changes and stop, applying nothing")
-	cmd.Flags().StringVar(&opts.Features, "features", "", "Comma-separated `set` of features to keep (also: all, none)")
+	cmd.Flags().StringVar(&opts.Features, "features", "", "Comma-separated `set` of features to add or refresh; whatever else stands is left alone (also: all, none)")
+	cmd.Flags().StringVar(&opts.Remove, "remove", "", "Comma-separated `set` of features to tear down; nothing goes unless it is named here")
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Remove a feature other projects still use")
 	cmd.Flags().BoolVar(&opts.AutoHeal, "auto-heal", false, "Let later deploys refresh stale features on their own; --auto-heal=false turns it off")
 
@@ -219,8 +222,19 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		}
 		catalogue := planned.GetFeatures()
 
+		named, err := parseRemoveFlag(opts.Remove, catalogue)
+		if err != nil {
+			return err
+		}
+		standing := enabledFeatures(catalogue)
+		going := goingFeatures(catalogue, standing, named)
+		if absent := without(named, standing); len(absent) > 0 {
+			fmt.Fprintf(stdout, "%s is not in the %s bootstrap, so there is nothing to remove.\n",
+				strings.Join(absent, ", "), Name(tier))
+		}
+
 		interactive := !opts.Yes && deps.StdinIsTerminal(stdin)
-		requested, selected, err := chooseFeatures(ctx, opts, catalogue, interactive, stdout)
+		requested, selected, err := chooseFeatures(ctx, opts, catalogue, standing, going, interactive, stdout)
 		if err != nil {
 			return err
 		}
@@ -228,16 +242,14 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			fmt.Fprintln(stdout, "Aborted.")
 			return nil
 		}
-
-		dropped := droppedFeatures(enabledFeatures(catalogue), requested)
-		if len(dropped) > 0 && !opts.Force && !interactive && !opts.Dry {
-			return fmt.Errorf("this would remove %s from the %s bootstrap; projects deployed against it break when it goes, so re-run with --force to remove it anyway",
-				strings.Join(dropped, ", "), Name(tier))
+		if err := bothWays(requested, named); err != nil {
+			return err
 		}
 
 		req := &contractv1.BootstrapRequest{
 			Tier:               tier,
 			Features:           requested,
+			Remove:             going,
 			Force:              opts.Force,
 			AcceptReplacements: opts.Yes,
 			Edge:               edgewire.Selection(cfg),
@@ -266,8 +278,11 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			if changeplan.AllKeep(plan) {
 				fmt.Fprint(stdout, "\nNo infrastructure changes — applying refreshes bootstrap seals and records.\n")
 			}
-		} else if len(dropped) > 0 {
-			fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(dropped, ", "), Name(tier))
+		} else if len(going) > 0 {
+			fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(going, ", "), Name(tier))
+			if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
+				fmt.Fprintf(stdout, "These projects were deployed against it and break when it goes: %s\n", strings.Join(dependents, ", "))
+			}
 		}
 		status := planned.GetBootstrap()
 		if status.GetDowngrade() {
@@ -289,20 +304,6 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			}
 		}
 
-		if len(dropped) > 0 && !req.Force && interactive {
-			if !planDrops(plan, dropped) {
-				proceed, err := confirmDrop(ctx, tier, dropped, dependentProjects(catalogue, dropped), stdout, stdin)
-				if err != nil {
-					return err
-				}
-				if !proceed {
-					fmt.Fprintln(stdout, "Aborted.")
-					return nil
-				}
-			}
-			req.Force = true
-		}
-
 		if interactive {
 			title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package())
 			if rendered && !changeplan.AllKeep(plan) {
@@ -319,6 +320,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			if rendered {
 				req.AcceptReplacements = true
 			}
+			req.Force = req.Force || len(going) > 0
 		}
 
 		if err := provider.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
@@ -388,31 +390,6 @@ func confirm(ctx context.Context, title string, stdin io.Reader) (bool, error) {
 		return false, err
 	}
 	return proceed, nil
-}
-
-func confirmDrop(ctx context.Context, tier environmentv1.Tier, dropped, dependents []string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(dropped, ", "), Name(tier))
-	if len(dependents) > 0 {
-		fmt.Fprintf(stdout, "These projects were deployed against it and break when it goes: %s\n", strings.Join(dependents, ", "))
-	} else {
-		fmt.Fprintln(stdout, "No project deployed here has recorded needing it, but anything relying on it breaks.")
-	}
-	return confirm(ctx, "Remove it anyway?", stdin)
-}
-
-func planDrops(plan *contractv1.ChangePlan, dropped []string) bool {
-	leaving := map[string]bool{}
-	for _, group := range plan.GetGroups() {
-		if group.GetAction() == contractv1.Change_ACTION_DELETE || group.GetAction() == contractv1.Change_ACTION_DISABLE_THEN_DELETE {
-			leaving[group.GetFeature()] = true
-		}
-	}
-	for _, name := range dropped {
-		if !leaving[name] {
-			return false
-		}
-	}
-	return true
 }
 
 func downgradeWarning(tier environmentv1.Tier, status *contractv1.BootstrapStatus) string {

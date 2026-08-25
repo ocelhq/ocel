@@ -239,6 +239,8 @@ message BootstrapRequest {
   bool accept_replacements = 5;
 
   EdgeSelection edge = 6;
+
+  repeated string remove = 7;
 }
 
 message PlanBootstrapRequest {

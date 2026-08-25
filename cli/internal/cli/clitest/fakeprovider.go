@@ -489,6 +489,9 @@ func journalPlanBootstrap(req *contractv1.PlanBootstrapRequest) {
 	fmt.Fprintf(f, "tier=%s withDependents=%t", req.GetTier(), req.GetWithDependents())
 	if intent := req.GetIntent(); intent != nil {
 		fmt.Fprintf(f, " intent=features=%s,force=%t", strings.Join(intent.GetFeatures(), "|"), intent.GetForce())
+		if removing := intent.GetRemove(); len(removing) > 0 {
+			fmt.Fprintf(f, ",remove=%s", strings.Join(removing, "|"))
+		}
 	}
 	fmt.Fprintln(f)
 }
@@ -736,8 +739,11 @@ func journalBootstrap(req *contractv1.BootstrapRequest) {
 		return
 	}
 	defer f.Close()
-	line := fmt.Sprintf("features=%s force=%t acceptReplacements=%t",
-		strings.Join(req.GetFeatures(), ","), req.GetForce(), req.GetAcceptReplacements())
+	line := "features=" + strings.Join(req.GetFeatures(), ",")
+	if removing := req.GetRemove(); len(removing) > 0 {
+		line += " remove=" + strings.Join(removing, ",")
+	}
+	line += fmt.Sprintf(" force=%t acceptReplacements=%t", req.GetForce(), req.GetAcceptReplacements())
 	if req.AutoHeal != nil {
 		line += fmt.Sprintf(" autoHeal=%t", req.GetAutoHeal())
 	}

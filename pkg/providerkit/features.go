@@ -103,10 +103,13 @@ func featureDeleteOrder(catalogue []Feature, names []string) ([]string, error) {
 	return out, nil
 }
 
-func featureDrop(catalogue []Feature, standing, requested []string) []string {
+func featureRemoval(catalogue []Feature, standing, named []string) ([]string, error) {
 	doomed := map[string]bool{}
-	for _, name := range standing {
-		if !slices.Contains(requested, name) {
+	for _, name := range named {
+		if _, ok := featureNamed(catalogue, name); !ok {
+			return nil, unknownFeature(catalogue, name, "")
+		}
+		if slices.Contains(standing, name) {
 			doomed[name] = true
 		}
 	}
@@ -123,7 +126,22 @@ func featureDrop(catalogue []Feature, standing, requested []string) []string {
 			}
 		}
 	}
-	return inCatalogueOrder(catalogue, keys(doomed))
+	return inCatalogueOrder(catalogue, keys(doomed)), nil
+}
+
+func refuseBothWays(ensure, removing []string) error {
+	var both []string
+	for _, name := range ensure {
+		if slices.Contains(removing, name) {
+			both = append(both, name)
+		}
+	}
+	if len(both) == 0 {
+		return nil
+	}
+	return Refuse(CodeInvalid,
+		"this run asks to stand %s up and to take it down at once; a feature is either ensured or removed, never both",
+		strings.Join(both, ", "))
 }
 
 func missingFeatures(standing, required []string) []string {
