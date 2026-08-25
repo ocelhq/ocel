@@ -38,7 +38,12 @@ type ParamAPIs struct {
 	IAM IAMKeyAPI
 }
 
-func PlanParameters(ctx context.Context, apis ParamAPIs, class string, kind edge.Kind, adoption edge.Adoption, req Request) (providerkit.ChangeGroup, error) {
+type EdgeAdoption struct {
+	Kind     edge.Kind
+	Adoption edge.Adoption
+}
+
+func PlanParameters(ctx context.Context, apis ParamAPIs, class string, adoptions []EdgeAdoption, req Request) (providerkit.ChangeGroup, error) {
 	group := providerkit.ChangeGroup{Kind: providerkit.ParameterGroupKind, Name: ParamGroupName}
 
 	origin, err := OriginSecretParamFor(class)
@@ -53,9 +58,13 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, class string, kind edge
 		group.Changes = append(group.Changes, change)
 	}
 
-	adopted, err := adoptionChanges(ctx, apis.SSM, class, kind, adoption, req)
-	if err != nil {
-		return providerkit.ChangeGroup{}, err
+	var adopted []providerkit.Change
+	for _, edging := range adoptions {
+		changes, err := adoptionChanges(ctx, apis.SSM, class, edging.Kind, edging.Adoption)
+		if err != nil {
+			return providerkit.ChangeGroup{}, err
+		}
+		adopted = append(adopted, changes...)
 	}
 	credentials, err := plannedEdgeCredentials(ctx, apis, class, req)
 	if err != nil {
@@ -151,8 +160,8 @@ func plannedPassphraseRemoval(ctx context.Context, ssmClient SSMAPI, class strin
 	}, nil
 }
 
-func adoptionChanges(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind, adoption edge.Adoption, req Request) ([]providerkit.Change, error) {
-	if droppingEdge(kind, req) || (len(adoption.Values) == 0 && len(adoption.Offers) == 0) {
+func adoptionChanges(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind, adoption edge.Adoption) ([]providerkit.Change, error) {
+	if len(adoption.Values) == 0 && len(adoption.Offers) == 0 {
 		return nil, nil
 	}
 	names, err := edgeNamesFor(class, kind)

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -52,8 +53,12 @@ func standingParams(t *testing.T) (*fakeSSM, *fakeIAM) {
 func plannedParams(t *testing.T, ssmc *fakeSSM, iamc *fakeIAM, req Request) providerkit.ChangeGroup {
 	t.Helper()
 
+	var adoptions []EdgeAdoption
+	if slices.Contains(req.Features, FeatureCloudflareEdge) {
+		adoptions = []EdgeAdoption{{Kind: KindCloudflare, Adoption: cloudflareAdoption()}}
+	}
 	group, err := PlanParameters(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc},
-		ClassProduction, KindCloudflare, cloudflareAdoption(), req)
+		ClassProduction, adoptions, req)
 	if err != nil {
 		t.Fatalf("PlanParameters: %v", err)
 	}
@@ -156,7 +161,7 @@ func TestPlanParametersUpdatesOnlyTheValuesTheEdgeWouldRewrite(t *testing.T) {
 
 func TestPlanParametersLeavesOutWhatAnEdgeThatAdoptsNothingNeverWrites(t *testing.T) {
 	group, err := PlanParameters(context.Background(), ParamAPIs{SSM: newFakeSSM(), IAM: &fakeIAM{}},
-		ClassProduction, "cloudfront", edge.Adoption{}, Request{Features: []string{FeatureCloudFrontEdge}})
+		ClassProduction, []EdgeAdoption{{Kind: KindCloudFront}}, Request{Features: []string{FeatureCloudFrontEdge}})
 	if err != nil {
 		t.Fatalf("PlanParameters: %v", err)
 	}

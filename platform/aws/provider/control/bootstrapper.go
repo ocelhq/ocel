@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -86,79 +85,125 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
-	adoption, err := b.adoption(ctx, req)
+	adoptions, err := b.adoptions(ctx, req)
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
 	params, err := bootstrap.PlanParameters(ctx,
 		bootstrap.ParamAPIs{SSM: b.SSM, IAM: b.IAM},
-		string(req.Class), b.Edge.Kind(), adoption,
+		string(req.Class), adoptions,
 		bootstrap.Request{Features: req.Features, Remove: req.Remove})
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
 	plan := providerkit.BootstrapPlan{Groups: providerkit.Vendored(groupVendor, append(groups, params))}
-	front, err := b.edgeGroup(ctx, req)
+	fronts, err := b.edgeGroups(ctx, req)
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
-	if front != nil {
-		plan.Groups = append(plan.Groups, *front)
-	}
+	plan.Groups = append(plan.Groups, fronts...)
 	return plan, nil
 }
 
-func (b Bootstrapper) adoption(ctx context.Context, req providerkit.BootstrapRequest) (edge.Adoption, error) {
-	adopter, ok := b.Edge.(edge.BootstrapAdopter)
-	if !ok {
-		return edge.Adoption{}, nil
+func (b Bootstrapper) open(kind edge.Kind) (edge.Edge, error) {
+	if b.Edge != nil && b.Edge.Kind() == kind {
+		return b.Edge, nil
 	}
-	adoption, err := adopter.Adoption(ctx, edge.Class(req.Class))
-	if err != nil {
-		return edge.Adoption{}, fmt.Errorf("read what the %s edge hands this account to hold: %w", b.Edge.Kind(), err)
-	}
-	return adoption, nil
+	return b.Edges.Open(kind)
 }
 
-func (b Bootstrapper) edgeGroup(ctx context.Context, req providerkit.BootstrapRequest) (*providerkit.ChangeGroup, error) {
-	planner, ok := b.Edge.(edge.BootstrapPlanner)
-	if !ok {
-		return nil, nil
+func (b Bootstrapper) adoptions(ctx context.Context, req providerkit.BootstrapRequest) ([]bootstrap.EdgeAdoption, error) {
+	var out []bootstrap.EdgeAdoption
+	for _, kind := range bootstrap.EdgeKindsFor(req.Features) {
+		front, err := b.open(kind)
+		if err != nil {
+			return nil, err
+		}
+		adopter, ok := front.(edge.BootstrapAdopter)
+		if !ok {
+			continue
+		}
+		adoption, err := adopter.Adoption(ctx, edge.Class(req.Class))
+		if err != nil {
+			return nil, fmt.Errorf("read what the %s edge hands this account to hold: %w", kind, err)
+		}
+		out = append(out, bootstrap.EdgeAdoption{Kind: kind, Adoption: adoption})
 	}
-	planned, err := planner.PlanBootstrap(ctx, edge.Class(req.Class))
+	return out, nil
+}
+
+func (b Bootstrapper) edgeGroups(ctx context.Context, req providerkit.BootstrapRequest) ([]providerkit.ChangeGroup, error) {
+	var groups []providerkit.ChangeGroup
+	for _, kind := range bootstrap.EdgeKindsFor(req.Features) {
+		group, err := b.standingEdgeGroup(ctx, req.Class, kind)
+		if err != nil {
+			return nil, err
+		}
+		if group != nil {
+			groups = append(groups, *group)
+		}
+	}
+	for _, kind := range bootstrap.EdgeKindsFor(bootstrap.Removing(req.Features, req.Remove)) {
+		group, err := b.severedEdge(ctx, req.Class, kind)
+		if err != nil {
+			return nil, err
+		}
+		if group != nil {
+			groups = append(groups, *group)
+		}
+	}
+	return groups, nil
+}
+
+func (b Bootstrapper) standingEdgeGroup(ctx context.Context, class providerkit.Class, kind edge.Kind) (*providerkit.ChangeGroup, error) {
+	front, err := b.open(kind)
 	if err != nil {
-		return nil, fmt.Errorf("plan the %s edge bootstrap: %w", b.Edge.Kind(), err)
+		return nil, err
 	}
-	if len(planned) == 0 {
-		return nil, nil
+	planned, err := plannedBootstrap(ctx, front, class)
+	if err != nil || len(planned) == 0 {
+		return nil, err
 	}
-	feature := providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), b.Edge.Kind())
-	if dropping(feature, req) {
-		return b.severedEdge(ctx, req.Class, feature, planned)
-	}
-	group, err := providerkit.EdgeGroup(b.Edge.Kind(), feature, planned)
+	group, err := providerkit.EdgeGroup(kind, providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), kind), planned)
 	if err != nil {
 		return nil, err
 	}
 	return &group, nil
 }
 
-func dropping(feature string, req providerkit.BootstrapRequest) bool {
-	return feature != "" && slices.Contains(req.Remove, feature) && !slices.Contains(req.Features, feature)
+func plannedBootstrap(ctx context.Context, front edge.Edge, class providerkit.Class) ([]edge.PlanChange, error) {
+	planner, ok := front.(edge.BootstrapPlanner)
+	if !ok {
+		return nil, nil
+	}
+	planned, err := planner.PlanBootstrap(ctx, edge.Class(class))
+	if err != nil {
+		return nil, fmt.Errorf("plan the %s edge bootstrap: %w", front.Kind(), err)
+	}
+	return planned, nil
 }
 
-func (b Bootstrapper) severedEdge(ctx context.Context, class providerkit.Class, feature string, planned []edge.PlanChange) (*providerkit.ChangeGroup, error) {
-	group, err := b.removedEdgeGroup(ctx, class, b.Edge)
+func (b Bootstrapper) severedEdge(ctx context.Context, class providerkit.Class, kind edge.Kind) (*providerkit.ChangeGroup, error) {
+	front, err := b.open(kind)
 	if err != nil {
 		return nil, err
 	}
+	group, err := b.removedEdgeGroup(ctx, class, front)
+	if err != nil {
+		return nil, err
+	}
+	feature := providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), kind)
 	if group == nil {
-		group = standingEdgeChanges(b.Edge.Kind(), feature, planned)
+		planned, err := plannedBootstrap(ctx, front, class)
+		if err != nil {
+			return nil, err
+		}
+		group = standingEdgeChanges(kind, feature, planned)
 	}
 	if group == nil {
 		return nil, nil
 	}
-	group.Reason = fmt.Sprintf("dropping %s tears the %s edge down; nothing is fronted with it afterwards", feature, b.Edge.Kind())
+	group.Reason = fmt.Sprintf("dropping %s takes the %s edge with it", feature, kind)
 	return group, nil
 }
 
@@ -214,7 +259,11 @@ func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest
 
 func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
 	progress, logf := say(report), detail(report)
-	fronts, err := b.standingEdges(ctx, class)
+	read, err := bootstrap.Read(ctx, b.CFN, string(class))
+	if err != nil {
+		return err
+	}
+	fronts, err := b.standingEdges(ctx, class, read.Deployed)
 	if err != nil {
 		return err
 	}
@@ -233,7 +282,7 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 }
 
 func (b Bootstrapper) apis() bootstrap.APIs {
-	return bootstrap.APIs{CFN: b.CFN, SSM: b.SSM, IAM: b.IAM, Store: b.Store, Edge: b.Edge}
+	return bootstrap.APIs{CFN: b.CFN, SSM: b.SSM, IAM: b.IAM, Store: b.Store, Edge: b.Edge, Edges: b.Edges}
 }
 
 func say(report providerkit.Reporter) func(string) {

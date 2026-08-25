@@ -113,7 +113,7 @@ func (g Gate) intended(ctx context.Context, class Class, req ApplyRequest) (inte
 	if err := RefuseSchemaAhead(standing.Schema, standing.Present, class); err != nil {
 		return intent{}, err
 	}
-	requested, err := featureClosure(catalogue, g.ensuringEdge(catalogue, req.Features))
+	asked, err := featureClosure(catalogue, req.Features)
 	if err != nil {
 		return intent{}, err
 	}
@@ -121,7 +121,14 @@ func (g Gate) intended(ctx context.Context, class Class, req ApplyRequest) (inte
 	if err != nil {
 		return intent{}, err
 	}
-	if err := refuseBothWays(requested, removing); err != nil {
+	if err := refuseBothWays(asked, removing); err != nil {
+		return intent{}, err
+	}
+	if err := g.refuseUnfronting(catalogue, req.Remove, removing); err != nil {
+		return intent{}, err
+	}
+	requested, err := featureClosure(catalogue, g.ensuringEdge(catalogue, req.Features))
+	if err != nil {
 		return intent{}, err
 	}
 	ordered, err := featureDeleteOrder(catalogue, removing)
@@ -137,6 +144,21 @@ func (g Gate) ensuringEdge(catalogue []Feature, requested []string) []string {
 		return requested
 	}
 	return append(slices.Clone(requested), fronting)
+}
+
+func (g Gate) refuseUnfronting(catalogue []Feature, named, removing []string) error {
+	fronting := FeatureNeedingEdge(catalogue, g.Edge)
+	if fronting == "" || !slices.Contains(removing, fronting) {
+		return nil
+	}
+	if slices.Contains(named, fronting) {
+		return Refuse(CodeInvalid,
+			"%s fronts this project's deploys, so this run will not remove it: point the project at another edge first",
+			fronting)
+	}
+	return Refuse(CodeInvalid,
+		"removing %s takes %s down with it, and %s fronts this project's deploys: point the project at another edge first",
+		strings.Join(named, ", "), fronting, fronting)
 }
 
 func (i intent) request(class Class, req ApplyRequest, writer Writer) BootstrapRequest {

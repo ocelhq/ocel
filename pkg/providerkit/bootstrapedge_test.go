@@ -3,6 +3,7 @@ package providerkit_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -154,6 +155,45 @@ func TestRemovingTheFeatureTheChosenEdgeFrontsThroughIsRefused(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("a run behind the %s edge removed the feature that edge fronts through", fake.KindRelay)
+	}
+	if !strings.Contains(err.Error(), fake.FeatureImages+" fronts this project's deploys") {
+		t.Errorf("refusal = %q, want it to name the edge this project fronts with", err)
+	}
+	if strings.Contains(err.Error(), "either ensured or removed") {
+		t.Errorf("refusal = %q, want the real conflict rather than features the run never asked to stand up", err)
+	}
+}
+
+func TestRemovingWhatTheFrontingFeatureStandsOnIsRefusedByName(t *testing.T) {
+	t.Parallel()
+
+	gate, provider := fronting(t, fake.KindRelay)
+	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+
+	_, err := gate.Plan(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
+		Remove: []string{fake.FeatureCache},
+	})
+	if err == nil {
+		t.Fatalf("removing %s took %s, the feature the %s edge fronts through, with it", fake.FeatureCache, fake.FeatureImages, fake.KindRelay)
+	}
+	if !strings.Contains(err.Error(), "removing "+fake.FeatureCache+" takes "+fake.FeatureImages+" down with it") {
+		t.Errorf("refusal = %q, want it to name what the cascade would take", err)
+	}
+	if strings.Contains(err.Error(), "either ensured or removed") {
+		t.Errorf("refusal = %q, want the real conflict rather than features the run never asked to stand up", err)
+	}
+}
+
+func TestRemovingAnEdgeFeatureThatFrontsNothingHereGoesAhead(t *testing.T) {
+	t.Parallel()
+
+	gate, provider := fronting(t, fake.KindDirect)
+	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+
+	if err := gate.Apply(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
+		Remove: []string{fake.FeatureImages},
+	}, nil); err != nil {
+		t.Fatalf("removing an edge feature no project here fronts with: %v", err)
 	}
 }
 

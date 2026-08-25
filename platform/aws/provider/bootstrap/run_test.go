@@ -455,8 +455,40 @@ type fakeEdge struct {
 	out         edge.BootstrapOutput
 	err         error
 	onBootstrap func()
+	onTeardown  func()
 	bootstraps  int
+	teardowns   int
 	class       edge.Class
+}
+
+type fakeEdges struct {
+	opened map[edge.Kind]edge.Edge
+}
+
+func newFakeEdges(fronts ...edge.Edge) *fakeEdges {
+	registry := &fakeEdges{opened: map[edge.Kind]edge.Edge{}}
+	for _, front := range fronts {
+		registry.opened[front.Kind()] = front
+	}
+	return registry
+}
+
+func (e *fakeEdges) Supported() []edge.Kind { return edgeKinds() }
+
+func (e *fakeEdges) Default() edge.Kind { return KindCloudFront }
+
+func (e *fakeEdges) Open(kind edge.Kind) (edge.Edge, error) {
+	if front, ok := e.opened[kind]; ok {
+		return front, nil
+	}
+	front := &fakeEdge{kind: kind}
+	e.opened[kind] = front
+	return front, nil
+}
+
+func (e *fakeEdges) at(kind edge.Kind) *fakeEdge {
+	front, _ := e.Open(kind)
+	return front.(*fakeEdge)
 }
 
 func (f *fakeEdge) Kind() edge.Kind {
@@ -475,7 +507,13 @@ func (f *fakeEdge) Bootstrap(_ context.Context, class edge.Class) (edge.Bootstra
 	return f.out, f.err
 }
 
-func (f *fakeEdge) Teardown(context.Context, edge.Class) error { return nil }
+func (f *fakeEdge) Teardown(context.Context, edge.Class) error {
+	f.teardowns++
+	if f.onTeardown != nil {
+		f.onTeardown()
+	}
+	return nil
+}
 
 func (f *fakeEdge) Facts() edge.Facts { return edge.Facts{} }
 
@@ -557,8 +595,12 @@ func apisOf(cfn *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore) APIs 
 }
 
 func apisFronting(cfn *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore, front edge.Edge) APIs {
+	return apisAcross(cfn, ssmc, iamc, store, front, newFakeEdges(front))
+}
+
+func apisAcross(cfn *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore, front edge.Edge, registry *fakeEdges) APIs {
 	cfn.users = iamc
-	return APIs{CFN: cfn, SSM: ssmc, IAM: iamc, Store: store, Edge: front}
+	return APIs{CFN: cfn, SSM: ssmc, IAM: iamc, Store: store, Edge: front, Edges: registry}
 }
 
 func everything() Request { return Request{Features: featureNames()} }
