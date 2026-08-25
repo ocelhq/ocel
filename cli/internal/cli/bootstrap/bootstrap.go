@@ -23,6 +23,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
+var theme = huh.ThemeFunc(huh.ThemeDracula)
+
 type Options struct {
 	Yes              bool
 	Force            bool
@@ -245,7 +247,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 						Affirmative("Yes").
 						Negative("No").
 						Value(&proceed),
-				)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).RunWithContext(ctx)
+				)).WithTheme(theme).RunWithContext(ctx)
 				if err != nil && !errors.Is(err, huh.ErrUserAborted) {
 					return err
 				}
@@ -264,7 +266,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 					Affirmative("Yes").
 					Negative("No").
 					Value(&proceed),
-			)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).RunWithContext(ctx)
+			)).WithTheme(theme).RunWithContext(ctx)
 			if err != nil && !errors.Is(err, huh.ErrUserAborted) {
 				return err
 			}
@@ -348,7 +350,7 @@ func confirmDrop(ctx context.Context, tier environmentv1.Tier, dropped, dependen
 			Affirmative("Yes").
 			Negative("No").
 			Value(&answer),
-	)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).RunWithContext(ctx)
+	)).WithTheme(theme).RunWithContext(ctx)
 	if errors.Is(err, huh.ErrUserAborted) {
 		return false, nil
 	}
