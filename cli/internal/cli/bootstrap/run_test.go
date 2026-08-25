@@ -94,7 +94,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 			"    – StateBucket  AWS::S3::Bucket   — the Pulumi state of every stack this bootstrap deployed (this one is slow)",
 			"– aws/parameters",
 			"    – /ocel/origin/secret  AWS::SSM::Parameter",
-			"– cloudfront/edge  [cloudflare-edge]",
+			"– cloudflare/edge  [cloudflare-edge]",
 			"    – ocel-deployments-store  Cloudflare::Worker",
 			"Left in place:",
 			"  /ocel/pulumi/passphrase  — the production bootstrap still stands",

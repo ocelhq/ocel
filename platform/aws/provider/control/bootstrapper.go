@@ -35,9 +35,10 @@ type Bootstrapper struct {
 	Store   bootstrap.ObjectStore
 	Buckets bootstrap.BucketEmptierAPI
 	Edge    edge.Edge
+	Edges   providerkit.EdgeRegistry
 }
 
-func BootstrapperFor(cfg aws.Config, front edge.Edge) Bootstrapper {
+func BootstrapperFor(cfg aws.Config, front edge.Edge, registry providerkit.EdgeRegistry) Bootstrapper {
 	return Bootstrapper{
 		CFN:     cloudformation.NewFromConfig(cfg),
 		SSM:     ssm.NewFromConfig(cfg),
@@ -45,6 +46,7 @@ func BootstrapperFor(cfg aws.Config, front edge.Edge) Bootstrapper {
 		Store:   s3.NewFromConfig(cfg),
 		Buckets: s3.NewFromConfig(cfg),
 		Edge:    front,
+		Edges:   registry,
 	}
 }
 
@@ -146,7 +148,7 @@ func dropping(feature string, req providerkit.BootstrapRequest) bool {
 }
 
 func (b Bootstrapper) severedEdge(ctx context.Context, class providerkit.Class, feature string, planned []edge.PlanChange) (*providerkit.ChangeGroup, error) {
-	group, err := b.removedEdgeGroup(ctx, class)
+	group, err := b.removedEdgeGroup(ctx, class, b.Edge)
 	if err != nil {
 		return nil, err
 	}
@@ -212,9 +214,15 @@ func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest
 
 func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
 	progress, logf := say(report), detail(report)
-	progress(fmt.Sprintf("Tearing down the %s edge", b.Edge.Kind()))
-	if err := b.Edge.Teardown(ctx, edge.Class(class)); err != nil {
-		return fmt.Errorf("tear down %s edge: %w", b.Edge.Kind(), err)
+	fronts, err := b.standingEdges(ctx, class)
+	if err != nil {
+		return err
+	}
+	for _, front := range fronts {
+		progress(fmt.Sprintf("Tearing down the %s edge", front.Kind()))
+		if err := front.Teardown(ctx, edge.Class(class)); err != nil {
+			return fmt.Errorf("tear down %s edge: %w", front.Kind(), err)
+		}
 	}
 	return bootstrap.Teardown(ctx, bootstrap.TeardownAPIs{
 		CFN:     b.CFN,

@@ -97,6 +97,20 @@ func edgeNamesFor(class string, kind edge.Kind) (edgeNames, error) {
 	}, nil
 }
 
+func EdgeStanding(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind) (bool, error) {
+	names, err := edgeNamesFor(class, kind)
+	if err != nil {
+		return false, err
+	}
+	for _, name := range names.edgeParams() {
+		held, err := paramHeld(ctx, ssmClient, name)
+		if err != nil || held {
+			return held, err
+		}
+	}
+	return false, nil
+}
+
 func DeploymentsStoreParamFor(class string, kind edge.Kind) (string, error) {
 	names, err := edgeNamesFor(class, kind)
 	if err != nil {

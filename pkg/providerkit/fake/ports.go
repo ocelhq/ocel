@@ -23,6 +23,7 @@ type Bootstrapper struct {
 	refusal  error
 	requests []providerkit.BootstrapRequest
 	front    edge.Kind
+	standing []edge.Kind
 }
 
 func NewBootstrapper() *Bootstrapper {
@@ -38,6 +39,12 @@ func (b *Bootstrapper) fronting(kind edge.Kind) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.front = kind
+}
+
+func (b *Bootstrapper) Standing(kinds ...edge.Kind) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.standing = append(make([]edge.Kind, 0, len(kinds)), kinds...)
 }
 
 func (b *Bootstrapper) Fronting() edge.Kind {
@@ -191,7 +198,29 @@ func (b *Bootstrapper) PlanRemoval(_ context.Context, class providerkit.Class) (
 		Reason: "the core every feature above was built on",
 		Slow:   true,
 	})
+	for _, kind := range b.standingEdges() {
+		plan.Groups = append(plan.Groups, providerkit.ChangeGroup{
+			Kind:   providerkit.EdgeGroupKind,
+			Name:   edge.EdgeGroupName(kind),
+			Action: providerkit.ActionDelete,
+			Changes: []providerkit.Change{{
+				Kind:   "Fake::Edge::Front",
+				Name:   string(kind) + "-front",
+				Action: providerkit.ActionDelete,
+			}},
+		})
+	}
 	return plan, nil
+}
+
+func (b *Bootstrapper) standingEdges() []edge.Kind {
+	if b.standing != nil {
+		return b.standing
+	}
+	if b.front == "" {
+		return nil
+	}
+	return []edge.Kind{b.front}
 }
 
 func (b *Bootstrapper) Remove(_ context.Context, class providerkit.Class, report providerkit.Reporter) error {

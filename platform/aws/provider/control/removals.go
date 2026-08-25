@@ -32,36 +32,64 @@ func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 	}
 
 	plan := providerkit.BootstrapPlan{Groups: providerkit.Vendored(groupVendor, stacks)}
-	front, err := b.removedEdgeGroup(ctx, class)
+	fronts, err := b.standingEdges(ctx, class)
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
-	if front != nil {
-		plan.Groups = append(plan.Groups, *front)
+	for _, front := range fronts {
+		group, err := b.removedEdgeGroup(ctx, class, front)
+		if err != nil {
+			return providerkit.BootstrapPlan{}, err
+		}
+		if group != nil {
+			plan.Groups = append(plan.Groups, *group)
+		}
 	}
 	return plan, nil
 }
 
-func (b Bootstrapper) removedEdgeGroup(ctx context.Context, class providerkit.Class) (*providerkit.ChangeGroup, error) {
-	remover, ok := b.Edge.(edge.BootstrapRemover)
+func (b Bootstrapper) standingEdges(ctx context.Context, class providerkit.Class) ([]edge.Edge, error) {
+	fronts := []edge.Edge{b.Edge}
+	for _, kind := range b.Edges.Supported() {
+		if kind == b.Edge.Kind() {
+			continue
+		}
+		standing, err := bootstrap.EdgeStanding(ctx, b.SSM, string(class), kind)
+		if err != nil {
+			return nil, err
+		}
+		if !standing {
+			continue
+		}
+		front, err := b.Edges.Open(kind)
+		if err != nil {
+			return nil, err
+		}
+		fronts = append(fronts, front)
+	}
+	return fronts, nil
+}
+
+func (b Bootstrapper) removedEdgeGroup(ctx context.Context, class providerkit.Class, front edge.Edge) (*providerkit.ChangeGroup, error) {
+	remover, ok := front.(edge.BootstrapRemover)
 	if !ok {
 		return nil, nil
 	}
 	planned, err := remover.PlanRemoveBootstrap(ctx, edge.Class(class))
 	if err != nil {
-		return nil, fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", b.Edge.Kind(), err)
+		return nil, fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", front.Kind(), err)
 	}
 	if len(planned) == 0 {
 		return nil, nil
 	}
-	changes, err := providerkit.EdgeChanges(b.Edge.Kind(), planned)
+	changes, err := providerkit.EdgeChanges(front.Kind(), planned)
 	if err != nil {
 		return nil, err
 	}
 	return &providerkit.ChangeGroup{
 		Kind:    providerkit.EdgeGroupKind,
-		Name:    edge.EdgeGroupName(b.Edge.Kind()),
-		Feature: providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), b.Edge.Kind()),
+		Name:    edge.EdgeGroupName(front.Kind()),
+		Feature: providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), front.Kind()),
 		Action:  providerkit.ActionDelete,
 		Changes: changes,
 	}, nil

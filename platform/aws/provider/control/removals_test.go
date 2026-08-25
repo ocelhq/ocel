@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,7 +14,10 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const cloudflareKind edge.Kind = "cloudflare"
+const (
+	cloudflareKind edge.Kind = "cloudflare"
+	cloudfrontKind edge.Kind = "cloudfront"
+)
 
 func edgeParam(t *testing.T, class, leaf string) string {
 	t.Helper()
@@ -51,6 +55,7 @@ func removingBootstrapper(t *testing.T, class string) Bootstrapper {
 		{Kind: "Cloudflare::Worker", Name: "ocel-deployments-store", Action: edge.PlanDelete},
 		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanDelete, Slow: true},
 	}}
+	b.Edges = registryOf(b.Edge)
 	return b
 }
 
@@ -213,5 +218,104 @@ func TestPlanRemovalLeavesOutAnEdgeThatSaysNothingAboutItsOwnRemoval(t *testing.
 		if group.Kind == providerkit.EdgeGroupKind {
 			t.Errorf("plan carries %+v for an edge that says nothing about its own removal", group)
 		}
+	}
+}
+
+func frontedBootstrapper(t *testing.T, class string) (Bootstrapper, *planningEdge, *planningEdge) {
+	t.Helper()
+
+	b := removingBootstrapper(t, class)
+	standing := b.Edge.(*planningEdge)
+	selected := &planningEdge{
+		teardownEdge: teardownEdge{kind: cloudfrontKind},
+		removals: []edge.PlanChange{
+			{Kind: "AWS::CloudFront::KeyValueStore", Name: "ocel-routes", Action: edge.PlanDelete},
+		},
+	}
+	b.Edge = selected
+	b.Edges = registryOf(selected, standing)
+	return b, selected, standing
+}
+
+func TestPlanRemovalNamesEveryStandingEdgeByItsOwnKind(t *testing.T) {
+	t.Parallel()
+
+	b, _, _ := frontedBootstrapper(t, bootstrap.ClassProduction)
+
+	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
+	if err != nil {
+		t.Fatalf("PlanRemoval: %v", err)
+	}
+
+	front := groupNamed(plan, string(cloudfrontKind)+"/edge")
+	if front == nil || front.Feature != bootstrap.FeatureCloudFrontEdge {
+		t.Fatalf("plan groups = %s, want the selected edge under its own kind and feature", groupNames(plan))
+	}
+	if changeNamed(front, "ocel-routes") == nil {
+		t.Errorf("the %s group carries %+v, want the rows that edge planned", front.Name, front.Changes)
+	}
+
+	other := groupNamed(plan, string(cloudflareKind)+"/edge")
+	if other == nil || other.Feature != bootstrap.FeatureCloudflareEdge {
+		t.Fatalf("plan groups = %s, want the standing edge too, under its own kind and feature", groupNames(plan))
+	}
+	if changeNamed(other, "ocel-edge-cache") == nil {
+		t.Errorf("the %s group carries %+v, want the rows that edge planned", other.Name, other.Changes)
+	}
+	for _, group := range []*providerkit.ChangeGroup{front, other} {
+		for _, change := range group.Changes {
+			if strings.HasPrefix(change.Kind, "Cloudflare::") != (group.Name == string(cloudflareKind)+"/edge") {
+				t.Errorf("group %q carries %+v, want only the rows of the edge it names", group.Name, change)
+			}
+		}
+	}
+}
+
+func TestPlanRemovalLeavesOutAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
+	t.Parallel()
+
+	b, selected, standing := frontedBootstrapper(t, bootstrap.ClassProduction)
+	unused := &planningEdge{
+		teardownEdge: teardownEdge{kind: "relay"},
+		removals:     []edge.PlanChange{{Kind: "Relay::Worker", Name: "ocel-relay", Action: edge.PlanDelete}},
+	}
+	b.Edges = registryOf(selected, standing, unused)
+
+	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
+	if err != nil {
+		t.Fatalf("PlanRemoval: %v", err)
+	}
+	if group := groupNamed(plan, "relay/edge"); group != nil {
+		t.Errorf("plan carries %+v for an edge this account holds no parameters for", group)
+	}
+}
+
+func TestRemoveTearsDownEveryEdgeThePlanShowed(t *testing.T) {
+	t.Parallel()
+
+	b, selected, standing := frontedBootstrapper(t, bootstrap.ClassProduction)
+
+	if err := b.Remove(context.Background(), providerkit.ClassProduction, nil); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	for _, front := range []*planningEdge{selected, standing} {
+		if !slices.Equal(front.torndown, []edge.Class{edge.ClassProduction}) {
+			t.Errorf("the %s edge saw teardowns %v, want the class the plan showed it under", front.Kind(), front.torndown)
+		}
+	}
+}
+
+func TestRemoveLeavesAloneAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
+	t.Parallel()
+
+	b, selected, standing := frontedBootstrapper(t, bootstrap.ClassProduction)
+	unused := &planningEdge{teardownEdge: teardownEdge{kind: "relay"}}
+	b.Edges = registryOf(selected, standing, unused)
+
+	if err := b.Remove(context.Background(), providerkit.ClassProduction, nil); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if len(unused.torndown) != 0 {
+		t.Errorf("the relay edge saw teardowns %v, want none: this account holds nothing for it", unused.torndown)
 	}
 }
