@@ -28,6 +28,9 @@ const (
 	keyGone         = "the access key it records is no longer on the user"
 	keyUnrecorded   = "it records no access key"
 	severedByRemove = "removing %s takes what the %s edge was reached through with it"
+
+	passphraseStranded = "the only copy of the passphrase every Pulumi stack in this account is encrypted under"
+	passphraseShared   = "the %s bootstrap still stands and its Pulumi state is encrypted under it"
 )
 
 type ParamAPIs struct {
@@ -66,6 +69,86 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, class string, kind edge
 
 	group.Action, group.Reason = providerkit.RollUp(group.Changes)
 	return group, nil
+}
+
+func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, class string, sharedPassphrase bool) (providerkit.ChangeGroup, error) {
+	group := providerkit.ChangeGroup{Kind: providerkit.ParameterGroupKind, Name: ParamGroupName}
+
+	names, err := ClassParamNames(class)
+	if err != nil {
+		return providerkit.ChangeGroup{}, err
+	}
+	for _, name := range names {
+		held, err := paramHeld(ctx, apis.SSM, name)
+		if err != nil {
+			return providerkit.ChangeGroup{}, err
+		}
+		if held {
+			group.Changes = append(group.Changes, providerkit.Change{
+				Kind:   kindParameter,
+				Name:   name,
+				Action: providerkit.ActionDelete,
+			})
+		}
+	}
+
+	user, err := EdgeUserNameFor(class)
+	if err != nil {
+		return providerkit.ChangeGroup{}, err
+	}
+	keys, err := liveAccessKeys(ctx, apis.IAM, user)
+	if err != nil {
+		return providerkit.ChangeGroup{}, err
+	}
+	for _, id := range keys {
+		group.Changes = append(group.Changes, providerkit.Change{
+			Kind:   kindAccessKey,
+			Name:   user + "/" + id,
+			Action: providerkit.ActionDelete,
+		})
+	}
+
+	passphrase, err := plannedPassphraseRemoval(ctx, apis.SSM, class, sharedPassphrase)
+	if err != nil {
+		return providerkit.ChangeGroup{}, err
+	}
+	if passphrase.Name != "" {
+		group.Changes = append(group.Changes, passphrase)
+	}
+
+	group.Action = providerkit.ActionKeep
+	for _, change := range group.Changes {
+		if change.Action == providerkit.ActionDelete {
+			group.Action = providerkit.ActionDelete
+			break
+		}
+	}
+	return group, nil
+}
+
+func plannedPassphraseRemoval(ctx context.Context, ssmClient SSMAPI, class string, shared bool) (providerkit.Change, error) {
+	held, err := paramHeld(ctx, ssmClient, PassphraseParamName)
+	if err != nil || !held {
+		return providerkit.Change{}, err
+	}
+	if !shared {
+		return providerkit.Change{
+			Kind:   kindParameter,
+			Name:   PassphraseParamName,
+			Action: providerkit.ActionDelete,
+			Reason: passphraseStranded,
+		}, nil
+	}
+	sibling, err := SiblingClassOf(class)
+	if err != nil {
+		return providerkit.Change{}, err
+	}
+	return providerkit.Change{
+		Kind:   kindParameter,
+		Name:   PassphraseParamName,
+		Action: providerkit.ActionKeep,
+		Reason: fmt.Sprintf(passphraseShared, sibling),
+	}, nil
 }
 
 func adoptionChanges(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind, adoption edge.Adoption, req Request) ([]providerkit.Change, error) {

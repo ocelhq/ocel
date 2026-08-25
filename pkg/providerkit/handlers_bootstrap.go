@@ -159,26 +159,30 @@ func namedEdge(kind string) string {
 func ChangePlanProto(plan BootstrapPlan, subject, kind string) *contractv1.ChangePlan {
 	out := &contractv1.ChangePlan{Subject: subject, EdgeKind: kind}
 	for _, group := range plan.Groups {
-		rendered := &contractv1.ChangeGroup{
-			Kind:    group.Kind,
-			Name:    group.Name,
-			Feature: group.Feature,
-			Action:  planAction(group.Action),
-			Reason:  group.Reason,
-			Slow:    group.Slow,
-		}
-		for _, change := range group.Changes {
-			rendered.Changes = append(rendered.Changes, &contractv1.Change{
-				Kind:   change.Kind,
-				Name:   change.Name,
-				Action: planAction(change.Action),
-				Reason: change.Reason,
-				Slow:   change.Slow,
-			})
-		}
-		out.Groups = append(out.Groups, rendered)
+		out.Groups = append(out.Groups, GroupProto(group))
 	}
 	return out
+}
+
+func GroupProto(group ChangeGroup) *contractv1.ChangeGroup {
+	rendered := &contractv1.ChangeGroup{
+		Kind:    group.Kind,
+		Name:    group.Name,
+		Feature: group.Feature,
+		Action:  planAction(group.Action),
+		Reason:  group.Reason,
+		Slow:    group.Slow,
+	}
+	for _, change := range group.Changes {
+		rendered.Changes = append(rendered.Changes, &contractv1.Change{
+			Kind:   change.Kind,
+			Name:   change.Name,
+			Action: planAction(change.Action),
+			Reason: change.Reason,
+			Slow:   change.Slow,
+		})
+	}
+	return rendered
 }
 
 func planAction(action ChangeAction) contractv1.Change_Action {
@@ -236,15 +240,11 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	if err := gate.Vacant(ctx, class); err != nil {
 		return nil, RefusalError(err)
 	}
-	surfaces, err := gate.Bootstrapper.Removals(ctx, class)
+	plan, err := gate.Bootstrapper.PlanRemoval(ctx, class)
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	return &contractv1.ChangePlan{
-		EdgeKind: string(edgeKind(provider, req.GetEdge().GetKind())),
-		Groups:   ChangeGroups(surfaces),
-		Subject:  string(class),
-	}, nil
+	return ChangePlanProto(plan, string(class), string(edgeKind(provider, req.GetEdge().GetKind()))), nil
 }
 
 func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope, stream *connect.ServerStream[progressv1.OperationEvent]) error {
@@ -267,27 +267,6 @@ func edgeKind(provider Provider, requested string) edge.Kind {
 		return edge.Kind(requested)
 	}
 	return provider.Edges().Default()
-}
-
-func ChangeGroups(surfaces []Removal) []*contractv1.ChangeGroup {
-	groups := make([]*contractv1.ChangeGroup, 0, len(surfaces))
-	for _, surface := range surfaces {
-		groups = append(groups, surfaceGroup(surface))
-	}
-	return groups
-}
-
-func changeAction(action edge.SurfaceAction) contractv1.Change_Action {
-	switch action {
-	case edge.SurfaceDelete:
-		return contractv1.Change_ACTION_DELETE
-	case edge.SurfaceDisableThenDelete:
-		return contractv1.Change_ACTION_DISABLE_THEN_DELETE
-	case edge.SurfaceKeep:
-		return contractv1.Change_ACTION_KEEP
-	default:
-		return contractv1.Change_ACTION_UNSPECIFIED
-	}
 }
 
 func (h *handlers) GetCredentialPolicy(_ context.Context, req *contractv1.CredentialPolicyRequest) (*contractv1.CredentialPolicyResponse, error) {

@@ -562,23 +562,51 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 		Subject:  class,
 		Groups: []*contractv1.ChangeGroup{
 			{
-				Kind:   "edge bootstrap",
-				Name:   resolvedEdgeKind(req.GetEdge().GetKind()),
-				Action: contractv1.Change_ACTION_DELETE,
-				Reason: "every worker the edge stood up for the " + class + " bootstrap",
+				Kind:    "stack",
+				Name:    "aws/ocel-" + class + "-isr",
+				Feature: "isr",
+				Action:  contractv1.Change_ACTION_DELETE,
+				Changes: []*contractv1.Change{
+					{Kind: "AWS::DynamoDB::Table", Name: "RevalidationTable", Action: contractv1.Change_ACTION_DELETE},
+				},
 			},
 			{
-				Kind:   "bucket",
-				Name:   "ocel-state-" + class,
+				Kind:   "stack",
+				Name:   "aws/ocel-" + class,
 				Action: contractv1.Change_ACTION_DELETE,
-				Reason: "the Pulumi state of every stack this bootstrap deployed",
-				Slow:   true,
+				Changes: []*contractv1.Change{
+					{Kind: "AWS::DynamoDB::Table", Name: "StateTable", Action: contractv1.Change_ACTION_DELETE},
+					{
+						Kind:   "AWS::S3::Bucket",
+						Name:   "StateBucket",
+						Action: contractv1.Change_ACTION_DELETE,
+						Reason: "the Pulumi state of every stack this bootstrap deployed",
+						Slow:   true,
+					},
+				},
 			},
 			{
-				Kind:   "parameter",
-				Name:   "/ocel/pulumi/passphrase",
-				Action: contractv1.Change_ACTION_KEEP,
-				Reason: "the production bootstrap still stands and its Pulumi state is encrypted under it",
+				Kind:   "parameters",
+				Name:   "aws/parameters",
+				Action: contractv1.Change_ACTION_DELETE,
+				Changes: []*contractv1.Change{
+					{Kind: "AWS::SSM::Parameter", Name: "/ocel/origin/secret", Action: contractv1.Change_ACTION_DELETE},
+					{
+						Kind:   "AWS::SSM::Parameter",
+						Name:   "/ocel/pulumi/passphrase",
+						Action: contractv1.Change_ACTION_KEEP,
+						Reason: "the production bootstrap still stands and its Pulumi state is encrypted under it",
+					},
+				},
+			},
+			{
+				Kind:    "edge",
+				Name:    resolvedEdgeKind(req.GetEdge().GetKind()) + "/edge",
+				Feature: "cloudflare-edge",
+				Action:  contractv1.Change_ACTION_DELETE,
+				Changes: []*contractv1.Change{
+					{Kind: "Cloudflare::Worker", Name: "ocel-deployments-store", Action: contractv1.Change_ACTION_DELETE},
+				},
 			},
 		},
 	}, nil
@@ -1099,20 +1127,23 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *c
 			EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 			Subject:  slug,
 			Groups: []*contractv1.ChangeGroup{
-				{
-					Kind:   "edge workers",
-					Name:   slug,
-					Action: contractv1.Change_ACTION_DELETE,
-				},
-				{
-					Kind:   "preview wildcard",
-					Name:   "*.preview.acme.com",
-					Action: contractv1.Change_ACTION_KEEP,
-					Reason: "bootstrap-scoped: every project's previews are served on it",
-				},
 				fakeInfraStackGroup(slug + "--pr-1--infra"),
 				fakeInfraStackGroup(slug + "--pr-2--infra"),
-				fakeAppStackGroup(slug + "--pr-1--web--b1"),
+				fakeAppStackGroup(slug+"--pr-1--web--b1", "web"),
+				{
+					Kind:   "edge",
+					Name:   resolvedEdgeKind(req.GetEdge().GetKind()) + "/edge",
+					Action: contractv1.Change_ACTION_DELETE,
+					Changes: []*contractv1.Change{
+						{Kind: "Cloudflare::Worker", Name: slug, Action: contractv1.Change_ACTION_DELETE},
+					},
+				},
+				{
+					Kind:   "edge",
+					Name:   resolvedEdgeKind(req.GetEdge().GetKind()) + "/edge",
+					Action: contractv1.Change_ACTION_KEEP,
+					Reason: "bootstrap-scoped: every project's previews are served on *.preview.acme.com",
+				},
 			},
 		}, nil
 	}
@@ -1120,16 +1151,21 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *c
 		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 		Subject:  slug,
 		Groups: []*contractv1.ChangeGroup{
+			fakeInfraStackGroup(slug + "--infra"),
+			fakeAppStackGroup(slug+"--web--b1", "web"),
 			{
-				Kind:   "edge stack",
-				Name:   slug,
+				Kind:   "edge",
+				Name:   resolvedEdgeKind(req.GetEdge().GetKind()) + "/edge",
 				Action: contractv1.Change_ACTION_DELETE,
-			},
-			{
-				Kind:   "distribution",
-				Name:   "E1" + slug,
-				Action: contractv1.Change_ACTION_DISABLE_THEN_DELETE,
-				Slow:   true,
+				Changes: []*contractv1.Change{
+					{
+						Kind:   "AWS::CloudFront::Distribution",
+						Name:   "E1" + slug,
+						Action: contractv1.Change_ACTION_DISABLE_THEN_DELETE,
+						Slow:   true,
+					},
+					{Kind: "AWS::CloudFront::KeyValueStore", Name: slug + ".example.com", Action: contractv1.Change_ACTION_DELETE},
+				},
 			},
 			{
 				Kind:   "certificate",
@@ -1137,26 +1173,26 @@ func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *c
 				Action: contractv1.Change_ACTION_KEEP,
 				Reason: "you pinned this certificate; Ocel never deletes one it did not request",
 			},
-			fakeInfraStackGroup(slug + "--infra"),
-			fakeAppStackGroup(slug + "--web--b1"),
 		},
 	}, nil
 }
 
 func fakeInfraStackGroup(name string) *contractv1.ChangeGroup {
 	return &contractv1.ChangeGroup{
-		Kind:   "infra stack",
-		Name:   name,
-		Action: contractv1.Change_ACTION_DELETE,
-		Reason: "databases and buckets, INCLUDING ALL DATA",
+		Kind:    "stack",
+		Name:    "aws/" + name,
+		Feature: "infra",
+		Action:  contractv1.Change_ACTION_DELETE,
+		Reason:  "databases and buckets, INCLUDING ALL DATA",
 	}
 }
 
-func fakeAppStackGroup(name string) *contractv1.ChangeGroup {
+func fakeAppStackGroup(name, app string) *contractv1.ChangeGroup {
 	return &contractv1.ChangeGroup{
-		Kind:   "app stack",
-		Name:   name,
-		Action: contractv1.Change_ACTION_DELETE,
+		Kind:    "stack",
+		Name:    "aws/" + name,
+		Feature: app,
+		Action:  contractv1.Change_ACTION_DELETE,
 	}
 }
 

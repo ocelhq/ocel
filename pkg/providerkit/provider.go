@@ -70,5 +70,3 @@ const (
 	ClassProduction = ports.ClassProduction
 	ClassPreview    = ports.ClassPreview
 )
-
-type Removal = edge.Surface

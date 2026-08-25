@@ -78,11 +78,11 @@ type Edge interface {
 
 	DomainOwner(ctx context.Context, hostname string) (string, error)
 
-	ProjectSurfaces(scope ProjectScope) []Surface
+	ProjectRemovals(scope ProjectScope) []PlanGroup
 
-	PreviewWildcardSurfaces(wildcard string) (removed, kept Surface)
+	PreviewWildcardRemovals(wildcard string) (removed, kept PlanGroup)
 
-	SharedPreviewSurface() Surface
+	SharedPreviewRemoval() PlanGroup
 }
 
 type ProjectScope struct {
@@ -90,30 +90,6 @@ type ProjectScope struct {
 	Class     Class
 	Hostnames []string
 	Front     string
-}
-
-type Surface struct {
-	Kind   string
-	Name   string
-	Action SurfaceAction
-	Reason string
-	Slow   bool
-}
-
-type SurfaceAction string
-
-const (
-	SurfaceKeep              SurfaceAction = "keep"
-	SurfaceDelete            SurfaceAction = "delete"
-	SurfaceDisableThenDelete SurfaceAction = "disable-then-delete"
-)
-
-func ValidSurfaceAction(action SurfaceAction) bool {
-	switch action {
-	case SurfaceKeep, SurfaceDelete, SurfaceDisableThenDelete:
-		return true
-	}
-	return false
 }
 
 const DefaultPointer = "@production"

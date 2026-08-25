@@ -27,8 +27,8 @@ func (bootstrapper) Apply(context.Context, providerkit.BootstrapRequest, provide
 	return nil
 }
 
-func (bootstrapper) Removals(context.Context, providerkit.Class) ([]providerkit.Removal, error) {
-	return nil, nil
+func (bootstrapper) PlanRemoval(context.Context, providerkit.Class) (providerkit.BootstrapPlan, error) {
+	return providerkit.BootstrapPlan{}, nil
 }
 
 func (bootstrapper) Remove(context.Context, providerkit.Class, providerkit.Reporter) error {

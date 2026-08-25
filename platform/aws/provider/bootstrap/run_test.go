@@ -499,13 +499,13 @@ func (f *fakeEdge) DestroyPreviewWildcard(context.Context, string) error {
 	return errors.New("bootstrap never destroys the preview wildcard")
 }
 
-func (f *fakeEdge) ProjectSurfaces(edge.ProjectScope) []edge.Surface { return nil }
+func (f *fakeEdge) ProjectRemovals(edge.ProjectScope) []edge.PlanGroup { return nil }
 
-func (f *fakeEdge) PreviewWildcardSurfaces(string) (edge.Surface, edge.Surface) {
-	return edge.Surface{}, edge.Surface{}
+func (f *fakeEdge) PreviewWildcardRemovals(string) (edge.PlanGroup, edge.PlanGroup) {
+	return edge.PlanGroup{}, edge.PlanGroup{}
 }
 
-func (f *fakeEdge) SharedPreviewSurface() edge.Surface { return edge.Surface{} }
+func (f *fakeEdge) SharedPreviewRemoval() edge.PlanGroup { return edge.PlanGroup{} }
 
 func (f *fakeEdge) DomainOwner(context.Context, string) (string, error) {
 	return "", errors.New("bootstrap never reads a domain owner")

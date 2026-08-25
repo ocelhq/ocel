@@ -48,15 +48,7 @@ func (p *Printer) Print(header string, plan *contractv1.ChangePlan, footer ...st
 	}
 	fmt.Fprintf(p.out, "%s:\n\n", header)
 
-	var kept []*contractv1.ChangeGroup
-	doomed := make([]*contractv1.ChangeGroup, 0, len(plan.GetGroups()))
-	for _, group := range plan.GetGroups() {
-		if group.GetAction() == contractv1.Change_ACTION_KEEP {
-			kept = append(kept, group)
-			continue
-		}
-		doomed = append(doomed, group)
-	}
+	doomed, kept, keptRows := partition(plan.GetGroups())
 	p.writeGroups(doomed)
 	if len(footer) > 0 {
 		if len(doomed) > 0 {
@@ -66,10 +58,44 @@ func (p *Printer) Print(header string, plan *contractv1.ChangePlan, footer ...st
 			fmt.Fprintln(p.out, p.footerLine(line))
 		}
 	}
-	if len(kept) > 0 {
+	if len(kept) > 0 || len(keptRows) > 0 {
 		fmt.Fprintf(p.out, "\nLeft in place:\n\n")
 		p.writeGroups(kept)
+		for _, row := range keptRows {
+			fmt.Fprintf(p.out, "  %s%s\n", row.GetName(), p.trail(gutter, row.GetReason(), row.GetSlow()))
+		}
 	}
+	if tally := Tally(plan); tally != "" {
+		fmt.Fprintf(p.out, "\n%s\n", tally)
+	}
+}
+
+func partition(groups []*contractv1.ChangeGroup) (doomed, kept []*contractv1.ChangeGroup, keptRows []*contractv1.Change) {
+	doomed = make([]*contractv1.ChangeGroup, 0, len(groups))
+	for _, group := range groups {
+		going := &contractv1.ChangeGroup{
+			Kind:    group.GetKind(),
+			Name:    group.GetName(),
+			Feature: group.GetFeature(),
+			Action:  group.GetAction(),
+			Reason:  group.GetReason(),
+			Slow:    group.GetSlow(),
+		}
+		for _, change := range group.GetChanges() {
+			if change.GetAction() == contractv1.Change_ACTION_KEEP {
+				keptRows = append(keptRows, change)
+				continue
+			}
+			going.Changes = append(going.Changes, change)
+		}
+		switch {
+		case group.GetAction() != contractv1.Change_ACTION_KEEP:
+			doomed = append(doomed, going)
+		case len(group.GetChanges()) == 0:
+			kept = append(kept, going)
+		}
+	}
+	return doomed, kept, keptRows
 }
 
 func (p *Printer) Render(header string, plan *contractv1.ChangePlan) {

@@ -286,6 +286,8 @@ This cannot be undone.
 Left in place:
 
   certificate shop.example.com  — you pinned this certificate
+
+2 to delete.
 `
 	if out.String() != want {
 		t.Errorf("Print() =\n%s\nwant\n%s", out.String(), want)

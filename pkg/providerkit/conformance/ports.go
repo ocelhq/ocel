@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func runPorts(t *testing.T, suite Suite) {
@@ -419,16 +418,24 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
 			}
 		}
 
-		removals, err := bootstrapper.Removals(ctx, class)
+		removal, err := bootstrapper.PlanRemoval(ctx, class)
 		if err != nil {
-			t.Fatalf("Removals() = %v", err)
+			t.Fatalf("PlanRemoval() = %v", err)
 		}
-		for _, removal := range removals {
-			if removal.Kind == "" || removal.Name == "" {
-				t.Errorf("Removals() returned %+v, and a removal plan cannot render a nameless item", removal)
+		for _, group := range removal.Groups {
+			if group.Kind == "" || group.Name == "" {
+				t.Errorf("PlanRemoval() returned %+v, and a removal plan cannot render a nameless group", group)
 			}
-			if !edge.ValidSurfaceAction(removal.Action) {
-				t.Errorf("Removals() returned action %q, which is none the plan knows", removal.Action)
+			if !providerkit.ValidChangeAction(group.Action) {
+				t.Errorf("PlanRemoval() returned action %q, which is none the plan knows", group.Action)
+			}
+			for _, change := range group.Changes {
+				if change.Kind == "" || change.Name == "" {
+					t.Errorf("PlanRemoval() returned row %+v, and a removal plan cannot render a nameless row", change)
+				}
+				if !providerkit.ValidChangeAction(change.Action) {
+					t.Errorf("PlanRemoval() returned row action %q, which is none the plan knows", change.Action)
+				}
 			}
 		}
 

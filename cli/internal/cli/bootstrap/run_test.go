@@ -86,8 +86,26 @@ func TestRunBootstrapDestroy(t *testing.T) {
 			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		if !strings.Contains(out, "This will permanently remove the production bootstrap") {
-			t.Errorf("stdout = %q, want --dry to print the plan", out)
+		for _, want := range []string{
+			"This will permanently remove the production bootstrap",
+			"– aws/ocel-production-isr  [isr]",
+			"    – RevalidationTable  AWS::DynamoDB::Table",
+			"– aws/ocel-production  [core]",
+			"    – StateBucket  AWS::S3::Bucket   — the Pulumi state of every stack this bootstrap deployed (this one is slow)",
+			"– aws/parameters",
+			"    – /ocel/origin/secret  AWS::SSM::Parameter",
+			"– cloudfront/edge  [cloudflare-edge]",
+			"    – ocel-deployments-store  Cloudflare::Worker",
+			"Left in place:",
+			"  /ocel/pulumi/passphrase  — the production bootstrap still stands",
+			"5 to delete.",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want --dry to print %q", out, want)
+			}
+		}
+		if strings.Index(out, "/ocel/pulumi/passphrase") < strings.Index(out, "Left in place:") {
+			t.Errorf("stdout = %q, want the kept parameter under what is left in place", out)
 		}
 		if !strings.Contains(out, "Run without --dry to destroy.") {
 			t.Errorf("stdout = %q, want --dry to say how to remove it", out)

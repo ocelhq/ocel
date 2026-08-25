@@ -101,16 +101,16 @@ func (f *recordingEdge) Facts() edge.Facts {
 	}
 }
 
-func (f *recordingEdge) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
-	return f.declared().ProjectSurfaces(scope)
+func (f *recordingEdge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+	return f.declared().ProjectRemovals(scope)
 }
 
-func (f *recordingEdge) PreviewWildcardSurfaces(wildcard string) (edge.Surface, edge.Surface) {
-	return f.declared().PreviewWildcardSurfaces(wildcard)
+func (f *recordingEdge) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+	return f.declared().PreviewWildcardRemovals(wildcard)
 }
 
-func (f *recordingEdge) SharedPreviewSurface() edge.Surface {
-	return f.declared().SharedPreviewSurface()
+func (f *recordingEdge) SharedPreviewRemoval() edge.PlanGroup {
+	return f.declared().SharedPreviewRemoval()
 }
 
 func (f *recordingEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {

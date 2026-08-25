@@ -24,31 +24,48 @@ func TestPrintDestroyPlan(t *testing.T) {
 
 		var out bytes.Buffer
 		printDestroyPlan(&out, "proj_shop", false, &contractv1.ChangePlan{
-			EdgeKind: "cloudflare",
+			EdgeKind: "cloudfront",
 			Subject:  "proj_shop",
 			Groups: []*contractv1.ChangeGroup{
-				{Kind: "edge stack", Name: "shop", Action: contractv1.Change_ACTION_DELETE},
-				{Kind: "distribution", Name: "E1SHOP", Action: contractv1.Change_ACTION_DISABLE_THEN_DELETE, Slow: true},
+				{
+					Kind:    "stack",
+					Name:    "aws/shop--infra",
+					Feature: "infra",
+					Action:  contractv1.Change_ACTION_DELETE,
+					Reason:  "databases and buckets, INCLUDING ALL DATA",
+				},
+				{Kind: "stack", Name: "aws/shop--web--b1", Feature: "web", Action: contractv1.Change_ACTION_DELETE},
+				{
+					Kind:   "edge",
+					Name:   "cloudfront/edge",
+					Action: contractv1.Change_ACTION_DELETE,
+					Changes: []*contractv1.Change{
+						{
+							Kind:   "AWS::CloudFront::Distribution",
+							Name:   "E1SHOP",
+							Action: contractv1.Change_ACTION_DISABLE_THEN_DELETE,
+							Slow:   true,
+						},
+						{Kind: "AWS::CloudFront::KeyValueStore", Name: "shop.example.com", Action: contractv1.Change_ACTION_DELETE},
+					},
+				},
 				{Kind: "certificate", Name: "shop.example.com", Action: contractv1.Change_ACTION_KEEP, Reason: "you pinned this certificate"},
-				{Kind: "infra stack", Name: "shop--infra", Action: contractv1.Change_ACTION_DELETE, Reason: "databases and buckets, INCLUDING ALL DATA"},
-				{Kind: "app stack", Name: "shop--web--b1", Action: contractv1.Change_ACTION_DELETE},
-				{Kind: "app stack", Name: "shop--api--b2", Action: contractv1.Change_ACTION_DELETE},
 			},
 		})
 		got := out.String()
 		for _, want := range []string{
 			`production project "proj_shop"`,
-			"fronted by the cloudflare edge",
-			"– edge stack shop",
-			"– disable, then delete distribution E1SHOP (this one is slow)",
-			"infra stack shop--infra",
-			"INCLUDING ALL DATA",
-			"app stack shop--web--b1",
-			"app stack shop--api--b2",
+			"fronted by the cloudfront edge",
+			"– aws/shop--infra  [infra]  — databases and buckets, INCLUDING ALL DATA",
+			"– aws/shop--web--b1  [web]",
+			"– cloudfront/edge",
+			"    – disable, then delete E1SHOP  AWS::CloudFront::Distribution (this one is slow)",
+			"    – shop.example.com             AWS::CloudFront::KeyValueStore",
 			"every production variable value",
 			"This cannot be undone.",
 			"Left in place:",
 			"  certificate shop.example.com  — you pinned this certificate",
+			"4 to delete.",
 		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("printDestroyPlan output missing %q; got:\n%s", want, got)
@@ -65,17 +82,22 @@ func TestPrintDestroyPlan(t *testing.T) {
 		var out bytes.Buffer
 		printDestroyPlan(&out, "proj_shop", false, &contractv1.ChangePlan{
 			EdgeKind: "api-gateway",
-			Groups: []*contractv1.ChangeGroup{
-				{Kind: "REST APIs", Name: "shop", Action: contractv1.Change_ACTION_DELETE, Slow: true},
-				{Kind: "domain names", Name: "shop.example.com", Action: contractv1.Change_ACTION_DELETE},
-			},
+			Groups: []*contractv1.ChangeGroup{{
+				Kind:   "edge",
+				Name:   "api-gateway/edge",
+				Action: contractv1.Change_ACTION_DELETE,
+				Changes: []*contractv1.Change{
+					{Kind: "AWS::ApiGateway::RestApi", Name: "shop", Action: contractv1.Change_ACTION_DELETE, Slow: true},
+					{Kind: "AWS::ApiGateway::DomainName", Name: "shop.example.com", Action: contractv1.Change_ACTION_DELETE},
+				},
+			}},
 		})
 		got := out.String()
-		if !strings.Contains(got, "– REST APIs shop (this one is slow)") {
-			t.Errorf("printDestroyPlan output missing the slow REST APIs line; got:\n%s", got)
+		if !strings.Contains(got, "– shop              AWS::ApiGateway::RestApi (this one is slow)") {
+			t.Errorf("printDestroyPlan output missing the slow REST API row; got:\n%s", got)
 		}
-		if !strings.Contains(got, "– domain names shop.example.com\n") {
-			t.Errorf("printDestroyPlan marked an unpaced item slow; got:\n%s", got)
+		if !strings.Contains(got, "– shop.example.com  AWS::ApiGateway::DomainName\n") {
+			t.Errorf("printDestroyPlan marked an unpaced row slow; got:\n%s", got)
 		}
 	})
 
@@ -111,21 +133,22 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 		for _, want := range []string{
 			`ENTIRE preview footprint of project "test-app"`,
 			"fronted by the cloudfront edge",
-			"– edge workers test-app",
-			"– infra stack test-app--pr-1--infra  — databases and buckets, INCLUDING ALL DATA",
-			"infra stack test-app--pr-2--infra",
-			"app stack test-app--pr-1--web--b1",
+			"– aws/test-app--pr-1--infra  [infra]  — databases and buckets, INCLUDING ALL DATA",
+			"– aws/test-app--pr-2--infra  [infra]",
+			"– aws/test-app--pr-1--web--b1  [web]",
+			"– cloudfront/edge",
+			"    – test-app  Cloudflare::Worker",
 			"every preview variable value",
 			"The account-level preview bootstrap is left intact. This cannot be undone.",
 			"Left in place:",
-			"  preview wildcard *.preview.acme.com  — bootstrap-scoped",
+			"  cloudfront/edge  — bootstrap-scoped: every project's previews are served on *.preview.acme.com",
 			"DESTROY PROJECT project=test-app dns= tier=TIER_PREVIEW",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		if strings.Index(out, "  preview wildcard") < strings.Index(out, "This cannot be undone.") {
+		if strings.Index(out, "Left in place:") < strings.Index(out, "This cannot be undone.") {
 			t.Errorf("stdout listed a kept item among the doomed ones:\n%s", out)
 		}
 		if strings.Contains(out, "Type the project name") {
@@ -244,11 +267,11 @@ func TestRunDestroy(t *testing.T) {
 		out := stdout.String()
 		for _, want := range []string{
 			"fronted by the cloudfront edge",
-			"– edge stack test-app",
-			"– disable, then delete distribution E1test-app (this one is slow)",
+			"– cloudfront/edge",
+			"    – disable, then delete E1test-app  AWS::CloudFront::Distribution (this one is slow)",
 			"  certificate test-app.example.com  — you pinned this certificate; Ocel never deletes one it did not request",
-			"infra stack test-app--infra",
-			"app stack test-app--web--b1",
+			"– aws/test-app--infra  [infra]",
+			"– aws/test-app--web--b1  [web]",
 			"DESTROY PROJECT project=test-app",
 		} {
 			if !strings.Contains(out, want) {

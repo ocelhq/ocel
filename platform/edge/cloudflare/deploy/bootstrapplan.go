@@ -24,16 +24,20 @@ const (
 	kindWorker          = "Cloudflare::Worker"
 	kindWorkerSecret    = "Cloudflare::WorkerSecret"
 	kindWorkerSubdomain = "Cloudflare::WorkerSubdomain"
+	kindWorkerRoute     = "Cloudflare::WorkerRoute"
+	kindDurableObject   = "Cloudflare::DurableObject"
 )
 
 const (
 	reasonCurrent       = "already current"
 	reasonScriptDrift   = "the deployed script differs from this build's bundle"
 	reasonMetadataDrift = "the deployed worker's compatibility settings or bindings differ from this build's"
+	reasonBucketEmptied = "every cached object in it, emptied one page at a time first"
 )
 
 var (
 	_ edge.BootstrapPlanner = (*provider)(nil)
+	_ edge.BootstrapRemover = (*provider)(nil)
 	_ edge.BootstrapAdopter = (*provider)(nil)
 )
 
@@ -47,6 +51,57 @@ func (p *provider) PlanBootstrap(ctx context.Context, class edge.Class) ([]edge.
 		return nil, err
 	}
 	return state.changes(), nil
+}
+
+func (p *provider) PlanRemoveBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
+	accountID, err := bootstrapCredentials()
+	if err != nil {
+		return nil, err
+	}
+	state, err := p.readState(ctx, accountID, class)
+	if err != nil {
+		return nil, err
+	}
+	return state.removals(), nil
+}
+
+func (s bootstrapState) removals() []edge.PlanChange {
+	var changes []edge.PlanChange
+	for _, worker := range s.workers {
+		changes = append(changes, worker.removals()...)
+	}
+	if s.store.bucketHeld {
+		changes = append(changes, edge.PlanChange{
+			Kind:   kindR2Bucket,
+			Name:   s.store.name,
+			Action: edge.PlanDelete,
+			Reason: reasonBucketEmptied,
+			Slow:   true,
+		})
+	}
+	if s.store.tokenHeld {
+		changes = append(changes, edge.PlanChange{Kind: kindAPIToken, Name: s.store.name, Action: edge.PlanDelete})
+	}
+	return changes
+}
+
+func (w workerState) removals() []edge.PlanChange {
+	if !w.present {
+		return nil
+	}
+	name := w.scriptName
+	changes := []edge.PlanChange{{Kind: kindWorker, Name: name, Action: edge.PlanDelete}}
+	if w.secretHeld {
+		changes = append(changes, edge.PlanChange{
+			Kind:   kindWorkerSecret,
+			Name:   name + "/" + bootstrapSecretBinding,
+			Action: edge.PlanDelete,
+		})
+	}
+	if w.subdomainOn {
+		changes = append(changes, edge.PlanChange{Kind: kindWorkerSubdomain, Name: name, Action: edge.PlanDelete})
+	}
+	return changes
 }
 
 func bootstrapCredentials() (string, error) {

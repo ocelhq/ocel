@@ -96,51 +96,60 @@ func (p *provider) FlipBound() edge.FlipBound {
 	return edge.FlipBound{}
 }
 
-func (p *provider) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
-	surfaces := []edge.Surface{{
-		Kind:   "edge workers",
+func (p *provider) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+	changes := []edge.PlanChange{{
+		Kind:   kindWorker,
 		Name:   scope.Slug,
-		Action: edge.SurfaceDelete,
+		Action: edge.PlanDelete,
 		Reason: "every per-app worker this project deployed, and the routes that reach them",
 	}}
-	if len(scope.Hostnames) > 0 {
-		surfaces = append(surfaces, edge.Surface{
-			Kind:   "worker routes",
-			Name:   strings.Join(scope.Hostnames, ", "),
-			Action: edge.SurfaceDelete,
-			Reason: "the hostnames this project is served on stop resolving to a worker",
+	for _, hostname := range scope.Hostnames {
+		changes = append(changes, edge.PlanChange{
+			Kind:   kindWorkerRoute,
+			Name:   hostname,
+			Action: edge.PlanDelete,
 		})
 	}
-	return append(surfaces, edge.Surface{
-		Kind:   "deployments store",
+	changes = append(changes, edge.PlanChange{
+		Kind:   kindDurableObject,
 		Name:   scope.Slug,
-		Action: edge.SurfaceDelete,
-		Reason: "the store instance holding every deployment and pointer this project promoted",
+		Action: edge.PlanDelete,
+		Reason: "every deployment and pointer this project promoted",
 	})
+	return []edge.PlanGroup{{
+		Kind:    edge.EdgeGroupKind,
+		Name:    edge.EdgeGroupName(Kind),
+		Action:  edge.PlanDelete,
+		Changes: changes,
+	}}
 }
 
-func (p *provider) PreviewWildcardSurfaces(wildcard string) (edge.Surface, edge.Surface) {
-	removed := edge.Surface{
-		Kind:   "preview entry worker",
-		Name:   wildcard,
-		Action: edge.SurfaceDelete,
-		Reason: "the shared entry worker holding this wildcard, and the route that reaches it",
+func (p *provider) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+	removed := edge.PlanGroup{
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(Kind),
+		Action: edge.PlanDelete,
+		Changes: []edge.PlanChange{
+			{Kind: kindWorkerRoute, Name: wildcard, Action: edge.PlanDelete},
+			{Kind: kindWorker, Name: previewEntryScript, Action: edge.PlanDelete,
+				Reason: "the shared entry worker this wildcard is held by"},
+		},
 	}
-	kept := edge.Surface{
-		Kind:   "preview bootstrap",
-		Name:   string(edge.ClassPreview),
-		Action: edge.SurfaceKeep,
+	kept := edge.PlanGroup{
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(Kind),
+		Action: edge.PlanKeep,
 		Reason: "bootstrap-scoped: `ocel bootstrap destroy preview` removes what it stood up",
 	}
 	return removed, kept
 }
 
-func (p *provider) SharedPreviewSurface() edge.Surface {
-	return edge.Surface{
-		Kind:   "shared preview entry worker",
-		Name:   edge.PreviewEntryOwner,
-		Action: edge.SurfaceKeep,
-		Reason: "bootstrap-scoped: it fronts every project's previews",
+func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
+	return edge.PlanGroup{
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(Kind),
+		Action: edge.PlanKeep,
+		Reason: "bootstrap-scoped: " + edge.PreviewEntryOwner + " fronts every project's previews",
 	}
 }
 

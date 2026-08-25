@@ -29,8 +29,8 @@ func (s stubBootstrapper) Apply(context.Context, providerkit.BootstrapRequest, p
 	return s.err
 }
 
-func (stubBootstrapper) Removals(context.Context, providerkit.Class) ([]providerkit.Removal, error) {
-	return nil, nil
+func (stubBootstrapper) PlanRemoval(context.Context, providerkit.Class) (providerkit.BootstrapPlan, error) {
+	return providerkit.BootstrapPlan{}, nil
 }
 
 func (s stubBootstrapper) Remove(context.Context, providerkit.Class, providerkit.Reporter) error {

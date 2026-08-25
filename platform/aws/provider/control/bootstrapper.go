@@ -132,7 +132,7 @@ func (b Bootstrapper) edgeGroup(ctx context.Context, req providerkit.BootstrapRe
 	}
 	feature := providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), b.Edge.Kind())
 	if dropping(feature, req) {
-		return severedEdge(b.Edge.Kind(), feature, planned), nil
+		return b.severedEdge(ctx, req.Class, feature, planned)
 	}
 	group, err := providerkit.EdgeGroup(b.Edge.Kind(), feature, planned)
 	if err != nil {
@@ -145,13 +145,27 @@ func dropping(feature string, req providerkit.BootstrapRequest) bool {
 	return feature != "" && slices.Contains(req.Remove, feature) && !slices.Contains(req.Features, feature)
 }
 
-func severedEdge(kind edge.Kind, feature string, planned []edge.PlanChange) *providerkit.ChangeGroup {
+func (b Bootstrapper) severedEdge(ctx context.Context, class providerkit.Class, feature string, planned []edge.PlanChange) (*providerkit.ChangeGroup, error) {
+	group, err := b.removedEdgeGroup(ctx, class)
+	if err != nil {
+		return nil, err
+	}
+	if group == nil {
+		group = standingEdgeChanges(b.Edge.Kind(), feature, planned)
+	}
+	if group == nil {
+		return nil, nil
+	}
+	group.Reason = fmt.Sprintf("dropping %s tears the %s edge down; nothing is fronted with it afterwards", feature, b.Edge.Kind())
+	return group, nil
+}
+
+func standingEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanChange) *providerkit.ChangeGroup {
 	group := providerkit.ChangeGroup{
 		Kind:    providerkit.EdgeGroupKind,
-		Name:    string(kind) + "/edge",
+		Name:    edge.EdgeGroupName(kind),
 		Feature: feature,
 		Action:  providerkit.ActionDelete,
-		Reason:  fmt.Sprintf("dropping %s tears the %s edge down; nothing is fronted with it afterwards", feature, kind),
 	}
 	for _, change := range planned {
 		if change.Action == edge.PlanCreate {
@@ -194,18 +208,6 @@ func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest
 		return providerkit.Refuse(providerkit.CodeDenied, "%s", err.Error())
 	}
 	return err
-}
-
-func (b Bootstrapper) Removals(ctx context.Context, class providerkit.Class) ([]providerkit.Removal, error) {
-	deployed, err := bootstrap.CheckDeployedFor(ctx, b.CFN, string(class))
-	if err != nil {
-		return nil, err
-	}
-	shared, err := bootstrap.PassphraseHeldBySibling(ctx, b.CFN, string(class))
-	if err != nil {
-		return nil, err
-	}
-	return removals(string(class), b.Edge.Kind(), deployed, shared)
 }
 
 func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
