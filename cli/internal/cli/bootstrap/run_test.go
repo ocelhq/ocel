@@ -117,6 +117,50 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		}
 	})
 
+	t.Run("nothing standing is a clean no-op, not a teardown", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		t.Setenv(clitest.FakeEmptyRemovalPlanEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		opts := Options{Yes: true}
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "Nothing to destroy: the production environment is not bootstrapped") {
+			t.Errorf("stdout = %q, want it to declare the no-op", out)
+		}
+		for _, unwanted := range []string{"This will permanently remove", "This cannot be undone", "TEARDOWN"} {
+			if strings.Contains(out, unwanted) {
+				t.Errorf("stdout = %q, want no %q: an empty plan must stop before the warning and the teardown", out, unwanted)
+			}
+		}
+	})
+
+	t.Run("--dry with nothing standing declares the no-op and offers nothing", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		t.Setenv(clitest.FakeEmptyRemovalPlanEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		opts := Options{Dry: true}
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "Nothing to destroy: the production environment is not bootstrapped") {
+			t.Errorf("stdout = %q, want it to declare the no-op", out)
+		}
+		if strings.Contains(out, "Run without --dry to destroy.") {
+			t.Errorf("stdout = %q, want no offer to destroy what is not there", out)
+		}
+	})
+
 	t.Run("without a terminal, a phrase it cannot ask for is a refusal", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := clitest.NewDeps()
@@ -307,8 +351,8 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if strings.Contains(stdout.String(), "Nothing to change") {
-			t.Errorf("stdout = %q, want a silent plan not to be read as an empty one", stdout.String())
+		if !strings.Contains(stdout.String(), "No infrastructure changes — applying refreshes bootstrap seals and records.") {
+			t.Errorf("stdout = %q, want the confirm never to float over a void", stdout.String())
 		}
 		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
 			t.Errorf("provider saw %v, want the apply to go through", got)
@@ -369,7 +413,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		}
 	})
 
-	t.Run("--remove of a feature that is not standing says so and removes nothing", func(t *testing.T) {
+	t.Run("--remove of a feature that is not standing says so and stops", func(t *testing.T) {
 		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 
@@ -381,9 +425,23 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		if !strings.Contains(stdout.String(), "image-optimization is not in the production bootstrap, so there is nothing to remove.") {
 			t.Errorf("stdout = %q, want it to say the named feature was never there", stdout.String())
 		}
+		if _, statErr := os.Stat(journal); statErr == nil {
+			t.Errorf("provider saw %v, want a run that was only a removal of nothing to apply nothing", clitest.ReadJournal(t, journal))
+		}
+	})
+
+	t.Run("--remove of an absent feature beside --features still ensures what --features named", func(t *testing.T) {
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
+
+		var stdout, stderr bytes.Buffer
+		opts := Options{Yes: true, Remove: "image-optimization", Features: "isr", FeaturesDeclared: true}
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
 		got := clitest.ReadJournal(t, journal)
 		if len(got) != 1 || got[0] != "features=isr force=false acceptReplacements=true" {
-			t.Errorf("provider saw %v, want a removal of nothing to leave the run an ordinary refresh", got)
+			t.Errorf("provider saw %v, want the declared features ensured despite the empty removal", got)
 		}
 	})
 }

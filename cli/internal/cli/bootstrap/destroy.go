@@ -64,6 +64,10 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		if err != nil {
 			return err
 		}
+		if len(plan.GetGroups()) == 0 {
+			ui.Finish(fmt.Sprintf("Nothing to destroy: the %s environment is not bootstrapped", name))
+			return nil
+		}
 		changeplan.NewPrinter(stdout).Print(fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
 			"Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
 		if opts.Dry {

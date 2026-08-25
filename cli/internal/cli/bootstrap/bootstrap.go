@@ -194,6 +194,9 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			fmt.Fprintf(stdout, "%s is not in the %s bootstrap, so there is nothing to remove.\n",
 				strings.Join(absent, ", "), Name(tier))
 		}
+		if len(named) > 0 && len(going) == 0 && !opts.FeaturesDeclared {
+			return nil
+		}
 
 		interactive := !opts.Yes && deps.StdinIsTerminal(stdin)
 		picked := interactive && !opts.FeaturesDeclared
@@ -246,6 +249,8 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
 				fmt.Fprintf(stdout, "These projects were deployed against it and break when it goes: %s\n", strings.Join(dependents, ", "))
 			}
+		} else {
+			fmt.Fprintln(stdout, "No infrastructure changes — applying refreshes bootstrap seals and records.")
 		}
 		if !picked {
 			kind := plan.GetEdgeKind()
