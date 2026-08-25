@@ -84,7 +84,18 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
-	plan := providerkit.BootstrapPlan{Groups: providerkit.Vendored(groupVendor, groups)}
+	adoption, err := b.adoption(ctx, req)
+	if err != nil {
+		return providerkit.BootstrapPlan{}, err
+	}
+	params, err := bootstrap.PlanParameters(ctx,
+		bootstrap.ParamAPIs{SSM: b.SSM, IAM: b.IAM},
+		string(req.Class), b.Edge.Kind(), adoption,
+		bootstrap.Request{Features: req.Features, Remove: req.Remove})
+	if err != nil {
+		return providerkit.BootstrapPlan{}, err
+	}
+	plan := providerkit.BootstrapPlan{Groups: providerkit.Vendored(groupVendor, append(groups, params))}
 	front, err := b.edgeGroup(ctx, req)
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
@@ -93,6 +104,18 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 		plan.Groups = append(plan.Groups, *front)
 	}
 	return plan, nil
+}
+
+func (b Bootstrapper) adoption(ctx context.Context, req providerkit.BootstrapRequest) (edge.Adoption, error) {
+	adopter, ok := b.Edge.(edge.BootstrapAdopter)
+	if !ok {
+		return edge.Adoption{}, nil
+	}
+	adoption, err := adopter.Adoption(ctx, edge.Class(req.Class))
+	if err != nil {
+		return edge.Adoption{}, fmt.Errorf("read what the %s edge hands this account to hold: %w", b.Edge.Kind(), err)
+	}
+	return adoption, nil
 }
 
 func (b Bootstrapper) edgeGroup(ctx context.Context, req providerkit.BootstrapRequest) (*providerkit.ChangeGroup, error) {

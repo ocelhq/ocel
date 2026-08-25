@@ -20,8 +20,9 @@ const (
 )
 
 const (
-	StackGroupKind = "stack"
-	EdgeGroupKind  = "edge"
+	StackGroupKind     = "stack"
+	EdgeGroupKind      = "edge"
+	ParameterGroupKind = "parameters"
 
 	DetailUnavailable = "resource-level detail unavailable"
 
@@ -163,7 +164,7 @@ func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) (Chang
 			Reason: change.Reason,
 		})
 	}
-	group.Action, group.Reason = rollUp(group.Changes)
+	group.Action, group.Reason = RollUp(group.Changes)
 	return group, nil
 }
 
@@ -178,17 +179,19 @@ func edgeAction(action edge.PlanAction) ChangeAction {
 	}
 }
 
-func rollUp(changes []Change) (ChangeAction, string) {
+func RollUp(changes []Change) (ChangeAction, string) {
 	if len(changes) == 0 {
 		return ActionUpdate, DetailUnavailable
 	}
-	creates, keeps := 0, 0
+	creates, keeps, deletes := 0, 0, 0
 	for _, change := range changes {
 		switch change.Action {
 		case ActionCreate:
 			creates++
 		case ActionKeep:
 			keeps++
+		case ActionDelete:
+			deletes++
 		}
 	}
 	switch {
@@ -196,6 +199,8 @@ func rollUp(changes []Change) (ChangeAction, string) {
 		return ActionKeep, reasonCurrent
 	case len(changes) == creates:
 		return ActionCreate, ""
+	case len(changes) == deletes:
+		return ActionDelete, ""
 	default:
 		return ActionUpdate, ""
 	}

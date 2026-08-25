@@ -45,6 +45,10 @@ var cacheStoreNameByClass = map[edge.Class]string{
 
 func cacheStoreName(class edge.Class) string { return cacheStoreNameByClass[class] }
 
+func adoptedValues(cacheBucket string) map[string]string {
+	return map[string]string{valueKeyCacheBucket: cacheBucket}
+}
+
 type bucketAPI interface {
 	Get(ctx context.Context, bucketName string, params r2.BucketGetParams, opts ...option.RequestOption) (*r2.Bucket, error)
 	New(ctx context.Context, params r2.BucketNewParams, opts ...option.RequestOption) (*r2.Bucket, error)
@@ -171,7 +175,7 @@ func (s cacheStore) bootstrap(ctx context.Context, accountID string, state cache
 
 	return edge.BootstrapOutput{
 		Trust:  edge.TrustExternal,
-		Values: map[string]string{valueKeyCacheBucket: name},
+		Values: adoptedValues(name),
 		Offers: []edge.Offer{{Kind: edge.OfferCacheStore, Values: values}},
 	}, nil
 }

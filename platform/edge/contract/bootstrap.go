@@ -12,6 +12,15 @@ type BootstrapPlanner interface {
 	PlanBootstrap(ctx context.Context, class Class) ([]PlanChange, error)
 }
 
+type BootstrapAdopter interface {
+	Adoption(ctx context.Context, class Class) (Adoption, error)
+}
+
+type Adoption struct {
+	Values map[string]string
+	Offers []OfferKind
+}
+
 type PlanChange struct {
 	Kind   string
 	Name   string

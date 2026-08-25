@@ -3,6 +3,9 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"slices"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const KindCloudflare = "cloudflare"
@@ -121,6 +124,76 @@ func edgeUserResource(userName, class string, optimizer bool) string {
 		paramAssetBucketARN, paramAssetBucketARN,
 		paramStateTableARN, paramStateTableARN, StateTableIndexName,
 		paramRevalidateQueueARN, invoke)
+}
+
+func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, class string, req Request) ([]providerkit.Change, error) {
+	if !slices.Contains(req.Features, FeatureCloudflareEdge) {
+		return nil, nil
+	}
+	names, err := edgeNamesFor(class, KindCloudflare)
+	if err != nil {
+		return nil, err
+	}
+	recorded, held, err := recordedEdgeKeyID(ctx, apis.SSM, names.credentialsParam)
+	if err != nil {
+		return nil, err
+	}
+	standing, err := edgeKeyStanding(ctx, apis.IAM, names.user, recorded)
+	if err != nil {
+		return nil, err
+	}
+	if standing {
+		return []providerkit.Change{
+			{Kind: kindParameter, Name: names.credentialsParam, Action: providerkit.ActionKeep, Reason: paramCurrent},
+			{Kind: kindAccessKey, Name: names.user, Action: providerkit.ActionKeep, Reason: paramCurrent},
+		}, nil
+	}
+	credentials := providerkit.Change{Kind: kindParameter, Name: names.credentialsParam, Action: providerkit.ActionCreate}
+	if held {
+		credentials.Action, credentials.Reason = providerkit.ActionUpdate, keyGone
+		if recorded == "" {
+			credentials.Reason = keyUnrecorded
+		}
+	}
+	return []providerkit.Change{
+		credentials,
+		{Kind: kindAccessKey, Name: names.user, Action: providerkit.ActionCreate},
+	}, nil
+}
+
+func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, class string, req Request) ([]providerkit.Change, error) {
+	if !slices.Contains(req.Remove, FeatureCloudflareEdge) || slices.Contains(req.Features, FeatureCloudflareEdge) {
+		return nil, nil
+	}
+	names, err := edgeNamesFor(class, KindCloudflare)
+	if err != nil {
+		return nil, err
+	}
+	reason := fmt.Sprintf(severedByRemove, FeatureCloudflareEdge, KindCloudflare)
+
+	var changes []providerkit.Change
+	keys, err := liveAccessKeys(ctx, apis.IAM, names.user)
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) > 0 {
+		changes = append(changes, providerkit.Change{
+			Kind: kindAccessKey, Name: names.user, Action: providerkit.ActionDelete, Reason: reason,
+		})
+	}
+	for _, param := range names.edgeParams() {
+		held, err := paramHeld(ctx, apis.SSM, param)
+		if err != nil {
+			return nil, err
+		}
+		if !held {
+			continue
+		}
+		changes = append(changes, providerkit.Change{
+			Kind: kindParameter, Name: param, Action: providerkit.ActionDelete, Reason: reason,
+		})
+	}
+	return changes, nil
 }
 
 func severCloudflareEdge(ctx context.Context, d stepDeps) error {

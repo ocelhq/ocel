@@ -16,12 +16,13 @@ import (
 const BypassEnv = "OCEL_DESTROY_BYPASS_CONFIRMATION"
 
 const (
-	stackKind   = "stack"
-	edgeKind    = "edge"
-	baselineTag = "core"
-	gutter      = "  "
-	typeGutter  = "   "
-	slowNote    = " (this one is slow)"
+	stackKind     = "stack"
+	edgeKind      = "edge"
+	parameterKind = "parameters"
+	baselineTag   = "core"
+	gutter        = "  "
+	typeGutter    = "   "
+	slowNote      = " (this one is slow)"
 )
 
 func BypassRequest() string {
@@ -143,13 +144,13 @@ func changeLabel(change *contractv1.Change) string {
 	return change.GetName()
 }
 
-var bootstrapKinds = map[string]bool{stackKind: true, edgeKind: true}
+var bootstrapKinds = map[string]bool{stackKind: true, edgeKind: true, parameterKind: true}
 
 func groupTag(group *contractv1.ChangeGroup) string {
 	if feature := group.GetFeature(); feature != "" {
 		return feature
 	}
-	if group.GetKind() == edgeKind {
+	if group.GetKind() != stackKind {
 		return ""
 	}
 	return baselineTag
