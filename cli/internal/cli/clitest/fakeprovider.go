@@ -539,9 +539,17 @@ func (s *deployFakeProviderServer) GetCredentialPermissions(ctx context.Context,
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	return &contractv1.CredentialPermissionsResponse{
+	groups := []*contractv1.CredentialGroup{{
+		Heading:  "AWS credentials",
 		Document: fmt.Sprintf(`{"Version":"2012-10-17","Statement":[{"Sid":%q}]}`, req.GetTier().String()),
-	}, nil
+	}}
+	if resolvedEdgeKind(req.GetEdge().GetKind()) == "cloudflare" {
+		groups = append(groups, &contractv1.CredentialGroup{
+			Heading:  "Cloudflare API token",
+			Document: "Account · Workers Scripts · Edit",
+		})
+	}
+	return &contractv1.CredentialPermissionsResponse{Groups: groups}, nil
 }
 
 func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {

@@ -299,7 +299,24 @@ func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.C
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	return &contractv1.CredentialPermissionsResponse{Document: document}, nil
+	groups := []*contractv1.CredentialGroup{{
+		Heading:  document.Heading,
+		Document: document.Document,
+	}}
+
+	if front, err := provider.Edges().Open(edgeKind(provider, req.GetEdge().GetKind())); err == nil {
+		if documenter, ok := front.(edge.CredentialDocumenter); ok {
+			documented, err := documenter.CredentialPermissions(tier)
+			if err != nil {
+				return nil, RefusalError(err)
+			}
+			groups = append(groups, &contractv1.CredentialGroup{
+				Heading:  documented.Heading,
+				Document: documented.Document,
+			})
+		}
+	}
+	return &contractv1.CredentialPermissionsResponse{Groups: groups}, nil
 }
 
 func CredentialTierOf(tier contractv1.CredentialTier) (CredentialTier, error) {

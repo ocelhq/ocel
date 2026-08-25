@@ -153,6 +153,22 @@ const (
 	EntitlementWithheld Entitlement = "withheld"
 )
 
+type CredentialTier string
+
+const (
+	TierBootstrap CredentialTier = "bootstrap"
+	TierDeploy    CredentialTier = "deploy"
+)
+
+type CredentialDocument struct {
+	Heading  string
+	Document string
+}
+
+type CredentialDocumenter interface {
+	CredentialPermissions(tier CredentialTier) (CredentialDocument, error)
+}
+
 type AppDeployment struct {
 	Name    string
 	Worker  Worker

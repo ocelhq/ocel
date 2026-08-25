@@ -51,7 +51,9 @@ func (credentials) Whoami(context.Context) (providerkit.Identity, error) {
 	return providerkit.Identity{Provider: Vendor}, nil
 }
 
-func (credentials) Permissions(providerkit.CredentialTier) (string, error) { return "", nil }
+func (credentials) Permissions(providerkit.CredentialTier) (edge.CredentialDocument, error) {
+	return edge.CredentialDocument{Heading: "VPS credentials"}, nil
+}
 
 type edges struct{}
 
