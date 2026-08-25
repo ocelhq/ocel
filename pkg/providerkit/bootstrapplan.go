@@ -63,6 +63,22 @@ func WithoutDetail(reason string) string {
 	return reason + "; " + DetailUnavailable
 }
 
+func NameStacks(described Bootstrap, catalogue []Feature, name func(feature string) string) Bootstrap {
+	held := make(map[string]bool, len(described.Stacks))
+	for _, stack := range described.Stacks {
+		held[stack.Feature] = true
+	}
+	named := described
+	named.Stacks = slices.Clone(described.Stacks)
+	for _, feature := range append([]string{""}, featureNames(catalogue)...) {
+		if held[feature] {
+			continue
+		}
+		named.Stacks = append(named.Stacks, BootstrapStack{Name: name(feature), Feature: feature})
+	}
+	return named
+}
+
 func DeriveGroups(described Bootstrap, catalogue []Feature, req BootstrapRequest) []ChangeGroup {
 	standing := make(map[string]BootstrapStack, len(described.Stacks))
 	for _, stack := range described.Stacks {

@@ -354,8 +354,8 @@ func TestPlanBootstrapPlansTheApplyItsIntentNames(t *testing.T) {
 	if plan.GetSubject() != string(providerkit.ClassProduction) {
 		t.Errorf("plan subject = %q, want the class it was asked about", plan.GetSubject())
 	}
-	if plan.GetEdgeKind() == "" {
-		t.Error("plan names no edge, and the plan is drawn against one")
+	if plan.GetEdgeKind() != "" {
+		t.Errorf("plan claims the %s edge though nothing named an edge and a bootstrap plan does not turn on one", plan.GetEdgeKind())
 	}
 	if len(plan.GetGroups()) != 3 {
 		t.Fatalf("plan = %v, want the baseline and the closure of images", plan.GetGroups())
@@ -367,6 +367,23 @@ func TestPlanBootstrapPlansTheApplyItsIntentNames(t *testing.T) {
 		if len(group.GetChanges()) == 0 {
 			t.Errorf("%s carries no resource-level detail", group.GetName())
 		}
+	}
+}
+
+func TestPlanBootstrapRefusesAnIntentAimedElsewhere(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+
+	_, err := client.PlanBootstrap(context.Background(), &contractv1.PlanBootstrapRequest{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Intent: &contractv1.BootstrapRequest{
+			Tier:     environmentv1.Tier_TIER_PREVIEW,
+			Features: []string{fake.FeatureCache},
+		},
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("PlanBootstrap() with an intent aimed at another tier = %v, want it refused rather than silently planned against production", err)
 	}
 }
 

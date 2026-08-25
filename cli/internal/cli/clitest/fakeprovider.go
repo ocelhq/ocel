@@ -389,9 +389,8 @@ func fakeChangePlan(req *contractv1.PlanBootstrapRequest) *contractv1.ChangePlan
 	class := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
 	core := &contractv1.ChangeGroup{Kind: "stack", Name: "ocel-" + class + "-core"}
 	plan := &contractv1.ChangePlan{
-		EdgeKind: resolvedEdgeKind(""),
-		Subject:  class,
-		Groups:   []*contractv1.ChangeGroup{core},
+		Subject: class,
+		Groups:  []*contractv1.ChangeGroup{core},
 	}
 	switch shape {
 	case "keep":
@@ -701,7 +700,8 @@ func journalBootstrap(req *contractv1.BootstrapRequest) {
 		return
 	}
 	defer f.Close()
-	line := fmt.Sprintf("features=%s force=%t", strings.Join(req.GetFeatures(), ","), req.GetForce())
+	line := fmt.Sprintf("features=%s force=%t acceptReplacements=%t",
+		strings.Join(req.GetFeatures(), ","), req.GetForce(), req.GetAcceptReplacements())
 	if req.AutoHeal != nil {
 		line += fmt.Sprintf(" autoHeal=%t", req.GetAutoHeal())
 	}

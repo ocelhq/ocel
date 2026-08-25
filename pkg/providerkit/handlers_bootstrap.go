@@ -73,7 +73,10 @@ func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootst
 	if err != nil {
 		return nil, err
 	}
-	provider, gate, err := h.gate("")
+	if err := sameClass(class, req); err != nil {
+		return nil, err
+	}
+	_, gate, err := h.gate("")
 	if err != nil {
 		return nil, err
 	}
@@ -107,8 +110,24 @@ func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootst
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	resp.Plan = ChangePlanProto(plan, string(class), string(edgeKind(provider, "")))
+	resp.Plan = ChangePlanProto(plan, string(class), "")
 	return resp, nil
+}
+
+func sameClass(class Class, req *contractv1.PlanBootstrapRequest) error {
+	if req.GetIntent() == nil {
+		return nil
+	}
+	intended, err := classOf(req.GetIntent().GetTier())
+	if err != nil {
+		return err
+	}
+	if intended == class {
+		return nil
+	}
+	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+		"this asks what would change in the %s bootstrap while carrying an intent aimed at the %s one; a plan answers for one bootstrap",
+		class, intended))
 }
 
 func ChangePlanProto(plan BootstrapPlan, subject, kind string) *contractv1.ChangePlan {

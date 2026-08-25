@@ -2,10 +2,10 @@ package bootstrap
 
 import (
 	"context"
-	"slices"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"gopkg.in/yaml.v3"
 
@@ -17,25 +17,13 @@ func NameStacks(described providerkit.Bootstrap) providerkit.Bootstrap {
 	if err != nil {
 		return described
 	}
-	held := make(map[string]bool, len(described.Stacks))
-	for _, stack := range described.Stacks {
-		held[stack.Feature] = true
-	}
-	named := described
-	named.Stacks = slices.Clone(described.Stacks)
-	if !held[""] {
-		named.Stacks = append(named.Stacks, providerkit.BootstrapStack{Name: target.stackName})
-	}
-	for _, f := range featureRegistry {
-		if held[f.name] {
-			continue
+	return providerkit.NameStacks(described, Catalogue(), func(name string) string {
+		f, ok := featureNamed(name)
+		if !ok {
+			return target.stackName
 		}
-		named.Stacks = append(named.Stacks, providerkit.BootstrapStack{
-			Name:    f.stackName(string(described.Class)),
-			Feature: f.name,
-		})
-	}
-	return named
+		return f.stackName(string(described.Class))
+	})
 }
 
 func PlanChanges(ctx context.Context, cfn CFNAPI, class string, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
@@ -58,9 +46,11 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, class string, req Request, gro
 		switch {
 		case !ok:
 			planned = append(planned, group)
-		case group.Action == providerkit.ActionCreate || group.Action == providerkit.ActionDelete:
+		case group.Action == providerkit.ActionCreate:
 			group.Changes = templateChanges(stack.body, group.Action)
 			planned = append(planned, group)
+		case group.Action == providerkit.ActionDelete:
+			planned = append(planned, planDelete(ctx, cfn, group, stack.body))
 		case group.Action == providerkit.ActionUpdate:
 			planned = append(planned, planUpdate(ctx, cfn, group, stack, req.Writer))
 		default:
@@ -90,7 +80,7 @@ func planUpdate(ctx context.Context, cfn CFNAPI, group providerkit.ChangeGroup, 
 		return group
 	}
 	if id == "" {
-		group.Action, group.Reason = providerkit.ActionKeep, "already current"
+		group.Reason = "version stamp is behind; no resource changes"
 		return group
 	}
 	discardChangeSet(ctx, cfn, id)
@@ -98,6 +88,47 @@ func planUpdate(ctx context.Context, cfn CFNAPI, group providerkit.ChangeGroup, 
 		group.Reason = providerkit.WithoutDetail(group.Reason)
 	}
 	return group
+}
+
+func planDelete(ctx context.Context, cfn CFNAPI, group providerkit.ChangeGroup, body string) providerkit.ChangeGroup {
+	standing, err := stackResources(ctx, cfn, group.Name)
+	if err != nil {
+		group.Changes = templateChanges(body, providerkit.ActionDelete)
+		group.Reason = providerkit.WithoutDetail(group.Reason)
+		return group
+	}
+	group.Changes = make([]providerkit.Change, 0, len(standing))
+	for _, resource := range standing {
+		group.Changes = append(group.Changes, providerkit.Change{
+			Kind:   resource.kind,
+			Name:   resource.id,
+			Action: providerkit.ActionDelete,
+		})
+	}
+	return group
+}
+
+func stackResources(ctx context.Context, cfn CFNAPI, stackName string) ([]templateResource, error) {
+	var out []templateResource
+	var token *string
+	for {
+		page, err := cfn.ListStackResources(ctx, &cloudformation.ListStackResourcesInput{
+			StackName: aws.String(stackName),
+			NextToken: token,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, summary := range page.StackResourceSummaries {
+			out = append(out, templateResource{
+				id:   aws.ToString(summary.LogicalResourceId),
+				kind: aws.ToString(summary.ResourceType),
+			})
+		}
+		if token = page.NextToken; token == nil {
+			return out, nil
+		}
+	}
 }
 
 func resourceChanges(changes []cfntypes.ResourceChange) []providerkit.Change {

@@ -92,9 +92,9 @@ func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
 		features    string
 		want        string
 	}{
-		{"a named set reaches the provider whole", "  edge: { kind: \"cloudflare\", options: {} },\n", "isr,image-optimization", "features=isr,image-optimization force=false"},
-		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,cloudflare-edge force=false"},
-		{"none leaves the core alone", "", "none", "features= force=false"},
+		{"a named set reaches the provider whole", "  edge: { kind: \"cloudflare\", options: {} },\n", "isr,image-optimization", "features=isr,image-optimization force=false acceptReplacements=true"},
+		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,cloudflare-edge force=false acceptReplacements=true"},
+		{"none leaves the core alone", "", "none", "features= force=false acceptReplacements=true"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -130,7 +130,7 @@ func TestBootstrapWithoutTheFlagKeepsWhatIsThere(t *testing.T) {
 	}
 
 	got := clitest.ReadJournal(t, journal)
-	if len(got) != 1 || got[0] != "features=isr force=false" {
+	if len(got) != 1 || got[0] != "features=isr force=false acceptReplacements=true" {
 		t.Errorf("provider saw %v, want the set the account already carries", got)
 	}
 }
@@ -165,7 +165,7 @@ func TestBootstrapForcesADropWhenTold(t *testing.T) {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	got := clitest.ReadJournal(t, journal)
-	if len(got) != 1 || got[0] != "features=isr force=true" {
+	if len(got) != 1 || got[0] != "features=isr force=true acceptReplacements=true" {
 		t.Errorf("provider saw %v, want the forced drop carried through", got)
 	}
 }
