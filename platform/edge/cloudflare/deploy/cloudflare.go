@@ -288,21 +288,28 @@ func (p *provider) settleWorker(ctx context.Context, accountID string, state wor
 	b := state.bootstrapWorker
 	up := upload{accountID: accountID, scriptName: b.scriptName, worker: b.worker}
 	var cred string
-	var inherited []string
-	if state.secretHeld {
-		inherited = []string{bootstrapSecretBinding}
-	} else {
+	if !state.secretHeld {
 		minted, err := mintSecret()
 		if err != nil {
 			return edge.Offer{}, fmt.Errorf("mint bootstrap credential: %w", err)
 		}
 		cred = minted
-		up.worker = withSecret(b.worker, bootstrapSecretBinding, cred)
 	}
 
-	if !state.settled() || cred != "" {
+	switch {
+	case !state.settled():
+		var inherited []string
+		if cred == "" {
+			inherited = []string{bootstrapSecretBinding}
+		} else {
+			up.worker = withSecret(b.worker, bootstrapSecretBinding, cred)
+		}
 		if err := p.putDurableObjectScript(ctx, up, b.do, state.classes, inherited); err != nil {
 			return edge.Offer{}, fmt.Errorf("put %s: %w", b.what, err)
+		}
+	case cred != "":
+		if err := p.putBootstrapSecret(ctx, accountID, b.scriptName, cred); err != nil {
+			return edge.Offer{}, fmt.Errorf("set the bootstrap credential of %s: %w", b.what, err)
 		}
 	}
 

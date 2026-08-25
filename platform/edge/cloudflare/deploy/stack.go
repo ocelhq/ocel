@@ -371,6 +371,18 @@ func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do dur
 	return err
 }
 
+func (p *provider) putBootstrapSecret(ctx context.Context, accountID, scriptName, value string) error {
+	_, err := p.client.Workers.Scripts.Secrets.Update(ctx, scriptName, workers.ScriptSecretUpdateParams{
+		AccountID: cf.F(accountID),
+		Body: workers.ScriptSecretUpdateParamsBodyWorkersBindingKindSecretText{
+			Name: cf.F(bootstrapSecretBinding),
+			Text: cf.F(value),
+			Type: cf.F(workers.ScriptSecretUpdateParamsBodyWorkersBindingKindSecretTextTypeSecretText),
+		},
+	})
+	return err
+}
+
 func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectWorker, deployedClasses, inherited []string) ([]byte, string, error) {
 	bindings := scriptBindings(worker, false)
 	for _, class := range do.classes {

@@ -52,6 +52,13 @@ type cfMock struct {
 	deletedBuckets       []string
 	deletedTokens        []string
 	subdomainCalls       []subdomainCall
+	putSecrets           []putSecret
+}
+
+type putSecret struct {
+	script string
+	name   string
+	text   string
 }
 
 type subdomainCall struct {
@@ -183,6 +190,21 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		}
 		w.Header().Set("Content-Type", put.contentType)
 		_, _ = w.Write(put.content)
+	})
+
+	mux.HandleFunc("PUT /accounts/acct/workers/scripts/{name}/secrets", func(w http.ResponseWriter, r *http.Request) {
+		script := r.PathValue("name")
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		name := fmt.Sprint(body["name"])
+		m.putSecrets = append(m.putSecrets, putSecret{script: script, name: name, text: fmt.Sprint(body["text"])})
+		if m.scriptSecrets == nil {
+			m.scriptSecrets = map[string][]string{}
+		}
+		if !slices.Contains(m.scriptSecrets[script], name) {
+			m.scriptSecrets[script] = append(m.scriptSecrets[script], name)
+		}
+		writeResult(w, map[string]any{"name": name, "type": "secret_text"})
 	})
 
 	mux.HandleFunc("GET /accounts/acct/workers/scripts/{name}/secrets", func(w http.ResponseWriter, r *http.Request) {
