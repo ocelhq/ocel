@@ -221,7 +221,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var mu sync.Mutex
 		var opened []string
 		recordBrowser(&sess, &opened, &mu)
-		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
+		clitest.StubBuild(&sess, []manifestbuilder.Function{
 			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 
@@ -544,7 +544,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 func TestGateRecoveryOnPreviewUp(t *testing.T) {
 	t.Run("a gate refusal in a terminal opens the UI and resumes", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		problems := problemsFile(t, missingStripeKey)
 		sess := newSession()
 		terminalStdin(&sess)
@@ -593,7 +593,7 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-				t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
 				sess := newSession()
 				if tc.terminal {

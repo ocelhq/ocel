@@ -24,12 +24,12 @@ import (
 )
 
 type Options struct {
-	Yes      bool
-	Force    bool
-	Features string
-	Declared bool
-	Healing  bool
-	AutoHeal bool
+	Yes              bool
+	Force            bool
+	Features         string
+	FeaturesDeclared bool
+	AutoHealDeclared bool
+	AutoHeal         bool
 }
 
 func NewCommand(sess session.Session) *cobra.Command {
@@ -79,8 +79,8 @@ func newProvisionCommand(sess session.Session, tier environmentv1.Tier, aliases 
 			}
 
 			opts := opts
-			opts.Declared = cmd.Flags().Changed("features")
-			opts.Healing = cmd.Flags().Changed("auto-heal")
+			opts.FeaturesDeclared = cmd.Flags().Changed("features")
+			opts.AutoHealDeclared = cmd.Flags().Changed("auto-heal")
 
 			ctx, stop := sess.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
@@ -190,7 +190,7 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 		return err
 	}
 
-	asked := prompt.New(stdout, stdin)
+	prompter := prompt.New(stdout, stdin)
 	return providerui.Run(ctx, sess, cfg, "ocel bootstrap "+Name(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
 		client, err := runner.Client()
 		if err != nil {
@@ -209,11 +209,11 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 		catalogue := described.GetFeatures()
 
 		interactive := !opts.Yes && sess.StdinIsTerminal(stdin)
-		requested, chosen, err := chooseFeatures(ctx, asked, opts, catalogue, interactive)
+		requested, selected, err := chooseFeatures(ctx, prompter, opts, catalogue, interactive)
 		if err != nil {
 			return err
 		}
-		if !chosen {
+		if !selected {
 			fmt.Fprintln(stdout, "Aborted.")
 			return nil
 		}
@@ -225,7 +225,7 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 				return fmt.Errorf("this would remove %s from the %s bootstrap; projects deployed against it break when it goes, so re-run with --force to remove it anyway",
 					strings.Join(dropped, ", "), Name(tier))
 			}
-			confirmed, err := confirmDrop(ctx, asked, tier, dropped, dependentProjects(catalogue, dropped), stdout)
+			confirmed, err := confirmDrop(ctx, prompter, tier, dropped, dependentProjects(catalogue, dropped), stdout)
 			if err != nil {
 				return err
 			}
@@ -239,7 +239,7 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 		if status := described.GetBootstrap(); status.GetDowngrade() {
 			fmt.Fprintln(stdout, downgradeWarning(tier, status))
 			if interactive {
-				proceed, err := asked.Confirm(ctx, "Write the older content anyway?")
+				proceed, err := prompter.Confirm(ctx, "Write the older content anyway?")
 				if err != nil {
 					return err
 				}
@@ -251,7 +251,7 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 		}
 
 		if interactive {
-			proceed, err := asked.Confirm(ctx, fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package()))
+			proceed, err := prompter.Confirm(ctx, fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package()))
 			if err != nil {
 				return err
 			}
@@ -267,7 +267,7 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 			Force:              force,
 			AcceptReplacements: opts.Yes,
 		}
-		if opts.Healing {
+		if opts.AutoHealDeclared {
 			req.AutoHeal = &opts.AutoHeal
 		}
 		if err := provider.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
@@ -321,14 +321,14 @@ func credentialTier(requested string) (contractv1.CredentialTier, error) {
 	}
 }
 
-func confirmDrop(ctx context.Context, asked prompt.Prompter, tier environmentv1.Tier, dropped, dependents []string, stdout io.Writer) (bool, error) {
+func confirmDrop(ctx context.Context, prompter prompt.Prompter, tier environmentv1.Tier, dropped, dependents []string, stdout io.Writer) (bool, error) {
 	fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(dropped, ", "), Name(tier))
 	if len(dependents) > 0 {
 		fmt.Fprintf(stdout, "These projects were deployed against it and break when it goes: %s\n", strings.Join(dependents, ", "))
 	} else {
 		fmt.Fprintln(stdout, "No project deployed here has recorded needing it, but anything relying on it breaks.")
 	}
-	return asked.Confirm(ctx, "Remove it anyway?")
+	return prompter.Confirm(ctx, "Remove it anyway?")
 }
 
 func downgradeWarning(tier environmentv1.Tier, status *contractv1.BootstrapStatus) string {

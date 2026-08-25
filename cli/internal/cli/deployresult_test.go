@@ -22,7 +22,7 @@ func TestDeployResult(t *testing.T) {
 	t.Run("a successful deploy records the promotion, the tag and every app", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{{
+		clitest.StubBuild(&sess, []manifestbuilder.Function{{
 			Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js",
 			ArtifactPath: "output/api", Framework: "express", App: "api",
 		}})
@@ -65,7 +65,7 @@ func TestDeployResult(t *testing.T) {
 	t.Run("a failed deploy leaves no stale result behind", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		root, _ := clitest.SetUpDeployFixture(t)
 		if err := deployresult.Write(root, deployresult.Result{PromotionID: "prm_previous_run"}); err != nil {
 			t.Fatalf("seed stale result: %v", err)
@@ -86,9 +86,9 @@ func TestDeployResult(t *testing.T) {
 	t.Run("a successful preview up records the named preview", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		root, _ := clitest.SetUpDeployFixture(t)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
 		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{name: "e2e-42"}, &stdout, &stderr, strings.NewReader("")); err != nil {

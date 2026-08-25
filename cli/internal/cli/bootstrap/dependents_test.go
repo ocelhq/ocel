@@ -27,7 +27,7 @@ func TestOnlyTheCommandThatRendersDependentsAsksForThem(t *testing.T) {
 		journal := describeJournal(t)
 		sess := clitest.NewSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 
 		var stdout, stderr bytes.Buffer
 		if err := RunStatus(context.Background(), sess, root, StatusOptions{}, &stdout, &stderr); err != nil {

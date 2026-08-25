@@ -84,7 +84,7 @@ func setUpEnvGateFixture(t *testing.T, definitions string) string {
 func setUpEnvGateFixtureWith(t *testing.T, definitions, script string) string {
 	t.Helper()
 	root, _ := clitest.SetUpDeployFixture(t)
-	t.Setenv(clitest.EnvFakeStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
+	t.Setenv(clitest.FakeVarsStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
 	t.Setenv("OCEL_TEST_ENV_DEFINITIONS", definitions)
 	t.Setenv("OCEL_TEST_ENV_PROBLEMS", "[]")
 	clitest.WriteFile(t, filepath.Join(root, "ocel", "env.ts"), script)
@@ -251,7 +251,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		writeAppSource(t, root, "api")
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		sess := newSession()
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -334,7 +334,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 	t.Run("a production value does not satisfy the preview gate", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		sess := newSession()
 		built := false
 		stubAppBuildRecorder(&sess, &built)
@@ -369,7 +369,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 				root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 				sess := newSession()
 				stubGit(&sess, "feature/login", "")
-				t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 				t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 				envSet(t, root, "POSTHOG_ID", "ph_shared", envOptions{preview: true})
@@ -397,7 +397,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		sess := newSession()
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
@@ -422,7 +422,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		sess := newSession()
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		envSet(t, root, "POSTHOG_ID", "ph_shared", envOptions{preview: true})

@@ -149,7 +149,7 @@ export default {
 `)
 		sess := newSession()
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainOwnerEnvVar, "ocel-other-preview")
 
@@ -216,7 +216,7 @@ export default {
 `)
 		writeAppSource(t, root, "api")
 		sess := newSession()
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {

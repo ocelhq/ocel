@@ -101,7 +101,7 @@ func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
 			root, journal, sess := clitest.SetUpEdgeFixture(t, tc.declaration)
 
 			var stdout, stderr bytes.Buffer
-			opts := bootstrap.Options{Yes: true, Features: tc.features, Declared: true}
+			opts := bootstrap.Options{Yes: true, Features: tc.features, FeaturesDeclared: true}
 			if err := bootstrap.Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
@@ -140,7 +140,7 @@ func TestBootstrapRefusesADropItCannotAskAbout(t *testing.T) {
 	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
 
 	var stdout, stderr bytes.Buffer
-	opts := bootstrap.Options{Yes: true, Features: "isr", Declared: true}
+	opts := bootstrap.Options{Yes: true, Features: "isr", FeaturesDeclared: true}
 	err := bootstrap.Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runBootstrap err = nil, want the unattended drop refused; stdout=%s", stdout.String())
@@ -160,7 +160,7 @@ func TestBootstrapForcesADropWhenTold(t *testing.T) {
 	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
 
 	var stdout, stderr bytes.Buffer
-	opts := bootstrap.Options{Yes: true, Features: "isr", Declared: true, Force: true}
+	opts := bootstrap.Options{Yes: true, Features: "isr", FeaturesDeclared: true, Force: true}
 	if err := bootstrap.Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -222,7 +222,7 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			root, journal, sess := clitest.SetUpEdgeFixture(t, tc.declaration)
-			t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+			t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 			t.Setenv(removalplan.BypassEnv, "test-app")
 

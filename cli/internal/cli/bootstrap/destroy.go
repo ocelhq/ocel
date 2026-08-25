@@ -46,7 +46,7 @@ func runDestroy(ctx context.Context, sess session.Session, cfg *projectconfig.Co
 			destroyCommand(tier), removalplan.BypassEnv, name)
 	}
 
-	asked := prompt.New(stdout, stdin)
+	prompter := prompt.New(stdout, stdin)
 	return providerui.Run(ctx, sess, cfg, destroyCommand(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
 		client, err := runner.Client()
 		if err != nil {
@@ -65,7 +65,7 @@ func runDestroy(ctx context.Context, sess session.Session, cfg *projectconfig.Co
 		removalplan.Print(stdout, fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
 			"Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
 		if !skipConfirmation {
-			confirmed, err := asked.Phrase(ctx, "environment name", plan.GetSubject())
+			confirmed, err := prompter.Phrase(ctx, "environment name", plan.GetSubject())
 			if err != nil {
 				return err
 			}

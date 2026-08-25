@@ -33,9 +33,9 @@ func TestRunPreviewUp(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		want, err := previewid.Resolve("feature/login", "")
@@ -68,9 +68,9 @@ func TestRunPreviewUp(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
+		clitest.StubBuild(&sess, []manifestbuilder.Function{
 			{
 				Name:         "api",
 				Runtime:      "nodejs24.x",
@@ -99,9 +99,9 @@ func TestRunPreviewUp(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
+		clitest.StubBuild(&sess, []manifestbuilder.Function{
 			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 
@@ -126,9 +126,9 @@ func TestRunPreviewUp(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "some-other-branch", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		want, err := previewid.Resolve("release/v2", "")
@@ -171,9 +171,9 @@ func TestRunPreviewUp(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -193,9 +193,9 @@ func TestRunPreviewUp(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -217,9 +217,9 @@ export default {
 `)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -252,9 +252,9 @@ export default {
 `)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "previews.ocel.dev")
 
@@ -277,9 +277,9 @@ export default {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -299,9 +299,9 @@ export default {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
 
 		var stdout, stderr bytes.Buffer
@@ -340,7 +340,7 @@ func TestRunDeployWithoutAPreviewDomain(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
@@ -361,9 +361,9 @@ func TestRunPreviewRm(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		want, err := previewid.Resolve("feature/login", "")
@@ -391,9 +391,9 @@ func TestRunPreviewRm(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "some-other-branch", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		want, err := previewid.Resolve("release/v2", "")
@@ -415,9 +415,9 @@ func TestRunPreviewRm(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -440,8 +440,8 @@ func TestRunPreviewLs(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -547,9 +547,9 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 		t.Setenv(clitest.FakePreflightJournalEnvVar, journal)
 		sess = newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		stubGit(&sess, "feature/login", "")
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		return root, journal, sess
 	}

@@ -86,7 +86,7 @@ func TestFlipBoundOnTheProductionDeployPromotionLine(t *testing.T) {
 			root, sockPath := clitest.SetUpDeployFixture(t)
 			sess := newSession()
 			clitest.SetLoggedIn(&sess)
-			clitest.StubAppFunctions(&sess, nil)
+			clitest.StubBuild(&sess, nil)
 			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
@@ -106,9 +106,9 @@ func TestFlipBoundOnThePreviewDeployPromotionLine(t *testing.T) {
 			root, sockPath := clitest.SetUpDeployFixture(t)
 			sess := newSession()
 			clitest.SetLoggedIn(&sess)
-			clitest.StubAppFunctions(&sess, nil)
+			clitest.StubBuild(&sess, nil)
 			stubGit(&sess, "feature/login", "")
-			t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+			t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
 
@@ -129,8 +129,8 @@ func TestFlipBoundOnTheRollbackPromotionLine(t *testing.T) {
 			root, sockPath := clitest.SetUpDeployFixture(t)
 			sess := newSession()
 			clitest.SetLoggedIn(&sess)
-			clitest.StubAppFunctions(&sess, nil)
-			t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+			clitest.StubBuild(&sess, nil)
+			t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
 
@@ -160,8 +160,8 @@ func TestFlipBoundIsAbsentFromThePromotionList(t *testing.T) {
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	sess := newSession()
 	clitest.SetLoggedIn(&sess)
-	clitest.StubAppFunctions(&sess, nil)
-	t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+	clitest.StubBuild(&sess, nil)
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakeFlipBoundEnvVar, "5000")
 

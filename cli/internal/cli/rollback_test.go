@@ -14,8 +14,8 @@ func TestRunRollback(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -34,8 +34,8 @@ func TestRunRollback(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -54,8 +54,8 @@ func TestRunRollback(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -78,7 +78,7 @@ func TestRunRollback(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 
 		var stdout, stderr bytes.Buffer
 		err := runRollback(context.Background(), sess, root, rollbackOptions{to: "promo-1", tag: "v1.0.0"}, &stdout, &stderr)
@@ -94,7 +94,7 @@ func TestRunRollback(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 
 		var stdout, stderr bytes.Buffer
 		err := runRollback(context.Background(), sess, root, rollbackOptions{tag: "feature/x"}, &stdout, &stderr)
@@ -110,8 +110,8 @@ func TestRunRollback(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -128,8 +128,8 @@ func TestRunRollback(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -149,8 +149,8 @@ func TestRunRollback(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
 
 		var stdout, stderr bytes.Buffer
