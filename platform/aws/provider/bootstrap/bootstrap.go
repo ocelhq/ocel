@@ -137,6 +137,8 @@ type Reading struct {
 	refs     stackRefs
 }
 
+func (r Reading) Class() string { return r.class }
+
 func Read(ctx context.Context, api CFNDescriber, class string) (Reading, error) {
 	deployed, refs, err := readBootstrap(ctx, api, class)
 	if err != nil {

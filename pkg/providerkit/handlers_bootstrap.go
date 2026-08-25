@@ -113,7 +113,7 @@ func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootst
 	if req.GetIntent() == nil {
 		return resp, nil
 	}
-	plan, err := gate.Plan(ctx, class, applyRequestOf(req.GetIntent()))
+	plan, err := gate.PlanFrom(ctx, standing, applyRequestOf(req.GetIntent()))
 	if err != nil {
 		return nil, RefusalError(err)
 	}

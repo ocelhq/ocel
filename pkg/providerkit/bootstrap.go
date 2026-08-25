@@ -20,6 +20,8 @@ type Bootstrap struct {
 	Class   Class
 	Present bool
 	Stacks  []BootstrapStack
+
+	Held any
 }
 
 type BootstrapStack struct {
@@ -58,4 +60,6 @@ type BootstrapRequest struct {
 	Heal bool
 
 	Writer Writer
+
+	Held any
 }

@@ -21,6 +21,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -375,9 +376,11 @@ type teardownCFN struct {
 	present   map[string]bootstrap.Deployed
 	resources map[string][]cfntypes.StackResourceSummary
 	deleted   []string
+	describes int
 }
 
 func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+	c.describes++
 	name := aws.ToString(in.StackName)
 	deployed, ok := c.present[name]
 	if !ok {
@@ -500,4 +503,34 @@ func (s *teardownSSM) GetParametersByPath(_ context.Context, in *ssm.GetParamete
 func (s *teardownSSM) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInput, _ ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error) {
 	delete(s.params, aws.ToString(in.Name))
 	return &ssm.DeleteParameterOutput{}, nil
+}
+
+func TestOnePlanReadsTheAccountOnce(t *testing.T) {
+	t.Parallel()
+
+	front := &planningEdge{planned: []edge.PlanChange{
+		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanCreate},
+	}}
+	b := planningBootstrapper(front)
+	cfn := b.CFN.(*teardownCFN)
+	gate := providerkit.Gate{Bootstrapper: b, Records: fake.NewRecords(), Edge: cloudflareKind}
+
+	standing, err := gate.Standing(context.Background(), providerkit.ClassProduction)
+	if err != nil {
+		t.Fatalf("Standing: %v", err)
+	}
+	read := cfn.describes
+	if read == 0 {
+		t.Fatal("Standing described no stack at all")
+	}
+
+	if _, err := gate.PlanFrom(context.Background(), standing, providerkit.ApplyRequest{
+		Features: []string{bootstrap.FeatureISR, bootstrap.FeatureCloudflareEdge},
+	}); err != nil {
+		t.Fatalf("PlanFrom: %v", err)
+	}
+	if cfn.describes != read {
+		t.Errorf("planning described %d stacks on top of the %d the standing read cost, want it to plan from the read it was handed",
+			cfn.describes-read, read)
+	}
 }
