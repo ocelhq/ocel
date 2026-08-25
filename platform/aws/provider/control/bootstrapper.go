@@ -56,7 +56,9 @@ func (b Bootstrapper) Describe(ctx context.Context, class providerkit.Class) (pr
 	if err != nil {
 		return providerkit.Bootstrap{}, err
 	}
-	return described(class, read.Deployed), nil
+	held := described(class, read.Deployed)
+	held.Held = read
+	return held, nil
 }
 
 func described(class providerkit.Class, deployed bootstrap.Deployed) providerkit.Bootstrap {
@@ -75,7 +77,7 @@ func described(class providerkit.Class, deployed bootstrap.Deployed) providerkit
 }
 
 func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
-	read, err := bootstrap.Read(ctx, b.CFN, string(req.Class))
+	read, err := b.reading(ctx, req)
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
@@ -103,6 +105,13 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	}
 	plan.Groups = append(plan.Groups, fronts...)
 	return plan, nil
+}
+
+func (b Bootstrapper) reading(ctx context.Context, req providerkit.BootstrapRequest) (bootstrap.Reading, error) {
+	if held, carried := req.Held.(bootstrap.Reading); carried && held.Class() == string(req.Class) {
+		return held, nil
+	}
+	return bootstrap.Read(ctx, b.CFN, string(req.Class))
 }
 
 func (b Bootstrapper) open(kind edge.Kind) (edge.Edge, error) {

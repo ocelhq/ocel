@@ -28,6 +28,7 @@ type Standing struct {
 	Schema   int
 	Writer   Writer
 	AutoHeal bool
+	Held     any
 }
 
 func (g Gate) Standing(ctx context.Context, class Class) (Standing, error) {
@@ -35,7 +36,7 @@ func (g Gate) Standing(ctx context.Context, class Class) (Standing, error) {
 	if err != nil {
 		return Standing{}, err
 	}
-	standing := Standing{Class: class, Present: described.Present, Stacks: described.Stacks}
+	standing := Standing{Class: class, Present: described.Present, Stacks: described.Stacks, Held: described.Held}
 	var carried []string
 	for _, stack := range described.Stacks {
 		if stack.Feature == "" {
@@ -104,12 +105,9 @@ type intent struct {
 	ordered   []string
 }
 
-func (g Gate) intended(ctx context.Context, class Class, req ApplyRequest) (intent, error) {
+func (g Gate) intended(standing Standing, req ApplyRequest) (intent, error) {
 	catalogue := g.Bootstrapper.Catalogue()
-	standing, err := g.Standing(ctx, class)
-	if err != nil {
-		return intent{}, err
-	}
+	class := standing.Class
 	if err := RefuseSchemaAhead(standing.Schema, standing.Present, class); err != nil {
 		return intent{}, err
 	}
@@ -168,14 +166,24 @@ func (i intent) request(class Class, req ApplyRequest, writer Writer) BootstrapR
 		Remove:     i.ordered,
 		Unattended: !req.AcceptReplacements,
 		Writer:     writer,
+		Held:       i.standing.Held,
 	}
 }
 
 func (g Gate) Plan(ctx context.Context, class Class, req ApplyRequest) (BootstrapPlan, error) {
-	intended, err := g.intended(ctx, class, req)
+	standing, err := g.Standing(ctx, class)
 	if err != nil {
 		return BootstrapPlan{}, err
 	}
+	return g.PlanFrom(ctx, standing, req)
+}
+
+func (g Gate) PlanFrom(ctx context.Context, standing Standing, req ApplyRequest) (BootstrapPlan, error) {
+	intended, err := g.intended(standing, req)
+	if err != nil {
+		return BootstrapPlan{}, err
+	}
+	class := standing.Class
 	plan, err := g.Bootstrapper.Plan(ctx, intended.request(class, req, g.Writer))
 	if err != nil {
 		return BootstrapPlan{}, err
@@ -211,7 +219,11 @@ func (g Gate) noteDependents(ctx context.Context, class Class, groups []ChangeGr
 }
 
 func (g Gate) Apply(ctx context.Context, class Class, req ApplyRequest, report Reporter) error {
-	intended, err := g.intended(ctx, class, req)
+	standing, err := g.Standing(ctx, class)
+	if err != nil {
+		return err
+	}
+	intended, err := g.intended(standing, req)
 	if err != nil {
 		return err
 	}
