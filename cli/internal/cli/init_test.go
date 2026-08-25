@@ -12,12 +12,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 )
 
-func stubPackageManager(sess *session.Session, result error) *[]string {
+func stubPackageManager(deps *cmddeps.Deps, result error) *[]string {
 	var argv []string
-	sess.RunPackageManager = func(_ context.Context, _ string, cmd []string, _ io.Writer) error {
+	deps.RunPackageManager = func(_ context.Context, _ string, cmd []string, _ io.Writer) error {
 		argv = cmd
 		return result
 	}
@@ -51,12 +51,12 @@ func TestRunInit(t *testing.T) {
 	t.Run("no argument defaults the slug to the directory name", func(t *testing.T) {
 		t.Parallel()
 
-		sess := newSession()
-		stubPackageManager(&sess, nil)
+		deps := newDeps()
+		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "My Cool App")
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), sess, dir, "", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -69,12 +69,12 @@ func TestRunInit(t *testing.T) {
 	t.Run("an explicit slug writes a deployable config", func(t *testing.T) {
 		t.Parallel()
 
-		sess := newSession()
-		stubPackageManager(&sess, nil)
+		deps := newDeps()
+		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "ignored-dir-name")
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), sess, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -101,11 +101,11 @@ func TestRunInit(t *testing.T) {
 			t.Run(slug, func(t *testing.T) {
 				t.Parallel()
 
-				sess := newSession()
-				stubPackageManager(&sess, nil)
+				deps := newDeps()
+				stubPackageManager(&deps, nil)
 				dir := initTestDir(t, "proj")
 
-				err := runInit(context.Background(), sess, dir, slug, initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
+				err := runInit(context.Background(), deps, dir, slug, initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
 				if err == nil {
 					t.Fatal("runInit err = nil, want error")
 				}
@@ -122,11 +122,11 @@ func TestRunInit(t *testing.T) {
 	t.Run("an unslugifiable directory name errors asking for a slug", func(t *testing.T) {
 		t.Parallel()
 
-		sess := newSession()
-		stubPackageManager(&sess, nil)
+		deps := newDeps()
+		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "!!!")
 
-		err := runInit(context.Background(), sess, dir, "", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
+		err := runInit(context.Background(), deps, dir, "", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
 		if err == nil {
 			t.Fatal("runInit err = nil, want error")
 		}
@@ -138,15 +138,15 @@ func TestRunInit(t *testing.T) {
 	t.Run("an existing config is never overwritten", func(t *testing.T) {
 		t.Parallel()
 
-		sess := newSession()
-		argv := stubPackageManager(&sess, nil)
+		deps := newDeps()
+		argv := stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 		configPath := filepath.Join(dir, "ocel.config.ts")
 		if err := os.WriteFile(configPath, []byte("existing"), 0o644); err != nil {
 			t.Fatalf("write existing config: %v", err)
 		}
 
-		err := runInit(context.Background(), sess, dir, "my-app", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
+		err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
 		if err == nil {
 			t.Fatal("runInit err = nil, want error")
 		}
@@ -164,12 +164,12 @@ func TestRunInit(t *testing.T) {
 	t.Run("--provider overrides the default package", func(t *testing.T) {
 		t.Parallel()
 
-		sess := newSession()
-		argv := stubPackageManager(&sess, nil)
+		deps := newDeps()
+		argv := stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 
 		opts := initOptions{provider: "@acme/provider-gcp"}
-		if err := runInit(context.Background(), sess, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
 
@@ -185,12 +185,12 @@ func TestRunInit(t *testing.T) {
 	t.Run("it installs the SDK alongside the provider", func(t *testing.T) {
 		t.Parallel()
 
-		sess := newSession()
-		argv := stubPackageManager(&sess, nil)
+		deps := newDeps()
+		argv := stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), sess, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
 
@@ -224,8 +224,8 @@ func TestRunInit(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 
-				sess := newSession()
-				argv := stubPackageManager(&sess, nil)
+				deps := newDeps()
+				argv := stubPackageManager(&deps, nil)
 				dir := initTestDir(t, "proj")
 				if tc.lockfile != "" {
 					if err := os.WriteFile(filepath.Join(dir, tc.lockfile), nil, 0o644); err != nil {
@@ -234,7 +234,7 @@ func TestRunInit(t *testing.T) {
 				}
 
 				var stdout bytes.Buffer
-				if err := runInit(context.Background(), sess, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+				if err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
 					t.Fatalf("runInit err = %v", err)
 				}
 				if got := *argv; !slices.Equal(got, tc.want) {
@@ -250,15 +250,15 @@ func TestRunInit(t *testing.T) {
 	t.Run("with no package.json it skips the install and says so", func(t *testing.T) {
 		t.Parallel()
 
-		sess := newSession()
-		argv := stubPackageManager(&sess, nil)
+		deps := newDeps()
+		argv := stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 		if err := os.Remove(filepath.Join(dir, "package.json")); err != nil {
 			t.Fatalf("remove package.json: %v", err)
 		}
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), sess, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
 		if *argv != nil {
@@ -272,15 +272,15 @@ func TestRunInit(t *testing.T) {
 	t.Run("a failing package manager keeps the config and prints the command", func(t *testing.T) {
 		t.Parallel()
 
-		sess := newSession()
-		stubPackageManager(&sess, errors.New("exec: \"pnpm\": executable file not found in $PATH"))
+		deps := newDeps()
+		stubPackageManager(&deps, errors.New("exec: \"pnpm\": executable file not found in $PATH"))
 		dir := initTestDir(t, "proj")
 		if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), nil, 0o644); err != nil {
 			t.Fatalf("write lockfile: %v", err)
 		}
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), sess, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v, want the failed install to be non-fatal", err)
 		}
 		if !strings.Contains(readConfig(t, dir), `slug: "my-app"`) {
@@ -309,12 +309,12 @@ func TestRunInit(t *testing.T) {
 			}
 		}
 
-		sess := newSession()
-		argv := stubPackageManager(&sess, nil)
+		deps := newDeps()
+		argv := stubPackageManager(&deps, nil)
 		opts := initOptions{configPath: filepath.Join("..", "infra", "ocel.ts")}
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), sess, cwd, "", opts, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, cwd, "", opts, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -336,12 +336,12 @@ func TestRunInit(t *testing.T) {
 	t.Run("--config creates the directories leading to the path", func(t *testing.T) {
 		t.Parallel()
 
-		sess := newSession()
-		stubPackageManager(&sess, nil)
+		deps := newDeps()
+		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 
 		opts := initOptions{configPath: filepath.Join("nested", "deep", "ocel.ts")}
-		if err := runInit(context.Background(), sess, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(dir, "nested", "deep", "ocel.ts")); err != nil {
@@ -352,15 +352,15 @@ func TestRunInit(t *testing.T) {
 	t.Run("--config never overwrites an existing config", func(t *testing.T) {
 		t.Parallel()
 
-		sess := newSession()
-		argv := stubPackageManager(&sess, nil)
+		deps := newDeps()
+		argv := stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 		configPath := filepath.Join(dir, "ocel.ts")
 		if err := os.WriteFile(configPath, []byte("existing"), 0o644); err != nil {
 			t.Fatalf("write existing config: %v", err)
 		}
 
-		err := runInit(context.Background(), sess, dir, "my-app", initOptions{configPath: "ocel.ts"}, &bytes.Buffer{}, &bytes.Buffer{})
+		err := runInit(context.Background(), deps, dir, "my-app", initOptions{configPath: "ocel.ts"}, &bytes.Buffer{}, &bytes.Buffer{})
 		if err == nil {
 			t.Fatal("runInit err = nil, want error")
 		}

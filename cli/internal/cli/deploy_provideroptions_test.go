@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func setUpProviderFixture(t *testing.T, options string) (root, journal string, sess session.Session) {
+func setUpProviderFixture(t *testing.T, options string) (root, journal string, deps cmddeps.Deps) {
 	t.Helper()
 
 	root, _ = clitest.SetUpDeployFixture(t)
@@ -31,19 +31,19 @@ export default {
 	journal = filepath.Join(t.TempDir(), "configure.journal")
 	t.Setenv(clitest.FakeConfigureJournalEnvVar, journal)
 
-	sess = newSession()
-	clitest.SetLoggedIn(&sess)
-	clitest.StubBuild(&sess, []manifestbuilder.Function{
+	deps = newDeps()
+	clitest.SetLoggedIn(&deps)
+	clitest.StubBuild(&deps, []manifestbuilder.Function{
 		{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 	})
-	return root, journal, sess
+	return root, journal, deps
 }
 
 func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
-	root, journal, sess := setUpProviderFixture(t, `{ region: "eu-west-2", transforms: ["./infra/net.transform.ts"], certificates: { "app.acme.com": "arn:aws:acm:eu-west-2:1:certificate/x" } }`)
+	root, journal, deps := setUpProviderFixture(t, `{ region: "eu-west-2", transforms: ["./infra/net.transform.ts"], certificates: { "app.acme.com": "arn:aws:acm:eu-west-2:1:certificate/x" } }`)
 
 	var stdout, stderr bytes.Buffer
-	if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -58,10 +58,10 @@ func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
 }
 
 func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
-	root, _, sess := setUpProviderFixture(t, `{ regionn: "eu-west-2" }`)
+	root, _, deps := setUpProviderFixture(t, `{ regionn: "eu-west-2" }`)
 
 	var stdout, stderr bytes.Buffer
-	err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want options the provider refuses reported; stdout=%s", stdout.String())
 	}

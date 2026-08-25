@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
@@ -33,11 +33,11 @@ var buildCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runBuild(ctx, newSession(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runBuild(ctx, newDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
-func runBuild(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer) error {
+func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -53,14 +53,14 @@ func runBuild(ctx context.Context, sess session.Session, cwd string, stdout, std
 	}
 	defer run.Close()
 
-	if err := sess.BuildApp(ctx, cfg, nil, stderr); err != nil {
+	if err := deps.BuildApp(ctx, cfg, nil, stderr); err != nil {
 		return err
 	}
 	if err := clientenv.RecordUnresolved(cfg.Dir); err != nil {
 		return err
 	}
 
-	functions, err := sess.CollectAppFunctions(cfg.Dir)
+	functions, err := deps.CollectAppFunctions(cfg.Dir)
 	if err != nil {
 		return err
 	}

@@ -20,9 +20,9 @@ import (
 
 func TestDeployResult(t *testing.T) {
 	t.Run("a successful deploy records the promotion, the tag and every app", func(t *testing.T) {
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, []manifestbuilder.Function{{
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, []manifestbuilder.Function{{
 			Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js",
 			ArtifactPath: "output/api", Framework: "express", App: "api",
 		}})
@@ -31,7 +31,7 @@ func TestDeployResult(t *testing.T) {
 		writeServeDescriptor(t, root, "api", "bld_api_1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true, tag: "v9"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, tag: "v9"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -63,9 +63,9 @@ func TestDeployResult(t *testing.T) {
 	})
 
 	t.Run("a failed deploy leaves no stale result behind", func(t *testing.T) {
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		root, _ := clitest.SetUpDeployFixture(t)
 		if err := deployresult.Write(root, deployresult.Result{PromotionID: "prm_previous_run"}); err != nil {
 			t.Fatalf("seed stale result: %v", err)
@@ -73,7 +73,7 @@ func TestDeployResult(t *testing.T) {
 		t.Setenv(clitest.FakeProviderModeEnvVar, "fail")
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want the simulated failure; stdout=%s", stdout.String())
 		}
@@ -84,14 +84,14 @@ func TestDeployResult(t *testing.T) {
 	})
 
 	t.Run("a successful preview up records the named preview", func(t *testing.T) {
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{name: "e2e-42"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "e2e-42"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 

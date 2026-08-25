@@ -12,7 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -22,7 +22,7 @@ type StatusOptions struct {
 	Check bool
 }
 
-func newStatusCommand(sess session.Session) *cobra.Command {
+func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
 	var opts StatusOptions
 
 	cmd := &cobra.Command{
@@ -38,10 +38,10 @@ func newStatusCommand(sess session.Session) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			ctx, stop := sess.Interrupt(cmd.Context(), cmd.ErrOrStderr())
+			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
 
-			return RunStatus(ctx, sess, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return RunStatus(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 
@@ -50,8 +50,8 @@ func newStatusCommand(sess session.Session) *cobra.Command {
 	return cmd
 }
 
-func RunStatus(ctx context.Context, sess session.Session, cwd string, opts StatusOptions, stdout, stderr io.Writer) error {
-	cfg, err := resolveProject(ctx, sess, cwd)
+func RunStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts StatusOptions, stdout, stderr io.Writer) error {
+	cfg, err := resolveProject(ctx, deps, cwd)
 	if err != nil {
 		return err
 	}

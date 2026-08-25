@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
@@ -26,12 +26,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func terminalStdin(sess *session.Session) {
-	sess.StdinIsTerminal = func(io.Reader) bool { return true }
+func terminalStdin(deps *cmddeps.Deps) {
+	deps.StdinIsTerminal = func(io.Reader) bool { return true }
 }
 
-func recordBrowser(sess *session.Session, opened *[]string, mu *sync.Mutex) {
-	sess.OpenBrowser = func(url string) error {
+func recordBrowser(deps *cmddeps.Deps, opened *[]string, mu *sync.Mutex) {
+	deps.OpenBrowser = func(url string) error {
 		mu.Lock()
 		defer mu.Unlock()
 		*opened = append(*opened, url)
@@ -44,10 +44,10 @@ type varsUISessions struct {
 	all []*varsui.Session
 }
 
-func captureVarsUI(sess *session.Session) *varsUISessions {
+func captureVarsUI(deps *cmddeps.Deps) *varsUISessions {
 	sessions := &varsUISessions{}
-	prev := sess.ServeVarsUI
-	sess.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
+	prev := deps.ServeVarsUI
+	deps.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
 		session, err := prev(ctx, cfg, runner, preview, gate)
 		if err == nil {
 			sessions.mu.Lock()
@@ -167,20 +167,20 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("a gate refusal in a terminal opens the UI and resumes into the build", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problems := problemsFile(t, missingStripeKey)
-		sess := newSession()
-		terminalStdin(&sess)
+		deps := newDeps()
+		terminalStdin(&deps)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&sess, &opened, &mu)
+		recordBrowser(&deps, &opened, &mu)
 
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		var out syncBuffer
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitVarsUI(t, &out, 1)
@@ -216,12 +216,12 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("the resumed pass declares each variable once", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		problems := problemsFile(t, missingStripeKey)
-		sess := newSession()
-		terminalStdin(&sess)
+		deps := newDeps()
+		terminalStdin(&deps)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&sess, &opened, &mu)
-		clitest.StubBuild(&sess, []manifestbuilder.Function{
+		recordBrowser(&deps, &opened, &mu)
+		clitest.StubBuild(&deps, []manifestbuilder.Function{
 			{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 
@@ -229,7 +229,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitVarsUI(t, &out, 1)
@@ -258,13 +258,13 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("the waiting state says how to abort", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
-		sess := newSession()
-		terminalStdin(&sess)
+		deps := newDeps()
+		terminalStdin(&deps)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&sess, &opened, &mu)
+		recordBrowser(&deps, &opened, &mu)
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -272,7 +272,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runDeploy(ctx, sess, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			done <- runDeploy(ctx, deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		awaitVarsUI(t, &out, 1)
@@ -292,13 +292,13 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("interrupting while waiting aborts with nothing built", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
-		sess := newSession()
-		terminalStdin(&sess)
+		deps := newDeps()
+		terminalStdin(&deps)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&sess, &opened, &mu)
+		recordBrowser(&deps, &opened, &mu)
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -306,7 +306,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runDeploy(ctx, sess, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			done <- runDeploy(ctx, deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		awaitVarsUI(t, &out, 1)
@@ -336,20 +336,20 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("closing the UI still names the keys that are owed", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
-		sess := newSession()
-		terminalStdin(&sess)
+		deps := newDeps()
+		terminalStdin(&deps)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&sess, &opened, &mu)
-		sessions := captureVarsUI(&sess)
+		recordBrowser(&deps, &opened, &mu)
+		sessions := captureVarsUI(&deps)
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		var out syncBuffer
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		awaitVarsUI(t, &out, 1)
@@ -381,20 +381,20 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "nope", envOptions{})
 		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_INVALID","detail":"must start with sk_"}]`)
-		sess := newSession()
-		terminalStdin(&sess)
+		deps := newDeps()
+		terminalStdin(&deps)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&sess, &opened, &mu)
-		sessions := captureVarsUI(&sess)
+		recordBrowser(&deps, &opened, &mu)
+		sessions := captureVarsUI(&deps)
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		var out syncBuffer
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitVarsUI(t, &out, 1)
@@ -426,20 +426,20 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("a reopened UI shows what is still owed", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problems := problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"},{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
-		sess := newSession()
-		terminalStdin(&sess)
+		deps := newDeps()
+		terminalStdin(&deps)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&sess, &opened, &mu)
-		sessions := captureVarsUI(&sess)
+		recordBrowser(&deps, &opened, &mu)
+		sessions := captureVarsUI(&deps)
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		var out syncBuffer
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitVarsUI(t, &out, 1)
@@ -477,17 +477,17 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("a non-interactive run never waits", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
-		sess := newSession()
+		deps := newDeps()
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&sess, &opened, &mu)
+		recordBrowser(&deps, &opened, &mu)
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(ctx, sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(ctx, deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a non-interactive run to hard-fail")
 		}
@@ -515,18 +515,18 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 				root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
 				t.Setenv(noBrowserEnvVar, tc.env)
-				sess := newSession()
-				terminalStdin(&sess)
+				deps := newDeps()
+				terminalStdin(&deps)
 				var mu sync.Mutex
 				var opened []string
-				recordBrowser(&sess, &opened, &mu)
+				recordBrowser(&deps, &opened, &mu)
 				built := false
-				stubAppBuildRecorder(&sess, &built)
+				stubAppBuildRecorder(&deps, &built)
 
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 				var stdout, stderr bytes.Buffer
-				err := runDeploy(ctx, sess, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
+				err := runDeploy(ctx, deps, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 				if err == nil {
 					t.Fatal("runDeploy err = nil, want the opt-out to keep the hard refusal")
 				}
@@ -546,19 +546,19 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		problems := problemsFile(t, missingStripeKey)
-		sess := newSession()
-		terminalStdin(&sess)
+		deps := newDeps()
+		terminalStdin(&deps)
 		var mu sync.Mutex
 		var opened []string
-		recordBrowser(&sess, &opened, &mu)
+		recordBrowser(&deps, &opened, &mu)
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		var out syncBuffer
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runPreviewUp(context.Background(), sess, root, previewUpOptions{name: "staging"}, &out, &stderr, strings.NewReader(""))
+			done <- runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &out, &stderr, strings.NewReader(""))
 		}()
 
 		address, token := awaitVarsUI(t, &out, 1)
@@ -595,20 +595,20 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 				root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
-				sess := newSession()
+				deps := newDeps()
 				if tc.terminal {
-					terminalStdin(&sess)
+					terminalStdin(&deps)
 				}
 				var mu sync.Mutex
 				var opened []string
-				recordBrowser(&sess, &opened, &mu)
+				recordBrowser(&deps, &opened, &mu)
 				built := false
-				stubAppBuildRecorder(&sess, &built)
+				stubAppBuildRecorder(&deps, &built)
 
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 				var stdout, stderr bytes.Buffer
-				err := runPreviewUp(ctx, sess, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
+				err := runPreviewUp(ctx, deps, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 				if err == nil {
 					t.Fatal("runPreviewUp err = nil, want the hard refusal kept")
 				}

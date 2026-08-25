@@ -26,7 +26,7 @@ func TestDeployE2E(t *testing.T) {
 		root, binPath := setUpRealProviderFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), defaultSession(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), newDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -47,7 +47,7 @@ func TestDeployE2E(t *testing.T) {
 		root, binPath, fnName := setUpRealProviderExpressFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), defaultSession(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), newDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}

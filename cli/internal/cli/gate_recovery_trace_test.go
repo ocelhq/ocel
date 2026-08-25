@@ -116,17 +116,17 @@ func rootSpan(t *testing.T, spans []traceSpan) traceSpan {
 func TestGateRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 	problems := problemsFile(t, missingStripeKey)
-	sess := newSession()
-	terminalStdin(&sess)
+	deps := newDeps()
+	terminalStdin(&deps)
 	var mu sync.Mutex
 	var opened []string
-	recordBrowser(&sess, &opened, &mu)
+	recordBrowser(&deps, &opened, &mu)
 
 	var out syncBuffer
 	var stderr bytes.Buffer
 	done := make(chan error, 1)
 	go func() {
-		done <- runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 	}()
 
 	address, token := awaitVarsUI(t, &out, 1)

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 )
 
@@ -18,12 +18,12 @@ const needsRefusal = "app web needs edge-middleware and the \"cloudfront\" edge 
 
 const degradedDetail = "web: middleware runs in the origin's Node server the way `next start` runs it, so every request pays the round trip to the origin before it is routed. It affects routes /dashboard"
 
-func useJSONLogFormat(t *testing.T, sess *session.Session) {
+func useJSONLogFormat(t *testing.T, deps *cmddeps.Deps) {
 	t.Helper()
 	orig := logFormatFlag
 	t.Cleanup(func() { logFormatFlag = orig })
 	logFormatFlag = logFormatJSON
-	sess.Format = func() deployui.Format { return deployui.FormatJSON }
+	deps.Format = func() deployui.Format { return deployui.FormatJSON }
 }
 
 func jsonRecords(t *testing.T, out string) []map[string]any {
@@ -54,11 +54,11 @@ func recordsOfType(records []map[string]any, kind string) []map[string]any {
 }
 
 func TestDeployRendersTheNeedsRefusalInHumanMode(t *testing.T) {
-	root, _, sess := clitest.SetUpEdgeFixture(t, "")
+	root, _, deps := clitest.SetUpEdgeFixture(t, "")
 	t.Setenv(clitest.FakeNeedsRefusalEnvVar, needsRefusal)
 
 	var stdout, stderr bytes.Buffer
-	err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the unsupported need to fail the deploy; stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
@@ -72,12 +72,12 @@ func TestDeployRendersTheNeedsRefusalInHumanMode(t *testing.T) {
 }
 
 func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
-	root, _, sess := clitest.SetUpEdgeFixture(t, "")
-	useJSONLogFormat(t, &sess)
+	root, _, deps := clitest.SetUpEdgeFixture(t, "")
+	useJSONLogFormat(t, &deps)
 	t.Setenv(clitest.FakeNeedsRefusalEnvVar, needsRefusal)
 
 	var stdout, stderr bytes.Buffer
-	err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the unsupported need to fail the deploy; stdout=%s", stdout.String())
 	}
@@ -95,11 +95,11 @@ func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
 }
 
 func TestDeployRendersADegradedNeedInHumanMode(t *testing.T) {
-	root, _, sess := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\"],\n")
+	root, _, deps := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\"],\n")
 	t.Setenv(clitest.FakeDegradedEnvVar, "edge-middleware="+degradedDetail)
 
 	var stdout, stderr bytes.Buffer
-	if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -112,12 +112,12 @@ func TestDeployRendersADegradedNeedInHumanMode(t *testing.T) {
 }
 
 func TestDeployRendersADegradedNeedAsATypedJSONRecord(t *testing.T) {
-	root, _, sess := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\", \"ppr-resume\"],\n")
-	useJSONLogFormat(t, &sess)
+	root, _, deps := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\", \"ppr-resume\"],\n")
+	useJSONLogFormat(t, &deps)
 	t.Setenv(clitest.FakeDegradedEnvVar, "edge-middleware="+degradedDetail+";ppr-resume=web: the shell comes from the origin. It affects routes /")
 
 	var stdout, stderr bytes.Buffer
-	if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -136,10 +136,10 @@ func TestDeployRendersADegradedNeedAsATypedJSONRecord(t *testing.T) {
 
 func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 	t.Run("human", func(t *testing.T) {
-		root, _, sess := clitest.SetUpEdgeFixture(t, "")
+		root, _, deps := clitest.SetUpEdgeFixture(t, "")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		rendered := stdout.String() + stderr.String()
@@ -151,11 +151,11 @@ func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 	})
 
 	t.Run("json", func(t *testing.T) {
-		root, _, sess := clitest.SetUpEdgeFixture(t, "")
-		useJSONLogFormat(t, &sess)
+		root, _, deps := clitest.SetUpEdgeFixture(t, "")
+		useJSONLogFormat(t, &deps)
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if got := recordsOfType(jsonRecords(t, stdout.String()), "degraded"); len(got) != 0 {

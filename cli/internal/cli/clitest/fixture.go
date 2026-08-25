@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
@@ -20,8 +20,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 )
 
-func NewSession() session.Session {
-	return session.Session{
+func NewDeps() cmddeps.Deps {
+	return cmddeps.Deps{
 		LoadCredentials:     credentials.Load,
 		FetchAccount:        resolve.StubAccount,
 		BuildApp:            appbuilder.Build,
@@ -125,18 +125,18 @@ func nodePlatformSuffix(t *testing.T) string {
 	return nodePlatform + "-" + nodeArch
 }
 
-func StubBuild(sess *session.Session, functions []manifestbuilder.Function) {
-	sess.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+func StubBuild(deps *cmddeps.Deps, functions []manifestbuilder.Function) {
+	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		return nil
 	}
-	sess.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
+	deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
 		return functions, nil
 	}
-	StubRecordedDeploymentIDs(sess)
+	StubRecordedDeploymentIDs(deps)
 }
 
-func StubRecordedDeploymentIDs(sess *session.Session) {
-	sess.DeploymentID = func(_, app string) (string, error) { return FixtureDeploymentID(app), nil }
+func StubRecordedDeploymentIDs(deps *cmddeps.Deps) {
+	deps.DeploymentID = func(_, app string) (string, error) { return FixtureDeploymentID(app), nil }
 }
 
 func WriteFile(t *testing.T, path, contents string) {
@@ -235,7 +235,7 @@ func ReadJournal(t *testing.T, path string) []string {
 	return lines
 }
 
-func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, sess session.Session) {
+func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, deps cmddeps.Deps) {
 	t.Helper()
 
 	root, _ = SetUpDeployFixture(t)
@@ -245,16 +245,16 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, s
 	journal = filepath.Join(t.TempDir(), "edge.journal")
 	t.Setenv(fakeEdgeJournalEnvVar, journal)
 
-	sess = NewSession()
-	SetLoggedIn(&sess)
-	StubBuild(&sess, []manifestbuilder.Function{
+	deps = NewDeps()
+	SetLoggedIn(&deps)
+	StubBuild(&deps, []manifestbuilder.Function{
 		{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 	})
-	return root, journal, sess
+	return root, journal, deps
 }
 
-func SetLoggedIn(sess *session.Session) {
-	sess.LoadCredentials = func() (credentials.Credentials, error) {
+func SetLoggedIn(deps *cmddeps.Deps) {
+	deps.LoadCredentials = func() (credentials.Credentials, error) {
 		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
 	}
 }

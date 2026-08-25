@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
@@ -35,14 +35,14 @@ var runCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runRun(ctx, newSession(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runRun(ctx, newDeps(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-func runRun(ctx context.Context, sess session.Session, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runRun(ctx context.Context, deps cmddeps.Deps, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	// TODO: unlike build/deploy, this never calls runtrace.Start, so discovery
 	// below produces no spans or logs and nothing else says so.
-	creds, err := sess.LoadCredentials()
+	creds, err := deps.LoadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
 		return &exitsig.ExitError{Code: 1}
@@ -60,14 +60,14 @@ func runRun(ctx context.Context, sess session.Session, cmd *cobra.Command, cwd s
 		return err
 	}
 	if found {
-		return runOnceAsFollower(ctx, sess, leaderAddr, appArgs, stdout, stderr, stdin)
+		return runOnceAsFollower(ctx, deps, leaderAddr, appArgs, stdout, stderr, stdin)
 	}
 
-	binding, err := ensureConsoleBinding(ctx, sess, cfg.Dir, apiURL, stdout, stderr, stdin)
+	binding, err := ensureConsoleBinding(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
 	if err != nil {
 		return err
 	}
-	return runStandalone(ctx, sess, creds, apiURL, binding.ProjectID, cfg, appArgs, stdout, stderr, stdin)
+	return runStandalone(ctx, deps, creds, apiURL, binding.ProjectID, cfg, appArgs, stdout, stderr, stdin)
 }
 
 func runningDevServer(root string) (string, bool, error) {
@@ -78,7 +78,7 @@ func runningDevServer(root string) (string, bool, error) {
 	return result.LeaderAddr, result.Role == election.Follower, nil
 }
 
-func runOnceAsFollower(ctx context.Context, sess session.Session, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	client := watchv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
 
 	stream, err := client.Subscribe(ctx, &watchv1.SubscribeRequest{})
@@ -91,10 +91,10 @@ func runOnceAsFollower(ctx context.Context, sess session.Session, leaderAddr str
 		return fmt.Errorf("connect to leader: %w", stream.Err())
 	}
 
-	return runChildOnce(ctx, sess, appArgs, stream.Msg().Env, stdin, stdout, stderr)
+	return runChildOnce(ctx, deps, appArgs, stream.Msg().Env, stdin, stdout, stderr)
 }
 
-func runStandalone(ctx context.Context, sess session.Session, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runStandalone(ctx context.Context, deps cmddeps.Deps, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return err
@@ -102,7 +102,7 @@ func runStandalone(ctx context.Context, sess session.Session, creds credentials.
 	reportUnreadableLines(stdout, file.Unreadable)
 	reportDotfile(stdout, cfg.Dir, file.Values, dotfileReadOnceAdvice)
 
-	projectCfg := resolveAccount(ctx, sess, apiURL, creds.AccessToken, projectID, stderr)
+	projectCfg := resolveAccount(ctx, deps, apiURL, creds.AccessToken, projectID, stderr)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -123,16 +123,16 @@ func runStandalone(ctx context.Context, sess session.Session, creds credentials.
 		return err
 	}
 
-	return runChildOnce(ctx, sess, appArgs, resolved, stdin, stdout, stderr)
+	return runChildOnce(ctx, deps, appArgs, resolved, stdin, stdout, stderr)
 }
 
-func runChildOnce(ctx context.Context, sess session.Session, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) error {
+func runChildOnce(ctx context.Context, deps cmddeps.Deps, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) error {
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
 	appCmd.Env = applyEnv(os.Environ(), env)
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	child, err := spawnAppChild(ctx, appCmd, stdin, sess.StdinIsTerminal(stdin))
+	child, err := spawnAppChild(ctx, appCmd, stdin, deps.StdinIsTerminal(stdin))
 	if err != nil {
 		return err
 	}

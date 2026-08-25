@@ -36,7 +36,7 @@ func postgresLinkJSON(name, host string) string {
 func linkSet(t *testing.T, root, body string, opts linkOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runLinkSet(context.Background(), newSession(), root, strings.NewReader(body), opts, &stdout, &stderr); err != nil {
+	if err := runLinkSet(context.Background(), newDeps(), root, strings.NewReader(body), opts, &stdout, &stderr); err != nil {
 		t.Fatalf("runLinkSet err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
@@ -45,7 +45,7 @@ func linkSet(t *testing.T, root, body string, opts linkOptions) string {
 func linkLs(t *testing.T, root string, opts linkOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runLinkLs(context.Background(), newSession(), root, opts, &stdout, &stderr); err != nil {
+	if err := runLinkLs(context.Background(), newDeps(), root, opts, &stdout, &stderr); err != nil {
 		t.Fatalf("runLinkLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
@@ -83,7 +83,7 @@ func TestRunLinkSet(t *testing.T) {
 		}
 
 		var rm, stderr bytes.Buffer
-		if err := runLinkRm(context.Background(), newSession(), root, "main", linkOptions{}, &rm, &stderr); err != nil {
+		if err := runLinkRm(context.Background(), newDeps(), root, "main", linkOptions{}, &rm, &stderr); err != nil {
 			t.Fatalf("runLinkRm err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(rm.String(), "main") {
@@ -100,7 +100,7 @@ func TestRunLinkSet(t *testing.T) {
 		linkSet(t, root, postgresLinkJSON("main", "db.internal"), linkOptions{owner: "terraform"})
 
 		var stdout, stderr bytes.Buffer
-		err := runLinkSet(context.Background(), newSession(), root,
+		err := runLinkSet(context.Background(), newDeps(), root,
 			strings.NewReader(postgresLinkJSON("main", "other.internal")), linkOptions{owner: "cli"}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runLinkSet over another publisher's link err = nil, want a refusal")
@@ -116,7 +116,7 @@ func TestRunLinkSet(t *testing.T) {
 		root := setUpLinkFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runLinkSet(context.Background(), newSession(), root,
+		err := runLinkSet(context.Background(), newDeps(), root,
 			strings.NewReader(postgresLinkJSON("main", "db.internal")), linkOptions{owner: "OCEL"}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runLinkSet --owner OCEL err = nil, want a refusal")
@@ -148,7 +148,7 @@ func TestRunLinkSet(t *testing.T) {
 		linkSet(t, root, postgresLinkJSON("main", "db.internal"), linkOptions{owner: "terraform"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runLinkRm(context.Background(), newSession(), root, "main", linkOptions{}, &stdout, &stderr); err != nil {
+		if err := runLinkRm(context.Background(), newDeps(), root, "main", linkOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runLinkRm over another publisher's link err = %v; stderr=%s", err, stderr.String())
 		}
 		if after := linkLs(t, root, linkOptions{}); strings.Contains(after, "main") {
@@ -160,7 +160,7 @@ func TestRunLinkSet(t *testing.T) {
 		root := setUpLinkFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runLinkRm(context.Background(), newSession(), root, "never-published", linkOptions{}, &stdout, &stderr); err != nil {
+		if err := runLinkRm(context.Background(), newDeps(), root, "never-published", linkOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runLinkRm err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "never-published") {
@@ -180,7 +180,7 @@ func TestRunLinkSet(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				var stdout, stderr bytes.Buffer
-				err := runLinkSet(context.Background(), newSession(), root, strings.NewReader(body), linkOptions{}, &stdout, &stderr)
+				err := runLinkSet(context.Background(), newDeps(), root, strings.NewReader(body), linkOptions{}, &stdout, &stderr)
 				if err == nil {
 					t.Fatalf("runLinkSet(%q) err = nil, want a refusal", body)
 				}
@@ -234,7 +234,7 @@ func customLinkJSON(name string) string {
 func linkGenerate(t *testing.T, root string, opts linkOptions) (string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runLinkGenerate(context.Background(), newSession(), root, opts, &stdout, &stderr); err != nil {
+	if err := runLinkGenerate(context.Background(), newDeps(), root, opts, &stdout, &stderr); err != nil {
 		t.Fatalf("runLinkGenerate err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	written, err := os.ReadFile(filepath.Join(root, linkTypesFileName))
@@ -328,7 +328,7 @@ func TestRunLinkGenerate(t *testing.T) {
 		root := setUpLinkFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runLinkGenerate(context.Background(), newSession(), root, linkOptions{environment: "staging"}, &stdout, &stderr)
+		err := runLinkGenerate(context.Background(), newDeps(), root, linkOptions{environment: "staging"}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runLinkGenerate --environment against production err = nil, want a refusal")
 		}
@@ -359,9 +359,9 @@ func TestLinkBootstrap(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		for name, err := range map[string]error{
-			"set": runLinkSet(context.Background(), newSession(), root, strings.NewReader(postgresLinkJSON("main", "db.internal")), linkOptions{environment: "staging"}, &stdout, &stderr),
-			"rm":  runLinkRm(context.Background(), newSession(), root, "main", linkOptions{environment: "staging"}, &stdout, &stderr),
-			"ls":  runLinkLs(context.Background(), newSession(), root, linkOptions{environment: "staging"}, &stdout, &stderr),
+			"set": runLinkSet(context.Background(), newDeps(), root, strings.NewReader(postgresLinkJSON("main", "db.internal")), linkOptions{environment: "staging"}, &stdout, &stderr),
+			"rm":  runLinkRm(context.Background(), newDeps(), root, "main", linkOptions{environment: "staging"}, &stdout, &stderr),
+			"ls":  runLinkLs(context.Background(), newDeps(), root, linkOptions{environment: "staging"}, &stdout, &stderr),
 		} {
 			if err == nil {
 				t.Errorf("`ocel link %s --environment` against production err = nil, want a refusal", name)
@@ -416,7 +416,7 @@ func TestRunLinkJSONOutput(t *testing.T) {
 	}
 
 	var rm, stderr bytes.Buffer
-	if err := runLinkRm(context.Background(), newSession(), root, "main", linkOptions{}, &rm, &stderr); err != nil {
+	if err := runLinkRm(context.Background(), newDeps(), root, "main", linkOptions{}, &rm, &stderr); err != nil {
 		t.Fatalf("runLinkRm err = %v; stderr=%s", err, stderr.String())
 	}
 	removed := asJSON(t, rm.String())

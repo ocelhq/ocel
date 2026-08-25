@@ -11,15 +11,15 @@ import (
 
 func TestACommandThatReadsTheBootstrapNamesTheFeatureItLacks(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
-	sess := newSession()
-	clitest.SetLoggedIn(&sess)
-	clitest.StubBuild(&sess, nil)
+	deps := newDeps()
+	clitest.SetLoggedIn(&deps)
+	clitest.StubBuild(&deps, nil)
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
 	var stdout, stderr bytes.Buffer
-	err := runPromotionsLs(context.Background(), sess, root, &stdout, &stderr)
+	err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr)
 	if err == nil {
 		t.Fatal("a command reading a bootstrap that lacks a feature this project needs ran on regardless")
 	}
@@ -30,15 +30,15 @@ func TestACommandThatReadsTheBootstrapNamesTheFeatureItLacks(t *testing.T) {
 
 func TestEnvAsksTheBootstrapOnlyWhetherThisCLICanSpeakToIt(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
-	sess := newSession()
-	clitest.SetLoggedIn(&sess)
-	clitest.StubBuild(&sess, nil)
+	deps := newDeps()
+	clitest.SetLoggedIn(&deps)
+	clitest.StubBuild(&deps, nil)
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
 	var stdout, stderr bytes.Buffer
-	if err := runEnvLs(context.Background(), sess, root, envOptions{}, &stdout, &stderr); err != nil {
+	if err := runEnvLs(context.Background(), deps, root, envOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("a variable this bootstrap holds was refused over a feature no variable needs: %v", err)
 	}
 }

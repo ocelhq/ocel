@@ -11,8 +11,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -32,7 +32,7 @@ type Options struct {
 	AutoHeal         bool
 }
 
-func NewCommand(sess session.Session) *cobra.Command {
+func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bootstrap <command>",
 		Short: "Set up the shared infrastructure deploys run on",
@@ -47,17 +47,17 @@ func NewCommand(sess session.Session) *cobra.Command {
 	}
 
 	cmd.AddCommand(
-		newProvisionCommand(sess, environmentv1.Tier_TIER_PRODUCTION, []string{"prod"}),
-		newProvisionCommand(sess, environmentv1.Tier_TIER_PREVIEW, nil),
-		newDestroyCommand(sess),
-		newPolicyCommand(sess),
-		newStatusCommand(sess),
+		newProvisionCommand(deps, environmentv1.Tier_TIER_PRODUCTION, []string{"prod"}),
+		newProvisionCommand(deps, environmentv1.Tier_TIER_PREVIEW, nil),
+		newDestroyCommand(deps),
+		newPolicyCommand(deps),
+		newStatusCommand(deps),
 	)
 
 	return cmd
 }
 
-func newProvisionCommand(sess session.Session, tier environmentv1.Tier, aliases []string) *cobra.Command {
+func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []string) *cobra.Command {
 	var opts Options
 
 	name := Name(tier)
@@ -82,10 +82,10 @@ func newProvisionCommand(sess session.Session, tier environmentv1.Tier, aliases 
 			opts.FeaturesDeclared = cmd.Flags().Changed("features")
 			opts.AutoHealDeclared = cmd.Flags().Changed("auto-heal")
 
-			ctx, stop := sess.Interrupt(cmd.Context(), cmd.ErrOrStderr())
+			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
 
-			return Run(ctx, sess, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return Run(ctx, deps, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 
@@ -97,7 +97,7 @@ func newProvisionCommand(sess session.Session, tier environmentv1.Tier, aliases 
 	return cmd
 }
 
-func newDestroyCommand(sess session.Session) *cobra.Command {
+func newDestroyCommand(deps cmddeps.Deps) *cobra.Command {
 	var opts Options
 
 	cmd := &cobra.Command{
@@ -120,10 +120,10 @@ func newDestroyCommand(sess session.Session) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			ctx, stop := sess.Interrupt(cmd.Context(), cmd.ErrOrStderr())
+			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
 
-			return RunDestroy(ctx, sess, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return RunDestroy(ctx, deps, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 
@@ -132,7 +132,7 @@ func newDestroyCommand(sess session.Session) *cobra.Command {
 	return cmd
 }
 
-func newPolicyCommand(sess session.Session) *cobra.Command {
+func newPolicyCommand(deps cmddeps.Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "policy <bootstrap|deploy>",
 		Short: "Print the permissions bootstrap or deploy credentials need",
@@ -153,10 +153,10 @@ func newPolicyCommand(sess session.Session) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			ctx, stop := sess.Interrupt(cmd.Context(), cmd.ErrOrStderr())
+			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
 
-			return RunPolicy(ctx, sess, cwd, tier, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return RunPolicy(ctx, deps, cwd, tier, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 }
@@ -184,14 +184,14 @@ func credentialTierArg(args []string) (contractv1.CredentialTier, error) {
 	return credentialTier(args[0])
 }
 
-func Run(ctx context.Context, sess session.Session, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := resolveProject(ctx, sess, cwd)
+func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
+	cfg, err := resolveProject(ctx, deps, cwd)
 	if err != nil {
 		return err
 	}
 
 	prompter := prompt.New(stdout, stdin)
-	return providerui.Run(ctx, sess, cfg, "ocel bootstrap "+Name(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+	return providerui.Run(ctx, deps, cfg, "ocel bootstrap "+Name(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
 		client, err := runner.Client()
 		if err != nil {
 			return err
@@ -208,7 +208,7 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 		}
 		catalogue := described.GetFeatures()
 
-		interactive := !opts.Yes && sess.StdinIsTerminal(stdin)
+		interactive := !opts.Yes && deps.StdinIsTerminal(stdin)
 		requested, selected, err := chooseFeatures(ctx, prompter, opts, catalogue, interactive)
 		if err != nil {
 			return err
@@ -278,16 +278,16 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 	})
 }
 
-func resolveProject(ctx context.Context, sess session.Session, cwd string) (*projectconfig.Config, error) {
-	cfg, err := projectconfig.Resolve(ctx, cwd, sess.ConfigPath())
+func resolveProject(ctx context.Context, deps cmddeps.Deps, cwd string) (*projectconfig.Config, error) {
+	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return nil, err
 	}
 	return cfg, nil
 }
 
-func RunPolicy(ctx context.Context, sess session.Session, cwd string, tier contractv1.CredentialTier, stdout, stderr io.Writer) error {
-	cfg, err := resolveProject(ctx, sess, cwd)
+func RunPolicy(ctx context.Context, deps cmddeps.Deps, cwd string, tier contractv1.CredentialTier, stdout, stderr io.Writer) error {
+	cfg, err := resolveProject(ctx, deps, cwd)
 	if err != nil {
 		return err
 	}

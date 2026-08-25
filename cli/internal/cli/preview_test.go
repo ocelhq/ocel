@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -21,9 +21,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func stubGit(sess *session.Session, branch, pr string) {
-	sess.CurrentGitBranch = func(string) (string, error) { return branch, nil }
-	sess.DiscoverPRNumber = func() string { return pr }
+func stubGit(deps *cmddeps.Deps, branch, pr string) {
+	deps.CurrentGitBranch = func(string) (string, error) { return branch, nil }
+	deps.DiscoverPRNumber = func() string { return pr }
 }
 
 var errNotARepo = errors.New("determine current git branch: not a git repository")
@@ -31,10 +31,10 @@ var errNotARepo = errors.New("determine current git branch: not a git repository
 func TestRunPreviewUp(t *testing.T) {
 	t.Run("an ephemeral preview sends a preview, ephemeral environment", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
@@ -44,7 +44,7 @@ func TestRunPreviewUp(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -65,12 +65,12 @@ func TestRunPreviewUp(t *testing.T) {
 	t.Run("an app's functions reach the preview manifest", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		clitest.StubBuild(&sess, []manifestbuilder.Function{
+		clitest.StubBuild(&deps, []manifestbuilder.Function{
 			{
 				Route:        "api",
 				Runtime:      "nodejs24.x",
@@ -82,7 +82,7 @@ func TestRunPreviewUp(t *testing.T) {
 		})
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -96,17 +96,17 @@ func TestRunPreviewUp(t *testing.T) {
 	t.Run("a preview publishes a map whose edges are the manifest's usages", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		clitest.StubBuild(&sess, []manifestbuilder.Function{
+		clitest.StubBuild(&deps, []manifestbuilder.Function{
 			{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -124,10 +124,10 @@ func TestRunPreviewUp(t *testing.T) {
 
 	t.Run("--ref stands up the explicit ref's ephemeral", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "some-other-branch", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "some-other-branch", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
@@ -137,7 +137,7 @@ func TestRunPreviewUp(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{ref: "release/v2"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{ref: "release/v2"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -148,10 +148,10 @@ func TestRunPreviewUp(t *testing.T) {
 	})
 
 	t.Run("--ref needs no git", func(t *testing.T) {
-		sess := newSession()
-		sess.CurrentGitBranch = func(string) (string, error) { return "", errNotARepo }
+		deps := newDeps()
+		deps.CurrentGitBranch = func(string) (string, error) { return "", errNotARepo }
 
-		env, err := resolveUpEnvironment(sess, "", previewUpOptions{ref: "/tmp/some-fixture"})
+		env, err := resolveUpEnvironment(deps, "", previewUpOptions{ref: "/tmp/some-fixture"})
 		if err != nil {
 			t.Fatalf("resolveUpEnvironment(--ref) err = %v, want it to resolve without git", err)
 		}
@@ -169,15 +169,15 @@ func TestRunPreviewUp(t *testing.T) {
 
 	t.Run("a persistent --name sends a persistent, declared environment", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -191,15 +191,15 @@ func TestRunPreviewUp(t *testing.T) {
 
 	t.Run("it declares the slug and the preview wildcard", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app domains=*.preview.acme.com tier=TIER_PREVIEW") {
@@ -215,15 +215,15 @@ export default {
   provider: { package: "@ocel/provider-aws", options: {} },
 };
 `)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		err := runPreviewUp(context.Background(), sess, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a missing-preview-domain refusal")
 		}
@@ -250,16 +250,16 @@ export default {
   provider: { package: "@ocel/provider-aws", options: {} },
 };
 `)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "previews.ocel.dev")
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -275,15 +275,15 @@ export default {
 
 	t.Run("a class mismatch refuses and drives no Deploy", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		err := runPreviewUp(context.Background(), sess, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a class-mismatch error")
 		}
@@ -297,15 +297,15 @@ export default {
 
 	t.Run("absent infrastructure refuses and drives no Deploy", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
 
 		var stdout, stderr bytes.Buffer
-		err := runPreviewUp(context.Background(), sess, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a missing-infrastructure error")
 		}
@@ -325,7 +325,7 @@ export default {
 };
 `)
 
-		err := runPreviewUp(context.Background(), newSession(), root, previewUpOptions{name: "staging"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runPreviewUp(context.Background(), newDeps(), root, previewUpOptions{name: "staging"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want error")
 		}
@@ -338,9 +338,9 @@ export default {
 func TestRunDeployWithoutAPreviewDomain(t *testing.T) {
 	t.Run("a production deploy needs no preview domain", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
@@ -350,7 +350,7 @@ export default {
 `)
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 	})
@@ -359,10 +359,10 @@ export default {
 func TestRunPreviewRm(t *testing.T) {
 	t.Run("an ephemeral preview for the current branch is destroyed without prompting", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
@@ -372,7 +372,7 @@ func TestRunPreviewRm(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewRm(context.Background(), sess, root, previewRmOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -389,10 +389,10 @@ func TestRunPreviewRm(t *testing.T) {
 
 	t.Run("--ref destroys the explicit ref", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "some-other-branch", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "some-other-branch", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
@@ -402,7 +402,7 @@ func TestRunPreviewRm(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewRm(context.Background(), sess, root, previewRmOptions{ref: "release/v2"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{ref: "release/v2"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -413,15 +413,15 @@ func TestRunPreviewRm(t *testing.T) {
 
 	t.Run("a persistent preview with --yes is destroyed without prompting", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewRm(context.Background(), sess, root, previewRmOptions{name: "staging", yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{name: "staging", yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -438,14 +438,14 @@ func TestRunPreviewRm(t *testing.T) {
 func TestRunPreviewLs(t *testing.T) {
 	t.Run("it renders every environment", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		sess := newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewLs(context.Background(), sess, root, &stdout, &stderr); err != nil {
+		if err := runPreviewLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runPreviewLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -475,11 +475,11 @@ func TestPreviewEnvironmentFlags(t *testing.T) {
 			resolve func() error
 		}{
 			{"up", func() error {
-				_, err := resolveUpEnvironment(newSession(), "", previewUpOptions{name: "staging", ref: "release/v2"})
+				_, err := resolveUpEnvironment(newDeps(), "", previewUpOptions{name: "staging", ref: "release/v2"})
 				return err
 			}},
 			{"rm", func() error {
-				_, err := resolveRmEnvironment(newSession(), "", previewRmOptions{name: "staging", ref: "release/v2"})
+				_, err := resolveRmEnvironment(newDeps(), "", previewRmOptions{name: "staging", ref: "release/v2"})
 				return err
 			}},
 		}
@@ -509,11 +509,11 @@ func TestPreviewEnvironmentFlags(t *testing.T) {
 			resolve func(string) error
 		}{
 			{"up", func(n string) error {
-				_, err := resolveUpEnvironment(newSession(), "", previewUpOptions{name: n})
+				_, err := resolveUpEnvironment(newDeps(), "", previewUpOptions{name: n})
 				return err
 			}},
 			{"rm", func(n string) error {
-				_, err := resolveRmEnvironment(newSession(), "", previewRmOptions{name: n})
+				_, err := resolveRmEnvironment(newDeps(), "", previewRmOptions{name: n})
 				return err
 			}},
 		}
@@ -540,25 +540,25 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 	const why = "the provider refuses a global-preview account mismatch only for a preflight that carries a slug and no domains, " +
 		"because that is exactly a preview deploy landing on the shared wildcard; a teardown that starts sending a slug would be refused and strand its resources"
 
-	setUpPreview := func(t *testing.T) (root, journal string, sess session.Session) {
+	setUpPreview := func(t *testing.T) (root, journal string, deps cmddeps.Deps) {
 		t.Helper()
 		root, _ = clitest.SetUpDeployFixture(t)
 		journal = filepath.Join(t.TempDir(), "preflight.journal")
 		t.Setenv(clitest.FakePreflightJournalEnvVar, journal)
-		sess = newSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		stubGit(&sess, "feature/login", "")
+		deps = newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		return root, journal, sess
+		return root, journal, deps
 	}
 
 	t.Run("up sends the slug and the project's declared preview hostnames, so the shared-wildcard refusal can reach it", func(t *testing.T) {
-		root, journal, sess := setUpPreview(t)
+		root, journal, deps := setUpPreview(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -576,21 +576,21 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 
 	teardowns := []struct {
 		name string
-		run  func(t *testing.T, sess session.Session, root string, stdout, stderr *bytes.Buffer) error
+		run  func(t *testing.T, deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error
 	}{
-		{"rm", func(t *testing.T, sess session.Session, root string, stdout, stderr *bytes.Buffer) error {
-			return runPreviewRm(context.Background(), sess, root, previewRmOptions{}, stdout, stderr, strings.NewReader(""))
+		{"rm", func(t *testing.T, deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
+			return runPreviewRm(context.Background(), deps, root, previewRmOptions{}, stdout, stderr, strings.NewReader(""))
 		}},
-		{"prune", func(t *testing.T, sess session.Session, root string, stdout, stderr *bytes.Buffer) error {
-			return runPreviewPrune(context.Background(), sess, root, previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}, stdout, stderr)
+		{"prune", func(t *testing.T, deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
+			return runPreviewPrune(context.Background(), deps, root, previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}, stdout, stderr)
 		}},
 	}
 	for _, tc := range teardowns {
 		t.Run(tc.name+" sends neither a slug nor domains, so the shared-wildcard refusal never reaches a teardown", func(t *testing.T) {
-			root, journal, sess := setUpPreview(t)
+			root, journal, deps := setUpPreview(t)
 
 			var stdout, stderr bytes.Buffer
-			if err := tc.run(t, sess, root, &stdout, &stderr); err != nil {
+			if err := tc.run(t, deps, root, &stdout, &stderr); err != nil {
 				t.Fatalf("`ocel preview %s` err = %v; stdout=%s stderr=%s", tc.name, err, stdout.String(), stderr.String())
 			}
 
@@ -608,10 +608,10 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 	}
 
 	t.Run("ls preflights not at all, so nothing about it can be refused", func(t *testing.T) {
-		root, journal, sess := setUpPreview(t)
+		root, journal, deps := setUpPreview(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewLs(context.Background(), sess, root, &stdout, &stderr); err != nil {
+		if err := runPreviewLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runPreviewLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 

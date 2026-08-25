@@ -14,8 +14,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -58,7 +58,7 @@ var domainUseCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runDomainUse(ctx, newSession(), cwd, args[0], domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainUse(ctx, newDeps(), cwd, args[0], domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -73,7 +73,7 @@ var domainLsCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runDomainLs(ctx, newSession(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainLs(ctx, newDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -88,7 +88,7 @@ var domainReleaseCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runDomainRelease(ctx, newSession(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDomainRelease(ctx, newDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -103,7 +103,7 @@ var domainAddCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runDomainAdd(ctx, newSession(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainAdd(ctx, newDeps(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -118,7 +118,7 @@ var domainRmCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runDomainRm(ctx, newSession(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainRm(ctx, newDeps(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -133,7 +133,7 @@ var domainStatusCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runDomainStatus(ctx, newSession(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainStatus(ctx, newDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -176,7 +176,7 @@ func globalPreviewBaseDomain(wildcard string) (string, error) {
 	return projectconfig.PreviewBaseDomain(host), nil
 }
 
-func runDomainUse(ctx context.Context, sess session.Session, cwd, wildcard string, opts domainOptions, stdout, stderr io.Writer) error {
+func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, opts domainOptions, stdout, stderr io.Writer) error {
 	if err := requirePreviewClass("ocel domain use", opts.preview); err != nil {
 		return err
 	}
@@ -190,8 +190,8 @@ func runDomainUse(ctx context.Context, sess session.Session, cwd, wildcard strin
 		return err
 	}
 
-	return providerui.Run(ctx, sess, cfg, "ocel domain use", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightPreview(ctx, sess, runner, cfg, stdout); err != nil {
+	return providerui.Run(ctx, deps, cfg, "ocel domain use", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightPreview(ctx, deps, runner, cfg, stdout); err != nil {
 			return err
 		}
 		req := &contractv1.UsePreviewWildcardRequest{
@@ -207,7 +207,7 @@ func runDomainUse(ctx context.Context, sess session.Session, cwd, wildcard strin
 	})
 }
 
-func runDomainLs(ctx context.Context, sess session.Session, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
+func runDomainLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
 	if err := requirePreviewClass("ocel domain ls", opts.preview); err != nil {
 		return err
 	}
@@ -218,7 +218,7 @@ func runDomainLs(ctx context.Context, sess session.Session, cwd string, opts dom
 	}
 
 	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
-		resp, err := listGlobalPreviewDomain(ctx, sess, runner, cfg, stdout)
+		resp, err := listGlobalPreviewDomain(ctx, deps, runner, cfg, stdout)
 		if err != nil {
 			return err
 		}
@@ -227,7 +227,7 @@ func runDomainLs(ctx context.Context, sess session.Session, cwd string, opts dom
 	})
 }
 
-func runDomainRelease(ctx context.Context, sess session.Session, cwd string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	if err := requirePreviewClass("ocel domain release", opts.preview); err != nil {
 		return err
 	}
@@ -240,8 +240,8 @@ func runDomainRelease(ctx context.Context, sess session.Session, cwd string, opt
 		return err
 	}
 
-	return providerui.Run(ctx, sess, cfg, "ocel domain release", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightPreview(ctx, sess, runner, cfg, stdout); err != nil {
+	return providerui.Run(ctx, deps, cfg, "ocel domain release", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightPreview(ctx, deps, runner, cfg, stdout); err != nil {
 			return err
 		}
 		client, err := runner.Client()
@@ -286,7 +286,7 @@ func runDomainRelease(ctx context.Context, sess session.Session, cwd string, opt
 	})
 }
 
-func runDomainAdd(ctx context.Context, sess session.Session, cwd, host string, stdout, stderr io.Writer) error {
+func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -295,8 +295,8 @@ func runDomainAdd(ctx context.Context, sess session.Session, cwd, host string, s
 	if len(configured) == 0 {
 		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
 	}
-	return providerui.Run(ctx, sess, cfg, "ocel domain add", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+	return providerui.Run(ctx, deps, cfg, "ocel domain add", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 		req := &contractv1.HostnameRequest{
@@ -320,14 +320,14 @@ func addedHosts(configured []string, host string) []string {
 	return []string{host}
 }
 
-func runDomainRm(ctx context.Context, sess session.Session, cwd, host string, stdout, stderr io.Writer) error {
+func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
-	return providerui.Run(ctx, sess, cfg, "ocel domain rm", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+	return providerui.Run(ctx, deps, cfg, "ocel domain rm", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 		req := &contractv1.HostnameRequest{
@@ -348,8 +348,8 @@ func runDomainRm(ctx context.Context, sess session.Session, cwd, host string, st
 	})
 }
 
-func listGlobalPreviewDomain(ctx context.Context, sess session.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer) (*contractv1.GetPreviewWildcardResponse, error) {
-	if err := preflightPreview(ctx, sess, runner, cfg, out); err != nil {
+func listGlobalPreviewDomain(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer) (*contractv1.GetPreviewWildcardResponse, error) {
+	if err := preflightPreview(ctx, deps, runner, cfg, out); err != nil {
 		return nil, err
 	}
 	client, err := runner.Client()
@@ -446,7 +446,7 @@ type domainWaitSchedule struct {
 
 var domainWait = domainWaitSchedule{initialInterval: 2 * time.Second, maxInterval: 30 * time.Second, deadline: 15 * time.Minute}
 
-func runDomainStatus(ctx context.Context, sess session.Session, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
+func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -454,7 +454,7 @@ func runDomainStatus(ctx context.Context, sess session.Session, cwd string, opts
 	configured := declaredHostnames(cfg, "production")
 
 	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
-		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 		client, err := runner.Client()

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -13,7 +13,7 @@ import (
 func runCommand(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 
-	cmd := NewCommand(session.Session{})
+	cmd := NewCommand(cmddeps.Deps{})
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -51,7 +51,7 @@ func TestBootstrapNeedsASubcommand(t *testing.T) {
 func TestBootstrapClassCommands(t *testing.T) {
 	t.Parallel()
 
-	cmd := NewCommand(session.Session{})
+	cmd := NewCommand(cmddeps.Deps{})
 	for _, tc := range []struct {
 		typed string
 		want  string

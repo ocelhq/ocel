@@ -18,14 +18,14 @@ import (
 func TestRunBootstrapDestroy(t *testing.T) {
 	t.Run("it renders the plan, kept items included, and takes the class name", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := clitest.NewSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		sess.StdinIsTerminal = func(io.Reader) bool { return true }
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		deps.StdinIsTerminal = func(io.Reader) bool { return true }
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
-		if err := RunDestroy(context.Background(), sess, root, environmentv1.Tier_TIER_PREVIEW, opts, &stdout, &stderr, strings.NewReader("preview\n")); err != nil {
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PREVIEW, opts, &stdout, &stderr, strings.NewReader("preview\n")); err != nil {
 			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -51,14 +51,14 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 	t.Run("a phrase that is not the class name aborts", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := clitest.NewSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		sess.StdinIsTerminal = func(io.Reader) bool { return true }
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		deps.StdinIsTerminal = func(io.Reader) bool { return true }
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
-		if err := RunDestroy(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("preview\n")); err != nil {
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("preview\n")); err != nil {
 			t.Fatalf("RunDestroy err = %v; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String()
@@ -72,13 +72,13 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 	t.Run("--yes skips the phrase and the terminal requirement", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := clitest.NewSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true}
-		if err := RunDestroy(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -92,14 +92,14 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 	t.Run("the bypass env skips the phrase and says so", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := clitest.NewSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		t.Setenv(removalplan.BypassEnv, "production")
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
-		if err := RunDestroy(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if strings.Contains(stdout.String(), "Type the environment name") {
@@ -112,14 +112,14 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 	t.Run("a bypass naming the other bootstrap is refused, not ignored", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := clitest.NewSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 		t.Setenv(removalplan.BypassEnv, "preview")
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
-		err := RunDestroy(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
+		err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("RunDestroy err = nil, want the mismatched-bypass refusal")
 		}
@@ -132,13 +132,13 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 	t.Run("without a terminal, a phrase it cannot ask for is a refusal", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := clitest.NewSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
-		err := RunDestroy(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
+		err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("RunDestroy err = nil, want the no-terminal refusal")
 		}
@@ -156,7 +156,7 @@ func TestRunBootstrap(t *testing.T) {
 	t.Run("a missing config errors before any spawn", func(t *testing.T) {
 		t.Parallel()
 
-		err := Run(context.Background(), clitest.NewSession(), t.TempDir(), environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := Run(context.Background(), clitest.NewDeps(), t.TempDir(), environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runBootstrap err = nil, want error")
 		}
@@ -175,7 +175,7 @@ export default {
 };
 `)
 
-		err := Run(context.Background(), clitest.NewSession(), root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := Run(context.Background(), clitest.NewDeps(), root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runBootstrap err = nil, want error")
 		}
@@ -185,12 +185,12 @@ export default {
 func TestRunBootstrapPolicy(t *testing.T) {
 	t.Run("it writes the document the provider renders for the tier", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		sess := clitest.NewSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := RunPolicy(context.Background(), sess, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout, &stderr); err != nil {
+		if err := RunPolicy(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout, &stderr); err != nil {
 			t.Fatalf("RunPolicy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "CREDENTIAL_TIER_DEPLOY") {
@@ -211,11 +211,11 @@ func TestBootstrapCarriesAutoHeal(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			root, journal, sess := clitest.SetUpEdgeFixture(t, "")
+			root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 			t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 
 			var stdout, stderr bytes.Buffer
-			if err := Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, tt.opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, tt.opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 			got := clitest.ReadJournal(t, journal)
@@ -230,12 +230,12 @@ func TestRunBootstrapStatus(t *testing.T) {
 	t.Run("it reports both classes", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		sess := clitest.NewSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := RunStatus(context.Background(), sess, root, StatusOptions{}, &stdout, &stderr); err != nil {
+		if err := RunStatus(context.Background(), deps, root, StatusOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runBootstrapStatus err = %v; stderr=%s", err, stderr.String())
 		}
 		out := stdout.String()
@@ -249,12 +249,12 @@ func TestRunBootstrapStatus(t *testing.T) {
 	t.Run("--check fails on stale content", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeBootstrapEnvVar, "stale")
-		sess := clitest.NewSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
-		err := RunStatus(context.Background(), sess, root, StatusOptions{Check: true}, &stdout, &stderr)
+		err := RunStatus(context.Background(), deps, root, StatusOptions{Check: true}, &stdout, &stderr)
 		if err == nil {
 			t.Fatalf("--check passed a bootstrap carrying stale content; stdout=%s", stdout.String())
 		}
@@ -266,12 +266,12 @@ func TestRunBootstrapStatus(t *testing.T) {
 	t.Run("--check passes a bootstrap this build wrote", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		sess := clitest.NewSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := RunStatus(context.Background(), sess, root, StatusOptions{Check: true}, &stdout, &stderr); err != nil {
+		if err := RunStatus(context.Background(), deps, root, StatusOptions{Check: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("--check = %v, want it to pass; stdout=%s", err, stdout.String())
 		}
 	})
@@ -281,14 +281,14 @@ func TestRunBootstrapDowngrade(t *testing.T) {
 	t.Run("it warns and takes a confirmation before writing older content", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeBootstrapEnvVar, "downgrade")
-		sess := clitest.NewSession()
-		clitest.SetLoggedIn(&sess)
-		clitest.StubBuild(&sess, nil)
-		sess.StdinIsTerminal = func(io.Reader) bool { return true }
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		deps.StdinIsTerminal = func(io.Reader) bool { return true }
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Features: "none", FeaturesDeclared: true}
-		if err := Run(context.Background(), sess, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()

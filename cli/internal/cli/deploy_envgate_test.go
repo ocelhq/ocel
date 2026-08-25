@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 
@@ -91,17 +91,17 @@ func setUpEnvGateFixtureWith(t *testing.T, definitions, script string) string {
 	return root
 }
 
-func stubAppBuildRecorder(sess *session.Session, built *bool) {
-	sess.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+func stubAppBuildRecorder(deps *cmddeps.Deps, built *bool) {
+	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		*built = true
 		return nil
 	}
 }
 
-func captureBuildEnv(sess *session.Session) *map[string]map[string]string {
-	clitest.StubRecordedDeploymentIDs(sess)
+func captureBuildEnv(deps *cmddeps.Deps) *map[string]map[string]string {
+	clitest.StubRecordedDeploymentIDs(deps)
 	var got map[string]map[string]string
-	sess.BuildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
+	deps.BuildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
 		got = envByApp
 		return nil
 	}
@@ -123,12 +123,12 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	t.Run("a missing value refuses before anything is built", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`)
-		sess := newSession()
+		deps := newDeps()
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the gate to refuse")
 		}
@@ -155,12 +155,12 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		root := setUpEnvGateFixtureWith(t,
 			`[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`,
 			envDeclareOnlyScript)
-		sess := newSession()
+		deps := newDeps()
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the gate to refuse on what it knows itself")
 		}
@@ -180,7 +180,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_value", envOptions{})
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), newSession(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), newDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Deployed") {
@@ -194,7 +194,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		t.Setenv(clitest.FakeRevealFailureEnvVar, "the store is unreachable")
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), newSession(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), newDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a store it cannot read to stop the deploy")
 		}
@@ -214,7 +214,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		t.Setenv("OCEL_TEST_ENV_CELLS_OUT", cellsPath)
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), newSession(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), newDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -250,11 +250,11 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		writeAppsConfig(t, root, `{ name: "api", path: "apps/api", framework: "express" }`)
 		writeAppSource(t, root, "api")
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
-		sess := newSession()
-		clitest.StubBuild(&sess, nil)
+		deps := newDeps()
+		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v, want a dead scope to warn, not stop the deploy; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String() + stderr.String()
@@ -272,11 +272,11 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
 
-		sess := newSession()
-		got := captureBuildEnv(&sess)
+		deps := newDeps()
+		got := captureBuildEnv(&deps)
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 		}
 		if (*got)["web"]["POSTHOG_ID"] != "ph_web" || (*got)["admin"]["POSTHOG_ID"] != "ph_admin" {
@@ -292,12 +292,12 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
 
-		sess := newSession()
+		deps := newDeps()
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a half-finished folder rename to stop the deploy")
 		}
@@ -317,11 +317,11 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		ownedElsewhere(t, "POSTHOG_ID", "ph_owned_by_platform")
 		envRef(t, root, "POSTHOG_ID", envOptions{}, envRefOptions{project: "platform"})
 
-		sess := newSession()
-		got := captureBuildEnv(&sess)
+		deps := newDeps()
+		got := captureBuildEnv(&deps)
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if (*got)[""]["POSTHOG_ID"] != "ph_owned_by_platform" {
@@ -335,12 +335,12 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		sess := newSession()
+		deps := newDeps()
 		built := false
-		stubAppBuildRecorder(&sess, &built)
+		stubAppBuildRecorder(&deps, &built)
 
 		var stdout, stderr bytes.Buffer
-		err := runPreviewUp(context.Background(), sess, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader(""))
+		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want the preview gate to refuse: the production store is not the preview one")
 		}
@@ -367,18 +367,18 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
-				sess := newSession()
-				stubGit(&sess, "feature/login", "")
+				deps := newDeps()
+				stubGit(&deps, "feature/login", "")
 				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 				t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 				envSet(t, root, "POSTHOG_ID", "ph_shared", envOptions{preview: true})
 				envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
 
-				got := captureBuildEnv(&sess)
+				got := captureBuildEnv(&deps)
 
 				var stdout, stderr bytes.Buffer
-				if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{name: tc.deploying}, &stdout, &stderr, strings.NewReader("")); err != nil {
+				if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: tc.deploying}, &stdout, &stderr, strings.NewReader("")); err != nil {
 					t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 				}
 				for app, env := range *got {
@@ -395,17 +395,17 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 
 	t.Run("an override is the only value its own environment needs", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
-		sess := newSession()
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
 
-		got := captureBuildEnv(&sess)
+		got := captureBuildEnv(&deps)
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v, want staging's own override to satisfy the gate; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if len(*got) == 0 {
@@ -420,21 +420,21 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 
 	t.Run("a redeployed branch finds the override it already had", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
-		sess := newSession()
-		stubGit(&sess, "feature/login", "")
+		deps := newDeps()
+		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		envSet(t, root, "POSTHOG_ID", "ph_shared", envOptions{preview: true})
 		envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
 
-		got := captureBuildEnv(&sess)
+		got := captureBuildEnv(&deps)
 
 		up := func(when string) {
 			t.Helper()
 			*got = nil
 			var stdout, stderr bytes.Buffer
-			if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runPreviewUp %s err = %v; stdout=%s stderr=%s", when, err, stdout.String(), stderr.String())
 			}
 			if len(*got) == 0 {
@@ -450,7 +450,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 		up("before the teardown")
 
 		var rm bytes.Buffer
-		if err := runPreviewRm(context.Background(), sess, root, previewRmOptions{name: "staging", yes: true}, &rm, &rm, strings.NewReader("")); err != nil {
+		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{name: "staging", yes: true}, &rm, &rm, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewRm err = %v; out=%s", err, rm.String())
 		}
 

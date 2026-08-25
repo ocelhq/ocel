@@ -8,7 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -29,7 +29,7 @@ var envUICmd = &cobra.Command{
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvUI(ctx, newSession(), cwd, envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvUI(ctx, newDeps(), cwd, envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -39,14 +39,14 @@ func init() {
 	envCmd.AddCommand(envUICmd)
 }
 
-func runEnvUI(ctx context.Context, sess session.Session, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, sess, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		gate, err := discoverVariables(ctx, cfg, runner, opts, stderr)
 		if err != nil {
 			return err
 		}
 
-		varsSession, err := serveAndOpenVarsUI(sess, ctx, cfg, runner, opts.preview, gate, stdout)
+		varsSession, err := serveAndOpenVarsUI(deps, ctx, cfg, runner, opts.preview, gate, stdout)
 		if err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ func runEnvUI(ctx context.Context, sess session.Session, cwd string, opts envOpt
 }
 
 func serveAndOpenVarsUI(
-	sess session.Session,
+	deps cmddeps.Deps,
 	ctx context.Context,
 	cfg *projectconfig.Config,
 	runner *provider.Runner,
@@ -64,13 +64,13 @@ func serveAndOpenVarsUI(
 	gate *envgate.Gate,
 	stdout io.Writer,
 ) (*varsui.Session, error) {
-	varsSession, err := sess.ServeVarsUI(ctx, cfg, runner, preview, gate)
+	varsSession, err := deps.ServeVarsUI(ctx, cfg, runner, preview, gate)
 	if err != nil {
 		return nil, err
 	}
 
 	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, varsSession.URL)
-	if err := sess.OpenBrowser(varsSession.URL); err != nil {
+	if err := deps.OpenBrowser(varsSession.URL); err != nil {
 		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
 	}
 	return varsSession, nil

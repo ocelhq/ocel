@@ -12,12 +12,12 @@ import (
 )
 
 func TestDeployOffersToBootstrapTheExactSet(t *testing.T) {
-	root, journal, sess := clitest.SetUpEdgeFixture(t, "")
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
-	sess.StdinIsTerminal = func(io.Reader) bool { return true }
+	deps.StdinIsTerminal = func(io.Reader) bool { return true }
 
 	var stdout, stderr bytes.Buffer
-	if err := runDeploy(context.Background(), sess, root, deployOptions{}, &stdout, &stderr, &lineByLine{lines: []string{"y\n", "y\n"}}); err != nil {
+	if err := runDeploy(context.Background(), deps, root, deployOptions{}, &stdout, &stderr, &lineByLine{lines: []string{"y\n", "y\n"}}); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -34,12 +34,12 @@ func TestDeployOffersToBootstrapTheExactSet(t *testing.T) {
 }
 
 func TestDeployYesNeverStopsToAsk(t *testing.T) {
-	root, journal, sess := clitest.SetUpEdgeFixture(t, "")
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
-	sess.StdinIsTerminal = func(io.Reader) bool { return true }
+	deps.StdinIsTerminal = func(io.Reader) bool { return true }
 
 	var stdout, stderr bytes.Buffer
-	err := runDeploy(context.Background(), sess, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("an unattended deploy against a bootstrap missing a feature it needs was allowed through")
 	}

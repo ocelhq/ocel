@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
-	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -46,14 +46,14 @@ var devCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runDev(ctx, newSession(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDev(ctx, newDeps(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-func runDev(ctx context.Context, sess session.Session, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDev(ctx context.Context, deps cmddeps.Deps, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	// TODO: unlike build/deploy, this never calls runtrace.Start, so discovery
 	// below produces no spans or logs and nothing else says so.
-	creds, err := sess.LoadCredentials()
+	creds, err := deps.LoadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
 		return &exitsig.ExitError{Code: 1}
@@ -73,28 +73,28 @@ func runDev(ctx context.Context, sess session.Session, cmd *cobra.Command, cwd s
 		}
 
 		if role.Role == election.Follower {
-			return runFollower(ctx, sess, role.LeaderAddr, appArgs, stdout, stderr, stdin)
+			return runFollower(ctx, deps, role.LeaderAddr, appArgs, stdout, stderr, stdin)
 		}
 
-		binding, err := ensureConsoleBinding(ctx, sess, cfg.Dir, apiURL, stdout, stderr, stdin)
+		binding, err := ensureConsoleBinding(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
 		if err != nil {
 			return err
 		}
-		if err := runLeader(ctx, sess, role, creds, apiURL, binding.ProjectID, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, election.ErrLost) {
+		if err := runLeader(ctx, deps, role, creds, apiURL, binding.ProjectID, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, election.ErrLost) {
 			return err
 		}
 	}
 	return errors.New("determine leader/follower role: repeatedly lost the leader election; try again")
 }
 
-func runLeader(ctx context.Context, sess session.Session, result election.Result, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return err
 	}
 	reportDotfile(stdout, cfg.Dir, file.Values, dotfileWatchedAdvice)
 
-	projectCfg := resolveAccount(ctx, sess, apiURL, creds.AccessToken, projectID, stderr)
+	projectCfg := resolveAccount(ctx, deps, apiURL, creds.AccessToken, projectID, stderr)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -134,7 +134,7 @@ func runLeader(ctx context.Context, sess session.Session, result election.Result
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	child, err := spawnAppChild(ctx, appCmd, stdin, sess.StdinIsTerminal(stdin))
+	child, err := spawnAppChild(ctx, appCmd, stdin, deps.StdinIsTerminal(stdin))
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 	})
 }
 
-func runFollower(ctx context.Context, sess session.Session, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runFollower(ctx context.Context, deps cmddeps.Deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	client := watchv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
 
 	stream, err := client.Subscribe(ctx, &watchv1.SubscribeRequest{})
@@ -227,7 +227,7 @@ func runFollower(ctx context.Context, sess session.Session, leaderAddr string, a
 		return errors.New("connect to leader: stream closed before first env push")
 	}
 
-	child, err := startFollowerChild(ctx, sess, appArgs, stream.Msg().Env, stdin, stdout, stderr)
+	child, err := startFollowerChild(ctx, deps, appArgs, stream.Msg().Env, stdin, stdout, stderr)
 	if err != nil {
 		return err
 	}
@@ -251,7 +251,7 @@ func runFollower(ctx context.Context, sess session.Session, leaderAddr string, a
 			return appExitError(ctx, err)
 		case env := <-updates:
 			child.stop()
-			child, err = startFollowerChild(ctx, sess, appArgs, env, stdin, stdout, stderr)
+			child, err = startFollowerChild(ctx, deps, appArgs, env, stdin, stdout, stderr)
 			if err != nil {
 				return err
 			}
@@ -266,13 +266,13 @@ func runFollower(ctx context.Context, sess session.Session, leaderAddr string, a
 	}
 }
 
-func startFollowerChild(ctx context.Context, sess session.Session, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*appChild, error) {
+func startFollowerChild(ctx context.Context, deps cmddeps.Deps, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*appChild, error) {
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
 	appCmd.Env = applyEnv(os.Environ(), env)
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	return spawnAppChild(ctx, appCmd, stdin, sess.StdinIsTerminal(stdin))
+	return spawnAppChild(ctx, appCmd, stdin, deps.StdinIsTerminal(stdin))
 }
 
 func appExitError(ctx context.Context, err error) error {
