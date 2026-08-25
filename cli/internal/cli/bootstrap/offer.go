@@ -78,7 +78,7 @@ func (p Plan) Refusal(tier environmentv1.Tier) error {
 	)
 }
 
-func (p Plan) Unattended(tier environmentv1.Tier, out io.Writer) error {
+func (p Plan) Advise(tier environmentv1.Tier, out io.Writer) error {
 	if err := p.Refusal(tier); err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.Boot
 		return nil
 	}
 	if !interactive {
-		return plan.Unattended(tier, out)
+		return plan.Advise(tier, out)
 	}
 
 	fmt.Fprintf(out, "The %s bootstrap is not what this project needs: %s.\n", Name(tier), plan.summary())
@@ -102,7 +102,7 @@ func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.Boot
 		return err
 	}
 	if !proceed {
-		return plan.Unattended(tier, out)
+		return plan.Advise(tier, out)
 	}
 	req := &contractv1.BootstrapRequest{
 		Tier:     tier,

@@ -22,7 +22,7 @@ func TestServiceMap(t *testing.T) {
 	t.Run("a deploy publishes a map whose edges are the manifest's usages", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
+		clitest.StubBuild(&sess, []manifestbuilder.Function{
 			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
@@ -54,7 +54,7 @@ func TestServiceMap(t *testing.T) {
 	t.Run("var keys and grant verbs come from the link, and no property value does", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
+		clitest.StubBuild(&sess, []manifestbuilder.Function{
 			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
@@ -90,7 +90,7 @@ func TestServiceMap(t *testing.T) {
 	t.Run("a failed deploy leaves no stale map behind", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		root, _ := clitest.SetUpDeployFixture(t)
 		if err := servicemap.Publish(root, servicemap.Record{PromotionID: "prm_previous_run"}); err != nil {
 			t.Fatalf("seed stale map: %v", err)

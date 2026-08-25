@@ -69,7 +69,7 @@ func stored(t *testing.T, rows []envgate.Stored, key string) envgate.Stored {
 func TestRunnerValues(t *testing.T) {
 	t.Run("List carries a named environment's value as an override", func(t *testing.T) {
 		root := setUpEnvFixture(t)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		preview := envOptions{preview: true}
 
 		withRunnerValues(t, root, preview, func(ctx context.Context, slug string, runner *provider.Runner, values runnerValues) error {

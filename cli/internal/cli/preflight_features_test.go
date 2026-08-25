@@ -13,8 +13,8 @@ func TestACommandThatReadsTheBootstrapNamesTheFeatureItLacks(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
 	sess := newSession()
 	clitest.SetLoggedIn(&sess)
-	clitest.StubAppFunctions(&sess, nil)
-	t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+	clitest.StubBuild(&sess, nil)
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
@@ -32,8 +32,8 @@ func TestEnvAsksTheBootstrapOnlyWhetherThisCLICanSpeakToIt(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
 	sess := newSession()
 	clitest.SetLoggedIn(&sess)
-	clitest.StubAppFunctions(&sess, nil)
-	t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+	clitest.StubBuild(&sess, nil)
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 

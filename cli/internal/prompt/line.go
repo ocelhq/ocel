@@ -18,7 +18,7 @@ var (
 	stdinReader *bufio.Reader
 )
 
-var ErrStdinBusy = errors.New("stdin is already being read by an abandoned prompt")
+var ErrStdinBusy = errors.New("another prompt is already reading stdin")
 
 func (p Prompter) confirmLine(ctx context.Context, question string) (bool, error) {
 	fmt.Fprintf(p.out, "%s [y/N] ", question)

@@ -63,7 +63,7 @@ func (p Prompter) Phrase(ctx context.Context, label, phrase string) (bool, error
 	return phrase != "" && typed == phrase, nil
 }
 
-func (p Prompter) Select(ctx context.Context, title string, options []Option) ([]string, bool, error) {
+func (p Prompter) MultiSelect(ctx context.Context, title string, options []Option) ([]string, bool, error) {
 	if !p.tty {
 		return p.selectLine(ctx, title, options)
 	}

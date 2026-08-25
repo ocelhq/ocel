@@ -16,7 +16,7 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
-const EnvFakeStoreEnvVar = "OCEL_TEST_FAKE_VARS_STORE"
+const FakeVarsStoreEnvVar = "OCEL_TEST_FAKE_VARS_STORE"
 
 const FakeRevealFailureEnvVar = "OCEL_TEST_FAKE_REVEAL_FAILURE"
 
@@ -54,7 +54,7 @@ func FakeCoordinateID(tier environmentv1.Tier, c *envvarsv1.Coordinate) string {
 
 func LoadFakeStore() (FakeStore, error) {
 	store := FakeStore{}
-	raw, err := os.ReadFile(os.Getenv(EnvFakeStoreEnvVar))
+	raw, err := os.ReadFile(os.Getenv(FakeVarsStoreEnvVar))
 	if errors.Is(err, os.ErrNotExist) {
 		return store, nil
 	}
@@ -69,7 +69,7 @@ func SaveFakeStore(store FakeStore) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(os.Getenv(EnvFakeStoreEnvVar), raw, 0o600)
+	return os.WriteFile(os.Getenv(FakeVarsStoreEnvVar), raw, 0o600)
 }
 
 func (s FakeStore) metadata(tier environmentv1.Tier, c *envvarsv1.Coordinate) *envvarsv1.ValueMetadata {

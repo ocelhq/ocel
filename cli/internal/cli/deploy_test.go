@@ -214,7 +214,7 @@ export default {
 	t.Run("the happy path discovers, builds, spawns and deploys to success", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
@@ -251,7 +251,7 @@ export default {
 	t.Run("an app builds its functions into the manifest", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
+		clitest.StubBuild(&sess, []manifestbuilder.Function{
 			{
 				Name:         "api",
 				Runtime:      "nodejs24.x",
@@ -287,7 +287,7 @@ export default {
 	t.Run("no apps warns and deploys resources only", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
@@ -316,7 +316,7 @@ export default {
 	t.Run("an app build failure aborts before spawn", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		sess.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 			return errors.New("boom: app build failed")
 		}
@@ -343,7 +343,7 @@ export default {
 	}{
 		{
 			name: "a class mismatch refuses without deploying",
-			env:  map[string]string{clitest.FakeInfraClassEnvVar: "preview", clitest.FakeInfraPresentEnvVar: "1"},
+			env:  map[string]string{clitest.FakeInfraTierEnvVar: "preview", clitest.FakeInfraPresentEnvVar: "1"},
 			want: "ocel deploy can only run against production infrastructure",
 		},
 		{
@@ -356,7 +356,7 @@ export default {
 		t.Run(tc.name, func(t *testing.T) {
 			sess := newSession()
 			clitest.SetLoggedIn(&sess)
-			clitest.StubAppFunctions(&sess, nil)
+			clitest.StubBuild(&sess, nil)
 			root, _ := clitest.SetUpDeployFixture(t)
 			for key, value := range tc.env {
 				t.Setenv(key, value)
@@ -379,7 +379,7 @@ export default {
 	t.Run("stdin that is not a terminal proceeds without prompting", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
@@ -401,7 +401,7 @@ export default {
 	t.Run("declared domains carry the slug", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
@@ -425,7 +425,7 @@ export default {
 	t.Run("--yes leaves the slug out", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		sess.StdinIsTerminal = func(io.Reader) bool { return true }
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
@@ -444,7 +444,7 @@ export default {
 	t.Run("a non-TTY stdin leaves the slug out", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
 
@@ -462,7 +462,7 @@ export default {
 	t.Run("an interactive deploy warns about other projects", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		sess.StdinIsTerminal = func(io.Reader) bool { return true }
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
@@ -493,7 +493,7 @@ export default {
 	t.Run("--yes bypasses the slug drift guard", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
 
@@ -516,7 +516,7 @@ export default {
 	t.Run("the identity banner prints before the build and the deploy", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		pretendStdoutIsTerminal(&sess)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeIDProviderEnvVar, "Origin")
@@ -552,7 +552,7 @@ export default {
 	t.Run("without a terminal the identity banner is omitted", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
 		t.Setenv(clitest.FakeIDProfileEnvVar, "default")
@@ -580,7 +580,7 @@ export default {
 	t.Run("a credential problem aborts before the build and the deploy", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
+		clitest.StubBuild(&sess, nil)
 		pretendStdoutIsTerminal(&sess)
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
@@ -611,7 +611,7 @@ export default {
 	t.Run("a single app produces exactly one attributed app", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
+		clitest.StubBuild(&sess, []manifestbuilder.Function{
 			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
@@ -649,7 +649,7 @@ export default {
 	t.Run("two apps attribute their functions to their own app", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
+		clitest.StubBuild(&sess, []manifestbuilder.Function{
 			{Name: "web", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
 			{Name: "admin", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/admin", Framework: "express", App: "admin"},
 		})
@@ -705,7 +705,7 @@ export default {
 	t.Run("a detected app appears in the manifest", func(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
+		clitest.StubBuild(&sess, []manifestbuilder.Function{
 			{Name: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "output/index", Framework: "next", App: "express-app"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)

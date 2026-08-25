@@ -38,7 +38,7 @@ const fakeProviderSockEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_SOCK"
 const FakeProviderModeEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_MODE"
 
 const (
-	FakeInfraClassEnvVar   = "OCEL_TEST_FAKE_INFRA_CLASS"
+	FakeInfraTierEnvVar    = "OCEL_TEST_FAKE_INFRA_TIER"
 	FakeInfraPresentEnvVar = "OCEL_TEST_FAKE_INFRA_PRESENT"
 )
 
@@ -78,15 +78,15 @@ const FakeDegradedEnvVar = "OCEL_TEST_FAKE_DEGRADED"
 const FakeDomainOwnerEnvVar = "OCEL_TEST_FAKE_DOMAIN_OWNER"
 
 const (
-	FakeGlobalDomainEnvVar         = "OCEL_TEST_FAKE_GLOBAL_DOMAIN"
-	FakeGlobalDomainAccountEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CF_ACCOUNT"
-	fakeGlobalDomainRouteEnvVar    = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_ROUTE"
-	fakeGlobalDomainGrammarEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_GRAMMAR"
-	FakeGlobalDomainProjectsEnvVar = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROJECTS"
-	FakeGlobalDomainCertEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CERT"
-	FakeGlobalDomainRecordsEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RECORDS"
-	FakeGlobalDomainOwedEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_OWED"
-	FakeGlobalDomainProbeEnvVar    = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROBE"
+	FakeGlobalDomainEnvVar          = "OCEL_TEST_FAKE_GLOBAL_DOMAIN"
+	FakeGlobalDomainEdgeScopeEnvVar = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_EDGE_SCOPE"
+	fakeGlobalDomainRouteEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_ROUTE"
+	fakeGlobalDomainGrammarEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_GRAMMAR"
+	FakeGlobalDomainProjectsEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROJECTS"
+	FakeGlobalDomainCertEnvVar      = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CERT"
+	FakeGlobalDomainRecordsEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RECORDS"
+	FakeGlobalDomainOwedEnvVar      = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_OWED"
+	FakeGlobalDomainProbeEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROBE"
 )
 
 const (
@@ -502,7 +502,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 	s.recordPreflight(req.GetSlug(), req.GetDomains(), req.GetRequiredTier())
 	journalPreflight(req)
 	resp := &contractv1.PreflightResponse{
-		InfraTier:             parseInfraTier(os.Getenv(FakeInfraClassEnvVar)),
+		InfraTier:             parseInfraTier(os.Getenv(FakeInfraTierEnvVar)),
 		InfrastructurePresent: os.Getenv(FakeInfraPresentEnvVar) != "0",
 		Identity: &contractv1.Identity{
 			Provider:  os.Getenv(FakeIDProviderEnvVar),
@@ -675,7 +675,7 @@ func fakeGlobalDomain() *contractv1.PreviewWildcard {
 	probeAt, probeEdge, probeOK := fakeGlobalDomainProbe()
 	return &contractv1.PreviewWildcard{
 		BaseDomain:     base,
-		EdgeScope:      os.Getenv(FakeGlobalDomainAccountEnvVar),
+		EdgeScope:      os.Getenv(FakeGlobalDomainEdgeScopeEnvVar),
 		GrammarMin:     grammarMin,
 		GrammarMax:     grammarMax,
 		RouteInstalled: os.Getenv(fakeGlobalDomainRouteEnvVar) != "0",

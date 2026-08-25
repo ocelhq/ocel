@@ -14,8 +14,8 @@ func TestRunDeploymentsLs(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -43,8 +43,8 @@ func TestRunDeploymentsLs(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -74,8 +74,8 @@ func TestRunDeploymentsLs(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -102,8 +102,8 @@ func TestRunDeploymentsPrune(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -126,8 +126,8 @@ func TestRunDeploymentsPrune(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		clitest.StubAppFunctions(&sess, nil)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		clitest.StubBuild(&sess, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer

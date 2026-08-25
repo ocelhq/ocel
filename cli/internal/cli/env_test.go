@@ -20,7 +20,7 @@ import (
 func setUpEnvFixture(t *testing.T) string {
 	t.Helper()
 	root, _ := clitest.SetUpDeployFixture(t)
-	t.Setenv(clitest.EnvFakeStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
+	t.Setenv(clitest.FakeVarsStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
 	return root
 }
 
@@ -124,7 +124,7 @@ func TestRunEnvSet(t *testing.T) {
 
 	t.Run("an override is its own cell beside the class-wide value", func(t *testing.T) {
 		root := setUpEnvFixture(t)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		preview := envOptions{preview: true}
 		staging := envOptions{preview: true, environment: "staging"}
@@ -154,7 +154,7 @@ func TestRunEnvSet(t *testing.T) {
 
 	t.Run("refuses an environment that does not exist, and the refused write does not land", func(t *testing.T) {
 		root := setUpEnvFixture(t)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newSession(), root, "STRIPE_API_KEY", "sk_typo", envOptions{preview: true, environment: "stagng"}, &stdout, &stderr)
@@ -186,7 +186,7 @@ func TestRunEnvSet(t *testing.T) {
 
 	t.Run("refuses on preview infrastructure", func(t *testing.T) {
 		root := setUpEnvFixture(t)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newSession(), root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}, &stdout, &stderr)
@@ -337,7 +337,7 @@ func TestRunEnvGet(t *testing.T) {
 		root := setUpEnvFixture(t)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var get bytes.Buffer
 		if err := runEnvGet(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{preview: true, reveal: true}, &get, &get); err == nil {
@@ -354,7 +354,7 @@ func TestRunEnvGet(t *testing.T) {
 
 		envSet(t, root, "STRIPE_API_KEY", "sk_test_preview", envOptions{preview: true})
 
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 
 		var production bytes.Buffer
 		if err := runEnvGet(context.Background(), newSession(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &production, &production); err != nil {
@@ -454,7 +454,7 @@ func TestRunEnvRm(t *testing.T) {
 
 	t.Run("an orphaned override is listed and removable", func(t *testing.T) {
 		root := setUpEnvFixture(t)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		envSet(t, root, "STRIPE_API_KEY", "sk_staging", envOptions{preview: true, environment: "staging"})
 
 		t.Setenv(clitest.FakeEnvironmentsEnvVar, "none")

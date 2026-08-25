@@ -21,7 +21,7 @@ const fakeLinkPassword = "pw-never-listed-7c31"
 func setUpLinkFixture(t *testing.T) string {
 	t.Helper()
 	root, _ := clitest.SetUpDeployFixture(t)
-	t.Setenv(clitest.LinkFakeStoreEnvVar, filepath.Join(t.TempDir(), "links.json"))
+	t.Setenv(clitest.FakeLinksStoreEnvVar, filepath.Join(t.TempDir(), "links.json"))
 	return root
 }
 
@@ -312,7 +312,7 @@ func TestRunLinkGenerate(t *testing.T) {
 		root := setUpLinkFixture(t)
 		linkSet(t, root, postgresLinkJSON("orders", "db.internal"), linkOptions{})
 
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		linkSet(t, root, customLinkJSON("network"), linkOptions{preview: true, environment: "staging", owner: "terraform"})
 
 		_, written := linkGenerate(t, root, linkOptions{preview: true, environment: "staging"})
@@ -377,7 +377,7 @@ func TestLinkBootstrap(t *testing.T) {
 		root := setUpLinkFixture(t)
 		linkSet(t, root, postgresLinkJSON("main", "prod.internal"), linkOptions{})
 
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		if out := linkLs(t, root, linkOptions{preview: true}); strings.Contains(out, "main") {
 			t.Errorf("preview ls = %q, want no production link listed", out)
 		}
@@ -387,7 +387,7 @@ func TestLinkBootstrap(t *testing.T) {
 			t.Errorf("ls --preview --environment staging = %q, want the link that environment holds", out)
 		}
 
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		if out := linkLs(t, root, linkOptions{}); strings.Contains(out, "staged") {
 			t.Errorf("production ls = %q, want no preview link listed", out)
 		}

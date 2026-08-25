@@ -85,7 +85,7 @@ func TestRunDomainStatusJSON(t *testing.T) {
 	jsonOutput(t)
 	sess := newSession()
 	clitest.SetLoggedIn(&sess)
-	t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
 	t.Setenv(clitest.FakeDomainExpiresEnvVar, "1757000000")
@@ -153,7 +153,7 @@ func TestRunDomain(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -173,7 +173,7 @@ func TestRunDomain(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -204,7 +204,7 @@ export default {
 `)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -239,10 +239,10 @@ export default {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
-		t.Setenv(clitest.FakeGlobalDomainAccountEnvVar, "cf-1")
+		t.Setenv(clitest.FakeGlobalDomainEdgeScopeEnvVar, "cf-1")
 		t.Setenv(clitest.FakeGlobalDomainProjectsEnvVar, "shop,blog")
 
 		var stdout, stderr bytes.Buffer
@@ -262,7 +262,7 @@ export default {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 		t.Setenv(clitest.FakeGlobalDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
@@ -292,7 +292,7 @@ export default {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
@@ -319,7 +319,7 @@ export default {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -339,7 +339,7 @@ export default {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 		t.Setenv(clitest.FakeServedPreviewsEnvVar, "shop, blog")
@@ -364,7 +364,7 @@ export default {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
@@ -405,7 +405,7 @@ export default {
 `)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -440,7 +440,7 @@ export default {
 `)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -470,7 +470,7 @@ export default {
 `)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainTimeoutEnvVar, "add a proxied (orange cloud) DNS record at shop.app.com")
 
@@ -540,7 +540,7 @@ export default {
 `)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -563,7 +563,7 @@ export default {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -584,7 +584,7 @@ export default {
 		writeProductionConfig(t, root)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
 		t.Setenv(clitest.FakeDomainExpiresEnvVar, "1757000000")
@@ -616,7 +616,7 @@ export default {
 		writeProductionConfig(t, root)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "2")
 		quickDomainWait(t)
@@ -640,7 +640,7 @@ export default {
 		writeProductionConfig(t, root)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "5")
 
@@ -661,7 +661,7 @@ export default {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -679,7 +679,7 @@ export default {
 		writeProductionConfig(t, root)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "3")
 		t.Setenv(clitest.FakeDomainFailUntilEnvVar, "3")
@@ -700,7 +700,7 @@ export default {
 		writeProductionConfig(t, root)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "99")
 		t.Setenv(clitest.FakeDomainFailUntilEnvVar, "99")
@@ -718,7 +718,7 @@ export default {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
-		t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		quickDomainWait(t)
 

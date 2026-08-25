@@ -32,7 +32,7 @@ func deployLinked(t *testing.T, links string) (root string, stdout, stderr bytes
 
 	sess := newSession()
 	clitest.SetLoggedIn(&sess)
-	clitest.StubAppFunctions(&sess, []manifestbuilder.Function{
+	clitest.StubBuild(&sess, []manifestbuilder.Function{
 		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 	})
 	root, _ = clitest.SetUpDeployFixture(t)

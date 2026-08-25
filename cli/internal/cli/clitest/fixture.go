@@ -105,7 +105,7 @@ export {};
 	t.Setenv(FakeProviderEnvVar, "1")
 	t.Setenv(fakeProviderSockEnvVar, sockPath)
 
-	t.Setenv(FakeInfraClassEnvVar, "production")
+	t.Setenv(FakeInfraTierEnvVar, "production")
 	t.Setenv(FakeInfraPresentEnvVar, "1")
 
 	return root, sockPath
@@ -125,7 +125,7 @@ func nodePlatformSuffix(t *testing.T) string {
 	return nodePlatform + "-" + nodeArch
 }
 
-func StubAppFunctions(sess *session.Session, functions []manifestbuilder.Function) {
+func StubBuild(sess *session.Session, functions []manifestbuilder.Function) {
 	sess.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		return nil
 	}
@@ -247,7 +247,7 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, s
 
 	sess = NewSession()
 	SetLoggedIn(&sess)
-	StubAppFunctions(&sess, []manifestbuilder.Function{
+	StubBuild(&sess, []manifestbuilder.Function{
 		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 	})
 	return root, journal, sess

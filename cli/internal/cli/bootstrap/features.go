@@ -15,18 +15,18 @@ const (
 	noFeatures  = "none"
 )
 
-func chooseFeatures(ctx context.Context, asked prompt.Prompter, opts Options, catalogue []*contractv1.Feature, interactive bool) ([]string, bool, error) {
-	if opts.Declared {
+func chooseFeatures(ctx context.Context, prompter prompt.Prompter, opts Options, catalogue []*contractv1.Feature, interactive bool) ([]string, bool, error) {
+	if opts.FeaturesDeclared {
 		requested, err := parseFeatureFlag(opts.Features, catalogue)
 		return requested, err == nil, err
 	}
 	if !interactive {
 		return enabledFeatures(catalogue), true, nil
 	}
-	return pickFeatures(ctx, asked, catalogue)
+	return pickFeatures(ctx, prompter, catalogue)
 }
 
-func pickFeatures(ctx context.Context, asked prompt.Prompter, catalogue []*contractv1.Feature) ([]string, bool, error) {
+func pickFeatures(ctx context.Context, prompter prompt.Prompter, catalogue []*contractv1.Feature) ([]string, bool, error) {
 	enabled := enabledFeatures(catalogue)
 	options := make([]prompt.Option, 0, len(catalogue))
 	for _, f := range catalogue {
@@ -37,8 +37,8 @@ func pickFeatures(ctx context.Context, asked prompt.Prompter, catalogue []*contr
 		})
 	}
 
-	chosen, taken, err := asked.Select(ctx, "Features to keep", options)
-	if err != nil || !taken {
+	chosen, selected, err := prompter.MultiSelect(ctx, "Features to keep", options)
+	if err != nil || !selected {
 		return nil, false, err
 	}
 	return withDependencies(catalogue, chosen), true, nil
