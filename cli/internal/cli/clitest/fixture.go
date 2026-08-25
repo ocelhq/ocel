@@ -89,7 +89,7 @@ globalThis.__ocelRegister.push(
 export {};
 `)
 
-	binDir := filepath.Join(root, "node_modules", "@ocel", "provider-aws-"+nodePlatformSuffix(t), "bin")
+	binDir := filepath.Join(root, "node_modules", "@ocel", "provider-aws-"+NodePlatformSuffix(t), "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", binDir, err)
 	}
@@ -111,7 +111,7 @@ export {};
 	return root, sockPath
 }
 
-func nodePlatformSuffix(t *testing.T) string {
+func NodePlatformSuffix(t *testing.T) string {
 	t.Helper()
 
 	nodePlatform := map[string]string{"darwin": "darwin", "linux": "linux"}[runtime.GOOS]
