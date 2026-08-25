@@ -623,7 +623,7 @@ func credentialPolicy(tier string, grants []grantStatement) (string, error) {
 		}
 		statements = append(statements, statement)
 	}
-	out, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": statements})
+	out, err := json.MarshalIndent(map[string]any{"Version": "2012-10-17", "Statement": statements}, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("render the %s credential policy: %w", tier, err)
 	}
