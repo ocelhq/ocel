@@ -40,7 +40,9 @@ func Serve(spec Spec) error {
 	}
 	defer ln.Close()
 
-	fmt.Fprintf(os.Stderr, "ocel provider %s: bound %s\n", spec.Version, addr)
+	if _, debug := os.LookupEnv("OCEL_PROVIDER_DEBUG"); debug {
+		fmt.Fprintf(os.Stderr, "ocel provider %s: bound %s\n", spec.Version, addr)
+	}
 
 	srv := &http.Server{Handler: NewMux(spec, token)}
 

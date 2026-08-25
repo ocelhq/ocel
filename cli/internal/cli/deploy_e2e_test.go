@@ -146,6 +146,7 @@ func requireRealProviderEnv(t *testing.T) string {
 	}
 
 	t.Setenv(provider.ReadyTimeoutEnvVar, "10s")
+	t.Setenv("OCEL_PROVIDER_DEBUG", "1")
 
 	return repoRoot
 }
