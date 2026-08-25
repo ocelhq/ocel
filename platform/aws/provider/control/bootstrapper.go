@@ -16,6 +16,8 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+const groupVendor providerkit.Vendor = "aws"
+
 type SSMAPI interface {
 	bootstrap.SSMAPI
 }
@@ -77,7 +79,32 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
-	return providerkit.BootstrapPlan{Groups: groups}, nil
+	plan := providerkit.BootstrapPlan{Groups: providerkit.Vendored(groupVendor, groups)}
+	front, err := b.edgeGroup(ctx, req.Class)
+	if err != nil {
+		return providerkit.BootstrapPlan{}, err
+	}
+	if front != nil {
+		plan.Groups = append(plan.Groups, *front)
+	}
+	return plan, nil
+}
+
+func (b Bootstrapper) edgeGroup(ctx context.Context, class providerkit.Class) (*providerkit.ChangeGroup, error) {
+	planner, ok := b.Edge.(edge.BootstrapPlanner)
+	if !ok {
+		return nil, nil
+	}
+	planned, err := planner.PlanBootstrap(ctx, edge.Class(class))
+	if err != nil {
+		return nil, fmt.Errorf("plan the %s edge bootstrap: %w", b.Edge.Kind(), err)
+	}
+	if len(planned) == 0 {
+		return nil, nil
+	}
+	group := providerkit.EdgeGroup(b.Edge.Kind(),
+		providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), b.Edge.Kind()), planned)
+	return &group, nil
 }
 
 func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {

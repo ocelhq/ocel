@@ -261,16 +261,26 @@ type DeploymentsStore struct {
 	BootstrapCred string `json:"bootstrapCred"`
 }
 
-func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, class string, values map[string]string) error {
+func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind, values map[string]string) error {
 	paramName, err := DeploymentsStoreParamFor(class)
 	if err != nil {
 		return err
 	}
-	payload, err := json.Marshal(DeploymentsStore{
+	store := DeploymentsStore{
 		Endpoint:      values[edge.OfferKeyStoreEndpoint],
 		ScriptName:    values[edge.OfferKeyStoreScriptName],
 		BootstrapCred: values[edge.OfferKeyStoreBootstrapCred],
-	})
+	}
+	if store.BootstrapCred == "" {
+		stored, err := ReadDeploymentsStoreFor(ctx, ssmClient, class)
+		if err != nil {
+			return err
+		}
+		if store.BootstrapCred = stored.BootstrapCred; store.BootstrapCred == "" {
+			return standingCredMissing(kind, "deployments store", store.ScriptName, paramName)
+		}
+	}
+	payload, err := json.Marshal(store)
 	if err != nil {
 		return fmt.Errorf("marshal deployments store: %w", err)
 	}
@@ -284,6 +294,14 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, class string, 
 		return fmt.Errorf("write deployments store parameter: %w", err)
 	}
 	return nil
+}
+
+func standingCredMissing(kind edge.Kind, surface, scriptName, paramName string) error {
+	return fmt.Errorf(
+		"the %s edge reoffered its %s %q without a bootstrap credential, meaning the one it holds still stands, "+
+			"but %s holds none: a prior bootstrap set that credential and failed before storing it. It cannot be read "+
+			"back, so delete the bootstrap credential %q holds at the %s edge and re-run bootstrap to mint a fresh one",
+		kind, surface, scriptName, paramName, scriptName, kind)
 }
 
 func ReadDeploymentsStoreFor(ctx context.Context, ssmClient SSMAPI, class string) (DeploymentsStore, error) {
@@ -315,16 +333,26 @@ type ISRWriter struct {
 	BootstrapCred string `json:"bootstrapCred"`
 }
 
-func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, class string, values map[string]string) error {
+func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind, values map[string]string) error {
 	paramName, err := ISRWriterParamFor(class)
 	if err != nil {
 		return err
 	}
-	payload, err := json.Marshal(ISRWriter{
+	writer := ISRWriter{
 		Endpoint:      values[edge.OfferKeyISRWriterEndpoint],
 		ScriptName:    values[edge.OfferKeyISRWriterScriptName],
 		BootstrapCred: values[edge.OfferKeyISRWriterBootstrapCred],
-	})
+	}
+	if writer.BootstrapCred == "" {
+		stored, err := ReadISRWriterFor(ctx, ssmClient, class)
+		if err != nil {
+			return err
+		}
+		if writer.BootstrapCred = stored.BootstrapCred; writer.BootstrapCred == "" {
+			return standingCredMissing(kind, "ISR writer", writer.ScriptName, paramName)
+		}
+	}
+	payload, err := json.Marshal(writer)
 	if err != nil {
 		return fmt.Errorf("marshal isr writer: %w", err)
 	}

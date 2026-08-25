@@ -503,12 +503,12 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 			}
 		case edge.OfferDeploymentsStore:
 			d.progress("Adopting the deployments-store worker (SSM SecureString)")
-			if err := adoptDeploymentsStore(ctx, d.ssm, d.class, offer.Values); err != nil {
+			if err := adoptDeploymentsStore(ctx, d.ssm, d.class, front.Kind(), offer.Values); err != nil {
 				return err
 			}
 		case edge.OfferISRWriter:
 			d.progress("Adopting the ISR writer worker (SSM SecureString)")
-			if err := adoptISRWriter(ctx, d.ssm, d.class, offer.Values); err != nil {
+			if err := adoptISRWriter(ctx, d.ssm, d.class, front.Kind(), offer.Values); err != nil {
 				return err
 			}
 			if _, err := ensureISRWriterSeed(ctx, d.ssm, d.class); err != nil {

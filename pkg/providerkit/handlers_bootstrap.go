@@ -49,7 +49,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	if err != nil {
 		return err
 	}
-	_, gate, err := h.gate("")
+	_, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootst
 	if err := sameClass(class, req); err != nil {
 		return nil, err
 	}
-	_, gate, err := h.gate("")
+	provider, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootst
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	resp.Plan = ChangePlanProto(plan, string(class), "")
+	resp.Plan = ChangePlanProto(plan, string(class), string(edgeKind(provider, req.GetEdge().GetKind())))
 	return resp, nil
 }
 

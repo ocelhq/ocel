@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
@@ -208,6 +209,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
 			Tier:           tier,
 			WithDependents: true,
+			Edge:           edgewire.Selection(cfg),
 		})
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
@@ -238,6 +240,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			Features:           requested,
 			Force:              opts.Force,
 			AcceptReplacements: opts.Yes,
+			Edge:               edgewire.Selection(cfg),
 		}
 		if opts.AutoHealDeclared {
 			req.AutoHeal = &opts.AutoHeal
@@ -247,6 +250,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		intended, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
 			Tier:   tier,
 			Intent: req,
+			Edge:   edgewire.Selection(cfg),
 		})
 		spinner.Stop()
 		if err != nil {

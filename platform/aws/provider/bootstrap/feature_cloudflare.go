@@ -3,9 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var cloudflareEdgeFeature = feature{
@@ -16,12 +13,9 @@ var cloudflareEdgeFeature = feature{
 	template:   cloudflareEdgeTemplate,
 	payloads:   cloudflareEdgePayloads,
 	placements: cloudflareEdgePlacements,
-	before:     adoptCloudflareEdge,
 	after:      mintEdgeCredentials,
 	drop:       severCloudflareEdge,
 }
-
-var cloudflareEdge = func() edge.Edge { return cloudflare.New() }
 
 func cloudflareEdgePayloads(ctx context.Context, store ObjectStore, bucket string) (stackPayloads, error) {
 	var code stackPayloads
@@ -125,10 +119,6 @@ func edgeUserResource(userName, class string, optimizer bool) string {
 		paramAssetBucketARN, paramAssetBucketARN,
 		paramStateTableARN, paramStateTableARN, StateTableIndexName,
 		paramRevalidateQueueARN, invoke)
-}
-
-func adoptCloudflareEdge(ctx context.Context, d stepDeps) error {
-	return bootstrapEdge(ctx, d, cloudflareEdge())
 }
 
 func severCloudflareEdge(ctx context.Context, d stepDeps) error {

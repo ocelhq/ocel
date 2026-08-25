@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -57,6 +58,94 @@ func standingBootstrapper(t *testing.T, class string) Bootstrapper {
 		Buckets: &teardownBuckets{},
 		Edge:    &teardownEdge{},
 	}
+}
+
+func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
+	t.Parallel()
+
+	front := &planningEdge{planned: []edge.PlanChange{
+		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanCreate},
+		{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanKeep, Reason: "already current"},
+	}}
+	b := Bootstrapper{CFN: &teardownCFN{present: map[string]bootstrap.Deployed{}}, Edge: front}
+
+	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
+		Class:    providerkit.ClassProduction,
+		Features: []string{bootstrap.FeatureISR},
+	})
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if len(plan.Groups) != 3 {
+		t.Fatalf("plan = %v, want the core stack, the isr stack and the edge", plan.Groups)
+	}
+	for _, group := range plan.Groups[:2] {
+		if group.Kind != providerkit.StackGroupKind || !strings.HasPrefix(group.Name, "aws/") {
+			t.Errorf("group %+v, want a stack named under the vendor that holds it", group)
+		}
+	}
+	if got := plan.Groups[0].Name; got != "aws/"+bootstrap.StackName {
+		t.Errorf("the core group is %q, want %q", got, "aws/"+bootstrap.StackName)
+	}
+	edgeGroup := plan.Groups[2]
+	if edgeGroup.Kind != providerkit.EdgeGroupKind || edgeGroup.Name != string(cloudflareKind)+"/edge" {
+		t.Errorf("the edge group = %+v, want the edge named under its own vendor", edgeGroup)
+	}
+	if edgeGroup.Feature != bootstrap.FeatureCloudflareEdge {
+		t.Errorf("the edge group's feature = %q, want the one the edge participates through", edgeGroup.Feature)
+	}
+	if edgeGroup.Action != providerkit.ActionUpdate {
+		t.Errorf("the edge group is %q, want an update where one of its resources is missing", edgeGroup.Action)
+	}
+	if len(edgeGroup.Changes) != len(front.planned) {
+		t.Errorf("the edge group carries %d changes, want the ones the edge planned", len(edgeGroup.Changes))
+	}
+	if front.classes[0] != edge.ClassProduction {
+		t.Errorf("the edge was planned for %q, want the class the bootstrap is for", front.classes[0])
+	}
+}
+
+func TestPlanLeavesOutAnEdgeThatCannotPlanItsOwnBootstrap(t *testing.T) {
+	t.Parallel()
+
+	b := Bootstrapper{CFN: &teardownCFN{present: map[string]bootstrap.Deployed{}}, Edge: &teardownEdge{}}
+
+	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{Class: providerkit.ClassProduction})
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	for _, group := range plan.Groups {
+		if group.Kind == providerkit.EdgeGroupKind {
+			t.Errorf("plan carries %+v for an edge that says nothing about its own bootstrap", group)
+		}
+	}
+}
+
+func TestPlanCarriesTheEdgesRefusalOut(t *testing.T) {
+	t.Parallel()
+
+	b := Bootstrapper{
+		CFN:  &teardownCFN{present: map[string]bootstrap.Deployed{}},
+		Edge: &planningEdge{err: errors.New("CLOUDFLARE_ACCOUNT_ID is not set")},
+	}
+
+	_, err := b.Plan(context.Background(), providerkit.BootstrapRequest{Class: providerkit.ClassProduction})
+	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_ACCOUNT_ID") {
+		t.Fatalf("Plan error = %v, want the edge's own account error carried out whole", err)
+	}
+}
+
+type planningEdge struct {
+	teardownEdge
+
+	planned []edge.PlanChange
+	err     error
+	classes []edge.Class
+}
+
+func (e *planningEdge) PlanBootstrap(_ context.Context, class edge.Class) ([]edge.PlanChange, error) {
+	e.classes = append(e.classes, class)
+	return e.planned, e.err
 }
 
 func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {

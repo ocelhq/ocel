@@ -10,7 +10,7 @@ import (
 func TestRunStamps(t *testing.T) {
 	t.Run("every stack it writes carries the schema, its own digest and the writer", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		req := everything()
 		req.Writer = "1.9.0"
@@ -40,7 +40,7 @@ func TestRunStamps(t *testing.T) {
 
 	t.Run("a dev build stamps a version that never parses", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{})
+		frontedBy(t, &fakeEdge{})
 
 		req := Request{Writer: "dev+cafebabe"}
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, req, nil, nil); err != nil {

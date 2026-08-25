@@ -163,7 +163,7 @@ func TestTagInvalidator(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				cfn := newFakeCFN()
-				standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+				frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 				if err := runAll(context.Background(), apisOf(cfn, newFakeSSM(), &fakeIAM{}, preloadedStore()), tc.target); err != nil {
 					t.Fatalf("run: %v", err)

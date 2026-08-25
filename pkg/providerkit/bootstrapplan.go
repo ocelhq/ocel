@@ -3,6 +3,8 @@ package providerkit
 import (
 	"slices"
 	"strings"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type ChangeAction string
@@ -18,8 +20,11 @@ const (
 
 const (
 	StackGroupKind = "stack"
+	EdgeGroupKind  = "edge"
 
 	DetailUnavailable = "resource-level detail unavailable"
+
+	reasonCurrent = "already current"
 )
 
 func ValidChangeAction(action ChangeAction) bool {
@@ -111,7 +116,7 @@ func baselineGroup(described Bootstrap, stack BootstrapStack, class Class) Chang
 	case behind(stack):
 		group.Action = ActionUpdate
 	default:
-		group.Action, group.Reason = ActionKeep, "already current"
+		group.Action, group.Reason = ActionKeep, reasonCurrent
 	}
 	return group
 }
@@ -124,9 +129,78 @@ func featureGroup(stack BootstrapStack, name string) ChangeGroup {
 	case behind(stack):
 		group.Action = ActionUpdate
 	default:
-		group.Action, group.Reason = ActionKeep, "already current"
+		group.Action, group.Reason = ActionKeep, reasonCurrent
 	}
 	return group
+}
+
+func Vendored(vendor Vendor, groups []ChangeGroup) []ChangeGroup {
+	named := slices.Clone(groups)
+	for i := range named {
+		named[i].Name = string(vendor) + "/" + named[i].Name
+	}
+	return named
+}
+
+func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) ChangeGroup {
+	group := ChangeGroup{
+		Kind:    EdgeGroupKind,
+		Name:    string(kind) + "/edge",
+		Feature: feature,
+		Changes: make([]Change, 0, len(planned)),
+	}
+	for _, change := range planned {
+		group.Changes = append(group.Changes, Change{
+			Kind:   change.Kind,
+			Name:   change.Name,
+			Action: edgeAction(change.Action),
+			Reason: change.Reason,
+		})
+	}
+	group.Action, group.Reason = rollUp(group.Changes)
+	return group
+}
+
+func edgeAction(action edge.PlanAction) ChangeAction {
+	switch action {
+	case edge.PlanCreate:
+		return ActionCreate
+	case edge.PlanUpdate:
+		return ActionUpdate
+	case edge.PlanKeep:
+		return ActionKeep
+	default:
+		return ""
+	}
+}
+
+func rollUp(changes []Change) (ChangeAction, string) {
+	creates, keeps := 0, 0
+	for _, change := range changes {
+		switch change.Action {
+		case ActionCreate:
+			creates++
+		case ActionKeep:
+			keeps++
+		}
+	}
+	switch {
+	case len(changes) == keeps:
+		return ActionKeep, reasonCurrent
+	case len(changes) == creates:
+		return ActionCreate, ""
+	default:
+		return ActionUpdate, ""
+	}
+}
+
+func FeatureNeedingEdge(catalogue []Feature, kind edge.Kind) string {
+	for _, f := range catalogue {
+		if slices.Contains(f.Needs, NeedsEdgePrefix+string(kind)) {
+			return f.Name
+		}
+	}
+	return ""
 }
 
 func behind(stack BootstrapStack) bool {

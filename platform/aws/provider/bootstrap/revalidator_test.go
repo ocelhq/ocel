@@ -454,7 +454,7 @@ func TestRunRevalidator(t *testing.T) {
 		} {
 			t.Run(tc.class, func(t *testing.T) {
 				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-				standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+				frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 				if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), tc.class, everything(), nil, nil); err != nil {
 					t.Fatalf("run: %v", err)

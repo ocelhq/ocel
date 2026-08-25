@@ -21,7 +21,7 @@ func TestRunNeverAsksWhatThePlanEntitles(t *testing.T) {
 	for _, class := range []string{ClassProduction, ClassPreview} {
 		t.Run(class, func(t *testing.T) {
 			ed := &freePlanEdge{fakeEdge: &fakeEdge{kind: "cloudflare"}}
-			standInCloudflare(t, ed)
+			frontedBy(t, ed)
 
 			if err := Run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), class, everything(), nil, nil); err != nil {
 				t.Fatalf("run: %v", err)
