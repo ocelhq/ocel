@@ -11,13 +11,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
-	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 )
 
 type Session struct {
 	LoadCredentials     func() (credentials.Credentials, error)
-	FetchProjectConfig  func(ctx context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error)
+	FetchAccount        func(ctx context.Context, apiURL, token, projectID string) (resolve.Account, error)
 	BuildApp            func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out io.Writer) error
 	CollectAppFunctions func(projectDir string) ([]manifestbuilder.Function, error)
 	DeploymentID        func(projectDir, app string) (string, error)

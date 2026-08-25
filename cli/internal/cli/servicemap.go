@@ -21,7 +21,7 @@ func publishServiceMap(cfg *projectconfig.Config, manifest *contractv1.Manifest,
 		Tag:         tag,
 	}, manifest, links)
 
-	if err := servicemap.Publish(cfg.Dir, record); err != nil {
+	if err := servicemap.Write(cfg.Dir, record); err != nil {
 		return fmt.Errorf("publish service map: %w", err)
 	}
 	return nil

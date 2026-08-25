@@ -138,8 +138,8 @@ func TestToDeclarations(t *testing.T) {
 			t.Fatalf("len(decls) = %d, want 1", len(decls))
 		}
 		d := decls[0]
-		if d.ID != "main" {
-			t.Errorf("ID = %q, want %q", d.ID, "main")
+		if d.Name != "main" {
+			t.Errorf("Name = %q, want %q", d.Name, "main")
 		}
 		if d.Type != linksv1.LinkType_LINK_TYPE_POSTGRES {
 			t.Errorf("Type = %v, want %v", d.Type, linksv1.LinkType_LINK_TYPE_POSTGRES)
@@ -253,7 +253,7 @@ export default {
 		clitest.SetLoggedIn(&sess)
 		clitest.StubBuild(&sess, []manifestbuilder.Function{
 			{
-				Name:         "api",
+				Route:        "api",
 				Runtime:      "nodejs24.x",
 				Handler:      "src/server.js",
 				ArtifactPath: "output/api",
@@ -612,7 +612,7 @@ export default {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
 		clitest.StubBuild(&sess, []manifestbuilder.Function{
-			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+			{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -650,8 +650,8 @@ export default {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
 		clitest.StubBuild(&sess, []manifestbuilder.Function{
-			{Name: "web", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
-			{Name: "admin", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/admin", Framework: "express", App: "admin"},
+			{Route: "web", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
+			{Route: "admin", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/admin", Framework: "express", App: "admin"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -706,7 +706,7 @@ export default {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
 		clitest.StubBuild(&sess, []manifestbuilder.Function{
-			{Name: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "output/index", Framework: "next", App: "express-app"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "output/index", Framework: "next", App: "express-app"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 

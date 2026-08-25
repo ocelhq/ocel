@@ -117,21 +117,21 @@ func TestHashDefs(t *testing.T) {
 	})
 }
 
-func TestFingerprint(t *testing.T) {
+func TestAccountFingerprint(t *testing.T) {
 	t.Parallel()
 
-	base := Fingerprint("https://api.example.com", "tok_a")
+	base := AccountFingerprint("https://api.example.com", "tok_a")
 
 	t.Run("changes with the token", func(t *testing.T) {
 		t.Parallel()
-		if Fingerprint("https://api.example.com", "tok_b") == base {
+		if AccountFingerprint("https://api.example.com", "tok_b") == base {
 			t.Fatal("Fingerprint should change when the token changes")
 		}
 	})
 
 	t.Run("changes with the base URL", func(t *testing.T) {
 		t.Parallel()
-		if Fingerprint("https://other.example.com", "tok_a") == base {
+		if AccountFingerprint("https://other.example.com", "tok_a") == base {
 			t.Fatal("Fingerprint should change when the base URL changes")
 		}
 	})

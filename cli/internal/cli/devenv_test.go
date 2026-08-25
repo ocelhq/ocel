@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -34,9 +34,9 @@ func withCredentials(sess *session.Session, apiURL string) {
 
 func withProjectEnv(sess *session.Session, envVars map[string]string) *atomic.Int32 {
 	var calls atomic.Int32
-	sess.FetchProjectConfig = func(_ context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error) {
+	sess.FetchAccount = func(_ context.Context, apiURL, token, projectID string) (resolve.Account, error) {
 		calls.Add(1)
-		return provision.ProjectConfig{ProjectID: projectID, EnvVars: envVars, APIURL: apiURL, Token: token}, nil
+		return resolve.Account{ProjectID: projectID, EnvVars: envVars, APIURL: apiURL, Token: token}, nil
 	}
 	return &calls
 }
@@ -68,7 +68,7 @@ func TestResolvedEnv(t *testing.T) {
 		projectEnv := map[string]string{"CONTESTED": "project"}
 		live := map[string]string{"CONTESTED": "live"}
 		dotfile := map[string]string{"CONTESTED": "dotfile", "DOTFILE_ONLY": "d"}
-		resources := []provision.Resource{
+		resources := []resolve.Resource{
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
@@ -93,7 +93,7 @@ func TestResolvedEnv(t *testing.T) {
 
 		projectEnv := map[string]string{"PROJECT_ONLY": "p", "OVERRIDDEN": "from-project"}
 		live := map[string]string{"WEBHOOK_SECRET": "whsec_live", "OVERRIDDEN": "from-live"}
-		resources := []provision.Resource{
+		resources := []resolve.Resource{
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
@@ -138,7 +138,7 @@ func TestResolvedEnv(t *testing.T) {
 			map[string]string{"OCEL_APP_FOLDER": "/from-project-env"},
 			map[string]string{"OCEL_APP_FOLDER": "/from-live"},
 			map[string]string{"OCEL_APP_FOLDER": "/from-dotfile"},
-			[]provision.Resource{{Name: "main", Env: map[string]string{"OCEL_APP_FOLDER": "/from-resource"}}},
+			[]resolve.Resource{{Name: "main", Env: map[string]string{"OCEL_APP_FOLDER": "/from-resource"}}},
 			"",
 			"/web",
 		)
@@ -685,8 +685,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 
 		sess := newSession()
 		withCredentials(&sess, resolveServer.URL)
-		sess.FetchProjectConfig = func(context.Context, string, string, string) (provision.ProjectConfig, error) {
-			return provision.ProjectConfig{}, errors.New("dial tcp: connection refused")
+		sess.FetchAccount = func(context.Context, string, string, string) (resolve.Account, error) {
+			return resolve.Account{}, errors.New("dial tcp: connection refused")
 		}
 
 		writeLink(t, root, resolveServer.URL, testProjectID(t))

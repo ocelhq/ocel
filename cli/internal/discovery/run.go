@@ -11,11 +11,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
-func Run(ctx context.Context, entry, serverURL string, stdout, stderr io.Writer) error {
+func Run(ctx context.Context, entry, resourceServerURL string, stdout, stderr io.Writer) error {
 	safeStdout, safeStderr := nodeprotocol.SyncPair(stdout, stderr)
 
 	cmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
-	cmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+serverURL)
+	cmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+resourceServerURL)
 	cmd.Stderr = safeStderr
 
 	pipe, err := cmd.StdoutPipe()

@@ -29,11 +29,11 @@ func stackAt(root, file string) string {
 
 func monorepoDeclarations(root string) []Declaration {
 	return []Declaration{
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main-db", Stack: stackAt(root, "shared/db.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "analytics-db", Stack: stackAt(root, "shared/analytics.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "audit-db", Stack: stackAt(root, "shared/audit.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "tenant-db", Stack: stackAt(root, "shared/tenant.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "uploads", Stack: stackAt(root, "shared/files.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: stackAt(root, "shared/db.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "analytics-db", Stack: stackAt(root, "shared/analytics.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "audit-db", Stack: stackAt(root, "shared/audit.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "tenant-db", Stack: stackAt(root, "shared/tenant.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Stack: stackAt(root, "shared/files.ts")},
 	}
 }
 
@@ -47,7 +47,7 @@ func monorepoApps() []App {
 func edgeStrings(usages []Usage) []string {
 	out := make([]string, 0, len(usages))
 	for _, u := range usages {
-		out = append(out, fmt.Sprintf("%s -> %s:%s [%s]", u.App, u.Type, u.ID, strings.Join(u.Files, " ")))
+		out = append(out, fmt.Sprintf("%s -> %s:%s [%s]", u.App, u.Type, u.Name, strings.Join(u.Files, " ")))
 	}
 	sort.Strings(out)
 	return out
@@ -83,7 +83,7 @@ func TestCompute(t *testing.T) {
 		}
 
 		for _, u := range usages {
-			if u.ID == "audit-db" {
+			if u.Name == "audit-db" {
 				t.Errorf("audit-db reached %q through %v, but apps/api/src/boot.ts only imports it for effect", u.App, u.Files)
 			}
 		}
@@ -98,7 +98,7 @@ func TestCompute(t *testing.T) {
 		}
 
 		for _, u := range usages {
-			if u.App == "worker" && u.ID == "uploads" {
+			if u.App == "worker" && u.Name == "uploads" {
 				t.Errorf("uploads reached worker through %v, but worker only takes db from the barrel", u.Files)
 			}
 		}
@@ -114,7 +114,7 @@ func TestCompute(t *testing.T) {
 
 		for _, u := range usages {
 			if slices.Contains(u.Files, "apps/worker/src/reexport.ts") || slices.Contains(u.Files, "apps/api/src/db-alias.ts") {
-				t.Errorf("%s:%s is provenanced to a conduit file: %v", u.Type, u.ID, u.Files)
+				t.Errorf("%s:%s is provenanced to a conduit file: %v", u.Type, u.Name, u.Files)
 			}
 		}
 	})
@@ -135,7 +135,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "jsx-in-js")
 
 		usages, err := Compute(root, []App{{Name: "web", Path: "apps/web"}}, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "metrics-db", Stack: stackAt(root, "shared/metrics.ts")},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "metrics-db", Stack: stackAt(root, "shared/metrics.ts")},
 		})
 		if err != nil {
 			t.Fatalf("Compute err = %v", err)
@@ -151,7 +151,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "computed-import")
 
 		_, err := Compute(root, []App{{Name: "worker", Path: "apps/worker"}}, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "metrics-db", Stack: stackAt(root, "shared/metrics.ts")},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "metrics-db", Stack: stackAt(root, "shared/metrics.ts")},
 		})
 
 		var unresolved *UnresolvedImportError
@@ -173,15 +173,15 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(root, monorepoApps(), []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main-db", Stack: "Error\n    at node:internal/modules/esm/module_job:271:25"},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: "Error\n    at node:internal/modules/esm/module_job:271:25"},
 		})
 
 		var unresolved *UnresolvedDeclarationError
 		if !errors.As(err, &unresolved) {
 			t.Fatalf("Compute err = %v, want an *UnresolvedDeclarationError", err)
 		}
-		if unresolved.ID != "main-db" {
-			t.Errorf("ID = %q, want %q", unresolved.ID, "main-db")
+		if unresolved.Name != "main-db" {
+			t.Errorf("Name = %q, want %q", unresolved.Name, "main-db")
 		}
 		if !strings.Contains(err.Error(), "main-db") {
 			t.Errorf("err = %v, want it to name the resource", err)
@@ -192,7 +192,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(root, monorepoApps(), []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main-db"},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db"},
 		})
 
 		var unresolved *UnresolvedDeclarationError
@@ -205,7 +205,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(root, monorepoApps(), []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main-db", Stack: stackAt(t.TempDir(), "elsewhere.ts")},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: stackAt(t.TempDir(), "elsewhere.ts")},
 		})
 
 		var unresolved *UnresolvedDeclarationError

@@ -162,15 +162,15 @@ func TestDerive(t *testing.T) {
 	})
 }
 
-func TestPublish(t *testing.T) {
+func TestWrite(t *testing.T) {
 	t.Parallel()
 
 	t.Run("no property value reaches the published record", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 
-		if err := Publish(dir, Derive(fixtureDeploy(), fixtureManifest(), fixtureLinks())); err != nil {
-			t.Fatalf("Publish() error = %v", err)
+		if err := Write(dir, Derive(fixtureDeploy(), fixtureManifest(), fixtureLinks())); err != nil {
+			t.Fatalf("Write() error = %v", err)
 		}
 
 		raw, err := os.ReadFile(Path(dir))
@@ -189,8 +189,8 @@ func TestPublish(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 
-		if err := Publish(dir, Record{Slug: "proj-123"}); err != nil {
-			t.Fatalf("Publish() error = %v", err)
+		if err := Write(dir, Record{Slug: "proj-123"}); err != nil {
+			t.Fatalf("Write() error = %v", err)
 		}
 
 		var got Record
@@ -224,8 +224,8 @@ func TestClear(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 
-		if err := Publish(dir, Record{Slug: "stale"}); err != nil {
-			t.Fatalf("Publish() error = %v", err)
+		if err := Write(dir, Record{Slug: "stale"}); err != nil {
+			t.Fatalf("Write() error = %v", err)
 		}
 		if err := Clear(dir); err != nil {
 			t.Fatalf("Clear() error = %v", err)

@@ -109,7 +109,7 @@ func Path(projectDir string) string {
 	return filepath.Join(projectDir, scratchDirName, fileName)
 }
 
-func Publish(projectDir string, r Record) error {
+func Write(projectDir string, r Record) error {
 	r.SchemaVersion = SchemaVersion
 	if r.DeployedAt.IsZero() {
 		r.DeployedAt = time.Now().UTC()

@@ -1,4 +1,4 @@
-package provision
+package resolve
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "ocel-provision-test-config-")
+	dir, err := os.MkdirTemp("", "ocel-resolve-test-config-")
 	if err != nil {
 		panic(err)
 	}

@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
-	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
 )
 
 var version = "dev"
@@ -96,7 +96,7 @@ func init() {
 func newSession() session.Session {
 	return session.Session{
 		LoadCredentials:     credentials.Load,
-		FetchProjectConfig:  provision.FetchProjectConfig,
+		FetchAccount:        resolve.StubAccount,
 		BuildApp:            appbuilder.Build,
 		CollectAppFunctions: appbuilder.CollectFunctions,
 		DeploymentID:        appbuilder.DeploymentID,

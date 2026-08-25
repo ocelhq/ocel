@@ -364,7 +364,7 @@ func collectFunctions(outputDir string) ([]manifestbuilder.Function, error) {
 		if byApp := strings.Compare(a.App, b.App); byApp != 0 {
 			return byApp
 		}
-		return strings.Compare(a.Name, b.Name)
+		return strings.Compare(a.Route, b.Route)
 	})
 	return functions, nil
 }
@@ -429,7 +429,7 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 	}
 
 	return manifestbuilder.Function{
-		Name:         route,
+		Route:        route,
 		Runtime:      fc.Runtime,
 		Handler:      fc.Handler,
 		ArtifactPath: filepath.ToSlash(artifactRel),

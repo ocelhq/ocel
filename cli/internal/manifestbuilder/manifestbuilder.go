@@ -13,11 +13,11 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-const SchemaVersion = "provider.v1"
+const ContractVersion = "provider.v1"
 
 type Declaration struct {
 	Type     linksv1.LinkType
-	ID       string
+	Name     string
 	Postgres *resourcesv1.PostgresConfig
 	Bucket   *resourcesv1.BucketConfig
 	Source   string
@@ -33,20 +33,20 @@ type App struct {
 
 type Usage struct {
 	Type  linksv1.LinkType
-	ID    string
+	Name  string
 	Files []string
 }
 
 type DanglingUsageError struct {
 	App  string
 	Type linksv1.LinkType
-	ID   string
+	Name string
 }
 
 func (e *DanglingUsageError) Error() string {
 	return fmt.Sprintf(
 		"manifestbuilder: app %q is attributed %s %q, which nothing in this project declares",
-		e.App, e.Type, e.ID,
+		e.App, e.Type, e.Name,
 	)
 }
 
@@ -60,7 +60,7 @@ type Variable struct {
 }
 
 type Function struct {
-	Name         string
+	Route        string
 	Runtime      string
 	Handler      string
 	ArtifactPath string
@@ -71,15 +71,15 @@ type Function struct {
 
 type DuplicateError struct {
 	TypeToken    string
-	ID           string
+	Name         string
 	FirstSource  string
 	SecondSource string
 }
 
 func (e *DuplicateError) Error() string {
 	return fmt.Sprintf(
-		"manifestbuilder: duplicate resource declaration for type=%s id=%q: declared at %s and %s",
-		e.TypeToken, e.ID, sourceOrUnknown(e.FirstSource), sourceOrUnknown(e.SecondSource),
+		"manifestbuilder: duplicate resource declaration for type=%s name=%q: declared at %s and %s",
+		e.TypeToken, e.Name, sourceOrUnknown(e.FirstSource), sourceOrUnknown(e.SecondSource),
 	)
 }
 
@@ -111,8 +111,8 @@ func typeKind(t linksv1.LinkType) (naming.Kind, error) {
 	return kind, nil
 }
 
-func resourceLogicalName(kind naming.Kind, id string) string {
-	return naming.Join(naming.FieldSeparator, string(kind), id)
+func resourceLogicalName(kind naming.Kind, name string) string {
+	return naming.Join(naming.FieldSeparator, string(kind), name)
 }
 
 func functionLogicalName(app, route string) string {
@@ -120,16 +120,16 @@ func functionLogicalName(app, route string) string {
 }
 
 func describeDeclaration(kind naming.Kind, d Declaration) string {
-	return fmt.Sprintf("%s %q declared at %s", kind, d.ID, sourceOrUnknown(d.Source))
+	return fmt.Sprintf("%s %q declared at %s", kind, d.Name, sourceOrUnknown(d.Source))
 }
 
 func describeFunction(f Function) string {
-	return fmt.Sprintf("route %q of app %q", f.Name, f.App)
+	return fmt.Sprintf("route %q of app %q", f.Route, f.App)
 }
 
 type identity struct {
-	typ linksv1.LinkType
-	id  string
+	typ  linksv1.LinkType
+	name string
 }
 
 type UnboundLinkError struct {
@@ -162,8 +162,8 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 
 	resources := make([]*contractv1.ManifestResource, 0, len(declarations))
 	for _, d := range declarations {
-		if d.ID == "" {
-			return nil, fmt.Errorf("manifestbuilder: declaration has empty resource id")
+		if d.Name == "" {
+			return nil, fmt.Errorf("manifestbuilder: declaration has empty resource name")
 		}
 
 		kind, err := typeKind(d.Type)
@@ -171,18 +171,18 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 			return nil, err
 		}
 
-		id := identity{d.Type, d.ID}
-		if prior, ok := seen[id]; ok {
+		key := identity{d.Type, d.Name}
+		if prior, ok := seen[key]; ok {
 			return nil, &DuplicateError{
 				TypeToken:    string(kind),
-				ID:           d.ID,
+				Name:         d.Name,
 				FirstSource:  prior.Source,
 				SecondSource: d.Source,
 			}
 		}
-		seen[id] = d
+		seen[key] = d
 
-		logical := resourceLogicalName(kind, d.ID)
+		logical := resourceLogicalName(kind, d.Name)
 		described := describeDeclaration(kind, d)
 		if prior, ok := named[logical]; ok {
 			return nil, &CollisionError{LogicalName: logical, First: prior, Second: described}
@@ -193,7 +193,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 			LogicalName: logical,
 			Resource: &resourcesv1.ResourceIdentifier{
 				Type: d.Type,
-				Name: d.ID,
+				Name: d.Name,
 			},
 		}
 		if d.Postgres != nil {
@@ -215,11 +215,11 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 
 	manifestFunctions := make([]*contractv1.ManifestFunction, 0, len(functions))
 	for _, f := range functions {
-		if f.App == "" || f.Name == "" {
-			return nil, fmt.Errorf("manifestbuilder: function %q of app %q needs both an app and a route name", f.Name, f.App)
+		if f.App == "" || f.Route == "" {
+			return nil, fmt.Errorf("manifestbuilder: function %q of app %q needs both an app and a route name", f.Route, f.App)
 		}
 
-		logical := functionLogicalName(f.App, f.Name)
+		logical := functionLogicalName(f.App, f.Route)
 		described := describeFunction(f)
 		if prior, ok := named[logical]; ok {
 			return nil, &CollisionError{LogicalName: logical, First: prior, Second: described}
@@ -256,7 +256,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 	}
 
 	return &contractv1.Manifest{
-		SchemaVersion: SchemaVersion,
+		SchemaVersion: ContractVersion,
 		Slug:          slug,
 		Resources:     resources,
 		Functions:     manifestFunctions,
@@ -291,15 +291,15 @@ func buildUsages(apps []App, declared map[identity]Declaration) ([]*contractv1.M
 	merged := map[string]*contractv1.ManifestUsage{}
 	for _, a := range apps {
 		for _, u := range a.Usages {
-			if _, ok := declared[identity{u.Type, u.ID}]; !ok {
-				return nil, &DanglingUsageError{App: a.Name, Type: u.Type, ID: u.ID}
+			if _, ok := declared[identity{u.Type, u.Name}]; !ok {
+				return nil, &DanglingUsageError{App: a.Name, Type: u.Type, Name: u.Name}
 			}
 			kind, err := typeKind(u.Type)
 			if err != nil {
 				return nil, err
 			}
 
-			logical := resourceLogicalName(kind, u.ID)
+			logical := resourceLogicalName(kind, u.Name)
 			edge, ok := merged[a.Name+naming.KeySeparator+logical]
 			if !ok {
 				edge = &contractv1.ManifestUsage{App: a.Name, Resource: logical}

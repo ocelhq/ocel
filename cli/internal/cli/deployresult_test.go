@@ -23,7 +23,7 @@ func TestDeployResult(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
 		clitest.StubBuild(&sess, []manifestbuilder.Function{{
-			Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js",
+			Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js",
 			ArtifactPath: "output/api", Framework: "express", App: "api",
 		}})
 		root, _ := clitest.SetUpDeployFixture(t)

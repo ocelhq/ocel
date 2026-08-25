@@ -85,7 +85,7 @@ func HashDefs(defs []Def) string {
 	return hash(sorted)
 }
 
-func Fingerprint(baseURL, token string) string {
+func AccountFingerprint(baseURL, token string) string {
 	return hash([2]string{baseURL, token})
 }
 

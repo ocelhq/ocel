@@ -17,7 +17,7 @@ func TestDeployUsageEdges(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
 		clitest.StubBuild(&sess, []manifestbuilder.Function{
-			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+			{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
@@ -89,8 +89,8 @@ func TestDeployScopesDeliveryToTheUsingApps(t *testing.T) {
 	sess := newSession()
 	clitest.SetLoggedIn(&sess)
 	clitest.StubBuild(&sess, []manifestbuilder.Function{
-		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
-		{Name: "web", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
+		{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+		{Route: "web", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
 	})
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	writeSharedResourceMonorepo(t, root)
@@ -121,7 +121,7 @@ func TestDeployAttributesAnUnconfiguredProjectToItsOnlyApp(t *testing.T) {
 	sess := newSession()
 	clitest.SetLoggedIn(&sess)
 	clitest.StubBuild(&sess, []manifestbuilder.Function{
-		{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output", Framework: "express", App: "web"},
+		{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output", Framework: "express", App: "web"},
 	})
 	root, sockPath := clitest.SetUpDeployFixture(t)
 
@@ -144,8 +144,8 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
 		clitest.StubBuild(&sess, []manifestbuilder.Function{
-			{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
-			{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
 		})
 		root, _ := clitest.SetUpDeployFixture(t)
 
@@ -166,8 +166,8 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
 		clitest.StubBuild(&sess, []manifestbuilder.Function{
-			{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
-			{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/legacy", Framework: "express", App: "legacy"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/legacy", Framework: "express", App: "legacy"},
 		})
 		root, _ := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
@@ -187,7 +187,7 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		sess := newSession()
 		clitest.SetLoggedIn(&sess)
 		clitest.StubBuild(&sess, []manifestbuilder.Function{
-			{Name: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 		root, _ := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)

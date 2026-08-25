@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
-	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
 )
@@ -103,24 +103,24 @@ func (l *liveKeys) reset() {
 
 type configCache struct {
 	mu  sync.Mutex
-	cfg *provision.ProjectConfig
+	cfg *resolve.Account
 }
 
 func newConfigCache() *configCache {
 	return &configCache{}
 }
 
-func (c *configCache) use(cfg provision.ProjectConfig) {
+func (c *configCache) use(cfg resolve.Account) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cfg = &cfg
 }
 
-func (c *configCache) held() (provision.ProjectConfig, bool) {
+func (c *configCache) held() (resolve.Account, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.cfg == nil {
-		return provision.ProjectConfig{}, false
+		return resolve.Account{}, false
 	}
 	return *c.cfg, true
 }

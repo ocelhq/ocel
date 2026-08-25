@@ -222,7 +222,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var opened []string
 		recordBrowser(&sess, &opened, &mu)
 		clitest.StubBuild(&sess, []manifestbuilder.Function{
-			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+			{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 
 		var out syncBuffer
