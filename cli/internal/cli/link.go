@@ -17,7 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/providerrunner"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -127,7 +127,7 @@ func runLinkSet(ctx context.Context, d session.Session, cwd string, stdin io.Rea
 		return err
 	}
 	owner := opts.publisher()
-	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
@@ -166,7 +166,7 @@ func decodeLink(stdin io.Reader) (*linksv1.Link, error) {
 }
 
 func runLinkRm(ctx context.Context, d session.Session, cwd, name string, opts linkOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
@@ -193,7 +193,7 @@ func runLinkRm(ctx context.Context, d session.Session, cwd, name string, opts li
 }
 
 func runLinkLs(ctx context.Context, d session.Session, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
@@ -215,7 +215,7 @@ func runLinkLs(ctx context.Context, d session.Session, cwd string, opts linkOpti
 }
 
 func runLinkGenerate(ctx context.Context, d session.Session, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts.bootstrap(), stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
@@ -230,7 +230,7 @@ func runLinkGenerate(ctx context.Context, d session.Session, cwd string, opts li
 		}
 
 		path := filepath.Join(cfg.Dir, linkTypesFileName)
-		if err := os.WriteFile(path, []byte(renderLinkTypes(provider.Package, describeLinkCoordinate(opts), resp.GetLinks())), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(renderLinkTypes(runner.Package(), describeLinkCoordinate(opts), resp.GetLinks())), 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", linkTypesFileName, err)
 		}
 

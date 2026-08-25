@@ -10,20 +10,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/obs"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
-func newRun(t *testing.T) (context.Context, *obs.Run) {
+func newRun(t *testing.T) (context.Context, *runtrace.Run) {
 	t.Helper()
-	ctx, run, err := obs.Start(context.Background(), t.TempDir(), "ocel build")
+	ctx, run, err := runtrace.Start(context.Background(), t.TempDir(), "ocel build")
 	if err != nil {
-		t.Fatalf("obs.Start: %v", err)
+		t.Fatalf("runtrace.Start: %v", err)
 	}
 	t.Cleanup(func() { _ = run.Close() })
 	return ctx, run
 }
 
-func readTrace(t *testing.T, run *obs.Run) string {
+func readTrace(t *testing.T, run *runtrace.Run) string {
 	t.Helper()
 	raw, err := os.ReadFile(strings.TrimSuffix(run.LogPath(), ".ndjson") + ".otlp.json")
 	if err != nil {
@@ -32,7 +32,7 @@ func readTrace(t *testing.T, run *obs.Run) string {
 	return string(raw)
 }
 
-func readLog(t *testing.T, run *obs.Run) string {
+func readLog(t *testing.T, run *runtrace.Run) string {
 	t.Helper()
 	raw, err := os.ReadFile(run.LogPath())
 	if err != nil {

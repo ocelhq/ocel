@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/providerrunner"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	"github.com/ocelhq/ocel/cli/node"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -40,7 +40,7 @@ func init() {
 }
 
 func runEnvUI(ctx context.Context, d session.Session, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
+	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		gate, err := discoverVariables(ctx, cfg, runner, opts, stderr)
 		if err != nil {
 			return err
@@ -59,7 +59,7 @@ func openVarsUI(
 	d session.Session,
 	ctx context.Context,
 	cfg *projectconfig.Config,
-	runner *providerrunner.Runner,
+	runner *provider.Runner,
 	preview bool,
 	gate *envgate.Gate,
 	stdout io.Writer,
@@ -79,7 +79,7 @@ func openVarsUI(
 func startVarsUI(
 	ctx context.Context,
 	cfg *projectconfig.Config,
-	runner *providerrunner.Runner,
+	runner *provider.Runner,
 	preview bool,
 	gate *envgate.Gate,
 ) (*varsui.Session, error) {
@@ -112,7 +112,7 @@ func startVarsUI(
 	})
 }
 
-func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, opts envOptions, stderr io.Writer) (*envgate.Gate, error) {
+func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, opts envOptions, stderr io.Writer) (*envgate.Gate, error) {
 	gate := envGate(cfg, runner, opts)
 	if _, err := deploycollector.Collect(ctx, cfg, gate, io.Discard, stderr); err != nil {
 		return nil, err
@@ -120,7 +120,7 @@ func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *p
 	return gate, nil
 }
 
-func envGate(cfg *projectconfig.Config, runner *providerrunner.Runner, opts envOptions) *envgate.Gate {
+func envGate(cfg *projectconfig.Config, runner *provider.Runner, opts envOptions) *envgate.Gate {
 	return envgate.New(runnerValues{
 		runner: runner,
 		slug:   cfg.Slug,

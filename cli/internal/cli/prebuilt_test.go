@@ -15,8 +15,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
-	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -24,9 +24,9 @@ import (
 
 func newBuildManifestSession(t *testing.T) (*deployui.Session, *bytes.Buffer) {
 	t.Helper()
-	_, run, err := obs.Start(context.Background(), t.TempDir(), "ocel deploy")
+	_, run, err := runtrace.Start(context.Background(), t.TempDir(), "ocel deploy")
 	if err != nil {
-		t.Fatalf("obs.Start() = %v", err)
+		t.Fatalf("runtrace.Start() = %v", err)
 	}
 	t.Cleanup(func() { _ = run.Close() })
 

@@ -17,8 +17,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/node"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -1276,9 +1276,9 @@ for (let i = 0; i < 4000; i++) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		ctx, run, err := obs.Start(context.Background(), dir, "ocel build")
+		ctx, run, err := runtrace.Start(context.Background(), dir, "ocel build")
 		if err != nil {
-			t.Fatalf("obs.Start: %v", err)
+			t.Fatalf("runtrace.Start: %v", err)
 		}
 
 		script := fmt.Sprintf(`const emit = (r) => console.log(%s + JSON.stringify(r));

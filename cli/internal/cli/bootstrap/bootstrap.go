@@ -11,15 +11,13 @@ import (
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
-	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	"github.com/ocelhq/ocel/cli/internal/providersession"
-	"github.com/ocelhq/ocel/cli/node"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -187,23 +185,13 @@ func credentialTierArg(args []string) (contractv1.CredentialTier, error) {
 }
 
 func Run(ctx context.Context, sess session.Session, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, provider, err := resolveProject(ctx, sess, cwd)
+	cfg, err := resolveProject(ctx, sess, cwd)
 	if err != nil {
 		return err
 	}
-
-	ctx, run, err := obs.Start(ctx, cfg.Dir, "ocel bootstrap "+Name(tier))
-	if err != nil {
-		return err
-	}
-	defer run.Close()
-
-	ui := deployui.New(stdout, run, sess.Format(), sess.Verbose())
-	defer ui.Close()
 
 	asked := prompt.New(stdout, stdin)
-	provW := ui.BuildWriter()
-	err = providersession.Drive(ctx, sess.LocateProviderBinary, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+	return providerui.Run(ctx, sess, cfg, "ocel bootstrap "+Name(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
 		client, err := runner.Deployments()
 		if err != nil {
 			return err
@@ -214,7 +202,7 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 		})
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				return fmt.Errorf("%s cannot say which features a bootstrap has; it predates them. Upgrade the provider pinned in this project and try again", provider.Package)
+				return fmt.Errorf("%s cannot say which features a bootstrap has; it predates them. Upgrade the provider pinned in this project and try again", runner.Package())
 			}
 			return err
 		}
@@ -263,7 +251,7 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 		}
 
 		if interactive {
-			proceed, err := asked.Confirm(ctx, fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), provider.Package))
+			proceed, err := asked.Confirm(ctx, fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package()))
 			if err != nil {
 				return err
 			}
@@ -282,40 +270,29 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 		if opts.Healing {
 			req.AutoHeal = &opts.AutoHeal
 		}
-		if err := providerrunner.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
+		if err := provider.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish("Bootstrapped")
 		return nil
 	})
-	if err != nil {
-		return providersession.Fail(ctx, ui, err)
-	}
-	return nil
 }
 
-func resolveProject(ctx context.Context, sess session.Session, cwd string) (*projectconfig.Config, *projectconfig.ProviderDescriptor, error) {
+func resolveProject(ctx context.Context, sess session.Session, cwd string) (*projectconfig.Config, error) {
 	cfg, err := projectconfig.Resolve(ctx, cwd, sess.ConfigPath())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	if err := node.Ensure(cfg.Dir); err != nil {
-		return nil, nil, err
-	}
-	provider, err := cfg.RequireProvider()
-	if err != nil {
-		return nil, nil, err
-	}
-	return cfg, provider, nil
+	return cfg, nil
 }
 
 func RunPolicy(ctx context.Context, sess session.Session, cwd string, tier contractv1.CredentialTier, stdout, stderr io.Writer) error {
-	cfg, provider, err := resolveProject(ctx, sess, cwd)
+	cfg, err := resolveProject(ctx, sess, cwd)
 	if err != nil {
 		return err
 	}
 
-	return providersession.Drive(ctx, sess.LocateProviderBinary, cfg, provider, stderr, stderr, func(runner *providerrunner.Runner) error {
+	return provider.Drive(ctx, cfg, stderr, stderr, func(runner *provider.Runner) error {
 		client, err := runner.Deployments()
 		if err != nil {
 			return err
@@ -323,7 +300,7 @@ func RunPolicy(ctx context.Context, sess session.Session, cwd string, tier contr
 		policy, err := client.GetCredentialPolicy(ctx, &contractv1.CredentialPolicyRequest{Tier: tier})
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				return fmt.Errorf("%s cannot say what permissions these credentials need; it predates them. Upgrade the provider pinned in this project and try again", provider.Package)
+				return fmt.Errorf("%s cannot say what permissions these credentials need; it predates them. Upgrade the provider pinned in this project and try again", runner.Package())
 			}
 			return err
 		}

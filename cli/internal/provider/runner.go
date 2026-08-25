@@ -1,4 +1,4 @@
-package providerrunner
+package provider
 
 import (
 	"bufio"
@@ -118,7 +118,7 @@ type Runner struct {
 
 func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	if cfg.BinaryPath == "" {
-		return nil, errors.New("providerrunner: BinaryPath is required")
+		return nil, errors.New("provider: BinaryPath is required")
 	}
 
 	token, err := newSessionToken()
@@ -140,15 +140,15 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, fmt.Errorf("providerrunner: attach stdout pipe: %w", err)
+		return nil, fmt.Errorf("provider: attach stdout pipe: %w", err)
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		return nil, fmt.Errorf("providerrunner: attach stderr pipe: %w", err)
+		return nil, fmt.Errorf("provider: attach stderr pipe: %w", err)
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("providerrunner: spawn provider %q: %w", cfg.BinaryPath, err)
+		return nil, fmt.Errorf("provider: spawn provider %q: %w", cfg.BinaryPath, err)
 	}
 
 	r := &Runner{
@@ -256,7 +256,7 @@ func (r *Runner) configure(ctx context.Context) error {
 		if errors.As(err, &rejected) && rejected.Code() == connect.CodeInvalidArgument {
 			return fmt.Errorf("%s configures %s with options it does not accept: %s", projectconfig.ConfigFileName, r.providerPackage, rejected.Message())
 		}
-		return fmt.Errorf("providerrunner: configure the provider session: %w", err)
+		return fmt.Errorf("provider: configure the provider session: %w", err)
 	}
 	return nil
 }
@@ -264,7 +264,7 @@ func (r *Runner) configure(ctx context.Context) error {
 func (r *Runner) dial(addr string) error {
 	network, address, err := channel.ParseAddr(addr)
 	if err != nil {
-		return fmt.Errorf("providerrunner: parse readiness address: %w", err)
+		return fmt.Errorf("provider: parse readiness address: %w", err)
 	}
 
 	httpClient := &http.Client{
@@ -286,6 +286,10 @@ func (r *Runner) dial(addr string) error {
 	return nil
 }
 
+func (r *Runner) Package() string {
+	return r.providerPackage
+}
+
 func (r *Runner) Vars() (envvarsv1connect.EnvVarsServiceClient, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -304,9 +308,9 @@ func (r *Runner) Deployments() (contractv1connect.ProviderServiceClient, error) 
 	return r.client, nil
 }
 
-var ErrVarsUnavailable = errors.New("providerrunner: the variable store was reached before a successful Ready")
+var ErrVarsUnavailable = errors.New("provider: the variable store was reached before a successful Ready")
 
-var ErrDeploymentsUnavailable = errors.New("providerrunner: the provider was reached before a successful Ready")
+var ErrDeploymentsUnavailable = errors.New("provider: the provider was reached before a successful Ready")
 
 func Stream[Req any](
 	ctx context.Context,
@@ -326,7 +330,7 @@ func Stream[Req any](
 
 func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) error {
 	if callErr != nil {
-		return fmt.Errorf("providerrunner: call %s: %w", rpc, callErr)
+		return fmt.Errorf("provider: call %s: %w", rpc, callErr)
 	}
 	defer stream.Close()
 
@@ -345,11 +349,11 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[p
 
 	if err := stream.Err(); err != nil {
 		if connect.CodeOf(err) == connect.CodeInvalidArgument {
-			return fmt.Errorf("providerrunner: call %s: %w", rpc, err)
+			return fmt.Errorf("provider: call %s: %w", rpc, err)
 		}
-		return fmt.Errorf("providerrunner: provider connection lost: %w", err)
+		return fmt.Errorf("provider: provider connection lost: %w", err)
 	}
-	return fmt.Errorf("providerrunner: provider closed the %s stream without a result", rpc)
+	return fmt.Errorf("provider: provider closed the %s stream without a result", rpc)
 }
 
 var (
@@ -469,7 +473,7 @@ func (r *Runner) drainStdout(stdout io.Reader) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		wrapped := fmt.Errorf("providerrunner: read provider stdout: %w", err)
+		wrapped := fmt.Errorf("provider: read provider stdout: %w", err)
 		r.record(wrapped.Error())
 		if !ready {
 			select {
@@ -490,7 +494,7 @@ func (r *Runner) drainStderr(stderr io.Reader) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		r.record(fmt.Errorf("providerrunner: read provider stderr: %w", err).Error())
+		r.record(fmt.Errorf("provider: read provider stderr: %w", err).Error())
 	}
 }
 
@@ -504,7 +508,7 @@ func (r *Runner) record(line string) {
 func newSessionToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("providerrunner: generate session token: %w", err)
+		return "", fmt.Errorf("provider: generate session token: %w", err)
 	}
 	return hex.EncodeToString(buf), nil
 }

@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/attribution"
+	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
@@ -26,13 +27,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
-	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	"github.com/ocelhq/ocel/cli/internal/providersession"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
-	"github.com/ocelhq/ocel/cli/node"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -92,15 +90,6 @@ func runDeploy(ctx context.Context, d session.Session, cwd string, opts deployOp
 		return err
 	}
 
-	if err := node.Ensure(cfg.Dir); err != nil {
-		return err
-	}
-
-	provider, err := cfg.RequireProvider()
-	if err != nil {
-		return err
-	}
-
 	if err := deployresult.Clear(cfg.Dir); err != nil {
 		return err
 	}
@@ -108,17 +97,7 @@ func runDeploy(ctx context.Context, d session.Session, cwd string, opts deployOp
 		return err
 	}
 
-	ctx, run, err := obs.Start(ctx, cfg.Dir, "ocel deploy")
-	if err != nil {
-		return err
-	}
-	defer run.Close()
-
-	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
-	defer ui.Close()
-
-	provW := ui.BuildWriter()
-	err = providersession.Drive(ctx, d.LocateProviderBinary, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+	return providerui.Run(ctx, d, cfg, "ocel deploy", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
 		willConfirm := !opts.yes && d.StdinIsTerminal(stdin)
 		knownSlugs, err := preflightDeploy(ctx, d, runner, cfg, willConfirm, stdout, stdin)
 		if err != nil {
@@ -126,7 +105,7 @@ func runDeploy(ctx context.Context, d session.Session, cwd string, opts deployOp
 		}
 
 		if willConfirm {
-			proceed, err := confirmDeploy(ctx, cfg.Slug, provider.Package, knownSlugs, stdout, stdin)
+			proceed, err := confirmDeploy(ctx, cfg.Slug, runner.Package(), knownSlugs, stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -174,7 +153,7 @@ func runDeploy(ctx context.Context, d session.Session, cwd string, opts deployOp
 		}
 
 		var out deployOutcome
-		if err := providerrunner.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.render(ui)); err != nil {
+		if err := provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.render(ui)); err != nil {
 			return err
 		}
 
@@ -187,10 +166,6 @@ func runDeploy(ctx context.Context, d session.Session, cwd string, opts deployOp
 		ui.Deployed("Deployed", out.appURLs, out.urlNote, out.flip, out.links, out.functions)
 		return nil
 	})
-	if err != nil {
-		return providersession.Fail(ctx, ui, err)
-	}
-	return nil
 }
 
 func collectAndBuildManifest(ctx context.Context, d session.Session, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *deployui.Session) (*contractv1.Manifest, error) {
@@ -427,7 +402,7 @@ func envApps(cfg *projectconfig.Config) []envgate.App {
 }
 
 type runnerValues struct {
-	runner *providerrunner.Runner
+	runner *provider.Runner
 	slug   string
 	tier   environmentv1.Tier
 }

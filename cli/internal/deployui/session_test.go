@@ -11,16 +11,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/obs"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func startTestRun(t *testing.T, dir, command string) *obs.Run {
+func startTestRun(t *testing.T, dir, command string) *runtrace.Run {
 	t.Helper()
-	_, run, err := obs.Start(context.Background(), dir, command)
+	_, run, err := runtrace.Start(context.Background(), dir, command)
 	if err != nil {
-		t.Fatalf("obs.Start() = %v", err)
+		t.Fatalf("runtrace.Start() = %v", err)
 	}
 	t.Cleanup(func() { _ = run.Close() })
 	return run
@@ -306,9 +306,9 @@ func TestSession(t *testing.T) {
 
 		var paths []string
 		for i := 0; i < 12; i++ {
-			_, run, err := obs.Start(context.Background(), dir, "ocel deploy")
+			_, run, err := runtrace.Start(context.Background(), dir, "ocel deploy")
 			if err != nil {
-				t.Fatalf("obs.Start() = %v", err)
+				t.Fatalf("runtrace.Start() = %v", err)
 			}
 			var out bytes.Buffer
 			s := New(&out, run, FormatHuman, false)
@@ -488,7 +488,7 @@ type traceAttr struct {
 	Value map[string]any `json:"value"`
 }
 
-func traceSpanAttrs(t *testing.T, run *obs.Run, spanName string) []traceAttr {
+func traceSpanAttrs(t *testing.T, run *runtrace.Run, spanName string) []traceAttr {
 	t.Helper()
 	tracePath := filepath.Join(run.Dir(), run.TraceID()+".otlp.json")
 	raw, err := os.ReadFile(tracePath)

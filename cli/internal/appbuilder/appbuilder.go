@@ -18,8 +18,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbundler"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/node"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -477,7 +477,7 @@ func runNode(ctx context.Context, scriptPath string, env []string, request []byt
 		return fmt.Errorf("node-builder failed: %w", err)
 	}
 
-	proc := &nodeprotocol.Processor{Run: obs.FromContext(ctx), Forward: safeOut}
+	proc := &nodeprotocol.Processor{Run: runtrace.FromContext(ctx), Forward: safeOut}
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("node-builder failed: %w", err)

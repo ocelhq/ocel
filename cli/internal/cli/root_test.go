@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/deployui"
-	"github.com/ocelhq/ocel/cli/internal/obs"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
 func TestLogFormatIsIndependentOfVerbosity(t *testing.T) {
@@ -43,9 +43,9 @@ func TestLogFormatFlagReachesTheSessionOutput(t *testing.T) {
 	t.Cleanup(func() { logFormatFlag = origFormat })
 
 	dir := t.TempDir()
-	_, run, err := obs.Start(context.Background(), dir, "ocel deploy")
+	_, run, err := runtrace.Start(context.Background(), dir, "ocel deploy")
 	if err != nil {
-		t.Fatalf("obs.Start() = %v", err)
+		t.Fatalf("runtrace.Start() = %v", err)
 	}
 	t.Cleanup(func() { _ = run.Close() })
 

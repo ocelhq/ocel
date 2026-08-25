@@ -40,7 +40,7 @@ var runCmd = &cobra.Command{
 }
 
 func runRun(ctx context.Context, d session.Session, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	// TODO: unlike build/deploy, this never calls obs.Start, so discovery
+	// TODO: unlike build/deploy, this never calls runtrace.Start, so discovery
 	// below produces no spans or logs and nothing else says so.
 	creds, err := d.LoadCredentials()
 	if err != nil {

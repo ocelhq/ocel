@@ -8,7 +8,7 @@ import (
 	"os/exec"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/cli/internal/obs"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
 func Run(ctx context.Context, entry, serverURL string, stdout, stderr io.Writer) error {
@@ -23,7 +23,7 @@ func Run(ctx context.Context, entry, serverURL string, stdout, stderr io.Writer)
 		return fmt.Errorf("discovery failed: %w", err)
 	}
 
-	proc := &nodeprotocol.Processor{Run: obs.FromContext(ctx), Forward: safeStdout}
+	proc := &nodeprotocol.Processor{Run: runtrace.FromContext(ctx), Forward: safeStdout}
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("discovery failed: %w", err)

@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/session"
@@ -17,25 +16,23 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/providerlocator"
-	"github.com/ocelhq/ocel/cli/internal/providersession"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/provision"
 )
 
 func NewSession() session.Session {
 	return session.Session{
-		LoadCredentials:      credentials.Load,
-		FetchProjectConfig:   provision.FetchProjectConfig,
-		LocateProviderBinary: providerlocator.Locate,
-		BuildApp:             appbuilder.Build,
-		CollectAppFunctions:  appbuilder.CollectFunctions,
-		DeploymentID:         appbuilder.DeploymentID,
-		DiscoverPRNumber:     func() string { return os.Getenv("OCEL_PR_NUMBER") },
-		StdinIsTerminal:      func(io.Reader) bool { return false },
-		StdoutIsTerminal:     deployui.IsTerminal,
-		ConfigPath:           func() string { return os.Getenv("OCEL_CONFIG") },
-		Verbose:              func() bool { return false },
-		Format:               func() deployui.Format { return deployui.FormatHuman },
+		LoadCredentials:     credentials.Load,
+		FetchProjectConfig:  provision.FetchProjectConfig,
+		BuildApp:            appbuilder.Build,
+		CollectAppFunctions: appbuilder.CollectFunctions,
+		DeploymentID:        appbuilder.DeploymentID,
+		DiscoverPRNumber:    func() string { return os.Getenv("OCEL_PR_NUMBER") },
+		StdinIsTerminal:     func(io.Reader) bool { return false },
+		StdoutIsTerminal:    deployui.IsTerminal,
+		ConfigPath:          func() string { return os.Getenv("OCEL_CONFIG") },
+		Verbose:             func() bool { return false },
+		Format:              func() deployui.Format { return deployui.FormatHuman },
 		Interrupt: func(ctx context.Context, _ io.Writer) (context.Context, context.CancelFunc) {
 			return context.WithCancel(ctx)
 		},
@@ -62,9 +59,7 @@ func SetUpDeployFixture(t *testing.T) (root, sockPath string) {
 		t.Skip("node not found on PATH")
 	}
 
-	prevTimeout := providersession.ReadyTimeout
-	providersession.ReadyTimeout = 5 * time.Second
-	t.Cleanup(func() { providersession.ReadyTimeout = prevTimeout })
+	t.Setenv(provider.ReadyTimeoutEnvVar, "5s")
 
 	root = t.TempDir()
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `

@@ -1,4 +1,4 @@
-package providerrunner
+package provider
 
 import (
 	"os"
