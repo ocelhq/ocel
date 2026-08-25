@@ -177,23 +177,23 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		t.Fatalf("RecordSchema() = %d, %v, want the bootstrap to have stamped %d", written, err, providerkit.RecordSchemaVersion)
 	}
 
-	described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
-		t.Fatalf("DescribeBootstrap() error = %v", err)
+		t.Fatalf("PlanBootstrap() error = %v", err)
 	}
-	if !described.GetBootstrap().GetAutoHeal() {
-		t.Error("DescribeBootstrap() reports auto_heal off after a bootstrap that turned it on")
+	if !planned.GetBootstrap().GetAutoHeal() {
+		t.Error("PlanBootstrap() reports auto_heal off after a bootstrap that turned it on")
 	}
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureCache},
 	})
-	described, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	planned, err = client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
-		t.Fatalf("DescribeBootstrap() error = %v", err)
+		t.Fatalf("PlanBootstrap() error = %v", err)
 	}
-	if !described.GetBootstrap().GetAutoHeal() {
+	if !planned.GetBootstrap().GetAutoHeal() {
 		t.Error("a bootstrap that named no auto_heal turned the standing one off")
 	}
 }
@@ -270,7 +270,7 @@ func recordProject(t *testing.T, provider *fake.Provider, slug string, features 
 	}
 }
 
-func TestDescribeBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
+func TestPlanBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -281,17 +281,17 @@ func TestDescribeBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 	})
 	recordProject(t, provider, "shop", fake.FeatureCache)
 
-	described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
+	planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
 		Tier:           environmentv1.Tier_TIER_PRODUCTION,
 		WithDependents: true,
 	})
 	if err != nil {
-		t.Fatalf("DescribeBootstrap() error = %v", err)
+		t.Fatalf("PlanBootstrap() error = %v", err)
 	}
 
-	features := described.GetFeatures()
+	features := planned.GetFeatures()
 	if len(features) != 2 {
-		t.Fatalf("DescribeBootstrap() offered %d features, want the whole catalogue", len(features))
+		t.Fatalf("PlanBootstrap() offered %d features, want the whole catalogue", len(features))
 	}
 	if features[0].GetName() != fake.FeatureCache || !features[0].GetEnabled() {
 		t.Errorf("%s = %+v, want it enabled", fake.FeatureCache, features[0])
@@ -306,9 +306,9 @@ func TestDescribeBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 		t.Errorf("%s depends on %v, want %v", fake.FeatureImages, features[1].GetDependsOn(), fake.FeatureCache)
 	}
 
-	status := described.GetBootstrap()
+	status := planned.GetBootstrap()
 	if !status.GetPresent() || status.GetSchema() != providerkit.BootstrapSchema {
-		t.Errorf("DescribeBootstrap() status = %+v, want it present at schema %d", status, providerkit.BootstrapSchema)
+		t.Errorf("PlanBootstrap() status = %+v, want it present at schema %d", status, providerkit.BootstrapSchema)
 	}
 	if status.GetRequiredSchema() != providerkit.BootstrapSchema {
 		t.Errorf("required_schema = %d, want %d", status.GetRequiredSchema(), providerkit.BootstrapSchema)
@@ -326,21 +326,21 @@ func TestDescribeBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 	}
 }
 
-func TestDescribeBootstrapReportsADowngrade(t *testing.T) {
+func TestPlanBootstrapReportsADowngrade(t *testing.T) {
 	t.Parallel()
 
 	client, provider := contractServed(t, "1.0.0")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	provider.Bootstrapper().WrittenBy("2.0.0")
 
-	described, err := client.DescribeBootstrap(context.Background(), &contractv1.DescribeBootstrapRequest{
+	planned, err := client.PlanBootstrap(context.Background(), &contractv1.PlanBootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	if err != nil {
-		t.Fatalf("DescribeBootstrap() error = %v", err)
+		t.Fatalf("PlanBootstrap() error = %v", err)
 	}
-	if !described.GetBootstrap().GetDowngrade() {
-		t.Error("DescribeBootstrap() reports no downgrade where a newer build wrote the bootstrap")
+	if !planned.GetBootstrap().GetDowngrade() {
+		t.Error("PlanBootstrap() reports no downgrade where a newer build wrote the bootstrap")
 	}
 }
 
@@ -386,11 +386,11 @@ func TestPlanRemoveBootstrapNamesTheClassAndWhatGoes(t *testing.T) {
 	if plan.GetSubject() != string(providerkit.ClassPreview) {
 		t.Errorf("subject = %q, want the class the CLI asks the user to type back", plan.GetSubject())
 	}
-	if len(plan.GetItems()) != 2 {
-		t.Fatalf("PlanRemoveBootstrap() planned %d items, want the feature stack and the core", len(plan.GetItems()))
+	if len(plan.GetGroups()) != 2 {
+		t.Fatalf("PlanRemoveBootstrap() planned %d items, want the feature stack and the core", len(plan.GetGroups()))
 	}
-	for _, item := range plan.GetItems() {
-		if item.GetAction() != contractv1.RemovalItem_ACTION_DELETE {
+	for _, item := range plan.GetGroups() {
+		if item.GetAction() != contractv1.Change_ACTION_DELETE {
 			t.Errorf("item %s planned action %v, want it deleted", item.GetName(), item.GetAction())
 		}
 		if item.GetKind() == "" || item.GetName() == "" || item.GetReason() == "" {
@@ -452,12 +452,12 @@ func TestRemoveBootstrapTakesTheBootstrapAndItsRecord(t *testing.T) {
 		t.Fatalf("RemoveBootstrap() result = %v, want it to succeed", result)
 	}
 
-	described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
-		t.Fatalf("DescribeBootstrap() error = %v", err)
+		t.Fatalf("PlanBootstrap() error = %v", err)
 	}
-	if described.GetBootstrap().GetPresent() {
-		t.Error("DescribeBootstrap() still reports a bootstrap after it was removed")
+	if planned.GetBootstrap().GetPresent() {
+		t.Error("PlanBootstrap() still reports a bootstrap after it was removed")
 	}
 	if _, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(providerkit.ClassProduction)); !errors.Is(err, providerkit.ErrNoRecord) {
 		t.Errorf("the bootstrap record survived the removal: %v", err)

@@ -197,7 +197,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		if err != nil {
 			return err
 		}
-		described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
+		planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
 			Tier:           tier,
 			WithDependents: true,
 		})
@@ -207,7 +207,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			}
 			return err
 		}
-		catalogue := described.GetFeatures()
+		catalogue := planned.GetFeatures()
 
 		interactive := !opts.Yes && deps.StdinIsTerminal(stdin)
 		requested, selected, err := chooseFeatures(ctx, opts, catalogue, interactive, stdout)
@@ -237,7 +237,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			force = true
 		}
 
-		if status := described.GetBootstrap(); status.GetDowngrade() {
+		if status := planned.GetBootstrap(); status.GetDowngrade() {
 			fmt.Fprintln(stdout, downgradeWarning(tier, status))
 			if interactive {
 				var proceed bool

@@ -31,9 +31,9 @@ func deployedProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fa
 	return client, provider
 }
 
-func kinds(plan *contractv1.RemovalPlan) []string {
+func kinds(plan *contractv1.ChangePlan) []string {
 	var out []string
-	for _, item := range plan.GetItems() {
+	for _, item := range plan.GetGroups() {
 		out = append(out, item.GetKind())
 	}
 	return out
@@ -55,7 +55,7 @@ func TestPlanRemoveProjectNamesEveryStackTheDeployStoodUp(t *testing.T) {
 	if plan.GetSubject() != "shop" {
 		t.Errorf("the plan's subject is %q, want the project it removes", plan.GetSubject())
 	}
-	for _, item := range plan.GetItems() {
+	for _, item := range plan.GetGroups() {
 		if item.GetName() == "" || item.GetReason() == "" {
 			t.Errorf("the plan carries %+v, and the CLI cannot render an item with no name or no reason", item)
 		}
@@ -191,14 +191,14 @@ func TestPlanRemoveProjectNamesTheRecordsAndCertificatesItsHostnamesHold(t *test
 			t.Errorf("the plan names %v, want a %q item among them", held, kind)
 		}
 	}
-	for _, item := range plan.GetItems() {
+	for _, item := range plan.GetGroups() {
 		switch item.GetName() {
 		case "owed.acme.com CNAME shop.relay.fake.invalid":
-			if item.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
+			if item.GetAction() != contractv1.Change_ACTION_KEEP {
 				t.Errorf("the plan deletes %q, want a record ocel never wrote kept", item.GetName())
 			}
 		case "cert-for-app":
-			if item.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
+			if item.GetAction() != contractv1.Change_ACTION_KEEP {
 				t.Errorf("the plan deletes %q, want a pinned certificate kept", item.GetName())
 			}
 		}
@@ -258,14 +258,14 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
-	for _, item := range plan.GetItems() {
+	for _, item := range plan.GetGroups() {
 		switch item.GetName() {
 		case "ocels-cert":
-			if item.GetAction() != contractv1.RemovalItem_ACTION_DELETE {
+			if item.GetAction() != contractv1.Change_ACTION_DELETE {
 				t.Errorf("the plan keeps %q, want a certificate ocel requested deleted", item.GetName())
 			}
 		case "pinned-cert":
-			if item.GetAction() != contractv1.RemovalItem_ACTION_KEEP {
+			if item.GetAction() != contractv1.Change_ACTION_KEEP {
 				t.Errorf("the plan deletes %q, want a pinned certificate kept", item.GetName())
 			}
 		}

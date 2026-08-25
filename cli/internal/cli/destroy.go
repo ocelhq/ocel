@@ -125,7 +125,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, st
 		if err != nil {
 			return err
 		}
-		if len(plan.GetItems()) == 0 {
+		if len(plan.GetGroups()) == 0 {
 			ui.Finish("Nothing to destroy")
 			return nil
 		}
@@ -184,7 +184,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 		if err != nil {
 			return err
 		}
-		if len(plan.GetItems()) == 0 {
+		if len(plan.GetGroups()) == 0 {
 			ui.Finish("Nothing to destroy")
 			return nil
 		}
@@ -215,7 +215,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 	})
 }
 
-func printDestroyPlan(out io.Writer, slug string, preview bool, plan *contractv1.RemovalPlan) {
+func printDestroyPlan(out io.Writer, slug string, preview bool, plan *contractv1.ChangePlan) {
 	if preview {
 		removalplan.Print(out, fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
 			"  • all stored preview assets belonging to this project",

@@ -351,7 +351,7 @@ func fakeLinks(m *contractv1.Manifest) []*linksv1.Link {
 	return out
 }
 
-func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
+func (s *deployFakeProviderServer) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootstrapRequest) (*contractv1.PlanBootstrapResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -364,8 +364,8 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *c
 			Enabled:   slices.Contains(enabled, name),
 		}
 	}
-	journalDescribeBootstrap(req)
-	return &contractv1.DescribeBootstrapResponse{
+	journalPlanBootstrap(req)
+	return &contractv1.PlanBootstrapResponse{
 		Features: []*contractv1.Feature{
 			feature("isr", "incremental static regeneration"),
 			feature("image-optimization", "on-demand image optimization"),
@@ -375,7 +375,7 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *c
 	}, nil
 }
 
-func journalDescribeBootstrap(req *contractv1.DescribeBootstrapRequest) {
+func journalPlanBootstrap(req *contractv1.PlanBootstrapRequest) {
 	path := os.Getenv(FakeDescribeJournalEnvVar)
 	if path == "" {
 		return
@@ -441,7 +441,7 @@ func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv
 	})
 }
 
-func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*contractv1.RemovalPlan, error) {
+func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*contractv1.ChangePlan, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
@@ -450,27 +450,27 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 		return nil, err
 	}
 	class := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
-	return &contractv1.RemovalPlan{
+	return &contractv1.ChangePlan{
 		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 		Subject:  class,
-		Items: []*contractv1.RemovalItem{
+		Groups: []*contractv1.ChangeGroup{
 			{
 				Kind:   "edge bootstrap",
 				Name:   resolvedEdgeKind(req.GetEdge().GetKind()),
-				Action: contractv1.RemovalItem_ACTION_DELETE,
+				Action: contractv1.Change_ACTION_DELETE,
 				Reason: "every worker the edge stood up for the " + class + " bootstrap",
 			},
 			{
 				Kind:   "bucket",
 				Name:   "ocel-state-" + class,
-				Action: contractv1.RemovalItem_ACTION_DELETE,
+				Action: contractv1.Change_ACTION_DELETE,
 				Reason: "the Pulumi state of every stack this bootstrap deployed",
 				Slow:   true,
 			},
 			{
 				Kind:   "parameter",
 				Name:   "/ocel/pulumi/passphrase",
-				Action: contractv1.RemovalItem_ACTION_KEEP,
+				Action: contractv1.Change_ACTION_KEEP,
 				Reason: "the production bootstrap still stands and its Pulumi state is encrypted under it",
 			},
 		},
@@ -754,13 +754,13 @@ const FakeServedPreviewsEnvVar = "OCEL_TEST_FAKE_SERVED_PREVIEWS"
 
 const FakeEmptyRemovalPlanEnvVar = "OCEL_TEST_FAKE_EMPTY_REMOVAL_PLAN"
 
-func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.RemovalPlan, error) {
+func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.ChangePlan, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
 	base := os.Getenv(FakeGlobalDomainEnvVar)
 	if base == "" {
-		return &contractv1.RemovalPlan{}, nil
+		return &contractv1.ChangePlan{}, nil
 	}
 	if served := os.Getenv(FakeServedPreviewsEnvVar); served != "" {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
@@ -768,20 +768,20 @@ func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context
 			base, served,
 		))
 	}
-	return &contractv1.RemovalPlan{
+	return &contractv1.ChangePlan{
 		EdgeKind: "cloudflare",
 		Subject:  base,
-		Items: []*contractv1.RemovalItem{
+		Groups: []*contractv1.ChangeGroup{
 			{
 				Kind:   "preview entry worker",
 				Name:   "*." + base,
-				Action: contractv1.RemovalItem_ACTION_DELETE,
+				Action: contractv1.Change_ACTION_DELETE,
 				Reason: "the shared entry worker holding this wildcard",
 			},
 			{
 				Kind:   "DNS record",
 				Name:   "*." + base + " CNAME you.example.com",
-				Action: contractv1.RemovalItem_ACTION_KEEP,
+				Action: contractv1.Change_ACTION_KEEP,
 				Reason: "you created it yourself; ocel never wrote it",
 			},
 		},
@@ -971,81 +971,81 @@ func (s *deployFakeProviderServer) RemoveEnvironment(ctx context.Context, req *c
 	})
 }
 
-func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*contractv1.RemovalPlan, error) {
+func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*contractv1.ChangePlan, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	slug := req.GetSlug()
 	if os.Getenv(FakeEmptyRemovalPlanEnvVar) != "" {
-		return &contractv1.RemovalPlan{
+		return &contractv1.ChangePlan{
 			EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 			Subject:  slug,
 		}, nil
 	}
 	if req.GetEnvironment().GetTier() == environmentv1.Tier_TIER_PREVIEW {
-		return &contractv1.RemovalPlan{
+		return &contractv1.ChangePlan{
 			EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 			Subject:  slug,
-			Items: []*contractv1.RemovalItem{
+			Groups: []*contractv1.ChangeGroup{
 				{
 					Kind:   "edge workers",
 					Name:   slug,
-					Action: contractv1.RemovalItem_ACTION_DELETE,
+					Action: contractv1.Change_ACTION_DELETE,
 				},
 				{
 					Kind:   "preview wildcard",
 					Name:   "*.preview.acme.com",
-					Action: contractv1.RemovalItem_ACTION_KEEP,
+					Action: contractv1.Change_ACTION_KEEP,
 					Reason: "bootstrap-scoped: every project's previews are served on it",
 				},
-				fakeInfraStackItem(slug + "--pr-1--infra"),
-				fakeInfraStackItem(slug + "--pr-2--infra"),
-				fakeAppStackItem(slug + "--pr-1--web--b1"),
+				fakeInfraStackGroup(slug + "--pr-1--infra"),
+				fakeInfraStackGroup(slug + "--pr-2--infra"),
+				fakeAppStackGroup(slug + "--pr-1--web--b1"),
 			},
 		}, nil
 	}
-	return &contractv1.RemovalPlan{
+	return &contractv1.ChangePlan{
 		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 		Subject:  slug,
-		Items: []*contractv1.RemovalItem{
+		Groups: []*contractv1.ChangeGroup{
 			{
 				Kind:   "edge stack",
 				Name:   slug,
-				Action: contractv1.RemovalItem_ACTION_DELETE,
+				Action: contractv1.Change_ACTION_DELETE,
 			},
 			{
 				Kind:   "distribution",
 				Name:   "E1" + slug,
-				Action: contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE,
+				Action: contractv1.Change_ACTION_DISABLE_THEN_DELETE,
 				Slow:   true,
 			},
 			{
 				Kind:   "certificate",
 				Name:   slug + ".example.com",
-				Action: contractv1.RemovalItem_ACTION_KEEP,
+				Action: contractv1.Change_ACTION_KEEP,
 				Reason: "you pinned this certificate; Ocel never deletes one it did not request",
 			},
-			fakeInfraStackItem(slug + "--infra"),
-			fakeAppStackItem(slug + "--web--b1"),
+			fakeInfraStackGroup(slug + "--infra"),
+			fakeAppStackGroup(slug + "--web--b1"),
 		},
 	}, nil
 }
 
-func fakeInfraStackItem(name string) *contractv1.RemovalItem {
-	return &contractv1.RemovalItem{
+func fakeInfraStackGroup(name string) *contractv1.ChangeGroup {
+	return &contractv1.ChangeGroup{
 		Kind:   "infra stack",
 		Name:   name,
-		Action: contractv1.RemovalItem_ACTION_DELETE,
+		Action: contractv1.Change_ACTION_DELETE,
 		Reason: "databases and buckets, INCLUDING ALL DATA",
 	}
 }
 
-func fakeAppStackItem(name string) *contractv1.RemovalItem {
-	return &contractv1.RemovalItem{
+func fakeAppStackGroup(name string) *contractv1.ChangeGroup {
+	return &contractv1.ChangeGroup{
 		Kind:   "app stack",
 		Name:   name,
-		Action: contractv1.RemovalItem_ACTION_DELETE,
+		Action: contractv1.Change_ACTION_DELETE,
 	}
 }
 

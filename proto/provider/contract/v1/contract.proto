@@ -17,19 +17,19 @@ service ProviderService {
 
     rpc Bootstrap(BootstrapRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc DescribeBootstrap(DescribeBootstrapRequest) returns (DescribeBootstrapResponse);
+    rpc PlanBootstrap(PlanBootstrapRequest) returns (PlanBootstrapResponse);
 
     rpc GetCredentialPolicy(CredentialPolicyRequest) returns (CredentialPolicyResponse);
 
     rpc RemoveBootstrap(BootstrapScope) returns (stream common.progress.v1.OperationEvent);
 
-    rpc PlanRemoveBootstrap(BootstrapScope) returns (RemovalPlan);
+    rpc PlanRemoveBootstrap(BootstrapScope) returns (ChangePlan);
 
     rpc RemoveEnvironment(RemoveEnvironmentRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc RemoveProject(ProjectRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc PlanRemoveProject(ProjectRequest) returns (RemovalPlan);
+    rpc PlanRemoveProject(ProjectRequest) returns (ChangePlan);
 
     rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
 
@@ -45,7 +45,7 @@ service ProviderService {
 
     rpc GetPreviewWildcard(PreviewWildcardRequest) returns (GetPreviewWildcardResponse);
 
-    rpc PlanRemovePreviewWildcard(PreviewWildcardRequest) returns (RemovalPlan);
+    rpc PlanRemovePreviewWildcard(PreviewWildcardRequest) returns (ChangePlan);
 
     rpc RemovePreviewWildcard(PreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent);
 
@@ -239,16 +239,20 @@ message BootstrapRequest {
   bool accept_replacements = 5;
 }
 
-message DescribeBootstrapRequest {
+message PlanBootstrapRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   bool with_dependents = 2;
+
+  BootstrapRequest intent = 3;
 }
 
-message DescribeBootstrapResponse {
+message PlanBootstrapResponse {
   repeated Feature features = 1;
 
   BootstrapStatus bootstrap = 2;
+
+  ChangePlan plan = 3;
 }
 
 message BootstrapStack {
@@ -349,26 +353,49 @@ message ProjectRequest {
   EdgeSelection edge = 3;
 }
 
-message RemovalPlan {
-  string edge_kind = 1;
+message ChangePlan {
+  string subject = 1;
 
-  repeated RemovalItem items = 2;
+  string edge_kind = 2;
 
-  string subject = 3;
+  repeated ChangeGroup groups = 3;
 }
 
-message RemovalItem {
+message ChangeGroup {
+  string kind = 1;
+
+  string name = 2;
+
+  string feature = 3;
+
+  Change.Action action = 4;
+
+  string reason = 5;
+
+  bool slow = 6;
+
+  repeated Change changes = 7;
+}
+
+message Change {
   enum Action {
     ACTION_UNSPECIFIED = 0;
-    ACTION_DELETE = 1;
-    ACTION_DISABLE_THEN_DELETE = 2;
-    ACTION_KEEP = 3;
+    ACTION_CREATE = 1;
+    ACTION_UPDATE = 2;
+    ACTION_REPLACE = 3;
+    ACTION_DELETE = 4;
+    ACTION_DISABLE_THEN_DELETE = 5;
+    ACTION_KEEP = 6;
   }
 
   string kind = 1;
+
   string name = 2;
+
   Action action = 3;
+
   string reason = 4;
+
   bool slow = 5;
 }
 

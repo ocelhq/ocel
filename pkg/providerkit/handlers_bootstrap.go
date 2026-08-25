@@ -68,7 +68,7 @@ func applyRequestOf(req *contractv1.BootstrapRequest) ApplyRequest {
 	}
 }
 
-func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
+func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootstrapRequest) (*contractv1.PlanBootstrapResponse, error) {
 	class, err := classOf(req.GetTier())
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 		}
 	}
 
-	resp := &contractv1.DescribeBootstrapResponse{
+	resp := &contractv1.PlanBootstrapResponse{
 		Bootstrap: BootstrapStatusProto(standing, h.session.writer, req.GetTier(), standing.Features),
 	}
 	for _, f := range gate.Bootstrapper.Catalogue() {
@@ -127,7 +127,7 @@ func BootstrapStatusProto(standing Standing, writing Writer, tier environmentv1.
 	return status
 }
 
-func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*contractv1.RemovalPlan, error) {
+func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*contractv1.ChangePlan, error) {
 	class, err := classOf(req.GetTier())
 	if err != nil {
 		return nil, err
@@ -143,9 +143,9 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	return &contractv1.RemovalPlan{
+	return &contractv1.ChangePlan{
 		EdgeKind: string(edgeKind(provider, req.GetEdge().GetKind())),
-		Items:    RemovalItems(surfaces),
+		Groups:   ChangeGroups(surfaces),
 		Subject:  string(class),
 	}, nil
 }
@@ -172,24 +172,24 @@ func edgeKind(provider Provider, requested string) edge.Kind {
 	return provider.Edges().Default()
 }
 
-func RemovalItems(surfaces []Removal) []*contractv1.RemovalItem {
-	items := make([]*contractv1.RemovalItem, 0, len(surfaces))
+func ChangeGroups(surfaces []Removal) []*contractv1.ChangeGroup {
+	groups := make([]*contractv1.ChangeGroup, 0, len(surfaces))
 	for _, surface := range surfaces {
-		items = append(items, surfaceItem(surface))
+		groups = append(groups, surfaceGroup(surface))
 	}
-	return items
+	return groups
 }
 
-func removalAction(action edge.SurfaceAction) contractv1.RemovalItem_Action {
+func changeAction(action edge.SurfaceAction) contractv1.Change_Action {
 	switch action {
 	case edge.SurfaceDelete:
-		return contractv1.RemovalItem_ACTION_DELETE
+		return contractv1.Change_ACTION_DELETE
 	case edge.SurfaceDisableThenDelete:
-		return contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE
+		return contractv1.Change_ACTION_DISABLE_THEN_DELETE
 	case edge.SurfaceKeep:
-		return contractv1.RemovalItem_ACTION_KEEP
+		return contractv1.Change_ACTION_KEEP
 	default:
-		return contractv1.RemovalItem_ACTION_UNSPECIFIED
+		return contractv1.Change_ACTION_UNSPECIFIED
 	}
 }
 
