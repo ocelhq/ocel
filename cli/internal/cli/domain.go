@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
@@ -21,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
-	"github.com/ocelhq/ocel/cli/internal/removalplan"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -263,7 +263,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 			return nil
 		}
 
-		removalplan.Print(stdout, fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
+		changeplan.Print(stdout, fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
 			"This cannot be undone.")
 
 		if !opts.yes {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
@@ -16,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
-	"github.com/ocelhq/ocel/cli/internal/removalplan"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -31,7 +31,7 @@ var destroyCmd = &cobra.Command{
 		"takes the whole preview footprint and leaves the account-level preview bootstrap intact.\n\n" +
 		"Either is irreversible and requires typing the project name to confirm.\n\n" +
 		"An automated caller that must tear its own project down unattended can set " +
-		removalplan.BypassEnv + " to the project name — and only that name — to skip both gates. " +
+		changeplan.BypassEnv + " to the project name — and only that name — to skip both gates. " +
 		"Any other value is not a bypass.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_ = cmd.Help()
@@ -85,10 +85,10 @@ func init() {
 }
 
 func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
-	requested := removalplan.BypassRequest()
+	requested := changeplan.BypassRequest()
 	tty := isReaderTTY(stdin)
 	if requested == "" && !tty {
-		return fmt.Errorf("`ocel destroy production` needs an interactive terminal to confirm the project name; to destroy unattended, set %s to the project name", removalplan.BypassEnv)
+		return fmt.Errorf("`ocel destroy production` needs an interactive terminal to confirm the project name; to destroy unattended, set %s to the project name", changeplan.BypassEnv)
 	}
 
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
@@ -99,11 +99,11 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, st
 	bypass := requested == cfg.Slug
 	switch {
 	case bypass:
-		fmt.Fprintf(stderr, "%s=%s: destroying production without confirmation\n", removalplan.BypassEnv, cfg.Slug)
+		fmt.Fprintf(stderr, "%s=%s: destroying production without confirmation\n", changeplan.BypassEnv, cfg.Slug)
 	case requested != "" && !tty:
-		return fmt.Errorf("%s is set to %q, but this project is %q; it must name the project being destroyed", removalplan.BypassEnv, requested, cfg.Slug)
+		return fmt.Errorf("%s is set to %q, but this project is %q; it must name the project being destroyed", changeplan.BypassEnv, requested, cfg.Slug)
 	case requested != "":
-		fmt.Fprintf(stderr, "%s is set to %q, not this project (%s); confirming interactively instead\n", removalplan.BypassEnv, requested, cfg.Slug)
+		fmt.Fprintf(stderr, "%s is set to %q, not this project (%s); confirming interactively instead\n", changeplan.BypassEnv, requested, cfg.Slug)
 	}
 
 	return providerui.Run(ctx, deps, cfg, "ocel destroy production", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
@@ -217,14 +217,14 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 
 func printDestroyPlan(out io.Writer, slug string, preview bool, plan *contractv1.ChangePlan) {
 	if preview {
-		removalplan.Print(out, fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
-			"  • all stored preview assets belonging to this project",
-			"  • every preview variable value this project holds, including each preview's own overrides",
+		changeplan.Print(out, fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
+			"– all stored preview assets belonging to this project",
+			"– every preview variable value this project holds, including each preview's own overrides",
 			"The account-level preview bootstrap is left intact. This cannot be undone.")
 		return
 	}
-	removalplan.Print(out, fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
-		"  • all stored assets belonging to this project",
-		"  • every production variable value this project holds, and their history",
+	changeplan.Print(out, fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
+		"– all stored assets belonging to this project",
+		"– every production variable value this project holds, and their history",
 		"This cannot be undone.")
 }

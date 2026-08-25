@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
-	"github.com/ocelhq/ocel/cli/internal/removalplan"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -224,7 +224,7 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
 			t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-			t.Setenv(removalplan.BypassEnv, "test-app")
+			t.Setenv(changeplan.BypassEnv, "test-app")
 
 			var stdout, stderr bytes.Buffer
 			if err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader("")); err != nil {

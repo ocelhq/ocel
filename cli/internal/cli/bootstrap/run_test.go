@@ -3,11 +3,12 @@ package bootstrap
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/removalplan"
+	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 
@@ -40,7 +41,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
-		t.Setenv(removalplan.BypassEnv, "production")
+		t.Setenv(changeplan.BypassEnv, "production")
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
@@ -50,8 +51,8 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		if strings.Contains(stdout.String(), "Type the environment name") {
 			t.Errorf("stdout = %q, want the bypass to skip the typed phrase", stdout.String())
 		}
-		if !strings.Contains(stderr.String(), removalplan.BypassEnv) {
-			t.Errorf("stderr = %q, want it to name %s so an unconfirmed teardown is never silent", stderr.String(), removalplan.BypassEnv)
+		if !strings.Contains(stderr.String(), changeplan.BypassEnv) {
+			t.Errorf("stderr = %q, want it to name %s so an unconfirmed teardown is never silent", stderr.String(), changeplan.BypassEnv)
 		}
 	})
 
@@ -60,7 +61,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
-		t.Setenv(removalplan.BypassEnv, "preview")
+		t.Setenv(changeplan.BypassEnv, "preview")
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
@@ -68,7 +69,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		if err == nil {
 			t.Fatal("RunDestroy err = nil, want the mismatched-bypass refusal")
 		}
-		for _, want := range []string{removalplan.BypassEnv, "preview", "production"} {
+		for _, want := range []string{changeplan.BypassEnv, "preview", "production"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to name %q", err, want)
 			}
@@ -87,7 +88,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		if err == nil {
 			t.Fatal("RunDestroy err = nil, want the no-terminal refusal")
 		}
-		for _, want := range []string{"interactive terminal", "--yes", removalplan.BypassEnv} {
+		for _, want := range []string{"interactive terminal", "--yes", changeplan.BypassEnv} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to name %q", err, want)
 			}
@@ -123,6 +124,133 @@ export default {
 		err := Run(context.Background(), clitest.NewDeps(), root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runBootstrap err = nil, want error")
+		}
+	})
+}
+
+func TestBootstrapShowsItsPlan(t *testing.T) {
+	t.Run("it renders every group and the tally before applying", func(t *testing.T) {
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
+		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "mixed")
+
+		var stdout, stderr bytes.Buffer
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			"Proposed changes to the production bootstrap",
+			"~ stack ocel-production-core — content is behind this build",
+			"    ~ OcelRouterFunction (AWS::Lambda::Function)",
+			"    ± OcelOriginSecret (AWS::SecretsManager::Secret) — rotation forces replacement",
+			"+ stack ocel-production-image-optimization — image-optimization joins the feature set",
+			"– stack ocel-production-isr — isr leaves the set; web, api were deployed against it (this one is slow)",
+			"    – OcelRevalidationTable (AWS::DynamoDB::Table)",
+			"  stack ocel-production-secrets — already current",
+			"1 to create, 1 to update, 1 to replace, 1 to delete.",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout missing %q; got:\n%s", want, out)
+			}
+		}
+		if strings.Contains(out, "    stack ocel-production-secrets") {
+			t.Errorf("a kept group listed what it keeps; got:\n%s", out)
+		}
+		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
+			t.Errorf("provider saw %v, want the apply the plan described", got)
+		}
+	})
+
+	t.Run("--dry stops at the plan", func(t *testing.T) {
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
+		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "mixed")
+
+		var stdout, stderr bytes.Buffer
+		opts := Options{Yes: true, Dry: true}
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "Proposed changes to the production bootstrap") {
+			t.Errorf("stdout = %q, want --dry to print the plan", out)
+		}
+		if !strings.Contains(out, "Run without --dry to apply.") {
+			t.Errorf("stdout = %q, want --dry to say how to apply it", out)
+		}
+		if _, err := os.Stat(journal); err == nil {
+			t.Errorf("--dry reached the provider: %v", clitest.ReadJournal(t, journal))
+		}
+	})
+
+	t.Run("a plan that changes nothing applies nothing", func(t *testing.T) {
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
+		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "keep")
+
+		var stdout, stderr bytes.Buffer
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "Nothing to change — the production bootstrap already matches.") {
+			t.Errorf("stdout = %q, want it to say the bootstrap already matches", out)
+		}
+		if _, err := os.Stat(journal); err == nil {
+			t.Errorf("an all-keep plan reached the provider: %v", clitest.ReadJournal(t, journal))
+		}
+	})
+
+	t.Run("--auto-heal is a change even when the plan holds none", func(t *testing.T) {
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
+		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "keep")
+
+		var stdout, stderr bytes.Buffer
+		opts := Options{Yes: true, AutoHealDeclared: true, AutoHeal: true}
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		got := clitest.ReadJournal(t, journal)
+		if len(got) != 1 || got[0] != "features=isr force=false autoHeal=true" {
+			t.Errorf("provider saw %v, want the switch recorded even with nothing else to do", got)
+		}
+	})
+
+	t.Run("a provider that plans nothing still applies", func(t *testing.T) {
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
+		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "silent")
+
+		var stdout, stderr bytes.Buffer
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if strings.Contains(stdout.String(), "Nothing to change") {
+			t.Errorf("stdout = %q, want a silent plan not to be read as an empty one", stdout.String())
+		}
+		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
+			t.Errorf("provider saw %v, want the apply to go through", got)
+		}
+	})
+
+	t.Run("a dropped feature the plan deletes carries the force the apply needs", func(t *testing.T) {
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
+		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "mixed")
+
+		var stdout, stderr bytes.Buffer
+		opts := Options{Yes: true, Features: "isr", FeaturesDeclared: true, Force: true}
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "– stack ocel-production-isr") {
+			t.Errorf("stdout = %q, want the deletion shown before it is applied", stdout.String())
+		}
+		got := clitest.ReadJournal(t, journal)
+		if len(got) != 1 || got[0] != "features=isr force=true" {
+			t.Errorf("provider saw %v, want the forced drop carried through", got)
 		}
 	})
 }

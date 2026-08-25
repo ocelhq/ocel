@@ -67,6 +67,8 @@ const FakeEnabledFeaturesEnvVar = "OCEL_TEST_FAKE_ENABLED_FEATURES"
 
 const FakeBootstrapEnvVar = "OCEL_TEST_FAKE_BOOTSTRAP"
 
+const FakeBootstrapPlanEnvVar = "OCEL_TEST_FAKE_BOOTSTRAP_PLAN"
+
 const FakeDescribeJournalEnvVar = "OCEL_TEST_FAKE_DESCRIBE_JOURNAL"
 
 const FakeEdgeRefusalEnvVar = "OCEL_TEST_FAKE_EDGE_REFUSAL"
@@ -372,7 +374,70 @@ func (s *deployFakeProviderServer) PlanBootstrap(ctx context.Context, req *contr
 			feature("cloudflare-edge", "a Cloudflare front", "isr"),
 		},
 		Bootstrap: fakeBootstrap(req.GetTier()),
+		Plan:      fakeChangePlan(req),
 	}, nil
+}
+
+func fakeChangePlan(req *contractv1.PlanBootstrapRequest) *contractv1.ChangePlan {
+	if req.GetIntent() == nil {
+		return nil
+	}
+	shape := os.Getenv(FakeBootstrapPlanEnvVar)
+	if shape == "silent" {
+		return nil
+	}
+	class := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
+	core := &contractv1.ChangeGroup{Kind: "stack", Name: "ocel-" + class + "-core"}
+	plan := &contractv1.ChangePlan{
+		EdgeKind: resolvedEdgeKind(""),
+		Subject:  class,
+		Groups:   []*contractv1.ChangeGroup{core},
+	}
+	switch shape {
+	case "keep":
+		core.Action, core.Reason = contractv1.Change_ACTION_KEEP, "already current"
+		return plan
+	case "mixed":
+	default:
+		core.Action, core.Reason = contractv1.Change_ACTION_CREATE, "new bootstrap"
+		return plan
+	}
+	core.Action, core.Reason = contractv1.Change_ACTION_UPDATE, "content is behind this build"
+	core.Changes = []*contractv1.Change{
+		{Kind: "AWS::Lambda::Function", Name: "OcelRouterFunction", Action: contractv1.Change_ACTION_UPDATE},
+		{Kind: "AWS::SecretsManager::Secret", Name: "OcelOriginSecret", Action: contractv1.Change_ACTION_REPLACE, Reason: "rotation forces replacement"},
+	}
+	plan.Groups = append(plan.Groups,
+		&contractv1.ChangeGroup{
+			Kind:    "stack",
+			Name:    "ocel-" + class + "-image-optimization",
+			Feature: "image-optimization",
+			Action:  contractv1.Change_ACTION_CREATE,
+			Reason:  "image-optimization joins the feature set",
+			Changes: []*contractv1.Change{
+				{Kind: "AWS::Lambda::Function", Name: "OcelImageFunction", Action: contractv1.Change_ACTION_CREATE},
+			},
+		},
+		&contractv1.ChangeGroup{
+			Kind:    "stack",
+			Name:    "ocel-" + class + "-isr",
+			Feature: "isr",
+			Action:  contractv1.Change_ACTION_DELETE,
+			Reason:  "isr leaves the set; web, api were deployed against it",
+			Slow:    true,
+			Changes: []*contractv1.Change{
+				{Kind: "AWS::DynamoDB::Table", Name: "OcelRevalidationTable", Action: contractv1.Change_ACTION_DELETE},
+			},
+		},
+		&contractv1.ChangeGroup{
+			Kind:    "stack",
+			Name:    "ocel-" + class + "-secrets",
+			Feature: "secrets",
+			Action:  contractv1.Change_ACTION_KEEP,
+			Reason:  "already current",
+		},
+	)
+	return plan
 }
 
 func journalPlanBootstrap(req *contractv1.PlanBootstrapRequest) {
@@ -386,7 +451,11 @@ func journalPlanBootstrap(req *contractv1.PlanBootstrapRequest) {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "tier=%s withDependents=%t\n", req.GetTier(), req.GetWithDependents())
+	fmt.Fprintf(f, "tier=%s withDependents=%t", req.GetTier(), req.GetWithDependents())
+	if intent := req.GetIntent(); intent != nil {
+		fmt.Fprintf(f, " intent=features=%s,force=%t", strings.Join(intent.GetFeatures(), "|"), intent.GetForce())
+	}
+	fmt.Fprintln(f)
 }
 
 func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
