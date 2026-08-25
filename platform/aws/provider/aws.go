@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -53,8 +52,6 @@ type Provider struct {
 	params   memo[classEdge, bootstrap.ClassParams]
 	account  memo[struct{}, string]
 
-	front atomic.Pointer[edge.Kind]
-
 	releases *deploy.Releaser
 }
 
@@ -88,7 +85,7 @@ func (p *Provider) Serves() []providerkit.LinkType { return deploy.Serves() }
 func (p *Provider) Region() string { return p.aws.Region }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
-	front, err := p.Edges().Open(kind)
+	front, err := p.edges().Open(kind)
 	if err != nil {
 		return nil, err
 	}
@@ -116,32 +113,7 @@ func (p *Provider) Sealer() providerkit.Sealer {
 
 func (p *Provider) Credentials() providerkit.Credentials { return control.CredentialsFor(p.aws) }
 
-func (p *Provider) Edges() providerkit.EdgeRegistry {
-	return fronted{Registry: p.edges(), note: p.noteFront}
-}
-
-type fronted struct {
-	edges.Registry
-	note func(edge.Kind)
-}
-
-func (f fronted) Open(kind edge.Kind) (edge.Edge, error) {
-	front, err := f.Registry.Open(kind)
-	if err != nil {
-		return nil, err
-	}
-	f.note(front.Kind())
-	return front, nil
-}
-
-func (p *Provider) noteFront(kind edge.Kind) { p.front.Store(&kind) }
-
-func (p *Provider) frontKind() edge.Kind {
-	if held := p.front.Load(); held != nil {
-		return *held
-	}
-	return edges.DefaultKind
-}
+func (p *Provider) Edges() providerkit.EdgeRegistry { return p.edges() }
 
 func (p *Provider) DNS() providerkit.DNSRegistry {
 	return dns.Registry{Deps: dns.Deps{AWS: p.aws}}
@@ -204,11 +176,15 @@ func (p *Provider) Buckets(ctx context.Context, class providerkit.Class) (awspor
 		return awsports.Buckets{}, err
 	}
 	buckets := awsports.Buckets{Functions: held.ArtifactBucket, Assets: held.AssetBucket}
-	params, err := p.classParams(ctx, class)
-	if err != nil {
-		return buckets, err
+	for _, kind := range bootstrap.EdgeKindsFor(held.Features.Names()) {
+		params, err := p.classParams(ctx, class, kind)
+		if err != nil {
+			return buckets, err
+		}
+		if params.CacheStore.Bucket != "" {
+			buckets.Caches = append(buckets.Caches, params.CacheStore.Bucket)
+		}
 	}
-	buckets.Cache = params.CacheStore.Bucket
 	return buckets, nil
 }
 
@@ -218,9 +194,11 @@ func (p *Provider) bootstrapped(ctx context.Context, class providerkit.Class) (b
 	})
 }
 
-func (p *Provider) classParams(ctx context.Context, class providerkit.Class) (bootstrap.ClassParams, error) {
-	kind := p.frontKind()
+func (p *Provider) classParams(ctx context.Context, class providerkit.Class, kind edge.Kind) (bootstrap.ClassParams, error) {
 	return p.params.resolve(classEdge{class: class, kind: kind}, func() (bootstrap.ClassParams, error) {
+		if kind == "" {
+			return bootstrap.ReadCoreParams(ctx, ssm.NewFromConfig(p.aws), string(class))
+		}
 		return bootstrap.ReadClassParams(ctx, ssm.NewFromConfig(p.aws), string(class), kind)
 	})
 }
@@ -243,7 +221,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	if err := p.standing(held, scope.Class); err != nil {
 		return deploy.Config{}, err
 	}
-	params, err := p.classParams(ctx, scope.Class)
+	params, err := p.classParams(ctx, scope.Class, scope.Edge)
 	if err != nil {
 		return deploy.Config{}, err
 	}

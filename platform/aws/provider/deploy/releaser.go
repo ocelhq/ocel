@@ -19,16 +19,25 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Scope struct {
 	Class providerkit.Class
 	Slug  string
 	Env   string
+	Edge  edge.Kind
 }
 
-func scopeOf(ref providerkit.StackRef) Scope {
-	return Scope{Class: ref.Class, Slug: ref.Project, Env: ref.Name.Env}
+func scopeOf(ref providerkit.StackRef, kind edge.Kind) Scope {
+	return Scope{Class: ref.Class, Slug: ref.Project, Env: ref.Name.Env, Edge: kind}
+}
+
+func edgeKindOf(plan providerkit.StackPlan) edge.Kind {
+	if plan.Edge == nil {
+		return ""
+	}
+	return plan.Edge.Kind()
 }
 
 type Resolver interface {
@@ -70,8 +79,8 @@ func newReleaser(resolve Resolver, realized *Realized, engine kitpulumi.Engine) 
 	}
 }
 
-func (r *Releaser) at(ctx context.Context, ref providerkit.StackRef) (*release, error) {
-	scope := scopeOf(ref)
+func (r *Releaser) at(ctx context.Context, ref providerkit.StackRef, kind edge.Kind) (*release, error) {
+	scope := scopeOf(ref, kind)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if held, opened := r.opened[scope]; opened {
@@ -297,7 +306,7 @@ func (r *release) refuseHandover(ctx context.Context, plan providerkit.StackPlan
 }
 
 func (r *Releaser) PackApp(ctx context.Context, packing providerkit.AppPacking, _ providerkit.Reporter) (providerkit.AppPack, error) {
-	held, err := r.at(ctx, packing.Ref)
+	held, err := r.at(ctx, packing.Ref, packing.Edge)
 	if err != nil {
 		return providerkit.AppPack{}, err
 	}
@@ -309,7 +318,7 @@ func (r *Releaser) PackApp(ctx context.Context, packing providerkit.AppPacking, 
 }
 
 func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
-	held, err := r.at(ctx, plan.Ref)
+	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
@@ -360,7 +369,7 @@ func (r *release) publishBuild(ctx context.Context, plan providerkit.StackPlan, 
 }
 
 func (r *Releaser) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
-	held, err := r.at(ctx, ref)
+	held, err := r.at(ctx, ref, "")
 	if err != nil {
 		return err
 	}
@@ -382,7 +391,7 @@ func (r *Releaser) Inspect(ctx context.Context, ref providerkit.StackRef) (provi
 }
 
 func (r *Releaser) Outputs(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (auto.OutputMap, error) {
-	held, err := r.at(ctx, ref)
+	held, err := r.at(ctx, ref, "")
 	if err != nil {
 		return nil, err
 	}

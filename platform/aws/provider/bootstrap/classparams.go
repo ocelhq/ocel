@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -32,6 +33,29 @@ type ClassParams struct {
 	ISRWriterSeed    string
 	OriginSecret     string
 }
+
+func ReadCoreParams(ctx context.Context, api SSMBatchAPI, class string) (ClassParams, error) {
+	origin, err := OriginSecretParamFor(class)
+	if err != nil {
+		return ClassParams{}, err
+	}
+	found, err := getParameters(ctx, api, []string{PassphraseParamName, origin})
+	if err != nil {
+		return ClassParams{}, err
+	}
+	passphrase, ok := found[PassphraseParamName]
+	if !ok {
+		return ClassParams{}, fmt.Errorf("read passphrase parameter: %s not found", PassphraseParamName)
+	}
+	return ClassParams{
+		Passphrase:         passphrase,
+		OriginSecret:       found[origin],
+		EdgeCredentialsErr: errUnnamedEdge,
+		EdgeValuesErr:      errUnnamedEdge,
+	}, nil
+}
+
+var errUnnamedEdge = errors.New("this call names no edge, so it reads none of the parameters an edge is reached through")
 
 func ReadClassParams(ctx context.Context, api SSMBatchAPI, class string, kind edge.Kind) (ClassParams, error) {
 	names, err := edgeNamesFor(class, kind)

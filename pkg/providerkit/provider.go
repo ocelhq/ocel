@@ -32,6 +32,7 @@ type CodeEmbedder interface {
 
 type DeployPreflight struct {
 	Plan      DeployPlan
+	Edge      edge.Kind
 	Resources []Resource
 	Grants    []Link
 	Apps      []AppUsage

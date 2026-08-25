@@ -312,6 +312,7 @@ func (r *deployRun) preflight(ctx context.Context) error {
 	}
 	return preflighter.PreflightDeploy(ctx, DeployPreflight{
 		Plan:      r.plan,
+		Edge:      r.front.Kind(),
 		Resources: resources,
 		Grants:    grants,
 		Apps:      apps,
