@@ -311,13 +311,13 @@ func (w *wildcards) holding() (edge.Edge, error) {
 	return w.provider.Edges().Open(holder)
 }
 
-func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.RemovalPlan, error) {
+func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.ChangePlan, error) {
 	w, err := h.wildcard(ctx, req.GetEdge())
 	if err != nil {
 		return nil, RefusalError(err)
 	}
 	if w.held.BaseDomain == "" {
-		return &contractv1.RemovalPlan{}, nil
+		return &contractv1.ChangePlan{}, nil
 	}
 	front, err := w.holding()
 	if err != nil {
@@ -326,43 +326,43 @@ func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv
 	if err := w.releasable(ctx); err != nil {
 		return nil, RefusalError(err)
 	}
-	return &contractv1.RemovalPlan{
+	return &contractv1.ChangePlan{
 		EdgeKind: string(front.Kind()),
-		Items:    w.releaseItems(front),
+		Groups:   w.releaseGroups(front),
 		Subject:  w.held.BaseDomain,
 	}, nil
 }
 
-func (w *wildcards) releaseItems(front edge.Edge) []*contractv1.RemovalItem {
+func (w *wildcards) releaseGroups(front edge.Edge) []*contractv1.ChangeGroup {
 	removed, kept := front.PreviewWildcardSurfaces(w.held.Hostname())
-	items := []*contractv1.RemovalItem{surfaceItem(removed)}
+	groups := []*contractv1.ChangeGroup{surfaceGroup(removed)}
 	for _, cert := range w.held.Settled.certificates() {
-		items = append(items, certificateItem(cert))
+		groups = append(groups, certificateGroup(cert))
 	}
 	for _, rec := range w.held.Settled.WrittenRecords() {
-		items = append(items, &contractv1.RemovalItem{
+		groups = append(groups, &contractv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: contractv1.RemovalItem_ACTION_DELETE,
+			Action: contractv1.Change_ACTION_DELETE,
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
 	for _, rec := range w.held.Settled.OwedRecords() {
-		items = append(items, &contractv1.RemovalItem{
+		groups = append(groups, &contractv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: contractv1.RemovalItem_ACTION_KEEP,
+			Action: contractv1.Change_ACTION_KEEP,
 			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
 		})
 	}
-	return append(items, surfaceItem(kept))
+	return append(groups, surfaceGroup(kept))
 }
 
-func surfaceItem(surface Removal) *contractv1.RemovalItem {
-	return &contractv1.RemovalItem{
+func surfaceGroup(surface Removal) *contractv1.ChangeGroup {
+	return &contractv1.ChangeGroup{
 		Kind:   surface.Kind,
 		Name:   surface.Name,
-		Action: removalAction(surface.Action),
+		Action: changeAction(surface.Action),
 		Reason: surface.Reason,
 		Slow:   surface.Slow,
 	}

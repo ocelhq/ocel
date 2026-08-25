@@ -20,16 +20,16 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &contractv1.RemovalPlan{
+		printDestroyPlan(&out, "proj_shop", false, &contractv1.ChangePlan{
 			EdgeKind: "cloudflare",
 			Subject:  "proj_shop",
-			Items: []*contractv1.RemovalItem{
-				{Kind: "edge stack", Name: "shop", Action: contractv1.RemovalItem_ACTION_DELETE},
-				{Kind: "distribution", Name: "E1SHOP", Action: contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE, Slow: true},
-				{Kind: "certificate", Name: "shop.example.com", Action: contractv1.RemovalItem_ACTION_KEEP, Reason: "you pinned this certificate"},
-				{Kind: "infra stack", Name: "shop--infra", Action: contractv1.RemovalItem_ACTION_DELETE, Reason: "databases and buckets, INCLUDING ALL DATA"},
-				{Kind: "app stack", Name: "shop--web--b1", Action: contractv1.RemovalItem_ACTION_DELETE},
-				{Kind: "app stack", Name: "shop--api--b2", Action: contractv1.RemovalItem_ACTION_DELETE},
+			Groups: []*contractv1.ChangeGroup{
+				{Kind: "edge stack", Name: "shop", Action: contractv1.Change_ACTION_DELETE},
+				{Kind: "distribution", Name: "E1SHOP", Action: contractv1.Change_ACTION_DISABLE_THEN_DELETE, Slow: true},
+				{Kind: "certificate", Name: "shop.example.com", Action: contractv1.Change_ACTION_KEEP, Reason: "you pinned this certificate"},
+				{Kind: "infra stack", Name: "shop--infra", Action: contractv1.Change_ACTION_DELETE, Reason: "databases and buckets, INCLUDING ALL DATA"},
+				{Kind: "app stack", Name: "shop--web--b1", Action: contractv1.Change_ACTION_DELETE},
+				{Kind: "app stack", Name: "shop--api--b2", Action: contractv1.Change_ACTION_DELETE},
 			},
 		})
 		got := out.String()
@@ -60,11 +60,11 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &contractv1.RemovalPlan{
+		printDestroyPlan(&out, "proj_shop", false, &contractv1.ChangePlan{
 			EdgeKind: "api-gateway",
-			Items: []*contractv1.RemovalItem{
-				{Kind: "REST APIs", Name: "shop", Action: contractv1.RemovalItem_ACTION_DELETE, Slow: true},
-				{Kind: "domain names", Name: "shop.example.com", Action: contractv1.RemovalItem_ACTION_DELETE},
+			Groups: []*contractv1.ChangeGroup{
+				{Kind: "REST APIs", Name: "shop", Action: contractv1.Change_ACTION_DELETE, Slow: true},
+				{Kind: "domain names", Name: "shop.example.com", Action: contractv1.Change_ACTION_DELETE},
 			},
 		})
 		got := out.String()
@@ -79,13 +79,13 @@ func TestPrintDestroyPlan(t *testing.T) {
 	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
 		t.Parallel()
 
-		got := removalplan.ItemLine(&contractv1.RemovalItem{
+		got := removalplan.GroupLine(&contractv1.ChangeGroup{
 			Kind:   "certificate",
 			Name:   "shop.example.com",
-			Action: contractv1.RemovalItem_Action(97),
+			Action: contractv1.Change_Action(97),
 		})
 		if !strings.Contains(got, "an action this CLI does not know") || !strings.HasSuffix(got, "certificate shop.example.com") {
-			t.Errorf("removalplan.ItemLine() = %q, want the unknown action named before the resource", got)
+			t.Errorf("removalplan.GroupLine() = %q, want the unknown action named before the resource", got)
 		}
 	})
 }

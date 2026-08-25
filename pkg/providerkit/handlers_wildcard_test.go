@@ -217,11 +217,11 @@ func TestPlanRemovePreviewWildcardNamesWhatGoesAndWhatStays(t *testing.T) {
 		t.Errorf("PlanRemovePreviewWildcard() = %+v, want it addressed to the recorded holder", plan)
 	}
 	var deletes, keeps int
-	for _, item := range plan.GetItems() {
+	for _, item := range plan.GetGroups() {
 		switch item.GetAction() {
-		case contractv1.RemovalItem_ACTION_DELETE:
+		case contractv1.Change_ACTION_DELETE:
 			deletes++
-		case contractv1.RemovalItem_ACTION_KEEP:
+		case contractv1.Change_ACTION_KEEP:
 			keeps++
 		}
 	}

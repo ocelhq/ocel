@@ -737,14 +737,14 @@ func TestDeployRecordsTheFeaturesItsProjectDependsOn(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
+	planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
 		Tier:           environmentv1.Tier_TIER_PRODUCTION,
 		WithDependents: true,
 	})
 	if err != nil {
-		t.Fatalf("DescribeBootstrap() error = %v", err)
+		t.Fatalf("PlanBootstrap() error = %v", err)
 	}
-	for _, feature := range described.GetFeatures() {
+	for _, feature := range planned.GetFeatures() {
 		if feature.GetName() != fake.FeatureCache {
 			continue
 		}

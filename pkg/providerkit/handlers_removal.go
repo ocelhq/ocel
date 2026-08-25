@@ -80,7 +80,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	return removal, nil
 }
 
-func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*contractv1.RemovalPlan, error) {
+func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*contractv1.ChangePlan, error) {
 	removal, err := h.openRemoval(ctx, req)
 	if err != nil {
 		return nil, RefusalError(err)
@@ -88,21 +88,21 @@ func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.Projec
 	return removal.plan(), nil
 }
 
-func (r *projectRemoval) plan() *contractv1.RemovalPlan {
-	plan := &contractv1.RemovalPlan{EdgeKind: string(r.front.Kind()), Subject: r.slug}
+func (r *projectRemoval) plan() *contractv1.ChangePlan {
+	plan := &contractv1.ChangePlan{EdgeKind: string(r.front.Kind()), Subject: r.slug}
 	for _, stack := range r.apps {
-		plan.Items = append(plan.Items, &contractv1.RemovalItem{
+		plan.Groups = append(plan.Groups, &contractv1.ChangeGroup{
 			Kind:   "app stack",
 			Name:   stack.String(),
-			Action: contractv1.RemovalItem_ACTION_DELETE,
+			Action: contractv1.Change_ACTION_DELETE,
 			Reason: "everything this release of " + stack.App + " stood up",
 		})
 	}
 	for _, stack := range r.infra {
-		plan.Items = append(plan.Items, &contractv1.RemovalItem{
+		plan.Groups = append(plan.Groups, &contractv1.ChangeGroup{
 			Kind:   "infra stack",
 			Name:   stack.String(),
-			Action: contractv1.RemovalItem_ACTION_DELETE,
+			Action: contractv1.Change_ACTION_DELETE,
 			Reason: "the resources every app in " + stack.Env + " links to",
 			Slow:   true,
 		})
@@ -113,62 +113,62 @@ func (r *projectRemoval) plan() *contractv1.RemovalPlan {
 		Hostnames: r.state.Hostnames(),
 		Front:     r.state.Edge.Front,
 	}) {
-		plan.Items = append(plan.Items, surfaceItem(surface))
+		plan.Groups = append(plan.Groups, surfaceGroup(surface))
 	}
-	plan.Items = append(plan.Items, r.recordItems()...)
-	plan.Items = append(plan.Items,
-		&contractv1.RemovalItem{
+	plan.Groups = append(plan.Groups, r.recordGroups()...)
+	plan.Groups = append(plan.Groups,
+		&contractv1.ChangeGroup{
 			Kind:   "variable values",
 			Name:   r.slug,
-			Action: contractv1.RemovalItem_ACTION_DELETE,
+			Action: contractv1.Change_ACTION_DELETE,
 			Reason: "the values this project's apps read, and the links published beside them",
 		},
-		&contractv1.RemovalItem{
+		&contractv1.ChangeGroup{
 			Kind:   "stored objects",
 			Name:   r.slug,
-			Action: contractv1.RemovalItem_ACTION_DELETE,
+			Action: contractv1.Change_ACTION_DELETE,
 			Reason: "the artifacts, assets and cache entries every release of this project wrote",
 		})
 	return plan
 }
 
-func (r *projectRemoval) recordItems() []*contractv1.RemovalItem {
-	var items []*contractv1.RemovalItem
+func (r *projectRemoval) recordGroups() []*contractv1.ChangeGroup {
+	var groups []*contractv1.ChangeGroup
 	for _, rec := range r.state.WrittenRecords() {
-		items = append(items, &contractv1.RemovalItem{
+		groups = append(groups, &contractv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: contractv1.RemovalItem_ACTION_DELETE,
+			Action: contractv1.Change_ACTION_DELETE,
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
 	for _, rec := range r.state.OwedRecords() {
-		items = append(items, &contractv1.RemovalItem{
+		groups = append(groups, &contractv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: contractv1.RemovalItem_ACTION_KEEP,
+			Action: contractv1.Change_ACTION_KEEP,
 			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
 		})
 	}
 	for _, cert := range r.state.Certificates() {
-		items = append(items, certificateItem(cert))
+		groups = append(groups, certificateGroup(cert))
 	}
-	return items
+	return groups
 }
 
-func certificateItem(cert Certificate) *contractv1.RemovalItem {
+func certificateGroup(cert Certificate) *contractv1.ChangeGroup {
 	if !cert.Requested {
-		return &contractv1.RemovalItem{
+		return &contractv1.ChangeGroup{
 			Kind:   "certificate",
 			Name:   cert.ID,
-			Action: contractv1.RemovalItem_ACTION_KEEP,
+			Action: contractv1.Change_ACTION_KEEP,
 			Reason: "you pinned it; ocel never requested it, so it is not ocel's to delete",
 		}
 	}
-	return &contractv1.RemovalItem{
+	return &contractv1.ChangeGroup{
 		Kind:   "certificate",
 		Name:   cert.ID,
-		Action: contractv1.RemovalItem_ACTION_DELETE,
+		Action: contractv1.Change_ACTION_DELETE,
 		Reason: "ocel requested it for a hostname this project serves, and nothing is left to serve",
 	}
 }

@@ -63,14 +63,14 @@ func RunStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts StatusOp
 			return err
 		}
 		for _, tier := range []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW} {
-			described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier})
+			planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: tier})
 			if err != nil {
 				if connect.CodeOf(err) == connect.CodeUnimplemented {
 					return fmt.Errorf("%s cannot report what a bootstrap has; it predates the report. Upgrade the provider pinned in this project and try again", runner.Package())
 				}
 				return err
 			}
-			status := described.GetBootstrap()
+			status := planned.GetBootstrap()
 			if status == nil {
 				return fmt.Errorf("%s answered without saying anything about the %s bootstrap. Upgrade the provider pinned in this project and try again", runner.Package(), Name(tier))
 			}
