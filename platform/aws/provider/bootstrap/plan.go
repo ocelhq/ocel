@@ -10,28 +10,29 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func NameStacks(described providerkit.Bootstrap) providerkit.Bootstrap {
-	target, err := bootstrapFor(string(described.Class))
+	coreStack, err := StackNameFor(string(described.Class))
 	if err != nil {
 		return described
 	}
 	return providerkit.NameStacks(described, Catalogue(), func(name string) string {
 		f, ok := featureNamed(name)
 		if !ok {
-			return target.stackName
+			return coreStack
 		}
 		return f.stackName(string(described.Class))
 	})
 }
 
-func PlanChanges(ctx context.Context, cfn CFNAPI, class string, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
+func PlanChanges(ctx context.Context, cfn CFNAPI, class string, front edge.Edge, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
 	target, err := bootstrapFor(class)
 	if err != nil {
 		return nil, err
 	}
-	deployed, refs, err := readBootstrap(ctx, cfn, class)
+	deployed, refs, err := readBootstrap(ctx, cfn, class, front)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +43,7 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, class string, req Request, gro
 
 	planned := make([]providerkit.ChangeGroup, 0, len(groups))
 	for _, group := range groups {
-		stack, ok := renderGroup(target, group.Feature, class, deployed.ArtifactBucket, refs, alongside)
+		stack, ok := renderGroup(target, group.Feature, class, front, deployed.ArtifactBucket, refs, alongside)
 		switch {
 		case !ok:
 			planned = append(planned, group)
@@ -60,9 +61,9 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, class string, req Request, gro
 	return planned, nil
 }
 
-func renderGroup(target spec, feature, class, artifactBucket string, refs stackRefs, alongside FeatureSet) (featureStack, bool) {
+func renderGroup(target spec, feature, class string, front edge.Edge, artifactBucket string, refs stackRefs, alongside FeatureSet) (featureStack, bool) {
 	if feature == "" {
-		return featureStack{body: target.template()}, true
+		return featureStack{body: target.template(coreFragment(front, class))}, true
 	}
 	f, ok := featureNamed(feature)
 	if !ok {

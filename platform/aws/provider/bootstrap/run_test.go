@@ -1032,7 +1032,7 @@ func TestRunDefaultEdge(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		var sawCore bool
 		front := &fakeEdge{kind: "cloudfront", onBootstrap: func() {
-			deployed, err := CheckDeployed(context.Background(), cfn)
+			deployed, err := CheckDeployed(context.Background(), cfn, nil)
 			if err != nil {
 				t.Errorf("CheckDeployed inside the edge bootstrap: %v", err)
 			}
@@ -1185,7 +1185,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		}
 
 		cfn.wedge(isrStack(ClassProduction))
-		deployed, err := CheckDeployed(context.Background(), cfn)
+		deployed, err := CheckDeployed(context.Background(), cfn, nil)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
@@ -1212,7 +1212,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		if !slices.Contains(cfn.deleted, isrStack(ClassProduction)) {
 			t.Errorf("deleted %v, want the wedged stack replaced rather than updated", cfn.deleted)
 		}
-		deployed, err := CheckDeployed(context.Background(), cfn)
+		deployed, err := CheckDeployed(context.Background(), cfn, nil)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}

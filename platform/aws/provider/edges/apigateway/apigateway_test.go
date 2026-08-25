@@ -181,12 +181,6 @@ func TestOnlyTheRoutesThatCanCarryTheEdgeHeaderDeclareIt(t *testing.T) {
 	if got := static.integrationResponse["200"][edgeHeaderParameter]; got != "'"+string(Kind)+"'" {
 		t.Errorf("static integration response sets %s = %q, want 'api-gateway'", EdgeHeader, got)
 	}
-
-	notFound := w.gateway.named(notFoundAPIName(edge.ClassProduction))
-	answer := methodOn(notFound, "/{proxy+}", anyMethod)
-	if got := answer.integrationResponse["404"][edgeHeaderParameter]; got != "'"+string(Kind)+"'" {
-		t.Errorf("the not-found integration response sets %s = %q, want 'api-gateway'", EdgeHeader, got)
-	}
 }
 
 func TestPromoteMovesTheStageOnce(t *testing.T) {
@@ -439,8 +433,8 @@ func TestReconcileRepairsAnAPIThatWasNeverFinished(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second Reconcile: %v", err)
 	}
-	if got := w.gateway.count("CreateRestApi"); got != 2 {
-		t.Errorf("CreateRestApi calls = %d, want one for the not-found API and one for this project's; the second reconcile must re-shape what it found", got)
+	if got := w.gateway.count("CreateRestApi"); got != 1 {
+		t.Errorf("CreateRestApi calls = %d, want one; the second reconcile must re-shape what it found rather than raise another API", got)
 	}
 	api := w.gateway.named(productionAPIName())
 	if ownState(t, stack).API != api.id {
@@ -578,7 +572,7 @@ func TestDestroyErasesTheDeploymentsLedger(t *testing.T) {
 	}
 }
 
-func TestTeardownTakesTheBootstrapSet(t *testing.T) {
+func TestTeardownLeavesTheCoreStacksResourcesToCloudFormation(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -591,22 +585,13 @@ func TestTeardownTakesTheBootstrapSet(t *testing.T) {
 			if _, err := e.Bootstrap(ctx, class); err != nil {
 				t.Fatalf("Bootstrap: %v", err)
 			}
-			api := w.gateway.named(notFoundAPIName(class))
-			if api == nil {
-				t.Fatal("bootstrap created no not-found API")
-			}
-			w.gateway.calls, w.iam.calls = nil, nil
+			w.gateway.calls = nil
 
 			if err := e.Teardown(ctx, class); err != nil {
 				t.Fatalf("Teardown: %v", err)
 			}
-			assertSet(t, "the API Gateway calls teardown makes", w.gateway.mutations(), []string{"DeleteRestApi " + api.id})
-			assertSet(t, "the IAM calls teardown makes", w.iam.calls, []string{
-				"DeleteRolePolicy " + invokeRoleName(class),
-				"DeleteRole " + invokeRoleName(class),
-			})
-			if len(w.gateway.apis) != 0 || len(w.iam.roles) != 0 {
-				t.Errorf("bootstrap set left %d APIs and %d roles, want none", len(w.gateway.apis), len(w.iam.roles))
+			if got := w.gateway.calls; len(got) != 0 {
+				t.Errorf("teardown called %v, want nothing; the role and the 404 responder go down with the core stack", got)
 			}
 		})
 	}
@@ -618,13 +603,13 @@ func TestTeardownTakesTheBootstrapSet(t *testing.T) {
 		if err := w.edge().Teardown(ctx, edge.Class("staging")); err == nil {
 			t.Fatal("Teardown(staging) reported success having removed nothing")
 		}
-		if len(w.gateway.calls) != 0 || len(w.iam.calls) != 0 {
-			t.Errorf("an unknown class called %v and %v, want nothing", w.gateway.calls, w.iam.calls)
+		if len(w.gateway.calls) != 0 {
+			t.Errorf("an unknown class called %v, want nothing", w.gateway.calls)
 		}
 	})
 }
 
-func TestBootstrapRaisesTheNotFoundAPIAndTheRole(t *testing.T) {
+func TestBootstrapWritesNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -639,66 +624,43 @@ func TestBootstrapRaisesTheNotFoundAPIAndTheRole(t *testing.T) {
 	if len(out.Offers) != 0 {
 		t.Errorf("Offers = %v, want none; the api-gateway edge hosts no store the bootstrap adopts", out.Offers)
 	}
-
-	api := w.gateway.named(notFoundAPIName(edge.ClassProduction))
-	if api == nil {
-		t.Fatalf("bootstrap raised no not-found API; it called %v", w.gateway.mutations())
-	}
-	method := methodOn(api, "/{proxy+}", anyMethod)
-	if method == nil {
-		t.Fatalf("the not-found API has no catch-all; methods are %v", slices.Sorted(maps.Keys(api.methods)))
-	}
-	if method.integration != agtypes.IntegrationTypeMock {
-		t.Errorf("the not-found integration = %q, want MOCK", method.integration)
-	}
-	if _, ok := method.methodResponses["404"]; !ok {
-		t.Errorf("the not-found API answers %v, want a 404", slices.Sorted(maps.Keys(method.methodResponses)))
-	}
-	for _, contentType := range []string{"application/json", "text/plain", "application/x-www-form-urlencoded"} {
-		if method.requestTemplates[contentType] == "" {
-			t.Errorf("the not-found integration maps %v, want %q among them; an unmapped content type is answered 415 instead of the 404 this API exists to serve", slices.Sorted(maps.Keys(method.requestTemplates)), contentType)
-		}
-	}
-	if _, ok := w.iam.roles[invokeRoleName(edge.ClassProduction)]; !ok {
-		t.Errorf("roles = %v, want the execution role API Gateway invokes through", w.iam.roles)
-	}
-
-	policy := w.iam.policies[invokeRoleName(edge.ClassProduction)]
-	if !strings.Contains(policy, fakeAssetBucket) {
-		t.Errorf("the execution policy = %s, want it to reach the asset bucket", policy)
-	}
-	if strings.Contains(policy, `"Resource":"*"`) {
-		t.Errorf("the execution policy = %s, want the functions it may invoke scoped rather than the whole account", policy)
-	}
-	if !strings.Contains(policy, "arn:aws:lambda:"+fakeRegion+":"+fakeAccount+":function:*") {
-		t.Errorf("the execution policy = %s, want lambda:InvokeFunction scoped to this account's functions in this region", policy)
-	}
-
-	if _, err := w.edge().Bootstrap(ctx, edge.ClassProduction); err != nil {
-		t.Fatalf("second Bootstrap: %v", err)
-	}
-	if got := w.gateway.count("CreateRestApi"); got != 1 {
-		t.Errorf("CreateRestApi calls over two bootstraps = %d, want one", got)
+	if got := w.gateway.mutations(); len(got) != 0 {
+		t.Errorf("bootstrap called %v, want nothing; everything it once created is in the core stack, where the change plan can show it", got)
 	}
 }
 
-func TestReconcileLeavesTheSharedRoleAlone(t *testing.T) {
+func TestBootstrapRefusesAnAccountTheCoreStackDoesNotFront(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	w := newWorld()
-	e := bootstrapped(t, w)
-	w.iam.calls = nil
 
-	if _, err := e.Reconcile(ctx, testSpec(), edge.StackState{}); err != nil {
-		t.Fatalf("Reconcile: %v", err)
-	}
+	t.Run("without the core stack", func(t *testing.T) {
+		t.Parallel()
 
-	for _, call := range w.iam.calls {
-		if !strings.HasPrefix(call, "GetRole") {
-			t.Errorf("reconcile called %q on the account-wide role; a deploy reads it, only bootstrap writes it", call)
+		w := newWorld()
+		w.cfn.absent = true
+		_, err := w.edge().Bootstrap(ctx, edge.ClassProduction)
+		if err == nil {
+			t.Fatal("Bootstrap reported success against an account with no core stack")
 		}
-	}
+		if !strings.Contains(err.Error(), "ocel bootstrap production") {
+			t.Errorf("error = %v, want it to name the command that raises the stack", err)
+		}
+	})
+
+	t.Run("bootstrapped against another edge", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld()
+		w.cfn.otherEdge = true
+		_, err := w.edge().Bootstrap(ctx, edge.ClassPreview)
+		if err == nil {
+			t.Fatal("Bootstrap reported success against a stack carrying none of this edge's outputs")
+		}
+		if !strings.Contains(err.Error(), "ocel bootstrap destroy preview") {
+			t.Errorf("error = %v, want it to name the destroy this move goes through", err)
+		}
+	})
 }
 
 func TestReconcileRefusesAnAccountThatWasNeverBootstrapped(t *testing.T) {
@@ -719,6 +681,7 @@ func TestReconcileRefusesAnAccountThatWasNeverBootstrapped(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
+		w.cfn.otherEdge = true
 		_, err := w.edge().Reconcile(context.Background(), testSpec(), edge.StackState{})
 		if err == nil {
 			t.Fatal("Reconcile succeeded without the role API Gateway invokes through")
@@ -727,6 +690,25 @@ func TestReconcileRefusesAnAccountThatWasNeverBootstrapped(t *testing.T) {
 			t.Errorf("error = %v, want it to name the command that creates the role", err)
 		}
 	})
+}
+
+func TestReconcileTakesTheInvokeRoleFromTheCoreStack(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	reconciled(t, w)
+
+	api := w.gateway.named(productionAPIName())
+	if api == nil {
+		t.Fatal("reconcile raised no API")
+	}
+	method := methodOn(api, "/{proxy+}", anyMethod)
+	if method == nil {
+		t.Fatal("the API has no catch-all method")
+	}
+	if method.credentials != fakeInvokeRole {
+		t.Errorf("the entry integration invokes as %q, want the %s output %q", method.credentials, OutputInvokeRoleARN, fakeInvokeRole)
+	}
 }
 
 func TestCreateAPINamesTheQuota(t *testing.T) {

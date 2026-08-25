@@ -13,8 +13,8 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("same bytes same digest", func(t *testing.T) {
 		t.Parallel()
 
-		body := stackTemplate()
-		if TemplateDigest(body) != TemplateDigest(stackTemplate()) {
+		body := stackTemplate(CoreFragment{})
+		if TemplateDigest(body) != TemplateDigest(stackTemplate(CoreFragment{})) {
 			t.Fatal("rendering the same template twice must produce the same digest")
 		}
 	})
@@ -22,7 +22,7 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("different bytes different digest", func(t *testing.T) {
 		t.Parallel()
 
-		if TemplateDigest(stackTemplate()) == TemplateDigest(previewStackTemplate()) {
+		if TemplateDigest(stackTemplate(CoreFragment{})) == TemplateDigest(previewStackTemplate(CoreFragment{})) {
 			t.Fatal("two different template bodies must not share a digest")
 		}
 	})

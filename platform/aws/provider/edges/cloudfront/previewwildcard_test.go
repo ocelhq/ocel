@@ -252,12 +252,15 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		}
 
 		w := newWorld()
+		raised := previewBootstrapped(t, w)
 		w.cfn.absent = true
-		if _, err := previewBootstrapped(t, w).ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err == nil {
+		if _, err := raised.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err == nil {
 			t.Error("ReconcilePreviewWildcard without a preview bootstrap err = nil, want an error")
 		}
 
-		if _, err := newWorld().edge().ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err == nil {
+		fronted := newWorld()
+		fronted.cfn.otherEdge = true
+		if _, err := fronted.edge().ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err == nil {
 			t.Error("ReconcilePreviewWildcard without a bootstrapped edge set err = nil, want an error")
 		}
 	})

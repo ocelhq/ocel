@@ -157,7 +157,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, class string, progress, lo
 		return err
 	}
 
-	deployed, _, err := readBootstrap(ctx, apis.CFN, class)
+	deployed, _, err := readBootstrap(ctx, apis.CFN, class, nil)
 	if err != nil {
 		return err
 	}

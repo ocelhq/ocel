@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -36,6 +37,8 @@ const (
 
 	namespace = "ocel"
 
+	listPageCeiling = 200
+
 	allViewerExceptHostPolicyID = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
 
 	kindDistribution         = "distribution"
@@ -43,28 +46,7 @@ const (
 )
 
 type CloudFrontAPI interface {
-	CreateKeyValueStore(context.Context, *cloudfront.CreateKeyValueStoreInput, ...func(*cloudfront.Options)) (*cloudfront.CreateKeyValueStoreOutput, error)
 	DescribeKeyValueStore(context.Context, *cloudfront.DescribeKeyValueStoreInput, ...func(*cloudfront.Options)) (*cloudfront.DescribeKeyValueStoreOutput, error)
-	DeleteKeyValueStore(context.Context, *cloudfront.DeleteKeyValueStoreInput, ...func(*cloudfront.Options)) (*cloudfront.DeleteKeyValueStoreOutput, error)
-
-	CreateFunction(context.Context, *cloudfront.CreateFunctionInput, ...func(*cloudfront.Options)) (*cloudfront.CreateFunctionOutput, error)
-	GetFunction(context.Context, *cloudfront.GetFunctionInput, ...func(*cloudfront.Options)) (*cloudfront.GetFunctionOutput, error)
-	DescribeFunction(context.Context, *cloudfront.DescribeFunctionInput, ...func(*cloudfront.Options)) (*cloudfront.DescribeFunctionOutput, error)
-	UpdateFunction(context.Context, *cloudfront.UpdateFunctionInput, ...func(*cloudfront.Options)) (*cloudfront.UpdateFunctionOutput, error)
-	PublishFunction(context.Context, *cloudfront.PublishFunctionInput, ...func(*cloudfront.Options)) (*cloudfront.PublishFunctionOutput, error)
-	DeleteFunction(context.Context, *cloudfront.DeleteFunctionInput, ...func(*cloudfront.Options)) (*cloudfront.DeleteFunctionOutput, error)
-
-	ListCachePolicies(context.Context, *cloudfront.ListCachePoliciesInput, ...func(*cloudfront.Options)) (*cloudfront.ListCachePoliciesOutput, error)
-	CreateCachePolicy(context.Context, *cloudfront.CreateCachePolicyInput, ...func(*cloudfront.Options)) (*cloudfront.CreateCachePolicyOutput, error)
-	DeleteCachePolicy(context.Context, *cloudfront.DeleteCachePolicyInput, ...func(*cloudfront.Options)) (*cloudfront.DeleteCachePolicyOutput, error)
-
-	ListResponseHeadersPolicies(context.Context, *cloudfront.ListResponseHeadersPoliciesInput, ...func(*cloudfront.Options)) (*cloudfront.ListResponseHeadersPoliciesOutput, error)
-	CreateResponseHeadersPolicy(context.Context, *cloudfront.CreateResponseHeadersPolicyInput, ...func(*cloudfront.Options)) (*cloudfront.CreateResponseHeadersPolicyOutput, error)
-	DeleteResponseHeadersPolicy(context.Context, *cloudfront.DeleteResponseHeadersPolicyInput, ...func(*cloudfront.Options)) (*cloudfront.DeleteResponseHeadersPolicyOutput, error)
-
-	ListOriginAccessControls(context.Context, *cloudfront.ListOriginAccessControlsInput, ...func(*cloudfront.Options)) (*cloudfront.ListOriginAccessControlsOutput, error)
-	CreateOriginAccessControl(context.Context, *cloudfront.CreateOriginAccessControlInput, ...func(*cloudfront.Options)) (*cloudfront.CreateOriginAccessControlOutput, error)
-	DeleteOriginAccessControl(context.Context, *cloudfront.DeleteOriginAccessControlInput, ...func(*cloudfront.Options)) (*cloudfront.DeleteOriginAccessControlOutput, error)
 
 	ListDistributions(context.Context, *cloudfront.ListDistributionsInput, ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error)
 	CreateDistribution(context.Context, *cloudfront.CreateDistributionInput, ...func(*cloudfront.Options)) (*cloudfront.CreateDistributionOutput, error)
@@ -230,9 +212,9 @@ func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (
 		return bootstrap.Deployed{}, err
 	}
 	if class == edge.ClassPreview {
-		return bootstrap.CheckDeployedPreview(ctx, c.CFN)
+		return bootstrap.CheckDeployedPreview(ctx, c.CFN, p)
 	}
-	return bootstrap.CheckDeployed(ctx, c.CFN)
+	return bootstrap.CheckDeployed(ctx, c.CFN, p)
 }
 
 func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
@@ -240,24 +222,18 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	if err := knownClass(class); err != nil {
+	deployed, err := p.bootstrap(ctx, c, class)
+	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	if _, err := ensureEdgeSet(ctx, c, class); err != nil {
+	if _, err := edgeSetOf(deployed, class); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
 	return edge.BootstrapOutput{Trust: edge.TrustInternal}, nil
 }
 
-func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
-	if err := knownClass(class); err != nil {
-		return err
-	}
-	c, err := p.clientsFor(ctx)
-	if err != nil {
-		return err
-	}
-	return teardownEdgeSet(ctx, c, class)
+func (p *provider) Teardown(_ context.Context, class edge.Class) error {
+	return knownClass(class)
 }
 
 func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -273,17 +249,13 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, err
 	}
 	if !deployed.Present {
-		return nil, fmt.Errorf("the %s bootstrap is not standing, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
+		return nil, fmt.Errorf("the %s bootstrap is not standing, so the %q edge has no state table to keep %s's deployments in. Run `%s` against this account, then deploy again", spec.Class, Kind, spec.Slug, providerkit.BootstrapCommand(spec.Class))
 	}
 	var own private
 	if err := prior.Adapter.Into(&own); err != nil {
 		return nil, err
 	}
-	set, err := findEdgeSet(ctx, c, spec.Class, edgeSet{
-		cachePolicy:         own.CachePolicy,
-		headersPolicy:       own.HeadersPolicy,
-		originAccessControl: own.OriginAccessControl,
-	})
+	set, err := edgeSetOf(deployed, spec.Class)
 	if err != nil {
 		return nil, err
 	}

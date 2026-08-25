@@ -10,8 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
-
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -28,15 +26,6 @@ const (
 	proxyPathParameter            = "method.request.path.proxy"
 	integrationProxyPathParameter = "integration.request.path.proxy"
 )
-
-var notFoundBodyTypes = []string{
-	"application/json",
-	"text/plain",
-	"text/html",
-	"application/x-www-form-urlencoded",
-	"multipart/form-data",
-	"application/octet-stream",
-}
 
 type apiPlan struct {
 	name        string
@@ -299,92 +288,6 @@ func deleteAPI(ctx context.Context, c Clients, id string) error {
 			return nil
 		}
 		return fmt.Errorf("delete REST API %s: %w", id, err)
-	}
-	return nil
-}
-
-func ensureNotFoundAPI(ctx context.Context, c Clients, class edge.Class) (string, error) {
-	name := notFoundAPIName(class)
-	id, found, err := findAPI(ctx, c, name)
-	if err != nil {
-		return "", err
-	}
-	if !found {
-		out, err := c.APIGateway.CreateRestApi(ctx, &apigateway.CreateRestApiInput{
-			Name:        aws.String(name),
-			Description: aws.String("Ocel answers 404 from here for every host pointed at this account that no deployment claims."),
-			EndpointConfiguration: &agtypes.EndpointConfiguration{
-				Types: []agtypes.EndpointType{agtypes.EndpointTypeRegional},
-			},
-		})
-		if err != nil {
-			return "", createAPIError(name, err)
-		}
-		id = aws.ToString(out.Id)
-	}
-	resources, err := apiResources(ctx, c, id)
-	if err != nil {
-		return "", err
-	}
-	if _, ok := resources[rootPath]; !ok {
-		return "", fmt.Errorf("REST API %s has no root resource", id)
-	}
-	proxy, err := ensureResource(ctx, c, id, resources, rootPath, proxyPathPart)
-	if err != nil {
-		return "", err
-	}
-	for _, path := range []string{rootPath, proxy} {
-		if err := putNotFoundRoute(ctx, c, id, resources[path]); err != nil {
-			return "", err
-		}
-	}
-	if err := publish(ctx, c, id); err != nil {
-		return "", err
-	}
-	return id, nil
-}
-
-func putNotFoundRoute(ctx context.Context, c Clients, api, resource string) error {
-	if _, err := c.APIGateway.PutMethod(ctx, &apigateway.PutMethodInput{
-		RestApiId:         aws.String(api),
-		ResourceId:        aws.String(resource),
-		HttpMethod:        aws.String(anyMethod),
-		AuthorizationType: aws.String("NONE"),
-	}); err != nil {
-		return fmt.Errorf("open the not-found method on REST API %s: %w", api, err)
-	}
-	templates := map[string]string{}
-	for _, contentType := range notFoundBodyTypes {
-		templates[contentType] = `{"statusCode": 404}`
-	}
-	if _, err := c.APIGateway.PutIntegration(ctx, &apigateway.PutIntegrationInput{
-		RestApiId:           aws.String(api),
-		ResourceId:          aws.String(resource),
-		HttpMethod:          aws.String(anyMethod),
-		Type:                agtypes.IntegrationTypeMock,
-		RequestTemplates:    templates,
-		PassthroughBehavior: aws.String("WHEN_NO_TEMPLATES"),
-	}); err != nil {
-		return fmt.Errorf("mock the not-found response on REST API %s: %w", api, err)
-	}
-	if _, err := c.APIGateway.PutMethodResponse(ctx, &apigateway.PutMethodResponseInput{
-		RestApiId:          aws.String(api),
-		ResourceId:         aws.String(resource),
-		HttpMethod:         aws.String(anyMethod),
-		StatusCode:         aws.String("404"),
-		ResponseParameters: map[string]bool{edgeHeaderParameter: true},
-	}); err != nil {
-		return fmt.Errorf("declare the not-found response on REST API %s: %w", api, err)
-	}
-	if _, err := c.APIGateway.PutIntegrationResponse(ctx, &apigateway.PutIntegrationResponseInput{
-		RestApiId:          aws.String(api),
-		ResourceId:         aws.String(resource),
-		HttpMethod:         aws.String(anyMethod),
-		StatusCode:         aws.String("404"),
-		ResponseParameters: map[string]string{edgeHeaderParameter: "'" + edgeHeaderValue + "'"},
-		ResponseTemplates:  map[string]string{"application/json": `{"message":"Not Found"}`},
-	}); err != nil {
-		return fmt.Errorf("set the not-found response on REST API %s: %w", api, err)
 	}
 	return nil
 }
