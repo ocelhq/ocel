@@ -1447,6 +1447,7 @@ type BootstrapRequest struct {
 	AutoHeal           *bool                  `protobuf:"varint,4,opt,name=auto_heal,json=autoHeal,proto3,oneof" json:"auto_heal,omitempty"`
 	AcceptReplacements bool                   `protobuf:"varint,5,opt,name=accept_replacements,json=acceptReplacements,proto3" json:"accept_replacements,omitempty"`
 	Edge               *EdgeSelection         `protobuf:"bytes,6,opt,name=edge,proto3" json:"edge,omitempty"`
+	Remove             []string               `protobuf:"bytes,7,rep,name=remove,proto3" json:"remove,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -1519,6 +1520,13 @@ func (x *BootstrapRequest) GetAcceptReplacements() bool {
 func (x *BootstrapRequest) GetEdge() *EdgeSelection {
 	if x != nil {
 		return x.Edge
+	}
+	return nil
+}
+
+func (x *BootstrapRequest) GetRemove() []string {
+	if x != nil {
+		return x.Remove
 	}
 	return nil
 }
@@ -3695,14 +3703,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x12,\n" +
 	"\x03tag\x18\x03 \x01(\tB\x1a\xbaH\x17r\x15\x18@2\x11^[A-Za-z0-9._-]*$R\x03tag\x127\n" +
-	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edgeJ\x04\b\x05\x10\x06R\x11required_features\"\x99\x02\n" +
+	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edgeJ\x04\b\x05\x10\x06R\x11required_features\"\xb1\x02\n" +
 	"\x10BootstrapRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x12\x1a\n" +
 	"\bfeatures\x18\x02 \x03(\tR\bfeatures\x12\x14\n" +
 	"\x05force\x18\x03 \x01(\bR\x05force\x12 \n" +
 	"\tauto_heal\x18\x04 \x01(\bH\x00R\bautoHeal\x88\x01\x01\x12/\n" +
 	"\x13accept_replacements\x18\x05 \x01(\bR\x12acceptReplacements\x127\n" +
-	"\x04edge\x18\x06 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edgeB\f\n" +
+	"\x04edge\x18\x06 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x16\n" +
+	"\x06remove\x18\a \x03(\tR\x06removeB\f\n" +
 	"\n" +
 	"_auto_heal\"\xf3\x01\n" +
 	"\x14PlanBootstrapRequest\x129\n" +

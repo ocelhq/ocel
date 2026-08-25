@@ -79,7 +79,7 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 		return providerkit.BootstrapPlan{}, err
 	}
 	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read,
-		bootstrap.Request{Features: req.Features, Drop: req.Drop, Writer: req.Writer},
+		bootstrap.Request{Features: req.Features, Remove: req.Remove, Writer: req.Writer},
 		providerkit.DeriveGroups(bootstrap.NameStacks(described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
@@ -119,7 +119,7 @@ func (b Bootstrapper) edgeGroup(ctx context.Context, req providerkit.BootstrapRe
 }
 
 func dropping(feature string, req providerkit.BootstrapRequest) bool {
-	return feature != "" && slices.Contains(req.Drop, feature) && !slices.Contains(req.Features, feature)
+	return feature != "" && slices.Contains(req.Remove, feature) && !slices.Contains(req.Features, feature)
 }
 
 func severedEdge(kind edge.Kind, feature string, planned []edge.PlanChange) *providerkit.ChangeGroup {
@@ -152,7 +152,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	}
 	err := bootstrap.Run(ctx, b.apis(), string(req.Class), bootstrap.Request{
 		Features:           req.Features,
-		Drop:               req.Drop,
+		Remove:             req.Remove,
 		Writer:             req.Writer,
 		AcceptReplacements: !req.Unattended,
 	}, say(report), detail(report))

@@ -41,33 +41,39 @@ func needsNote(stdout io.Writer, note string) string {
 	return gated(stdout, color.RGB(0xff, 0xb8, 0x6c)).Sprint(note)
 }
 
-func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.Feature, interactive bool, stdout io.Writer) ([]string, bool, error) {
+func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.Feature, standing, going []string, interactive bool, stdout io.Writer) ([]string, bool, error) {
 	if opts.FeaturesDeclared {
 		requested, err := parseFeatureFlag(opts.Features, catalogue)
 		return requested, err == nil, err
 	}
 	if !interactive {
-		return enabledFeatures(catalogue), true, nil
+		return without(standing, going), true, nil
 	}
-	return pickFeatures(ctx, catalogue, stdout)
+	return pickFeatures(ctx, catalogue, standing, going, stdout)
 }
 
-func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, stdout io.Writer) ([]string, bool, error) {
+func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, standing, going []string, stdout io.Writer) ([]string, bool, error) {
 	if len(catalogue) == 0 {
 		return nil, true, nil
 	}
 
+	kept := without(standing, going)
 	printCatalogue(stdout, catalogue)
+	printStanding(stdout, kept)
 
-	enabled := enabledFeatures(catalogue)
-	options := make([]huh.Option[string], 0, len(catalogue))
-	for _, f := range catalogue {
-		options = append(options, huh.NewOption(f.GetName(), f.GetName()).Selected(slices.Contains(enabled, f.GetName())))
+	addable := addableFeatures(catalogue, standing)
+	options := make([]huh.Option[string], 0, len(addable))
+	for _, name := range addable {
+		options = append(options, huh.NewOption(name, name))
+	}
+	if len(options) == 0 {
+		fmt.Fprintln(stdout, "Every feature this provider offers is already standing, so there is nothing to add.")
+		return kept, true, nil
 	}
 
-	chosen := slices.Clone(enabled)
+	var chosen []string
 	field := huh.NewMultiSelect[string]().
-		Title("Select all that apply").
+		Title("Select the features to add").
 		Options(options...).
 		// FIXME: huh v2.0.3 subtracts the title height from the multiselect viewport
 		// instead of the frame, so an unset Height scrolls one option at a time.
@@ -84,9 +90,31 @@ func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, stdout i
 	if err != nil {
 		return nil, false, err
 	}
-	applied := withDependencies(catalogue, chosen)
-	printApplied(stdout, catalogue, applied, chosen)
+	named := inCatalogueOrder(catalogue, append(slices.Clone(kept), chosen...))
+	applied := withDependencies(catalogue, named)
+	printApplied(stdout, catalogue, applied, named)
 	return applied, true, nil
+}
+
+func addableFeatures(catalogue []*contractv1.Feature, standing []string) []string {
+	var addable []string
+	for _, f := range catalogue {
+		if !slices.Contains(standing, f.GetName()) {
+			addable = append(addable, f.GetName())
+		}
+	}
+	return addable
+}
+
+func printStanding(stdout io.Writer, standing []string) {
+	if len(standing) == 0 {
+		return
+	}
+	marked := make([]string, 0, len(standing))
+	for _, name := range standing {
+		marked = append(marked, selectedMark(stdout)+" "+name)
+	}
+	fmt.Fprintf(stdout, "Already standing, and this run keeps them: %s\n\n", strings.Join(marked, "  "))
 }
 
 func printApplied(stdout io.Writer, catalogue []*contractv1.Feature, applied, chosen []string) {
@@ -225,14 +253,69 @@ func unmetDependency(catalogue []*contractv1.Feature, chosen []string) error {
 	return nil
 }
 
-func droppedFeatures(enabled, requested []string) []string {
-	var dropped []string
-	for _, name := range enabled {
-		if !slices.Contains(requested, name) {
-			dropped = append(dropped, name)
+func parseRemoveFlag(raw string, catalogue []*contractv1.Feature) ([]string, error) {
+	var named []string
+	for _, name := range strings.Split(raw, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if !slices.Contains(catalogueNames(catalogue), name) {
+			return nil, fmt.Errorf("this provider has no bootstrap feature named %q; it offers %s",
+				name, strings.Join(catalogueNames(catalogue), ", "))
+		}
+		if !slices.Contains(named, name) {
+			named = append(named, name)
 		}
 	}
-	return dropped
+	return inCatalogueOrder(catalogue, named), nil
+}
+
+func goingFeatures(catalogue []*contractv1.Feature, standing, named []string) []string {
+	var doomed []string
+	for _, name := range named {
+		if slices.Contains(standing, name) {
+			doomed = append(doomed, name)
+		}
+	}
+	for grew := true; grew; {
+		grew = false
+		for _, f := range catalogue {
+			if slices.Contains(doomed, f.GetName()) || !slices.Contains(standing, f.GetName()) {
+				continue
+			}
+			for _, dep := range f.GetDependsOn() {
+				if slices.Contains(doomed, dep) {
+					doomed, grew = append(doomed, f.GetName()), true
+				}
+			}
+		}
+	}
+	return inCatalogueOrder(catalogue, doomed)
+}
+
+func without(names, taken []string) []string {
+	var kept []string
+	for _, name := range names {
+		if !slices.Contains(taken, name) {
+			kept = append(kept, name)
+		}
+	}
+	return kept
+}
+
+func bothWays(requested, named []string) error {
+	var both []string
+	for _, name := range named {
+		if slices.Contains(requested, name) {
+			both = append(both, name)
+		}
+	}
+	if len(both) == 0 {
+		return nil
+	}
+	return fmt.Errorf("--features and --remove both name %s; a feature is either ensured or taken down, never both in one run",
+		strings.Join(both, ", "))
 }
 
 func dependentProjects(catalogue []*contractv1.Feature, dropped []string) []string {

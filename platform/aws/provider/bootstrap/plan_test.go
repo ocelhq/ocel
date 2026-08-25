@@ -34,7 +34,7 @@ func planned(t *testing.T, cfn CFNAPI, class string, req Request) []providerkit.
 	}
 	groups, err := PlanChanges(ctx, cfn, read, req, providerkit.DeriveGroups(
 		NameStacks(described), Catalogue(),
-		providerkit.BootstrapRequest{Class: providerkit.Class(class), Features: req.Features, Drop: req.Drop}))
+		providerkit.BootstrapRequest{Class: providerkit.Class(class), Features: req.Features, Remove: req.Remove}))
 	if err != nil {
 		t.Fatalf("PlanChanges: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestPlanListsWhatADroppedFeatureTakesWithIt(t *testing.T) {
 
 	groups := planned(t, cfn, ClassProduction, Request{
 		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
-		Drop:     []string{FeatureISR},
+		Remove:   []string{FeatureISR},
 	})
 	group := groupNamed(t, groups, stack)
 	if group.Action != providerkit.ActionDelete || group.Feature != FeatureISR {
@@ -225,7 +225,7 @@ func TestPlanListsTheResourcesTheStandingStackHoldsNotTheOnesThisBuildWouldRende
 
 	group := groupNamed(t, planned(t, cfn, ClassProduction, Request{
 		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
-		Drop:     []string{FeatureISR},
+		Remove:   []string{FeatureISR},
 	}), stack)
 	leftover := changeNamed(t, group, "LeftoverQueue")
 	if leftover.Kind != "AWS::SQS::Queue" || leftover.Action != providerkit.ActionDelete {
@@ -250,7 +250,7 @@ func TestPlanFallsBackToTheTemplateWhenItCannotReadTheStandingStack(t *testing.T
 
 	group := groupNamed(t, planned(t, unlistable{cfn}, ClassProduction, Request{
 		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
-		Drop:     []string{FeatureISR},
+		Remove:   []string{FeatureISR},
 	}), stack)
 	if queue := changeNamed(t, group, "RevalidateQueue"); queue.Action != providerkit.ActionDelete {
 		t.Errorf("RevalidateQueue = %+v, want the template's best guess at what goes", queue)

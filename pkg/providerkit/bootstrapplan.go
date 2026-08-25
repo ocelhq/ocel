@@ -95,7 +95,7 @@ func DeriveGroups(described Bootstrap, catalogue []Feature, req BootstrapRequest
 	for _, name := range req.Features {
 		groups = append(groups, featureGroup(standing[name], name))
 	}
-	for _, name := range req.Drop {
+	for _, name := range req.Remove {
 		if slices.Contains(req.Features, name) {
 			continue
 		}

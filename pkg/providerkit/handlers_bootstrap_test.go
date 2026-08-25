@@ -198,7 +198,7 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 	}
 }
 
-func TestBootstrapRefusesToDropAFeatureAProjectRecorded(t *testing.T) {
+func TestBootstrapRefusesToRemoveAFeatureAProjectRecorded(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -210,8 +210,9 @@ func TestBootstrapRefusesToDropAFeatureAProjectRecorded(t *testing.T) {
 	recordProject(t, provider, "shop", fake.FeatureImages)
 
 	stream, err := client.Bootstrap(ctx, &contractv1.BootstrapRequest{
-		Tier:     environmentv1.Tier_TIER_PRODUCTION,
-		Features: []string{fake.FeatureCache},
+		Tier:   environmentv1.Tier_TIER_PRODUCTION,
+		Edge:   &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+		Remove: []string{fake.FeatureImages},
 	})
 	if err != nil {
 		t.Fatalf("Bootstrap() error = %v", err)
@@ -221,7 +222,7 @@ func TestBootstrapRefusesToDropAFeatureAProjectRecorded(t *testing.T) {
 		t.Fatalf("Bootstrap() stream = %v", err)
 	}
 	if result.GetSuccess() {
-		t.Fatal("Bootstrap() dropped a feature a deployed project recorded")
+		t.Fatal("Bootstrap() removed a feature a deployed project recorded")
 	}
 	for _, want := range []string{fake.FeatureImages, "shop", "--force"} {
 		if !strings.Contains(result.GetError(), want) {
@@ -230,7 +231,7 @@ func TestBootstrapRefusesToDropAFeatureAProjectRecorded(t *testing.T) {
 	}
 }
 
-func TestBootstrapDropsInDeleteOrderWhenForced(t *testing.T) {
+func TestBootstrapRemovesInDeleteOrderWhenForced(t *testing.T) {
 	t.Parallel()
 
 	client, provider := contractServed(t, "1.2.3")
@@ -241,17 +242,41 @@ func TestBootstrapDropsInDeleteOrderWhenForced(t *testing.T) {
 	recordProject(t, provider, "shop", fake.FeatureImages)
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
-		Tier:  environmentv1.Tier_TIER_PRODUCTION,
-		Force: true,
+		Tier:   environmentv1.Tier_TIER_PRODUCTION,
+		Edge:   &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+		Remove: []string{fake.FeatureCache},
+		Force:  true,
 	})
 
 	applied := provider.Bootstrapper().Applied()
-	dropping := applied[len(applied)-1]
-	if want := []string{fake.FeatureImages, fake.FeatureCache}; !slices.Equal(dropping.Drop, want) {
-		t.Errorf("Apply() dropped %v, want %v — what stands on a feature goes first", dropping.Drop, want)
+	removing := applied[len(applied)-1]
+	if want := []string{fake.FeatureImages, fake.FeatureCache}; !slices.Equal(removing.Remove, want) {
+		t.Errorf("Apply() removed %v, want %v — what stands on a feature goes first", removing.Remove, want)
 	}
-	if len(dropping.Features) != 0 {
-		t.Errorf("Apply() was asked for %v, want nothing left standing", dropping.Features)
+	if len(removing.Features) != 0 {
+		t.Errorf("Apply() was asked for %v, want a run that named only removals to ensure nothing", removing.Features)
+	}
+}
+
+func TestBootstrapLeavesAFeatureNoRunNamed(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{
+		Tier:     environmentv1.Tier_TIER_PRODUCTION,
+		Features: []string{fake.FeatureImages},
+	})
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{
+		Tier:     environmentv1.Tier_TIER_PRODUCTION,
+		Edge:     &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+		Features: []string{fake.FeatureCache},
+	})
+
+	applied := provider.Bootstrapper().Applied()
+	last := applied[len(applied)-1]
+	if len(last.Remove) != 0 {
+		t.Errorf("Apply() removed %v, want a run naming only %s to leave the rest of the account alone",
+			last.Remove, fake.FeatureCache)
 	}
 }
 

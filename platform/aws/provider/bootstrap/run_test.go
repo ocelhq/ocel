@@ -915,7 +915,7 @@ func TestRun(t *testing.T) {
 		}
 		dropped := Request{
 			Features: []string{FeatureImageOptimization},
-			Drop:     []string{FeatureCloudflareEdge, FeatureISR},
+			Remove:   []string{FeatureCloudflareEdge, FeatureISR},
 		}
 		if err := Run(context.Background(), apis, ClassProduction, dropped, nil, nil); err != nil {
 			t.Fatalf("Run without the edge: %v", err)
@@ -1112,7 +1112,7 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 
 				req := Request{
 					Features: []string{FeatureISR, FeatureImageOptimization},
-					Drop:     []string{FeatureCloudflareEdge},
+					Remove:   []string{FeatureCloudflareEdge},
 				}
 				if err := Run(context.Background(), apis, tc.class, req, nil, nil); err != nil {
 					t.Fatalf("dropping the cloudflare edge: %v", err)
@@ -1145,7 +1145,7 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 		}
 		req := Request{
 			Features: []string{FeatureImageOptimization},
-			Drop:     []string{FeatureCloudflareEdge, FeatureISR},
+			Remove:   []string{FeatureCloudflareEdge, FeatureISR},
 		}
 		if err := Run(context.Background(), apis, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("dropping isr: %v", err)
@@ -1232,7 +1232,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		}
 		cfn.wedge(isrStack(ClassProduction))
 
-		if err := Run(context.Background(), apis, ClassProduction, Request{Drop: []string{FeatureISR}}, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, ClassProduction, Request{Remove: []string{FeatureISR}}, nil, nil); err != nil {
 			t.Fatalf("dropping a wedged stack: %v", err)
 		}
 		if slices.Contains(cfn.stacks(), isrStack(ClassProduction)) {

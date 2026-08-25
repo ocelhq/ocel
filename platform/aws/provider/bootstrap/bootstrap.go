@@ -111,7 +111,7 @@ type APIs struct {
 
 type Request struct {
 	Features           []string
-	Drop               []string
+	Remove             []string
 	Writer             providerkit.Writer
 	AcceptReplacements bool
 }
@@ -430,7 +430,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 		logf("reused the existing Pulumi passphrase")
 	}
 
-	if err := dropFeatures(ctx, apis.CFN, steps, target.class, req.Drop, progressf, logf); err != nil {
+	if err := dropFeatures(ctx, apis.CFN, steps, target.class, req.Remove, progressf, logf); err != nil {
 		return err
 	}
 
@@ -510,7 +510,7 @@ func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, class string,
 
 func droppingEdge(front edge.Edge, req Request) bool {
 	name := providerkit.FeatureNeedingEdge(Catalogue(), front.Kind())
-	return name != "" && slices.Contains(req.Drop, name) && !slices.Contains(req.Features, name)
+	return name != "" && slices.Contains(req.Remove, name) && !slices.Contains(req.Features, name)
 }
 
 func tearDownEdge(ctx context.Context, d stepDeps, front edge.Edge) error {

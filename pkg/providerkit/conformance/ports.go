@@ -373,7 +373,7 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
 		}
 		class := providerkit.ClassProduction
 		drop := featureNames(catalogue)
-		plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Drop: drop})
+		plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Remove: drop})
 		if err != nil {
 			t.Fatalf("Plan(%s, drop %v) = %v", class, drop, err)
 		}
@@ -454,7 +454,7 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
 		for i := len(drop) - 1; i >= 0; i-- {
 			ordered = append(ordered, drop[i]...)
 		}
-		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Drop: ordered}, nil); err != nil {
+		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Remove: ordered}, nil); err != nil {
 			t.Fatalf("Apply() dropping every feature = %v", err)
 		}
 		if err := bootstrapper.Remove(ctx, class, nil); err != nil {

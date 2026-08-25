@@ -116,8 +116,8 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 	b := Bootstrapper{CFN: &teardownCFN{present: map[string]bootstrap.Deployed{}}, Edge: front}
 
 	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
-		Class: providerkit.ClassProduction,
-		Drop:  []string{bootstrap.FeatureCloudflareEdge},
+		Class:  providerkit.ClassProduction,
+		Remove: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)

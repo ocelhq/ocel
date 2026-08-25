@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"os"
 	"strings"
 	"testing"
 
@@ -135,38 +134,33 @@ func TestBootstrapWithoutTheFlagKeepsWhatIsThere(t *testing.T) {
 	}
 }
 
-func TestBootstrapRefusesADropItCannotAskAbout(t *testing.T) {
+func TestBootstrapLeavesOutWhatItWasNotAskedAbout(t *testing.T) {
 	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
 
 	var stdout, stderr bytes.Buffer
 	opts := bootstrap.Options{Yes: true, Features: "isr", FeaturesDeclared: true}
-	err := bootstrap.Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
-	if err == nil {
-		t.Fatalf("runBootstrap err = nil, want the unattended drop refused; stdout=%s", stdout.String())
-	}
-	for _, want := range []string{"image-optimization", "--force"} {
-		if !strings.Contains(stdout.String(), want) {
-			t.Errorf("stdout = %q, want the refusal to name %q", stdout.String(), want)
-		}
-	}
-	if _, statErr := os.Stat(journal); statErr == nil {
-		t.Errorf("the provider was reached despite the refusal: %v", clitest.ReadJournal(t, journal))
-	}
-}
-
-func TestBootstrapForcesADropWhenTold(t *testing.T) {
-	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
-	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
-
-	var stdout, stderr bytes.Buffer
-	opts := bootstrap.Options{Yes: true, Features: "isr", FeaturesDeclared: true, Force: true}
 	if err := bootstrap.Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	got := clitest.ReadJournal(t, journal)
-	if len(got) != 1 || got[0] != "features=isr force=true acceptReplacements=true" {
-		t.Errorf("provider saw %v, want the forced drop carried through", got)
+	if len(got) != 1 || got[0] != "features=isr force=false acceptReplacements=true" {
+		t.Errorf("provider saw %v; another project's feature goes only when a run names it", got)
+	}
+}
+
+func TestBootstrapRemovesWhatItIsTold(t *testing.T) {
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
+
+	var stdout, stderr bytes.Buffer
+	opts := bootstrap.Options{Yes: true, Remove: "image-optimization", Force: true}
+	if err := bootstrap.Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	got := clitest.ReadJournal(t, journal)
+	if len(got) != 1 || got[0] != "features=isr remove=image-optimization force=true acceptReplacements=true" {
+		t.Errorf("provider saw %v, want the named removal carried through", got)
 	}
 }
 
