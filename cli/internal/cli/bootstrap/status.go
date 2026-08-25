@@ -102,7 +102,7 @@ func renderStatuses(out io.Writer, statuses []*contractv1.BootstrapStatus) {
 func renderStatus(out io.Writer, status *contractv1.BootstrapStatus) {
 	name := Name(status.GetTier())
 	if !status.GetPresent() {
-		fmt.Fprintf(out, "%s: not bootstrapped\n", name)
+		fmt.Fprintf(out, "%s: not bootstrapped — run `ocel bootstrap %s` to set it up\n", name, name)
 		return
 	}
 	fmt.Fprintf(out, "%s: schema %d, this CLI speaks schema %d\n", name, status.GetSchema(), status.GetRequiredSchema())

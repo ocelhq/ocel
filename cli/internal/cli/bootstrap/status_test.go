@@ -38,12 +38,12 @@ func TestRenderBootstrapStatus(t *testing.T) {
 		}
 	})
 
-	t.Run("an absent bootstrap says so and nothing more", func(t *testing.T) {
+	t.Run("an absent bootstrap says so and points at the fix", func(t *testing.T) {
 		var out bytes.Buffer
 		renderStatus(&out, &contractv1.BootstrapStatus{Tier: environmentv1.Tier_TIER_PREVIEW, RequiredSchema: 1})
 
-		if got := out.String(); got != "preview: not bootstrapped\n" {
-			t.Errorf("report = %q, want the one line that says it is not there", got)
+		if got := out.String(); got != "preview: not bootstrapped — run `ocel bootstrap preview` to set it up\n" {
+			t.Errorf("report = %q, want the one line that says it is not there and how to set it up", got)
 		}
 	})
 

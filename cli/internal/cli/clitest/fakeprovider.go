@@ -571,6 +571,9 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 		return nil, err
 	}
 	class := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
+	if os.Getenv(FakeEmptyRemovalPlanEnvVar) != "" {
+		return &contractv1.ChangePlan{Subject: class}, nil
+	}
 	return &contractv1.ChangePlan{
 		EdgeKind: "cloudflare",
 		Subject:  class,
