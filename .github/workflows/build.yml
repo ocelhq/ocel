@@ -34,6 +34,9 @@ jobs:
       - name: pnpm --filter @ocel/provider-aws typecheck
         run: pnpm --filter @ocel/provider-aws typecheck
 
+      - name: pnpm --filter @ocel/provider-vps typecheck
+        run: pnpm --filter @ocel/provider-vps typecheck
+
       - name: pnpm --filter @ocel/sst build (tsc)
         run: pnpm --filter @ocel/sst build
 
@@ -50,6 +53,7 @@ jobs:
           pnpm --filter @ocel/sst test
           pnpm --filter @ocel/pulumi test
           pnpm --filter @ocel/provider-aws test
+          pnpm --filter @ocel/provider-vps test
           pnpm --filter @framework/next-router test
           pnpm --filter @platform/cf-entry test
           pnpm --filter @platform/cloudfront-resolver test

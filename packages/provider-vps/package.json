@@ -1,0 +1,32 @@
+{
+  "name": "@ocel/provider-vps",
+  "version": "0.0.1-alpha.0",
+  "private": true,
+  "type": "module",
+  "description": "VPS provider descriptor for `ocel deploy`",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "optionalDependencies": {
+    "@ocel/provider-vps-darwin-arm64": "workspace:^",
+    "@ocel/provider-vps-darwin-x64": "workspace:^",
+    "@ocel/provider-vps-linux-x64": "workspace:^",
+    "@ocel/provider-vps-linux-arm64": "workspace:^",
+    "@ocel/provider-vps-win32-x64": "workspace:^"
+  },
+  "peerDependencies": {
+    "ocel": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "ocel": "workspace:^",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.3",
+    "vitest": "^4.1.9"
+  },
+  "license": "MIT"
+}
