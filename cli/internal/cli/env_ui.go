@@ -39,24 +39,24 @@ func init() {
 	envCmd.AddCommand(envUICmd)
 }
 
-func runEnvUI(ctx context.Context, d session.Session, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+func runEnvUI(ctx context.Context, sess session.Session, cwd string, opts envOptions, stdout, stderr io.Writer) error {
+	return withEnvProvider(ctx, sess, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		gate, err := discoverVariables(ctx, cfg, runner, opts, stderr)
 		if err != nil {
 			return err
 		}
 
-		session, err := openVarsUI(d, ctx, cfg, runner, opts.preview, gate, stdout)
+		varsSession, err := serveAndOpenVarsUI(sess, ctx, cfg, runner, opts.preview, gate, stdout)
 		if err != nil {
 			return err
 		}
-		defer session.Close()
-		return session.Wait(ctx)
+		defer varsSession.Close()
+		return varsSession.Wait(ctx)
 	})
 }
 
-func openVarsUI(
-	d session.Session,
+func serveAndOpenVarsUI(
+	sess session.Session,
 	ctx context.Context,
 	cfg *projectconfig.Config,
 	runner *provider.Runner,
@@ -64,19 +64,19 @@ func openVarsUI(
 	gate *envgate.Gate,
 	stdout io.Writer,
 ) (*varsui.Session, error) {
-	session, err := d.ServeVarsUI(ctx, cfg, runner, preview, gate)
+	varsSession, err := sess.ServeVarsUI(ctx, cfg, runner, preview, gate)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, session.URL)
-	if err := d.OpenBrowser(session.URL); err != nil {
+	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, varsSession.URL)
+	if err := sess.OpenBrowser(varsSession.URL); err != nil {
 		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
 	}
-	return session, nil
+	return varsSession, nil
 }
 
-func startVarsUI(
+func serveVarsUI(
 	ctx context.Context,
 	cfg *projectconfig.Config,
 	runner *provider.Runner,

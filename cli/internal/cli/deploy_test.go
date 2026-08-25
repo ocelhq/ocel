@@ -727,8 +727,8 @@ export default {
 	})
 }
 
-func pretendStdoutIsTerminal(d *session.Session) {
-	d.StdoutIsTerminal = func(io.Writer) bool { return true }
+func pretendStdoutIsTerminal(sess *session.Session) {
+	sess.StdoutIsTerminal = func(io.Writer) bool { return true }
 }
 
 func addAppToFixtureConfig(t *testing.T, root string) {

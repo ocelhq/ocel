@@ -149,13 +149,13 @@ func init() {
 	previewCmd.AddCommand(previewPruneCmd)
 }
 
-func runPreviewUp(ctx context.Context, d session.Session, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runPreviewUp(ctx context.Context, sess session.Session, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
-	env, err := resolveUpEnvironment(d, cwd, opts)
+	env, err := resolveUpEnvironment(sess, cwd, opts)
 	if err != nil {
 		return err
 	}
@@ -167,14 +167,14 @@ func runPreviewUp(ctx context.Context, d session.Session, cwd string, opts previ
 		return err
 	}
 
-	return providerui.Run(ctx, d, cfg, "ocel preview up", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightPreviewUp(ctx, d, runner, cfg, env.GetIdentity(), stdout, stdin); err != nil {
+	return providerui.Run(ctx, sess, cfg, "ocel preview up", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightPreviewUp(ctx, sess, runner, cfg, env.GetIdentity(), stdout, stdin); err != nil {
 			return err
 		}
 
 		ui.Building()
 		recovery := gateRecovery{
-			sess:    d,
+			sess:    sess,
 			cfg:     cfg,
 			runner:  runner,
 			preview: true,
@@ -187,7 +187,7 @@ func runPreviewUp(ctx context.Context, d session.Session, cwd string, opts previ
 			},
 			ui:      ui,
 			stdout:  stdout,
-			enabled: canOpenVarsUI(d, stdin, opts.noUI),
+			enabled: canOpenVarsUI(sess, stdin, opts.noUI),
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
@@ -290,13 +290,13 @@ func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contract
 	return nil
 }
 
-func runPreviewRm(ctx context.Context, d session.Session, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runPreviewRm(ctx context.Context, sess session.Session, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
-	env, err := resolveRmEnvironment(d, cwd, opts)
+	env, err := resolveRmEnvironment(sess, cwd, opts)
 	if err != nil {
 		return err
 	}
@@ -317,8 +317,8 @@ func runPreviewRm(ctx context.Context, d session.Session, cwd string, opts previ
 		}
 	}
 
-	return providerui.Run(ctx, d, cfg, "ocel preview rm", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightPreview(ctx, d, runner, cfg, stdout); err != nil {
+	return providerui.Run(ctx, sess, cfg, "ocel preview rm", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightPreview(ctx, sess, runner, cfg, stdout); err != nil {
 			return err
 		}
 
@@ -335,7 +335,7 @@ func runPreviewRm(ctx context.Context, d session.Session, cwd string, opts previ
 	})
 }
 
-func runPreviewLs(ctx context.Context, d session.Session, cwd string, stdout, stderr io.Writer) error {
+func runPreviewLs(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -357,7 +357,7 @@ func runPreviewLs(ctx context.Context, d session.Session, cwd string, stdout, st
 	})
 }
 
-func runPreviewPrune(ctx context.Context, d session.Session, cwd string, opts previewPruneOptions, stdout, stderr io.Writer) error {
+func runPreviewPrune(ctx context.Context, sess session.Session, cwd string, opts previewPruneOptions, stdout, stderr io.Writer) error {
 	if opts.name == "" {
 		return fmt.Errorf("`ocel preview prune` requires --name: only persistent previews are pruned")
 	}
@@ -371,8 +371,8 @@ func runPreviewPrune(ctx context.Context, d session.Session, cwd string, opts pr
 		return err
 	}
 
-	return providerui.Run(ctx, d, cfg, "ocel preview prune", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightPreview(ctx, d, runner, cfg, stdout); err != nil {
+	return providerui.Run(ctx, sess, cfg, "ocel preview prune", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightPreview(ctx, sess, runner, cfg, stdout); err != nil {
 			return err
 		}
 		req := &contractv1.RemoveStalePromotionsRequest{
@@ -400,7 +400,7 @@ func persistentPreviewEnvironment(name string) (*environmentv1.Environment, erro
 	}, nil
 }
 
-func resolveUpEnvironment(d session.Session, cwd string, opts previewUpOptions) (*environmentv1.Environment, error) {
+func resolveUpEnvironment(sess session.Session, cwd string, opts previewUpOptions) (*environmentv1.Environment, error) {
 	if opts.name != "" && opts.ref != "" {
 		return nil, fmt.Errorf("--name and --ref are mutually exclusive; use one to stand up a persistent or ephemeral preview")
 	}
@@ -410,11 +410,11 @@ func resolveUpEnvironment(d session.Session, cwd string, opts previewUpOptions) 
 
 	ref, prNumber := opts.ref, ""
 	if ref == "" {
-		branch, err := d.CurrentGitBranch(cwd)
+		branch, err := sess.CurrentGitBranch(cwd)
 		if err != nil {
 			return nil, err
 		}
-		ref, prNumber = branch, d.DiscoverPRNumber()
+		ref, prNumber = branch, sess.DiscoverPRNumber()
 	}
 	id, err := previewid.Resolve(ref, prNumber)
 	if err != nil {
@@ -427,7 +427,7 @@ func resolveUpEnvironment(d session.Session, cwd string, opts previewUpOptions) 
 	}, nil
 }
 
-func resolveRmEnvironment(d session.Session, cwd string, opts previewRmOptions) (*environmentv1.Environment, error) {
+func resolveRmEnvironment(sess session.Session, cwd string, opts previewRmOptions) (*environmentv1.Environment, error) {
 	if opts.name != "" && opts.ref != "" {
 		return nil, fmt.Errorf("--name and --ref are mutually exclusive; use one to address a persistent or ephemeral preview")
 	}
@@ -437,7 +437,7 @@ func resolveRmEnvironment(d session.Session, cwd string, opts previewRmOptions) 
 
 	ref := opts.ref
 	if ref == "" {
-		branch, err := d.CurrentGitBranch(cwd)
+		branch, err := sess.CurrentGitBranch(cwd)
 		if err != nil {
 			return nil, err
 		}
@@ -458,31 +458,31 @@ func confirmDestroyPreview(ctx context.Context, name string, stdout io.Writer, s
 	return prompt.New(stdout, stdin).Confirm(ctx, fmt.Sprintf("Destroy persistent preview %q?", name))
 }
 
-func preflightPreview(ctx context.Context, d session.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer) error {
-	return preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", out)
+func preflightPreview(ctx context.Context, sess session.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer) error {
+	return preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", out)
 }
 
-func preflightPreviewUp(ctx context.Context, d session.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, stdin io.Reader) error {
-	resp, err := preflight(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), projectFrameworks(cfg), "ocel bootstrap preview", out)
+func preflightPreviewUp(ctx context.Context, sess session.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, stdin io.Reader) error {
+	resp, err := preflight(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, declaredHostnames(cfg, "preview"), projectFrameworks(cfg), "ocel bootstrap preview", out)
 	if err != nil {
 		return err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return err
 	}
-	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, d.StdinIsTerminal(stdin), out, stdin); err != nil {
+	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, sess.StdinIsTerminal(stdin), out, stdin); err != nil {
 		return err
 	}
 	return requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, out)
 }
 
-func preflightDeploy(ctx context.Context, d session.Session, runner *provider.Runner, cfg *projectconfig.Config, interactive bool, out io.Writer, stdin io.Reader) ([]string, error) {
+func preflightDeploy(ctx context.Context, sess session.Session, runner *provider.Runner, cfg *projectconfig.Config, interactive bool, out io.Writer, stdin io.Reader) ([]string, error) {
 	domains := declaredHostnames(cfg, "production")
 	var slug string
 	if interactive || len(domains) > 0 {
 		slug = cfg.Slug
 	}
-	resp, err := preflight(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slug, domains, projectFrameworks(cfg), "ocel bootstrap production", out)
+	resp, err := preflight(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slug, domains, projectFrameworks(cfg), "ocel bootstrap production", out)
 	if err != nil {
 		return nil, err
 	}
@@ -536,20 +536,20 @@ func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string) e
 	return errors.New(b.String())
 }
 
-func preflightTier(ctx context.Context, d session.Session, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
-	resp, err := preflight(ctx, d, runner, cfg, required, "", nil, projectFrameworks(cfg), bootstrapHint, out)
+func preflightTier(ctx context.Context, sess session.Session, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
+	resp, err := preflight(ctx, sess, runner, cfg, required, "", nil, projectFrameworks(cfg), bootstrapHint, out)
 	if err != nil {
 		return err
 	}
 	return bootstrap.PlanFor(resp.GetBootstrap()).Refusal(required)
 }
 
-func preflightSchema(ctx context.Context, d session.Session, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
-	_, err := preflight(ctx, d, runner, cfg, required, "", nil, nil, bootstrapHint, out)
+func preflightSchema(ctx context.Context, sess session.Session, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
+	_, err := preflight(ctx, sess, runner, cfg, required, "", nil, nil, bootstrapHint, out)
 	return err
 }
 
-func preflight(ctx context.Context, d session.Session, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string, out io.Writer) (*contractv1.PreflightResponse, error) {
+func preflight(ctx context.Context, sess session.Session, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string, out io.Writer) (*contractv1.PreflightResponse, error) {
 	client, err := runner.Client()
 	if err != nil {
 		return nil, err
@@ -567,7 +567,7 @@ func preflight(ctx context.Context, d session.Session, runner *provider.Runner, 
 	if err != nil {
 		return nil, err
 	}
-	if d.StdoutIsTerminal(out) {
+	if sess.StdoutIsTerminal(out) {
 		fmt.Fprint(out, formatIdentityBanner(resp.GetIdentity()))
 	}
 	if err := credentialProblems(resp.GetCredentialProblems()); err != nil {

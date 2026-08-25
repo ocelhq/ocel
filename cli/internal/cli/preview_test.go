@@ -21,9 +21,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func stubGit(d *session.Session, branch, pr string) {
-	d.CurrentGitBranch = func(string) (string, error) { return branch, nil }
-	d.DiscoverPRNumber = func() string { return pr }
+func stubGit(sess *session.Session, branch, pr string) {
+	sess.CurrentGitBranch = func(string) (string, error) { return branch, nil }
+	sess.DiscoverPRNumber = func() string { return pr }
 }
 
 var errNotARepo = errors.New("determine current git branch: not a git repository")
@@ -540,25 +540,25 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 	const why = "the provider refuses a global-preview account mismatch only for a preflight that carries a slug and no domains, " +
 		"because that is exactly a preview deploy landing on the shared wildcard; a teardown that starts sending a slug would be refused and strand its resources"
 
-	setUpPreview := func(t *testing.T) (root, journal string, d session.Session) {
+	setUpPreview := func(t *testing.T) (root, journal string, sess session.Session) {
 		t.Helper()
 		root, _ = clitest.SetUpDeployFixture(t)
 		journal = filepath.Join(t.TempDir(), "preflight.journal")
 		t.Setenv(clitest.FakePreflightJournalEnvVar, journal)
-		d = newSession()
-		clitest.SetLoggedIn(&d)
-		clitest.StubAppFunctions(&d, nil)
-		stubGit(&d, "feature/login", "")
+		sess = newSession()
+		clitest.SetLoggedIn(&sess)
+		clitest.StubAppFunctions(&sess, nil)
+		stubGit(&sess, "feature/login", "")
 		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		return root, journal, d
+		return root, journal, sess
 	}
 
 	t.Run("up sends the slug and the project's declared preview hostnames, so the shared-wildcard refusal can reach it", func(t *testing.T) {
-		root, journal, d := setUpPreview(t)
+		root, journal, sess := setUpPreview(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewUp(context.Background(), d, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewUp(context.Background(), sess, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -576,21 +576,21 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 
 	teardowns := []struct {
 		name string
-		run  func(t *testing.T, d session.Session, root string, stdout, stderr *bytes.Buffer) error
+		run  func(t *testing.T, sess session.Session, root string, stdout, stderr *bytes.Buffer) error
 	}{
-		{"rm", func(t *testing.T, d session.Session, root string, stdout, stderr *bytes.Buffer) error {
-			return runPreviewRm(context.Background(), d, root, previewRmOptions{}, stdout, stderr, strings.NewReader(""))
+		{"rm", func(t *testing.T, sess session.Session, root string, stdout, stderr *bytes.Buffer) error {
+			return runPreviewRm(context.Background(), sess, root, previewRmOptions{}, stdout, stderr, strings.NewReader(""))
 		}},
-		{"prune", func(t *testing.T, d session.Session, root string, stdout, stderr *bytes.Buffer) error {
-			return runPreviewPrune(context.Background(), d, root, previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}, stdout, stderr)
+		{"prune", func(t *testing.T, sess session.Session, root string, stdout, stderr *bytes.Buffer) error {
+			return runPreviewPrune(context.Background(), sess, root, previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}, stdout, stderr)
 		}},
 	}
 	for _, tc := range teardowns {
 		t.Run(tc.name+" sends neither a slug nor domains, so the shared-wildcard refusal never reaches a teardown", func(t *testing.T) {
-			root, journal, d := setUpPreview(t)
+			root, journal, sess := setUpPreview(t)
 
 			var stdout, stderr bytes.Buffer
-			if err := tc.run(t, d, root, &stdout, &stderr); err != nil {
+			if err := tc.run(t, sess, root, &stdout, &stderr); err != nil {
 				t.Fatalf("`ocel preview %s` err = %v; stdout=%s stderr=%s", tc.name, err, stdout.String(), stderr.String())
 			}
 
@@ -608,10 +608,10 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 	}
 
 	t.Run("ls preflights not at all, so nothing about it can be refused", func(t *testing.T) {
-		root, journal, d := setUpPreview(t)
+		root, journal, sess := setUpPreview(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewLs(context.Background(), d, root, &stdout, &stderr); err != nil {
+		if err := runPreviewLs(context.Background(), sess, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runPreviewLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 

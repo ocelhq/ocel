@@ -26,15 +26,15 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func withCredentials(d *session.Session, apiURL string) {
-	d.LoadCredentials = func() (credentials.Credentials, error) {
+func withCredentials(sess *session.Session, apiURL string) {
+	sess.LoadCredentials = func() (credentials.Credentials, error) {
 		return credentials.Credentials{APIURL: apiURL, AccessToken: "tok"}, nil
 	}
 }
 
-func withProjectEnv(d *session.Session, envVars map[string]string) *atomic.Int32 {
+func withProjectEnv(sess *session.Session, envVars map[string]string) *atomic.Int32 {
 	var calls atomic.Int32
-	d.FetchProjectConfig = func(_ context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error) {
+	sess.FetchProjectConfig = func(_ context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error) {
 		calls.Add(1)
 		return provision.ProjectConfig{ProjectID: projectID, EnvVars: envVars, APIURL: apiURL, Token: token}, nil
 	}

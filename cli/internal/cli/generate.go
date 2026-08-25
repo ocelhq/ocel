@@ -36,7 +36,7 @@ var generateCmd = &cobra.Command{
 	},
 }
 
-func runGenerate(ctx context.Context, d session.Session, cwd string, stdout, stderr io.Writer) error {
+func runGenerate(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -47,7 +47,7 @@ func runGenerate(ctx context.Context, d session.Session, cwd string, stdout, std
 	}
 
 	gate := envgate.New(noValues{}, envgate.Scope{Apps: envApps(cfg)})
-	if _, err := d.CollectDeclarations(ctx, cfg, gate, stderr, stderr); err != nil {
+	if _, err := sess.CollectDeclarations(ctx, cfg, gate, stderr, stderr); err != nil {
 		return err
 	}
 

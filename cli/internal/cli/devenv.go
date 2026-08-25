@@ -31,8 +31,8 @@ func storeValues(projectEnv, dotfile map[string]string) map[string]string {
 	return values
 }
 
-func resolveProjectConfig(ctx context.Context, d session.Session, apiURL, token, projectID string, stderr io.Writer) provision.ProjectConfig {
-	cfg, err := d.FetchProjectConfig(ctx, apiURL, token, projectID)
+func resolveProjectConfig(ctx context.Context, sess session.Session, apiURL, token, projectID string, stderr io.Writer) provision.ProjectConfig {
+	cfg, err := sess.FetchProjectConfig(ctx, apiURL, token, projectID)
 	if err == nil {
 		return cfg
 	}

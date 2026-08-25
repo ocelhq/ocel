@@ -37,7 +37,7 @@ var buildCmd = &cobra.Command{
 	},
 }
 
-func runBuild(ctx context.Context, d session.Session, cwd string, stdout, stderr io.Writer) error {
+func runBuild(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -53,14 +53,14 @@ func runBuild(ctx context.Context, d session.Session, cwd string, stdout, stderr
 	}
 	defer run.Close()
 
-	if err := d.BuildApp(ctx, cfg, nil, stderr); err != nil {
+	if err := sess.BuildApp(ctx, cfg, nil, stderr); err != nil {
 		return err
 	}
 	if err := clientenv.RecordUnresolved(cfg.Dir); err != nil {
 		return err
 	}
 
-	functions, err := d.CollectAppFunctions(cfg.Dir)
+	functions, err := sess.CollectAppFunctions(cfg.Dir)
 	if err != nil {
 		return err
 	}

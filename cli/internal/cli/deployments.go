@@ -69,14 +69,14 @@ func init() {
 	deploymentsCmd.AddCommand(deploymentsPruneCmd)
 }
 
-func runDeploymentsLs(ctx context.Context, d session.Session, cwd string, stdout, stderr io.Writer) error {
+func runDeploymentsLs(ctx context.Context, sess session.Session, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
 	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
-		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -96,14 +96,14 @@ func runDeploymentsLs(ctx context.Context, d session.Session, cwd string, stdout
 	})
 }
 
-func runDeploymentsPrune(ctx context.Context, d session.Session, cwd string, keepN int, stdout, stderr io.Writer) error {
+func runDeploymentsPrune(ctx context.Context, sess session.Session, cwd string, keepN int, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
-	return providerui.Run(ctx, d, cfg, "ocel deployments prune", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+	return providerui.Run(ctx, sess, cfg, "ocel deployments prune", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+		if err := preflightTier(ctx, sess, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
