@@ -66,6 +66,20 @@ func (b Bootstrapper) Describe(ctx context.Context, class providerkit.Class) (pr
 	return described, nil
 }
 
+func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
+	described, err := b.Describe(ctx, req.Class)
+	if err != nil {
+		return providerkit.BootstrapPlan{}, err
+	}
+	groups := providerkit.DeriveGroups(bootstrap.NameStacks(described), bootstrap.Catalogue(), req)
+	for i, group := range groups {
+		if group.Action == providerkit.ActionUpdate {
+			groups[i].Reason = providerkit.WithoutDetail(group.Reason)
+		}
+	}
+	return providerkit.BootstrapPlan{Groups: groups}, nil
+}
+
 func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
 	if req.Heal {
 		return b.heal(ctx, req, report)

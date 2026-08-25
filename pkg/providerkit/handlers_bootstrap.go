@@ -73,7 +73,7 @@ func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootst
 	if err != nil {
 		return nil, err
 	}
-	_, gate, err := h.gate("")
+	provider, gate, err := h.gate("")
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,59 @@ func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootst
 			Dependents: ProjectsDependingOn(recorded, []string{f.Name}),
 		})
 	}
+	if req.GetIntent() == nil {
+		return resp, nil
+	}
+	plan, err := gate.Plan(ctx, class, applyRequestOf(req.GetIntent()))
+	if err != nil {
+		return nil, RefusalError(err)
+	}
+	resp.Plan = ChangePlanProto(plan, string(class), string(edgeKind(provider, "")))
 	return resp, nil
+}
+
+func ChangePlanProto(plan BootstrapPlan, subject, kind string) *contractv1.ChangePlan {
+	out := &contractv1.ChangePlan{Subject: subject, EdgeKind: kind}
+	for _, group := range plan.Groups {
+		rendered := &contractv1.ChangeGroup{
+			Kind:    group.Kind,
+			Name:    group.Name,
+			Feature: group.Feature,
+			Action:  planAction(group.Action),
+			Reason:  group.Reason,
+			Slow:    group.Slow,
+		}
+		for _, change := range group.Changes {
+			rendered.Changes = append(rendered.Changes, &contractv1.Change{
+				Kind:   change.Kind,
+				Name:   change.Name,
+				Action: planAction(change.Action),
+				Reason: change.Reason,
+				Slow:   change.Slow,
+			})
+		}
+		out.Groups = append(out.Groups, rendered)
+	}
+	return out
+}
+
+func planAction(action ChangeAction) contractv1.Change_Action {
+	switch action {
+	case ActionCreate:
+		return contractv1.Change_ACTION_CREATE
+	case ActionUpdate:
+		return contractv1.Change_ACTION_UPDATE
+	case ActionReplace:
+		return contractv1.Change_ACTION_REPLACE
+	case ActionDelete:
+		return contractv1.Change_ACTION_DELETE
+	case ActionDisableThenDelete:
+		return contractv1.Change_ACTION_DISABLE_THEN_DELETE
+	case ActionKeep:
+		return contractv1.Change_ACTION_KEEP
+	default:
+		return contractv1.Change_ACTION_UNSPECIFIED
+	}
 }
 
 func BootstrapStatusProto(standing Standing, writing Writer, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {

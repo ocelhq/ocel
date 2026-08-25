@@ -109,19 +109,61 @@ func (b *Bootstrapper) Describe(_ context.Context, class providerkit.Class) (pro
 	return described, nil
 }
 
-func (b *Bootstrapper) stack(class providerkit.Class, feature string) providerkit.BootstrapStack {
+func stackNameOf(class providerkit.Class, feature string) string {
 	name := "fake-" + string(class)
 	if feature != "" {
 		name += "-" + feature
 	}
+	return name
+}
+
+func (b *Bootstrapper) stack(class providerkit.Class, feature string) providerkit.BootstrapStack {
 	return providerkit.BootstrapStack{
-		Name:          name,
+		Name:          stackNameOf(class, feature),
 		Feature:       feature,
 		Present:       true,
 		Schema:        b.schema,
 		DigestCurrent: !b.behind[feature],
 		Writer:        b.writer,
 	}
+}
+
+func (b *Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
+	described, err := b.Describe(ctx, req.Class)
+	if err != nil {
+		return providerkit.BootstrapPlan{}, err
+	}
+	groups := providerkit.DeriveGroups(b.named(described), b.Catalogue(), req)
+	for i, group := range groups {
+		if group.Action == providerkit.ActionKeep {
+			continue
+		}
+		groups[i].Changes = []providerkit.Change{{
+			Kind:   "Fake::Stack::Resource",
+			Name:   group.Name + "-resource",
+			Action: group.Action,
+		}}
+	}
+	return providerkit.BootstrapPlan{Groups: groups}, nil
+}
+
+func (b *Bootstrapper) named(described providerkit.Bootstrap) providerkit.Bootstrap {
+	held := map[string]bool{}
+	for _, stack := range described.Stacks {
+		held[stack.Feature] = true
+	}
+	named := described
+	named.Stacks = slices.Clone(described.Stacks)
+	for _, feature := range append([]string{""}, FeatureCache, FeatureImages) {
+		if held[feature] {
+			continue
+		}
+		named.Stacks = append(named.Stacks, providerkit.BootstrapStack{
+			Name:    stackNameOf(described.Class, feature),
+			Feature: feature,
+		})
+	}
+	return named
 }
 
 func (b *Bootstrapper) Apply(_ context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
