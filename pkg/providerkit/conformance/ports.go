@@ -329,6 +329,44 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
 		}
 	})
 
+	t.Run("Plan answers for the request Apply would be given", func(t *testing.T) {
+		class := providerkit.ClassProduction
+		described, err := bootstrapper.Describe(ctx, class)
+		if err != nil {
+			t.Fatalf("Describe(%s) = %v", class, err)
+		}
+		plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+		if err != nil {
+			t.Fatalf("Plan(%s) = %v", class, err)
+		}
+		creates := 0
+		for _, group := range plan.Groups {
+			if group.Name == "" {
+				t.Errorf("Plan() returned %+v, and no plan can render a nameless group", group)
+			}
+			if !providerkit.ValidChangeAction(group.Action) {
+				t.Errorf("Plan() returned group action %q, which is none the plan knows", group.Action)
+			}
+			if group.Action == providerkit.ActionUpdate && len(group.Changes) == 0 && group.Reason == "" {
+				t.Errorf("Plan() returned %q as an update with neither children nor a reason, which reads as no change at all", group.Name)
+			}
+			if group.Action == providerkit.ActionCreate {
+				creates++
+			}
+			for _, change := range group.Changes {
+				if change.Name == "" {
+					t.Errorf("Plan() returned %+v under %q, and no plan can render a nameless change", change, group.Name)
+				}
+				if !providerkit.ValidChangeAction(change.Action) {
+					t.Errorf("Plan() returned change action %q, which is none the plan knows", change.Action)
+				}
+			}
+		}
+		if !described.Present && creates == 0 {
+			t.Error("Plan() against an account with no bootstrap creates nothing, and an apply from here would create the whole bootstrap")
+		}
+	})
+
 	t.Run("what Apply stands up, Describe reports and Remove takes down", func(t *testing.T) {
 		class := providerkit.ClassPreview
 		levels, err := providerkit.FeatureLevels(catalogue, featureNames(catalogue))

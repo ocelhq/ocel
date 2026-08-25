@@ -94,40 +94,97 @@ type ApplyRequest struct {
 	AcceptReplacements bool
 }
 
-func (g Gate) Apply(ctx context.Context, class Class, req ApplyRequest, report Reporter) error {
+type intent struct {
+	standing  Standing
+	requested []string
+	drop      []string
+	ordered   []string
+}
+
+func (g Gate) intended(ctx context.Context, class Class, req ApplyRequest) (intent, error) {
 	catalogue := g.Bootstrapper.Catalogue()
 	standing, err := g.Standing(ctx, class)
 	if err != nil {
-		return err
+		return intent{}, err
 	}
 	if err := RefuseSchemaAhead(standing.Schema, standing.Present, class); err != nil {
-		return err
+		return intent{}, err
 	}
-
 	requested, err := featureClosure(catalogue, req.Features)
 	if err != nil {
-		return err
+		return intent{}, err
 	}
 	drop := featureDrop(catalogue, standing.Features, requested)
-	if err := g.admitDrops(ctx, class, drop, req.Force); err != nil {
-		return err
-	}
 	ordered, err := featureDeleteOrder(catalogue, drop)
+	if err != nil {
+		return intent{}, err
+	}
+	return intent{standing: standing, requested: requested, drop: drop, ordered: ordered}, nil
+}
+
+func (i intent) request(class Class, req ApplyRequest, writer Writer) BootstrapRequest {
+	return BootstrapRequest{
+		Class:      class,
+		Features:   i.requested,
+		Drop:       i.ordered,
+		Unattended: !req.AcceptReplacements,
+		Writer:     writer,
+	}
+}
+
+func (g Gate) Plan(ctx context.Context, class Class, req ApplyRequest) (BootstrapPlan, error) {
+	intended, err := g.intended(ctx, class, req)
+	if err != nil {
+		return BootstrapPlan{}, err
+	}
+	plan, err := g.Bootstrapper.Plan(ctx, intended.request(class, req, g.Writer))
+	if err != nil {
+		return BootstrapPlan{}, err
+	}
+	return plan, g.noteDependents(ctx, class, plan.Groups)
+}
+
+func (g Gate) noteDependents(ctx context.Context, class Class, groups []ChangeGroup) error {
+	var dropped []string
+	for _, group := range groups {
+		if group.Action == ActionDelete && group.Feature != "" {
+			dropped = append(dropped, group.Feature)
+		}
+	}
+	if len(dropped) == 0 {
+		return nil
+	}
+	recorded, err := g.RecordedFeatures(ctx, class)
 	if err != nil {
 		return err
 	}
+	for i, group := range groups {
+		if group.Action != ActionDelete || group.Feature == "" {
+			continue
+		}
+		dependents := ProjectsDependingOn(recorded, []string{group.Feature})
+		if len(dependents) == 0 {
+			continue
+		}
+		groups[i].Reason = group.Reason + "; " + strings.Join(dependents, ", ") + " were deployed against it"
+	}
+	return nil
+}
 
-	autoHeal := standing.AutoHeal
+func (g Gate) Apply(ctx context.Context, class Class, req ApplyRequest, report Reporter) error {
+	intended, err := g.intended(ctx, class, req)
+	if err != nil {
+		return err
+	}
+	if err := g.admitDrops(ctx, class, intended.drop, req.Force); err != nil {
+		return err
+	}
+
+	autoHeal := intended.standing.AutoHeal
 	if req.AutoHeal != nil {
 		autoHeal = *req.AutoHeal
 	}
-	if err := g.Bootstrapper.Apply(ctx, BootstrapRequest{
-		Class:      class,
-		Features:   requested,
-		Drop:       ordered,
-		Unattended: !req.AcceptReplacements,
-		Writer:     g.Writer,
-	}, report); err != nil {
+	if err := g.Bootstrapper.Apply(ctx, intended.request(class, req, g.Writer), report); err != nil {
 		return err
 	}
 	if err := g.RecordBootstrap(ctx, class, BootstrapState{AutoHeal: autoHeal}); err != nil {

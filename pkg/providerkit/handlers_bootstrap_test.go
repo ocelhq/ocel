@@ -326,6 +326,50 @@ func TestPlanBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 	}
 }
 
+func TestPlanBootstrapPlansTheApplyItsIntentNames(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client, _ := contractServed(t, "1.2.3")
+
+	bare, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	if err != nil {
+		t.Fatalf("PlanBootstrap() error = %v", err)
+	}
+	if bare.GetPlan() != nil {
+		t.Errorf("PlanBootstrap() drew a change plan for a request naming no intent: %v", bare.GetPlan())
+	}
+
+	planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Intent: &contractv1.BootstrapRequest{
+			Tier:     environmentv1.Tier_TIER_PRODUCTION,
+			Features: []string{fake.FeatureImages},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PlanBootstrap() with an intent error = %v", err)
+	}
+	plan := planned.GetPlan()
+	if plan.GetSubject() != string(providerkit.ClassProduction) {
+		t.Errorf("plan subject = %q, want the class it was asked about", plan.GetSubject())
+	}
+	if plan.GetEdgeKind() == "" {
+		t.Error("plan names no edge, and the plan is drawn against one")
+	}
+	if len(plan.GetGroups()) != 3 {
+		t.Fatalf("plan = %v, want the baseline and the closure of images", plan.GetGroups())
+	}
+	for _, group := range plan.GetGroups() {
+		if group.GetAction() != contractv1.Change_ACTION_CREATE {
+			t.Errorf("%s is %s, want it created on an account holding nothing", group.GetName(), group.GetAction())
+		}
+		if len(group.GetChanges()) == 0 {
+			t.Errorf("%s carries no resource-level detail", group.GetName())
+		}
+	}
+}
+
 func TestPlanBootstrapReportsADowngrade(t *testing.T) {
 	t.Parallel()
 

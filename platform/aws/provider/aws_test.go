@@ -21,6 +21,10 @@ func (stubBootstrapper) Describe(context.Context, providerkit.Class) (providerki
 	return providerkit.Bootstrap{}, nil
 }
 
+func (s stubBootstrapper) Plan(context.Context, providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
+	return providerkit.BootstrapPlan{}, s.err
+}
+
 func (s stubBootstrapper) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Reporter) error {
 	return s.err
 }

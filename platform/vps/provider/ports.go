@@ -15,6 +15,14 @@ func (bootstrapper) Describe(_ context.Context, class providerkit.Class) (provid
 	return providerkit.Bootstrap{Class: class}, nil
 }
 
+func (b bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
+	described, err := b.Describe(ctx, req.Class)
+	if err != nil {
+		return providerkit.BootstrapPlan{}, err
+	}
+	return providerkit.BootstrapPlan{Groups: providerkit.DeriveGroups(described, b.Catalogue(), req)}, nil
+}
+
 func (bootstrapper) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Reporter) error {
 	return nil
 }
