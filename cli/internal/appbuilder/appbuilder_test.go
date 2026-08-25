@@ -150,8 +150,8 @@ func TestBuild(t *testing.T) {
 		}
 
 		assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{
-			{Name: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/api/functions/index.func", Framework: "express", App: "api"},
-			{Name: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/worker/functions/index.func", Framework: "express", App: "worker"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/api/functions/index.func", Framework: "express", App: "api"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/worker/functions/index.func", Framework: "express", App: "worker"},
 		})
 
 		if got, want := gotReq.OutDir, filepath.Join(root, ".ocel", "output"); got != want {
@@ -458,7 +458,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("CollectFunctions: %v", err)
 		}
 		assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{
-			{Name: "index", Runtime: "nodejs24.x", Handler: "index.mjs", ArtifactPath: "apps/api/functions/index.func", Framework: "express", RouteID: "/", App: "api"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "index.mjs", ArtifactPath: "apps/api/functions/index.func", Framework: "express", RouteID: "/", App: "api"},
 		})
 
 		bundle := filepath.Join(root, scratchDirName, outputDirName, appsDirName, "api", functionsDirName, "index.func", "index.mjs")
@@ -605,7 +605,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("CollectFunctions returned %d functions, want 1: %+v", len(fns), fns)
 		}
 		want := manifestbuilder.Function{
-			Name:         "index",
+			Route:        "index",
 			Runtime:      "nodejs24.x",
 			Handler:      "index.mjs",
 			ArtifactPath: "apps/api/functions/index.func",
@@ -640,8 +640,8 @@ func TestBuild(t *testing.T) {
 		if len(fns) != 1 {
 			t.Fatalf("CollectFunctions returned %d functions, want 1: %+v", len(fns), fns)
 		}
-		if fns[0].Name != "index" || fns[0].Framework != "express" {
-			t.Errorf("detected function = %+v, want name index framework express", fns[0])
+		if fns[0].Route != "index" || fns[0].Framework != "express" {
+			t.Errorf("detected function = %+v, want route index framework express", fns[0])
 		}
 		if fns[0].App != "express-app" {
 			t.Errorf("detected function app = %q, want %q", fns[0].App, "express-app")
@@ -885,8 +885,8 @@ func TestCollectFunctions(t *testing.T) {
 		}
 
 		assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{
-			{Name: "api/todos/[id]", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", Framework: "next", App: "web"},
-			{Name: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", Framework: "next", App: "web"},
+			{Route: "api/todos/[id]", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", Framework: "next", App: "web"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", Framework: "next", App: "web"},
 		})
 	})
 
@@ -919,8 +919,8 @@ func TestCollectFunctions(t *testing.T) {
 				}
 			},
 			want: []manifestbuilder.Function{
-				{Name: "api/todos/[id]", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", Framework: "next", App: "web"},
-				{Name: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", Framework: "next", App: "web"},
+				{Route: "api/todos/[id]", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", Framework: "next", App: "web"},
+				{Route: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", Framework: "next", App: "web"},
 			},
 		},
 		{
@@ -932,8 +932,8 @@ func TestCollectFunctions(t *testing.T) {
 				}
 			},
 			want: []manifestbuilder.Function{
-				{Name: "api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "apps/admin/functions/api/documents.func", Framework: "next", RouteID: "/api/documents", App: "admin"},
-				{Name: "api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "apps/storefront/functions/api/documents.func", Framework: "next", RouteID: "/api/documents", App: "storefront"},
+				{Route: "api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "apps/admin/functions/api/documents.func", Framework: "next", RouteID: "/api/documents", App: "admin"},
+				{Route: "api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "apps/storefront/functions/api/documents.func", Framework: "next", RouteID: "/api/documents", App: "storefront"},
 			},
 		},
 	}

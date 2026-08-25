@@ -15,7 +15,7 @@ import (
 
 type Declaration struct {
 	Type  linksv1.LinkType
-	ID    string
+	Name  string
 	Stack string
 }
 
@@ -27,25 +27,25 @@ type App struct {
 type Usage struct {
 	App   string
 	Type  linksv1.LinkType
-	ID    string
+	Name  string
 	Files []string
 }
 
 type identity struct {
-	typ linksv1.LinkType
-	id  string
+	typ  linksv1.LinkType
+	name string
 }
 
 type UnresolvedDeclarationError struct {
 	Type  linksv1.LinkType
-	ID    string
+	Name  string
 	Stack string
 }
 
 func (e *UnresolvedDeclarationError) Error() string {
 	return fmt.Sprintf(
 		"attribution: cannot tell which project file declares %s %q, so no app can be granted it: %s",
-		e.Type, e.ID, describeStack(e.Stack),
+		e.Type, e.Name, describeStack(e.Stack),
 	)
 }
 
@@ -92,7 +92,7 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 	for _, d := range declarations {
 		frame, ok := DeclaringFrame(root, d.Stack)
 		if !ok {
-			return nil, &UnresolvedDeclarationError{Type: d.Type, ID: d.ID, Stack: d.Stack}
+			return nil, &UnresolvedDeclarationError{Type: d.Type, Name: d.Name, Stack: d.Stack}
 		}
 		declaringFiles[frame.File] = append(declaringFiles[frame.File], d)
 	}
@@ -105,11 +105,11 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 		for _, entry := range slices.Sorted(maps.Keys(survivors)) {
 			for file := range survivors[entry] {
 				for _, d := range declaringFiles[file] {
-					id := identity{d.Type, d.ID}
-					u, ok := byResource[id]
+					key := identity{d.Type, d.Name}
+					u, ok := byResource[key]
 					if !ok {
-						u = &Usage{App: app.Name, Type: d.Type, ID: d.ID}
-						byResource[id] = u
+						u = &Usage{App: app.Name, Type: d.Type, Name: d.Name}
+						byResource[key] = u
 					}
 					if !slices.Contains(u.Files, entry) {
 						u.Files = append(u.Files, entry)
@@ -131,7 +131,7 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 		if c := cmp.Compare(a.Type, b.Type); c != 0 {
 			return c
 		}
-		return strings.Compare(a.ID, b.ID)
+		return strings.Compare(a.Name, b.Name)
 	})
 	return usages, nil
 }

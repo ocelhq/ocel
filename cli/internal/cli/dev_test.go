@@ -24,7 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
-	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -37,7 +37,7 @@ func TestMergeEnv(t *testing.T) {
 
 		base := []string{"PATH=/bin", "SHARED=base"}
 		projectEnv := map[string]string{"SHARED": "project", "PROJECT_ONLY": "p"}
-		resources := []provision.Resource{
+		resources := []resolve.Resource{
 			{Name: "main", Env: map[string]string{"SHARED": "resource", "OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 

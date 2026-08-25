@@ -17,13 +17,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
-	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
 )
 
 func NewSession() session.Session {
 	return session.Session{
 		LoadCredentials:     credentials.Load,
-		FetchProjectConfig:  provision.FetchProjectConfig,
+		FetchAccount:        resolve.StubAccount,
 		BuildApp:            appbuilder.Build,
 		CollectAppFunctions: appbuilder.CollectFunctions,
 		DeploymentID:        appbuilder.DeploymentID,
@@ -248,7 +248,7 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, s
 	sess = NewSession()
 	SetLoggedIn(&sess)
 	StubBuild(&sess, []manifestbuilder.Function{
-		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+		{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 	})
 	return root, journal, sess
 }

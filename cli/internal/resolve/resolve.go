@@ -1,4 +1,4 @@
-package provision
+package resolve
 
 import (
 	"bytes"
@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/resolvecache"
+	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
-type ProjectConfig struct {
+type Account struct {
 	OrgID     string
 	ProjectID string
 	UserID    string
@@ -44,8 +44,8 @@ func NewResolver() *Resolver {
 	}
 }
 
-func FetchProjectConfig(_ context.Context, apiURL, token, projectID string) (ProjectConfig, error) {
-	return ProjectConfig{
+func StubAccount(_ context.Context, apiURL, token, projectID string) (Account, error) {
+	return Account{
 		OrgID:     "org_stub",
 		ProjectID: projectID,
 		UserID:    "user_stub",
@@ -55,11 +55,11 @@ func FetchProjectConfig(_ context.Context, apiURL, token, projectID string) (Pro
 	}, nil
 }
 
-func FetchLiveValues(_ context.Context, apiURL, token, projectID string, keys []string) (map[string]string, error) {
+func StubLiveValues(_ context.Context, apiURL, token, projectID string, keys []string) (map[string]string, error) {
 	return make(map[string]string, len(keys)), nil
 }
 
-func Run(ctx context.Context, cfg ProjectConfig, resources []manifest.Entry) ([]Resource, error) {
+func Resolve(ctx context.Context, cfg Account, resources []resourceregistry.Entry) ([]Resource, error) {
 	return NewResolver().Resolve(ctx, cfg.APIURL, cfg.Token, cfg.ProjectID, resources)
 }
 
@@ -78,7 +78,7 @@ type resolveResponseBody struct {
 	ExpiresAt string            `json:"expiresAt"`
 }
 
-func (r *Resolver) Resolve(ctx context.Context, baseURL, token, projectID string, resources []manifest.Entry) ([]Resource, error) {
+func (r *Resolver) Resolve(ctx context.Context, baseURL, token, projectID string, resources []resourceregistry.Entry) ([]Resource, error) {
 	if len(resources) == 0 {
 		return []Resource{}, nil
 	}
@@ -92,7 +92,7 @@ func (r *Resolver) Resolve(ctx context.Context, baseURL, token, projectID string
 		defs = append(defs, resolvecache.Def{Name: entry.Name, Type: fragment})
 	}
 	defsHash := resolvecache.HashDefs(defs)
-	account := resolvecache.Fingerprint(baseURL, token)
+	account := resolvecache.AccountFingerprint(baseURL, token)
 
 	cache, cacheErr := r.OpenCache()
 	if cacheErr == nil {
@@ -121,7 +121,7 @@ func (r *Resolver) Resolve(ctx context.Context, baseURL, token, projectID string
 	return resourcesFromEnv(resources, env)
 }
 
-func (r *Resolver) callResolve(ctx context.Context, baseURL, token, projectID string, resources []manifest.Entry) (map[string]string, time.Time, error) {
+func (r *Resolver) callResolve(ctx context.Context, baseURL, token, projectID string, resources []resourceregistry.Entry) (map[string]string, time.Time, error) {
 	entries := make([]resolveResourceEntry, 0, len(resources))
 	for _, resource := range resources {
 		fragment, err := envFragment(resource.Type)
@@ -165,7 +165,7 @@ func (r *Resolver) callResolve(ctx context.Context, baseURL, token, projectID st
 	return decoded.Env, expiresAt, nil
 }
 
-func resourcesFromEnv(resources []manifest.Entry, env map[string]string) ([]Resource, error) {
+func resourcesFromEnv(resources []resourceregistry.Entry, env map[string]string) ([]Resource, error) {
 	out := make([]Resource, 0, len(resources))
 	for _, resource := range resources {
 		fragment, err := envFragment(resource.Type)

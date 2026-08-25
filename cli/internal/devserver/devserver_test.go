@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/manifest"
-	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
@@ -120,8 +120,8 @@ func TestSync(t *testing.T) {
 		if result.Err != nil {
 			t.Fatalf("Sync result error: %v", result.Err)
 		}
-		if result.ProjectConfig.ProjectID != "proj_1" {
-			t.Fatalf("ProjectConfig.ProjectID = %q, want %q", result.ProjectConfig.ProjectID, "proj_1")
+		if result.Account.ProjectID != "proj_1" {
+			t.Fatalf("Account.ProjectID = %q, want %q", result.Account.ProjectID, "proj_1")
 		}
 		if len(result.Resources) != 1 || result.Resources[0].Name != "main" {
 			t.Fatalf("Resources = %+v, want one entry named main", result.Resources)
@@ -170,7 +170,7 @@ func TestSync(t *testing.T) {
 			t.Fatalf("Sync result error: %v", result.Err)
 		}
 
-		i := slices.IndexFunc(result.Resources, func(r provision.Resource) bool { return r.Name == "storage" })
+		i := slices.IndexFunc(result.Resources, func(r resolve.Resource) bool { return r.Name == "storage" })
 		if i < 0 {
 			t.Fatalf("Resources = %+v, want a synthesized storage bucket entry", result.Resources)
 		}
@@ -229,7 +229,7 @@ func TestSync(t *testing.T) {
 	t.Run("propagates a provision error", func(t *testing.T) {
 		t.Parallel()
 		s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
-		s.provision = func(context.Context, provision.ProjectConfig, []manifest.Entry) ([]provision.Resource, error) {
+		s.resolve = func(context.Context, resolve.Account, []resourceregistry.Entry) ([]resolve.Resource, error) {
 			return nil, errors.New("boom")
 		}
 		url := serve(t, s)

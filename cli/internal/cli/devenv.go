@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -31,13 +31,13 @@ func storeValues(projectEnv, dotfile map[string]string) map[string]string {
 	return values
 }
 
-func resolveProjectConfig(ctx context.Context, sess session.Session, apiURL, token, projectID string, stderr io.Writer) provision.ProjectConfig {
-	cfg, err := sess.FetchProjectConfig(ctx, apiURL, token, projectID)
+func resolveAccount(ctx context.Context, sess session.Session, apiURL, token, projectID string, stderr io.Writer) resolve.Account {
+	cfg, err := sess.FetchAccount(ctx, apiURL, token, projectID)
 	if err == nil {
 		return cfg
 	}
 	fmt.Fprintf(stderr, "could not reach the control plane (%v). This run resolves values from %s alone; anything set with `ocel env set` is not in play.\n", err, dotenv.FileName)
-	return provision.ProjectConfig{ProjectID: projectID, APIURL: apiURL, Token: token}
+	return resolve.Account{ProjectID: projectID, APIURL: apiURL, Token: token}
 }
 
 func devRefusal(err error, dotfileKeys map[string]struct{}) error {

@@ -1,4 +1,4 @@
-package provision
+package resolve
 
 import (
 	"context"
@@ -8,19 +8,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/manifest"
+	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-func TestFetchProjectConfig(t *testing.T) {
+func TestStubAccount(t *testing.T) {
 	t.Parallel()
 
 	t.Run("returns an identity for the project ID", func(t *testing.T) {
 		t.Parallel()
-		cfg, err := FetchProjectConfig(context.Background(), "https://api.example.com", "tok_123", "proj_abc")
+		cfg, err := StubAccount(context.Background(), "https://api.example.com", "tok_123", "proj_abc")
 		if err != nil {
-			t.Fatalf("FetchProjectConfig: %v", err)
+			t.Fatalf("StubAccount: %v", err)
 		}
 		if cfg.ProjectID != "proj_abc" {
 			t.Fatalf("ProjectID = %q, want %q", cfg.ProjectID, "proj_abc")
@@ -74,21 +74,21 @@ func TestEnvFragment(t *testing.T) {
 }
 
 func TestProvision(t *testing.T) {
-	onePostgres := []manifest.Entry{{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES}}
+	onePostgres := []resourceregistry.Entry{{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES}}
 
-	t.Run("an empty manifest yields no resources without calling resolve", func(t *testing.T) {
+	t.Run("an empty registry yields no resources without calling resolve", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Error("Provision made an HTTP request for an empty resource list")
 			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}))
 		defer ts.Close()
 
-		got, err := Run(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL}, nil)
+		got, err := Resolve(context.Background(), Account{ProjectID: "proj_abc", APIURL: ts.URL}, nil)
 		if err != nil {
 			t.Fatalf("Provision: %v", err)
 		}
 		if len(got) != 0 {
-			t.Fatalf("Run() = %+v, want empty", got)
+			t.Fatalf("Resolve() = %+v, want empty", got)
 		}
 	})
 
@@ -121,12 +121,12 @@ func TestProvision(t *testing.T) {
 		ts := httptest.NewServer(mux)
 		defer ts.Close()
 
-		got, err := Run(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL, Token: "tok_123"}, onePostgres)
+		got, err := Resolve(context.Background(), Account{ProjectID: "proj_abc", APIURL: ts.URL, Token: "tok_123"}, onePostgres)
 		if err != nil {
 			t.Fatalf("Provision: %v", err)
 		}
 		if len(got) != 1 {
-			t.Fatalf("Run() len = %d, want 1", len(got))
+			t.Fatalf("Resolve() len = %d, want 1", len(got))
 		}
 		if gotAuth != "Bearer tok_123" {
 			t.Fatalf("Authorization = %q, want %q", gotAuth, "Bearer tok_123")
@@ -150,12 +150,12 @@ func TestProvision(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		got, err := Run(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL, Token: "tok_123"}, onePostgres)
+		got, err := Resolve(context.Background(), Account{ProjectID: "proj_abc", APIURL: ts.URL, Token: "tok_123"}, onePostgres)
 		if err != nil {
 			t.Fatalf("Provision: %v", err)
 		}
 		if len(got) != 1 {
-			t.Fatalf("Run() len = %d, want 1", len(got))
+			t.Fatalf("Resolve() len = %d, want 1", len(got))
 		}
 
 		const key = "OCEL_RESOURCE_POSTGRES_main"
@@ -179,7 +179,7 @@ func TestProvision(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		_, err := Run(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL}, onePostgres)
+		_, err := Resolve(context.Background(), Account{ProjectID: "proj_abc", APIURL: ts.URL}, onePostgres)
 		if err == nil {
 			t.Fatal("Provision: expected error, got nil")
 		}
@@ -191,7 +191,7 @@ func TestProvision(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		_, err := Run(context.Background(), ProjectConfig{ProjectID: "proj_abc", APIURL: ts.URL}, onePostgres)
+		_, err := Resolve(context.Background(), Account{ProjectID: "proj_abc", APIURL: ts.URL}, onePostgres)
 		if err == nil {
 			t.Fatal("Provision: expected error for missing env key, got nil")
 		}

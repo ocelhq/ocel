@@ -72,7 +72,7 @@ func TestRunPreviewUp(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		clitest.StubBuild(&sess, []manifestbuilder.Function{
 			{
-				Name:         "api",
+				Route:        "api",
 				Runtime:      "nodejs24.x",
 				Handler:      "index.handler",
 				ArtifactPath: "output/api",
@@ -102,7 +102,7 @@ func TestRunPreviewUp(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		clitest.StubBuild(&sess, []manifestbuilder.Function{
-			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+			{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 
 		var stdout, stderr bytes.Buffer

@@ -1,4 +1,4 @@
-package manifest
+package resourceregistry
 
 import (
 	"sync"
@@ -35,7 +35,7 @@ func TestManifest(t *testing.T) {
 
 		got := m.Snapshot()
 		if got[0].Name != "main" {
-			t.Fatalf("mutating a snapshot affected the manifest: got %q", got[0].Name)
+			t.Fatalf("mutating a snapshot affected the registry: got %q", got[0].Name)
 		}
 	})
 

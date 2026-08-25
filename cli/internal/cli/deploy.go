@@ -463,7 +463,7 @@ func (v runnerValues) Reveal(ctx context.Context, rows []envgate.Address) (map[e
 func toApps(apps []projectconfig.App, usages []attribution.Usage) []manifestbuilder.App {
 	byApp := make(map[string][]manifestbuilder.Usage, len(apps))
 	for _, u := range usages {
-		byApp[u.App] = append(byApp[u.App], manifestbuilder.Usage{Type: u.Type, ID: u.ID, Files: u.Files})
+		byApp[u.App] = append(byApp[u.App], manifestbuilder.Usage{Type: u.Type, Name: u.Name, Files: u.Files})
 	}
 
 	out := make([]manifestbuilder.App, 0, len(apps))
@@ -562,7 +562,7 @@ func toDeclarations(configDir string, resources []declare.Resource) []manifestbu
 		}
 		decls[i] = manifestbuilder.Declaration{
 			Type:     r.Type,
-			ID:       r.Name,
+			Name:     r.Name,
 			Postgres: r.Postgres,
 			Bucket:   r.Bucket,
 			Source:   source,
@@ -574,7 +574,7 @@ func toDeclarations(configDir string, resources []declare.Resource) []manifestbu
 func toAttributionDeclarations(resources []declare.Resource) []attribution.Declaration {
 	decls := make([]attribution.Declaration, len(resources))
 	for i, r := range resources {
-		decls[i] = attribution.Declaration{Type: r.Type, ID: r.Name, Stack: r.Stack}
+		decls[i] = attribution.Declaration{Type: r.Type, Name: r.Name, Stack: r.Stack}
 	}
 	return decls
 }

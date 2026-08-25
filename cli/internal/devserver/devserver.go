@@ -15,9 +15,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
-	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -29,8 +29,8 @@ import (
 )
 
 type SyncResult struct {
-	ProjectConfig  provision.ProjectConfig
-	Resources      []provision.Resource
+	Account        resolve.Account
+	Resources      []resolve.Resource
 	RuntimeAddress string
 	LiveValues     map[string]string
 	LiveKeys       []string
@@ -38,7 +38,7 @@ type SyncResult struct {
 }
 
 type Server struct {
-	manifest      *manifest.Manifest
+	registry      *resourceregistry.Registry
 	apiURL        string
 	token         string
 	projectID     string
@@ -47,9 +47,9 @@ type Server struct {
 	detector      *detector
 	syncCh        chan SyncResult
 
-	fetchProjectConfig func(ctx context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error)
-	provision          func(ctx context.Context, cfg provision.ProjectConfig, resources []manifest.Entry) ([]provision.Resource, error)
-	fetchLiveValues    func(ctx context.Context, apiURL, token, projectID string, keys []string) (map[string]string, error)
+	fetchAccount    func(ctx context.Context, apiURL, token, projectID string) (resolve.Account, error)
+	resolve         func(ctx context.Context, cfg resolve.Account, resources []resourceregistry.Entry) ([]resolve.Resource, error)
+	fetchLiveValues func(ctx context.Context, apiURL, token, projectID string, keys []string) (map[string]string, error)
 
 	config *configCache
 	live   *liveKeys
@@ -59,21 +59,21 @@ type Server struct {
 
 func New(apiURL, token, projectID, devServerAddr string) *Server {
 	return &Server{
-		manifest:           manifest.New(),
-		apiURL:             apiURL,
-		token:              token,
-		projectID:          projectID,
-		devServerAddr:      devServerAddr,
-		runtime:            newRuntimeShim(apiURL, token, projectID),
-		detector:           newDetector(apiURL, token, projectID),
-		syncCh:             make(chan SyncResult, 1),
-		fetchProjectConfig: provision.FetchProjectConfig,
-		provision:          provision.Run,
-		fetchLiveValues:    provision.FetchLiveValues,
-		config:             newConfigCache(),
-		live:               newLiveKeys(),
-		env:                newEnvState(),
-		fanout:             newEnvFanout(),
+		registry:        resourceregistry.New(),
+		apiURL:          apiURL,
+		token:           token,
+		projectID:       projectID,
+		devServerAddr:   devServerAddr,
+		runtime:         newRuntimeShim(apiURL, token, projectID),
+		detector:        newDetector(apiURL, token, projectID),
+		syncCh:          make(chan SyncResult, 1),
+		fetchAccount:    resolve.StubAccount,
+		resolve:         resolve.Resolve,
+		fetchLiveValues: resolve.StubLiveValues,
+		config:          newConfigCache(),
+		live:            newLiveKeys(),
+		env:             newEnvState(),
+		fanout:          newEnvFanout(),
 	}
 }
 
@@ -87,7 +87,7 @@ func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*r
 		return nil, err
 	}
 
-	s.manifest.Add(manifest.Entry{Name: res.Name, Type: res.Type})
+	s.registry.Add(resourceregistry.Entry{Name: res.Name, Type: res.Type})
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
@@ -95,15 +95,15 @@ func (s *Server) UseValues(values map[string]string, scope envgate.Scope) {
 	s.env.use(values, scope)
 }
 
-func (s *Server) UseProjectConfig(cfg provision.ProjectConfig) {
+func (s *Server) UseAccount(cfg resolve.Account) {
 	s.config.use(cfg)
 }
 
-func (s *Server) projectConfig(ctx context.Context) (provision.ProjectConfig, error) {
+func (s *Server) account(ctx context.Context) (resolve.Account, error) {
 	if cfg, ok := s.config.held(); ok {
 		return cfg, nil
 	}
-	return s.fetchProjectConfig(ctx, s.apiURL, s.token, s.projectID)
+	return s.fetchAccount(ctx, s.apiURL, s.token, s.projectID)
 }
 
 func (s *Server) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
@@ -154,7 +154,7 @@ func (s *Server) ReportEnvProblems(ctx context.Context, req *resourcesv1.ReportE
 }
 
 func (s *Server) ResetManifest() {
-	s.manifest.Reset()
+	s.registry.Reset()
 	s.live.reset()
 	s.env.forgetDeclarations()
 }
@@ -211,8 +211,8 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	var toResolve, buckets []manifest.Entry
-	for _, e := range s.manifest.Snapshot() {
+	var toResolve, buckets []resourceregistry.Entry
+	for _, e := range s.registry.Snapshot() {
 		if e.Type == linksv1.LinkType_LINK_TYPE_BUCKET {
 			buckets = append(buckets, e)
 		} else {
@@ -220,7 +220,7 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	cfg, err := s.projectConfig(ctx)
+	cfg, err := s.account(ctx)
 	if err != nil {
 		err = fmt.Errorf("fetch project config: %w", err)
 		s.deliverSync(SyncResult{Err: err})
@@ -228,14 +228,14 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	provisioned, err := s.provision(ctx, cfg, toResolve)
+	resolved, err := s.resolve(ctx, cfg, toResolve)
 	if err != nil {
-		err = fmt.Errorf("provision resources: %w", err)
+		err = fmt.Errorf("resolve resources: %w", err)
 		s.deliverSync(SyncResult{Err: err})
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	provisioned = append(provisioned, s.bucketResources(buckets)...)
+	resolved = append(resolved, s.bucketResources(buckets)...)
 
 	var liveValues map[string]string
 	liveKeys := s.live.sorted()
@@ -249,18 +249,18 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.deliverSync(SyncResult{ProjectConfig: cfg, Resources: provisioned, RuntimeAddress: s.devServerAddr, LiveValues: liveValues, LiveKeys: liveKeys})
+	s.deliverSync(SyncResult{Account: cfg, Resources: resolved, RuntimeAddress: s.devServerAddr, LiveValues: liveValues, LiveKeys: liveKeys})
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) bucketResources(buckets []manifest.Entry) []provision.Resource {
-	out := make([]provision.Resource, 0, len(buckets))
+func (s *Server) bucketResources(buckets []resourceregistry.Entry) []resolve.Resource {
+	out := make([]resolve.Resource, 0, len(buckets))
 	for _, b := range buckets {
 		value, _ := protojson.Marshal(&linksv1.Link{
 			Name:       b.Name,
 			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: b.Name}},
 		})
-		out = append(out, provision.Resource{
+		out = append(out, resolve.Resource{
 			Name: b.Name,
 			Type: b.Type,
 			Env:  map[string]string{"OCEL_RESOURCE_" + naming.EnvFragment(b.Type) + "_" + b.Name: string(value)},

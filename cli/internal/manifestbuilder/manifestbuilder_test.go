@@ -82,15 +82,15 @@ func marshal(t *testing.T, m *contractv1.Manifest) []byte {
 
 func synthDeclarations() []Declaration {
 	return []Declaration{
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "analytics", Postgres: &resourcesv1.PostgresConfig{Version: "16"}, Source: "app/analytics.ts:9"},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "analytics", Postgres: &resourcesv1.PostgresConfig{Version: "16"}, Source: "app/analytics.ts:9"},
 	}
 }
 
 func synthFunctions() []Function {
 	return []Function{
-		{Name: "api/documents", App: "web", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "next", RouteID: "/api/documents"},
-		{Name: "worker", App: "web", Runtime: "nodejs24.x", Handler: "app/worker.ts", ArtifactPath: "dist/worker.zip", Framework: ""},
+		{Route: "api/documents", App: "web", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "next", RouteID: "/api/documents"},
+		{Route: "worker", App: "web", Runtime: "nodejs24.x", Handler: "app/worker.ts", ArtifactPath: "dist/worker.zip", Framework: ""},
 	}
 }
 
@@ -201,7 +201,7 @@ func TestBuild(t *testing.T) {
 		}
 
 		withExtra := append(append([]Declaration{}, base...), Declaration{
-			Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "billing", Source: "app/billing.ts:2",
+			Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "billing", Source: "app/billing.ts:2",
 		})
 		after, err := Build("proj-1", nil, nil, withExtra, nil, nil, nil)
 		if err != nil {
@@ -227,7 +227,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
 		}, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -250,7 +250,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
+			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
 		}, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -276,8 +276,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Source: "app/db.ts:5"},
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Source: "app/other.ts:12"},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Source: "app/db.ts:5"},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Source: "app/other.ts:12"},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected duplicate error, got nil")
@@ -287,8 +287,8 @@ func TestBuild(t *testing.T) {
 		if !ok {
 			t.Fatalf("Build error = %T, want *DuplicateError", err)
 		}
-		if dupErr.TypeToken != "db" || dupErr.ID != "main" {
-			t.Fatalf("DuplicateError = %+v, want type=db id=main", dupErr)
+		if dupErr.TypeToken != "db" || dupErr.Name != "main" {
+			t.Fatalf("DuplicateError = %+v, want type=db name=main", dupErr)
 		}
 		if dupErr.FirstSource != "app/db.ts:5" || dupErr.SecondSource != "app/other.ts:12" {
 			t.Fatalf("DuplicateError sources = %q, %q, want both offending source locations", dupErr.FirstSource, dupErr.SecondSource)
@@ -306,8 +306,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, nil, nil, []Function{
-			{Name: "api/users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
-			{Name: "users", App: "web-api", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b"},
+			{Route: "api/users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
+			{Route: "users", App: "web-api", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -326,8 +326,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, nil, nil, []Function{
-			{Name: "api/users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
-			{Name: "api_users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b"},
+			{Route: "api/users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
+			{Route: "api_users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b"},
 		}, nil)
 		if err == nil {
 			t.Fatal("Build: expected a collision error, got nil")
@@ -351,8 +351,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "my_uploads", Source: "app/a.ts:1"},
-			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "my-uploads", Source: "app/b.ts:2"},
+			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "my_uploads", Source: "app/a.ts:1"},
+			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "my-uploads", Source: "app/b.ts:2"},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected a collision error, got nil")
@@ -373,7 +373,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, nil, nil, []Function{
-			{Name: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
 		}, nil)
 		if err == nil {
 			t.Fatal("Build: expected an error for a function with no app, got nil")
@@ -384,7 +384,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_UNSPECIFIED, ID: "main"},
+			{Type: linksv1.LinkType_LINK_TYPE_UNSPECIFIED, Name: "main"},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected error for unsupported resource type, got nil")
@@ -395,7 +395,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: ""},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: ""},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected error for empty id, got nil")
@@ -436,7 +436,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, nil, nil, []Function{
-			{Name: "Web API", App: "web", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
+			{Route: "Web API", App: "web", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -453,7 +453,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, nil, nil, []Function{
-			{Name: "api/documents", App: "web", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "functions/api/documents.func", Framework: "next", RouteID: "/api/documents"},
+			{Route: "api/documents", App: "web", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "functions/api/documents.func", Framework: "next", RouteID: "/api/documents"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -475,8 +475,8 @@ func TestBuild(t *testing.T) {
 			{Name: "admin", Framework: "express"},
 		}
 		manifest, err := Build("proj-1", nil, apps, nil, nil, []Function{
-			{Name: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "web"},
-			{Name: "admin", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b", Framework: "express", App: "admin"},
+			{Route: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "web"},
+			{Route: "admin", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b", Framework: "express", App: "admin"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -504,7 +504,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express"}}, nil, nil, []Function{
-			{Name: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "express", App: "web"},
+			{Route: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "express", App: "web"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -518,8 +518,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, nil, nil, []Function{
-			{Name: "api/documents", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "storefront"},
-			{Name: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b", Framework: "next", App: "storefront"},
+			{Route: "api/documents", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "storefront"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b", Framework: "next", App: "storefront"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -540,7 +540,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, nil, nil, []Function{
-			{Name: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "express", App: "web"},
+			{Route: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "express", App: "web"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -587,7 +587,7 @@ func TestBuild(t *testing.T) {
 			},
 		}
 		manifest, err := Build("proj-1", nil, []App{{Name: "admin", Framework: "express"}}, nil, nil, []Function{
-			{Name: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "storefront"},
+			{Route: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "storefront"},
 		}, variables)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -744,8 +744,8 @@ func TestBuildUsages(t *testing.T) {
 	t.Parallel()
 
 	declarations := []Declaration{
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Source: "shared/db.ts:3"},
-		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "uploads", Source: "shared/files.ts:3"},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Source: "shared/db.ts:3"},
+		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Source: "shared/files.ts:3"},
 	}
 
 	t.Run("lands one edge per app and resource, files deduped and sorted", func(t *testing.T) {
@@ -753,12 +753,12 @@ func TestBuildUsages(t *testing.T) {
 
 		manifest, err := Build("proj-1", nil, []App{
 			{Name: "api", Usages: []Usage{
-				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Files: []string{"apps/api/src/server.ts"}},
-				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Files: []string{"apps/api/src/reports.ts", "apps/api/src/server.ts"}},
-				{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "uploads", Files: []string{"apps/api/src/server.ts"}},
+				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/server.ts"}},
+				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/reports.ts", "apps/api/src/server.ts"}},
+				{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/api/src/server.ts"}},
 			}},
 			{Name: "worker", Usages: []Usage{
-				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Files: []string{"apps/worker/src/worker.ts"}},
+				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/worker/src/worker.ts"}},
 			}},
 		}, declarations, nil, nil, nil)
 		if err != nil {
@@ -783,7 +783,7 @@ func TestBuildUsages(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, []App{
-			{Name: "api", Usages: []Usage{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Files: []string{"apps/api/src/server.ts"}}}},
+			{Name: "api", Usages: []Usage{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/server.ts"}}}},
 		}, declarations, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build err = %v", err)
@@ -801,14 +801,14 @@ func TestBuildUsages(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, []App{
-			{Name: "api", Usages: []Usage{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "ghost", Files: []string{"apps/api/src/server.ts"}}}},
+			{Name: "api", Usages: []Usage{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "ghost", Files: []string{"apps/api/src/server.ts"}}}},
 		}, declarations, nil, nil, nil)
 
 		var dangling *DanglingUsageError
 		if !errors.As(err, &dangling) {
 			t.Fatalf("Build err = %v, want a *DanglingUsageError", err)
 		}
-		if dangling.App != "api" || dangling.ID != "ghost" {
+		if dangling.App != "api" || dangling.Name != "ghost" {
 			t.Errorf("err = %+v, want it to name app api and resource ghost", dangling)
 		}
 		if !strings.Contains(err.Error(), "ghost") || !strings.Contains(err.Error(), "api") {
@@ -831,8 +831,8 @@ func TestBuildUsages(t *testing.T) {
 
 func TestBindLinks(t *testing.T) {
 	declarations := []Declaration{
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "ocel/db.ts:1"},
-		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "uploads", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/bucket.ts:1"},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "ocel/db.ts:1"},
+		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/bucket.ts:1"},
 	}
 
 	t.Run("a listed id marks the resource ocel does not provision", func(t *testing.T) {
@@ -864,7 +864,7 @@ func TestBindLinks(t *testing.T) {
 
 	t.Run("a listed id two resources answer to is refused", func(t *testing.T) {
 		t.Parallel()
-		ambiguous := append(append([]Declaration{}, declarations...), Declaration{Type: linksv1.LinkType_LINK_TYPE_BUCKET, ID: "main", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/blob.ts:1"})
+		ambiguous := append(append([]Declaration{}, declarations...), Declaration{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "main", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/blob.ts:1"})
 		_, err := Build("proj-1", nil, nil, ambiguous, []string{"main"}, nil, nil)
 		var clash *AmbiguousLinkError
 		if !errors.As(err, &clash) {

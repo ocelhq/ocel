@@ -263,14 +263,14 @@ func declaredVariables(ctx context.Context, sess session.Session, cfg *projectco
 	if err != nil {
 		return nil, err
 	}
-	fingerprint, err := declcache.Fingerprint(entry)
+	fingerprint, err := declcache.ContentHash(entry)
 	if err != nil {
 		return nil, err
 	}
 
 	cache, cacheErr := declcache.Open()
 	if cacheErr == nil {
-		if definitions, ok := cache.Load(cfg.Dir, fingerprint, key); ok {
+		if definitions, ok := cache.LoadContaining(cfg.Dir, fingerprint, key); ok {
 			return definitions, nil
 		}
 	}

@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/election"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
 	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
 	"github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1/watchv1connect"
@@ -94,7 +94,7 @@ func runLeader(ctx context.Context, sess session.Session, result election.Result
 	}
 	reportDotfile(stdout, cfg.Dir, file.Values, dotfileWatchedAdvice)
 
-	projectCfg := resolveProjectConfig(ctx, sess, apiURL, creds.AccessToken, projectID, stderr)
+	projectCfg := resolveAccount(ctx, sess, apiURL, creds.AccessToken, projectID, stderr)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -105,7 +105,7 @@ func runLeader(ctx context.Context, sess session.Session, result election.Result
 	devServerAddr := "http://" + addr
 
 	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
-	srv.UseProjectConfig(projectCfg)
+	srv.UseAccount(projectCfg)
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
@@ -176,7 +176,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 	}
 
 	reportLiveValues(stdout, syncResult.LiveKeys)
-	return resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, syncResult.RuntimeAddress, appFolder), nil
+	return resolvedEnv(syncResult.Account.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, syncResult.RuntimeAddress, appFolder), nil
 }
 
 func reportLiveValues(stdout io.Writer, liveKeys []string) {
@@ -293,11 +293,11 @@ func waitExitError(err error) error {
 	return err
 }
 
-func mergeEnv(base []string, projectEnv, liveValues, dotfile map[string]string, resources []provision.Resource, runtimeAddress, appFolder string) []string {
+func mergeEnv(base []string, projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtimeAddress, appFolder string) []string {
 	return applyEnv(base, resolvedEnv(projectEnv, liveValues, dotfile, resources, runtimeAddress, appFolder))
 }
 
-func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []provision.Resource, runtimeAddress, appFolder string) map[string]string {
+func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtimeAddress, appFolder string) map[string]string {
 	merged := make(map[string]string, len(projectEnv)+len(liveValues)+len(dotfile)+1)
 	for k, v := range projectEnv {
 		merged[k] = v

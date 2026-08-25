@@ -102,7 +102,7 @@ func runStandalone(ctx context.Context, sess session.Session, creds credentials.
 	reportUnreadableLines(stdout, file.Unreadable)
 	reportDotfile(stdout, cfg.Dir, file.Values, dotfileReadOnceAdvice)
 
-	projectCfg := resolveProjectConfig(ctx, sess, apiURL, creds.AccessToken, projectID, stderr)
+	projectCfg := resolveAccount(ctx, sess, apiURL, creds.AccessToken, projectID, stderr)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -112,7 +112,7 @@ func runStandalone(ctx context.Context, sess session.Session, creds credentials.
 	devServerAddr := "http://" + listener.Addr().String()
 
 	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
-	srv.UseProjectConfig(projectCfg)
+	srv.UseAccount(projectCfg)
 	srv.UseValues(storeValues(projectCfg.EnvVars, file.Values), envScope(cfg, false, ""))
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)

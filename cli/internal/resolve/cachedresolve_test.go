@@ -1,4 +1,4 @@
-package provision
+package resolve
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/resolvecache"
+	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
@@ -51,7 +51,7 @@ func countingResolveServer(t *testing.T) (*httptest.Server, *int) {
 func TestCachedResolve(t *testing.T) {
 	t.Parallel()
 
-	onePostgres := []manifest.Entry{{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES}}
+	onePostgres := []resourceregistry.Entry{{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES}}
 
 	t.Run("a miss calls the API and persists a 0600 cache file", func(t *testing.T) {
 		t.Parallel()
@@ -123,7 +123,7 @@ func TestCachedResolve(t *testing.T) {
 		}
 
 		if _, err := resolver.Resolve(context.Background(), ts.URL, "tok", "proj_1",
-			[]manifest.Entry{
+			[]resourceregistry.Entry{
 				{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES},
 				{Name: "second", Type: linksv1.LinkType_LINK_TYPE_POSTGRES},
 			}); err != nil {

@@ -38,7 +38,7 @@ func OpenAt(dir string) (*Cache, error) {
 	return &Cache{dir: dir}, nil
 }
 
-func (c *Cache) Load(projectDir, fingerprint, key string) (definitions []*resourcesv1.VariableDefinition, ok bool) {
+func (c *Cache) LoadContaining(projectDir, fingerprint, key string) (definitions []*resourcesv1.VariableDefinition, ok bool) {
 	data, err := os.ReadFile(c.path(projectDir))
 	if err != nil {
 		return nil, false
@@ -88,7 +88,7 @@ func (c *Cache) path(projectDir string) string {
 	return filepath.Join(c.dir, hashString(projectDir)+".json")
 }
 
-func Fingerprint(entryPath string) (string, error) {
+func ContentHash(entryPath string) (string, error) {
 	f, err := os.Open(entryPath)
 	if err != nil {
 		return "", fmt.Errorf("read the bundled discovery entrypoint: %w", err)
