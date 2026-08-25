@@ -33,7 +33,7 @@ export function destroyProject(slug) {
   console.error(`[ocel-e2e] destroying the preview footprint of project ${slug} (from ${dir})`);
   const res = spawnSync(
     process.execPath,
-    [join(adapterDir, "packages", "ocel", "bin", "run.js"), "destroy", "--preview", "--yes"],
+    [join(adapterDir, "packages", "ocel", "bin", "run.js"), "destroy", "preview", "--yes"],
     {
       cwd: dir,
       stdio: ["ignore", "inherit", "inherit"],

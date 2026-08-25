@@ -15,7 +15,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/devserver"
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func fixtureWorkerTree(t *testing.T, root, name string) (appArgs []string, startedPath, pidPath string) {
@@ -37,7 +40,7 @@ func fixtureDeepWorkerTree(t *testing.T, root, name string) (appArgs []string, s
 	scriptPath := filepath.Join(root, name+".sh")
 	startedPath = filepath.Join(root, name+".started")
 	pidPrefix := filepath.Join(root, name+".workerpid.")
-	writeFile(t, scriptPath, `#!/bin/sh
+	clitest.WriteFile(t, scriptPath, `#!/bin/sh
 depth="$1"
 started="$2"
 pidprefix="$3"
@@ -84,17 +87,17 @@ func TestProcessTreeDiesWithTheCLI(t *testing.T) {
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "run")
 
@@ -123,17 +126,17 @@ export default { slug: "test-app" };
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, leafPidPath := fixtureDeepWorkerTree(t, root, "run-deep")
 
@@ -162,17 +165,17 @@ export default { slug: "test-app" };
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "leader")
 
@@ -199,8 +202,8 @@ export default { slug: "test-app" };
 	})
 
 	t.Run("a follower `ocel dev` kills its app's grandchildren", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
@@ -222,7 +225,7 @@ export default { slug: "test-app" };
 			t.Fatalf("lockfile.Create: %v", err)
 		}
 
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, apiURL, projectID)
@@ -244,9 +247,9 @@ export default { slug: "test-app" };
 		select {
 		case err := <-done:
 			if err != nil && !errors.Is(err, context.Canceled) {
-				var exitErr *ExitError
+				var exitErr *exitsig.ExitError
 				if !errors.As(err, &exitErr) {
-					t.Fatalf("runDev (follower) err = %v, want nil or *ExitError", err)
+					t.Fatalf("runDev (follower) err = %v, want nil or *exitsig.ExitError", err)
 				}
 			}
 		case <-time.After(5 * time.Second):

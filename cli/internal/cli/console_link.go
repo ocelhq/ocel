@@ -14,7 +14,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/authclient"
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/consolebinding"
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectclient"
 )
 
@@ -47,25 +49,25 @@ var consoleLinkCmd = &cobra.Command{
 			project = args[0]
 		}
 
-		d := defaultDeps()
+		d := newSession()
 		opts := consoleLinkOpts
-		creds, _ := d.loadCredentials()
-		opts.apiURL = effectiveAPIURL(cmd, creds.APIURL)
+		creds, _ := d.LoadCredentials()
+		opts.apiURL = effectiveAPIURL(creds.APIURL)
 
 		return runConsoleLink(cmd.Context(), d, cwd, project, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-func runConsoleLink(ctx context.Context, d deps, projectDir, project string, opts consoleLinkOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	creds, err := d.loadCredentials()
+func runConsoleLink(ctx context.Context, d session.Session, projectDir, project string, opts consoleLinkOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+	creds, err := d.LoadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
+		return &exitsig.ExitError{Code: 1}
 	}
 
 	apiURL := strings.TrimRight(opts.apiURL, "/")
 	// TODO: consoleLinkCmd installs no interrupt handler, so SIGINT still hard-kills here —
-	// migrating these reads to readLine without also adding installInterruptHandler
+	// migrating these reads to the prompt package without also adding installInterruptHandler
 	// would look like a cleanup but would reintroduce the raw-mode/masked-SIGINT bug
 	// this package's other commands fixed (see #245).
 	scanner := bufio.NewScanner(stdin)
@@ -120,7 +122,7 @@ func runConsoleLink(ctx context.Context, d deps, projectDir, project string, opt
 	return nil
 }
 
-func ensureConsoleBinding(ctx context.Context, d deps, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*consolebinding.Binding, error) {
+func ensureConsoleBinding(ctx context.Context, d session.Session, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*consolebinding.Binding, error) {
 	binding, err := consolebinding.Read(projectDir, apiURL)
 	if err != nil {
 		return nil, err

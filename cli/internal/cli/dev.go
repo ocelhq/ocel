@@ -17,11 +17,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provision"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
@@ -44,17 +46,17 @@ var devCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runDev(ctx, defaultDeps(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDev(ctx, newSession(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-func runDev(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDev(ctx context.Context, d session.Session, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	// TODO: unlike build/deploy, this never calls obs.Start, so discovery
 	// below produces no spans or logs and nothing else says so.
-	creds, err := d.loadCredentials()
+	creds, err := d.LoadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
+		return &exitsig.ExitError{Code: 1}
 	}
 
 	cfg, err := projectconfig.ResolveOptional(ctx, cwd, explicitConfigPath())
@@ -62,7 +64,7 @@ func runDev(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs
 		return err
 	}
 
-	apiURL := effectiveAPIURL(cmd, creds.APIURL)
+	apiURL := effectiveAPIURL(creds.APIURL)
 
 	for range 3 {
 		role, err := election.Elect(cfg.Dir)
@@ -85,7 +87,7 @@ func runDev(ctx context.Context, d deps, cmd *cobra.Command, cwd string, appArgs
 	return errors.New("determine leader/follower role: repeatedly lost the leader election; try again")
 }
 
-func runLeader(ctx context.Context, d deps, role election.Result, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runLeader(ctx context.Context, d session.Session, role election.Result, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return err
@@ -132,7 +134,7 @@ func runLeader(ctx context.Context, d deps, role election.Result, creds credenti
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	child, err := spawnAppChild(ctx, appCmd, stdin, d.stdinIsTerminal(stdin))
+	child, err := spawnAppChild(ctx, appCmd, stdin, d.StdinIsTerminal(stdin))
 	if err != nil {
 		return err
 	}
@@ -209,7 +211,7 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 	})
 }
 
-func runFollower(ctx context.Context, d deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runFollower(ctx context.Context, d session.Session, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	client := watchv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
 
 	stream, err := client.Subscribe(ctx, &watchv1.SubscribeRequest{})
@@ -256,26 +258,26 @@ func runFollower(ctx context.Context, d deps, leaderAddr string, appArgs []strin
 		case <-streamDone:
 			child.stop()
 			if ctx.Err() != nil {
-				return &ExitError{Code: interruptExitCode}
+				return &exitsig.ExitError{Code: exitsig.InterruptCode}
 			}
 			fmt.Fprintln(stderr, "Leader disconnected. Restart `ocel dev` in the leader's terminal, then re-run this command.")
-			return &ExitError{Code: 1}
+			return &exitsig.ExitError{Code: 1}
 		}
 	}
 }
 
-func startFollowerChild(ctx context.Context, d deps, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*appChild, error) {
+func startFollowerChild(ctx context.Context, d session.Session, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*appChild, error) {
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
 	appCmd.Env = applyEnv(os.Environ(), env)
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
-	return spawnAppChild(ctx, appCmd, stdin, d.stdinIsTerminal(stdin))
+	return spawnAppChild(ctx, appCmd, stdin, d.StdinIsTerminal(stdin))
 }
 
 func appExitError(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
-		return &ExitError{Code: interruptExitCode}
+		return &exitsig.ExitError{Code: exitsig.InterruptCode}
 	}
 	return waitExitError(err)
 }
@@ -286,7 +288,7 @@ func waitExitError(err error) error {
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return &ExitError{Code: appExitCode(exitErr)}
+		return &exitsig.ExitError{Code: appExitCode(exitErr)}
 	}
 	return err
 }

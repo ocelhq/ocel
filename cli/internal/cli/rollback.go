@@ -8,8 +8,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/edgewire"
+	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
+	"github.com/ocelhq/ocel/cli/internal/providersession"
 	"github.com/ocelhq/ocel/cli/node"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -33,7 +37,7 @@ var rollbackCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runRollback(ctx, defaultDeps(), cwd, rollbackOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runRollback(ctx, newSession(), cwd, rollbackOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -42,7 +46,7 @@ func init() {
 	rollbackCmd.Flags().StringVar(&rollbackOpts.tag, "tag", "", "Roll back to the promotion carrying this tag (mutually exclusive with --to)")
 }
 
-func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, stdout, stderr io.Writer) error {
+func runRollback(ctx context.Context, d session.Session, cwd string, opts rollbackOptions, stdout, stderr io.Writer) error {
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
 	}
@@ -59,14 +63,14 @@ func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, 
 		return err
 	}
 
-	ctx, run, err := startRun(ctx, cfg, "ocel rollback")
+	ctx, run, err := obs.Start(ctx, cfg.Dir, "ocel rollback")
 	if err != nil {
 		return err
 	}
 	defer run.Close()
 
-	return runProviderSession(ctx, d, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+	return providersession.Drive(ctx, d.LocateProviderBinary, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -78,7 +82,7 @@ func runRollback(ctx context.Context, d deps, cwd string, opts rollbackOptions, 
 			Slug: cfg.Slug,
 			To:   opts.to,
 			Tag:  opts.tag,
-			Edge: edgeSelection(cfg),
+			Edge: edgewire.Selection(cfg),
 		})
 		if err != nil {
 			return err

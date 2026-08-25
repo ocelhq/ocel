@@ -14,17 +14,19 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestDeployResult(t *testing.T) {
 	t.Run("a successful deploy records the promotion, the tag and every app", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, []manifestbuilder.Function{{
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, []manifestbuilder.Function{{
 			Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js",
 			ArtifactPath: "output/api", Framework: "express", App: "api",
 		}})
-		root, _ := setUpDeployFixture(t)
+		root, _ := clitest.SetUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
 		writeServeDescriptor(t, root, "api", "bld_api_1")
 
@@ -43,14 +45,14 @@ func TestDeployResult(t *testing.T) {
 		if got.Environment.Class != "production" {
 			t.Errorf("environment.class = %q, want %q", got.Environment.Class, "production")
 		}
-		if got.PromotionID != fakePromotionID {
-			t.Errorf("promotionId = %q, want the provider's %q", got.PromotionID, fakePromotionID)
+		if got.PromotionID != clitest.FakePromotionID {
+			t.Errorf("promotionId = %q, want the provider's %q", got.PromotionID, clitest.FakePromotionID)
 		}
 		if got.Tag != "v9" {
 			t.Errorf("tag = %q, want %q", got.Tag, "v9")
 		}
-		if len(got.AppURLs) != 1 || got.AppURLs[0] != fakeAppURL {
-			t.Errorf("appUrls = %v, want [%s]", got.AppURLs, fakeAppURL)
+		if len(got.AppURLs) != 1 || got.AppURLs[0] != clitest.FakeAppURL {
+			t.Errorf("appUrls = %v, want [%s]", got.AppURLs, clitest.FakeAppURL)
 		}
 		if len(got.Apps) != 1 || got.Apps[0].Name != "api" || got.Apps[0].BuildID != "bld_api_1" {
 			t.Errorf("apps = %+v, want one api app with build id bld_api_1", got.Apps)
@@ -61,14 +63,14 @@ func TestDeployResult(t *testing.T) {
 	})
 
 	t.Run("a failed deploy leaves no stale result behind", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		root, _ := setUpDeployFixture(t)
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		root, _ := clitest.SetUpDeployFixture(t)
 		if err := deployresult.Write(root, deployresult.Result{PromotionID: "prm_previous_run"}); err != nil {
 			t.Fatalf("seed stale result: %v", err)
 		}
-		t.Setenv(deployFakeProviderModeEnvVar, "fail")
+		t.Setenv(clitest.FakeProviderModeEnvVar, "fail")
 
 		var stdout, stderr bytes.Buffer
 		err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
@@ -82,11 +84,11 @@ func TestDeployResult(t *testing.T) {
 	})
 
 	t.Run("a successful preview up records the named preview", func(t *testing.T) {
-		d := defaultDeps()
-		setLoggedIn(&d)
-		stubAppFunctions(&d, nil)
-		root, _ := setUpDeployFixture(t)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
+		d := newSession()
+		clitest.SetLoggedIn(&d)
+		clitest.StubAppFunctions(&d, nil)
+		root, _ := clitest.SetUpDeployFixture(t)
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
 		if err := runPreviewUp(context.Background(), d, root, previewUpOptions{name: "e2e-42"}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -97,11 +99,11 @@ func TestDeployResult(t *testing.T) {
 		if got.Environment.Class != "preview" || got.Environment.Identity != "e2e-42" {
 			t.Errorf("environment = %+v, want the named preview", got.Environment)
 		}
-		if got.PromotionID != fakePromotionID {
-			t.Errorf("promotionId = %q, want the provider's %q", got.PromotionID, fakePromotionID)
+		if got.PromotionID != clitest.FakePromotionID {
+			t.Errorf("promotionId = %q, want the provider's %q", got.PromotionID, clitest.FakePromotionID)
 		}
-		if len(got.AppURLs) != 1 || got.AppURLs[0] != fakeAppURL {
-			t.Errorf("appUrls = %v, want [%s]", got.AppURLs, fakeAppURL)
+		if len(got.AppURLs) != 1 || got.AppURLs[0] != clitest.FakeAppURL {
+			t.Errorf("appUrls = %v, want [%s]", got.AppURLs, clitest.FakeAppURL)
 		}
 	})
 }
@@ -121,6 +123,6 @@ func readDeployResult(t *testing.T, root string) deployresult.Result {
 
 func writeServeDescriptor(t *testing.T, root, app, buildID string) {
 	t.Helper()
-	writeFile(t, filepath.Join(root, ".ocel", "output", "apps", app, edge.ServeDescriptorFile),
+	clitest.WriteFile(t, filepath.Join(root, ".ocel", "output", "apps", app, edge.ServeDescriptorFile),
 		`{"framework":"express","buildId":"`+buildID+`"}`)
 }

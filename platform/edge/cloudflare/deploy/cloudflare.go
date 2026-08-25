@@ -130,7 +130,7 @@ func (p *provider) PreviewWildcardSurfaces(wildcard string) (edge.Surface, edge.
 		Kind:   "preview bootstrap",
 		Name:   string(edge.ClassPreview),
 		Action: edge.SurfaceKeep,
-		Reason: "bootstrap-scoped: `ocel bootstrap --destroy --preview` removes what it stood up",
+		Reason: "bootstrap-scoped: `ocel bootstrap destroy preview` removes what it stood up",
 	}
 	return removed, kept
 }

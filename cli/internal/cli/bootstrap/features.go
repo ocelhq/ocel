@@ -1,14 +1,12 @@
-package cli
+package bootstrap
 
 import (
 	"context"
 	"fmt"
-	"io"
 	"slices"
-	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -17,15 +15,33 @@ const (
 	noFeatures  = "none"
 )
 
-func projectFrameworks(cfg *projectconfig.Config) []string {
-	var frameworks []string
-	for _, app := range cfg.Apps {
-		if app.Framework != "" {
-			frameworks = append(frameworks, app.Framework)
-		}
+func chooseFeatures(ctx context.Context, asked prompt.Prompter, opts Options, catalogue []*contractv1.Feature, interactive bool) ([]string, bool, error) {
+	if opts.Declared {
+		requested, err := parseFeatureFlag(opts.Features, catalogue)
+		return requested, err == nil, err
 	}
-	slices.Sort(frameworks)
-	return slices.Compact(frameworks)
+	if !interactive {
+		return enabledFeatures(catalogue), true, nil
+	}
+	return pickFeatures(ctx, asked, catalogue)
+}
+
+func pickFeatures(ctx context.Context, asked prompt.Prompter, catalogue []*contractv1.Feature) ([]string, bool, error) {
+	enabled := enabledFeatures(catalogue)
+	options := make([]prompt.Option, 0, len(catalogue))
+	for _, f := range catalogue {
+		options = append(options, prompt.Option{
+			Name:     f.GetName(),
+			Summary:  f.GetSummary(),
+			Selected: slices.Contains(enabled, f.GetName()),
+		})
+	}
+
+	chosen, taken, err := asked.Select(ctx, "Features to keep", options)
+	if err != nil || !taken {
+		return nil, false, err
+	}
+	return withDependencies(catalogue, chosen), true, nil
 }
 
 func catalogueNames(catalogue []*contractv1.Feature) []string {
@@ -142,61 +158,4 @@ func dependentProjects(catalogue []*contractv1.Feature, dropped []string) []stri
 	}
 	slices.Sort(projects)
 	return projects
-}
-
-func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, stdout io.Writer, stdin io.Reader) ([]string, bool, error) {
-	chosen := enabledFeatures(catalogue)
-	for {
-		fmt.Fprintln(stdout, "Features this bootstrap carries:")
-		for i, f := range catalogue {
-			mark := " "
-			if slices.Contains(chosen, f.GetName()) {
-				mark = "x"
-			}
-			fmt.Fprintf(stdout, "  %d) [%s] %s", i+1, mark, f.GetName())
-			if summary := f.GetSummary(); summary != "" {
-				fmt.Fprintf(stdout, " — %s", summary)
-			}
-			fmt.Fprintln(stdout)
-		}
-		fmt.Fprint(stdout, "Numbers to toggle, comma separated, or Enter to take this set: ")
-
-		line, err := readLine(ctx, stdin)
-		if err != nil {
-			if err == io.EOF {
-				return nil, false, nil
-			}
-			return nil, false, err
-		}
-		if strings.TrimSpace(line) == "" {
-			return withDependencies(catalogue, chosen), true, nil
-		}
-		toggled, err := toggleFeatures(catalogue, chosen, line)
-		if err != nil {
-			fmt.Fprintln(stdout, err)
-			continue
-		}
-		chosen = toggled
-	}
-}
-
-func toggleFeatures(catalogue []*contractv1.Feature, chosen []string, line string) ([]string, error) {
-	next := slices.Clone(chosen)
-	for _, field := range strings.Split(line, ",") {
-		field = strings.TrimSpace(field)
-		if field == "" {
-			continue
-		}
-		index, err := strconv.Atoi(field)
-		if err != nil || index < 1 || index > len(catalogue) {
-			return nil, fmt.Errorf("%q is not one of 1-%d", field, len(catalogue))
-		}
-		name := catalogue[index-1].GetName()
-		if at := slices.Index(next, name); at >= 0 {
-			next = slices.Delete(next, at, at+1)
-			continue
-		}
-		next = append(next, name)
-	}
-	return inCatalogueOrder(catalogue, next), nil
 }

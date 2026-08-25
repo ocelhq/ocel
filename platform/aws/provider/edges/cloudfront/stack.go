@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -296,6 +297,7 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 }
 
 func (s *stack) originSecret(ctx context.Context, c Clients) (string, error) {
+	command := providerkit.BootstrapCommand(s.class())
 	name, err := bootstrap.OriginSecretParamFor(string(s.class()))
 	if err != nil {
 		return "", err
@@ -305,11 +307,11 @@ func (s *stack) originSecret(ctx context.Context, c Clients) (string, error) {
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
-		return "", fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s is unreadable. Re-run `ocel bootstrap` against this account to mint it: %w", name, err)
+		return "", fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s is unreadable. Re-run `%s` against this account to mint it: %w", name, command, err)
 	}
 	secret := aws.ToString(out.Parameter.Value)
 	if secret == "" {
-		return "", fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s holds nothing. Re-run `ocel bootstrap` against this account to mint it", name)
+		return "", fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s holds nothing. Re-run `%s` against this account to mint it", name, command)
 	}
 	return secret, nil
 }

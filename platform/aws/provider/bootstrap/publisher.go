@@ -40,6 +40,7 @@ func ensureTagPublisherPayload(ctx context.Context, store ObjectStore, bucket st
 }
 
 func tagPublisherResources(code payloads.Placement, class string) string {
+	command := classCommand(class)
 	writerParam, seedParam := isrWriterParamNames(class)
 	return fmt.Sprintf(`  TagPublisherDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -51,7 +52,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
   TagPublisherRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this bootstrap's tag-snapshot publisher. Grants it the state table's stream, the asset bucket and the two ISR writer parameters, and nothing else. Managed by ocel bootstrap; deleting it stops every origin-raised invalidation before it reaches the edge."
+      Description: "Execution role for this bootstrap's tag-snapshot publisher. Grants it the state table's stream, the asset bucket and the two ISR writer parameters, and nothing else. Managed by %s; deleting it stops every origin-raised invalidation before it reaches the edge."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -99,7 +100,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
   TagPublisher:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel tag-snapshot publisher - the single writer of every build's tag clock in this bootstrap, fed by the state table stream. Managed by ocel bootstrap; delete it and origin-raised invalidations never reach the edge."
+      Description: "Ocel tag-snapshot publisher - the single writer of every build's tag clock in this bootstrap, fed by the state table stream. Managed by %s; delete it and origin-raised invalidations never reach the edge."
       Runtime: %s
       Architectures:
         - %s
@@ -135,8 +136,9 @@ func tagPublisherResources(code payloads.Placement, class string) string {
         Filters:
           - Pattern: '%s'
 `, tagPublisherDLQRetentionSeconds,
+		command,
 		writerParam, seedParam, writerParam, seedParam,
-		tagPublisherRuntime, tagPublisherArchitecture, tagPublisherHandler, tagPublisherMemoryMB, tagPublisherTimeoutSeconds,
+		command, tagPublisherRuntime, tagPublisherArchitecture, tagPublisherHandler, tagPublisherMemoryMB, tagPublisherTimeoutSeconds,
 		code.Bucket, code.Key,
 		tagPublisherAssetBucketEnvVar, tagPublisherWriterParamEnvVar, writerParam, tagPublisherSeedParamEnvVar, seedParam,
 		tagPublisherBatchSize, tagPublisherRetries, tagRecordStreamFilter)

@@ -16,6 +16,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/cli/internal/providersession"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestDeployE2E(t *testing.T) {
@@ -23,7 +27,7 @@ func TestDeployE2E(t *testing.T) {
 		root, binPath := setUpRealProviderFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), defaultDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), defaultSession(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -44,7 +48,7 @@ func TestDeployE2E(t *testing.T) {
 		root, binPath, fnName := setUpRealProviderExpressFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), defaultDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), defaultSession(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -71,13 +75,13 @@ func setUpRealProviderFixture(t *testing.T) (root, binPath string) {
 	repoRoot := requireRealProviderEnv(t)
 
 	root = t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
 };
 `)
-	writeFile(t, filepath.Join(root, "ocel", "main.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), `
 import { postgres } from "ocel/postgres";
 
 postgres("main", { version: "15" });
@@ -105,7 +109,7 @@ func setUpRealProviderExpressFixture(t *testing.T) (root, binPath, funcLogicalNa
 	}
 
 	const appName = "api"
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -117,7 +121,7 @@ export default {
 	if err != nil {
 		t.Fatalf("compute resource module path: %v", err)
 	}
-	writeFile(t, filepath.Join(root, "ocel", "main.ts"), fmt.Sprintf("export * from %q;\n", filepath.ToSlash(resourceModule)))
+	clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), fmt.Sprintf("export * from %q;\n", filepath.ToSlash(resourceModule)))
 
 	binPath = installRealProvider(t, repoRoot, root)
 	return root, binPath, appName
@@ -142,9 +146,9 @@ func requireRealProviderEnv(t *testing.T) string {
 		t.Skipf("packages/ocel is not built (missing %s); run `pnpm --filter ocel build` first", ocelDist)
 	}
 
-	prevTimeout := deployReadyTimeout
-	deployReadyTimeout = 10 * time.Second
-	t.Cleanup(func() { deployReadyTimeout = prevTimeout })
+	prevTimeout := providersession.ReadyTimeout
+	providersession.ReadyTimeout = 10 * time.Second
+	t.Cleanup(func() { providersession.ReadyTimeout = prevTimeout })
 
 	return repoRoot
 }

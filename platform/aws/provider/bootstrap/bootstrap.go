@@ -833,7 +833,7 @@ func ensurePassphrase(ctx context.Context, ssmClient SSMAPI) (created bool, err 
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:        aws.String(PassphraseParamName),
-		Description: aws.String("Ocel: the passphrase every Pulumi stack in this account is encrypted under, production and preview alike. Generated once by ocel bootstrap and never rotated. It is the only copy - delete it and the state in the Pulumi state buckets can never be decrypted again, stranding every app Ocel has deployed here."),
+		Description: aws.String("Ocel: the passphrase every Pulumi stack in this account is encrypted under, production and preview alike. Generated once by Ocel's first bootstrap of this account and never rotated. It is the only copy - delete it and the state in the Pulumi state buckets can never be decrypted again, stranding every app Ocel has deployed here."),
 		Value:       aws.String(passphrase),
 		Type:        ssmtypes.ParameterTypeSecureString,
 		Overwrite:   aws.Bool(false),
@@ -862,9 +862,17 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
+func classCommand(class string) string {
+	return providerkit.BootstrapCommand(providerkit.Class(class))
+}
+
+func classFeaturesCommand(class string) string {
+	return providerkit.BootstrapFeaturesCommand(providerkit.Class(class))
+}
+
 func stackTemplate() string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap (production) - the account-global core every production app Ocel deploys into this AWS account is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store. Created and updated by ocel bootstrap; each optional feature it can carry is a stack of its own beside this one. It holds no app of its own. Deleting this stack orphans every app deployed from it: the Pulumi state describing them goes with its bucket, and no deploy or teardown can run until it is recreated."
+Description: "Ocel bootstrap (production) - the account-global core every production app Ocel deploys into this AWS account is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store. Created and updated by %s; each optional feature it can carry is a stack of its own beside this one. It holds no app of its own. Deleting this stack orphans every app deployed from it: the Pulumi state describing them goes with its bucket, and no deploy or teardown can run until it is recreated."
 Resources:
 %s%s%s%s%s%s%sOutputs:
   %s:
@@ -873,12 +881,12 @@ Resources:
 %s%s%s%s%s  %s:
     Description: "Class this bootstrap is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
     Value: '%s'
-`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), appBoundaryResource(ClassProduction), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassProduction)
+`, classCommand(ClassProduction), stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), appBoundaryResource(ClassProduction), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassProduction)
 }
 
 func previewStackTemplate() string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap (preview) - the account-global core every preview environment Ocel deploys into this AWS account is carved from, deliberately separate from the production bootstrap so a per-PR preview can never reach production state, variables or caches. Created and updated by ocel bootstrap --preview; each optional feature it can carry is a stack of its own beside this one. Deleting this stack orphans every live preview: the Pulumi state describing them goes with its bucket, and no preview deploy or teardown can run until it is recreated."
+Description: "Ocel bootstrap (preview) - the account-global core every preview environment Ocel deploys into this AWS account is carved from, deliberately separate from the production bootstrap so a per-PR preview can never reach production state, variables or caches. Created and updated by %s; each optional feature it can carry is a stack of its own beside this one. Deleting this stack orphans every live preview: the Pulumi state describing them goes with its bucket, and no preview deploy or teardown can run until it is recreated."
 Resources:
 %s%s%s%s%s%s%sOutputs:
   %s:
@@ -887,7 +895,7 @@ Resources:
 %s%s%s%s%s  %s:
     Description: "Class this bootstrap is stamped with, verified before an action runs so that a preview deploy cannot reach production state, variables or caches."
     Value: '%s'
-`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), appBoundaryResource(ClassPreview), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassPreview)
+`, classCommand(ClassPreview), stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), appBoundaryResource(ClassPreview), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassPreview)
 }
 
 func stateBucketResource(class string) string {

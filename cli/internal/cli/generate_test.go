@@ -11,14 +11,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func declaring(d *deps, definitions ...*resourcesv1.VariableDefinition) {
-	d.collectDeclarations = func(ctx context.Context, _ *projectconfig.Config, gate *envgate.Gate, _, _ io.Writer) ([]declare.Resource, error) {
+func declaring(d *session.Session, definitions ...*resourcesv1.VariableDefinition) {
+	d.CollectDeclarations = func(ctx context.Context, _ *projectconfig.Config, gate *envgate.Gate, _, _ io.Writer) ([]declare.Resource, error) {
 		if _, err := gate.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: definitions}); err != nil {
 			return nil, err
 		}
@@ -38,9 +41,9 @@ func plainClient(key string) *resourcesv1.VariableDefinition {
 func setUpGenerateFixture(t *testing.T, config, tsconfig string) string {
 	t.Helper()
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), config)
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), config)
 	if tsconfig != "" {
-		writeFile(t, filepath.Join(root, "tsconfig.json"), tsconfig)
+		clitest.WriteFile(t, filepath.Join(root, "tsconfig.json"), tsconfig)
 	}
 	return root
 }
@@ -58,7 +61,7 @@ export default {
 };
 `, "{\n  \"compilerOptions\": {}\n}\n")
 
-		d := defaultDeps()
+		d := newSession()
 		declaring(&d, plainClient("NEXT_PUBLIC_SITE_URL"), plainClient("NEXT_PUBLIC_APP_ID"))
 
 		var stdout, stderr bytes.Buffer
@@ -95,7 +98,7 @@ export default {
 	t.Run("generates for declarations no value backs", func(t *testing.T) {
 		root := setUpGenerateFixture(t, generateSoloConfig, "{}\n")
 
-		d := defaultDeps()
+		d := newSession()
 		declaring(&d, plainClient("NEXT_PUBLIC_SITE_URL"))
 
 		var stdout, stderr bytes.Buffer
@@ -110,7 +113,7 @@ export default {
 	t.Run("names only client-accessible plaintext", func(t *testing.T) {
 		root := setUpGenerateFixture(t, generateSoloConfig, "{}\n")
 
-		d := defaultDeps()
+		d := newSession()
 		declaring(&d,
 			plainClient("NEXT_PUBLIC_SITE_URL"),
 			&resourcesv1.VariableDefinition{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
@@ -137,7 +140,7 @@ export default {
 	t.Run("writes nothing for a project with no client-accessible variable", func(t *testing.T) {
 		root := setUpGenerateFixture(t, generateSoloConfig, "{}\n")
 
-		d := defaultDeps()
+		d := newSession()
 		declaring(&d, &resourcesv1.VariableDefinition{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN})
 
 		var stdout, stderr bytes.Buffer
@@ -163,8 +166,8 @@ export default {
 	t.Run("surfaces a discovery failure", func(t *testing.T) {
 		root := setUpGenerateFixture(t, generateSoloConfig, "")
 
-		d := defaultDeps()
-		d.collectDeclarations = func(context.Context, *projectconfig.Config, *envgate.Gate, io.Writer, io.Writer) ([]declare.Resource, error) {
+		d := newSession()
+		d.CollectDeclarations = func(context.Context, *projectconfig.Config, *envgate.Gate, io.Writer, io.Writer) ([]declare.Resource, error) {
 			return nil, errors.New("discovery blew up")
 		}
 

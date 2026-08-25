@@ -6,13 +6,18 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/edgewire"
+	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
+	"github.com/ocelhq/ocel/cli/internal/providersession"
+	"github.com/ocelhq/ocel/cli/internal/removalplan"
 	"github.com/ocelhq/ocel/cli/node"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -21,16 +26,26 @@ import (
 
 var destroyCmd = &cobra.Command{
 	Use:   "destroy",
-	Short: "Permanently destroy this project's entire production deployment",
-	Long: "Permanently destroy this project's entire production deployment: the edge stack " +
-		"(edge workers, custom-domain binding, deployments store), the infra stack (databases " +
-		"and buckets, including all their data), and every app-deploy stack.\n\n" +
-		"This is irreversible and requires typing the project name to confirm; it refuses to run " +
-		"without an interactive terminal.\n\n" +
+	Short: "Permanently destroy this project's deployment of one class",
+	Long: "Permanently destroy what this project has deployed into one class: `production` takes " +
+		"the edge stack (edge workers, custom-domain binding, deployments store), the infra stack " +
+		"(databases and buckets, including all their data), and every app-deploy stack; `preview` " +
+		"takes the whole preview footprint and leaves the account-level preview bootstrap intact.\n\n" +
+		"Either is irreversible and requires typing the project name to confirm.\n\n" +
 		"An automated caller that must tear its own project down unattended can set " +
-		destroyBypassEnv + " to the project name — and only that name — to skip both gates. " +
+		removalplan.BypassEnv + " to the project name — and only that name — to skip both gates. " +
 		"Any other value is not a bypass.",
-	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		_ = cmd.Help()
+		return errors.New("destroy acts on one class at a time: production or preview")
+	},
+}
+
+var destroyProductionCmd = &cobra.Command{
+	Use:     "production",
+	Aliases: []string{"prod"},
+	Short:   "Permanently destroy this project's entire production deployment",
+	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -40,45 +55,42 @@ var destroyCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		if err := checkDestroyFlags(destroyPreview, destroyYes); err != nil {
-			return err
-		}
-		if destroyPreview {
-			return runDestroyPreviewProject(ctx, defaultDeps(), cwd, destroyYes, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
-		}
-		return runDestroy(ctx, defaultDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDestroy(ctx, newSession(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-var (
-	destroyPreview bool
-	destroyYes     bool
-)
+var destroyYes bool
 
 func init() {
-	destroyCmd.Flags().BoolVar(&destroyPreview, "preview", false, "Destroy this project's entire preview footprint instead of production (leaves account-level preview bootstrap intact)")
-	destroyCmd.Flags().BoolVarP(&destroyYes, "yes", "y", false, "With --preview only: destroy the whole preview footprint — every preview, ALL its data, assets and variables — with no confirmation and no terminal, for CI. Skips both the typed-name confirmation and the interactive-terminal requirement")
+	previewCmd := &cobra.Command{
+		Use:   "preview",
+		Short: "Permanently destroy this project's entire preview footprint",
+		Long: "Permanently destroy this project's entire preview footprint: every preview, all its " +
+			"data, assets and variables. The account-level preview bootstrap is left intact.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("determine working directory: %w", err)
+			}
+
+			ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
+			defer stop()
+
+			return runDestroyPreviewProject(ctx, newSession(), cwd, destroyYes, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		},
+	}
+	previewCmd.Flags().BoolVarP(&destroyYes, "yes", "y", false, "Destroy the whole preview footprint with no confirmation and no terminal, for CI. Skips both the typed-name confirmation and the interactive-terminal requirement")
+
+	destroyCmd.AddCommand(destroyProductionCmd, previewCmd)
 	rootCmd.AddCommand(destroyCmd)
 }
 
-func checkDestroyFlags(preview, yes bool) error {
-	if yes && !preview {
-		return fmt.Errorf("`ocel destroy --yes` is only accepted with --preview; destroying production requires typing the project name at an interactive terminal, or %s set to the project name", destroyBypassEnv)
-	}
-	return nil
-}
-
-const destroyBypassEnv = "OCEL_DESTROY_BYPASS_CONFIRMATION"
-
-func destroyBypassRequest() string {
-	return strings.TrimSpace(os.Getenv(destroyBypassEnv))
-}
-
-func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
-	requested := destroyBypassRequest()
+func runDestroy(ctx context.Context, d session.Session, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
+	requested := removalplan.BypassRequest()
 	tty := isReaderTTY(stdin)
 	if requested == "" && !tty {
-		return fmt.Errorf("`ocel destroy` needs an interactive terminal to confirm the project name; to destroy unattended, set %s to the project name", destroyBypassEnv)
+		return fmt.Errorf("`ocel destroy production` needs an interactive terminal to confirm the project name; to destroy unattended, set %s to the project name", removalplan.BypassEnv)
 	}
 
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
@@ -89,11 +101,11 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 	bypass := requested == cfg.Slug
 	switch {
 	case bypass:
-		fmt.Fprintf(stderr, "%s=%s: destroying production without confirmation\n", destroyBypassEnv, cfg.Slug)
+		fmt.Fprintf(stderr, "%s=%s: destroying production without confirmation\n", removalplan.BypassEnv, cfg.Slug)
 	case requested != "" && !tty:
-		return fmt.Errorf("%s is set to %q, but this project is %q; it must name the project being destroyed", destroyBypassEnv, requested, cfg.Slug)
+		return fmt.Errorf("%s is set to %q, but this project is %q; it must name the project being destroyed", removalplan.BypassEnv, requested, cfg.Slug)
 	case requested != "":
-		fmt.Fprintf(stderr, "%s is set to %q, not this project (%s); confirming interactively instead\n", destroyBypassEnv, requested, cfg.Slug)
+		fmt.Fprintf(stderr, "%s is set to %q, not this project (%s); confirming interactively instead\n", removalplan.BypassEnv, requested, cfg.Slug)
 	}
 
 	if err := node.Ensure(cfg.Dir); err != nil {
@@ -104,7 +116,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		return err
 	}
 
-	ctx, run, err := startRun(ctx, cfg, "ocel destroy")
+	ctx, run, err := obs.Start(ctx, cfg.Dir, "ocel destroy production")
 	if err != nil {
 		return err
 	}
@@ -114,8 +126,8 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+	err = providersession.Drive(ctx, d.LocateProviderBinary, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -127,7 +139,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
 		plan, err := client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
 			Slug: cfg.Slug,
-			Edge: edgeSelection(cfg),
+			Edge: edgewire.Selection(cfg),
 		})
 		spinner.Stop()
 		if err != nil {
@@ -140,7 +152,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 
 		printDestroyPlan(stdout, cfg.Slug, false, plan)
 		if !bypass {
-			confirmed, err := confirmPhrase(ctx, "project name", plan.GetSubject(), stdout, stdin)
+			confirmed, err := prompt.New(stdout, stdin).Phrase(ctx, "project name", plan.GetSubject())
 			if err != nil {
 				return err
 			}
@@ -152,7 +164,7 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 
 		req := &contractv1.ProjectRequest{
 			Slug: cfg.Slug,
-			Edge: edgeSelection(cfg),
+			Edge: edgewire.Selection(cfg),
 		}
 		if err := providerrunner.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
 			return err
@@ -161,14 +173,14 @@ func runDestroy(ctx context.Context, d deps, cwd string, stdout, stderr io.Write
 		return nil
 	})
 	if err != nil {
-		return failSession(ctx, ui, err)
+		return providersession.Fail(ctx, ui, err)
 	}
 	return nil
 }
 
-func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroyPreviewProject(ctx context.Context, d session.Session, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	if !yes && !isReaderTTY(stdin) {
-		return errors.New("`ocel destroy --preview` needs an interactive terminal to confirm the project name; re-run with --yes to tear the preview footprint down non-interactively")
+		return errors.New("`ocel destroy preview` needs an interactive terminal to confirm the project name; re-run with --yes to tear the preview footprint down non-interactively")
 	}
 
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
@@ -184,7 +196,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		return err
 	}
 
-	ctx, run, err := startRun(ctx, cfg, "ocel destroy --preview")
+	ctx, run, err := obs.Start(ctx, cfg.Dir, "ocel destroy preview")
 	if err != nil {
 		return err
 	}
@@ -194,8 +206,8 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap --preview", stdout); err != nil {
+	err = providersession.Drive(ctx, d.LocateProviderBinary, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
 			return err
 		}
 
@@ -208,7 +220,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		plan, err := client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
-			Edge:        edgeSelection(cfg),
+			Edge:        edgewire.Selection(cfg),
 		})
 		spinner.Stop()
 		if err != nil {
@@ -222,7 +234,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		printDestroyPlan(stdout, cfg.Slug, true, plan)
 
 		if !yes {
-			confirmed, err := confirmPhrase(ctx, "project name", plan.GetSubject(), stdout, stdin)
+			confirmed, err := prompt.New(stdout, stdin).Phrase(ctx, "project name", plan.GetSubject())
 			if err != nil {
 				return err
 			}
@@ -235,7 +247,7 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		req := &contractv1.ProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
-			Edge:        edgeSelection(cfg),
+			Edge:        edgewire.Selection(cfg),
 		}
 		if err := providerrunner.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
 			return err
@@ -244,80 +256,21 @@ func runDestroyPreviewProject(ctx context.Context, d deps, cwd string, yes bool,
 		return nil
 	})
 	if err != nil {
-		return failSession(ctx, ui, err)
+		return providersession.Fail(ctx, ui, err)
 	}
 	return nil
 }
 
 func printDestroyPlan(out io.Writer, slug string, preview bool, plan *contractv1.RemovalPlan) {
 	if preview {
-		printRemovalPlan(out, fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
+		removalplan.Print(out, fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
 			"  • all stored preview assets belonging to this project",
 			"  • every preview variable value this project holds, including each preview's own overrides",
 			"The account-level preview bootstrap is left intact. This cannot be undone.")
 		return
 	}
-	printRemovalPlan(out, fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
+	removalplan.Print(out, fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
 		"  • all stored assets belonging to this project",
 		"  • every production variable value this project holds, and their history",
 		"This cannot be undone.")
-}
-
-func printRemovalPlan(out io.Writer, header string, plan *contractv1.RemovalPlan, footer ...string) {
-	if kind := plan.GetEdgeKind(); kind != "" {
-		header += fmt.Sprintf(", fronted by the %s edge", kind)
-	}
-	fmt.Fprintf(out, "%s:\n", header)
-
-	kept := printPlanItems(out, plan.GetItems())
-	for _, line := range footer {
-		fmt.Fprintln(out, line)
-	}
-	printKeptItems(out, kept)
-}
-
-func printPlanItems(out io.Writer, items []*contractv1.RemovalItem) []*contractv1.RemovalItem {
-	var kept []*contractv1.RemovalItem
-	for _, item := range items {
-		if item.GetAction() == contractv1.RemovalItem_ACTION_KEEP {
-			kept = append(kept, item)
-			continue
-		}
-		fmt.Fprintf(out, "  • %s\n", removalItemLine(item))
-	}
-	return kept
-}
-
-func printKeptItems(out io.Writer, kept []*contractv1.RemovalItem) {
-	if len(kept) == 0 {
-		return
-	}
-	fmt.Fprintln(out, "Left in place:")
-	for _, item := range kept {
-		fmt.Fprintf(out, "  • %s\n", removalItemLine(item))
-	}
-}
-
-func removalItemLine(item *contractv1.RemovalItem) string {
-	line := fmt.Sprintf("%s %s %s", removalItemAction(item.GetAction()), item.GetKind(), item.GetName())
-	if reason := item.GetReason(); reason != "" {
-		line += " — " + reason
-	}
-	if item.GetSlow() {
-		line += " (this one is slow)"
-	}
-	return line
-}
-
-func removalItemAction(action contractv1.RemovalItem_Action) string {
-	switch action {
-	case contractv1.RemovalItem_ACTION_DELETE:
-		return "delete"
-	case contractv1.RemovalItem_ACTION_DISABLE_THEN_DELETE:
-		return "disable, then delete"
-	case contractv1.RemovalItem_ACTION_KEEP:
-		return "keep"
-	default:
-		return fmt.Sprintf("act on (%s, an action this CLI does not know)", action)
-	}
 }

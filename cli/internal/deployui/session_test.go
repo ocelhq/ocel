@@ -141,7 +141,7 @@ func TestSession(t *testing.T) {
 
 	t.Run("fail lists what a slow delete left standing, one item to a line", func(t *testing.T) {
 		t.Parallel()
-		s, out, _ := newTestSession(t, "ocel destroy")
+		s, out, _ := newTestSession(t, "ocel destroy production")
 		s.Fail(&edge.OutstandingError{
 			Because: "API Gateway paces deletions",
 			Waited:  14*time.Minute + 30*time.Second,

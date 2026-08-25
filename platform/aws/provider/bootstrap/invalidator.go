@@ -37,6 +37,7 @@ func ensureTagInvalidatorPayload(ctx context.Context, store ObjectStore, bucket 
 }
 
 func tagInvalidatorResources(code payloads.Placement, class string) string {
+	command := classCommand(class)
 	return fmt.Sprintf(`  TagInvalidatorDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
@@ -47,7 +48,7 @@ func tagInvalidatorResources(code payloads.Placement, class string) string {
   TagInvalidatorRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this bootstrap's tag invalidator. Grants it the state table's stream, the ledger items naming which distributions to reach, and invalidation on this account's distributions - and nothing else. Managed by ocel bootstrap; deleting it leaves every front serving pages the origin already considers stale."
+      Description: "Execution role for this bootstrap's tag invalidator. Grants it the state table's stream, the ledger items naming which distributions to reach, and invalidation on this account's distributions - and nothing else. Managed by %s; deleting it leaves every front serving pages the origin already considers stale."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -83,7 +84,7 @@ func tagInvalidatorResources(code payloads.Placement, class string) string {
   TagInvalidator:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel tag invalidator - turns each build's tag raises, read from the state table stream, into cache-tag invalidations on the distributions the ledger names for that project. Managed by ocel bootstrap; delete it and on-demand revalidation stops reaching the fronts."
+      Description: "Ocel tag invalidator - turns each build's tag raises, read from the state table stream, into cache-tag invalidations on the distributions the ledger names for that project. Managed by %s; delete it and on-demand revalidation stops reaching the fronts."
       Runtime: %s
       Architectures:
         - %s
@@ -118,7 +119,7 @@ func tagInvalidatorResources(code payloads.Placement, class string) string {
         Filters:
           - Pattern: '%s'
 `, tagInvalidatorDLQRetentionSeconds,
-		tagInvalidatorRuntime, tagInvalidatorArchitecture, tagInvalidatorHandler, tagInvalidatorMemoryMB, tagInvalidatorTimeoutSeconds,
+		command, command, tagInvalidatorRuntime, tagInvalidatorArchitecture, tagInvalidatorHandler, tagInvalidatorMemoryMB, tagInvalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		tagInvalidatorStateTableEnvVar, tagInvalidatorClassEnvVar, class,
 		tagInvalidatorBatchSize, tagInvalidatorRetries, tagRecordStreamFilter)

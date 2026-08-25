@@ -12,12 +12,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error) {
 	t.Helper()
 	ctx := context.Background()
-	err := envSession(ctx, defaultDeps(), root, opts, io.Discard, io.Discard, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
+	err := envSession(ctx, newSession(), root, opts, io.Discard, io.Discard, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		return drive(ctx, cfg.Slug, runner, runnerValues{
 			runner: runner,
 			slug:   cfg.Slug,
@@ -67,7 +69,7 @@ func stored(t *testing.T, rows []envgate.Stored, key string) envgate.Stored {
 func TestRunnerValues(t *testing.T) {
 	t.Run("List carries a named environment's value as an override", func(t *testing.T) {
 		root := setUpEnvFixture(t)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
 		preview := envOptions{preview: true}
 
 		withRunnerValues(t, root, preview, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {

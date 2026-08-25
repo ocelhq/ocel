@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,21 +12,25 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/attribution"
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
+	"github.com/ocelhq/ocel/cli/internal/providersession"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	"github.com/ocelhq/ocel/cli/node"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -37,15 +40,13 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
-var deployReadyTimeout time.Duration
-
 const noBrowserEnvVar = "OCEL_NO_BROWSER"
 
-func (d deps) canOpenVarsUI(stdin io.Reader, noUI bool) bool {
+func canOpenVarsUI(d session.Session, stdin io.Reader, noUI bool) bool {
 	if noUI || os.Getenv(noBrowserEnvVar) != "" {
 		return false
 	}
-	return d.stdinIsTerminal(stdin)
+	return d.StdinIsTerminal(stdin)
 }
 
 const noUIFlagUsage = "Never pause to open the variables UI; fail on a missing or invalid variable instead"
@@ -72,7 +73,7 @@ var deployCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runDeploy(ctx, defaultDeps(), cwd, deployOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDeploy(ctx, newSession(), cwd, deployOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -85,7 +86,7 @@ func init() {
 
 const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building the apps first (produce it with ocel build)"
 
-func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDeploy(ctx context.Context, d session.Session, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -107,7 +108,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		return err
 	}
 
-	ctx, run, err := startRun(ctx, cfg, "ocel deploy")
+	ctx, run, err := obs.Start(ctx, cfg.Dir, "ocel deploy")
 	if err != nil {
 		return err
 	}
@@ -117,8 +118,8 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = runProviderSession(ctx, d, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		willConfirm := !opts.yes && d.stdinIsTerminal(stdin)
+	err = providersession.Drive(ctx, d.LocateProviderBinary, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		willConfirm := !opts.yes && d.StdinIsTerminal(stdin)
 		knownSlugs, err := preflightDeploy(ctx, d, runner, cfg, willConfirm, stdout, stdin)
 		if err != nil {
 			return err
@@ -137,7 +138,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 
 		ui.Building()
 		recovery := gateRecovery{
-			deps:   d,
+			sess:   d,
 			cfg:    cfg,
 			runner: runner,
 			newGate: func() *envgate.Gate {
@@ -149,7 +150,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 			},
 			ui:      ui,
 			stdout:  stdout,
-			enabled: d.canOpenVarsUI(stdin, opts.noUI),
+			enabled: canOpenVarsUI(d, stdin, opts.noUI),
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
@@ -169,7 +170,7 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 			Manifest:    manifest,
 			Environment: env,
 			Tag:         opts.tag,
-			Edge:        edgeSelection(cfg),
+			Edge:        edgewire.Selection(cfg),
 		}
 
 		var out deployOutcome
@@ -187,12 +188,12 @@ func runDeploy(ctx context.Context, d deps, cwd string, opts deployOptions, stdo
 		return nil
 	})
 	if err != nil {
-		return failSession(ctx, ui, err)
+		return providersession.Fail(ctx, ui, err)
 	}
 	return nil
 }
 
-func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *deployui.Session) (*contractv1.Manifest, error) {
+func collectAndBuildManifest(ctx context.Context, d session.Session, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *deployui.Session) (*contractv1.Manifest, error) {
 	buildOut := ui.BuildWriter()
 
 	captured := &boundedCapture{}
@@ -229,7 +230,7 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		if err := clientenv.Generate(clients); err != nil {
 			return nil, err
 		}
-		if err := d.buildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
+		if err := d.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
 			return nil, err
 		}
 		if err := clientenv.Record(cfg.Dir, clients); err != nil {
@@ -237,7 +238,7 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		}
 	}
 
-	functions, err := d.collectAppFunctions(cfg.Dir)
+	functions, err := d.CollectAppFunctions(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +272,7 @@ func collectAndBuildManifest(ctx context.Context, d deps, cfg *projectconfig.Con
 		return nil, err
 	}
 	for _, app := range manifest.GetApps() {
-		id, err := d.deploymentID(cfg.Dir, app.GetName())
+		id, err := d.DeploymentID(cfg.Dir, app.GetName())
 		if err != nil {
 			return nil, err
 		}
@@ -568,78 +569,13 @@ func detectedApps(functions []manifestbuilder.Function) []string {
 	return detected
 }
 
-func failSession(ctx context.Context, ui *deployui.Session, err error) error {
-	if ctx.Err() != nil {
-		ui.Cancel()
-		return &ExitError{Code: interruptExitCode}
-	}
-	ui.Fail(err)
-	return &ExitError{Code: 1}
-}
-
-func runProviderSession(ctx context.Context, d deps, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, stdout, stderr io.Writer, drive func(*providerrunner.Runner) error) error {
-	binPath, err := d.locateProviderBinary(ctx, cfg.Dir, provider.Package)
-	if err != nil {
-		return fmt.Errorf("locate provider binary: %w", err)
-	}
-
-	env, err := workerBundleEnv(cfg.Dir)
-	if err != nil {
-		return err
-	}
-
-	sessionConfig, err := providerConfig(provider)
-	if err != nil {
-		return err
-	}
-
-	runner, err := providerrunner.Spawn(ctx, providerrunner.Config{
-		BinaryPath:      binPath,
-		Stdout:          stdout,
-		Stderr:          stderr,
-		Env:             env,
-		Provider:        sessionConfig,
-		ProviderPackage: provider.Package,
-		ReadyTimeout:    deployReadyTimeout,
-	})
-	if err != nil {
-		return fmt.Errorf("spawn provider: %w", err)
-	}
-	defer runner.Close()
-
-	if err := runner.Ready(ctx); err != nil {
-		return err
-	}
-	return drive(runner)
-}
-
-func workerBundleEnv(projectDir string) ([]string, error) {
-	bundles, err := json.Marshal(node.WorkerBundles(projectDir))
-	if err != nil {
-		return nil, fmt.Errorf("marshal worker bundles: %w", err)
-	}
-	store, err := json.Marshal(node.StoreWorkerBundles(projectDir))
-	if err != nil {
-		return nil, fmt.Errorf("marshal store worker bundles: %w", err)
-	}
-	isrWriter, err := json.Marshal(node.ISRWriterBundles(projectDir))
-	if err != nil {
-		return nil, fmt.Errorf("marshal isr writer worker bundles: %w", err)
-	}
-	return append(os.Environ(),
-		"OCEL_WORKER_BUNDLES="+string(bundles),
-		"OCEL_STORE_WORKER_BUNDLES="+string(store),
-		"OCEL_ISR_WRITER_WORKER_BUNDLES="+string(isrWriter),
-	), nil
-}
-
 func confirmDeploy(ctx context.Context, slug, providerPackage string, knownSlugs []string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	if len(knownSlugs) == 0 {
-		return confirmYN(ctx, fmt.Sprintf("Deploy %s with %s?", slug, providerPackage), stdout, stdin)
+		return prompt.New(stdout, stdin).Confirm(ctx, fmt.Sprintf("Deploy %s with %s?", slug, providerPackage))
 	}
 	fmt.Fprintf(stdout, "No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s\n",
 		slug, strings.Join(knownSlugs, ", "))
-	return confirmYN(ctx, "Continue?", stdout, stdin)
+	return prompt.New(stdout, stdin).Confirm(ctx, "Continue?")
 }
 
 func toDeclarations(configDir string, resources []declare.Resource) []manifestbuilder.Declaration {

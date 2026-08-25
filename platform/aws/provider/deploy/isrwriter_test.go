@@ -56,12 +56,12 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		storeOnly := base
 		storeOnly.CacheStoreBucket = "isr"
 		storeOnly.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
-		if err := checkISRWriterAgrees(storeOnly.objectStores(), storeOnly.isrWriter()); err == nil {
+		if err := checkISRWriterAgrees(providerkit.ClassProduction, storeOnly.objectStores(), storeOnly.isrWriter()); err == nil {
 			t.Error("a cache store with no writer to write into it must fail the deploy")
 		}
 
 		writerOnly := adoptISRWriter(t, base)
-		if err := checkISRWriterAgrees(writerOnly.objectStores(), writerOnly.isrWriter()); err == nil {
+		if err := checkISRWriterAgrees(providerkit.ClassProduction, writerOnly.objectStores(), writerOnly.isrWriter()); err == nil {
 			t.Error("a writer with no adopted cache store must fail the deploy")
 		}
 

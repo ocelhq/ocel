@@ -127,7 +127,7 @@ func TestAdmitRefusesABootstrapThatIsNotThere(t *testing.T) {
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
 		t.Fatalf("Admit() = %v, want a %s refusal", err, providerkit.CodeNotReady)
 	}
-	if !strings.Contains(refusal.Message, "`ocel bootstrap --preview`") {
+	if !strings.Contains(refusal.Message, "`ocel bootstrap preview`") {
 		t.Errorf("Admit() = %q, want it to name the command that creates the preview bootstrap", refusal.Message)
 	}
 }
@@ -162,7 +162,7 @@ func TestAdmitRefusesAMissingFeatureAndOffersTheFullSet(t *testing.T) {
 	}
 	for _, want := range []string{
 		"lacks the features this project needs: " + fake.FeatureImages,
-		"`ocel bootstrap --features " + fake.FeatureCache + "," + fake.FeatureImages + "`",
+		"`ocel bootstrap production --features " + fake.FeatureCache + "," + fake.FeatureImages + "`",
 	} {
 		if !strings.Contains(refusal.Message, want) {
 			t.Errorf("Admit() = %q, want it to contain %q", refusal.Message, want)
@@ -331,9 +331,9 @@ func TestOccupancyRefusesWhileAnythingStandsOnTheBootstrap(t *testing.T) {
 	}
 	for _, want := range []string{
 		"2 project(s) are still deployed into it: blog, shop",
-		"`ocel destroy --preview`",
+		"`ocel destroy preview`",
 		"*.previews.example.com",
-		"`ocel bootstrap --destroy --preview`",
+		"`ocel bootstrap destroy preview`",
 	} {
 		if !strings.Contains(refusal.Message, want) {
 			t.Errorf("Refuse() = %q, want it to contain %q", refusal.Message, want)
@@ -349,7 +349,7 @@ func TestASchemaNewerThanThisBuildIsRefusedWithNoEscapeHatch(t *testing.T) {
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
 		t.Fatalf("RefuseSchemaAhead() = %v, want a %s refusal", err, providerkit.CodeNotReady)
 	}
-	if !strings.Contains(refusal.Message, "ocel bootstrap --destroy") {
+	if !strings.Contains(refusal.Message, "ocel bootstrap destroy") {
 		t.Errorf("RefuseSchemaAhead() = %q, want it to name what drops the bootstrap", refusal.Message)
 	}
 	if strings.Contains(refusal.Message, "--force") {
@@ -374,7 +374,7 @@ func TestAPreviewBootstrapIsRemediatedWithItsOwnCommand(t *testing.T) {
 	if !errors.As(err, &refusal) {
 		t.Fatalf("Admit() = %v, want a refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "`ocel bootstrap --preview --features ") {
+	if !strings.Contains(refusal.Message, "`ocel bootstrap preview --features ") {
 		t.Errorf("Admit() = %q, want the preview bootstrap's own command", refusal.Message)
 	}
 }

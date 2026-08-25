@@ -14,20 +14,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func terminalStdin(d *deps) {
-	d.stdinIsTerminal = func(io.Reader) bool { return true }
+func terminalStdin(d *session.Session) {
+	d.StdinIsTerminal = func(io.Reader) bool { return true }
 }
 
-func recordBrowser(d *deps, opened *[]string, mu *sync.Mutex) {
-	d.openBrowser = func(url string) error {
+func recordBrowser(d *session.Session, opened *[]string, mu *sync.Mutex) {
+	d.OpenBrowser = func(url string) error {
 		mu.Lock()
 		defer mu.Unlock()
 		*opened = append(*opened, url)
@@ -40,10 +44,10 @@ type varsUISessions struct {
 	all []*varsui.Session
 }
 
-func captureVarsUI(d *deps) *varsUISessions {
+func captureVarsUI(d *session.Session) *varsUISessions {
 	sessions := &varsUISessions{}
-	prev := d.serveVarsUI
-	d.serveVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
+	prev := d.ServeVarsUI
+	d.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
 		session, err := prev(ctx, cfg, runner, preview, gate)
 		if err == nil {
 			sessions.mu.Lock()
@@ -131,7 +135,7 @@ func markDone(t *testing.T, address, token string) {
 func problemsFile(t *testing.T, problems string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "problems.json")
-	writeFile(t, path, problems)
+	clitest.WriteFile(t, path, problems)
 	t.Setenv("OCEL_TEST_ENV_PROBLEMS_FILE", path)
 	return path
 }
@@ -163,7 +167,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("a gate refusal in a terminal opens the UI and resumes into the build", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problems := problemsFile(t, missingStripeKey)
-		d := defaultDeps()
+		d := newSession()
 		terminalStdin(&d)
 		var mu sync.Mutex
 		var opened []string
@@ -181,7 +185,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 
 		address, token := awaitVarsUI(t, &out, 1)
 		setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
-		writeFile(t, problems, "[]")
+		clitest.WriteFile(t, problems, "[]")
 		markDone(t, address, token)
 
 		select {
@@ -212,12 +216,12 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("the resumed pass declares each variable once", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		problems := problemsFile(t, missingStripeKey)
-		d := defaultDeps()
+		d := newSession()
 		terminalStdin(&d)
 		var mu sync.Mutex
 		var opened []string
 		recordBrowser(&d, &opened, &mu)
-		stubAppFunctions(&d, []manifestbuilder.Function{
+		clitest.StubAppFunctions(&d, []manifestbuilder.Function{
 			{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 		})
 
@@ -230,7 +234,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 
 		address, token := awaitVarsUI(t, &out, 1)
 		setCell(t, address, token, "STRIPE_API_KEY", "pk_filled_in")
-		writeFile(t, problems, "[]")
+		clitest.WriteFile(t, problems, "[]")
 		markDone(t, address, token)
 
 		select {
@@ -254,7 +258,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("the waiting state says how to abort", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
-		d := defaultDeps()
+		d := newSession()
 		terminalStdin(&d)
 		var mu sync.Mutex
 		var opened []string
@@ -288,7 +292,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("interrupting while waiting aborts with nothing built", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
-		d := defaultDeps()
+		d := newSession()
 		terminalStdin(&d)
 		var mu sync.Mutex
 		var opened []string
@@ -310,7 +314,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 
 		select {
 		case err := <-done:
-			var exit *ExitError
+			var exit *exitsig.ExitError
 			if !errors.As(err, &exit) || exit.Code == 0 {
 				t.Fatalf("runDeploy err = %v, want a non-zero exit; stdout=%s", err, out.String())
 			}
@@ -332,7 +336,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("closing the UI still names the keys that are owed", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
-		d := defaultDeps()
+		d := newSession()
 		terminalStdin(&d)
 		var mu sync.Mutex
 		var opened []string
@@ -354,7 +358,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 
 		select {
 		case err := <-done:
-			var exit *ExitError
+			var exit *exitsig.ExitError
 			if !errors.As(err, &exit) || exit.Code == 0 {
 				t.Fatalf("runDeploy err = %v, want a non-zero exit", err)
 			}
@@ -377,7 +381,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "nope", envOptions{})
 		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_INVALID","detail":"must start with sk_"}]`)
-		d := defaultDeps()
+		d := newSession()
 		terminalStdin(&d)
 		var mu sync.Mutex
 		var opened []string
@@ -422,7 +426,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("a reopened UI shows what is still owed", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problems := problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"},{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
-		d := defaultDeps()
+		d := newSession()
 		terminalStdin(&d)
 		var mu sync.Mutex
 		var opened []string
@@ -443,7 +447,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 			t.Fatalf("stdout = %q, want the first refusal to name both cells", first)
 		}
 		setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
-		writeFile(t, problems, `[{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
+		clitest.WriteFile(t, problems, `[{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
 		before := out.String()
 		markDone(t, address, token)
 
@@ -473,7 +477,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("a non-interactive run never waits", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
-		d := defaultDeps()
+		d := newSession()
 		var mu sync.Mutex
 		var opened []string
 		recordBrowser(&d, &opened, &mu)
@@ -511,7 +515,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 				root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
 				t.Setenv(noBrowserEnvVar, tc.env)
-				d := defaultDeps()
+				d := newSession()
 				terminalStdin(&d)
 				var mu sync.Mutex
 				var opened []string
@@ -540,9 +544,9 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 func TestGateRecoveryOnPreviewUp(t *testing.T) {
 	t.Run("a gate refusal in a terminal opens the UI and resumes", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-		t.Setenv(fakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
 		problems := problemsFile(t, missingStripeKey)
-		d := defaultDeps()
+		d := newSession()
 		terminalStdin(&d)
 		var mu sync.Mutex
 		var opened []string
@@ -562,7 +566,7 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 			t.Errorf("bootstrap = %q, want the preview's own", got)
 		}
 		setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
-		writeFile(t, problems, "[]")
+		clitest.WriteFile(t, problems, "[]")
 		markDone(t, address, token)
 
 		select {
@@ -589,9 +593,9 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-				t.Setenv(fakeInfraClassEnvVar, "preview")
+				t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
-				d := defaultDeps()
+				d := newSession()
 				if tc.terminal {
 					terminalStdin(&d)
 				}

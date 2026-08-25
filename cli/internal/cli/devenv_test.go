@@ -13,24 +13,28 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provision"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func withCredentials(d *deps, apiURL string) {
-	d.loadCredentials = func() (credentials.Credentials, error) {
+func withCredentials(d *session.Session, apiURL string) {
+	d.LoadCredentials = func() (credentials.Credentials, error) {
 		return credentials.Credentials{APIURL: apiURL, AccessToken: "tok"}, nil
 	}
 }
 
-func withProjectEnv(d *deps, envVars map[string]string) *atomic.Int32 {
+func withProjectEnv(d *session.Session, envVars map[string]string) *atomic.Int32 {
 	var calls atomic.Int32
-	d.fetchProjectConfig = func(_ context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error) {
+	d.FetchProjectConfig = func(_ context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error) {
 		calls.Add(1)
 		return provision.ProjectConfig{ProjectID: projectID, EnvVars: envVars, APIURL: apiURL, Token: token}, nil
 	}
@@ -428,14 +432,14 @@ func TestRunDevEnvironment(t *testing.T) {
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
-		writeFile(t, filepath.Join(root, ".env"), "NEXT_PUBLIC_SITE_URL=https://example.com\nAWS_PROFILE=dev\napi_base=lower\nAPI_BASE=http://localhost:3000\nnot an assignment\n")
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
+		clitest.WriteFile(t, filepath.Join(root, ".env"), "NEXT_PUBLIC_SITE_URL=https://example.com\nAWS_PROFILE=dev\napi_base=lower\nAPI_BASE=http://localhost:3000\nnot an assignment\n")
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -443,7 +447,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want exit 7; stderr=%s", err, stderr.String())
 		}
@@ -493,10 +497,10 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
@@ -526,14 +530,14 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
-		writeFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
+		clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
@@ -563,14 +567,14 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
-		writeFile(t, filepath.Join(root, ".env"), "NOBODY=x\n")
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
+		clitest.WriteFile(t, filepath.Join(root, ".env"), "NOBODY=x\n")
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
@@ -578,7 +582,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want the app to have run and exited 7; stderr=%s", err, stderr.String())
 		}
@@ -598,11 +602,11 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		calls := withProjectEnv(&d, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -610,7 +614,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 		}
@@ -640,12 +644,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		withProjectEnv(&d, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, ".env"), "STRIPE_API_KEY=sk_from_file\n")
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, ".env"), "STRIPE_API_KEY=sk_from_file\n")
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -653,7 +657,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want exit 7; stderr=%s", err, stderr.String())
 		}
@@ -679,15 +683,15 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
-		d.fetchProjectConfig = func(context.Context, string, string, string) (provision.ProjectConfig, error) {
+		d.FetchProjectConfig = func(context.Context, string, string, string) (provision.ProjectConfig, error) {
 			return provision.ProjectConfig{}, errors.New("dial tcp: connection refused")
 		}
 
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -695,7 +699,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want exit 7 (offline is not a failure); stderr=%s", err, stderr.String())
 		}
@@ -726,10 +730,10 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DB_PASSWORD","class":"VARIABLE_CLASS_SECRET","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DB_PASSWORD","class":"VARIABLE_CLASS_SECRET","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
@@ -737,7 +741,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 		}
@@ -760,12 +764,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n")
-		writeFile(t, filepath.Join(root, ".env"), "PUBLIC_SITE_URL=https://local.example.com\nSTRIPE_API_KEY=sk_local\n")
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(
+		clitest.WriteFile(t, filepath.Join(root, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n")
+		clitest.WriteFile(t, filepath.Join(root, ".env"), "PUBLIC_SITE_URL=https://local.example.com\nSTRIPE_API_KEY=sk_local\n")
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(
 			`{"key":"PUBLIC_SITE_URL","class":"VARIABLE_CLASS_PLAIN","required":true,"clientAccessible":true}`,
 			`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`,
 		))
@@ -776,7 +780,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 		}
@@ -821,14 +825,14 @@ func TestRunRunEnvironment(t *testing.T) {
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
-		writeFile(t, filepath.Join(root, ".env"), "NOBODY=x\n")
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
+		clitest.WriteFile(t, filepath.Join(root, ".env"), "NOBODY=x\n")
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
@@ -836,7 +840,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr bytes.Buffer
 		err := runRun(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runRun err = %v, want the app to have run and exited 7; stderr=%s", err, stderr.String())
 		}
@@ -856,14 +860,14 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
-		writeFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(
+		clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(
 			`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
@@ -872,7 +876,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr bytes.Buffer
 		err := runRun(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runRun err = %v, want exit 7; stderr=%s", err, stderr.String())
 		}
@@ -904,10 +908,10 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
@@ -940,11 +944,11 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-		d := defaultDeps()
+		d := newSession()
 		withCredentials(&d, resolveServer.URL)
 		withProjectEnv(&d, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -952,7 +956,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		var stdout, stderr syncBuffer
 		err := runRun(context.Background(), d, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *ExitError
+		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runRun err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 		}

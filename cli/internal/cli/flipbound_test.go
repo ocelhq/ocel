@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestFlipNote(t *testing.T) {
@@ -81,11 +83,11 @@ var flipBoundCases = []struct {
 func TestFlipBoundOnTheProductionDeployPromotionLine(t *testing.T) {
 	for _, tc := range flipBoundCases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, sockPath := setUpDeployFixture(t)
-			d := defaultDeps()
-			setLoggedIn(&d)
-			stubAppFunctions(&d, nil)
-			t.Setenv(fakeFlipBoundEnvVar, tc.spec)
+			root, sockPath := clitest.SetUpDeployFixture(t)
+			d := newSession()
+			clitest.SetLoggedIn(&d)
+			clitest.StubAppFunctions(&d, nil)
+			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
 			if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -101,14 +103,14 @@ func TestFlipBoundOnTheProductionDeployPromotionLine(t *testing.T) {
 func TestFlipBoundOnThePreviewDeployPromotionLine(t *testing.T) {
 	for _, tc := range flipBoundCases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, sockPath := setUpDeployFixture(t)
-			d := defaultDeps()
-			setLoggedIn(&d)
-			stubAppFunctions(&d, nil)
+			root, sockPath := clitest.SetUpDeployFixture(t)
+			d := newSession()
+			clitest.SetLoggedIn(&d)
+			clitest.StubAppFunctions(&d, nil)
 			stubGit(&d, "feature/login", "")
-			t.Setenv(fakeInfraClassEnvVar, "preview")
-			t.Setenv(fakeInfraPresentEnvVar, "1")
-			t.Setenv(fakeFlipBoundEnvVar, tc.spec)
+			t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
 			if err := runPreviewUp(context.Background(), d, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -124,13 +126,13 @@ func TestFlipBoundOnThePreviewDeployPromotionLine(t *testing.T) {
 func TestFlipBoundOnTheRollbackPromotionLine(t *testing.T) {
 	for _, tc := range flipBoundCases {
 		t.Run(tc.name, func(t *testing.T) {
-			root, sockPath := setUpDeployFixture(t)
-			d := defaultDeps()
-			setLoggedIn(&d)
-			stubAppFunctions(&d, nil)
-			t.Setenv(fakeInfraClassEnvVar, "production")
-			t.Setenv(fakeInfraPresentEnvVar, "1")
-			t.Setenv(fakeFlipBoundEnvVar, tc.spec)
+			root, sockPath := clitest.SetUpDeployFixture(t)
+			d := newSession()
+			clitest.SetLoggedIn(&d)
+			clitest.StubAppFunctions(&d, nil)
+			t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
 			if err := runRollback(context.Background(), d, root, rollbackOptions{}, &stdout, &stderr); err != nil {
@@ -155,13 +157,13 @@ func TestFlipBoundOnTheRollbackPromotionLine(t *testing.T) {
 }
 
 func TestFlipBoundIsAbsentFromThePromotionList(t *testing.T) {
-	root, sockPath := setUpDeployFixture(t)
-	d := defaultDeps()
-	setLoggedIn(&d)
-	stubAppFunctions(&d, nil)
-	t.Setenv(fakeInfraClassEnvVar, "production")
-	t.Setenv(fakeInfraPresentEnvVar, "1")
-	t.Setenv(fakeFlipBoundEnvVar, "5000")
+	root, sockPath := clitest.SetUpDeployFixture(t)
+	d := newSession()
+	clitest.SetLoggedIn(&d)
+	clitest.StubAppFunctions(&d, nil)
+	t.Setenv(clitest.FakeInfraClassEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+	t.Setenv(clitest.FakeFlipBoundEnvVar, "5000")
 
 	var stdout, stderr bytes.Buffer
 	if err := runDeploymentsLs(context.Background(), d, root, &stdout, &stderr); err != nil {

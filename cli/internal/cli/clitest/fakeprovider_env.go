@@ -1,4 +1,4 @@
-package cli
+package clitest
 
 import (
 	"context"
@@ -16,45 +16,45 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
-const envFakeStoreEnvVar = "OCEL_TEST_FAKE_VARS_STORE"
+const EnvFakeStoreEnvVar = "OCEL_TEST_FAKE_VARS_STORE"
 
-const fakeRevealFailureEnvVar = "OCEL_TEST_FAKE_REVEAL_FAILURE"
+const FakeRevealFailureEnvVar = "OCEL_TEST_FAKE_REVEAL_FAILURE"
 
-type fakeCell struct {
+type FakeCell struct {
 	Tier       environmentv1.Tier `json:"tier"`
-	Coordinate fakeCoordinate     `json:"coordinate"`
+	Coordinate FakeCoordinate     `json:"coordinate"`
 	Deleted    bool               `json:"deleted"`
-	Versions   []fakeCellData     `json:"versions"`
+	Versions   []FakeCellData     `json:"versions"`
 }
 
-type fakeCoordinate struct {
+type FakeCoordinate struct {
 	Slug        string `json:"slug"`
 	Folder      string `json:"folder"`
 	Key         string `json:"key"`
 	Environment string `json:"environment"`
 }
 
-func (c fakeCoordinate) proto() *envvarsv1.Coordinate {
+func (c FakeCoordinate) proto() *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{Slug: c.Slug, Folder: c.Folder, Key: c.Key, Environment: c.Environment}
 }
 
-type fakeCellData struct {
+type FakeCellData struct {
 	Value  string          `json:"value"`
-	Target *fakeCoordinate `json:"target,omitempty"`
+	Target *FakeCoordinate `json:"target,omitempty"`
 	Ts     int64           `json:"ts"`
 }
 
-type fakeStore map[string]*fakeCell
+type FakeStore map[string]*FakeCell
 
 const fakeHistoryWindow = 50
 
-func fakeCoordinateID(tier environmentv1.Tier, c *envvarsv1.Coordinate) string {
+func FakeCoordinateID(tier environmentv1.Tier, c *envvarsv1.Coordinate) string {
 	return fmt.Sprintf("%s %q %q %q %q", tier, c.GetSlug(), c.GetFolder(), c.GetKey(), c.GetEnvironment())
 }
 
-func loadFakeStore() (fakeStore, error) {
-	store := fakeStore{}
-	raw, err := os.ReadFile(os.Getenv(envFakeStoreEnvVar))
+func LoadFakeStore() (FakeStore, error) {
+	store := FakeStore{}
+	raw, err := os.ReadFile(os.Getenv(EnvFakeStoreEnvVar))
 	if errors.Is(err, os.ErrNotExist) {
 		return store, nil
 	}
@@ -64,19 +64,19 @@ func loadFakeStore() (fakeStore, error) {
 	return store, json.Unmarshal(raw, &store)
 }
 
-func saveFakeStore(store fakeStore) error {
+func SaveFakeStore(store FakeStore) error {
 	raw, err := json.Marshal(store)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(os.Getenv(envFakeStoreEnvVar), raw, 0o600)
+	return os.WriteFile(os.Getenv(EnvFakeStoreEnvVar), raw, 0o600)
 }
 
-func (s fakeStore) metadata(tier environmentv1.Tier, c *envvarsv1.Coordinate) *envvarsv1.ValueMetadata {
-	return s[fakeCoordinateID(tier, c)].metadata()
+func (s FakeStore) metadata(tier environmentv1.Tier, c *envvarsv1.Coordinate) *envvarsv1.ValueMetadata {
+	return s[FakeCoordinateID(tier, c)].metadata()
 }
 
-func (cell *fakeCell) metadata() *envvarsv1.ValueMetadata {
+func (cell *FakeCell) metadata() *envvarsv1.ValueMetadata {
 	if cell == nil || cell.Deleted || len(cell.Versions) == 0 {
 		return nil
 	}
@@ -93,17 +93,17 @@ func (cell *fakeCell) metadata() *envvarsv1.ValueMetadata {
 	return m
 }
 
-func (cell *fakeCell) target() *fakeCoordinate {
+func (cell *FakeCell) target() *FakeCoordinate {
 	if cell == nil || cell.Deleted || len(cell.Versions) == 0 {
 		return nil
 	}
 	return cell.Versions[len(cell.Versions)-1].Target
 }
 
-func (s fakeStore) resolve(tier environmentv1.Tier, cell *fakeCell) (string, error) {
+func (s FakeStore) Resolve(tier environmentv1.Tier, cell *FakeCell) (string, error) {
 	if target := cell.target(); target != nil {
-		held := s[fakeCoordinateID(tier, target.proto())]
-		if held.liveVersion() == 0 {
+		held := s[FakeCoordinateID(tier, target.proto())]
+		if held.LiveVersion() == 0 {
 			return "", connect.NewError(connect.CodeNotFound, fmt.Errorf(
 				"%s/%s holds no value: vars: not found", target.Slug, target.Key))
 		}
@@ -112,8 +112,8 @@ func (s fakeStore) resolve(tier environmentv1.Tier, cell *fakeCell) (string, err
 	return cell.Versions[len(cell.Versions)-1].Value, nil
 }
 
-func (s fakeStore) referencesTo(tier environmentv1.Tier, at *envvarsv1.Coordinate) []*envvarsv1.Coordinate {
-	want := coordinateOf(at)
+func (s FakeStore) referencesTo(tier environmentv1.Tier, at *envvarsv1.Coordinate) []*envvarsv1.Coordinate {
+	want := CoordinateOf(at)
 	var found []*envvarsv1.Coordinate
 	for _, id := range sortedIDs(s) {
 		cell := s[id]
@@ -124,7 +124,7 @@ func (s fakeStore) referencesTo(tier environmentv1.Tier, at *envvarsv1.Coordinat
 	return found
 }
 
-func sortedIDs(s fakeStore) []string {
+func sortedIDs(s FakeStore) []string {
 	ids := make([]string, 0, len(s))
 	for id := range s {
 		ids = append(ids, id)
@@ -133,15 +133,15 @@ func sortedIDs(s fakeStore) []string {
 	return ids
 }
 
-func (c *fakeCell) liveVersion() int64 {
+func (c *FakeCell) LiveVersion() int64 {
 	if c == nil || c.Deleted {
 		return 0
 	}
 	return int64(len(c.Versions))
 }
 
-func checkExpectation(cell *fakeCell, expected *int64) error {
-	if expected == nil || *expected == cell.liveVersion() {
+func checkExpectation(cell *FakeCell, expected *int64) error {
+	if expected == nil || *expected == cell.LiveVersion() {
 		return nil
 	}
 	return connect.NewError(connect.CodeFailedPrecondition,
@@ -185,12 +185,12 @@ func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envvarsv1.
 	if err := s.addressable(ctx, req.GetCoordinate(), req.GetTier()); err != nil {
 		return nil, err
 	}
-	store, err := loadFakeStore()
+	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
 	}
 
-	cell := store[fakeCoordinateID(req.GetTier(), req.GetCoordinate())]
+	cell := store[FakeCoordinateID(req.GetTier(), req.GetCoordinate())]
 	if err := checkExpectation(cell, req.ExpectedVersion); err != nil {
 		return nil, err
 	}
@@ -199,17 +199,17 @@ func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envvarsv1.
 			"%s/%s is a reference to %s/%s, which is where that value is edited: vars: cell is a reference",
 			cell.Coordinate.Slug, cell.Coordinate.Key, target.Slug, target.Key))
 	}
-	if err := store.write(req.GetTier(), req.GetCoordinate(), fakeCellData{Value: req.GetValue()}); err != nil {
+	if err := store.Write(req.GetTier(), req.GetCoordinate(), FakeCellData{Value: req.GetValue()}); err != nil {
 		return nil, err
 	}
 	return &envvarsv1.SetValueResponse{Metadata: store.metadata(req.GetTier(), req.GetCoordinate())}, nil
 }
 
-func (s fakeStore) write(tier environmentv1.Tier, at *envvarsv1.Coordinate, data fakeCellData) error {
-	id := fakeCoordinateID(tier, at)
+func (s FakeStore) Write(tier environmentv1.Tier, at *envvarsv1.Coordinate, data FakeCellData) error {
+	id := FakeCoordinateID(tier, at)
 	cell := s[id]
 	if cell == nil {
-		cell = &fakeCell{Tier: tier, Coordinate: coordinateOf(at)}
+		cell = &FakeCell{Tier: tier, Coordinate: CoordinateOf(at)}
 		s[id] = cell
 	}
 	data.Ts = 1_700_000_000 + int64(len(cell.Versions))
@@ -218,11 +218,11 @@ func (s fakeStore) write(tier environmentv1.Tier, at *envvarsv1.Coordinate, data
 	if len(cell.Versions) > fakeHistoryWindow {
 		cell.Versions = cell.Versions[len(cell.Versions)-fakeHistoryWindow:]
 	}
-	return saveFakeStore(s)
+	return SaveFakeStore(s)
 }
 
-func coordinateOf(c *envvarsv1.Coordinate) fakeCoordinate {
-	return fakeCoordinate{Slug: c.GetSlug(), Folder: c.GetFolder(), Key: c.GetKey(), Environment: c.GetEnvironment()}
+func CoordinateOf(c *envvarsv1.Coordinate) FakeCoordinate {
+	return FakeCoordinate{Slug: c.GetSlug(), Folder: c.GetFolder(), Key: c.GetKey(), Environment: c.GetEnvironment()}
 }
 
 func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envvarsv1.SetReferenceRequest) (*envvarsv1.SetReferenceResponse, error) {
@@ -232,7 +232,7 @@ func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envvar
 	if err := s.addressable(ctx, req.GetCoordinate(), req.GetTier()); err != nil {
 		return nil, err
 	}
-	store, err := loadFakeStore()
+	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
 	}
@@ -246,11 +246,11 @@ func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envvar
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"a reference resolves against %s's class-wide value; %q is an environment of the project holding the reference", target.GetKey(), target.GetEnvironment()))
 	}
-	if coordinateOf(at) == coordinateOf(target) {
+	if CoordinateOf(at) == CoordinateOf(target) {
 		return nil, deepens(describeCoordinate(at) + " would reference itself")
 	}
 
-	pointedAt := store[fakeCoordinateID(req.GetTier(), target)]
+	pointedAt := store[FakeCoordinateID(req.GetTier(), target)]
 	if pointedAt.target() != nil {
 		return nil, deepens(describeCoordinate(target) + " is itself a reference")
 	}
@@ -258,8 +258,8 @@ func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envvar
 		return nil, deepens(describeCoordinate(at) + " is referenced by " + describeCoordinate(consumers[0]))
 	}
 
-	pointer := coordinateOf(target)
-	if err := store.write(req.GetTier(), at, fakeCellData{Target: &pointer}); err != nil {
+	pointer := CoordinateOf(target)
+	if err := store.Write(req.GetTier(), at, FakeCellData{Target: &pointer}); err != nil {
 		return nil, err
 	}
 	return &envvarsv1.SetReferenceResponse{Metadata: store.metadata(req.GetTier(), at)}, nil
@@ -269,7 +269,7 @@ func (s *deployFakeProviderServer) ListReferences(ctx context.Context, req *envv
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	store, err := loadFakeStore()
+	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +280,7 @@ func (s *deployFakeProviderServer) ListValues(ctx context.Context, req *envvarsv
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	store, err := loadFakeStore()
+	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +302,7 @@ func (s *deployFakeProviderServer) GetValue(ctx context.Context, req *envvarsv1.
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	store, err := loadFakeStore()
+	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +313,7 @@ func (s *deployFakeProviderServer) GetValue(ctx context.Context, req *envvarsv1.
 	}
 	resp := &envvarsv1.GetValueResponse{Found: true, Metadata: metadata}
 	if req.GetReveal() {
-		if resp.Value, err = store.resolve(req.GetTier(), store[fakeCoordinateID(req.GetTier(), req.GetCoordinate())]); err != nil {
+		if resp.Value, err = store.Resolve(req.GetTier(), store[FakeCoordinateID(req.GetTier(), req.GetCoordinate())]); err != nil {
 			return nil, err
 		}
 	}
@@ -324,10 +324,10 @@ func (s *deployFakeProviderServer) RevealValues(ctx context.Context, req *envvar
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	if reason := os.Getenv(fakeRevealFailureEnvVar); reason != "" {
+	if reason := os.Getenv(FakeRevealFailureEnvVar); reason != "" {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New(reason))
 	}
-	store, err := loadFakeStore()
+	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +339,7 @@ func (s *deployFakeProviderServer) RevealValues(ctx context.Context, req *envvar
 		if metadata == nil {
 			continue
 		}
-		value, err := store.resolve(req.GetTier(), store[fakeCoordinateID(req.GetTier(), c)])
+		value, err := store.Resolve(req.GetTier(), store[FakeCoordinateID(req.GetTier(), c)])
 		if err != nil {
 			return nil, err
 		}
@@ -352,20 +352,20 @@ func (s *deployFakeProviderServer) DeleteValue(ctx context.Context, req *envvars
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	store, err := loadFakeStore()
+	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
 	}
 
-	cell := store[fakeCoordinateID(req.GetTier(), req.GetCoordinate())]
+	cell := store[FakeCoordinateID(req.GetTier(), req.GetCoordinate())]
 	if err := checkExpectation(cell, req.ExpectedVersion); err != nil {
 		return nil, err
 	}
-	if cell.liveVersion() == 0 {
+	if cell.LiveVersion() == 0 {
 		return &envvarsv1.DeleteValueResponse{}, nil
 	}
 	cell.Deleted = true
-	if err := saveFakeStore(store); err != nil {
+	if err := SaveFakeStore(store); err != nil {
 		return nil, err
 	}
 	return &envvarsv1.DeleteValueResponse{Deleted: true}, nil
@@ -375,12 +375,12 @@ func (s *deployFakeProviderServer) ListVersions(ctx context.Context, req *envvar
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	store, err := loadFakeStore()
+	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
 	}
 
-	cell := store[fakeCoordinateID(req.GetTier(), req.GetCoordinate())]
+	cell := store[FakeCoordinateID(req.GetTier(), req.GetCoordinate())]
 	if cell == nil {
 		return &envvarsv1.ListVersionsResponse{}, nil
 	}
@@ -393,4 +393,15 @@ func (s *deployFakeProviderServer) ListVersions(ctx context.Context, req *envvar
 		})
 	}
 	return resp, nil
+}
+
+func describeCoordinate(c *envvarsv1.Coordinate) string {
+	out := c.GetSlug() + "/" + c.GetKey()
+	if c.GetFolder() != "" {
+		out += " in " + c.GetFolder()
+	}
+	if c.GetEnvironment() != "" {
+		out += " for " + c.GetEnvironment()
+	}
+	return out
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -31,11 +32,11 @@ var generateCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runGenerate(ctx, defaultDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runGenerate(ctx, newSession(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
-func runGenerate(ctx context.Context, d deps, cwd string, stdout, stderr io.Writer) error {
+func runGenerate(ctx context.Context, d session.Session, cwd string, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -46,7 +47,7 @@ func runGenerate(ctx context.Context, d deps, cwd string, stdout, stderr io.Writ
 	}
 
 	gate := envgate.New(noValues{}, envgate.Scope{Apps: envApps(cfg)})
-	if _, err := d.collectDeclarations(ctx, cfg, gate, stderr, stderr); err != nil {
+	if _, err := d.CollectDeclarations(ctx, cfg, gate, stderr, stderr); err != nil {
 		return err
 	}
 

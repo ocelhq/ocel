@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -72,16 +73,9 @@ func requireInvokeRole(ctx context.Context, c Clients, class edge.Class) (string
 		return "", err
 	}
 	if !found {
-		return "", fmt.Errorf("the %s role API Gateway invokes this project's functions through does not exist in this account, so the %q edge has nothing to front the deployment with. It is created once per account when you bootstrap, and this deploy will not create it: run `%s` and deploy again", name, Kind, bootstrapCommandFor(class))
+		return "", fmt.Errorf("the %s role API Gateway invokes this project's functions through does not exist in this account, so the %q edge has nothing to front the deployment with. It is created once per account when you bootstrap, and this deploy will not create it: run `%s` and deploy again", name, Kind, providerkit.BootstrapCommand(class))
 	}
 	return arn, nil
-}
-
-func bootstrapCommandFor(class edge.Class) string {
-	if class == edge.ClassPreview {
-		return "ocel bootstrap --preview"
-	}
-	return "ocel bootstrap"
 }
 
 func findRole(ctx context.Context, c Clients, name string) (string, bool, error) {

@@ -35,8 +35,8 @@ npx ocel deploy        # deploy to the provider configured in ocel.config.ts
 | `ocel preview up\|rm\|ls\|prune` | Stand up a preview environment for the current branch |
 | `ocel rollback` | Roll production back to a previous deployment |
 | `ocel deployments ls\|prune` | Manage production deployments |
-| `ocel destroy` | Permanently destroy this project's entire production deployment |
-| `ocel bootstrap` | Provision the account-global resources your provider needs |
+| `ocel destroy production\|preview` | Permanently destroy this project's deployment of one class |
+| `ocel bootstrap production\|preview\|destroy\|policy\|status` | Provision the account-global resources your provider needs |
 | `ocel login` / `ocel logout` | Authenticate the CLI with your account |
 | `ocel console link [project]` / `ocel console unlink` | Link this directory to an Ocel console project |
 

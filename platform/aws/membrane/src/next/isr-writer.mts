@@ -33,7 +33,7 @@ export function isrEntryStore(): EntryStore {
     throw new Error(
       `ocel cache handler: ${writerURLEnv} and ${writerSecretEnv} must both be set ` +
         `when this deploy reads its ISR entries from an adopted cache store; ` +
-        "re-run `ocel bootstrap` and redeploy",
+        "re-run `ocel bootstrap production` and redeploy",
     );
   }
   return entryStoreAt(url, secret);

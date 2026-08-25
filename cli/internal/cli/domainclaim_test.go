@@ -10,6 +10,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestDeclaredHostnames(t *testing.T) {
@@ -137,19 +139,19 @@ func TestRefuseClaimedDomains(t *testing.T) {
 
 func TestDomainClaims(t *testing.T) {
 	t.Run("a preview refuses a domain another project claims", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, _ := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
 };
 `)
-		d := defaultDeps()
+		d := newSession()
 		stubGit(&d, "feature/login", "")
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
-		t.Setenv(fakeDomainOwnerEnvVar, "ocel-other-preview")
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeDomainOwnerEnvVar, "ocel-other-preview")
 
 		var stdout, stderr bytes.Buffer
 		err := runPreviewUp(context.Background(), d, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
@@ -172,18 +174,18 @@ export default {
 	})
 
 	t.Run("a deploy refuses a domain another project claims", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, _ := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { production: "acme.com" },
 };
 `)
-		t.Setenv(fakeDomainOwnerEnvVar, "ocel-other-production-web")
+		t.Setenv(clitest.FakeDomainOwnerEnvVar, "ocel-other-production-web")
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), defaultDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), newSession(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a domain-claim refusal")
 		}
@@ -203,8 +205,8 @@ export default {
 	})
 
 	t.Run("a deploy declares the project's and the apps' hostnames", func(t *testing.T) {
-		root, _ := setUpDeployFixture(t)
-		writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+		root, _ := clitest.SetUpDeployFixture(t)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -213,8 +215,8 @@ export default {
 };
 `)
 		writeAppSource(t, root, "api")
-		d := defaultDeps()
-		stubAppFunctions(&d, nil)
+		d := newSession()
+		clitest.StubAppFunctions(&d, nil)
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {

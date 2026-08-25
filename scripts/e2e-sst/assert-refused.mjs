@@ -67,7 +67,7 @@ if (problem) {
   if (deployed.status === 0) {
     spawnSync(
       process.execPath,
-      [join(adapterDir, "packages", "ocel", "bin", "run.js"), "destroy"],
+      [join(adapterDir, "packages", "ocel", "bin", "run.js"), "destroy", "production"],
       {
         cwd: appDir,
         stdio: "inherit",

@@ -297,7 +297,7 @@ func (w *wildcards) releasable(ctx context.Context) error {
 		return nil
 	}
 	return Refuse(CodeNotReady,
-		"%s still carries live preview pointers for %d project(s): %s — nothing would serve them the moment it is released. Remove one preview with `ocel preview rm`, or a project's whole preview footprint with `ocel destroy --preview`, in each of them first",
+		"%s still carries live preview pointers for %d project(s): %s — nothing would serve them the moment it is released. Remove one preview with `ocel preview rm`, or a project's whole preview footprint with `ocel destroy preview`, in each of them first",
 		w.held.Hostname(), len(carrying), strings.Join(carrying, ", "))
 }
 

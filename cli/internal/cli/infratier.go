@@ -14,12 +14,12 @@ func checkTier(infra, required environmentv1.Tier) error {
 	switch required {
 	case environmentv1.Tier_TIER_PREVIEW:
 		return fmt.Errorf(
-			"ocel preview can only run against preview infrastructure, but the account points at %s; run `ocel bootstrap --preview` to stand up preview infrastructure",
+			"ocel preview can only run against preview infrastructure, but the account points at %s; run `ocel bootstrap preview` to stand up preview infrastructure",
 			infraLabel(infra),
 		)
 	case environmentv1.Tier_TIER_PRODUCTION:
 		return fmt.Errorf(
-			"ocel deploy can only run against production infrastructure, but the account points at %s; run `ocel bootstrap` to stand up production infrastructure",
+			"ocel deploy can only run against production infrastructure, but the account points at %s; run `ocel bootstrap production` to stand up production infrastructure",
 			infraLabel(infra),
 		)
 	default:

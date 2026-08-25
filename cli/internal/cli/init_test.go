@@ -11,11 +11,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 )
 
-func stubPackageManager(d *deps, result error) *[]string {
+func stubPackageManager(d *session.Session, result error) *[]string {
 	var argv []string
-	d.runPackageManager = func(_ context.Context, _ string, cmd []string, _ io.Writer) error {
+	d.RunPackageManager = func(_ context.Context, _ string, cmd []string, _ io.Writer) error {
 		argv = cmd
 		return result
 	}
@@ -49,7 +51,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("no argument defaults the slug to the directory name", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
+		d := newSession()
 		stubPackageManager(&d, nil)
 		dir := initTestDir(t, "My Cool App")
 
@@ -67,7 +69,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("an explicit slug writes a deployable config", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
+		d := newSession()
 		stubPackageManager(&d, nil)
 		dir := initTestDir(t, "ignored-dir-name")
 
@@ -99,7 +101,7 @@ func TestRunInit(t *testing.T) {
 			t.Run(slug, func(t *testing.T) {
 				t.Parallel()
 
-				d := defaultDeps()
+				d := newSession()
 				stubPackageManager(&d, nil)
 				dir := initTestDir(t, "proj")
 
@@ -120,7 +122,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("an unslugifiable directory name errors asking for a slug", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
+		d := newSession()
 		stubPackageManager(&d, nil)
 		dir := initTestDir(t, "!!!")
 
@@ -136,7 +138,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("an existing config is never overwritten", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
+		d := newSession()
 		argv := stubPackageManager(&d, nil)
 		dir := initTestDir(t, "proj")
 		configPath := filepath.Join(dir, "ocel.config.ts")
@@ -162,7 +164,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("--provider overrides the default package", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
+		d := newSession()
 		argv := stubPackageManager(&d, nil)
 		dir := initTestDir(t, "proj")
 
@@ -183,7 +185,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("it installs the SDK alongside the provider", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
+		d := newSession()
 		argv := stubPackageManager(&d, nil)
 		dir := initTestDir(t, "proj")
 
@@ -222,7 +224,7 @@ func TestRunInit(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 
-				d := defaultDeps()
+				d := newSession()
 				argv := stubPackageManager(&d, nil)
 				dir := initTestDir(t, "proj")
 				if tc.lockfile != "" {
@@ -248,7 +250,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("with no package.json it skips the install and says so", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
+		d := newSession()
 		argv := stubPackageManager(&d, nil)
 		dir := initTestDir(t, "proj")
 		if err := os.Remove(filepath.Join(dir, "package.json")); err != nil {
@@ -270,7 +272,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("a failing package manager keeps the config and prints the command", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
+		d := newSession()
 		stubPackageManager(&d, errors.New("exec: \"pnpm\": executable file not found in $PATH"))
 		dir := initTestDir(t, "proj")
 		if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), nil, 0o644); err != nil {
@@ -307,7 +309,7 @@ func TestRunInit(t *testing.T) {
 			}
 		}
 
-		d := defaultDeps()
+		d := newSession()
 		argv := stubPackageManager(&d, nil)
 		opts := initOptions{configPath: filepath.Join("..", "infra", "ocel.ts")}
 
@@ -334,7 +336,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("--config creates the directories leading to the path", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
+		d := newSession()
 		stubPackageManager(&d, nil)
 		dir := initTestDir(t, "proj")
 
@@ -350,7 +352,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("--config never overwrites an existing config", func(t *testing.T) {
 		t.Parallel()
 
-		d := defaultDeps()
+		d := newSession()
 		argv := stubPackageManager(&d, nil)
 		dir := initTestDir(t, "proj")
 		configPath := filepath.Join(dir, "ocel.ts")

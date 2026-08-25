@@ -99,8 +99,8 @@ func appAssetPrefix(c naming.Coordinate) string {
 
 func assetPlaneTargets(cfg Config) []uploadTarget {
 	return []uploadTarget{
-		{up: cfg.CacheStoreUploader, bucket: cfg.CacheStoreBucket},
-		{up: cfg.Uploader, bucket: cfg.AssetBucket},
+		{up: cfg.CacheStoreUploader, bucket: cfg.CacheStoreBucket, class: cfg.Class},
+		{up: cfg.Uploader, bucket: cfg.AssetBucket, class: cfg.Class},
 	}
 }
 
@@ -112,7 +112,7 @@ func publishStaticAssets(ctx context.Context, cfg Config, app, framework string,
 		return nil
 	}
 
-	assetBucket := uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket}
+	assetBucket := uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket, class: cfg.Class}
 	plane := assetPlaneTargets(cfg)
 	type upload struct {
 		key, src string

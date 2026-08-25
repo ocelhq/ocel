@@ -8,13 +8,15 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func writeLinkedMonorepo(t *testing.T, root string, links string) {
 	t.Helper()
 
-	writeUsageMonorepo(t, root)
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+	clitest.WriteUsageMonorepo(t, root)
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -28,12 +30,12 @@ export default {
 func deployLinked(t *testing.T, links string) (root string, stdout, stderr bytes.Buffer, err error) {
 	t.Helper()
 
-	d := defaultDeps()
-	setLoggedIn(&d)
-	stubAppFunctions(&d, []manifestbuilder.Function{
+	d := newSession()
+	clitest.SetLoggedIn(&d)
+	clitest.StubAppFunctions(&d, []manifestbuilder.Function{
 		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
 	})
-	root, _ = setUpDeployFixture(t)
+	root, _ = clitest.SetUpDeployFixture(t)
 	writeLinkedMonorepo(t, root, links)
 
 	err = runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
@@ -42,7 +44,7 @@ func deployLinked(t *testing.T, links string) (root string, stdout, stderr bytes
 
 func TestDeployBindsListedLinks(t *testing.T) {
 	t.Run("a listed resource reaches the provider bound to its published record", func(t *testing.T) {
-		t.Setenv(fakePublishedLinksEnvVar, "main")
+		t.Setenv(clitest.FakePublishedLinksEnvVar, "main")
 
 		_, stdout, stderr, err := deployLinked(t, `"main"`)
 		if err != nil {
@@ -59,7 +61,7 @@ func TestDeployBindsListedLinks(t *testing.T) {
 	})
 
 	t.Run("a listed resource nothing published refuses the deploy by name", func(t *testing.T) {
-		t.Setenv(fakePublishedLinksEnvVar, "")
+		t.Setenv(clitest.FakePublishedLinksEnvVar, "")
 
 		_, stdout, stderr, err := deployLinked(t, `"main"`)
 		if err == nil {
@@ -72,7 +74,7 @@ func TestDeployBindsListedLinks(t *testing.T) {
 	})
 
 	t.Run("a published name this project provisions instead is called out", func(t *testing.T) {
-		t.Setenv(fakePublishedLinksEnvVar, "main")
+		t.Setenv(clitest.FakePublishedLinksEnvVar, "main")
 
 		_, stdout, stderr, err := deployLinked(t, ``)
 		if err != nil {

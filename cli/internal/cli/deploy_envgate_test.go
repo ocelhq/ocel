@@ -11,7 +11,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 const envDeclarationScript = `
@@ -79,25 +83,25 @@ func setUpEnvGateFixture(t *testing.T, definitions string) string {
 
 func setUpEnvGateFixtureWith(t *testing.T, definitions, script string) string {
 	t.Helper()
-	root, _ := setUpDeployFixture(t)
-	t.Setenv(envFakeStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
+	root, _ := clitest.SetUpDeployFixture(t)
+	t.Setenv(clitest.EnvFakeStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
 	t.Setenv("OCEL_TEST_ENV_DEFINITIONS", definitions)
 	t.Setenv("OCEL_TEST_ENV_PROBLEMS", "[]")
-	writeFile(t, filepath.Join(root, "ocel", "env.ts"), script)
+	clitest.WriteFile(t, filepath.Join(root, "ocel", "env.ts"), script)
 	return root
 }
 
-func stubAppBuildRecorder(d *deps, built *bool) {
-	d.buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+func stubAppBuildRecorder(d *session.Session, built *bool) {
+	d.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		*built = true
 		return nil
 	}
 }
 
-func captureBuildEnv(d *deps) *map[string]map[string]string {
-	stubRecordedDeploymentIDs(d)
+func captureBuildEnv(d *session.Session) *map[string]map[string]string {
+	clitest.StubRecordedDeploymentIDs(d)
 	var got map[string]map[string]string
-	d.buildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
+	d.BuildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
 		got = envByApp
 		return nil
 	}
@@ -106,7 +110,7 @@ func captureBuildEnv(d *deps) *map[string]map[string]string {
 
 func writeAppsConfig(t *testing.T, root, apps string) {
 	t.Helper()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
@@ -119,7 +123,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	t.Run("a missing value refuses before anything is built", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`)
-		d := defaultDeps()
+		d := newSession()
 		built := false
 		stubAppBuildRecorder(&d, &built)
 
@@ -128,7 +132,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the gate to refuse")
 		}
-		var exit *ExitError
+		var exit *exitsig.ExitError
 		if !errors.As(err, &exit) || exit.Code == 0 {
 			t.Errorf("runDeploy err = %v, want a non-zero exit", err)
 		}
@@ -151,7 +155,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		root := setUpEnvGateFixtureWith(t,
 			`[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`,
 			envDeclareOnlyScript)
-		d := defaultDeps()
+		d := newSession()
 		built := false
 		stubAppBuildRecorder(&d, &built)
 
@@ -176,7 +180,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_value", envOptions{})
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), defaultDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), newSession(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Deployed") {
@@ -187,10 +191,10 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	t.Run("a value that cannot be read names the cell", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_value", envOptions{})
-		t.Setenv(fakeRevealFailureEnvVar, "the store is unreachable")
+		t.Setenv(clitest.FakeRevealFailureEnvVar, "the store is unreachable")
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), defaultDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		err := runDeploy(context.Background(), newSession(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a store it cannot read to stop the deploy")
 		}
@@ -210,7 +214,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		t.Setenv("OCEL_TEST_ENV_CELLS_OUT", cellsPath)
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), defaultDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDeploy(context.Background(), newSession(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -246,8 +250,8 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		writeAppsConfig(t, root, `{ name: "api", path: "apps/api", framework: "express" }`)
 		writeAppSource(t, root, "api")
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
-		d := defaultDeps()
-		stubAppFunctions(&d, nil)
+		d := newSession()
+		clitest.StubAppFunctions(&d, nil)
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -268,7 +272,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
 
-		d := defaultDeps()
+		d := newSession()
 		got := captureBuildEnv(&d)
 
 		var stdout, stderr bytes.Buffer
@@ -288,7 +292,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
 
-		d := defaultDeps()
+		d := newSession()
 		built := false
 		stubAppBuildRecorder(&d, &built)
 
@@ -313,7 +317,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		ownedElsewhere(t, "POSTHOG_ID", "ph_owned_by_platform")
 		envRef(t, root, "POSTHOG_ID", envOptions{}, envRefOptions{project: "platform"})
 
-		d := defaultDeps()
+		d := newSession()
 		got := captureBuildEnv(&d)
 
 		var stdout, stderr bytes.Buffer
@@ -330,8 +334,8 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 	t.Run("a production value does not satisfy the preview gate", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		d := defaultDeps()
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		d := newSession()
 		built := false
 		stubAppBuildRecorder(&d, &built)
 
@@ -363,10 +367,10 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
-				d := defaultDeps()
+				d := newSession()
 				stubGit(&d, "feature/login", "")
-				t.Setenv(fakeInfraClassEnvVar, "preview")
-				t.Setenv(fakeInfraPresentEnvVar, "1")
+				t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+				t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 				envSet(t, root, "POSTHOG_ID", "ph_shared", envOptions{preview: true})
 				envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
@@ -391,10 +395,10 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 
 	t.Run("an override is the only value its own environment needs", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
-		d := defaultDeps()
+		d := newSession()
 		stubGit(&d, "feature/login", "")
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
 
@@ -416,10 +420,10 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 
 	t.Run("a redeployed branch finds the override it already had", func(t *testing.T) {
 		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
-		d := defaultDeps()
+		d := newSession()
 		stubGit(&d, "feature/login", "")
-		t.Setenv(fakeInfraClassEnvVar, "preview")
-		t.Setenv(fakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeInfraClassEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		envSet(t, root, "POSTHOG_ID", "ph_shared", envOptions{preview: true})
 		envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})

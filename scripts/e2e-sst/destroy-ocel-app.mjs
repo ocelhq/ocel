@@ -26,7 +26,7 @@ const state = JSON.parse(readFileSync(join(appDir, CONSUMER_STATE_FILE), "utf8")
 
 const destroyed = spawnSync(
   process.execPath,
-  [join(adapterDir, "packages", "ocel", "bin", "run.js"), "destroy"],
+  [join(adapterDir, "packages", "ocel", "bin", "run.js"), "destroy", "production"],
   {
     cwd: appDir,
     stdio: "inherit",
@@ -35,7 +35,7 @@ const destroyed = spawnSync(
   },
 );
 if (destroyed.status !== 0) {
-  console.error(`${LOG_PREFIX} ocel destroy exited ${destroyed.status}; the consuming project may still be live`);
+  console.error(`${LOG_PREFIX} ocel destroy production exited ${destroyed.status}; the consuming project may still be live`);
   process.exit(1);
 }
 

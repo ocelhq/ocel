@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
 )
 
@@ -35,7 +36,7 @@ func (s Sealer) key(ctx context.Context, at kit.Coordinate) (string, error) {
 	}
 	if s.Keys == nil {
 		return "", kit.Refuse(kit.CodeNotReady,
-			"this account has no Ocel bootstrap, so there is no key to seal a value under.\nRun `ocel bootstrap` to create it, then try again")
+			"this account has no Ocel bootstrap, so there is no key to seal a value under.\nRun `%s` to create it, then try again", providerkit.BootstrapCommand(at.Class))
 	}
 	return s.Keys.Key(ctx, at.Class)
 }

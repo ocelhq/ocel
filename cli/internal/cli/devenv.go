@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -30,8 +31,8 @@ func storeValues(projectEnv, dotfile map[string]string) map[string]string {
 	return values
 }
 
-func resolveProjectConfig(ctx context.Context, d deps, apiURL, token, projectID string, stderr io.Writer) provision.ProjectConfig {
-	cfg, err := d.fetchProjectConfig(ctx, apiURL, token, projectID)
+func resolveProjectConfig(ctx context.Context, d session.Session, apiURL, token, projectID string, stderr io.Writer) provision.ProjectConfig {
+	cfg, err := d.FetchProjectConfig(ctx, apiURL, token, projectID)
 	if err == nil {
 		return cfg
 	}

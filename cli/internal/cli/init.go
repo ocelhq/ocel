@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
@@ -50,7 +51,7 @@ var initCmd = &cobra.Command{
 		opts := initOpts
 		opts.configPath = explicitConfigPath()
 
-		return runInit(cmd.Context(), defaultDeps(), cwd, slug, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runInit(cmd.Context(), newSession(), cwd, slug, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -58,7 +59,7 @@ func init() {
 	initCmd.Flags().StringVar(&initOpts.provider, "provider", defaultProviderPackage, "Provider package to scaffold with")
 }
 
-func runInit(ctx context.Context, d deps, cwd, slug string, opts initOptions, stdout, stderr io.Writer) error {
+func runInit(ctx context.Context, d session.Session, cwd, slug string, opts initOptions, stdout, stderr io.Writer) error {
 	configPath := filepath.Join(cwd, projectconfig.ConfigFileName)
 	if opts.configPath != "" {
 		configPath = opts.configPath
@@ -169,7 +170,7 @@ func detectPackageManager(dir string) packageManager {
 	return npmPackageManager
 }
 
-func addDependencies(ctx context.Context, d deps, dir string, pkgs []string, stdout, stderr io.Writer) {
+func addDependencies(ctx context.Context, d session.Session, dir string, pkgs []string, stdout, stderr io.Writer) {
 	pm := detectPackageManager(dir)
 	argv := append([]string{pm.name, pm.addCommand}, pkgs...)
 	command := strings.Join(argv, " ")
@@ -181,7 +182,7 @@ func addDependencies(ctx context.Context, d deps, dir string, pkgs []string, std
 	}
 
 	err := withSpinner(stdout, fmt.Sprintf("Adding %s...", added), func() error {
-		return d.runPackageManager(ctx, dir, argv, stderr)
+		return d.RunPackageManager(ctx, dir, argv, stderr)
 	})
 	if err != nil {
 		fmt.Fprintf(stdout, "! Could not add %s (%v) — run `%s` yourself.\n", added, err, command)

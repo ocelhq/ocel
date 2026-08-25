@@ -42,7 +42,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 
 	if standing.Present {
 		resp.InfraTier, resp.InfrastructurePresent = tierOf(class), true
-		if err := checkCompat(standing.Schema, true, BootstrapSchema).explain(standing.Schema, BootstrapSchema, bootstrapCommand(class)); err != nil {
+		if err := checkCompat(standing.Schema, true, BootstrapSchema).explain(standing.Schema, BootstrapSchema, BootstrapCommand(class)); err != nil {
 			return nil, RefusalError(err)
 		}
 		resp.KnownSlugs, err = slugsBesides(ctx, gate, class, req.GetSlug())

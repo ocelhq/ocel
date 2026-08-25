@@ -29,7 +29,7 @@ func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.Previ
 		return "", err
 	}
 	if !found {
-		return "", fmt.Errorf("the preview bootstrap has no not-found API, so nothing would answer a hostname on %s that no preview claims; run `ocel bootstrap --preview` first", wildcard)
+		return "", fmt.Errorf("the preview bootstrap has no not-found API, so nothing would answer a hostname on %s that no preview claims; run `ocel bootstrap preview` first", wildcard)
 	}
 	front, err := ensurePreviewDomain(ctx, c, wildcard, spec.Certificate)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -28,7 +29,7 @@ var envUICmd = &cobra.Command{
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvUI(ctx, defaultDeps(), cwd, envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvUI(ctx, newSession(), cwd, envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -38,14 +39,14 @@ func init() {
 	envCmd.AddCommand(envUICmd)
 }
 
-func runEnvUI(ctx context.Context, d deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
+func runEnvUI(ctx context.Context, d session.Session, cwd string, opts envOptions, stdout, stderr io.Writer) error {
 	return envSession(ctx, d, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, _ *projectconfig.ProviderDescriptor) error {
 		gate, err := discoverVariables(ctx, cfg, runner, opts, stderr)
 		if err != nil {
 			return err
 		}
 
-		session, err := d.openVarsUI(ctx, cfg, runner, opts.preview, gate, stdout)
+		session, err := openVarsUI(d, ctx, cfg, runner, opts.preview, gate, stdout)
 		if err != nil {
 			return err
 		}
@@ -54,7 +55,8 @@ func runEnvUI(ctx context.Context, d deps, cwd string, opts envOptions, stdout, 
 	})
 }
 
-func (d deps) openVarsUI(
+func openVarsUI(
+	d session.Session,
 	ctx context.Context,
 	cfg *projectconfig.Config,
 	runner *providerrunner.Runner,
@@ -62,13 +64,13 @@ func (d deps) openVarsUI(
 	gate *envgate.Gate,
 	stdout io.Writer,
 ) (*varsui.Session, error) {
-	session, err := d.serveVarsUI(ctx, cfg, runner, preview, gate)
+	session, err := d.ServeVarsUI(ctx, cfg, runner, preview, gate)
 	if err != nil {
 		return nil, err
 	}
 
 	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, session.URL)
-	if err := d.openBrowser(session.URL); err != nil {
+	if err := d.OpenBrowser(session.URL); err != nil {
 		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
 	}
 	return session, nil

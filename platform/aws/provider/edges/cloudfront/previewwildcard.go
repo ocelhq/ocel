@@ -120,7 +120,7 @@ func (p *provider) previewWildcardPlan(ctx context.Context, c Clients, baseDomai
 		return distributionPlan{}, bootstrap.Deployed{}, err
 	}
 	if !deployed.Present {
-		return distributionPlan{}, bootstrap.Deployed{}, fmt.Errorf("the preview bootstrap is not standing, so nothing would answer a hostname on %s; run `ocel bootstrap --preview` first", edge.PreviewWildcard(baseDomain))
+		return distributionPlan{}, bootstrap.Deployed{}, fmt.Errorf("the preview bootstrap is not standing, so nothing would answer a hostname on %s; run `ocel bootstrap preview` first", edge.PreviewWildcard(baseDomain))
 	}
 	set, err := findEdgeSet(ctx, c, edge.ClassPreview, edgeSet{})
 	if err != nil {

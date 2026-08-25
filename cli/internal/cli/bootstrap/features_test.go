@@ -1,13 +1,10 @@
-package cli
+package bootstrap
 
 import (
-	"bytes"
-	"context"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -105,74 +102,5 @@ func TestWithDependencies(t *testing.T) {
 	got := withDependencies(testCatalogue(), []string{featureCloudflareEdge})
 	if want := []string{featureISR, featureCloudflareEdge}; !reflect.DeepEqual(got, want) {
 		t.Errorf("withDependencies = %v, want %v", got, want)
-	}
-}
-
-func TestToggleFeatures(t *testing.T) {
-	t.Parallel()
-
-	catalogue := testCatalogue(featureISR)
-	got, err := toggleFeatures(catalogue, []string{featureISR}, "1, 3")
-	if err != nil {
-		t.Fatalf("toggleFeatures: %v", err)
-	}
-	if want := []string{featureCloudflareEdge}; !reflect.DeepEqual(got, want) {
-		t.Errorf("toggleFeatures = %v, want the first off and the third on", got)
-	}
-	if _, err := toggleFeatures(catalogue, nil, "9"); err == nil {
-		t.Error("toggleFeatures accepted a number no feature answers to")
-	}
-}
-
-func TestProjectFrameworks(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name string
-		cfg  *projectconfig.Config
-		want []string
-	}{
-		{
-			name: "a project with no apps names no framework",
-			cfg:  &projectconfig.Config{},
-		},
-		{
-			name: "an app with no framework is left out",
-			cfg:  &projectconfig.Config{Apps: []projectconfig.App{{Name: "web"}}},
-		},
-		{
-			name: "each app's framework is named",
-			cfg:  &projectconfig.Config{Apps: []projectconfig.App{{Framework: "next"}, {Framework: "express"}}},
-			want: []string{"express", "next"},
-		},
-		{
-			name: "two apps on one framework name it once",
-			cfg:  &projectconfig.Config{Apps: []projectconfig.App{{Framework: "next"}, {Framework: "next"}}},
-			want: []string{"next"},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := projectFrameworks(tc.cfg)
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("projectFrameworks = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestBootstrapRefusesAFeatureSetAlongsideDestroy(t *testing.T) {
-	t.Parallel()
-
-	opts := bootstrapOptions{destroy: true, declared: true, features: "all"}
-	err := runBootstrap(context.Background(), defaultDeps(), t.TempDir(), opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
-	if err == nil {
-		t.Fatal("runBootstrap err = nil, want --features and --destroy refused together")
-	}
-	for _, want := range []string{"--features", "--destroy"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("err = %v, want it to name %q", err, want)
-		}
 	}
 }

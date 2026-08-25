@@ -38,11 +38,12 @@ func ensureOptimizerPayload(ctx context.Context, store ObjectStore, bucket strin
 	return payloads.Place(ctx, store, bucket, optimizerKeyPrefix, optimizerLabel, payloads.ImageOptimizer())
 }
 
-func imageOptimizerResources(code payloads.Placement) string {
+func imageOptimizerResources(code payloads.Placement, class string) string {
+	command := classCommand(class)
 	return fmt.Sprintf(`  ImageOptimizerRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this bootstrap's shared image optimizer. Grants read on the asset bucket's assets and image-config prefixes and nothing else, so a compromised optimizer cannot reach state, variables or another app's data. Managed by ocel bootstrap; deleting it breaks /_next/image for every app in this bootstrap."
+      Description: "Execution role for this bootstrap's shared image optimizer. Grants read on the asset bucket's assets and image-config prefixes and nothing else, so a compromised optimizer cannot reach state, variables or another app's data. Managed by %s; deleting it breaks /_next/image for every app in this bootstrap."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -65,7 +66,7 @@ func imageOptimizerResources(code payloads.Placement) string {
   ImageOptimizer:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel image optimizer - one shared function transforming /_next/image for every app in this bootstrap, invoked by the edge. Managed by ocel bootstrap; delete it and /_next/image answers 502 everywhere here."
+      Description: "Ocel image optimizer - one shared function transforming /_next/image for every app in this bootstrap, invoked by the edge. Managed by %s; delete it and /_next/image answers 502 everywhere here."
       Runtime: %s
       Architectures:
         - %s
@@ -91,7 +92,7 @@ func imageOptimizerResources(code payloads.Placement) string {
       TargetFunctionArn: !GetAtt ImageOptimizer.Arn
       AuthType: AWS_IAM
       InvokeMode: RESPONSE_STREAM
-`, optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
+`, command, command, optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
 		code.Bucket, code.Key, optimizerBucketEnvVar, optimizerThreadpoolSize,
 		optimizerComponentTagKey, optimizerComponentTagValue)
 }
