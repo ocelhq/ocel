@@ -10,8 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/node"
 )
 
@@ -47,7 +47,7 @@ func runBuild(ctx context.Context, d session.Session, cwd string, stdout, stderr
 		return err
 	}
 
-	ctx, run, err := obs.Start(ctx, cfg.Dir, "ocel build")
+	ctx, run, err := runtrace.Start(ctx, cfg.Dir, "ocel build")
 	if err != nil {
 		return err
 	}

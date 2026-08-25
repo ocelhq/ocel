@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/cli/session"
+	"github.com/ocelhq/ocel/cli/internal/deployui"
 )
 
 const needsRefusal = "app web needs edge-middleware and the \"cloudfront\" edge does not serve it: middleware runs in the origin's Node server the way `next start` runs it, so every request pays the round trip to the origin before it is routed. " +
@@ -16,11 +18,12 @@ const needsRefusal = "app web needs edge-middleware and the \"cloudfront\" edge 
 
 const degradedDetail = "web: middleware runs in the origin's Node server the way `next start` runs it, so every request pays the round trip to the origin before it is routed. It affects routes /dashboard"
 
-func useJSONLogFormat(t *testing.T) {
+func useJSONLogFormat(t *testing.T, sess *session.Session) {
 	t.Helper()
 	orig := logFormatFlag
 	t.Cleanup(func() { logFormatFlag = orig })
 	logFormatFlag = logFormatJSON
+	sess.Format = func() deployui.Format { return deployui.FormatJSON }
 }
 
 func jsonRecords(t *testing.T, out string) []map[string]any {
@@ -69,9 +72,8 @@ func TestDeployRendersTheNeedsRefusalInHumanMode(t *testing.T) {
 }
 
 func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
-	useJSONLogFormat(t)
-
 	root, _, d := clitest.SetUpEdgeFixture(t, "")
+	useJSONLogFormat(t, &d)
 	t.Setenv(clitest.FakeNeedsRefusalEnvVar, needsRefusal)
 
 	var stdout, stderr bytes.Buffer
@@ -110,9 +112,8 @@ func TestDeployRendersADegradedNeedInHumanMode(t *testing.T) {
 }
 
 func TestDeployRendersADegradedNeedAsATypedJSONRecord(t *testing.T) {
-	useJSONLogFormat(t)
-
 	root, _, d := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\", \"ppr-resume\"],\n")
+	useJSONLogFormat(t, &d)
 	t.Setenv(clitest.FakeDegradedEnvVar, "edge-middleware="+degradedDetail+";ppr-resume=web: the shell comes from the origin. It affects routes /")
 
 	var stdout, stderr bytes.Buffer
@@ -150,8 +151,8 @@ func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 	})
 
 	t.Run("json", func(t *testing.T) {
-		useJSONLogFormat(t)
 		root, _, d := clitest.SetUpEdgeFixture(t, "")
+		useJSONLogFormat(t, &d)
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), d, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {

@@ -12,14 +12,14 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/ocelhq/ocel/cli/internal/obs"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 type Session struct {
 	r       *Renderer
-	run     *obs.Run
+	run     *runtrace.Run
 	command string
 	verbose bool
 	waiting bool
@@ -30,7 +30,7 @@ type Session struct {
 	logWriter *syncFileWriter
 }
 
-func New(stdout io.Writer, run *obs.Run, format Format, verbose bool) *Session {
+func New(stdout io.Writer, run *runtrace.Run, format Format, verbose bool) *Session {
 	s := &Session{
 		r:       NewRenderer(stdout, format, verbose),
 		run:     run,
@@ -273,23 +273,23 @@ func formatLink(l *linksv1.Link) string {
 	return l.GetName()
 }
 
-func spanStatus(s progressv1.SpanStatus) obs.SpanStatus {
+func spanStatus(s progressv1.SpanStatus) runtrace.SpanStatus {
 	switch s {
 	case progressv1.SpanStatus_SPAN_STATUS_OK:
-		return obs.SpanStatusOK
+		return runtrace.SpanStatusOK
 	case progressv1.SpanStatus_SPAN_STATUS_ERROR:
-		return obs.SpanStatusError
+		return runtrace.SpanStatusError
 	default:
-		return obs.SpanStatusUnset
+		return runtrace.SpanStatusUnset
 	}
 }
 
 var numericAttributeKeys = map[attribute.Key]struct{}{
-	obs.AttrExitCode:      {},
-	obs.AttrResourceCount: {},
-	obs.AttrBytes:         {},
-	obs.AttrRetryCount:    {},
-	obs.AttrDurationMS:    {},
+	runtrace.AttrExitCode:      {},
+	runtrace.AttrResourceCount: {},
+	runtrace.AttrBytes:         {},
+	runtrace.AttrRetryCount:    {},
+	runtrace.AttrDurationMS:    {},
 }
 
 func spanAttributes(attrs []*progressv1.SpanAttribute) []attribute.KeyValue {
@@ -319,31 +319,31 @@ func attributeValue(key attribute.Key, value string) attribute.KeyValue {
 func attributeKey(k progressv1.AttributeKey) (attribute.Key, bool) {
 	switch k {
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_COMMAND:
-		return obs.AttrCommand, true
+		return runtrace.AttrCommand, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_STAGE:
-		return obs.AttrStage, true
+		return runtrace.AttrStage, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_APP:
-		return obs.AttrApp, true
+		return runtrace.AttrApp, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_PHASE:
-		return obs.AttrPhase, true
+		return runtrace.AttrPhase, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_PROVIDER:
-		return obs.AttrProvider, true
+		return runtrace.AttrProvider, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_EXIT_CODE:
-		return obs.AttrExitCode, true
+		return runtrace.AttrExitCode, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND:
-		return obs.AttrErrorKind, true
+		return runtrace.AttrErrorKind, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT:
-		return obs.AttrResourceCount, true
+		return runtrace.AttrResourceCount, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES:
-		return obs.AttrBytes, true
+		return runtrace.AttrBytes, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT:
-		return obs.AttrRetryCount, true
+		return runtrace.AttrRetryCount, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS:
-		return obs.AttrDurationMS, true
+		return runtrace.AttrDurationMS, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE:
-		return obs.AttrResourceType, true
+		return runtrace.AttrResourceType, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME:
-		return obs.AttrResourceName, true
+		return runtrace.AttrResourceName, true
 	default:
 		return "", false
 	}

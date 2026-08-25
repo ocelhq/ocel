@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	"github.com/ocelhq/ocel/cli/internal/providerrunner"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -87,7 +87,7 @@ func (p Plan) Unattended(tier environmentv1.Tier, out io.Writer) error {
 	return nil
 }
 
-func Offer(ctx context.Context, runner *providerrunner.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, interactive bool, out io.Writer, stdin io.Reader) error {
+func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, interactive bool, out io.Writer, stdin io.Reader) error {
 	plan := PlanFor(status)
 	if plan.Empty() {
 		return nil
@@ -108,7 +108,7 @@ func Offer(ctx context.Context, runner *providerrunner.Runner, status *contractv
 		Tier:     tier,
 		Features: plan.Features,
 	}
-	return providerrunner.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap,
+	return provider.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap,
 		func(ev *progressv1.OperationEvent) { reportEvent(out, ev) })
 }
 

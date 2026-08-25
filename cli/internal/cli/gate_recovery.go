@@ -12,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
-	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/providerrunner"
+	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -22,7 +22,7 @@ import (
 type gateRecovery struct {
 	sess    session.Session
 	cfg     *projectconfig.Config
-	runner  *providerrunner.Runner
+	runner  *provider.Runner
 	preview bool
 
 	newGate func() *envgate.Gate
@@ -34,14 +34,14 @@ type gateRecovery struct {
 }
 
 func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contractv1.Manifest, error) {
-	run := obs.FromContext(ctx)
+	run := runtrace.FromContext(ctx)
 	for attempt := 0; ; attempt++ {
 		gate := r.newGate()
 
 		attemptCtx := ctx
 		var span trace.Span
 		if run != nil {
-			attemptCtx, span = run.StartSpan(ctx, "build", obs.AttrRetryCount.Int(attempt))
+			attemptCtx, span = run.StartSpan(ctx, "build", runtrace.AttrRetryCount.Int(attempt))
 		}
 		manifest, err := collectAndBuildManifest(attemptCtx, r.sess, r.cfg, gate, prebuilt, r.ui)
 		endAttemptSpan(span, err)
@@ -68,7 +68,7 @@ func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *env
 		fmt.Fprintln(r.stdout, "  Couldn't open your browser automatically — open the link above yourself.")
 	}
 
-	run := obs.FromContext(ctx)
+	run := runtrace.FromContext(ctx)
 	waitCtx := ctx
 	var span trace.Span
 	if run != nil {

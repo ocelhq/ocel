@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/obs"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
 func bundleFixture(t *testing.T, source string) string {
@@ -93,9 +93,9 @@ export {};
 `)
 
 	dir := t.TempDir()
-	ctx, run, err := obs.Start(context.Background(), dir, "ocel dev")
+	ctx, run, err := runtrace.Start(context.Background(), dir, "ocel dev")
 	if err != nil {
-		t.Fatalf("obs.Start: %v", err)
+		t.Fatalf("runtrace.Start: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -115,7 +115,7 @@ export {};
 	}
 }
 
-func readTraceFile(t *testing.T, run *obs.Run) string {
+func readTraceFile(t *testing.T, run *runtrace.Run) string {
 	t.Helper()
 	path := strings.TrimSuffix(run.LogPath(), ".ndjson") + ".otlp.json"
 	raw, err := os.ReadFile(path)

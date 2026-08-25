@@ -1,4 +1,4 @@
-package obs
+package runtrace
 
 import (
 	"context"

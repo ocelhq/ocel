@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
-	"github.com/ocelhq/ocel/cli/internal/providerlocator"
 	"github.com/ocelhq/ocel/cli/internal/provision"
 )
 
@@ -96,24 +95,23 @@ func init() {
 
 func newSession() session.Session {
 	return session.Session{
-		LoadCredentials:      credentials.Load,
-		FetchProjectConfig:   provision.FetchProjectConfig,
-		LocateProviderBinary: providerlocator.Locate,
-		BuildApp:             appbuilder.Build,
-		CollectAppFunctions:  appbuilder.CollectFunctions,
-		DeploymentID:         appbuilder.DeploymentID,
-		CollectDeclarations:  deploycollector.Collect,
-		OpenBrowser:          browser.OpenURL,
-		ServeVarsUI:          startVarsUI,
-		CurrentGitBranch:     gitBranch,
-		DiscoverPRNumber:     prNumberFromEnv,
-		RunPackageManager:    runPackageManagerCommand,
-		StdinIsTerminal:      isReaderTTY,
-		StdoutIsTerminal:     deployui.IsTerminal,
-		ConfigPath:           explicitConfigPath,
-		Verbose:              verboseEnabled,
-		Format:               sessionFormat,
-		Interrupt:            installInterruptHandler,
+		LoadCredentials:     credentials.Load,
+		FetchProjectConfig:  provision.FetchProjectConfig,
+		BuildApp:            appbuilder.Build,
+		CollectAppFunctions: appbuilder.CollectFunctions,
+		DeploymentID:        appbuilder.DeploymentID,
+		CollectDeclarations: deploycollector.Collect,
+		OpenBrowser:         browser.OpenURL,
+		ServeVarsUI:         startVarsUI,
+		CurrentGitBranch:    gitBranch,
+		DiscoverPRNumber:    prNumberFromEnv,
+		RunPackageManager:   runPackageManagerCommand,
+		StdinIsTerminal:     isReaderTTY,
+		StdoutIsTerminal:    deployui.IsTerminal,
+		ConfigPath:          explicitConfigPath,
+		Verbose:             verboseEnabled,
+		Format:              sessionFormat,
+		Interrupt:           installInterruptHandler,
 	}
 }
 

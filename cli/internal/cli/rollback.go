@@ -10,11 +10,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
-	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	"github.com/ocelhq/ocel/cli/internal/providersession"
-	"github.com/ocelhq/ocel/cli/node"
+	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -55,21 +53,13 @@ func runRollback(ctx context.Context, d session.Session, cwd string, opts rollba
 		return err
 	}
 
-	if err := node.Ensure(cfg.Dir); err != nil {
-		return err
-	}
-	provider, err := cfg.RequireProvider()
-	if err != nil {
-		return err
-	}
-
-	ctx, run, err := obs.Start(ctx, cfg.Dir, "ocel rollback")
+	ctx, run, err := runtrace.Start(ctx, cfg.Dir, "ocel rollback")
 	if err != nil {
 		return err
 	}
 	defer run.Close()
 
-	return providersession.Drive(ctx, d.LocateProviderBinary, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
 		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}

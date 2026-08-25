@@ -9,16 +9,14 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
-	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	"github.com/ocelhq/ocel/cli/internal/providersession"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/removalplan"
-	"github.com/ocelhq/ocel/cli/node"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -108,25 +106,7 @@ func runDestroy(ctx context.Context, d session.Session, cwd string, stdout, stde
 		fmt.Fprintf(stderr, "%s is set to %q, not this project (%s); confirming interactively instead\n", removalplan.BypassEnv, requested, cfg.Slug)
 	}
 
-	if err := node.Ensure(cfg.Dir); err != nil {
-		return err
-	}
-	provider, err := cfg.RequireProvider()
-	if err != nil {
-		return err
-	}
-
-	ctx, run, err := obs.Start(ctx, cfg.Dir, "ocel destroy production")
-	if err != nil {
-		return err
-	}
-	defer run.Close()
-
-	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
-	defer ui.Close()
-
-	provW := ui.BuildWriter()
-	err = providersession.Drive(ctx, d.LocateProviderBinary, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+	return providerui.Run(ctx, d, cfg, "ocel destroy production", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
 		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
@@ -166,16 +146,12 @@ func runDestroy(ctx context.Context, d session.Session, cwd string, stdout, stde
 			Slug: cfg.Slug,
 			Edge: edgewire.Selection(cfg),
 		}
-		if err := providerrunner.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
+		if err := provider.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Destroyed project %s", cfg.Slug))
 		return nil
 	})
-	if err != nil {
-		return providersession.Fail(ctx, ui, err)
-	}
-	return nil
 }
 
 func runDestroyPreviewProject(ctx context.Context, d session.Session, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
@@ -188,25 +164,7 @@ func runDestroyPreviewProject(ctx context.Context, d session.Session, cwd string
 		return err
 	}
 
-	if err := node.Ensure(cfg.Dir); err != nil {
-		return err
-	}
-	provider, err := cfg.RequireProvider()
-	if err != nil {
-		return err
-	}
-
-	ctx, run, err := obs.Start(ctx, cfg.Dir, "ocel destroy preview")
-	if err != nil {
-		return err
-	}
-	defer run.Close()
-
-	ui := deployui.New(stdout, run, sessionFormat(), verboseEnabled())
-	defer ui.Close()
-
-	provW := ui.BuildWriter()
-	err = providersession.Drive(ctx, d.LocateProviderBinary, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+	return providerui.Run(ctx, d, cfg, "ocel destroy preview", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
 		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
 			return err
 		}
@@ -249,16 +207,12 @@ func runDestroyPreviewProject(ctx context.Context, d session.Session, cwd string
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
 			Edge:        edgewire.Selection(cfg),
 		}
-		if err := providerrunner.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
+		if err := provider.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.Slug))
 		return nil
 	})
-	if err != nil {
-		return providersession.Fail(ctx, ui, err)
-	}
-	return nil
 }
 
 func printDestroyPlan(out io.Writer, slug string, preview bool, plan *contractv1.RemovalPlan) {

@@ -1,6 +1,6 @@
 //go:build unix
 
-package providerrunner
+package provider
 
 import (
 	"bytes"

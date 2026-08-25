@@ -1,8 +1,3 @@
-// Package nodeprotocol reads the newline-delimited protocol the Node
-// subprocesses (the builder and the discovery entrypoint) write to their
-// own stdout, and converts it into obs spans and log records. Anything on
-// that stream that isn't a protocol record — a framework's own build
-// output, in particular — is forwarded untouched.
 package nodeprotocol
 
 import (
@@ -18,7 +13,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/ocelhq/ocel/cli/internal/obs"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
 const Prefix = "@@OCEL_V1@@"
@@ -85,7 +80,7 @@ type openSpan struct {
 }
 
 type Processor struct {
-	Run     *obs.Run
+	Run     *runtrace.Run
 	Forward io.Writer
 
 	mu           sync.Mutex
@@ -170,7 +165,7 @@ func (p *Processor) apply(ctx context.Context, rec record) {
 	switch rec.Type {
 	case typeLog:
 		if p.Run != nil {
-			p.Run.Log(p.logContext(ctx, rec.App), obs.Level(rec.Level), obs.Stage(rec.Stage), obs.App(rec.App), rec.Message)
+			p.Run.Log(p.logContext(ctx, rec.App), runtrace.Level(rec.Level), runtrace.Stage(rec.Stage), runtrace.App(rec.App), rec.Message)
 		}
 	case typeSpanStart:
 		p.startSpan(ctx, rec)
@@ -181,7 +176,7 @@ func (p *Processor) apply(ctx context.Context, rec record) {
 		p.err = rec.Message
 		p.mu.Unlock()
 		if p.Run != nil {
-			p.Run.Error(p.logContext(ctx, rec.App), obs.Stage(rec.Stage), obs.App(rec.App), rec.Message)
+			p.Run.Error(p.logContext(ctx, rec.App), runtrace.Stage(rec.Stage), runtrace.App(rec.App), rec.Message)
 		}
 	}
 }
@@ -205,7 +200,7 @@ func (p *Processor) startSpan(ctx context.Context, rec record) {
 	}
 	var attrs []attribute.KeyValue
 	if rec.App != "" {
-		attrs = append(attrs, obs.AttrApp.String(rec.App))
+		attrs = append(attrs, runtrace.AttrApp.String(rec.App))
 	}
 	spanCtx, span := p.Run.StartSpan(ctx, rec.Stage, attrs...)
 

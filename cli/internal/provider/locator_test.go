@@ -1,4 +1,4 @@
-package providerlocator
+package provider
 
 import (
 	"context"

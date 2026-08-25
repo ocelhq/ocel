@@ -1,4 +1,4 @@
-package providersession
+package provider
 
 import (
 	"encoding/json"

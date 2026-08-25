@@ -13,8 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/session"
-	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	"github.com/ocelhq/ocel/cli/internal/providersession"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -52,13 +51,13 @@ func newStatusCommand(sess session.Session) *cobra.Command {
 }
 
 func RunStatus(ctx context.Context, sess session.Session, cwd string, opts StatusOptions, stdout, stderr io.Writer) error {
-	cfg, provider, err := resolveProject(ctx, sess, cwd)
+	cfg, err := resolveProject(ctx, sess, cwd)
 	if err != nil {
 		return err
 	}
 
 	var statuses []*contractv1.BootstrapStatus
-	err = providersession.Drive(ctx, sess.LocateProviderBinary, cfg, provider, stderr, stderr, func(runner *providerrunner.Runner) error {
+	err = provider.Drive(ctx, cfg, stderr, stderr, func(runner *provider.Runner) error {
 		client, err := runner.Deployments()
 		if err != nil {
 			return err
@@ -67,13 +66,13 @@ func RunStatus(ctx context.Context, sess session.Session, cwd string, opts Statu
 			described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier})
 			if err != nil {
 				if connect.CodeOf(err) == connect.CodeUnimplemented {
-					return fmt.Errorf("%s cannot report what a bootstrap has; it predates the report. Upgrade the provider pinned in this project and try again", provider.Package)
+					return fmt.Errorf("%s cannot report what a bootstrap has; it predates the report. Upgrade the provider pinned in this project and try again", runner.Package())
 				}
 				return err
 			}
 			status := described.GetBootstrap()
 			if status == nil {
-				return fmt.Errorf("%s answered without saying anything about the %s bootstrap. Upgrade the provider pinned in this project and try again", provider.Package, Name(tier))
+				return fmt.Errorf("%s answered without saying anything about the %s bootstrap. Upgrade the provider pinned in this project and try again", runner.Package(), Name(tier))
 			}
 			statuses = append(statuses, status)
 		}

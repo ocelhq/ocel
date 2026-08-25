@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/cli/session"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
-	"github.com/ocelhq/ocel/cli/internal/obs"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	"github.com/ocelhq/ocel/cli/internal/providersession"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/removalplan"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -20,14 +19,14 @@ import (
 )
 
 func RunDestroy(ctx context.Context, sess session.Session, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, provider, err := resolveProject(ctx, sess, cwd)
+	cfg, err := resolveProject(ctx, sess, cwd)
 	if err != nil {
 		return err
 	}
-	return runDestroy(ctx, sess, cfg, provider, tier, opts, stdout, stderr, stdin)
+	return runDestroy(ctx, sess, cfg, tier, opts, stdout, stderr, stdin)
 }
 
-func runDestroy(ctx context.Context, sess session.Session, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroy(ctx context.Context, sess session.Session, cfg *projectconfig.Config, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
 	name := Name(tier)
 	requested := removalplan.BypassRequest()
 	bypass := requested == name
@@ -47,18 +46,8 @@ func runDestroy(ctx context.Context, sess session.Session, cfg *projectconfig.Co
 			destroyCommand(tier), removalplan.BypassEnv, name)
 	}
 
-	ctx, run, err := obs.Start(ctx, cfg.Dir, destroyCommand(tier))
-	if err != nil {
-		return err
-	}
-	defer run.Close()
-
-	ui := deployui.New(stdout, run, sess.Format(), sess.Verbose())
-	defer ui.Close()
-
 	asked := prompt.New(stdout, stdin)
-	provW := ui.BuildWriter()
-	err = providersession.Drive(ctx, sess.LocateProviderBinary, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+	return providerui.Run(ctx, sess, cfg, destroyCommand(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
 		client, err := runner.Deployments()
 		if err != nil {
 			return err
@@ -90,16 +79,12 @@ func runDestroy(ctx context.Context, sess session.Session, cfg *projectconfig.Co
 			Tier: tier,
 			Edge: edgewire.Selection(cfg),
 		}
-		if err := providerrunner.Stream(ctx, runner, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap, ui.Event); err != nil {
+		if err := provider.Stream(ctx, runner, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Removed the %s bootstrap", name))
 		return nil
 	})
-	if err != nil {
-		return providersession.Fail(ctx, ui, err)
-	}
-	return nil
 }
 
 func destroyCommand(tier environmentv1.Tier) string {

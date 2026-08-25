@@ -1,4 +1,4 @@
-package providerrunner
+package provider
 
 import (
 	"context"
@@ -480,6 +480,6 @@ func assertNoStaleSocket(t *testing.T, sockPath string) {
 
 func init() {
 	if _, err := os.Stat(os.Args[0]); err != nil {
-		panic(fmt.Sprintf("providerrunner tests require os.Args[0] to be a runnable test binary: %v", err))
+		panic(fmt.Sprintf("provider tests require os.Args[0] to be a runnable test binary: %v", err))
 	}
 }

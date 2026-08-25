@@ -1,4 +1,4 @@
-package providersession
+package provider
 
 import (
 	"context"
@@ -6,25 +6,26 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/ocelhq/ocel/cli/internal/deployui"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/node"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-var ReadyTimeout time.Duration
+func Drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, fn func(*Runner) error) error {
+	if err := node.Ensure(cfg.Dir); err != nil {
+		return err
+	}
 
-type Locator func(ctx context.Context, projectDir, providerPackage string) (string, error)
+	desc, err := cfg.RequireProvider()
+	if err != nil {
+		return err
+	}
 
-func Drive(ctx context.Context, locate Locator, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, stdout, stderr io.Writer, drive func(*providerrunner.Runner) error) error {
-	binPath, err := locate(ctx, cfg.Dir, provider.Package)
+	binPath, err := Locate(ctx, cfg.Dir, desc.Package)
 	if err != nil {
 		return fmt.Errorf("locate provider binary: %w", err)
 	}
@@ -34,19 +35,18 @@ func Drive(ctx context.Context, locate Locator, cfg *projectconfig.Config, provi
 		return err
 	}
 
-	sessionConfig, err := providerConfig(provider)
+	sessionConfig, err := providerConfig(desc)
 	if err != nil {
 		return err
 	}
 
-	runner, err := providerrunner.Spawn(ctx, providerrunner.Config{
+	runner, err := Spawn(ctx, Config{
 		BinaryPath:      binPath,
 		Stdout:          stdout,
 		Stderr:          stderr,
 		Env:             env,
 		Provider:        sessionConfig,
-		ProviderPackage: provider.Package,
-		ReadyTimeout:    ReadyTimeout,
+		ProviderPackage: desc.Package,
 	})
 	if err != nil {
 		return fmt.Errorf("spawn provider: %w", err)
@@ -56,26 +56,17 @@ func Drive(ctx context.Context, locate Locator, cfg *projectconfig.Config, provi
 	if err := runner.Ready(ctx); err != nil {
 		return err
 	}
-	return drive(runner)
+	return fn(runner)
 }
 
-func Fail(ctx context.Context, ui *deployui.Session, err error) error {
-	if ctx.Err() != nil {
-		ui.Cancel()
-		return &exitsig.ExitError{Code: exitsig.InterruptCode}
-	}
-	ui.Fail(err)
-	return &exitsig.ExitError{Code: 1}
-}
-
-func providerConfig(provider *projectconfig.ProviderDescriptor) (*contractv1.ProviderConfig, error) {
+func providerConfig(desc *projectconfig.ProviderDescriptor) (*contractv1.ProviderConfig, error) {
 	config := &contractv1.ProviderConfig{}
-	if provider == nil || len(provider.Options) == 0 {
+	if desc == nil || len(desc.Options) == 0 {
 		return config, nil
 	}
 	options := &structpb.Struct{}
-	if err := protojson.Unmarshal(provider.Options, options); err != nil {
-		return nil, fmt.Errorf("%s configures %s with options that are not a JSON object: %w", projectconfig.ConfigFileName, provider.Package, err)
+	if err := protojson.Unmarshal(desc.Options, options); err != nil {
+		return nil, fmt.Errorf("%s configures %s with options that are not a JSON object: %w", projectconfig.ConfigFileName, desc.Package, err)
 	}
 	config.Options = options
 	return config, nil
