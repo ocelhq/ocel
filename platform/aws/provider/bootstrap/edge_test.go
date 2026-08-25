@@ -403,10 +403,10 @@ func TestAdoptDeploymentsStore(t *testing.T) {
 		preview[edge.OfferKeyStoreScriptName] = "ocel-deployments-store-preview"
 		preview[edge.OfferKeyStoreBootstrapCred] = "cred-preview"
 
-		if err := adoptDeploymentsStore(context.Background(), ssmc, ClassProduction, offeredDeploymentsStore()); err != nil {
+		if err := adoptDeploymentsStore(context.Background(), ssmc, ClassProduction, "fake", offeredDeploymentsStore()); err != nil {
 			t.Fatalf("production adopt: %v", err)
 		}
-		if err := adoptDeploymentsStore(context.Background(), ssmc, ClassPreview, preview); err != nil {
+		if err := adoptDeploymentsStore(context.Background(), ssmc, ClassPreview, "fake", preview); err != nil {
 			t.Fatalf("preview adopt: %v", err)
 		}
 
@@ -425,6 +425,85 @@ func TestAdoptDeploymentsStore(t *testing.T) {
 		}
 		if prev != wantPrev {
 			t.Errorf("preview store = %+v, want %+v", prev, wantPrev)
+		}
+	})
+}
+
+func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
+	t.Run("a standing credential survives a re-offer without one", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		if err := adoptDeploymentsStore(context.Background(), ssmc, ClassProduction, "fake", offeredDeploymentsStore()); err != nil {
+			t.Fatalf("first adopt: %v", err)
+		}
+
+		reoffer := offeredDeploymentsStore()
+		delete(reoffer, edge.OfferKeyStoreBootstrapCred)
+		reoffer[edge.OfferKeyStoreEndpoint] = "https://ocel-deployments-store.acct.workers.dev/v2"
+		if err := adoptDeploymentsStore(context.Background(), ssmc, ClassProduction, "fake", reoffer); err != nil {
+			t.Fatalf("second adopt: %v", err)
+		}
+
+		got, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ReadDeploymentsStoreFor: %v", err)
+		}
+		if got.BootstrapCred != "cred-prod" {
+			t.Errorf("credential = %q, want the stored one kept where the edge offered none", got.BootstrapCred)
+		}
+		if got.Endpoint != "https://ocel-deployments-store.acct.workers.dev/v2" {
+			t.Errorf("endpoint = %q, want the reoffered coordinate", got.Endpoint)
+		}
+	})
+
+	t.Run("nothing on either side is a refusal, not an empty credential", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		offer := offeredDeploymentsStore()
+		delete(offer, edge.OfferKeyStoreBootstrapCred)
+
+		err := adoptDeploymentsStore(context.Background(), ssmc, ClassProduction, "fake", offer)
+		if err == nil {
+			t.Fatal("adoptDeploymentsStore stored a credential-less store rather than refusing")
+		}
+		if !strings.Contains(err.Error(), "ocel-deployments-store") || !strings.Contains(err.Error(), DeploymentsStoreParamName) {
+			t.Errorf("error = %v, want it to name the worker and the parameter that holds nothing", err)
+		}
+		if _, stored := ssmc.params[DeploymentsStoreParamName]; stored {
+			t.Error("a credential-less store was written despite the refusal")
+		}
+	})
+}
+
+func TestAdoptISRWriterBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
+	t.Run("a standing credential survives a re-offer without one", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		if err := adoptISRWriter(context.Background(), ssmc, ClassProduction, "fake", offeredISRWriter("", "cred-prod")); err != nil {
+			t.Fatalf("first adopt: %v", err)
+		}
+
+		if err := adoptISRWriter(context.Background(), ssmc, ClassProduction, "fake", offeredISRWriter("", "")); err != nil {
+			t.Fatalf("second adopt: %v", err)
+		}
+		got, err := ReadISRWriterFor(context.Background(), ssmc, ClassProduction)
+		if err != nil {
+			t.Fatalf("ReadISRWriterFor: %v", err)
+		}
+		if got.BootstrapCred != "cred-prod" {
+			t.Errorf("credential = %q, want the stored one kept where the edge offered none", got.BootstrapCred)
+		}
+	})
+
+	t.Run("nothing on either side is a refusal, not an empty credential", func(t *testing.T) {
+		ssmc := newFakeSSM()
+
+		err := adoptISRWriter(context.Background(), ssmc, ClassProduction, "fake", offeredISRWriter("", ""))
+		if err == nil {
+			t.Fatal("adoptISRWriter stored a credential-less writer rather than refusing")
+		}
+		if !strings.Contains(err.Error(), "ocel-isr-writer") || !strings.Contains(err.Error(), ISRWriterParamName) {
+			t.Errorf("error = %v, want it to name the worker and the parameter that holds nothing", err)
+		}
+		if _, stored := ssmc.params[ISRWriterParamName]; stored {
+			t.Error("a credential-less writer was written despite the refusal")
 		}
 	})
 }
@@ -478,10 +557,10 @@ func TestISRWriterParamFor(t *testing.T) {
 func TestAdoptISRWriter(t *testing.T) {
 	t.Run("preview stores separately", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		if err := adoptISRWriter(context.Background(), ssmc, ClassProduction, offeredISRWriter("", "cred-prod")); err != nil {
+		if err := adoptISRWriter(context.Background(), ssmc, ClassProduction, "fake", offeredISRWriter("", "cred-prod")); err != nil {
 			t.Fatalf("production adopt: %v", err)
 		}
-		if err := adoptISRWriter(context.Background(), ssmc, ClassPreview, offeredISRWriter("-preview", "cred-preview")); err != nil {
+		if err := adoptISRWriter(context.Background(), ssmc, ClassPreview, "fake", offeredISRWriter("-preview", "cred-preview")); err != nil {
 			t.Fatalf("preview adopt: %v", err)
 		}
 

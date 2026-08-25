@@ -317,7 +317,7 @@ func TestRunOptimizer(t *testing.T) {
 	t.Run("first bootstrap places the payload before the stack that names it", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		store := newFakeObjectStore()
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap()); err != nil {
 			t.Fatalf("run: %v", err)
@@ -337,7 +337,7 @@ func TestRunOptimizer(t *testing.T) {
 	t.Run("an account already holding the payloads uploads nothing", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		store := preloadedStore()
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap()); err != nil {
 			t.Fatalf("run: %v", err)

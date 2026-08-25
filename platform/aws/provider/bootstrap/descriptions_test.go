@@ -103,7 +103,7 @@ func TestSSMDescriptionsFitTheirLimits(t *testing.T) {
 	for _, class := range []string{ClassProduction, ClassPreview} {
 		t.Run(class, func(t *testing.T) {
 			cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-			standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+			frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), class, everything(), nil, nil); err != nil {
 				t.Fatalf("Run: %v", err)

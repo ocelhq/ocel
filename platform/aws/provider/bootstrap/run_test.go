@@ -511,11 +511,13 @@ func (f *fakeEdge) DomainOwner(context.Context, string) (string, error) {
 	return "", errors.New("bootstrap never reads a domain owner")
 }
 
-func standInCloudflare(t *testing.T, ed edge.Edge) {
+var standingEdge = func() edge.Edge { return &fakeEdge{kind: "default"} }
+
+func frontedBy(t *testing.T, ed edge.Edge) {
 	t.Helper()
-	previous := cloudflareEdge
-	cloudflareEdge = func() edge.Edge { return ed }
-	t.Cleanup(func() { cloudflareEdge = previous })
+	previous := standingEdge
+	standingEdge = func() edge.Edge { return ed }
+	t.Cleanup(func() { standingEdge = previous })
 }
 
 func hasEdgeUser(t *testing.T, template string) bool {
@@ -551,7 +553,7 @@ func assertMintedSecrets(t *testing.T, ssmc *fakeSSM, names ...string) {
 }
 
 func apisOf(cfn *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore) APIs {
-	return apisFronting(cfn, ssmc, iamc, store, &fakeEdge{kind: "default"})
+	return apisFronting(cfn, ssmc, iamc, store, standingEdge())
 }
 
 func apisFronting(cfn *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore, front edge.Edge) APIs {
@@ -575,7 +577,7 @@ func TestRun(t *testing.T) {
 	t.Run("core alone stands up no feature stack", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		ed := &fakeEdge{}
-		standInCloudflare(t, ed)
+		frontedBy(t, ed)
 
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -583,8 +585,8 @@ func TestRun(t *testing.T) {
 		if got := cfn.stacks(); !slices.Equal(got, []string{StackName}) {
 			t.Errorf("stacks = %v, want only %s", got, StackName)
 		}
-		if ed.bootstraps != 0 {
-			t.Errorf("an edge was bootstrapped %d times for a core-only bootstrap", ed.bootstraps)
+		if ed.bootstraps != 1 {
+			t.Errorf("the front was bootstrapped %d times for a core-only bootstrap, want 1: the edge is the front, not a feature", ed.bootstraps)
 		}
 		if len(iamc.created) != 0 {
 			t.Errorf("minted %v for a core-only bootstrap", iamc.created)
@@ -593,7 +595,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("asking for the cloudflare edge pulls in what it stands on", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction,
 			Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}, nil, nil)
@@ -609,7 +611,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("a stack is never applied before what feeds it", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -627,7 +629,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("a feature reads its upstream by parameter, never by import", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -649,7 +651,7 @@ func TestRun(t *testing.T) {
 	t.Run("the cloudflare edge feature provisions the edge reader", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		ed := &fakeEdge{kind: "cloudflare"}
-		standInCloudflare(t, ed)
+		frontedBy(t, ed)
 
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -673,7 +675,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("mints the secrets a release and its publisher authenticate with", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		standInCloudflare(t, &fakeEdge{
+		frontedBy(t, &fakeEdge{
 			kind: "cloudflare",
 			out:  edge.BootstrapOutput{Offers: []edge.Offer{{Kind: edge.OfferISRWriter, Values: offeredISRWriter("", "cred-prod")}}},
 		})
@@ -688,7 +690,7 @@ func TestRun(t *testing.T) {
 		for _, want := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 			t.Run(string(want), func(t *testing.T) {
 				ed := &fakeEdge{kind: "cloudflare"}
-				standInCloudflare(t, ed)
+				frontedBy(t, ed)
 				if err := Run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), string(want), everything(), nil, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
@@ -709,7 +711,7 @@ func TestRun(t *testing.T) {
 		} {
 			t.Run(tc.class, func(t *testing.T) {
 				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-				standInCloudflare(t, &fakeEdge{})
+				frontedBy(t, &fakeEdge{})
 
 				req := Request{Features: []string{FeatureISR, FeatureImageOptimization}}
 				if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), tc.class, req, nil, nil); err != nil {
@@ -733,7 +735,7 @@ func TestRun(t *testing.T) {
 	t.Run("persists edge values", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		values := map[string]string{"bucketName": "edge-cache-7f3", "namespaceId": "ns-42"}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{Values: values}})
+		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{Values: values}})
 
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -754,7 +756,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("no edge values stores nothing", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -773,7 +775,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("ignores unrecognised offer", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
+		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
 			Offers: []edge.Offer{
 				{Kind: "something-invented-later", Values: map[string]string{"id": "x"}},
 				{Kind: edge.OfferCacheStore, Values: offeredStore()},
@@ -796,7 +798,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("no offers stores no cache store", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -817,7 +819,7 @@ func TestRun(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				ssmc := newFakeSSM()
-				standInCloudflare(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
+				frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
 					Offers: []edge.Offer{{Kind: edge.OfferCacheStore, Values: offeredStore()}},
 				}})
 
@@ -842,7 +844,7 @@ func TestRun(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		offer := offeredStore()
 		delete(offer, edge.OfferKeySecretAccessKey)
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
+		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
 			Offers: []edge.Offer{{Kind: edge.OfferCacheStore, Values: offer}},
 		}})
 
@@ -860,7 +862,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("idempotent", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
+		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
 			Values: map[string]string{"namespaceId": "ns-42"},
 		}})
 
@@ -889,7 +891,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("edge bootstrap failure stops provisioning the feature it belongs to", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare", err: errors.New("edge API unreachable")})
+		frontedBy(t, &fakeEdge{kind: "cloudflare", err: errors.New("edge API unreachable")})
 
 		err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil)
 		if err == nil {
@@ -905,7 +907,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("a dropped name takes its stack with it, in the order it was handed", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		apis := apisOf(cfn, ssmc, iamc, preloadedStore())
 
 		if err := Run(context.Background(), apis, ClassProduction, everything(), nil, nil); err != nil {
@@ -932,7 +934,7 @@ func TestRun(t *testing.T) {
 func TestRunPreview(t *testing.T) {
 	t.Run("mints the preview secrets a release and its publisher authenticate with", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
+		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
 			Offers: []edge.Offer{{Kind: edge.OfferISRWriter, Values: offeredISRWriter("-preview", "cred-preview")}},
 		}})
 
@@ -950,7 +952,7 @@ func TestRunPreview(t *testing.T) {
 	t.Run("idempotent", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		values := map[string]string{"namespaceId": "ns-42"}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{Values: values}})
+		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{Values: values}})
 
 		var passphrase string
 		for i := range 2 {
@@ -1012,7 +1014,7 @@ func TestRunDefaultEdge(t *testing.T) {
 	t.Run("core bootstraps the edge the provider fronts with by default", func(t *testing.T) {
 		front := &fakeEdge{kind: "cloudfront"}
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		apis := apisFronting(cfn, ssmc, iamc, preloadedStore(), front)
 		if err := Run(context.Background(), apis, ClassProduction, Request{}, nil, nil); err != nil {
@@ -1036,7 +1038,7 @@ func TestRunDefaultEdge(t *testing.T) {
 			}
 			sawCore = deployed.AssetBucket != ""
 		}}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		if err := Run(context.Background(), apisFronting(cfn, ssmc, iamc, preloadedStore(), front), ClassProduction, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -1049,7 +1051,7 @@ func TestRunDefaultEdge(t *testing.T) {
 	t.Run("preview bootstraps the default edge for the preview class", func(t *testing.T) {
 		front := &fakeEdge{kind: "cloudfront"}
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		if err := Run(context.Background(), apisFronting(cfn, ssmc, iamc, preloadedStore(), front), ClassPreview, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -1062,7 +1064,7 @@ func TestRunDefaultEdge(t *testing.T) {
 	t.Run("a default edge that cannot be bootstrapped stops the run", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		front := &fakeEdge{kind: "cloudfront", err: errors.New("edge API unreachable")}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		err := Run(context.Background(), apisFronting(cfn, ssmc, iamc, preloadedStore(), front), ClassProduction, everything(), nil, nil)
 		if err == nil {
@@ -1085,7 +1087,7 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-				standInCloudflare(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
+				frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
 					Values: map[string]string{"namespaceId": "ns-42"},
 					Offers: []edge.Offer{
 						{Kind: edge.OfferCacheStore, Values: offeredStore()},
@@ -1135,7 +1137,7 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 
 	t.Run("dropping isr takes the edge that stands on it down first", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		apis := apisOf(cfn, ssmc, iamc, preloadedStore())
 
 		if err := Run(context.Background(), apis, ClassProduction, everything(), nil, nil); err != nil {
@@ -1173,7 +1175,7 @@ func originSecretFor(t *testing.T, class string) string {
 func TestUpsertRecoversFailedStacks(t *testing.T) {
 	t.Run("a rolled-back feature stack reads as absent, not enabled", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		cfn.holdName(isrStack(ClassProduction), 1)
 		holdNothing(t)
@@ -1194,7 +1196,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 
 	t.Run("a rolled-back stack is replaced, not updated into a wall", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		apis := apisOf(cfn, ssmc, iamc, preloadedStore())
 		holdNothing(t)
 
@@ -1221,7 +1223,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 
 	t.Run("a wedged stack left out of the set is still taken away", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		apis := apisOf(cfn, ssmc, iamc, preloadedStore())
 		holdNothing(t)
 
@@ -1240,7 +1242,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 
 	t.Run("a queue name still held is waited out, not surfaced", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		held := holdNothing(t)
 		cfn.holdName(isrStack(ClassProduction), 2)
 
@@ -1260,7 +1262,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 
 	t.Run("a stack that fails for any other reason is not retried", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		holdNothing(t)
 		cfn.holdName(isrStack(ClassProduction), 1)
 		cfn.reason(isrStack(ClassProduction), "Resource handler returned message: Access denied")

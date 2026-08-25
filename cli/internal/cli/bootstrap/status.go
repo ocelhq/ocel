@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -63,7 +64,7 @@ func RunStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts StatusOp
 			return err
 		}
 		for _, tier := range []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW} {
-			planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: tier})
+			planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: tier, Edge: edgewire.Selection(cfg)})
 			if err != nil {
 				if connect.CodeOf(err) == connect.CodeUnimplemented {
 					return fmt.Errorf("%s cannot report what a bootstrap has; it predates the report. Upgrade the provider pinned in this project and try again", runner.Package())

@@ -237,6 +237,8 @@ message BootstrapRequest {
   optional bool auto_heal = 4;
 
   bool accept_replacements = 5;
+
+  EdgeSelection edge = 6;
 }
 
 message PlanBootstrapRequest {
@@ -245,6 +247,8 @@ message PlanBootstrapRequest {
   bool with_dependents = 2;
 
   BootstrapRequest intent = 3;
+
+  EdgeSelection edge = 4;
 }
 
 message PlanBootstrapResponse {

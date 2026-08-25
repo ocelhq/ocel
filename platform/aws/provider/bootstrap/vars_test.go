@@ -266,7 +266,7 @@ func TestVarsDescriptions(t *testing.T) {
 func TestRunVars(t *testing.T) {
 	t.Run("provisions the variable store idempotently", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		for i := range 2 {
 			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
@@ -302,7 +302,7 @@ func TestRunVars(t *testing.T) {
 			}
 		}
 
-		standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}

@@ -354,8 +354,8 @@ func TestPlanBootstrapPlansTheApplyItsIntentNames(t *testing.T) {
 	if plan.GetSubject() != string(providerkit.ClassProduction) {
 		t.Errorf("plan subject = %q, want the class it was asked about", plan.GetSubject())
 	}
-	if plan.GetEdgeKind() != "" {
-		t.Errorf("plan claims the %s edge though nothing named an edge and a bootstrap plan does not turn on one", plan.GetEdgeKind())
+	if plan.GetEdgeKind() != string(fake.KindRelay) {
+		t.Errorf("plan was drawn against the %q edge, want the default the apply would bootstrap", plan.GetEdgeKind())
 	}
 	if len(plan.GetGroups()) != 3 {
 		t.Fatalf("plan = %v, want the baseline and the closure of images", plan.GetGroups())
@@ -570,6 +570,39 @@ func TestPlanRemoveBootstrapPlansTheEdgeItWasAsked(t *testing.T) {
 	}
 	if fronting := provider.Bootstrapper().Fronting(); fronting != fake.KindDirect {
 		t.Errorf("PlanRemoveBootstrap() asked the provider for the %q edge, want the %q the request named", fronting, fake.KindDirect)
+	}
+}
+
+func TestBootstrapStandsUpTheEdgeTheProjectSelected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client, provider := contractServed(t, "1.2.3")
+
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+	})
+	if fronting := provider.Bootstrapper().Fronting(); fronting != fake.KindDirect {
+		t.Errorf("Bootstrap() stood up the %q edge, want the %q this project selected", fronting, fake.KindDirect)
+	}
+
+	plan, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+		Intent: &contractv1.BootstrapRequest{
+			Tier: environmentv1.Tier_TIER_PRODUCTION,
+			Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PlanBootstrap() error = %v", err)
+	}
+	if plan.GetPlan().GetEdgeKind() != string(fake.KindDirect) {
+		t.Errorf("PlanBootstrap() planned against %q, want the %q this project selected", plan.GetPlan().GetEdgeKind(), fake.KindDirect)
+	}
+	if fronting := provider.Bootstrapper().Fronting(); fronting != fake.KindDirect {
+		t.Errorf("PlanBootstrap() asked the provider for the %q edge, want the %q this project selected", fronting, fake.KindDirect)
 	}
 }
 

@@ -221,7 +221,7 @@ func (l *healLog) says(substr string) bool {
 func standingBootstrap(t *testing.T) (*fakeCFN, APIs) {
 	t.Helper()
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-	standInCloudflare(t, &fakeEdge{kind: "cloudflare"})
+	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(cfn, ssmc, iamc, preloadedStore())
 	if err := Run(context.Background(), apis, ClassProduction, everything(), nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
