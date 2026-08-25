@@ -71,11 +71,11 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	if err != nil {
 		return providerkit.BootstrapPlan{}, err
 	}
-	groups := providerkit.DeriveGroups(bootstrap.NameStacks(described), bootstrap.Catalogue(), req)
-	for i, group := range groups {
-		if group.Action == providerkit.ActionUpdate {
-			groups[i].Reason = providerkit.WithoutDetail(group.Reason)
-		}
+	groups, err := bootstrap.PlanChanges(ctx, b.CFN, string(req.Class),
+		bootstrap.Request{Features: req.Features, Drop: req.Drop, Writer: req.Writer},
+		providerkit.DeriveGroups(bootstrap.NameStacks(described), bootstrap.Catalogue(), req))
+	if err != nil {
+		return providerkit.BootstrapPlan{}, err
 	}
 	return providerkit.BootstrapPlan{Groups: groups}, nil
 }
