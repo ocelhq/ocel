@@ -191,7 +191,7 @@ func (h *handlers) SetReference(ctx context.Context, req *envvarsv1.SetReference
 	target := req.GetTarget()
 	if target.GetEnvironment() != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"a reference resolves against %s's class-wide value; %q is an environment of the project holding the reference, and names nothing in the target's",
+			"a reference resolves against the value %s sets for all environments; %q is an environment of the project holding the reference, and names nothing in the target's",
 			target.GetKey(), target.GetEnvironment()))
 	}
 	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
