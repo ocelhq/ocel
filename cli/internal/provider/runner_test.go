@@ -140,7 +140,7 @@ func TestConfigure(t *testing.T) {
 
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "reject-config", Config{
-			Provider:        &contractv1.ProviderConfig{},
+			ProviderConfig:  &contractv1.ProviderConfig{},
 			ProviderPackage: "@ocel/provider-aws",
 			ReadyTimeout:    5 * time.Second,
 		})
@@ -254,15 +254,15 @@ func TestDeploy(t *testing.T) {
 
 		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
 
-		var deployErr *DeployFailedError
+		var deployErr *OperationFailedError
 		if !errors.As(err, &deployErr) {
-			t.Fatalf("Deploy() error = %v (%T), want *DeployFailedError", err, err)
+			t.Fatalf("Deploy() error = %v (%T), want *OperationFailedError", err, err)
 		}
 		if deployErr.Message != "simulated deploy failure" {
-			t.Errorf("DeployFailedError.Message = %q, want %q", deployErr.Message, "simulated deploy failure")
+			t.Errorf("OperationFailedError.Message = %q, want %q", deployErr.Message, "simulated deploy failure")
 		}
 		if err.Error() != "simulated deploy failure" {
-			t.Errorf("DeployFailedError.Error() = %q, want the provider's message verbatim", err.Error())
+			t.Errorf("OperationFailedError.Error() = %q, want the provider's message verbatim", err.Error())
 		}
 	})
 
@@ -273,21 +273,21 @@ func TestDeploy(t *testing.T) {
 		r, _ := spawnFake(t, ctx, "never-ready", Config{ReadyTimeout: 50 * time.Millisecond})
 
 		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
-		if !errors.Is(err, ErrDeploymentsUnavailable) {
-			t.Fatalf("Deploy() error = %v, want ErrDeploymentsUnavailable", err)
+		if !errors.Is(err, ErrClientUnavailable) {
+			t.Fatalf("Deploy() error = %v, want ErrClientUnavailable", err)
 		}
 	})
 }
 
-func TestDeployFailedError(t *testing.T) {
+func TestOperationFailedError(t *testing.T) {
 	t.Parallel()
 
 	t.Run("an empty message still reads as a failure", func(t *testing.T) {
 		t.Parallel()
 
-		err := (&DeployFailedError{}).Error()
+		err := (&OperationFailedError{}).Error()
 		if strings.TrimSpace(err) == "" {
-			t.Fatalf("DeployFailedError{}.Error() = %q, want a non-empty fallback", err)
+			t.Fatalf("OperationFailedError{}.Error() = %q, want a non-empty fallback", err)
 		}
 	})
 }
@@ -334,12 +334,12 @@ func TestBootstrap(t *testing.T) {
 
 		err := Stream(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
 
-		var failErr *DeployFailedError
+		var failErr *OperationFailedError
 		if !errors.As(err, &failErr) {
-			t.Fatalf("Bootstrap() error = %v (%T), want *DeployFailedError", err, err)
+			t.Fatalf("Bootstrap() error = %v (%T), want *OperationFailedError", err, err)
 		}
 		if failErr.Message != "simulated bootstrap failure" {
-			t.Errorf("DeployFailedError.Message = %q, want %q", failErr.Message, "simulated bootstrap failure")
+			t.Errorf("OperationFailedError.Message = %q, want %q", failErr.Message, "simulated bootstrap failure")
 		}
 	})
 }
@@ -370,8 +370,8 @@ func TestVars(t *testing.T) {
 		if vars, err := r.Vars(); err != nil || vars == nil {
 			t.Errorf("Vars() = %v, %v, want a client and no error", vars, err)
 		}
-		if client, err := r.Deployments(); err != nil || client == nil {
-			t.Errorf("Deployments() = %v, %v, want a client and no error", client, err)
+		if client, err := r.Client(); err != nil || client == nil {
+			t.Errorf("Client() = %v, %v, want a client and no error", client, err)
 		}
 	})
 }

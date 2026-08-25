@@ -244,7 +244,7 @@ func runDomainRelease(ctx context.Context, d session.Session, cwd string, opts d
 		if err := preflightPreview(ctx, d, runner, cfg, stdout); err != nil {
 			return err
 		}
-		client, err := runner.Deployments()
+		client, err := runner.Client()
 		if err != nil {
 			return err
 		}
@@ -360,7 +360,7 @@ func listGlobalPreviewDomain(ctx context.Context, d session.Session, runner *pro
 	if err := preflightPreview(ctx, d, runner, cfg, out); err != nil {
 		return nil, err
 	}
-	client, err := runner.Deployments()
+	client, err := runner.Client()
 	if err != nil {
 		return nil, err
 	}
@@ -465,7 +465,7 @@ func runDomainStatus(ctx context.Context, d session.Session, cwd string, opts do
 		if err := preflightTier(ctx, d, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
-		client, err := runner.Deployments()
+		client, err := runner.Client()
 		if err != nil {
 			return err
 		}

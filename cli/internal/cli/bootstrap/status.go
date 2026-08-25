@@ -58,7 +58,7 @@ func RunStatus(ctx context.Context, sess session.Session, cwd string, opts Statu
 
 	var statuses []*contractv1.BootstrapStatus
 	err = provider.Drive(ctx, cfg, stderr, stderr, func(runner *provider.Runner) error {
-		client, err := runner.Deployments()
+		client, err := runner.Client()
 		if err != nil {
 			return err
 		}

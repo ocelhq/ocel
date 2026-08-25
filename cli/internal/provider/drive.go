@@ -35,7 +35,7 @@ func Drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Wri
 		return err
 	}
 
-	sessionConfig, err := providerConfig(desc)
+	providerConfig, err := providerConfig(desc)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func Drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Wri
 		Stdout:          stdout,
 		Stderr:          stderr,
 		Env:             env,
-		Provider:        sessionConfig,
+		ProviderConfig:  providerConfig,
 		ProviderPackage: desc.Package,
 	})
 	if err != nil {

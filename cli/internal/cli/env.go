@@ -210,7 +210,7 @@ func envCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
 }
 
 func namedEnvironments(ctx context.Context, runner *provider.Runner, slug string) ([]string, error) {
-	client, err := runner.Deployments()
+	client, err := runner.Client()
 	if err != nil {
 		return nil, err
 	}

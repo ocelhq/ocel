@@ -64,7 +64,7 @@ func runRollback(ctx context.Context, d session.Session, cwd string, opts rollba
 			return err
 		}
 
-		client, err := runner.Deployments()
+		client, err := runner.Client()
 		if err != nil {
 			return err
 		}
