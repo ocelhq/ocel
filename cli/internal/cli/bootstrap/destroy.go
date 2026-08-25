@@ -34,6 +34,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 	bypass := requested == name
 	tty := deps.StdinIsTerminal(stdin)
 	switch {
+	case opts.Dry:
 	case bypass:
 		fmt.Fprintf(stderr, "%s=%s: removing the %s bootstrap without confirmation\n", changeplan.BypassEnv, name, name)
 	case requested == "" || opts.Yes:
@@ -43,7 +44,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		fmt.Fprintf(stderr, "%s is set to %q, not this bootstrap (%s); confirming interactively instead\n", changeplan.BypassEnv, requested, name)
 	}
 	skipConfirmation := opts.Yes || bypass
-	if !skipConfirmation && !tty {
+	if !opts.Dry && !skipConfirmation && !tty {
 		return fmt.Errorf("`%s` needs an interactive terminal to confirm the environment name; re-run with --yes, or set %s to %q, to remove it unattended",
 			destroyCommand(tier), changeplan.BypassEnv, name)
 	}
@@ -65,6 +66,10 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		}
 		changeplan.NewPrinter(stdout).Print(fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
 			"Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
+		if opts.Dry {
+			fmt.Fprintln(stdout, "Run without --dry to destroy.")
+			return nil
+		}
 		if !skipConfirmation {
 			subject := plan.GetSubject()
 			var typed string

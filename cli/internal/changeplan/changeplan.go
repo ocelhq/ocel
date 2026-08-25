@@ -83,7 +83,7 @@ func (p *Printer) Render(header string, plan *contractv1.ChangePlan) {
 
 func (p *Printer) writeGroups(groups []*contractv1.ChangeGroup) {
 	for i, group := range groups {
-		if i > 0 {
+		if i > 0 && (rendersChanges(groups[i-1]) || rendersChanges(group)) {
 			fmt.Fprintln(p.out)
 		}
 		fmt.Fprintln(p.out, p.GroupLine(group))
@@ -94,6 +94,10 @@ func (p *Printer) writeGroups(groups []*contractv1.ChangeGroup) {
 			fmt.Fprintln(p.out, line)
 		}
 	}
+}
+
+func rendersChanges(group *contractv1.ChangeGroup) bool {
+	return group.GetAction() != contractv1.Change_ACTION_KEEP && len(group.GetChanges()) > 0
 }
 
 func (p *Printer) GroupLine(group *contractv1.ChangeGroup) string {

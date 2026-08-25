@@ -77,6 +77,29 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		}
 	})
 
+	t.Run("--dry prints the plan, removes nothing, and needs no terminal", func(t *testing.T) {
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+
+		var stdout, stderr bytes.Buffer
+		opts := Options{Dry: true}
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "This will permanently remove the production bootstrap") {
+			t.Errorf("stdout = %q, want --dry to print the plan", out)
+		}
+		if !strings.Contains(out, "Run without --dry to destroy.") {
+			t.Errorf("stdout = %q, want --dry to say how to remove it", out)
+		}
+		if strings.Contains(out, "TEARDOWN") {
+			t.Errorf("stdout = %q, want --dry to remove nothing", out)
+		}
+		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
+			t.Errorf("provider saw %v, want the plan alone", got)
+		}
+	})
+
 	t.Run("without a terminal, a phrase it cannot ask for is a refusal", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := clitest.NewDeps()

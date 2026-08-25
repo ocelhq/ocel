@@ -112,9 +112,11 @@ func newDestroyCommand(deps cmddeps.Deps) *cobra.Command {
 		Short: "Tear down an environment with nothing deployed in it",
 		Long: "Tear down an environment with nothing deployed in it.\n\n" +
 			"Refuses while anything is still deployed there, and lists what has to go first. " +
-			"Irreversible: requires typing the environment name to confirm; --yes skips that.",
-		Example: "  $ ocel bootstrap destroy preview",
-		Args:    cobra.MaximumNArgs(1),
+			"Irreversible: requires typing the environment name to confirm; --yes skips that, " +
+			"and --dry prints what would go and stops.",
+		Example: "  $ ocel bootstrap destroy preview\n" +
+			"  $ ocel bootstrap destroy preview --dry",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tier, err := environmentArg(args)
 			if err != nil {
@@ -135,6 +137,7 @@ func newDestroyCommand(deps cmddeps.Deps) *cobra.Command {
 	}
 
 	cmd.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "Skip confirmation")
+	cmd.Flags().BoolVar(&opts.Dry, "dry", false, "Print what would be removed and stop, removing nothing")
 
 	return cmd
 }

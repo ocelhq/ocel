@@ -95,7 +95,6 @@ func TestRenderCountsAChildlessGroupAsOneItem(t *testing.T) {
 	want := `Proposed changes to the preview bootstrap:
 
 + ocel-preview-core  [core]
-
 – disable, then delete distribution E1PREVIEW (this one is slow)
 
 1 to create, 1 to delete.
@@ -142,7 +141,6 @@ func TestPrintSeparatesTheDoomedFromTheKept(t *testing.T) {
 	want := `This will permanently destroy production project "shop", fronted by the cloudflare edge:
 
 – edge stack shop
-
 – infra stack shop--infra  — databases and buckets, INCLUDING ALL DATA
 
 – all stored assets belonging to this project

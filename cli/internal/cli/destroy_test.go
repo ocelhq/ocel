@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 
@@ -101,7 +103,7 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDestroyPreviewProject(context.Background(), deps, root, true, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDestroyPreviewProject(context.Background(), deps, root, true, false, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -148,7 +150,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDestroyPreviewProject(context.Background(), deps, root, true, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDestroyPreviewProject(context.Background(), deps, root, true, false, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if out := stdout.String(); !strings.Contains(out, "DESTROY PROJECT project=test-app dns=route53") {
@@ -156,9 +158,34 @@ export default {
 		}
 	})
 
+	t.Run("--dry prints the plan, tears nothing down, and needs no terminal", func(t *testing.T) {
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDestroyPreviewProject(context.Background(), deps, root, true, true, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		out := stdout.String()
+		if !strings.Contains(out, `ENTIRE preview footprint of project "test-app"`) {
+			t.Errorf("stdout = %q, want --dry to print the plan", out)
+		}
+		if !strings.Contains(out, "Run without --dry to destroy.") {
+			t.Errorf("stdout = %q, want --dry to say how to destroy it", out)
+		}
+		if strings.Contains(out, "DESTROY PROJECT") {
+			t.Errorf("stdout = %q, want --dry to beat --yes and destroy nothing", out)
+		}
+		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
+			t.Errorf("provider saw %v, want the plan alone", got)
+		}
+	})
+
 	t.Run("without --yes it refuses without a terminal", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		err := runDestroyPreviewProject(context.Background(), newDeps(), t.TempDir(), false, &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyPreviewProject(context.Background(), newDeps(), t.TempDir(), false, false, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyPreviewProject without a TTY err = nil, want a refusal")
 		}
@@ -171,7 +198,7 @@ export default {
 func TestRunDestroy(t *testing.T) {
 	t.Run("it refuses without a terminal", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		err := runDestroyProduction(context.Background(), newDeps(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), newDeps(), t.TempDir(), false, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyProduction without a TTY err = nil, want a refusal")
 		}
@@ -188,7 +215,7 @@ func TestRunDestroy(t *testing.T) {
 		t.Setenv(changeplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
-		err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), deps, root, false, &stdout, &stderr, strings.NewReader(""))
 		if err != nil && strings.Contains(err.Error(), "interactive terminal") {
 			t.Errorf("err = %v, want the bypass to get past the TTY requirement", err)
 		}
@@ -210,7 +237,7 @@ func TestRunDestroy(t *testing.T) {
 		t.Setenv(changeplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDestroyProduction(context.Background(), deps, root, false, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -230,6 +257,31 @@ func TestRunDestroy(t *testing.T) {
 		}
 	})
 
+	t.Run("--dry prints the plan, destroys nothing, and needs no terminal", func(t *testing.T) {
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDestroyProduction(context.Background(), deps, root, true, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		out := stdout.String()
+		if !strings.Contains(out, `This will permanently destroy production project "test-app"`) {
+			t.Errorf("stdout = %q, want --dry to print the plan", out)
+		}
+		if !strings.Contains(out, "Run without --dry to destroy.") {
+			t.Errorf("stdout = %q, want --dry to say how to destroy it", out)
+		}
+		if strings.Contains(out, "DESTROY PROJECT") {
+			t.Errorf("stdout = %q, want --dry to destroy nothing", out)
+		}
+		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
+			t.Errorf("provider saw %v, want the plan alone", got)
+		}
+	})
+
 	t.Run("an empty plan destroys nothing and never asks for the project name", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := newDeps()
@@ -241,7 +293,7 @@ func TestRunDestroy(t *testing.T) {
 		t.Setenv(changeplan.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
-		if err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runDestroyProduction(context.Background(), deps, root, false, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -264,7 +316,7 @@ func TestRunDestroy(t *testing.T) {
 		t.Setenv(changeplan.BypassEnv, "1")
 
 		var stdout, stderr bytes.Buffer
-		err := runDestroyProduction(context.Background(), deps, root, &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), deps, root, false, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDestroyProduction err = nil, want an ambient %s=1 refused; stdout=%s", changeplan.BypassEnv, stdout.String())
 		}
@@ -276,7 +328,7 @@ func TestRunDestroy(t *testing.T) {
 	t.Run("an unset bypass is not a bypass", func(t *testing.T) {
 		t.Setenv(changeplan.BypassEnv, "")
 		var stdout, stderr bytes.Buffer
-		err := runDestroyProduction(context.Background(), newDeps(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), newDeps(), t.TempDir(), false, &stdout, &stderr, strings.NewReader(""))
 		if err == nil || !strings.Contains(err.Error(), "interactive terminal") {
 			t.Errorf("err = %v, want the no-TTY refusal", err)
 		}
@@ -296,6 +348,24 @@ func TestDestroyNeedsAClass(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output = %q, want the help to list %q", out.String(), want)
 		}
+	}
+}
+
+func TestDestroyNamesAClassItDoesNotKnow(t *testing.T) {
+	var out bytes.Buffer
+	destroyCmd.SetOut(&out)
+	destroyCmd.SetErr(&out)
+	t.Cleanup(func() { destroyCmd.SetOut(nil); destroyCmd.SetErr(nil) })
+
+	err := destroyCmd.RunE(destroyCmd, []string{"foo"})
+	if err == nil {
+		t.Fatal("destroy foo err = nil, want a class it does not know to be a failure")
+	}
+	if err.Error() != `the class to destroy is production or preview, not "foo"` {
+		t.Errorf("err = %v, want it to name the value typed", err)
+	}
+	if out.Len() != 0 {
+		t.Errorf("output = %q, want no help dump when the class is named but wrong", out.String())
 	}
 }
 
@@ -321,5 +391,10 @@ func TestDestroyClassCommands(t *testing.T) {
 	preview, _, _ := destroyCmd.Find([]string{"preview"})
 	if preview.Flags().Lookup("yes") == nil {
 		t.Error("destroy preview carries no --yes")
+	}
+	for _, cmd := range []*cobra.Command{production, preview} {
+		if cmd.Flags().Lookup("dry") == nil {
+			t.Errorf("destroy %s carries no --dry; every destructive command previews", cmd.Name())
+		}
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"charm.land/huh/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/fatih/color"
 
 	"github.com/ocelhq/ocel/cli/internal/deployui"
@@ -21,16 +20,22 @@ const (
 	noFeatures  = "none"
 )
 
-var needsStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffb86c"))
+func tint(stdout io.Writer, attrs ...color.Attribute) *color.Color {
+	c := color.New(attrs...)
+	if deployui.IsTerminal(stdout) && !color.NoColor {
+		c.EnableColor()
+	} else {
+		c.DisableColor()
+	}
+	return c
+}
 
 func selectedMark(stdout io.Writer) string {
-	mark := color.New(color.FgGreen)
-	if deployui.IsTerminal(stdout) && !color.NoColor {
-		mark.EnableColor()
-	} else {
-		mark.DisableColor()
-	}
-	return mark.Sprint("✓")
+	return tint(stdout, color.FgGreen).Sprint("✓")
+}
+
+func needsNote(stdout io.Writer, note string) string {
+	return tint(stdout, color.Faint).Sprint(note)
 }
 
 func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.Feature, interactive bool, stdout io.Writer) ([]string, bool, error) {
@@ -92,7 +97,7 @@ func printApplied(stdout io.Writer, catalogue []*contractv1.Feature, applied, ch
 			parts = append(parts, name)
 			continue
 		}
-		parts = append(parts, name+" "+needsStyle.Render("(needed by "+strings.Join(directDependents(catalogue, name, applied), ", ")+")"))
+		parts = append(parts, name+" "+needsNote(stdout, "(needed by "+strings.Join(directDependents(catalogue, name, applied), ", ")+")"))
 	}
 	fmt.Fprintf(stdout, "%s Selected %s\n", selectedMark(stdout), strings.Join(parts, ", "))
 }
@@ -107,7 +112,7 @@ func printCatalogue(stdout io.Writer, catalogue []*contractv1.Feature) {
 	for _, f := range catalogue {
 		fmt.Fprintf(stdout, "  %-*s   %s", width, f.GetName(), f.GetSummary())
 		if deps := f.GetDependsOn(); len(deps) > 0 {
-			fmt.Fprintf(stdout, "  %s", needsStyle.Render("(needs "+strings.Join(deps, ", ")+")"))
+			fmt.Fprintf(stdout, "  %s", needsNote(stdout, "(needs "+strings.Join(deps, ", ")+")"))
 		}
 		fmt.Fprintln(stdout)
 	}

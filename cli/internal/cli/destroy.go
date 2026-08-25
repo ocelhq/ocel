@@ -29,11 +29,15 @@ var destroyCmd = &cobra.Command{
 		"the edge stack (edge workers, custom-domain binding, deployments store), the infra stack " +
 		"(databases and buckets, including all their data), and every app-deploy stack; `preview` " +
 		"takes the whole preview footprint and leaves the account-level preview bootstrap intact.\n\n" +
-		"Either is irreversible and requires typing the project name to confirm.\n\n" +
+		"Either is irreversible and requires typing the project name to confirm; --dry prints " +
+		"what would go and stops.\n\n" +
 		"An automated caller that must tear its own project down unattended can set " +
 		changeplan.BypassEnv + " to the project name — and only that name — to skip both gates. " +
 		"Any other value is not a bypass.",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) > 0 {
+			return fmt.Errorf("the class to destroy is production or preview, not %q", args[0])
+		}
 		_ = cmd.Help()
 		return errors.New("destroy acts on one class at a time: production or preview")
 	},
@@ -43,7 +47,10 @@ var destroyProductionCmd = &cobra.Command{
 	Use:     "production",
 	Aliases: []string{"prod"},
 	Short:   "Permanently destroy this project's entire production deployment",
-	Args:    cobra.NoArgs,
+	Long: "Permanently destroy this project's entire production deployment.\n\n" +
+		"Every run prints what it would destroy before asking for the project name; --dry prints " +
+		"it and stops.",
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -53,18 +60,24 @@ var destroyProductionCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runDestroyProduction(ctx, newDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDestroyProduction(ctx, newDeps(), cwd, destroyProductionDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-var destroyYes bool
+var (
+	destroyYes           bool
+	destroyProductionDry bool
+	destroyPreviewDry    bool
+)
 
 func init() {
 	previewCmd := &cobra.Command{
 		Use:   "preview",
 		Short: "Permanently destroy this project's entire preview footprint",
 		Long: "Permanently destroy this project's entire preview footprint: every preview, all its " +
-			"data, assets and variables. The account-level preview bootstrap is left intact.",
+			"data, assets and variables. The account-level preview bootstrap is left intact.\n\n" +
+			"Every run prints what it would destroy before asking for the project name; --dry prints " +
+			"it and stops.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
@@ -75,19 +88,21 @@ func init() {
 			ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
 
-			return runDestroyPreviewProject(ctx, newDeps(), cwd, destroyYes, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDestroyPreviewProject(ctx, newDeps(), cwd, destroyYes, destroyPreviewDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	previewCmd.Flags().BoolVarP(&destroyYes, "yes", "y", false, "Destroy the whole preview footprint with no confirmation and no terminal, for CI. Skips both the typed-name confirmation and the interactive-terminal requirement")
+	previewCmd.Flags().BoolVar(&destroyPreviewDry, "dry", false, "Print what would be destroyed and stop, destroying nothing")
+	destroyProductionCmd.Flags().BoolVar(&destroyProductionDry, "dry", false, "Print what would be destroyed and stop, destroying nothing")
 
 	destroyCmd.AddCommand(destroyProductionCmd, previewCmd)
 	rootCmd.AddCommand(destroyCmd)
 }
 
-func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, dry bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	requested := changeplan.BypassRequest()
 	tty := isReaderTTY(stdin)
-	if requested == "" && !tty {
+	if !dry && requested == "" && !tty {
 		return fmt.Errorf("`ocel destroy production` needs an interactive terminal to confirm the project name; to destroy unattended, set %s to the project name", changeplan.BypassEnv)
 	}
 
@@ -96,8 +111,9 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, st
 		return err
 	}
 
-	bypass := requested == cfg.Slug
+	bypass := !dry && requested == cfg.Slug
 	switch {
+	case dry:
 	case bypass:
 		fmt.Fprintf(stderr, "%s=%s: destroying production without confirmation\n", changeplan.BypassEnv, cfg.Slug)
 	case requested != "" && !tty:
@@ -131,6 +147,10 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, st
 		}
 
 		printDestroyPlan(stdout, cfg.Slug, false, plan)
+		if dry {
+			fmt.Fprintln(stdout, "Run without --dry to destroy.")
+			return nil
+		}
 		if !bypass {
 			confirmed, err := prompt.New(stdout, stdin).Phrase(ctx, "project name", plan.GetSubject())
 			if err != nil {
@@ -154,8 +174,8 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, st
 	})
 }
 
-func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
-	if !yes && !isReaderTTY(stdin) {
+func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout, stderr io.Writer, stdin io.Reader) error {
+	if !dry && !yes && !isReaderTTY(stdin) {
 		return errors.New("`ocel destroy preview` needs an interactive terminal to confirm the project name; re-run with --yes to tear the preview footprint down non-interactively")
 	}
 
@@ -190,6 +210,10 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 		}
 
 		printDestroyPlan(stdout, cfg.Slug, true, plan)
+		if dry {
+			fmt.Fprintln(stdout, "Run without --dry to destroy.")
+			return nil
+		}
 
 		if !yes {
 			confirmed, err := prompt.New(stdout, stdin).Phrase(ctx, "project name", plan.GetSubject())
