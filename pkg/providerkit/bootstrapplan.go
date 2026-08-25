@@ -1,6 +1,7 @@
 package providerkit
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -142,7 +143,7 @@ func Vendored(vendor Vendor, groups []ChangeGroup) []ChangeGroup {
 	return named
 }
 
-func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) ChangeGroup {
+func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) (ChangeGroup, error) {
 	group := ChangeGroup{
 		Kind:    EdgeGroupKind,
 		Name:    string(kind) + "/edge",
@@ -150,6 +151,11 @@ func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) Change
 		Changes: make([]Change, 0, len(planned)),
 	}
 	for _, change := range planned {
+		if !edge.ValidPlanAction(change.Action) {
+			return ChangeGroup{}, fmt.Errorf(
+				"the %s edge plans %q on %s %q, and %q is not an action a plan can render",
+				kind, change.Action, change.Kind, change.Name, change.Action)
+		}
 		group.Changes = append(group.Changes, Change{
 			Kind:   change.Kind,
 			Name:   change.Name,
@@ -158,7 +164,7 @@ func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) Change
 		})
 	}
 	group.Action, group.Reason = rollUp(group.Changes)
-	return group
+	return group, nil
 }
 
 func edgeAction(action edge.PlanAction) ChangeAction {
@@ -167,14 +173,15 @@ func edgeAction(action edge.PlanAction) ChangeAction {
 		return ActionCreate
 	case edge.PlanUpdate:
 		return ActionUpdate
-	case edge.PlanKeep:
-		return ActionKeep
 	default:
-		return ""
+		return ActionKeep
 	}
 }
 
 func rollUp(changes []Change) (ChangeAction, string) {
+	if len(changes) == 0 {
+		return ActionUpdate, DetailUnavailable
+	}
 	creates, keeps := 0, 0
 	for _, change := range changes {
 		switch change.Action {

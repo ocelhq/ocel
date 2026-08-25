@@ -46,6 +46,15 @@ func settingsProvider(t *testing.T, status int, body string) *provider {
 	)}
 }
 
+func readDeployedClasses(t *testing.T, p *provider, script string) ([]string, error) {
+	t.Helper()
+	settings, err := p.scriptSettings(t.Context(), "acct", script)
+	if err != nil {
+		return nil, err
+	}
+	return deployedClasses(settings), nil
+}
+
 func TestDeployedClasses(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
@@ -80,9 +89,9 @@ func TestDeployedClasses(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			classes, err := settingsProvider(t, tc.status, tc.body).deployedClasses(t.Context(), tc.script)
+			classes, err := readDeployedClasses(t, settingsProvider(t, tc.status, tc.body), tc.script)
 			if err != nil {
-				t.Fatalf("deployedClasses: %v", err)
+				t.Fatalf("read settings: %v", err)
 			}
 			if !reflect.DeepEqual(classes, tc.want) {
 				t.Errorf("deployedClasses = %v, want %v", classes, tc.want)
@@ -95,10 +104,9 @@ func TestDurableObjectMigrationAgainstLiveClasses(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
 	t.Run("a class the script already carries is not redeclared", func(t *testing.T) {
-		classes, err := settingsProvider(t, http.StatusOK, liveDeploymentsStoreSettings).
-			deployedClasses(t.Context(), "ocel-deployments-store-preview")
+		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, liveDeploymentsStoreSettings), "ocel-deployments-store-preview")
 		if err != nil {
-			t.Fatalf("deployedClasses: %v", err)
+			t.Fatalf("read settings: %v", err)
 		}
 
 		meta := doMetadataFromMultipart(t, testStoreWorker(), deploymentsStoreWorker, classes)
@@ -109,10 +117,9 @@ func TestDurableObjectMigrationAgainstLiveClasses(t *testing.T) {
 	})
 
 	t.Run("a class another script owns is still created locally", func(t *testing.T) {
-		classes, err := settingsProvider(t, http.StatusOK, foreignClassSettings).
-			deployedClasses(t.Context(), "ocel-isr-writer-preview")
+		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, foreignClassSettings), "ocel-isr-writer-preview")
 		if err != nil {
-			t.Fatalf("deployedClasses: %v", err)
+			t.Fatalf("read settings: %v", err)
 		}
 
 		meta := doMetadataFromMultipart(t, testStoreWorker(), isrWriterWorker, classes)

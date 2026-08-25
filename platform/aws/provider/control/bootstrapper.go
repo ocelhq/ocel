@@ -111,7 +111,10 @@ func (b Bootstrapper) edgeGroup(ctx context.Context, req providerkit.BootstrapRe
 	if dropping(feature, req) {
 		return severedEdge(b.Edge.Kind(), feature, planned), nil
 	}
-	group := providerkit.EdgeGroup(b.Edge.Kind(), feature, planned)
+	group, err := providerkit.EdgeGroup(b.Edge.Kind(), feature, planned)
+	if err != nil {
+		return nil, err
+	}
 	return &group, nil
 }
 

@@ -76,6 +76,9 @@ func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootst
 	if err := sameClass(class, req); err != nil {
 		return nil, err
 	}
+	if err := sameEdge(req); err != nil {
+		return nil, err
+	}
 	provider, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
@@ -128,6 +131,26 @@ func sameClass(class Class, req *contractv1.PlanBootstrapRequest) error {
 	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 		"this asks what would change in the %s bootstrap while carrying an intent aimed at the %s one; a plan answers for one bootstrap",
 		class, intended))
+}
+
+func sameEdge(req *contractv1.PlanBootstrapRequest) error {
+	if req.GetIntent() == nil {
+		return nil
+	}
+	asked, intended := req.GetEdge().GetKind(), req.GetIntent().GetEdge().GetKind()
+	if asked == intended {
+		return nil
+	}
+	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+		"this asks what would change behind the %s edge while carrying an intent aimed at the %s one; a plan answers for one edge",
+		namedEdge(asked), namedEdge(intended)))
+}
+
+func namedEdge(kind string) string {
+	if kind == "" {
+		return "default"
+	}
+	return kind
 }
 
 func ChangePlanProto(plan BootstrapPlan, subject, kind string) *contractv1.ChangePlan {

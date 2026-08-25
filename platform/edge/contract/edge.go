@@ -39,12 +39,7 @@ func Supports(e Edge, need Need) bool {
 }
 
 func ValidNeed(need Need) bool {
-	for _, n := range AllNeeds() {
-		if n == need {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(AllNeeds(), need)
 }
 
 type FlipBound struct {

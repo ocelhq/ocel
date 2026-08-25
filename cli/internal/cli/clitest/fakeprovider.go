@@ -31,6 +31,8 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+const reasonCurrent = "already current"
+
 const FakeProviderEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER"
 
 const fakeProviderSockEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_SOCK"
@@ -398,7 +400,7 @@ func fakeChangePlan(req *contractv1.PlanBootstrapRequest) *contractv1.ChangePlan
 	}
 	switch shape {
 	case "keep":
-		core.Action, core.Reason = contractv1.Change_ACTION_KEEP, "already current"
+		core.Action, core.Reason = contractv1.Change_ACTION_KEEP, reasonCurrent
 		return plan
 	case "mixed":
 	default:
@@ -436,7 +438,7 @@ func fakeChangePlan(req *contractv1.PlanBootstrapRequest) *contractv1.ChangePlan
 			Name:    "aws/ocel-" + class + "-secrets",
 			Feature: "secrets",
 			Action:  contractv1.Change_ACTION_KEEP,
-			Reason:  "already current",
+			Reason:  reasonCurrent,
 		},
 	)
 	if front := fakeEdgeGroup(req, class); front != nil {

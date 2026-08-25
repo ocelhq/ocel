@@ -44,6 +44,7 @@ type cfMock struct {
 	deletedCustomDomains []string
 	putScripts           []string
 	putBodies            map[string]putBody
+	scriptSettings       map[string]map[string]any
 	scriptSecrets        map[string][]string
 	subdomainOn          map[string]bool
 	createdBuckets       []string
@@ -158,7 +159,20 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 			m.scriptSecrets = map[string][]string{}
 		}
 		m.scriptSecrets[name] = uploadedSecretNames(m.putBodies[name], m.scriptSecrets[name])
+		if m.scriptSettings == nil {
+			m.scriptSettings = map[string]map[string]any{}
+		}
+		m.scriptSettings[name] = settledSettings(m.putBodies[name])
 		writeResult(w, map[string]any{"id": name})
+	})
+
+	mux.HandleFunc("GET /accounts/acct/workers/scripts/{name}/settings", func(w http.ResponseWriter, r *http.Request) {
+		settings, ok := m.scriptSettings[r.PathValue("name")]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writeResult(w, settings)
 	})
 
 	mux.HandleFunc("GET /accounts/acct/workers/scripts/{name}/content/v2", func(w http.ResponseWriter, r *http.Request) {
@@ -318,7 +332,7 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func uploadedSecretNames(put putBody, held []string) []string {
+func putMetadata(put putBody) map[string]any {
 	_, params, err := mime.ParseMediaType(put.contentType)
 	if err != nil {
 		return nil
@@ -337,17 +351,39 @@ func uploadedSecretNames(put putBody, held []string) []string {
 		if err := json.Unmarshal(data, &meta); err != nil {
 			return nil
 		}
-		var names []string
-		for _, binding := range bindingsByType(meta, "secret_text") {
-			names = append(names, fmt.Sprint(binding["name"]))
-		}
-		for _, binding := range bindingsByType(meta, inheritedBindingType) {
-			if name := fmt.Sprint(binding["name"]); slices.Contains(held, name) {
-				names = append(names, name)
-			}
-		}
-		return names
+		return meta
 	}
+}
+
+func uploadedSecretNames(put putBody, held []string) []string {
+	meta := putMetadata(put)
+	if meta == nil {
+		return nil
+	}
+	var names []string
+	for _, binding := range bindingsByType(meta, "secret_text") {
+		names = append(names, fmt.Sprint(binding["name"]))
+	}
+	for _, binding := range bindingsByType(meta, inheritedBindingType) {
+		if name := fmt.Sprint(binding["name"]); slices.Contains(held, name) {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func settledSettings(put putBody) map[string]any {
+	meta := putMetadata(put)
+	if meta == nil {
+		return map[string]any{}
+	}
+	settings := map[string]any{"bindings": []any{}}
+	for _, key := range []string{"compatibility_date", "compatibility_flags", "bindings"} {
+		if value, ok := meta[key]; ok {
+			settings[key] = value
+		}
+	}
+	return settings
 }
 
 func matchingRecords(records []map[string]any, query url.Values) []map[string]any {

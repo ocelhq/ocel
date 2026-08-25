@@ -2,6 +2,7 @@ package changeplan_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
@@ -193,6 +194,27 @@ func TestRenderKeepsAnEdgeThatIsAlreadyCurrent(t *testing.T) {
 	}
 	if !changeplan.AllKeep(plan) {
 		t.Error("AllKeep() = false for a plan whose stacks and edge are both current")
+	}
+}
+
+func TestRenderLeavesAnEdgeWithNoFeatureUntagged(t *testing.T) {
+	t.Parallel()
+
+	plan := &contractv1.ChangePlan{Groups: []*contractv1.ChangeGroup{
+		{
+			Kind:   "edge",
+			Name:   "cloudflare/edge",
+			Action: contractv1.Change_ACTION_CREATE,
+			Changes: []*contractv1.Change{
+				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: contractv1.Change_ACTION_CREATE},
+			},
+		},
+	}}
+	var out bytes.Buffer
+	changeplan.NewPrinter(&out).Render("Proposed changes to the production bootstrap", plan)
+
+	if strings.Contains(out.String(), "[core]") {
+		t.Errorf("Render() =\n%s\nwant an edge belonging to no feature not tagged as the core stack", out.String())
 	}
 }
 

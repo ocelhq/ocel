@@ -70,6 +70,14 @@ func (p Plan) Command(tier environmentv1.Tier) string {
 	return cmd
 }
 
+func (p Plan) Request(tier environmentv1.Tier, front *contractv1.EdgeSelection) *contractv1.BootstrapRequest {
+	return &contractv1.BootstrapRequest{
+		Tier:     tier,
+		Features: p.Features,
+		Edge:     front,
+	}
+}
+
 func (p Plan) Refusal(tier environmentv1.Tier) error {
 	if len(p.Missing) == 0 {
 		return nil
@@ -89,7 +97,7 @@ func (p Plan) Advise(tier environmentv1.Tier, out io.Writer) error {
 	return nil
 }
 
-func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, interactive bool, out io.Writer) error {
+func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer) error {
 	plan := PlanFor(status)
 	if plan.Empty() {
 		return nil
@@ -113,11 +121,7 @@ func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.Boot
 	if errors.Is(err, huh.ErrUserAborted) || !proceed {
 		return plan.Advise(tier, out)
 	}
-	req := &contractv1.BootstrapRequest{
-		Tier:     tier,
-		Features: plan.Features,
-	}
-	return provider.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap,
+	return provider.Stream(ctx, runner, "Bootstrap", plan.Request(tier, front), contractv1connect.ProviderServiceClient.Bootstrap,
 		func(ev *progressv1.OperationEvent) { reportEvent(out, ev) })
 }
 
