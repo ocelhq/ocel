@@ -535,11 +535,11 @@ func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
 	return status
 }
 
-func (s *deployFakeProviderServer) GetCredentialPolicy(ctx context.Context, req *contractv1.CredentialPolicyRequest) (*contractv1.CredentialPolicyResponse, error) {
+func (s *deployFakeProviderServer) GetCredentialPermissions(ctx context.Context, req *contractv1.CredentialPermissionsRequest) (*contractv1.CredentialPermissionsResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	return &contractv1.CredentialPolicyResponse{
+	return &contractv1.CredentialPermissionsResponse{
 		Document: fmt.Sprintf(`{"Version":"2012-10-17","Statement":[{"Sid":%q}]}`, req.GetTier().String()),
 	}, nil
 }

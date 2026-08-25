@@ -602,11 +602,11 @@ func bootstrapTier() []grantStatement {
 	return slices.Concat(bootstrapAccess(), appProvisioning(), bootstrapProvisioning(), edgePrincipal())
 }
 
-func DeployCredentialPolicy() (string, error) {
+func DeployCredentialPermissions() (string, error) {
 	return credentialPolicy("deploy", deployTier())
 }
 
-func BootstrapCredentialPolicy() (string, error) {
+func BootstrapCredentialPermissions() (string, error) {
 	return credentialPolicy("bootstrap", bootstrapTier())
 }
 

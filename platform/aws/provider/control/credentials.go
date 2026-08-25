@@ -48,15 +48,15 @@ func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 	}, nil
 }
 
-func (c Credentials) Policy(tier providerkit.CredentialTier) (string, error) {
+func (c Credentials) Permissions(tier providerkit.CredentialTier) (string, error) {
 	switch tier {
 	case providerkit.TierBootstrap:
-		return bootstrap.BootstrapCredentialPolicy()
+		return bootstrap.BootstrapCredentialPermissions()
 	case providerkit.TierDeploy:
-		return bootstrap.DeployCredentialPolicy()
+		return bootstrap.DeployCredentialPermissions()
 	default:
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"a credential policy is rendered for the bootstrap tier or the deploy tier; this request named neither")
+			"credential permissions are rendered for the bootstrap tier or the deploy tier; this request named neither")
 	}
 }
 

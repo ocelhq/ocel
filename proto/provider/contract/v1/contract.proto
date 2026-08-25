@@ -19,7 +19,7 @@ service ProviderService {
 
     rpc PlanBootstrap(PlanBootstrapRequest) returns (PlanBootstrapResponse);
 
-    rpc GetCredentialPolicy(CredentialPolicyRequest) returns (CredentialPolicyResponse);
+    rpc GetCredentialPermissions(CredentialPermissionsRequest) returns (CredentialPermissionsResponse);
 
     rpc RemoveBootstrap(BootstrapScope) returns (stream common.progress.v1.OperationEvent);
 
@@ -303,11 +303,11 @@ enum CredentialTier {
   CREDENTIAL_TIER_DEPLOY = 2;
 }
 
-message CredentialPolicyRequest {
+message CredentialPermissionsRequest {
   CredentialTier tier = 1 [(buf.validate.field).enum.defined_only = true];
 }
 
-message CredentialPolicyResponse {
+message CredentialPermissionsResponse {
   string document = 1;
 }
 

@@ -505,10 +505,10 @@ func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
 		}
 	})
 
-	t.Run("a policy is rendered for either tier", func(t *testing.T) {
+	t.Run("permissions are rendered for either tier", func(t *testing.T) {
 		for _, tier := range []providerkit.CredentialTier{providerkit.TierBootstrap, providerkit.TierDeploy} {
-			if _, err := credentials.Policy(tier); err != nil {
-				t.Errorf("Policy(%s) = %v, want the permissions that tier needs", tier, err)
+			if _, err := credentials.Permissions(tier); err != nil {
+				t.Errorf("Permissions(%s) = %v, want the permissions that tier needs", tier, err)
 			}
 		}
 	})

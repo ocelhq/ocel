@@ -354,6 +354,6 @@ func (c *Credentials) Whoami(context.Context) (providerkit.Identity, error) {
 	}, nil
 }
 
-func (c *Credentials) Policy(tier providerkit.CredentialTier) (string, error) {
-	return "fake policy for " + string(tier), nil
+func (c *Credentials) Permissions(tier providerkit.CredentialTier) (string, error) {
+	return "fake permissions for " + string(tier), nil
 }

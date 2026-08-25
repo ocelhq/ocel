@@ -1851,27 +1851,27 @@ func (x *BootstrapStatus) GetDowngrade() bool {
 	return false
 }
 
-type CredentialPolicyRequest struct {
+type CredentialPermissionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tier          CredentialTier         `protobuf:"varint,1,opt,name=tier,proto3,enum=provider.contract.v1.CredentialTier" json:"tier,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CredentialPolicyRequest) Reset() {
-	*x = CredentialPolicyRequest{}
+func (x *CredentialPermissionsRequest) Reset() {
+	*x = CredentialPermissionsRequest{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CredentialPolicyRequest) String() string {
+func (x *CredentialPermissionsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CredentialPolicyRequest) ProtoMessage() {}
+func (*CredentialPermissionsRequest) ProtoMessage() {}
 
-func (x *CredentialPolicyRequest) ProtoReflect() protoreflect.Message {
+func (x *CredentialPermissionsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1883,39 +1883,39 @@ func (x *CredentialPolicyRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CredentialPolicyRequest.ProtoReflect.Descriptor instead.
-func (*CredentialPolicyRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use CredentialPermissionsRequest.ProtoReflect.Descriptor instead.
+func (*CredentialPermissionsRequest) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{23}
 }
 
-func (x *CredentialPolicyRequest) GetTier() CredentialTier {
+func (x *CredentialPermissionsRequest) GetTier() CredentialTier {
 	if x != nil {
 		return x.Tier
 	}
 	return CredentialTier_CREDENTIAL_TIER_UNSPECIFIED
 }
 
-type CredentialPolicyResponse struct {
+type CredentialPermissionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Document      string                 `protobuf:"bytes,1,opt,name=document,proto3" json:"document,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CredentialPolicyResponse) Reset() {
-	*x = CredentialPolicyResponse{}
+func (x *CredentialPermissionsResponse) Reset() {
+	*x = CredentialPermissionsResponse{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CredentialPolicyResponse) String() string {
+func (x *CredentialPermissionsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CredentialPolicyResponse) ProtoMessage() {}
+func (*CredentialPermissionsResponse) ProtoMessage() {}
 
-func (x *CredentialPolicyResponse) ProtoReflect() protoreflect.Message {
+func (x *CredentialPermissionsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1927,12 +1927,12 @@ func (x *CredentialPolicyResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CredentialPolicyResponse.ProtoReflect.Descriptor instead.
-func (*CredentialPolicyResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use CredentialPermissionsResponse.ProtoReflect.Descriptor instead.
+func (*CredentialPermissionsResponse) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *CredentialPolicyResponse) GetDocument() string {
+func (x *CredentialPermissionsResponse) GetDocument() string {
 	if x != nil {
 		return x.Document
 	}
@@ -3748,10 +3748,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\tauto_heal\x18\x05 \x01(\bR\bautoHeal\x12<\n" +
 	"\x06stacks\x18\x06 \x03(\v2$.provider.contract.v1.BootstrapStackR\x06stacks\x12\x16\n" +
 	"\x06writer\x18\a \x01(\tR\x06writer\x12\x1c\n" +
-	"\tdowngrade\x18\b \x01(\bR\tdowngrade\"]\n" +
-	"\x17CredentialPolicyRequest\x12B\n" +
-	"\x04tier\x18\x01 \x01(\x0e2$.provider.contract.v1.CredentialTierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\"6\n" +
-	"\x18CredentialPolicyResponse\x12\x1a\n" +
+	"\tdowngrade\x18\b \x01(\bR\tdowngrade\"b\n" +
+	"\x1cCredentialPermissionsRequest\x12B\n" +
+	"\x04tier\x18\x01 \x01(\x0e2$.provider.contract.v1.CredentialTierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\";\n" +
+	"\x1dCredentialPermissionsResponse\x12\x1a\n" +
 	"\bdocument\x18\x01 \x01(\tR\bdocument\"\xa6\x01\n" +
 	"\aFeature\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
@@ -3907,13 +3907,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0eCredentialTier\x12\x1f\n" +
 	"\x1bCREDENTIAL_TIER_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19CREDENTIAL_TIER_BOOTSTRAP\x10\x01\x12\x1a\n" +
-	"\x16CREDENTIAL_TIER_DEPLOY\x10\x022\xd3\x11\n" +
+	"\x16CREDENTIAL_TIER_DEPLOY\x10\x022\xe3\x11\n" +
 	"\x0fProviderService\x12\\\n" +
 	"\tConfigure\x12&.provider.contract.v1.ConfigureRequest\x1a'.provider.contract.v1.ConfigureResponse\x12S\n" +
 	"\x06Deploy\x12#.provider.contract.v1.DeployRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12Y\n" +
 	"\tBootstrap\x12&.provider.contract.v1.BootstrapRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12h\n" +
-	"\rPlanBootstrap\x12*.provider.contract.v1.PlanBootstrapRequest\x1a+.provider.contract.v1.PlanBootstrapResponse\x12t\n" +
-	"\x13GetCredentialPolicy\x12-.provider.contract.v1.CredentialPolicyRequest\x1a..provider.contract.v1.CredentialPolicyResponse\x12]\n" +
+	"\rPlanBootstrap\x12*.provider.contract.v1.PlanBootstrapRequest\x1a+.provider.contract.v1.PlanBootstrapResponse\x12\x83\x01\n" +
+	"\x18GetCredentialPermissions\x122.provider.contract.v1.CredentialPermissionsRequest\x1a3.provider.contract.v1.CredentialPermissionsResponse\x12]\n" +
 	"\x0fRemoveBootstrap\x12$.provider.contract.v1.BootstrapScope\x1a\".common.progress.v1.OperationEvent0\x01\x12]\n" +
 	"\x13PlanRemoveBootstrap\x12$.provider.contract.v1.BootstrapScope\x1a .provider.contract.v1.ChangePlan\x12i\n" +
 	"\x11RemoveEnvironment\x12..provider.contract.v1.RemoveEnvironmentRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12[\n" +
@@ -3947,71 +3947,71 @@ func file_provider_contract_v1_contract_proto_rawDescGZIP() []byte {
 var file_provider_contract_v1_contract_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_provider_contract_v1_contract_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
 var file_provider_contract_v1_contract_proto_goTypes = []any{
-	(CredentialTier)(0),                  // 0: provider.contract.v1.CredentialTier
-	(Change_Action)(0),                   // 1: provider.contract.v1.Change.Action
-	(DomainClaim_Status)(0),              // 2: provider.contract.v1.DomainClaim.Status
-	(*ProviderConfig)(nil),               // 3: provider.contract.v1.ProviderConfig
-	(*ConfigureRequest)(nil),             // 4: provider.contract.v1.ConfigureRequest
-	(*ConfigureResponse)(nil),            // 5: provider.contract.v1.ConfigureResponse
-	(*UsePreviewWildcardRequest)(nil),    // 6: provider.contract.v1.UsePreviewWildcardRequest
-	(*PreviewWildcardRequest)(nil),       // 7: provider.contract.v1.PreviewWildcardRequest
-	(*GetPreviewWildcardResponse)(nil),   // 8: provider.contract.v1.GetPreviewWildcardResponse
-	(*HostnameRequest)(nil),              // 9: provider.contract.v1.HostnameRequest
-	(*GetHostnameStatusResponse)(nil),    // 10: provider.contract.v1.GetHostnameStatusResponse
-	(*CertificateState)(nil),             // 11: provider.contract.v1.CertificateState
-	(*ProductionHostname)(nil),           // 12: provider.contract.v1.ProductionHostname
-	(*Manifest)(nil),                     // 13: provider.contract.v1.Manifest
-	(*ManifestUsage)(nil),                // 14: provider.contract.v1.ManifestUsage
-	(*TierDomains)(nil),                  // 15: provider.contract.v1.TierDomains
-	(*ManifestApp)(nil),                  // 16: provider.contract.v1.ManifestApp
-	(*ManifestVariable)(nil),             // 17: provider.contract.v1.ManifestVariable
-	(*ManifestFunction)(nil),             // 18: provider.contract.v1.ManifestFunction
-	(*ManifestResource)(nil),             // 19: provider.contract.v1.ManifestResource
-	(*DeployRequest)(nil),                // 20: provider.contract.v1.DeployRequest
-	(*BootstrapRequest)(nil),             // 21: provider.contract.v1.BootstrapRequest
-	(*PlanBootstrapRequest)(nil),         // 22: provider.contract.v1.PlanBootstrapRequest
-	(*PlanBootstrapResponse)(nil),        // 23: provider.contract.v1.PlanBootstrapResponse
-	(*BootstrapStack)(nil),               // 24: provider.contract.v1.BootstrapStack
-	(*BootstrapStatus)(nil),              // 25: provider.contract.v1.BootstrapStatus
-	(*CredentialPolicyRequest)(nil),      // 26: provider.contract.v1.CredentialPolicyRequest
-	(*CredentialPolicyResponse)(nil),     // 27: provider.contract.v1.CredentialPolicyResponse
-	(*Feature)(nil),                      // 28: provider.contract.v1.Feature
-	(*Dns)(nil),                          // 29: provider.contract.v1.Dns
-	(*EdgeSelection)(nil),                // 30: provider.contract.v1.EdgeSelection
-	(*BootstrapScope)(nil),               // 31: provider.contract.v1.BootstrapScope
-	(*RemoveEnvironmentRequest)(nil),     // 32: provider.contract.v1.RemoveEnvironmentRequest
-	(*ProjectRequest)(nil),               // 33: provider.contract.v1.ProjectRequest
-	(*ChangePlan)(nil),                   // 34: provider.contract.v1.ChangePlan
-	(*ChangeGroup)(nil),                  // 35: provider.contract.v1.ChangeGroup
-	(*Change)(nil),                       // 36: provider.contract.v1.Change
-	(*ListEnvironmentsRequest)(nil),      // 37: provider.contract.v1.ListEnvironmentsRequest
-	(*ListEnvironmentsResponse)(nil),     // 38: provider.contract.v1.ListEnvironmentsResponse
-	(*PreviewEnvironment)(nil),           // 39: provider.contract.v1.PreviewEnvironment
-	(*PreflightRequest)(nil),             // 40: provider.contract.v1.PreflightRequest
-	(*PreflightResponse)(nil),            // 41: provider.contract.v1.PreflightResponse
-	(*PreviewWildcard)(nil),              // 42: provider.contract.v1.PreviewWildcard
-	(*DomainClaim)(nil),                  // 43: provider.contract.v1.DomainClaim
-	(*Identity)(nil),                     // 44: provider.contract.v1.Identity
-	(*Detail)(nil),                       // 45: provider.contract.v1.Detail
-	(*CredentialProblem)(nil),            // 46: provider.contract.v1.CredentialProblem
-	(*Promotion)(nil),                    // 47: provider.contract.v1.Promotion
-	(*PromotionHistoryEntry)(nil),        // 48: provider.contract.v1.PromotionHistoryEntry
-	(*ListPromotionsRequest)(nil),        // 49: provider.contract.v1.ListPromotionsRequest
-	(*ListPromotionsResponse)(nil),       // 50: provider.contract.v1.ListPromotionsResponse
-	(*RollbackRequest)(nil),              // 51: provider.contract.v1.RollbackRequest
-	(*RollbackResponse)(nil),             // 52: provider.contract.v1.RollbackResponse
-	(*RemoveStalePromotionsRequest)(nil), // 53: provider.contract.v1.RemoveStalePromotionsRequest
-	nil,                                  // 54: provider.contract.v1.Promotion.BuildsEntry
-	(*structpb.Struct)(nil),              // 55: google.protobuf.Struct
-	(v1.Tier)(0),                         // 56: common.environment.v1.Tier
-	(v11.VariableClass)(0),               // 57: app.resources.v1.VariableClass
-	(*v11.ResourceIdentifier)(nil),       // 58: app.resources.v1.ResourceIdentifier
-	(*v11.PostgresConfig)(nil),           // 59: app.resources.v1.PostgresConfig
-	(*v11.BucketConfig)(nil),             // 60: app.resources.v1.BucketConfig
-	(*v1.Environment)(nil),               // 61: common.environment.v1.Environment
-	(v1.Lifecycle)(0),                    // 62: common.environment.v1.Lifecycle
-	(*v12.FlipBound)(nil),                // 63: common.progress.v1.FlipBound
-	(*v12.OperationEvent)(nil),           // 64: common.progress.v1.OperationEvent
+	(CredentialTier)(0),                   // 0: provider.contract.v1.CredentialTier
+	(Change_Action)(0),                    // 1: provider.contract.v1.Change.Action
+	(DomainClaim_Status)(0),               // 2: provider.contract.v1.DomainClaim.Status
+	(*ProviderConfig)(nil),                // 3: provider.contract.v1.ProviderConfig
+	(*ConfigureRequest)(nil),              // 4: provider.contract.v1.ConfigureRequest
+	(*ConfigureResponse)(nil),             // 5: provider.contract.v1.ConfigureResponse
+	(*UsePreviewWildcardRequest)(nil),     // 6: provider.contract.v1.UsePreviewWildcardRequest
+	(*PreviewWildcardRequest)(nil),        // 7: provider.contract.v1.PreviewWildcardRequest
+	(*GetPreviewWildcardResponse)(nil),    // 8: provider.contract.v1.GetPreviewWildcardResponse
+	(*HostnameRequest)(nil),               // 9: provider.contract.v1.HostnameRequest
+	(*GetHostnameStatusResponse)(nil),     // 10: provider.contract.v1.GetHostnameStatusResponse
+	(*CertificateState)(nil),              // 11: provider.contract.v1.CertificateState
+	(*ProductionHostname)(nil),            // 12: provider.contract.v1.ProductionHostname
+	(*Manifest)(nil),                      // 13: provider.contract.v1.Manifest
+	(*ManifestUsage)(nil),                 // 14: provider.contract.v1.ManifestUsage
+	(*TierDomains)(nil),                   // 15: provider.contract.v1.TierDomains
+	(*ManifestApp)(nil),                   // 16: provider.contract.v1.ManifestApp
+	(*ManifestVariable)(nil),              // 17: provider.contract.v1.ManifestVariable
+	(*ManifestFunction)(nil),              // 18: provider.contract.v1.ManifestFunction
+	(*ManifestResource)(nil),              // 19: provider.contract.v1.ManifestResource
+	(*DeployRequest)(nil),                 // 20: provider.contract.v1.DeployRequest
+	(*BootstrapRequest)(nil),              // 21: provider.contract.v1.BootstrapRequest
+	(*PlanBootstrapRequest)(nil),          // 22: provider.contract.v1.PlanBootstrapRequest
+	(*PlanBootstrapResponse)(nil),         // 23: provider.contract.v1.PlanBootstrapResponse
+	(*BootstrapStack)(nil),                // 24: provider.contract.v1.BootstrapStack
+	(*BootstrapStatus)(nil),               // 25: provider.contract.v1.BootstrapStatus
+	(*CredentialPermissionsRequest)(nil),  // 26: provider.contract.v1.CredentialPermissionsRequest
+	(*CredentialPermissionsResponse)(nil), // 27: provider.contract.v1.CredentialPermissionsResponse
+	(*Feature)(nil),                       // 28: provider.contract.v1.Feature
+	(*Dns)(nil),                           // 29: provider.contract.v1.Dns
+	(*EdgeSelection)(nil),                 // 30: provider.contract.v1.EdgeSelection
+	(*BootstrapScope)(nil),                // 31: provider.contract.v1.BootstrapScope
+	(*RemoveEnvironmentRequest)(nil),      // 32: provider.contract.v1.RemoveEnvironmentRequest
+	(*ProjectRequest)(nil),                // 33: provider.contract.v1.ProjectRequest
+	(*ChangePlan)(nil),                    // 34: provider.contract.v1.ChangePlan
+	(*ChangeGroup)(nil),                   // 35: provider.contract.v1.ChangeGroup
+	(*Change)(nil),                        // 36: provider.contract.v1.Change
+	(*ListEnvironmentsRequest)(nil),       // 37: provider.contract.v1.ListEnvironmentsRequest
+	(*ListEnvironmentsResponse)(nil),      // 38: provider.contract.v1.ListEnvironmentsResponse
+	(*PreviewEnvironment)(nil),            // 39: provider.contract.v1.PreviewEnvironment
+	(*PreflightRequest)(nil),              // 40: provider.contract.v1.PreflightRequest
+	(*PreflightResponse)(nil),             // 41: provider.contract.v1.PreflightResponse
+	(*PreviewWildcard)(nil),               // 42: provider.contract.v1.PreviewWildcard
+	(*DomainClaim)(nil),                   // 43: provider.contract.v1.DomainClaim
+	(*Identity)(nil),                      // 44: provider.contract.v1.Identity
+	(*Detail)(nil),                        // 45: provider.contract.v1.Detail
+	(*CredentialProblem)(nil),             // 46: provider.contract.v1.CredentialProblem
+	(*Promotion)(nil),                     // 47: provider.contract.v1.Promotion
+	(*PromotionHistoryEntry)(nil),         // 48: provider.contract.v1.PromotionHistoryEntry
+	(*ListPromotionsRequest)(nil),         // 49: provider.contract.v1.ListPromotionsRequest
+	(*ListPromotionsResponse)(nil),        // 50: provider.contract.v1.ListPromotionsResponse
+	(*RollbackRequest)(nil),               // 51: provider.contract.v1.RollbackRequest
+	(*RollbackResponse)(nil),              // 52: provider.contract.v1.RollbackResponse
+	(*RemoveStalePromotionsRequest)(nil),  // 53: provider.contract.v1.RemoveStalePromotionsRequest
+	nil,                                   // 54: provider.contract.v1.Promotion.BuildsEntry
+	(*structpb.Struct)(nil),               // 55: google.protobuf.Struct
+	(v1.Tier)(0),                          // 56: common.environment.v1.Tier
+	(v11.VariableClass)(0),                // 57: app.resources.v1.VariableClass
+	(*v11.ResourceIdentifier)(nil),        // 58: app.resources.v1.ResourceIdentifier
+	(*v11.PostgresConfig)(nil),            // 59: app.resources.v1.PostgresConfig
+	(*v11.BucketConfig)(nil),              // 60: app.resources.v1.BucketConfig
+	(*v1.Environment)(nil),                // 61: common.environment.v1.Environment
+	(v1.Lifecycle)(0),                     // 62: common.environment.v1.Lifecycle
+	(*v12.FlipBound)(nil),                 // 63: common.progress.v1.FlipBound
+	(*v12.OperationEvent)(nil),            // 64: common.progress.v1.OperationEvent
 }
 var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	55, // 0: provider.contract.v1.ProviderConfig.options:type_name -> google.protobuf.Struct
@@ -4049,7 +4049,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	34, // 32: provider.contract.v1.PlanBootstrapResponse.plan:type_name -> provider.contract.v1.ChangePlan
 	56, // 33: provider.contract.v1.BootstrapStatus.tier:type_name -> common.environment.v1.Tier
 	24, // 34: provider.contract.v1.BootstrapStatus.stacks:type_name -> provider.contract.v1.BootstrapStack
-	0,  // 35: provider.contract.v1.CredentialPolicyRequest.tier:type_name -> provider.contract.v1.CredentialTier
+	0,  // 35: provider.contract.v1.CredentialPermissionsRequest.tier:type_name -> provider.contract.v1.CredentialTier
 	29, // 36: provider.contract.v1.EdgeSelection.dns:type_name -> provider.contract.v1.Dns
 	56, // 37: provider.contract.v1.BootstrapScope.tier:type_name -> common.environment.v1.Tier
 	30, // 38: provider.contract.v1.BootstrapScope.edge:type_name -> provider.contract.v1.EdgeSelection
@@ -4087,7 +4087,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	20, // 70: provider.contract.v1.ProviderService.Deploy:input_type -> provider.contract.v1.DeployRequest
 	21, // 71: provider.contract.v1.ProviderService.Bootstrap:input_type -> provider.contract.v1.BootstrapRequest
 	22, // 72: provider.contract.v1.ProviderService.PlanBootstrap:input_type -> provider.contract.v1.PlanBootstrapRequest
-	26, // 73: provider.contract.v1.ProviderService.GetCredentialPolicy:input_type -> provider.contract.v1.CredentialPolicyRequest
+	26, // 73: provider.contract.v1.ProviderService.GetCredentialPermissions:input_type -> provider.contract.v1.CredentialPermissionsRequest
 	31, // 74: provider.contract.v1.ProviderService.RemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
 	31, // 75: provider.contract.v1.ProviderService.PlanRemoveBootstrap:input_type -> provider.contract.v1.BootstrapScope
 	32, // 76: provider.contract.v1.ProviderService.RemoveEnvironment:input_type -> provider.contract.v1.RemoveEnvironmentRequest
@@ -4109,7 +4109,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	64, // 92: provider.contract.v1.ProviderService.Deploy:output_type -> common.progress.v1.OperationEvent
 	64, // 93: provider.contract.v1.ProviderService.Bootstrap:output_type -> common.progress.v1.OperationEvent
 	23, // 94: provider.contract.v1.ProviderService.PlanBootstrap:output_type -> provider.contract.v1.PlanBootstrapResponse
-	27, // 95: provider.contract.v1.ProviderService.GetCredentialPolicy:output_type -> provider.contract.v1.CredentialPolicyResponse
+	27, // 95: provider.contract.v1.ProviderService.GetCredentialPermissions:output_type -> provider.contract.v1.CredentialPermissionsResponse
 	64, // 96: provider.contract.v1.ProviderService.RemoveBootstrap:output_type -> common.progress.v1.OperationEvent
 	34, // 97: provider.contract.v1.ProviderService.PlanRemoveBootstrap:output_type -> provider.contract.v1.ChangePlan
 	64, // 98: provider.contract.v1.ProviderService.RemoveEnvironment:output_type -> common.progress.v1.OperationEvent

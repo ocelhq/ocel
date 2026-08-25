@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func runCommand(t *testing.T, args ...string) (string, error) {
@@ -32,7 +31,7 @@ func TestBootstrapNeedsASubcommand(t *testing.T) {
 		if err == nil {
 			t.Fatal("Execute err = nil, want bootstrap without a subcommand to be a failure")
 		}
-		for _, want := range []string{"production", "preview", "destroy", "policy", "status"} {
+		for _, want := range []string{"production", "preview", "destroy", "status"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("output = %q, want the help to list %q", out, want)
 			}
@@ -123,49 +122,5 @@ func TestBootstrapDestroyClassArgument(t *testing.T) {
 		if got != want {
 			t.Errorf("environmentArg(%q) = %v, want %v", typed, got, want)
 		}
-	}
-}
-
-func TestBootstrapPolicyNeedsATier(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name string
-		args []string
-	}{
-		{"no tier", []string{"policy"}},
-		{"a tier that is neither", []string{"policy", "admin"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			out, err := runCommand(t, tc.args...)
-			if err == nil {
-				t.Fatal("Execute err = nil, want a policy without a credential tier to be a failure")
-			}
-			for _, want := range []string{"bootstrap", "deploy"} {
-				if !strings.Contains(err.Error(), want) {
-					t.Errorf("err = %v, want it to name the %s tier", err, want)
-				}
-			}
-			if !strings.Contains(out, "policy <bootstrap|deploy>") {
-				t.Errorf("output = %q, want the policy help", out)
-			}
-		})
-	}
-}
-
-func TestCredentialTier(t *testing.T) {
-	t.Parallel()
-
-	got, err := credentialTier("deploy")
-	if err != nil {
-		t.Fatalf("credentialTier err = %v", err)
-	}
-	if got != contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY {
-		t.Errorf("credentialTier = %v, want the deploy tier", got)
-	}
-	if _, err := credentialTier("admin"); err == nil || !strings.Contains(err.Error(), `"admin"`) {
-		t.Errorf("credentialTier err = %v, want it to name what was typed", err)
 	}
 }
