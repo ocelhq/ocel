@@ -7,7 +7,7 @@ import (
 
 var isrFeature = feature{
 	name:       FeatureISR,
-	summary:    "Incremental static regeneration: the shared revalidation queue, the revalidator that drains it, and the invalidator that carries each tag raise out to the fronts.",
+	summary:    "incremental static regeneration — queue, revalidator, invalidator",
 	needs:      []string{needsFrameworkPrefix + "next"},
 	template:   isrTemplate,
 	payloads:   isrPayloads,

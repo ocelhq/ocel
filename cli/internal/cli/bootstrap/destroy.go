@@ -2,15 +2,17 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+
+	"charm.land/huh/v2"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/removalplan"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -46,7 +48,6 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 			destroyCommand(tier), removalplan.BypassEnv, name)
 	}
 
-	prompter := prompt.New(stdout, stdin)
 	return providerui.Run(ctx, deps, cfg, destroyCommand(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
 		client, err := runner.Client()
 		if err != nil {
@@ -65,11 +66,17 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		removalplan.Print(stdout, fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
 			"Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
 		if !skipConfirmation {
-			confirmed, err := prompter.Phrase(ctx, "environment name", plan.GetSubject())
-			if err != nil {
+			subject := plan.GetSubject()
+			var typed string
+			err := huh.NewForm(huh.NewGroup(
+				huh.NewInput().
+					Title("Type the environment name (" + subject + ") to confirm").
+					Value(&typed),
+			)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).RunWithContext(ctx)
+			if err != nil && !errors.Is(err, huh.ErrUserAborted) {
 				return err
 			}
-			if !confirmed {
+			if errors.Is(err, huh.ErrUserAborted) || subject == "" || typed != subject {
 				fmt.Fprintln(stdout, "Aborted.")
 				return nil
 			}

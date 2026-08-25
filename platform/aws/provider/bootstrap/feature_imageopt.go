@@ -7,7 +7,7 @@ import (
 
 var imageOptimizationFeature = feature{
 	name:       FeatureImageOptimization,
-	summary:    "On-demand image optimization: one shared function every front in this bootstrap calls to transform an image.",
+	summary:    "one shared image transform every front calls",
 	needs:      []string{needsFrameworkPrefix + "next"},
 	template:   imageOptimizationTemplate,
 	payloads:   imageOptimizationPayloads,

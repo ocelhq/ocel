@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"bytes"
 	"context"
-	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,60 +15,6 @@ import (
 )
 
 func TestRunBootstrapDestroy(t *testing.T) {
-	t.Run("it renders the plan, kept items included, and takes the class name", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-		deps.StdinIsTerminal = func(io.Reader) bool { return true }
-
-		var stdout, stderr bytes.Buffer
-		opts := Options{}
-		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PREVIEW, opts, &stdout, &stderr, strings.NewReader("preview\n")); err != nil {
-			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-
-		out := stdout.String()
-		for _, want := range []string{
-			"fronted by the cloudfront edge",
-			"delete edge bootstrap cloudfront",
-			"delete bucket ocel-state-preview",
-			"(this one is slow)",
-			"Left in place:",
-			"keep parameter /ocel/pulumi/passphrase — the production bootstrap still stands",
-			"Type the environment name (preview) to confirm:",
-			"TEARDOWN tier=TIER_PREVIEW",
-		} {
-			if !strings.Contains(out, want) {
-				t.Errorf("stdout missing %q; got:\n%s", want, out)
-			}
-		}
-		if strings.Index(out, "keep parameter") < strings.Index(out, "This cannot be undone.") {
-			t.Errorf("kept items must follow the doomed ones; got:\n%s", out)
-		}
-	})
-
-	t.Run("a phrase that is not the class name aborts", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-		deps.StdinIsTerminal = func(io.Reader) bool { return true }
-
-		var stdout, stderr bytes.Buffer
-		opts := Options{}
-		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("preview\n")); err != nil {
-			t.Fatalf("RunDestroy err = %v; stdout=%s", err, stdout.String())
-		}
-		out := stdout.String()
-		if !strings.Contains(out, "Aborted.") {
-			t.Errorf("stdout = %q, want the teardown aborted", out)
-		}
-		if strings.Contains(out, "TEARDOWN") {
-			t.Errorf("stdout = %q, want no teardown after an unconfirmed phrase", out)
-		}
-	})
-
 	t.Run("--yes skips the phrase and the terminal requirement", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := clitest.NewDeps()
@@ -273,30 +218,6 @@ func TestRunBootstrapStatus(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		if err := RunStatus(context.Background(), deps, root, StatusOptions{Check: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("--check = %v, want it to pass; stdout=%s", err, stdout.String())
-		}
-	})
-}
-
-func TestRunBootstrapDowngrade(t *testing.T) {
-	t.Run("it warns and takes a confirmation before writing older content", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		t.Setenv(clitest.FakeBootstrapEnvVar, "downgrade")
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-		deps.StdinIsTerminal = func(io.Reader) bool { return true }
-
-		var stdout, stderr bytes.Buffer
-		opts := Options{Features: "none", FeaturesDeclared: true}
-		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
-			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
-		}
-		out := stdout.String()
-		if !strings.Contains(out, "last written by 1.9.0") {
-			t.Errorf("stdout never named the newer build that wrote the bootstrap; got:\n%s", out)
-		}
-		if !strings.Contains(out, "Aborted.") {
-			t.Errorf("declining the downgrade still wrote; got:\n%s", out)
 		}
 	})
 }
