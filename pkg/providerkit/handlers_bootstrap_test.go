@@ -530,8 +530,8 @@ func TestPlanRemoveBootstrapNamesTheClassAndWhatGoes(t *testing.T) {
 		if item.GetAction() != contractv1.Change_ACTION_DELETE {
 			t.Errorf("item %s planned action %v, want it deleted", item.GetName(), item.GetAction())
 		}
-		if item.GetKind() == "" || item.GetName() == "" || item.GetReason() == "" {
-			t.Errorf("item %+v does not say what it is or why it goes", item)
+		if item.GetKind() == "" || item.GetName() == "" {
+			t.Errorf("item %+v does not say what it is", item)
 		}
 	}
 }

@@ -257,44 +257,48 @@ func (e *Edge) DomainOwner(_ context.Context, hostname string) (string, error) {
 	return e.owners[hostname], nil
 }
 
-func (e *Edge) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
-	surfaces := []edge.Surface{{
-		Kind:   "edge stack",
+func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+	changes := []edge.PlanChange{{
+		Kind:   "Fake::EdgeStack",
 		Name:   scope.Slug + "-" + string(scope.Class),
-		Action: edge.SurfaceDelete,
+		Action: edge.PlanDelete,
 		Reason: "the " + string(e.kind) + " edge stack this project deploys through",
 	}}
 	for _, hostname := range scope.Hostnames {
-		surfaces = append(surfaces, edge.Surface{
-			Kind:   "hostname",
+		changes = append(changes, edge.PlanChange{
+			Kind:   "Fake::Hostname",
 			Name:   hostname,
-			Action: edge.SurfaceDelete,
-			Reason: "bound to this project's edge stack",
+			Action: edge.PlanDelete,
 		})
 	}
-	return surfaces
+	return []edge.PlanGroup{{
+		Kind:    edge.EdgeGroupKind,
+		Name:    edge.EdgeGroupName(e.kind),
+		Action:  edge.PlanDelete,
+		Changes: changes,
+	}}
 }
 
-func (e *Edge) PreviewWildcardSurfaces(wildcard string) (removed, kept edge.Surface) {
-	return edge.Surface{
-		Kind:   "preview entry",
-		Name:   wildcard,
-		Action: edge.SurfaceDelete,
-		Reason: "the shared entry every preview on this wildcard is served through",
-	}, edge.Surface{
-		Kind:   "preview entry worker",
-		Name:   edge.PreviewEntryOwner,
-		Action: edge.SurfaceKeep,
-		Reason: "shared with every other wildcard in this account",
-	}
+func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.PlanGroup) {
+	return edge.PlanGroup{
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(e.kind),
+		Action: edge.PlanDelete,
+		Changes: []edge.PlanChange{{
+			Kind:   "Fake::PreviewEntry",
+			Name:   wildcard,
+			Action: edge.PlanDelete,
+			Reason: "the shared entry every preview on this wildcard is served through",
+		}},
+	}, e.SharedPreviewRemoval()
 }
 
-func (e *Edge) SharedPreviewSurface() edge.Surface {
-	return edge.Surface{
-		Kind:   "preview entry worker",
-		Name:   edge.PreviewEntryOwner,
-		Action: edge.SurfaceKeep,
-		Reason: "shared with every other wildcard in this account",
+func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
+	return edge.PlanGroup{
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(e.kind),
+		Action: edge.PlanKeep,
+		Reason: "shared with every other wildcard in this account: " + edge.PreviewEntryOwner,
 	}
 }
 

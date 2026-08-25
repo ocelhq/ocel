@@ -188,14 +188,19 @@ func planningBootstrapper(front edge.Edge) Bootstrapper {
 type planningEdge struct {
 	teardownEdge
 
-	planned []edge.PlanChange
-	err     error
-	classes []edge.Class
+	planned  []edge.PlanChange
+	removals []edge.PlanChange
+	err      error
+	classes  []edge.Class
 }
 
 func (e *planningEdge) PlanBootstrap(_ context.Context, class edge.Class) ([]edge.PlanChange, error) {
 	e.classes = append(e.classes, class)
 	return e.planned, e.err
+}
+
+func (e *planningEdge) PlanRemoveBootstrap(context.Context, edge.Class) ([]edge.PlanChange, error) {
+	return e.removals, e.err
 }
 
 func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
@@ -266,8 +271,9 @@ func (e *teardownEdge) Teardown(_ context.Context, class edge.Class) error {
 type teardownCFN struct {
 	bootstrap.CFNAPI
 
-	present map[string]bootstrap.Deployed
-	deleted []string
+	present   map[string]bootstrap.Deployed
+	resources map[string][]cfntypes.StackResourceSummary
+	deleted   []string
 }
 
 func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
@@ -290,8 +296,10 @@ func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 	}}}, nil
 }
 
-func (c *teardownCFN) ListStackResources(_ context.Context, _ *cloudformation.ListStackResourcesInput, _ ...func(*cloudformation.Options)) (*cloudformation.ListStackResourcesOutput, error) {
-	return &cloudformation.ListStackResourcesOutput{}, nil
+func (c *teardownCFN) ListStackResources(_ context.Context, in *cloudformation.ListStackResourcesInput, _ ...func(*cloudformation.Options)) (*cloudformation.ListStackResourcesOutput, error) {
+	return &cloudformation.ListStackResourcesOutput{
+		StackResourceSummaries: c.resources[aws.ToString(in.StackName)],
+	}, nil
 }
 
 func (c *teardownCFN) DeleteStack(_ context.Context, in *cloudformation.DeleteStackInput, _ ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error) {

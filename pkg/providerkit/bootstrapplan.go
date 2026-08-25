@@ -21,7 +21,7 @@ const (
 
 const (
 	StackGroupKind     = "stack"
-	EdgeGroupKind      = "edge"
+	EdgeGroupKind      = edge.EdgeGroupKind
 	ParameterGroupKind = "parameters"
 
 	DetailUnavailable = "resource-level detail unavailable"
@@ -145,35 +145,70 @@ func Vendored(vendor Vendor, groups []ChangeGroup) []ChangeGroup {
 }
 
 func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) (ChangeGroup, error) {
+	changes, err := EdgeChanges(kind, planned)
+	if err != nil {
+		return ChangeGroup{}, err
+	}
 	group := ChangeGroup{
 		Kind:    EdgeGroupKind,
-		Name:    string(kind) + "/edge",
+		Name:    edge.EdgeGroupName(kind),
 		Feature: feature,
-		Changes: make([]Change, 0, len(planned)),
-	}
-	for _, change := range planned {
-		if !edge.ValidPlanAction(change.Action) {
-			return ChangeGroup{}, fmt.Errorf(
-				"the %s edge plans %q on %s %q, and %q is not an action a plan can render",
-				kind, change.Action, change.Kind, change.Name, change.Action)
-		}
-		group.Changes = append(group.Changes, Change{
-			Kind:   change.Kind,
-			Name:   change.Name,
-			Action: edgeAction(change.Action),
-			Reason: change.Reason,
-		})
+		Changes: changes,
 	}
 	group.Action, group.Reason = RollUp(group.Changes)
 	return group, nil
 }
 
-func edgeAction(action edge.PlanAction) ChangeAction {
+func EdgeChanges(kind edge.Kind, planned []edge.PlanChange) ([]Change, error) {
+	changes := make([]Change, 0, len(planned))
+	for _, change := range planned {
+		if !edge.ValidPlanAction(change.Action) {
+			return nil, fmt.Errorf(
+				"the %s edge plans %q on %s %q, and %q is not an action a plan can render",
+				kind, change.Action, change.Kind, change.Name, change.Action)
+		}
+		changes = append(changes, Change{
+			Kind:   change.Kind,
+			Name:   change.Name,
+			Action: EdgeAction(change.Action),
+			Reason: change.Reason,
+			Slow:   change.Slow,
+		})
+	}
+	return changes, nil
+}
+
+func EdgeGroupOf(group edge.PlanGroup) ChangeGroup {
+	converted := ChangeGroup{
+		Kind:    group.Kind,
+		Name:    group.Name,
+		Feature: group.Feature,
+		Action:  EdgeAction(group.Action),
+		Reason:  group.Reason,
+		Slow:    group.Slow,
+	}
+	for _, change := range group.Changes {
+		converted.Changes = append(converted.Changes, Change{
+			Kind:   change.Kind,
+			Name:   change.Name,
+			Action: EdgeAction(change.Action),
+			Reason: change.Reason,
+			Slow:   change.Slow,
+		})
+	}
+	return converted
+}
+
+func EdgeAction(action edge.PlanAction) ChangeAction {
 	switch action {
 	case edge.PlanCreate:
 		return ActionCreate
 	case edge.PlanUpdate:
 		return ActionUpdate
+	case edge.PlanDelete:
+		return ActionDelete
+	case edge.PlanDisableThenDelete:
+		return ActionDisableThenDelete
 	default:
 		return ActionKeep
 	}
@@ -190,7 +225,7 @@ func RollUp(changes []Change) (ChangeAction, string) {
 			creates++
 		case ActionKeep:
 			keeps++
-		case ActionDelete:
+		case ActionDelete, ActionDisableThenDelete:
 			deletes++
 		}
 	}

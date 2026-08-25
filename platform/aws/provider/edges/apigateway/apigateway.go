@@ -137,23 +137,32 @@ func (p *provider) FlipBound() edge.FlipBound {
 
 func (p *provider) CertificateRegion(apiRegion string) string { return apiRegion }
 
-func (p *provider) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
-	surfaces := []edge.Surface{{
-		Kind:   "REST APIs",
+const (
+	typeRestAPI    = "AWS::ApiGateway::RestApi"
+	typeDomainName = "AWS::ApiGateway::DomainName"
+)
+
+func (p *provider) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+	changes := []edge.PlanChange{{
+		Kind:   typeRestAPI,
 		Name:   scope.Slug,
-		Action: edge.SurfaceDelete,
+		Action: edge.PlanDelete,
 		Reason: restAPIsReason(scope.Class),
 		Slow:   true,
 	}}
-	if len(scope.Hostnames) > 0 {
-		surfaces = append(surfaces, edge.Surface{
-			Kind:   "domain names",
-			Name:   strings.Join(scope.Hostnames, ", "),
-			Action: edge.SurfaceDelete,
-			Reason: "the API Gateway domain name each hostname is mapped onto",
+	for _, hostname := range scope.Hostnames {
+		changes = append(changes, edge.PlanChange{
+			Kind:   typeDomainName,
+			Name:   hostname,
+			Action: edge.PlanDelete,
 		})
 	}
-	return surfaces
+	return []edge.PlanGroup{{
+		Kind:    edge.EdgeGroupKind,
+		Name:    edge.EdgeGroupName(Kind),
+		Action:  edge.PlanDelete,
+		Changes: changes,
+	}}
 }
 
 func restAPIsReason(class edge.Class) string {
@@ -164,22 +173,27 @@ func restAPIsReason(class edge.Class) string {
 	return "the production API and every preview API this project is served through, and the host rules routing to them" + paced
 }
 
-func (p *provider) PreviewWildcardSurfaces(wildcard string) (edge.Surface, edge.Surface) {
-	removed := edge.Surface{
-		Kind:   "wildcard domain name",
-		Name:   wildcard,
-		Action: edge.SurfaceDelete,
-		Reason: "the API Gateway domain name every project's previews are routed through, and the rules under it",
+func (p *provider) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+	removed := edge.PlanGroup{
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(Kind),
+		Action: edge.PlanDelete,
+		Changes: []edge.PlanChange{{
+			Kind:   typeDomainName,
+			Name:   wildcard,
+			Action: edge.PlanDelete,
+			Reason: "every project's previews are routed through it, and the rules under it go with it",
+		}},
 	}
-	return removed, p.SharedPreviewSurface()
+	return removed, p.SharedPreviewRemoval()
 }
 
-func (p *provider) SharedPreviewSurface() edge.Surface {
-	return edge.Surface{
-		Kind:   "preview fallback API",
-		Name:   "404 responder",
-		Action: edge.SurfaceKeep,
-		Reason: "bootstrap-scoped: it answers every preview hostname no project claims",
+func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
+	return edge.PlanGroup{
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(Kind),
+		Action: edge.PlanKeep,
+		Reason: "bootstrap-scoped: the preview fallback API answers every preview hostname no project claims",
 	}
 }
 

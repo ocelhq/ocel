@@ -57,6 +57,74 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, req Request, gro
 	return planned, nil
 }
 
+func PlanRemoval(ctx context.Context, cfn CFNAPI, read Reading) ([]providerkit.ChangeGroup, error) {
+	if !read.Deployed.Present {
+		return nil, nil
+	}
+	target, err := bootstrapFor(read.class)
+	if err != nil {
+		return nil, err
+	}
+	coreStack, err := StackNameFor(read.class)
+	if err != nil {
+		return nil, err
+	}
+	standing := read.Deployed.Features.Names()
+	order, err := FeatureDeleteOrder(standing)
+	if err != nil {
+		return nil, err
+	}
+	alongside := FeatureSet{}
+	for _, name := range standing {
+		alongside[name] = true
+	}
+
+	groups := make([]providerkit.ChangeGroup, 0, len(order)+1)
+	for _, feature := range append(order, "") {
+		name := coreStack
+		if feature != "" {
+			name = FeatureStackName(feature, read.class)
+		}
+		group := providerkit.ChangeGroup{
+			Kind:    providerkit.StackGroupKind,
+			Name:    name,
+			Feature: feature,
+			Action:  providerkit.ActionDelete,
+		}
+		stack, ok := renderGroup(target, feature, read.class, read.Deployed.ArtifactBucket, read.refs, alongside)
+		if ok {
+			group = noteStranded(planDelete(ctx, cfn, group, stack.body))
+		}
+		groups = append(groups, group)
+	}
+	return groups, nil
+}
+
+var stranded = map[string]providerkit.Change{
+	"StateBucket": {
+		Reason: "the Pulumi state of every stack this bootstrap deployed; nothing can describe or remove those resources afterwards",
+		Slow:   true,
+	},
+	"ArtifactBucket": {Reason: "the function code staged for this bootstrap", Slow: true},
+	"AssetBucket": {
+		Reason: "every build's static assets, prerender fallbacks and edge fetch cache",
+		Slow:   true,
+	},
+	"VarsTable": {Reason: "every variable value this class holds, and their history"},
+	"VarsKey":   {Reason: "the key those values are encrypted under"},
+}
+
+func noteStranded(group providerkit.ChangeGroup) providerkit.ChangeGroup {
+	for i, change := range group.Changes {
+		note, ok := stranded[change.Name]
+		if !ok {
+			continue
+		}
+		group.Changes[i].Reason, group.Changes[i].Slow = note.Reason, note.Slow
+	}
+	return group
+}
+
 func renderGroup(target spec, feature, class, artifactBucket string, refs stackRefs, alongside FeatureSet) (featureStack, bool) {
 	if feature == "" {
 		return featureStack{body: target.core()}, true

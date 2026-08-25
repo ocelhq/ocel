@@ -168,29 +168,30 @@ func (b *Bootstrapper) Apply(_ context.Context, req providerkit.BootstrapRequest
 	return nil
 }
 
-func (b *Bootstrapper) Removals(_ context.Context, class providerkit.Class) ([]providerkit.Removal, error) {
+func (b *Bootstrapper) PlanRemoval(_ context.Context, class providerkit.Class) (providerkit.BootstrapPlan, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
 	if !present {
-		return nil, nil
+		return providerkit.BootstrapPlan{}, nil
 	}
-	removals := make([]providerkit.Removal, 0, len(features)+1)
+	plan := providerkit.BootstrapPlan{Groups: make([]providerkit.ChangeGroup, 0, len(features)+1)}
 	for _, feature := range features {
-		removals = append(removals, providerkit.Removal{
-			Kind:   "feature stack",
-			Name:   b.stack(class, feature).Name,
-			Action: edge.SurfaceDelete,
-			Reason: "the stack carrying the " + feature + " feature of this bootstrap",
+		plan.Groups = append(plan.Groups, providerkit.ChangeGroup{
+			Kind:    providerkit.StackGroupKind,
+			Name:    b.stack(class, feature).Name,
+			Feature: feature,
+			Action:  providerkit.ActionDelete,
 		})
 	}
-	return append(removals, providerkit.Removal{
-		Kind:   "bootstrap",
+	plan.Groups = append(plan.Groups, providerkit.ChangeGroup{
+		Kind:   providerkit.StackGroupKind,
 		Name:   b.stack(class, "").Name,
-		Action: edge.SurfaceDelete,
+		Action: providerkit.ActionDelete,
 		Reason: "the core every feature above was built on",
 		Slow:   true,
-	}), nil
+	})
+	return plan, nil
 }
 
 func (b *Bootstrapper) Remove(_ context.Context, class providerkit.Class, report providerkit.Reporter) error {

@@ -3,6 +3,7 @@ package providerkit_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -47,17 +48,25 @@ func TestPlanRemoveProjectNamesEveryStackTheDeployStoodUp(t *testing.T) {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
 	held := kinds(plan)
-	for _, kind := range []string{"app stack", "infra stack", "edge stack", "variable values", "stored objects"} {
+	for _, kind := range []string{providerkit.StackGroupKind, providerkit.EdgeGroupKind, "variable values", "stored objects"} {
 		if !slices.Contains(held, kind) {
-			t.Errorf("the plan names %v, want a %q item among them", held, kind)
+			t.Errorf("the plan names %v, want a %q group among them", held, kind)
 		}
 	}
 	if plan.GetSubject() != "shop" {
 		t.Errorf("the plan's subject is %q, want the project it removes", plan.GetSubject())
 	}
-	for _, item := range plan.GetGroups() {
-		if item.GetName() == "" || item.GetReason() == "" {
-			t.Errorf("the plan carries %+v, and the CLI cannot render an item with no name or no reason", item)
+	for _, group := range plan.GetGroups() {
+		if group.GetName() == "" {
+			t.Errorf("the plan carries %+v, and the CLI cannot render a nameless group", group)
+		}
+		if group.GetKind() == providerkit.StackGroupKind && !strings.HasPrefix(group.GetName(), "fake/") {
+			t.Errorf("the plan carries %+v, want every stack named under the vendor that holds it", group)
+		}
+		for _, change := range group.GetChanges() {
+			if change.GetKind() == "" || change.GetName() == "" {
+				t.Errorf("the plan carries row %+v, and a row renders as a name in a type column", change)
+			}
 		}
 	}
 }
@@ -70,7 +79,7 @@ func TestPlanRemoveProjectOfAProjectNothingDeployedNamesNoStack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
-	if slices.Contains(kinds(plan), "app stack") {
+	if slices.Contains(kinds(plan), providerkit.StackGroupKind) {
 		t.Errorf("the plan names %v for a project that never deployed", kinds(plan))
 	}
 }

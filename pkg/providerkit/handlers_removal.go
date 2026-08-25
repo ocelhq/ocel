@@ -90,30 +90,33 @@ func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.Projec
 
 func (r *projectRemoval) plan() *contractv1.ChangePlan {
 	plan := &contractv1.ChangePlan{EdgeKind: string(r.front.Kind()), Subject: r.slug}
+	vendor := string(r.provider.Vendor())
 	for _, stack := range r.apps {
 		plan.Groups = append(plan.Groups, &contractv1.ChangeGroup{
-			Kind:   "app stack",
-			Name:   stack.String(),
-			Action: contractv1.Change_ACTION_DELETE,
-			Reason: "everything this release of " + stack.App + " stood up",
+			Kind:    StackGroupKind,
+			Name:    vendor + "/" + stack.String(),
+			Feature: stack.App,
+			Action:  contractv1.Change_ACTION_DELETE,
+			Reason:  "everything this release of " + stack.App + " stood up",
 		})
 	}
 	for _, stack := range r.infra {
 		plan.Groups = append(plan.Groups, &contractv1.ChangeGroup{
-			Kind:   "infra stack",
-			Name:   stack.String(),
-			Action: contractv1.Change_ACTION_DELETE,
-			Reason: "the resources every app in " + stack.Env + " links to",
-			Slow:   true,
+			Kind:    StackGroupKind,
+			Name:    vendor + "/" + stack.String(),
+			Feature: stack.Env,
+			Action:  contractv1.Change_ACTION_DELETE,
+			Reason:  "the resources every app in " + stack.Env + " links to",
+			Slow:    true,
 		})
 	}
-	for _, surface := range r.front.ProjectSurfaces(edge.ProjectScope{
+	for _, group := range r.front.ProjectRemovals(edge.ProjectScope{
 		Slug:      r.slug,
 		Class:     r.class,
 		Hostnames: r.state.Hostnames(),
 		Front:     r.state.Edge.Front,
 	}) {
-		plan.Groups = append(plan.Groups, surfaceGroup(surface))
+		plan.Groups = append(plan.Groups, edgeGroupProto(group))
 	}
 	plan.Groups = append(plan.Groups, r.recordGroups()...)
 	plan.Groups = append(plan.Groups,

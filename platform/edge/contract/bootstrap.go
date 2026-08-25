@@ -12,6 +12,10 @@ type BootstrapPlanner interface {
 	PlanBootstrap(ctx context.Context, class Class) ([]PlanChange, error)
 }
 
+type BootstrapRemover interface {
+	PlanRemoveBootstrap(ctx context.Context, class Class) ([]PlanChange, error)
+}
+
 type BootstrapAdopter interface {
 	Adoption(ctx context.Context, class Class) (Adoption, error)
 }
@@ -21,28 +25,45 @@ type Adoption struct {
 	Offers []OfferKind
 }
 
+type PlanGroup struct {
+	Kind    string
+	Name    string
+	Feature string
+	Action  PlanAction
+	Reason  string
+	Slow    bool
+	Changes []PlanChange
+}
+
 type PlanChange struct {
 	Kind   string
 	Name   string
 	Action PlanAction
 	Reason string
+	Slow   bool
 }
 
 type PlanAction string
 
 const (
-	PlanCreate PlanAction = "create"
-	PlanUpdate PlanAction = "update"
-	PlanKeep   PlanAction = "keep"
+	PlanCreate            PlanAction = "create"
+	PlanUpdate            PlanAction = "update"
+	PlanDelete            PlanAction = "delete"
+	PlanDisableThenDelete PlanAction = "disable-then-delete"
+	PlanKeep              PlanAction = "keep"
 )
 
 func ValidPlanAction(action PlanAction) bool {
 	switch action {
-	case PlanCreate, PlanUpdate, PlanKeep:
+	case PlanCreate, PlanUpdate, PlanDelete, PlanDisableThenDelete, PlanKeep:
 		return true
 	}
 	return false
 }
+
+const EdgeGroupKind = "edge"
+
+func EdgeGroupName(kind Kind) string { return string(kind) + "/edge" }
 
 type Class string
 

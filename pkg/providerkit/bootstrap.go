@@ -11,7 +11,7 @@ type Bootstrapper interface {
 
 	Apply(ctx context.Context, req BootstrapRequest, report Reporter) error
 
-	Removals(ctx context.Context, class Class) ([]Removal, error)
+	PlanRemoval(ctx context.Context, class Class) (BootstrapPlan, error)
 
 	Remove(ctx context.Context, class Class, report Reporter) error
 }

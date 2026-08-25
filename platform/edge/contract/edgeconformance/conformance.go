@@ -70,36 +70,39 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
-	t.Run("teardown surfaces are named, reasoned and honestly actioned", func(t *testing.T) {
+	t.Run("teardown plans are named, typed and honestly actioned", func(t *testing.T) {
 		e, spec := suite.New(t)
 
-		surfaces := e.ProjectSurfaces(edge.ProjectScope{
+		groups := e.ProjectRemovals(edge.ProjectScope{
 			Slug:      spec.Slug,
 			Class:     spec.Class,
 			Hostnames: []string{suite.Hostname},
 			Front:     "front.example.net",
 		})
-		if len(surfaces) == 0 {
-			t.Fatal("ProjectSurfaces = none, want the surfaces a project with a bound hostname stands on")
+		if len(groups) == 0 {
+			t.Fatal("ProjectRemovals = none, want what a project with a bound hostname stands on")
 		}
-		for _, surface := range surfaces {
-			checkSurface(t, "ProjectSurfaces", surface)
-		}
-
-		removed, kept := e.PreviewWildcardSurfaces("*.preview.example.com")
-		checkSurface(t, "PreviewWildcardSurfaces removed", removed)
-		checkSurface(t, "PreviewWildcardSurfaces kept", kept)
-		if removed.Action == edge.SurfaceKeep {
-			t.Error("PreviewWildcardSurfaces' removed surface is kept; releasing the wildcard must take down what holds it")
-		}
-		if kept.Action != edge.SurfaceKeep {
-			t.Errorf("PreviewWildcardSurfaces' kept surface has action %q, want %q", kept.Action, edge.SurfaceKeep)
+		for _, group := range groups {
+			checkRemoval(t, "ProjectRemovals", group)
 		}
 
-		shared := e.SharedPreviewSurface()
-		checkSurface(t, "SharedPreviewSurface", shared)
-		if shared.Action != edge.SurfaceKeep {
-			t.Errorf("SharedPreviewSurface action = %q, want %q: it is bootstrap-scoped", shared.Action, edge.SurfaceKeep)
+		removed, kept := e.PreviewWildcardRemovals("*.preview.example.com")
+		checkRemoval(t, "PreviewWildcardRemovals removed", removed)
+		checkRemoval(t, "PreviewWildcardRemovals kept", kept)
+		if removed.Action == edge.PlanKeep {
+			t.Error("PreviewWildcardRemovals' removed group is kept; releasing the wildcard must take down what holds it")
+		}
+		if len(removed.Changes) == 0 {
+			t.Error("PreviewWildcardRemovals' removed group carries no rows; a removal plan names what goes")
+		}
+		if kept.Action != edge.PlanKeep {
+			t.Errorf("PreviewWildcardRemovals' kept group has action %q, want %q", kept.Action, edge.PlanKeep)
+		}
+
+		shared := e.SharedPreviewRemoval()
+		checkRemoval(t, "SharedPreviewRemoval", shared)
+		if shared.Action != edge.PlanKeep {
+			t.Errorf("SharedPreviewRemoval action = %q, want %q: it is bootstrap-scoped", shared.Action, edge.PlanKeep)
 		}
 	})
 
@@ -395,14 +398,25 @@ func Run(t *testing.T, suite Suite) {
 	})
 }
 
-func checkSurface(t *testing.T, what string, surface edge.Surface) {
+func checkRemoval(t *testing.T, what string, group edge.PlanGroup) {
 	t.Helper()
 
-	if surface.Kind == "" || surface.Name == "" || surface.Reason == "" {
-		t.Errorf("%s: surface %+v must carry a kind, a name and a reason", what, surface)
+	if group.Kind != edge.EdgeGroupKind || group.Name == "" {
+		t.Errorf("%s: group %+v must be an edge group with a name", what, group)
 	}
-	if !edge.ValidSurfaceAction(surface.Action) {
-		t.Errorf("%s: surface %+v names no valid action", what, surface)
+	if !edge.ValidPlanAction(group.Action) {
+		t.Errorf("%s: group %+v names no valid action", what, group)
+	}
+	if group.Action == edge.PlanKeep && group.Reason == "" {
+		t.Errorf("%s: group %+v is kept and says nothing about why", what, group)
+	}
+	for _, change := range group.Changes {
+		if change.Kind == "" || change.Name == "" {
+			t.Errorf("%s: row %+v must carry a resource type and a name", what, change)
+		}
+		if !edge.ValidPlanAction(change.Action) {
+			t.Errorf("%s: row %+v names no valid action", what, change)
+		}
 	}
 }
 

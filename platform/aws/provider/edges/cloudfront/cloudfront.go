@@ -128,45 +128,62 @@ func (p *provider) CertificateRegion(string) string { return certs.CloudFrontReg
 
 const distributionDeleteReason = "CloudFront only deletes a disabled distribution once the disable has reached every edge"
 
-func (p *provider) ProjectSurfaces(scope edge.ProjectScope) []edge.Surface {
-	var surfaces []edge.Surface
+const (
+	typeDistribution  = "AWS::CloudFront::Distribution"
+	typeKeyValueStore = "AWS::CloudFront::KeyValueStore"
+)
+
+func (p *provider) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+	var changes []edge.PlanChange
 	if scope.Front != "" {
-		surfaces = append(surfaces, edge.Surface{
-			Kind:   "distribution",
+		changes = append(changes, edge.PlanChange{
+			Kind:   typeDistribution,
 			Name:   scope.Front,
-			Action: edge.SurfaceDisableThenDelete,
-			Reason: "the CloudFront distribution fronting this project; " + distributionDeleteReason,
+			Action: edge.PlanDisableThenDelete,
+			Reason: distributionDeleteReason,
 			Slow:   true,
 		})
 	}
-	if len(scope.Hostnames) > 0 {
-		surfaces = append(surfaces, edge.Surface{
-			Kind:   "edge routes",
-			Name:   strings.Join(scope.Hostnames, ", "),
-			Action: edge.SurfaceDelete,
-			Reason: "the key-value store entry the resolver reads for each of this project's hostnames",
+	for _, hostname := range scope.Hostnames {
+		changes = append(changes, edge.PlanChange{
+			Kind:   typeKeyValueStore,
+			Name:   hostname,
+			Action: edge.PlanDelete,
 		})
 	}
-	return surfaces
-}
-
-func (p *provider) PreviewWildcardSurfaces(wildcard string) (edge.Surface, edge.Surface) {
-	removed := edge.Surface{
-		Kind:   "wildcard distribution",
-		Name:   wildcard,
-		Action: edge.SurfaceDisableThenDelete,
-		Reason: "the CloudFront distribution every project's previews are served through; " + distributionDeleteReason,
-		Slow:   true,
+	if len(changes) == 0 {
+		return nil
 	}
-	return removed, p.SharedPreviewSurface()
+	return []edge.PlanGroup{{
+		Kind:    edge.EdgeGroupKind,
+		Name:    edge.EdgeGroupName(Kind),
+		Action:  edge.PlanDelete,
+		Changes: changes,
+	}}
 }
 
-func (p *provider) SharedPreviewSurface() edge.Surface {
-	return edge.Surface{
-		Kind:   "preview resolver",
-		Name:   "function and key-value store",
-		Action: edge.SurfaceKeep,
-		Reason: "bootstrap-scoped: every project's routes are read from it",
+func (p *provider) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+	removed := edge.PlanGroup{
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(Kind),
+		Action: edge.PlanDelete,
+		Changes: []edge.PlanChange{{
+			Kind:   typeDistribution,
+			Name:   wildcard,
+			Action: edge.PlanDisableThenDelete,
+			Reason: distributionDeleteReason,
+			Slow:   true,
+		}},
+	}
+	return removed, p.SharedPreviewRemoval()
+}
+
+func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
+	return edge.PlanGroup{
+		Kind:   edge.EdgeGroupKind,
+		Name:   edge.EdgeGroupName(Kind),
+		Action: edge.PlanKeep,
+		Reason: "bootstrap-scoped: every project's routes are read from the preview resolver function and its key-value store",
 	}
 }
 
