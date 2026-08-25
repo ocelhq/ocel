@@ -218,3 +218,58 @@ func TestPlanParametersRemintsTheKeyTheAccountNoLongerHolds(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanParametersAsksEveryFeatureThatManagesOne(t *testing.T) {
+	standing := featureRegistry
+	t.Cleanup(func() { featureRegistry = standing })
+	featureRegistry = append(slices.Clone(standing), feature{
+		name: "test-edge",
+		afterPlan: func(context.Context, ParamAPIs, string) ([]providerkit.Change, error) {
+			return []providerkit.Change{{Kind: kindParameter, Name: "/ocel/test/written", Action: providerkit.ActionCreate}}, nil
+		},
+		dropPlan: func(context.Context, ParamAPIs, string) ([]providerkit.Change, error) {
+			return []providerkit.Change{{Kind: kindParameter, Name: "/ocel/test/severed", Action: providerkit.ActionDelete}}, nil
+		},
+	})
+
+	ssmc, iamc := standingParams(t)
+
+	planned := actions(plannedParams(t, ssmc, iamc, Request{Features: []string{"test-edge"}}))
+	if planned["/ocel/test/written"] != providerkit.ActionCreate {
+		t.Errorf("the plan says %q about the parameter the feature writes, want it created", planned["/ocel/test/written"])
+	}
+	if _, named := planned["/ocel/test/severed"]; named {
+		t.Error("the plan names what dropping the feature would take while the feature is being asked for")
+	}
+
+	dropped := actions(plannedParams(t, ssmc, iamc, Request{Remove: []string{"test-edge"}}))
+	if dropped["/ocel/test/severed"] != providerkit.ActionDelete {
+		t.Errorf("the plan says %q about what dropping the feature takes, want it deleted", dropped["/ocel/test/severed"])
+	}
+	if _, named := dropped["/ocel/test/written"]; named {
+		t.Error("the plan names a parameter the dropped feature would write")
+	}
+}
+
+func TestPlanParameterRemovalReadsTheAccountInBatches(t *testing.T) {
+	ssmc, iamc := standingParams(t)
+	ssmc.batches = 0
+
+	group, err := PlanParameterRemoval(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, ClassProduction, false)
+	if err != nil {
+		t.Fatalf("PlanParameterRemoval: %v", err)
+	}
+	if len(group.Changes) == 0 {
+		t.Fatal("the removal plan names nothing, and this account holds parameters")
+	}
+
+	names, err := ClassParamNames(ClassProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := (len(names) + 1 + getParametersLimit - 1) / getParametersLimit
+	if ssmc.batches != want {
+		t.Errorf("the removal plan read SSM %d times for %d parameters, want %d batched calls",
+			ssmc.batches, len(names)+1, want)
+	}
+}

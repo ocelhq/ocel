@@ -21,6 +21,8 @@ type fakeSSM struct {
 	params       map[string]string
 	descriptions map[string]string
 	puts         int
+	batches      int
+	wanted       []string
 }
 
 func newFakeSSM() *fakeSSM {
@@ -33,6 +35,21 @@ func (f *fakeSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ .
 		return nil, &ssmtypes.ParameterNotFound{}
 	}
 	return &ssm.GetParameterOutput{Parameter: &ssmtypes.Parameter{Value: aws.String(v)}}, nil
+}
+
+func (f *fakeSSM) GetParameters(_ context.Context, in *ssm.GetParametersInput, _ ...func(*ssm.Options)) (*ssm.GetParametersOutput, error) {
+	f.batches++
+	out := &ssm.GetParametersOutput{}
+	for _, name := range in.Names {
+		f.wanted = append(f.wanted, name)
+		v, ok := f.params[name]
+		if !ok {
+			out.InvalidParameters = append(out.InvalidParameters, name)
+			continue
+		}
+		out.Parameters = append(out.Parameters, ssmtypes.Parameter{Name: aws.String(name), Value: aws.String(v)})
+	}
+	return out, nil
 }
 
 func (f *fakeSSM) PutParameter(_ context.Context, in *ssm.PutParameterInput, _ ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {

@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -19,7 +18,9 @@ var cloudflareEdgeFeature = feature{
 	payloads:   cloudflareEdgePayloads,
 	placements: cloudflareEdgePlacements,
 	after:      mintEdgeCredentials,
+	afterPlan:  plannedEdgeCredentials,
 	drop:       severCloudflareEdge,
+	dropPlan:   plannedCloudflareSever,
 }
 
 func cloudflareEdgePayloads(ctx context.Context, store ObjectStore, bucket string) (stackPayloads, error) {
@@ -126,10 +127,7 @@ func edgeUserResource(userName, class string, optimizer bool) string {
 		paramRevalidateQueueARN, invoke)
 }
 
-func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, class string, req Request) ([]providerkit.Change, error) {
-	if !slices.Contains(req.Features, FeatureCloudflareEdge) {
-		return nil, nil
-	}
+func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, class string) ([]providerkit.Change, error) {
 	names, err := edgeNamesFor(class, KindCloudflare)
 	if err != nil {
 		return nil, err
@@ -161,10 +159,7 @@ func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, class string, r
 	}, nil
 }
 
-func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, class string, req Request) ([]providerkit.Change, error) {
-	if !slices.Contains(req.Remove, FeatureCloudflareEdge) || slices.Contains(req.Features, FeatureCloudflareEdge) {
-		return nil, nil
-	}
+func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, class string) ([]providerkit.Change, error) {
 	names, err := edgeNamesFor(class, KindCloudflare)
 	if err != nil {
 		return nil, err
@@ -181,12 +176,12 @@ func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, class string, r
 			Kind: kindAccessKey, Name: names.user, Action: providerkit.ActionDelete, Reason: reason,
 		})
 	}
+	held, err := paramsHeld(ctx, apis.SSM, names.edgeParams())
+	if err != nil {
+		return nil, err
+	}
 	for _, param := range names.edgeParams() {
-		held, err := paramHeld(ctx, apis.SSM, param)
-		if err != nil {
-			return nil, err
-		}
-		if !held {
+		if !held[param] {
 			continue
 		}
 		changes = append(changes, providerkit.Change{

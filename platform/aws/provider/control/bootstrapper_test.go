@@ -456,7 +456,8 @@ func (b *teardownBuckets) DeleteObjects(_ context.Context, in *s3.DeleteObjectsI
 }
 
 type teardownSSM struct {
-	params map[string]string
+	params  map[string]string
+	batches int
 }
 
 func (s *teardownSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {
@@ -465,6 +466,20 @@ func (s *teardownSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput,
 		return nil, &ssmtypes.ParameterNotFound{}
 	}
 	return &ssm.GetParameterOutput{Parameter: &ssmtypes.Parameter{Value: aws.String(raw)}}, nil
+}
+
+func (s *teardownSSM) GetParameters(_ context.Context, in *ssm.GetParametersInput, _ ...func(*ssm.Options)) (*ssm.GetParametersOutput, error) {
+	s.batches++
+	out := &ssm.GetParametersOutput{}
+	for _, name := range in.Names {
+		raw, ok := s.params[name]
+		if !ok {
+			out.InvalidParameters = append(out.InvalidParameters, name)
+			continue
+		}
+		out.Parameters = append(out.Parameters, ssmtypes.Parameter{Name: aws.String(name), Value: aws.String(raw)})
+	}
+	return out, nil
 }
 
 func (s *teardownSSM) PutParameter(_ context.Context, in *ssm.PutParameterInput, _ ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
