@@ -64,7 +64,9 @@ type feature struct {
 	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
 	placements func(string) stackPayloads
 	after      func(context.Context, stepDeps) error
+	afterPlan  func(context.Context, ParamAPIs, string) ([]providerkit.Change, error)
 	drop       func(context.Context, stepDeps) error
+	dropPlan   func(context.Context, ParamAPIs, string) ([]providerkit.Change, error)
 }
 
 func (f feature) render(class, artifactBucket string, refs stackRefs, alongside FeatureSet) featureStack {

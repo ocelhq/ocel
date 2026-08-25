@@ -66,18 +66,36 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, class string, adoptions
 		}
 		adopted = append(adopted, changes...)
 	}
-	credentials, err := plannedEdgeCredentials(ctx, apis, class, req)
+	written, err := featureParams(ctx, apis, class, req.Features, func(f feature) paramPlanner { return f.afterPlan })
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
-	severed, err := plannedCloudflareSever(ctx, apis, class, req)
+	severed, err := featureParams(ctx, apis, class, Removing(req.Features, req.Remove), func(f feature) paramPlanner { return f.dropPlan })
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
-	group.Changes = slices.Concat(group.Changes, adopted, credentials, severed)
+	group.Changes = slices.Concat(group.Changes, adopted, written, severed)
 
 	group.Action, group.Reason = providerkit.RollUp(group.Changes)
 	return group, nil
+}
+
+type paramPlanner func(context.Context, ParamAPIs, string) ([]providerkit.Change, error)
+
+func featureParams(ctx context.Context, apis ParamAPIs, class string, named []string, hook func(feature) paramPlanner) ([]providerkit.Change, error) {
+	var changes []providerkit.Change
+	for _, f := range featureRegistry {
+		plan := hook(f)
+		if plan == nil || !slices.Contains(named, f.name) {
+			continue
+		}
+		planned, err := plan(ctx, apis, class)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, planned...)
+	}
+	return changes, nil
 }
 
 func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, class string, sharedPassphrase bool) (providerkit.ChangeGroup, error) {
@@ -87,12 +105,12 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, class string, sha
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
+	held, err := paramsHeld(ctx, apis.SSM, append(slices.Clone(names), PassphraseParamName))
+	if err != nil {
+		return providerkit.ChangeGroup{}, err
+	}
 	for _, name := range names {
-		held, err := paramHeld(ctx, apis.SSM, name)
-		if err != nil {
-			return providerkit.ChangeGroup{}, err
-		}
-		if held {
+		if held[name] {
 			group.Changes = append(group.Changes, providerkit.Change{
 				Kind:   kindParameter,
 				Name:   name,
@@ -117,7 +135,7 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, class string, sha
 		})
 	}
 
-	passphrase, err := plannedPassphraseRemoval(ctx, apis.SSM, class, sharedPassphrase)
+	passphrase, err := plannedPassphraseRemoval(held[PassphraseParamName], class, sharedPassphrase)
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
@@ -135,10 +153,9 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, class string, sha
 	return group, nil
 }
 
-func plannedPassphraseRemoval(ctx context.Context, ssmClient SSMAPI, class string, shared bool) (providerkit.Change, error) {
-	held, err := paramHeld(ctx, ssmClient, PassphraseParamName)
-	if err != nil || !held {
-		return providerkit.Change{}, err
+func plannedPassphraseRemoval(held bool, class string, shared bool) (providerkit.Change, error) {
+	if !held {
+		return providerkit.Change{}, nil
 	}
 	if !shared {
 		return providerkit.Change{
@@ -219,6 +236,18 @@ func paramPresence(ctx context.Context, ssmClient SSMAPI, name string) (provider
 		change.Action, change.Reason = providerkit.ActionKeep, paramCurrent
 	}
 	return change, nil
+}
+
+func paramsHeld(ctx context.Context, api SSMBatchAPI, names []string) (map[string]bool, error) {
+	found, err := getParameters(ctx, api, names)
+	if err != nil {
+		return nil, err
+	}
+	held := make(map[string]bool, len(found))
+	for name := range found {
+		held[name] = true
+	}
+	return held, nil
 }
 
 func paramHeld(ctx context.Context, ssmClient SSMAPI, name string) (bool, error) {
