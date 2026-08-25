@@ -7,6 +7,12 @@ export interface AppInput {
   folder?: string;
 }
 
+export interface FrameworkSpec {
+  name: string;
+  runtime: string;
+  entrypointCandidates: string[];
+}
+
 export interface BuildOptions {
   outDir: string;
   edgeKind?: string;

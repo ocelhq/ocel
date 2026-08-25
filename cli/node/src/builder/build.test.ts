@@ -15,12 +15,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildApp, buildApps, detectApp, placeFile, writeBuildPlan } from "./build.js";
 import { BUNDLE_HANDLER } from "./bundle.js";
-import { sanitizeName } from "./detect.js";
 import {
   BUILD_PLAN_FILE,
   NODE_ENTRY_ROUTE_ID,
   SERVE_DESCRIPTOR_FILE,
   appOutDir,
+  sanitizeName,
 } from "./layout.js";
 import { artifactHash } from "./trace.js";
 

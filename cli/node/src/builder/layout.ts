@@ -2,6 +2,10 @@ import path from "node:path";
 
 export const APPS_DIR = "apps";
 
+export function sanitizeName(raw: string): string {
+  return raw.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
 export function appRel(appName: string): string {
   return path.join(APPS_DIR, appName);
 }

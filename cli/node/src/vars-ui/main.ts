@@ -41,7 +41,7 @@ interface AppResolution {
 
 interface State {
   slug: string;
-  bootstrap: string;
+  tier: string;
   environments: string[];
   matrix: {
     columns: string[];
@@ -66,7 +66,7 @@ let selected: Address | null = null;
 let history_: Version[] = [];
 let draft = "";
 let error = "";
-let thread: AppResolution | null = null;
+let hoveredApp: AppResolution | null = null;
 let saving = false;
 
 class ApiError extends Error {
@@ -161,7 +161,7 @@ function folderName(folder: string): string {
 const namedLimit = 5;
 
 function environmentName(environment: string): string {
-  return environment === "" ? "class-wide" : environment;
+  return environment === "" ? "all environments" : environment;
 }
 
 function names(items: string[]): string {
@@ -183,9 +183,9 @@ function coordinateLine(
   }
   const overrides = (cell.overrides ?? []).map((held) => held.environment);
   if (overrides.length === 0) {
-    return `${where} · class-wide, every environment reads it`;
+    return `${where} · all environments read it`;
   }
-  return `${where} · class-wide, except in ${names(overrides)}`;
+  return `${where} · all environments except ${names(overrides)}`;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -263,7 +263,7 @@ function renderMasthead(current: State): HTMLElement {
   const masthead = element("header", "masthead");
   const slug = element("h1", "slug");
   slug.append(current.slug, " ");
-  slug.append(element("span", "bootstrap", `· ${current.bootstrap}`));
+  slug.append(element("span", "tier", `· ${current.tier}`));
   masthead.append(slug);
 
   const owed = owedCount(current);
@@ -298,11 +298,11 @@ function renderApps(current: State): HTMLElement {
     item.append(verdict);
 
     item.addEventListener("mouseenter", () => {
-      thread = app;
+      hoveredApp = app;
       render();
     });
     item.addEventListener("mouseleave", () => {
-      thread = null;
+      hoveredApp = null;
       render();
     });
     list.append(item);
@@ -313,7 +313,7 @@ function renderApps(current: State): HTMLElement {
 function renderMatrix(current: State): HTMLElement {
   const scroller = element("div", "scroller");
   const table = element("table", "matrix");
-  if (thread) table.dataset.threading = "true";
+  if (hoveredApp) table.dataset.threading = "true";
 
   const head = element("thead");
   const headRow = element("tr");
@@ -362,7 +362,7 @@ function renderSocket(row: MatrixRow, cell: MatrixCell): HTMLElement {
   socket.dataset.state = socketState(cell);
   socket.append(element("span", "pip"));
 
-  if (thread && (cell.folder === "" || cell.folder === thread.folder)) {
+  if (hoveredApp && (cell.folder === "" || cell.folder === hoveredApp.folder)) {
     socket.classList.add("threaded");
   }
   return socket;
@@ -579,8 +579,8 @@ function verdictLine(
   }
   if (environment !== "") {
     return set
-      ? `${environment} reads this value; every other environment reads the class-wide one.`
-      : `${environment} has no value of its own, so it reads the class-wide one. Set one here to make it differ.`;
+      ? `${environment} reads this value; every other environment reads the one set for all environments.`
+      : `${environment} has no value of its own, so it reads the one set for all environments. Set one here to make it differ.`;
   }
   if (set) return "A value is set here.";
   return cell.state === "required"

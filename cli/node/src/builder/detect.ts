@@ -11,7 +11,3 @@ export function hasDep(dir: string, name: string): boolean {
     return false;
   }
 }
-
-export function sanitizeName(raw: string): string {
-  return raw.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
-}

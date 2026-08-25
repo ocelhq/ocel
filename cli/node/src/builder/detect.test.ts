@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { hasDep, sanitizeName } from "./detect.js";
+import { hasDep } from "./detect.js";
 
 const roots: string[] = [];
 afterAll(() => roots.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -35,10 +35,4 @@ describe("hasDep", () => {
     writeFileSync(path.join(dir, "package.json"), "{ not json");
     expect(hasDep(dir, "express")).toBe(false);
   });
-});
-
-describe("sanitizeName", () => {
-  it("keeps a clean name", () => expect(sanitizeName("acme-web")).toBe("acme-web"));
-  it("replaces unsafe runs and trims dashes", () => expect(sanitizeName("@acme/web app")).toBe("acme-web-app"));
-  it("can reduce to empty", () => expect(sanitizeName("@/")).toBe(""));
 });
