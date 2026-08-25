@@ -342,7 +342,7 @@ func runPreviewLs(ctx context.Context, d session.Session, cwd string, stdout, st
 	}
 
 	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
-		client, err := runner.Deployments()
+		client, err := runner.Client()
 		if err != nil {
 			return err
 		}
@@ -550,7 +550,7 @@ func preflightSchema(ctx context.Context, d session.Session, runner *provider.Ru
 }
 
 func preflight(ctx context.Context, d session.Session, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string, out io.Writer) (*contractv1.PreflightResponse, error) {
-	client, err := runner.Deployments()
+	client, err := runner.Client()
 	if err != nil {
 		return nil, err
 	}

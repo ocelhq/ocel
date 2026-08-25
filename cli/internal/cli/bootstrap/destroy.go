@@ -48,7 +48,7 @@ func runDestroy(ctx context.Context, sess session.Session, cfg *projectconfig.Co
 
 	asked := prompt.New(stdout, stdin)
 	return providerui.Run(ctx, sess, cfg, destroyCommand(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		client, err := runner.Deployments()
+		client, err := runner.Client()
 		if err != nil {
 			return err
 		}

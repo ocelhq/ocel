@@ -111,7 +111,7 @@ func runDestroy(ctx context.Context, d session.Session, cwd string, stdout, stde
 			return err
 		}
 
-		client, err := runner.Deployments()
+		client, err := runner.Client()
 		if err != nil {
 			return err
 		}
@@ -169,7 +169,7 @@ func runDestroyPreviewProject(ctx context.Context, d session.Session, cwd string
 			return err
 		}
 
-		client, err := runner.Deployments()
+		client, err := runner.Client()
 		if err != nil {
 			return err
 		}

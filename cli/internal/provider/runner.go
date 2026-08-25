@@ -41,7 +41,7 @@ type Config struct {
 	BinaryPath      string
 	Args            []string
 	Env             []string
-	Provider        *contractv1.ProviderConfig
+	ProviderConfig  *contractv1.ProviderConfig
 	ProviderPackage string
 	Stdout          io.Writer
 	Stderr          io.Writer
@@ -76,11 +76,11 @@ func (e *ReadyTimeoutError) Error() string {
 	return fmt.Sprintf("provider did not signal readiness within %s", e.Timeout)
 }
 
-type DeployFailedError struct {
+type OperationFailedError struct {
 	Message string
 }
 
-func (e *DeployFailedError) Error() string {
+func (e *OperationFailedError) Error() string {
 	if strings.TrimSpace(e.Message) == "" {
 		return "the provider reported a failure without a reason"
 	}
@@ -90,7 +90,7 @@ func (e *DeployFailedError) Error() string {
 type Runner struct {
 	cmd             *exec.Cmd
 	token           string
-	provider        *contractv1.ProviderConfig
+	providerConfig  *contractv1.ProviderConfig
 	providerPackage string
 	stdout          io.Writer
 	stderr          io.Writer
@@ -154,7 +154,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	r := &Runner{
 		cmd:             cmd,
 		token:           token,
-		provider:        cfg.Provider,
+		providerConfig:  cfg.ProviderConfig,
 		providerPackage: cfg.ProviderPackage,
 		stdout:          cfg.Stdout,
 		stderr:          cfg.Stderr,
@@ -244,14 +244,14 @@ func (r *Runner) open(ctx context.Context, addr string) error {
 }
 
 func (r *Runner) configure(ctx context.Context) error {
-	if r.provider == nil {
+	if r.providerConfig == nil {
 		return nil
 	}
-	client, err := r.Deployments()
+	client, err := r.Client()
 	if err != nil {
 		return err
 	}
-	if _, err := client.Configure(ctx, &contractv1.ConfigureRequest{Config: r.provider}); err != nil {
+	if _, err := client.Configure(ctx, &contractv1.ConfigureRequest{Config: r.providerConfig}); err != nil {
 		var rejected *connect.Error
 		if errors.As(err, &rejected) && rejected.Code() == connect.CodeInvalidArgument {
 			return fmt.Errorf("%s configures %s with options it does not accept: %s", projectconfig.ConfigFileName, r.providerPackage, rejected.Message())
@@ -299,18 +299,18 @@ func (r *Runner) Vars() (envvarsv1connect.EnvVarsServiceClient, error) {
 	return r.vars, nil
 }
 
-func (r *Runner) Deployments() (contractv1connect.ProviderServiceClient, error) {
+func (r *Runner) Client() (contractv1connect.ProviderServiceClient, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.client == nil {
-		return nil, ErrDeploymentsUnavailable
+		return nil, ErrClientUnavailable
 	}
 	return r.client, nil
 }
 
 var ErrVarsUnavailable = errors.New("provider: the variable store was reached before a successful Ready")
 
-var ErrDeploymentsUnavailable = errors.New("provider: the provider was reached before a successful Ready")
+var ErrClientUnavailable = errors.New("provider: the provider was reached before a successful Ready")
 
 func Stream[Req any](
 	ctx context.Context,
@@ -320,7 +320,7 @@ func Stream[Req any](
 	call func(contractv1connect.ProviderServiceClient, context.Context, *Req) (*connect.ServerStreamForClient[progressv1.OperationEvent], error),
 	onEvent func(*progressv1.OperationEvent),
 ) error {
-	client, err := r.Deployments()
+	client, err := r.Client()
 	if err != nil {
 		return err
 	}
@@ -343,7 +343,7 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[p
 			if result.GetSuccess() {
 				return nil
 			}
-			return &DeployFailedError{Message: result.GetError()}
+			return &OperationFailedError{Message: result.GetError()}
 		}
 	}
 

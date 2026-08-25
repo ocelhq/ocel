@@ -80,7 +80,7 @@ func runDeploymentsLs(ctx context.Context, d session.Session, cwd string, stdout
 			return err
 		}
 
-		client, err := runner.Deployments()
+		client, err := runner.Client()
 		if err != nil {
 			return err
 		}

@@ -192,7 +192,7 @@ func Run(ctx context.Context, sess session.Session, cwd string, tier environment
 
 	asked := prompt.New(stdout, stdin)
 	return providerui.Run(ctx, sess, cfg, "ocel bootstrap "+Name(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		client, err := runner.Deployments()
+		client, err := runner.Client()
 		if err != nil {
 			return err
 		}
@@ -293,7 +293,7 @@ func RunPolicy(ctx context.Context, sess session.Session, cwd string, tier contr
 	}
 
 	return provider.Drive(ctx, cfg, stderr, stderr, func(runner *provider.Runner) error {
-		client, err := runner.Deployments()
+		client, err := runner.Client()
 		if err != nil {
 			return err
 		}
