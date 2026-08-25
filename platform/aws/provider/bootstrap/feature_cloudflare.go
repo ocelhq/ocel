@@ -5,11 +5,13 @@ import (
 	"fmt"
 )
 
+const KindCloudflare = "cloudflare"
+
 var cloudflareEdgeFeature = feature{
 	name:       FeatureCloudflareEdge,
 	summary:    "Cloudflare as the front — workers, credential, snapshot publisher",
 	dependsOn:  []string{FeatureISR},
-	needs:      []string{needsEdgePrefix + "cloudflare"},
+	needs:      []string{needsEdgePrefix + KindCloudflare},
 	template:   cloudflareEdgeTemplate,
 	payloads:   cloudflareEdgePayloads,
 	placements: cloudflareEdgePlacements,
@@ -122,7 +124,7 @@ func edgeUserResource(userName, class string, optimizer bool) string {
 }
 
 func severCloudflareEdge(ctx context.Context, d stepDeps) error {
-	names, err := edgeNamesFor(d.class)
+	names, err := edgeNamesFor(d.class, KindCloudflare)
 	if err != nil {
 		return err
 	}
@@ -141,7 +143,7 @@ func severCloudflareEdge(ctx context.Context, d stepDeps) error {
 
 func mintEdgeCredentials(ctx context.Context, d stepDeps) error {
 	d.progress("Ensuring edge reader credentials (SSM SecureString)")
-	created, err := ensureEdgeCredentials(ctx, d.iam, d.ssm, d.class)
+	created, err := ensureEdgeCredentials(ctx, d.iam, d.ssm, d.class, KindCloudflare)
 	if err != nil {
 		return err
 	}

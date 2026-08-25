@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore"
 	kvstypes "github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore/types"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -125,7 +126,7 @@ func routeKey(hostname string) string { return strings.ToLower(hostname) }
 
 func routeOwner(ctx context.Context, c Clients, class edge.Class, hostname string) (string, bool, error) {
 	store, err := c.CloudFront.DescribeKeyValueStore(ctx, &cloudfront.DescribeKeyValueStoreInput{
-		Name: aws.String(keyValueStoreName(class)),
+		Name: aws.String(bootstrap.EdgeRoutesStoreName(class)),
 	})
 	if err != nil {
 		if isNotFound(err) {
@@ -145,7 +146,7 @@ func routeOwner(ctx context.Context, c Clients, class edge.Class, hostname strin
 	}
 	var held route
 	if err := json.Unmarshal([]byte(aws.ToString(out.Value)), &held); err != nil {
-		return "", false, fmt.Errorf("decode the route %s answers on: it is not the JSON the resolver reads, so something other than Ocel wrote it. Remove that key from the %s key value store and promote again: %w", hostname, keyValueStoreName(class), err)
+		return "", false, fmt.Errorf("decode the route %s answers on: it is not the JSON the resolver reads, so something other than Ocel wrote it. Remove that key from the %s key value store and promote again: %w", hostname, bootstrap.EdgeRoutesStoreName(class), err)
 	}
 	if held.Stack == "" {
 		return "", false, nil

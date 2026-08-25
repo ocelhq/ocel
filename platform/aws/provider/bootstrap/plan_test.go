@@ -17,7 +17,7 @@ func planned(t *testing.T, cfn CFNAPI, class string, req Request) []providerkit.
 	t.Helper()
 
 	ctx := context.Background()
-	read, err := Read(ctx, cfn, class, nil)
+	read, err := Read(ctx, cfn, class)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -32,7 +32,7 @@ func planned(t *testing.T, cfn CFNAPI, class string, req Request) []providerkit.
 			DigestCurrent: stack.Current(),
 		})
 	}
-	groups, err := PlanChanges(ctx, cfn, read, nil, req, providerkit.DeriveGroups(
+	groups, err := PlanChanges(ctx, cfn, read, req, providerkit.DeriveGroups(
 		NameStacks(described), Catalogue(),
 		providerkit.BootstrapRequest{Class: providerkit.Class(class), Features: req.Features, Drop: req.Drop}))
 	if err != nil {

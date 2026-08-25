@@ -668,8 +668,8 @@ func TestRun(t *testing.T) {
 		if len(iamc.created) != 1 || iamc.created[0] != EdgeUserName {
 			t.Errorf("minted keys for %v, want [%s]", iamc.created, EdgeUserName)
 		}
-		if _, ok := ssmc.params[EdgeCredentialsParamName]; !ok {
-			t.Errorf("no static key stored at %s", EdgeCredentialsParamName)
+		if _, ok := ssmc.params[cloudflareNames(ClassProduction).credentialsParam]; !ok {
+			t.Errorf("no static key stored at %s", cloudflareNames(ClassProduction).credentialsParam)
 		}
 	})
 
@@ -683,7 +683,7 @@ func TestRun(t *testing.T) {
 		if err := Run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		assertMintedSecrets(t, ssmc, OriginSecretParamName, ISRWriterSeedParamName)
+		assertMintedSecrets(t, ssmc, OriginSecretParamName, cloudflareNames(ClassProduction).isrWriterSeedParam)
 	})
 
 	t.Run("bootstraps the edge for its own class", func(t *testing.T) {
@@ -706,8 +706,8 @@ func TestRun(t *testing.T) {
 			class     string
 			credParam string
 		}{
-			{ClassProduction, EdgeCredentialsParamName},
-			{ClassPreview, EdgeCredentialsPreviewParamName},
+			{ClassProduction, cloudflareNames(ClassProduction).credentialsParam},
+			{ClassPreview, cloudflareNames(ClassPreview).credentialsParam},
 		} {
 			t.Run(tc.class, func(t *testing.T) {
 				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
@@ -740,7 +740,7 @@ func TestRun(t *testing.T) {
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		got, err := ReadEdgeValues(context.Background(), ssmc, ClassProduction)
+		got, err := ReadEdgeValues(context.Background(), ssmc, ClassProduction, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ReadEdgeValues: %v", err)
 		}
@@ -761,10 +761,10 @@ func TestRun(t *testing.T) {
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		if _, ok := ssmc.params[EdgeValuesParamName]; ok {
+		if _, ok := ssmc.params[cloudflareNames(ClassProduction).valuesParam]; ok {
 			t.Errorf("stored an edge values parameter for an edge that reported none")
 		}
-		got, err := ReadEdgeValues(context.Background(), ssmc, ClassProduction)
+		got, err := ReadEdgeValues(context.Background(), ssmc, ClassProduction, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ReadEdgeValues on an absent parameter: %v", err)
 		}
@@ -791,7 +791,7 @@ func TestRun(t *testing.T) {
 		if len(iamc.created) != 1 {
 			t.Errorf("an unrecognised offer changed what was minted: %v", iamc.created)
 		}
-		if _, ok := ssmc.params[CacheStoreParamName]; !ok {
+		if _, ok := ssmc.params[cloudflareNames(ClassProduction).cacheStoreParam]; !ok {
 			t.Errorf("the recognised offer alongside it was not adopted")
 		}
 	})
@@ -803,7 +803,7 @@ func TestRun(t *testing.T) {
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		if _, ok := ssmc.params[CacheStoreParamName]; ok {
+		if _, ok := ssmc.params[cloudflareNames(ClassProduction).cacheStoreParam]; ok {
 			t.Errorf("stored a cache store for an edge that offered none")
 		}
 	})
@@ -814,8 +814,8 @@ func TestRun(t *testing.T) {
 			class string
 			param string
 		}{
-			{"production", ClassProduction, CacheStoreParamName},
-			{"preview", ClassPreview, CacheStorePreviewParamName},
+			{"production", ClassProduction, cloudflareNames(ClassProduction).cacheStoreParam},
+			{"preview", ClassPreview, cloudflareNames(ClassPreview).cacheStoreParam},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				ssmc := newFakeSSM()
@@ -829,7 +829,7 @@ func TestRun(t *testing.T) {
 				if _, ok := ssmc.params[tc.param]; !ok {
 					t.Fatalf("no cache store stored at %s", tc.param)
 				}
-				got, err := ReadCacheStore(context.Background(), ssmc, tc.class)
+				got, err := ReadCacheStore(context.Background(), ssmc, tc.class, KindCloudflare)
 				if err != nil {
 					t.Fatalf("ReadCacheStore: %v", err)
 				}
@@ -852,7 +852,7 @@ func TestRun(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected Run to fail on an unrecoverable cache-store credential")
 		}
-		if _, ok := ssmc.params[CacheStoreParamName]; ok {
+		if _, ok := ssmc.params[cloudflareNames(ClassProduction).cacheStoreParam]; ok {
 			t.Error("stored a credential-less cache store despite the hazard")
 		}
 		if slices.Contains(cfn.stacks(), edgeStack(ClassProduction)) {
@@ -875,17 +875,17 @@ func TestRun(t *testing.T) {
 			t.Errorf("minted %d keys across two bootstraps, want 1: %v", len(iamc.created), iamc.created)
 		}
 		var creds EdgeCredentials
-		if err := json.Unmarshal([]byte(ssmc.params[EdgeCredentialsParamName]), &creds); err != nil {
+		if err := json.Unmarshal([]byte(ssmc.params[cloudflareNames(ClassProduction).credentialsParam]), &creds); err != nil {
 			t.Fatalf("stored credentials are not readable after a re-run: %v", err)
 		}
 		if creds.AccessKeyID != "AKIAEDGE" {
 			t.Errorf("stored key = %q, want the first minted key", creds.AccessKeyID)
 		}
-		if cfn.creates != 4 {
-			t.Errorf("stacks were created %d times across two bootstraps, want one create each for core and its three features", cfn.creates)
+		if want := 1 + len(featureNames()); cfn.creates != want {
+			t.Errorf("stacks were created %d times across two bootstraps, want one create each for core and its %d features", cfn.creates, len(featureNames()))
 		}
-		if cfn.noops != 4 {
-			t.Errorf("the second bootstrap submitted %d unchanged templates, want 4: a re-run must converge, not re-provision", cfn.noops)
+		if want := 1 + len(featureNames()); cfn.noops != want {
+			t.Errorf("the second bootstrap submitted %d unchanged templates, want %d: a re-run must converge, not re-provision", cfn.noops, want)
 		}
 	})
 
@@ -941,8 +941,8 @@ func TestRunPreview(t *testing.T) {
 		if err := Run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), ClassPreview, everything(), nil, nil); err != nil {
 			t.Fatalf("RunPreview: %v", err)
 		}
-		assertMintedSecrets(t, ssmc, OriginSecretPreviewParamName, ISRWriterSeedPreviewParamName)
-		for _, name := range []string{OriginSecretParamName, ISRWriterSeedParamName} {
+		assertMintedSecrets(t, ssmc, OriginSecretPreviewParamName, cloudflareNames(ClassPreview).isrWriterSeedParam)
+		for _, name := range []string{OriginSecretParamName, cloudflareNames(ClassProduction).isrWriterSeedParam} {
 			if _, ok := ssmc.params[name]; ok {
 				t.Errorf("a preview bootstrap wrote %s, want the production secrets left alone", name)
 			}
@@ -964,11 +964,11 @@ func TestRunPreview(t *testing.T) {
 			}
 		}
 
-		if cfn.creates != 4 {
-			t.Errorf("stacks were created %d times across two preview bootstraps, want one create each for core and its three features", cfn.creates)
+		if want := 1 + len(featureNames()); cfn.creates != want {
+			t.Errorf("stacks were created %d times across two preview bootstraps, want one create each for core and its %d features", cfn.creates, len(featureNames()))
 		}
-		if cfn.noops != 4 {
-			t.Errorf("the second bootstrap submitted %d unchanged templates, want 4: a re-run must converge, not re-provision", cfn.noops)
+		if want := 1 + len(featureNames()); cfn.noops != want {
+			t.Errorf("the second bootstrap submitted %d unchanged templates, want %d: a re-run must converge, not re-provision", cfn.noops, want)
 		}
 		for _, name := range cfn.stacks() {
 			if !strings.HasSuffix(name, "-preview") {
@@ -980,7 +980,7 @@ func TestRunPreview(t *testing.T) {
 			t.Errorf("minted %d keys across two preview bootstraps, want 1: %v", len(iamc.created), iamc.created)
 		}
 		var creds EdgeCredentials
-		if err := json.Unmarshal([]byte(ssmc.params[EdgeCredentialsPreviewParamName]), &creds); err != nil {
+		if err := json.Unmarshal([]byte(ssmc.params[cloudflareNames(ClassPreview).credentialsParam]), &creds); err != nil {
 			t.Fatalf("stored preview credentials are not readable after a re-run: %v", err)
 		}
 		if creds.AccessKeyID != "AKIAEDGE" {
@@ -990,7 +990,7 @@ func TestRunPreview(t *testing.T) {
 			t.Error("the second bootstrap regenerated the Pulumi passphrase, orphaning every preview stack encrypted under the first")
 		}
 
-		got, err := ReadEdgeValues(context.Background(), ssmc, ClassPreview)
+		got, err := ReadEdgeValues(context.Background(), ssmc, ClassPreview, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ReadEdgeValues: %v", err)
 		}
@@ -1032,7 +1032,7 @@ func TestRunDefaultEdge(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		var sawCore bool
 		front := &fakeEdge{kind: "cloudfront", onBootstrap: func() {
-			deployed, err := CheckDeployed(context.Background(), cfn, nil)
+			deployed, err := CheckDeployed(context.Background(), cfn)
 			if err != nil {
 				t.Errorf("CheckDeployed inside the edge bootstrap: %v", err)
 			}
@@ -1100,7 +1100,7 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 				if err := Run(context.Background(), apis, tc.class, everything(), nil, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
-				names, err := edgeNamesFor(tc.class)
+				names, err := edgeNamesFor(tc.class, KindCloudflare)
 				if err != nil {
 					t.Fatalf("edgeNamesFor: %v", err)
 				}
@@ -1165,7 +1165,7 @@ func previewSuffix(class string) string {
 
 func originSecretFor(t *testing.T, class string) string {
 	t.Helper()
-	names, err := edgeNamesFor(class)
+	names, err := edgeNamesFor(class, KindCloudflare)
 	if err != nil {
 		t.Fatalf("edgeNamesFor: %v", err)
 	}
@@ -1185,7 +1185,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		}
 
 		cfn.wedge(isrStack(ClassProduction))
-		deployed, err := CheckDeployed(context.Background(), cfn, nil)
+		deployed, err := CheckDeployed(context.Background(), cfn)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
@@ -1212,7 +1212,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		if !slices.Contains(cfn.deleted, isrStack(ClassProduction)) {
 			t.Errorf("deleted %v, want the wedged stack replaced rather than updated", cfn.deleted)
 		}
-		deployed, err := CheckDeployed(context.Background(), cfn, nil)
+		deployed, err := CheckDeployed(context.Background(), cfn)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}

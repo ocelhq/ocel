@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -121,8 +122,8 @@ func TestReconcilePreviewWildcardRoutesEverythingUnclaimedTo404(t *testing.T) {
 	if catchAll == nil {
 		t.Fatalf("no catch-all rule; the wildcard holds %v", w.gateway.mutations())
 	}
-	if catchAll.api != fakeNotFoundAPI || catchAll.stage != stageName {
-		t.Errorf("catch-all rule serves %s/%s, want the %s the core stack outputs, on %s", catchAll.api, catchAll.stage, OutputNotFoundAPIID, stageName)
+	if catchAll.api != fakeNotFoundAPI || catchAll.stage != bootstrap.EdgeStageName {
+		t.Errorf("catch-all rule serves %s/%s, want the %s the core stack outputs, on %s", catchAll.api, catchAll.stage, bootstrap.OutputEdgeNotFoundAPIID, stageName)
 	}
 	if catchAll.priority != catchAllPriority {
 		t.Errorf("catch-all priority = %d, want %d; rules are evaluated lowest first, so the catch-all has to lose to every preview", catchAll.priority, catchAllPriority)

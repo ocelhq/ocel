@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"maps"
 	mathrand "math/rand/v2"
 	"slices"
 	"strings"
@@ -74,7 +75,7 @@ type Deployed struct {
 	RevalidateQueueURL string
 	AppBoundaryARN     string
 	Class              string
-	CoreOutputs        map[string]string
+	Outputs            map[string]string
 }
 
 type CFNDescriber interface {
@@ -115,16 +116,16 @@ type Request struct {
 	AcceptReplacements bool
 }
 
-func CheckDeployed(ctx context.Context, api CFNDescriber, front edge.Edge) (Deployed, error) {
-	return CheckDeployedFor(ctx, api, ClassProduction, front)
+func CheckDeployed(ctx context.Context, api CFNDescriber) (Deployed, error) {
+	return CheckDeployedFor(ctx, api, ClassProduction)
 }
 
-func CheckDeployedPreview(ctx context.Context, api CFNDescriber, front edge.Edge) (Deployed, error) {
-	return CheckDeployedFor(ctx, api, ClassPreview, front)
+func CheckDeployedPreview(ctx context.Context, api CFNDescriber) (Deployed, error) {
+	return CheckDeployedFor(ctx, api, ClassPreview)
 }
 
-func CheckDeployedFor(ctx context.Context, api CFNDescriber, class string, front edge.Edge) (Deployed, error) {
-	deployed, _, err := readBootstrap(ctx, api, class, front)
+func CheckDeployedFor(ctx context.Context, api CFNDescriber, class string) (Deployed, error) {
+	deployed, _, err := readBootstrap(ctx, api, class)
 	return deployed, err
 }
 
@@ -134,23 +135,23 @@ type Reading struct {
 	refs     stackRefs
 }
 
-func Read(ctx context.Context, api CFNDescriber, class string, front edge.Edge) (Reading, error) {
-	deployed, refs, err := readBootstrap(ctx, api, class, front)
+func Read(ctx context.Context, api CFNDescriber, class string) (Reading, error) {
+	deployed, refs, err := readBootstrap(ctx, api, class)
 	if err != nil {
 		return Reading{}, err
 	}
 	return Reading{Deployed: deployed, class: class, refs: refs}, nil
 }
 
-func CoreOutputs(ctx context.Context, api CFNDescriber, class string) (map[string]string, error) {
-	stackName, err := StackNameFor(class)
-	if err != nil {
-		return nil, err
+func FeatureOutputs(ctx context.Context, api CFNDescriber, class, name string) (map[string]string, error) {
+	f, ok := featureNamed(name)
+	if !ok {
+		return nil, fmt.Errorf("bootstrap: no feature named %q", name)
 	}
-	return stackOutputs(ctx, api, stackName)
+	return stackOutputs(ctx, api, f.stackName(class))
 }
 
-func readBootstrap(ctx context.Context, api CFNDescriber, class string, front edge.Edge) (Deployed, stackRefs, error) {
+func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deployed, stackRefs, error) {
 	coreStack, err := StackNameFor(class)
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
@@ -163,9 +164,9 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string, front ed
 		return Deployed{Present: false, Features: FeatureSet{}}, stackRefs{}, nil
 	}
 
-	d := Deployed{Present: true, Features: FeatureSet{}, CoreOutputs: outputsOf(core)}
+	d := Deployed{Present: true, Features: FeatureSet{}, Outputs: outputsOf(core)}
 	var refs stackRefs
-	if err := absorb(&d, &refs, d.CoreOutputs); err != nil {
+	if err := absorb(&d, &refs, d.Outputs); err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
 	coreStamp := readStamp(core.Tags)
@@ -182,7 +183,9 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string, front ed
 		}
 		d.Features[f.name] = true
 		stamps[f.name] = readStamp(stack.Tags)
-		if err := absorb(&d, &refs, outputsOf(stack)); err != nil {
+		out := outputsOf(stack)
+		maps.Copy(d.Outputs, out)
+		if err := absorb(&d, &refs, out); err != nil {
 			return Deployed{}, stackRefs{}, err
 		}
 	}
@@ -196,7 +199,7 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string, front ed
 		Present:   true,
 		Schema:    coreStamp.Schema,
 		Digest:    coreStamp.Digest,
-		Intended:  TemplateDigest(target.core(coreFragment(front, class))),
+		Intended:  TemplateDigest(target.core()),
 		WrittenBy: coreStamp.WrittenBy,
 	})
 	for _, f := range featureRegistry {
@@ -323,7 +326,7 @@ type spec struct {
 	stackStep string
 }
 
-func (s spec) core(front CoreFragment) string { return coreStackTemplate(s.class, front) }
+func (s spec) core() string { return coreStackTemplate(s.class) }
 
 func productionBootstrap() spec {
 	return spec{
@@ -396,25 +399,18 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	}
 
 	progressf(target.stackStep)
-	standing, err := standingCore(ctx, apis.CFN, target)
-	if err != nil {
-		return err
-	}
-	if err := refuseEdgeSwitch(target, apis.Edge, standing); err != nil {
-		return err
-	}
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	review := admitReplacements(req.AcceptReplacements, logf)
-	coreBody := target.core(coreFragment(apis.Edge, target.class))
+	coreBody := target.core()
 	coreTags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
 	if err := upsertCFNStack(ctx, apis.CFN, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
-	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.class, apis.Edge)
+	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.class)
 	if err != nil {
 		return err
 	}
-	steps := stepDeps{class: target.class, ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
+	steps := stepDeps{class: target.class, kind: apis.Edge.Kind(), ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
 	if droppingEdge(apis.Edge, req) {
 		if err := tearDownEdge(ctx, steps, apis.Edge); err != nil {
 			return err
@@ -512,14 +508,6 @@ func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, class string,
 	return deleteFeatureStacks(ctx, cfn, class, dropOrder, logf)
 }
 
-func standingCore(ctx context.Context, api CFNDescriber, target spec) (Deployed, error) {
-	core, err := describeStack(ctx, api, target.stackName)
-	if err != nil || core == nil || stackUnusable(core.StackStatus) {
-		return Deployed{}, err
-	}
-	return Deployed{Present: true, CoreOutputs: outputsOf(core)}, nil
-}
-
 func droppingEdge(front edge.Edge, req Request) bool {
 	name := providerkit.FeatureNeedingEdge(Catalogue(), front.Kind())
 	return name != "" && slices.Contains(req.Drop, name) && !slices.Contains(req.Features, name)
@@ -556,7 +544,7 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 			if err := adoptISRWriter(ctx, d.ssm, d.class, front.Kind(), offer.Values); err != nil {
 				return err
 			}
-			if _, err := ensureISRWriterSeed(ctx, d.ssm, d.class); err != nil {
+			if _, err := ensureISRWriterSeed(ctx, d.ssm, d.class, d.kind); err != nil {
 				return err
 			}
 		default:
@@ -567,7 +555,7 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 		return nil
 	}
 	d.progress("Storing edge bootstrap outputs (SSM SecureString)")
-	return writeEdgeValues(ctx, d.ssm, d.class, out.Values)
+	return writeEdgeValues(ctx, d.ssm, d.class, front.Kind(), out.Values)
 }
 
 func FeatureStackName(name, class string) string {
@@ -908,21 +896,21 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func coreStackTemplate(class string, front CoreFragment) string {
+func coreStackTemplate(class string) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: %q
 Resources:
-%s%s%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket holding the Pulumi state Ocel plans every %s deploy and teardown from. One versioned object per %s stack."
     Value: !Ref StateBucket
-%s%s%s%s%s%s  %s:
+%s%s%s%s%s  %s:
     Description: "Class this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
     Value: '%s'
 `, coreStackDescription(class),
-		stateBucketResource(class), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(class), appBoundaryResource(class), front.Resources,
+		stateBucketResource(class), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(class), appBoundaryResource(class),
 		outputStateBucket, class, scopeOf(class),
-		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), front.Outputs, outputInfraClass, class)
+		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, class)
 }
 
 func coreStackDescription(class string) string {
@@ -930,7 +918,7 @@ func coreStackDescription(class string) string {
 	if class == ClassPreview {
 		apart = " It is kept apart from the production bootstrap so a per-PR preview never reaches production state, variables or caches."
 	}
-	return fmt.Sprintf("Ocel bootstrap (%s) - the account-global core every %s Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store and whatever the selected edge fronts them with.%s", class, scopeOf(class), apart)
+	return fmt.Sprintf("Ocel bootstrap (%s) - the account-global core every %s Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store. Each edge this account fronts deployments with stands in a feature stack of its own beside it.%s", class, scopeOf(class), apart)
 }
 
 func scopeOf(class string) string {

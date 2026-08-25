@@ -9,6 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
 const (
@@ -74,7 +76,7 @@ func (p distributionPlan) config(aliases []string, certificate string) *cftypes.
 		HttpVersion:     cftypes.HttpVersionHttp2and3,
 		IsIPV6Enabled:   ptr(true),
 		PriceClass:      cftypes.PriceClassPriceClassAll,
-		CacheTagConfig:  &cftypes.CacheTagConfig{HeaderName: aws.String(cacheTagHeader)},
+		CacheTagConfig:  &cftypes.CacheTagConfig{HeaderName: aws.String(bootstrap.EdgeCacheTagHeader)},
 		Aliases:         &cftypes.Aliases{Quantity: quantity(aliases), Items: aliases},
 		Origins: &cftypes.Origins{
 			Quantity: ptr(int32(1)),

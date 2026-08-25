@@ -166,7 +166,7 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	if front.bootstraps != 1 {
 		t.Errorf("the edge was bootstrapped %d times, want once: a drop re-adopting what it is about to sever leaves the two disagreeing", front.bootstraps)
 	}
-	if _, held := ssmc.params[DeploymentsStoreParamName]; held {
+	if _, held := ssmc.params[cloudflareNames(ClassProduction).deploymentsStoreParam]; held {
 		t.Error("the deployments store parameter outlived the drop, so the next bootstrap reads a store nothing stands behind")
 	}
 

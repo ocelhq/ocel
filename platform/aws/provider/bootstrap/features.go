@@ -10,12 +10,15 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
 	FeatureISR               = "isr"
 	FeatureImageOptimization = "image-optimization"
 	FeatureCloudflareEdge    = "cloudflare-edge"
+	FeatureCloudFrontEdge    = "cloudfront-edge"
+	FeatureAPIGatewayEdge    = "apigateway-edge"
 
 	needsFrameworkPrefix = providerkit.NeedsFrameworkPrefix
 	needsEdgePrefix      = providerkit.NeedsEdgePrefix
@@ -45,6 +48,7 @@ type featureStack struct {
 
 type stepDeps struct {
 	class    string
+	kind     edge.Kind
 	ssm      SSMAPI
 	iam      IAMAPI
 	progress func(string)
@@ -80,7 +84,13 @@ func (f feature) stackName(class string) string {
 	return StackName + "-" + f.name
 }
 
-var featureRegistry = []feature{isrFeature, imageOptimizationFeature, cloudflareEdgeFeature}
+var featureRegistry = []feature{
+	isrFeature,
+	imageOptimizationFeature,
+	cloudflareEdgeFeature,
+	cloudFrontEdgeFeature,
+	apiGatewayEdgeFeature,
+}
 
 func Catalogue() []providerkit.Feature {
 	out := make([]providerkit.Feature, 0, len(featureRegistry))
@@ -102,6 +112,18 @@ func featureNamed(name string) (feature, bool) {
 		}
 	}
 	return feature{}, false
+}
+
+func edgeKinds() []edge.Kind {
+	var kinds []edge.Kind
+	for _, f := range featureRegistry {
+		for _, need := range f.needs {
+			if kind, ok := strings.CutPrefix(need, needsEdgePrefix); ok {
+				kinds = append(kinds, edge.Kind(kind))
+			}
+		}
+	}
+	return kinds
 }
 
 func featureNames() []string {

@@ -95,7 +95,7 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc := newFakeSSM()
 		iamc := &fakeIAM{}
 
-		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
+		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -106,9 +106,9 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 			t.Errorf("CreateAccessKey users = %v, want [%s]", iamc.created, EdgeUserName)
 		}
 
-		stored, ok := ssmc.params[EdgeCredentialsParamName]
+		stored, ok := ssmc.params[cloudflareNames(ClassProduction).credentialsParam]
 		if !ok {
-			t.Fatalf("credentials were not written to %s", EdgeCredentialsParamName)
+			t.Fatalf("credentials were not written to %s", cloudflareNames(ClassProduction).credentialsParam)
 		}
 		var creds EdgeCredentials
 		if err := json.Unmarshal([]byte(stored), &creds); err != nil {
@@ -121,10 +121,10 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 
 	t.Run("reuses a recorded key the user still has", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		ssmc.params[EdgeCredentialsParamName] = `{"accessKeyId":"AKOLD","secretAccessKey":"old"}`
+		ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = `{"accessKeyId":"AKOLD","secretAccessKey":"old"}`
 		iamc := &fakeIAM{keys: []string{"AKOLD"}}
 
-		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
+		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -141,10 +141,10 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 
 	t.Run("re-mints when the recorded key is gone from the user", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		ssmc.params[EdgeCredentialsParamName] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
+		ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
 		iamc := &fakeIAM{}
 
-		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
+		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -152,7 +152,7 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 			t.Error("expected created=true: a CloudFormation replacement of the user takes its key, and the parameter outlives it")
 		}
 		var creds EdgeCredentials
-		if err := json.Unmarshal([]byte(ssmc.params[EdgeCredentialsParamName]), &creds); err != nil {
+		if err := json.Unmarshal([]byte(ssmc.params[cloudflareNames(ClassProduction).credentialsParam]), &creds); err != nil {
 			t.Fatalf("stored value is not EdgeCredentials JSON: %v", err)
 		}
 		if creds.AccessKeyID != "AKIAEDGE" {
@@ -162,10 +162,10 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 
 	t.Run("names the dead key when the cap blocks a re-mint", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		ssmc.params[EdgeCredentialsParamName] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
+		ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
 		iamc := &fakeIAM{keys: []string{"AK1", "AK2"}}
 
-		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction, KindCloudflare)
 		if err == nil {
 			t.Fatal("expected an error when the user is already at the 2-key cap")
 		}
@@ -178,7 +178,7 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc := newFakeSSM()
 		iamc := &fakeIAM{keys: []string{"AK1", "AK2"}}
 
-		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction, KindCloudflare)
 		if err == nil {
 			t.Fatal("expected an error when the user is already at the 2-key cap")
 		}
@@ -194,23 +194,23 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc := newFakeSSM()
 		iamc := &fakeIAM{}
 
-		if _, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassPreview); err != nil {
+		if _, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassPreview, KindCloudflare); err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
 		if len(iamc.created) != 1 || iamc.created[0] != EdgePreviewUserName {
 			t.Errorf("CreateAccessKey users = %v, want [%s]", iamc.created, EdgePreviewUserName)
 		}
-		if _, ok := ssmc.params[EdgeCredentialsPreviewParamName]; !ok {
-			t.Errorf("preview credentials were not written to %s", EdgeCredentialsPreviewParamName)
+		if _, ok := ssmc.params[cloudflareNames(ClassPreview).credentialsParam]; !ok {
+			t.Errorf("preview credentials were not written to %s", cloudflareNames(ClassPreview).credentialsParam)
 		}
 	})
 }
 
 func TestReadEdgeCredentials(t *testing.T) {
 	ssmc := newFakeSSM()
-	ssmc.params[EdgeCredentialsParamName] = `{"accessKeyId":"AK1","secretAccessKey":"s1"}`
+	ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = `{"accessKeyId":"AK1","secretAccessKey":"s1"}`
 
-	creds, err := ReadEdgeCredentials(context.Background(), ssmc, ClassProduction)
+	creds, err := ReadEdgeCredentials(context.Background(), ssmc, ClassProduction, KindCloudflare)
 	if err != nil {
 		t.Fatalf("ReadEdgeCredentials: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestReadEdgeCredentials(t *testing.T) {
 
 func TestEdgeCredentials(t *testing.T) {
 	t.Run("unknown class", func(t *testing.T) {
-		if _, err := ensureEdgeCredentials(context.Background(), &fakeIAM{}, newFakeSSM(), "nonsense"); err == nil {
+		if _, err := ensureEdgeCredentials(context.Background(), &fakeIAM{}, newFakeSSM(), "nonsense", KindCloudflare); err == nil {
 			t.Error("expected an error for an unknown class")
 		}
 	})
@@ -244,7 +244,7 @@ func TestAdoptCacheStore(t *testing.T) {
 		if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offeredStore()); err != nil {
 			t.Fatalf("adoptCacheStore: %v", err)
 		}
-		got, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
+		got, err := ReadCacheStore(context.Background(), ssmc, ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadCacheStore: %v", err)
 		}
@@ -273,7 +273,7 @@ func TestAdoptCacheStore(t *testing.T) {
 		if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", reoffer); err != nil {
 			t.Fatalf("second adopt: %v", err)
 		}
-		got, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
+		got, err := ReadCacheStore(context.Background(), ssmc, ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadCacheStore: %v", err)
 		}
@@ -296,7 +296,7 @@ func TestAdoptCacheStore(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				ssmc := newFakeSSM()
 				if tc.stored != "" {
-					ssmc.params[CacheStoreParamName] = tc.stored
+					ssmc.params[namesFor(ClassProduction, "fake").cacheStoreParam] = tc.stored
 				}
 				offer := offeredStore()
 				delete(offer, edge.OfferKeySecretAccessKey)
@@ -308,8 +308,8 @@ func TestAdoptCacheStore(t *testing.T) {
 				if !strings.Contains(err.Error(), "tok-1") {
 					t.Errorf("diagnostic does not name the token: %v", err)
 				}
-				if ssmc.params[CacheStoreParamName] != tc.stored {
-					t.Errorf("wrote %q over the stored store despite failing", ssmc.params[CacheStoreParamName])
+				if ssmc.params[namesFor(ClassProduction, "fake").cacheStoreParam] != tc.stored {
+					t.Errorf("wrote %q over the stored store despite failing", ssmc.params[namesFor(ClassProduction, "fake").cacheStoreParam])
 				}
 			})
 		}
@@ -328,11 +328,11 @@ func TestAdoptCacheStore(t *testing.T) {
 			t.Fatalf("preview adopt: %v", err)
 		}
 
-		prod, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
+		prod, err := ReadCacheStore(context.Background(), ssmc, ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadCacheStore production: %v", err)
 		}
-		prev, err := ReadCacheStore(context.Background(), ssmc, ClassPreview)
+		prev, err := ReadCacheStore(context.Background(), ssmc, ClassPreview, "fake")
 		if err != nil {
 			t.Fatalf("ReadCacheStore preview: %v", err)
 		}
@@ -353,7 +353,7 @@ func TestAdoptCacheStore(t *testing.T) {
 
 func TestReadCacheStore(t *testing.T) {
 	t.Run("absent is not an error", func(t *testing.T) {
-		got, err := ReadCacheStore(context.Background(), newFakeSSM(), ClassProduction)
+		got, err := ReadCacheStore(context.Background(), newFakeSSM(), ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadCacheStore on an absent parameter: %v", err)
 		}
@@ -376,10 +376,10 @@ func TestDeploymentsStoreParamFor(t *testing.T) {
 		class string
 		want  string
 	}{
-		{ClassProduction, DeploymentsStoreParamName},
-		{ClassPreview, DeploymentsStorePreviewParamName},
+		{ClassProduction, "/ocel/edge/fake/deployments-store"},
+		{ClassPreview, "/ocel/edge/fake-preview/deployments-store"},
 	} {
-		got, err := DeploymentsStoreParamFor(tc.class)
+		got, err := DeploymentsStoreParamFor(tc.class, "fake")
 		if err != nil {
 			t.Fatalf("DeploymentsStoreParamFor(%q): %v", tc.class, err)
 		}
@@ -387,11 +387,11 @@ func TestDeploymentsStoreParamFor(t *testing.T) {
 			t.Errorf("DeploymentsStoreParamFor(%q) = %q, want %q", tc.class, got, tc.want)
 		}
 	}
-	if _, err := DeploymentsStoreParamFor("nonsense"); err == nil {
+	if _, err := DeploymentsStoreParamFor("nonsense", "fake"); err == nil {
 		t.Error("DeploymentsStoreParamFor(unknown class) = nil error, want an error")
 	}
-	if DeploymentsStoreParamName == DeploymentsStorePreviewParamName {
-		t.Error("production and preview deployments-store parameters must differ")
+	if _, err := DeploymentsStoreParamFor(ClassProduction, ""); err == nil {
+		t.Error("DeploymentsStoreParamFor(no kind) = nil error, want an error: every edge parameter is namespaced by the kind that owns it")
 	}
 }
 
@@ -410,11 +410,11 @@ func TestAdoptDeploymentsStore(t *testing.T) {
 			t.Fatalf("preview adopt: %v", err)
 		}
 
-		prod, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassProduction)
+		prod, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadDeploymentsStoreFor(production): %v", err)
 		}
-		prev, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassPreview)
+		prev, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassPreview, "fake")
 		if err != nil {
 			t.Fatalf("ReadDeploymentsStoreFor(preview): %v", err)
 		}
@@ -443,7 +443,7 @@ func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 			t.Fatalf("second adopt: %v", err)
 		}
 
-		got, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassProduction)
+		got, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadDeploymentsStoreFor: %v", err)
 		}
@@ -464,10 +464,10 @@ func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 		if err == nil {
 			t.Fatal("adoptDeploymentsStore stored a credential-less store rather than refusing")
 		}
-		if !strings.Contains(err.Error(), "ocel-deployments-store") || !strings.Contains(err.Error(), DeploymentsStoreParamName) {
+		if !strings.Contains(err.Error(), "ocel-deployments-store") || !strings.Contains(err.Error(), namesFor(ClassProduction, "fake").deploymentsStoreParam) {
 			t.Errorf("error = %v, want it to name the worker and the parameter that holds nothing", err)
 		}
-		if _, stored := ssmc.params[DeploymentsStoreParamName]; stored {
+		if _, stored := ssmc.params[namesFor(ClassProduction, "fake").deploymentsStoreParam]; stored {
 			t.Error("a credential-less store was written despite the refusal")
 		}
 	})
@@ -483,7 +483,7 @@ func TestAdoptISRWriterBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 		if err := adoptISRWriter(context.Background(), ssmc, ClassProduction, "fake", offeredISRWriter("", "")); err != nil {
 			t.Fatalf("second adopt: %v", err)
 		}
-		got, err := ReadISRWriterFor(context.Background(), ssmc, ClassProduction)
+		got, err := ReadISRWriterFor(context.Background(), ssmc, ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadISRWriterFor: %v", err)
 		}
@@ -499,10 +499,10 @@ func TestAdoptISRWriterBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 		if err == nil {
 			t.Fatal("adoptISRWriter stored a credential-less writer rather than refusing")
 		}
-		if !strings.Contains(err.Error(), "ocel-isr-writer") || !strings.Contains(err.Error(), ISRWriterParamName) {
+		if !strings.Contains(err.Error(), "ocel-isr-writer") || !strings.Contains(err.Error(), namesFor(ClassProduction, "fake").isrWriterParam) {
 			t.Errorf("error = %v, want it to name the worker and the parameter that holds nothing", err)
 		}
-		if _, stored := ssmc.params[ISRWriterParamName]; stored {
+		if _, stored := ssmc.params[namesFor(ClassProduction, "fake").isrWriterParam]; stored {
 			t.Error("a credential-less writer was written despite the refusal")
 		}
 	})
@@ -511,7 +511,7 @@ func TestAdoptISRWriterBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 func TestReadDeploymentsStore(t *testing.T) {
 	t.Run("absent is not an error", func(t *testing.T) {
 		for _, class := range []string{ClassProduction, ClassPreview} {
-			got, err := ReadDeploymentsStoreFor(context.Background(), newFakeSSM(), class)
+			got, err := ReadDeploymentsStoreFor(context.Background(), newFakeSSM(), class, "fake")
 			if err != nil {
 				t.Fatalf("ReadDeploymentsStoreFor(%q) on an absent parameter: %v", class, err)
 			}
@@ -535,10 +535,10 @@ func TestISRWriterParamFor(t *testing.T) {
 		class string
 		want  string
 	}{
-		{ClassProduction, ISRWriterParamName},
-		{ClassPreview, ISRWriterPreviewParamName},
+		{ClassProduction, "/ocel/edge/fake/isr-writer"},
+		{ClassPreview, "/ocel/edge/fake-preview/isr-writer"},
 	} {
-		got, err := ISRWriterParamFor(tc.class)
+		got, err := ISRWriterParamFor(tc.class, "fake")
 		if err != nil {
 			t.Fatalf("ISRWriterParamFor(%q): %v", tc.class, err)
 		}
@@ -546,11 +546,11 @@ func TestISRWriterParamFor(t *testing.T) {
 			t.Errorf("ISRWriterParamFor(%q) = %q, want %q", tc.class, got, tc.want)
 		}
 	}
-	if _, err := ISRWriterParamFor("nonsense"); err == nil {
+	if _, err := ISRWriterParamFor("nonsense", "fake"); err == nil {
 		t.Error("ISRWriterParamFor(unknown class) = nil error, want an error")
 	}
-	if ISRWriterParamName == ISRWriterPreviewParamName {
-		t.Error("production and preview isr-writer parameters must differ")
+	if _, err := ISRWriterParamFor(ClassProduction, ""); err == nil {
+		t.Error("ISRWriterParamFor(no kind) = nil error, want an error: every edge parameter is namespaced by the kind that owns it")
 	}
 }
 
@@ -564,11 +564,11 @@ func TestAdoptISRWriter(t *testing.T) {
 			t.Fatalf("preview adopt: %v", err)
 		}
 
-		prod, err := ReadISRWriterFor(context.Background(), ssmc, ClassProduction)
+		prod, err := ReadISRWriterFor(context.Background(), ssmc, ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadISRWriterFor(production): %v", err)
 		}
-		prev, err := ReadISRWriterFor(context.Background(), ssmc, ClassPreview)
+		prev, err := ReadISRWriterFor(context.Background(), ssmc, ClassPreview, "fake")
 		if err != nil {
 			t.Fatalf("ReadISRWriterFor(preview): %v", err)
 		}
@@ -585,7 +585,7 @@ func TestAdoptISRWriter(t *testing.T) {
 
 func TestReadISRWriterFor(t *testing.T) {
 	t.Run("absent is not an error", func(t *testing.T) {
-		got, err := ReadISRWriterFor(context.Background(), newFakeSSM(), ClassProduction)
+		got, err := ReadISRWriterFor(context.Background(), newFakeSSM(), ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadISRWriterFor on an absent parameter: %v", err)
 		}
@@ -599,14 +599,14 @@ func TestEnsureISRWriterSeed(t *testing.T) {
 	t.Run("is create only", func(t *testing.T) {
 		ssmc := newFakeSSM()
 
-		first, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
+		first, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ensureISRWriterSeed: %v", err)
 		}
 		if first == "" {
 			t.Fatal("ensureISRWriterSeed minted no seed")
 		}
-		again, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
+		again, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ensureISRWriterSeed (second run): %v", err)
 		}
@@ -614,7 +614,7 @@ func TestEnsureISRWriterSeed(t *testing.T) {
 			t.Errorf("second bootstrap returned seed %q, want the stored %q", again, first)
 		}
 
-		preview, err := ensureISRWriterSeed(context.Background(), ssmc, ClassPreview)
+		preview, err := ensureISRWriterSeed(context.Background(), ssmc, ClassPreview, "fake")
 		if err != nil {
 			t.Fatalf("ensureISRWriterSeed (preview): %v", err)
 		}
@@ -626,7 +626,7 @@ func TestEnsureISRWriterSeed(t *testing.T) {
 	t.Run("converges on a concurrent bootstrap", func(t *testing.T) {
 		ssmc := &racingSSM{fakeSSM: newFakeSSM(), winner: "the-other-bootstraps-seed"}
 
-		seed, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
+		seed, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ensureISRWriterSeed lost a race instead of converging: %v", err)
 		}
@@ -652,7 +652,7 @@ func (r *racingSSM) PutParameter(ctx context.Context, in *ssm.PutParameterInput,
 
 func TestReadISRWriterSeedFor(t *testing.T) {
 	t.Run("absent is not a failure", func(t *testing.T) {
-		seed, err := ReadISRWriterSeedFor(context.Background(), newFakeSSM(), ClassProduction)
+		seed, err := ReadISRWriterSeedFor(context.Background(), newFakeSSM(), ClassProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadISRWriterSeedFor: %v", err)
 		}

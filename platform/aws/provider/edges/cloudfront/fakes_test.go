@@ -25,6 +25,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	smithy "github.com/aws/smithy-go"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -123,16 +124,25 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if f.absent {
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
-	held := map[string]string{
-		"StateTableName":  fakeStateTable,
-		"AssetBucketName": fakeAssetBucket,
+	class := edge.ClassProduction
+	name := aws.ToString(in.StackName)
+	if trimmed, preview := strings.CutSuffix(name, "-"+string(edge.ClassPreview)); preview {
+		class, name = edge.ClassPreview, trimmed
 	}
-	if !f.otherEdge {
-		class := edge.ClassProduction
-		if strings.HasSuffix(aws.ToString(in.StackName), "-"+string(edge.ClassPreview)) {
-			class = edge.ClassPreview
+	var held map[string]string
+	switch name {
+	case bootstrap.StackName:
+		held = map[string]string{
+			"StateTableName":  fakeStateTable,
+			"AssetBucketName": fakeAssetBucket,
 		}
-		maps.Copy(held, fakeEdgeOutputs(class))
+	case bootstrap.StackName + "-" + bootstrap.FeatureCloudFrontEdge:
+		if f.otherEdge {
+			return &cloudformation.DescribeStacksOutput{}, nil
+		}
+		held = fakeEdgeOutputs(class)
+	default:
+		return &cloudformation.DescribeStacksOutput{}, nil
 	}
 	out := make([]cfntypes.Output, 0, len(held))
 	for _, key := range slices.Sorted(maps.Keys(held)) {
@@ -201,27 +211,27 @@ func newFakeCloudFront(shared *trail) *fakeCloudFront {
 		distributions: map[string]*fakeDistribution{},
 	}
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		name := keyValueStoreName(class)
+		name := bootstrap.EdgeRoutesStoreName(class)
 		f.stores[name] = &fakeStore{arn: fakeRoutesARN(class), etag: "kvs-1"}
 	}
 	return f
 }
 
 func fakeRoutesARN(class edge.Class) string {
-	return "arn:aws:cloudfront::123456789012:key-value-store/" + keyValueStoreName(class)
+	return "arn:aws:cloudfront::123456789012:key-value-store/" + bootstrap.EdgeRoutesStoreName(class)
 }
 
 func fakeResolverARN(class edge.Class) string {
-	return "arn:aws:cloudfront::123456789012:function/" + functionName(class)
+	return "arn:aws:cloudfront::123456789012:function/" + bootstrap.EdgeResolverName(class)
 }
 
 func fakeEdgeOutputs(class edge.Class) map[string]string {
 	return map[string]string{
-		outputRoutesStoreARN: fakeRoutesARN(class),
-		outputResolverARN:    fakeResolverARN(class),
-		outputCachePolicy:    "cache-" + string(class),
-		outputHeadersPolicy:  "headers-" + string(class),
-		outputAssetAccess:    "oac-" + string(class),
+		bootstrap.OutputEdgeRoutesStoreARN: fakeRoutesARN(class),
+		bootstrap.OutputEdgeResolverARN:    fakeResolverARN(class),
+		bootstrap.OutputEdgeCachePolicy:    "cache-" + string(class),
+		bootstrap.OutputEdgeHeadersPolicy:  "headers-" + string(class),
+		bootstrap.OutputEdgeAssetAccess:    "oac-" + string(class),
 	}
 }
 

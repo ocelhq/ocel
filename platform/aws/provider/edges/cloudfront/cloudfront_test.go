@@ -15,7 +15,10 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	kvstypes "github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore/types"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 )
@@ -150,6 +153,14 @@ func TestNativeIsNotProgrammable(t *testing.T) {
 	}
 }
 
+func TestTheEdgeKindReachesItsBootstrapFeature(t *testing.T) {
+	t.Parallel()
+
+	if got := providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != bootstrap.FeatureCloudFrontEdge {
+		t.Errorf("bootstrapping with the %q edge raises the %q feature, want %q; nothing else stands the resolver, routes store and policies this edge reads", Kind, got, bootstrap.FeatureCloudFrontEdge)
+	}
+}
+
 func TestBootstrap(t *testing.T) {
 	t.Parallel()
 
@@ -235,8 +246,8 @@ func TestReconcile(t *testing.T) {
 		if aws.ToString(behavior.CachePolicyId) != ownState(t, stack).CachePolicy {
 			t.Errorf("cache policy = %q, want the one bootstrap made (%q)", aws.ToString(behavior.CachePolicyId), ownState(t, stack).CachePolicy)
 		}
-		if got := aws.ToString(held.config.CacheTagConfig.HeaderName); got != cacheTagHeader {
-			t.Errorf("cache tag header = %q, want %q", got, cacheTagHeader)
+		if got := aws.ToString(held.config.CacheTagConfig.HeaderName); got != bootstrap.EdgeCacheTagHeader {
+			t.Errorf("cache tag header = %q, want %q", got, bootstrap.EdgeCacheTagHeader)
 		}
 		origin := held.config.Origins.Items[0]
 		if aws.ToString(origin.DomainName) != assetOriginDomain(fakeAssetBucket, fakeRegion) {
@@ -564,15 +575,15 @@ func TestCacheTagHeaderIsTheOneTheOriginWrites(t *testing.T) {
 	if named == nil {
 		t.Fatalf("%s no longer names the header the origin puts its cache tags in", shaping)
 	}
-	if got := string(named[1]); got != cacheTagHeader {
-		t.Errorf("the origin writes its tags in %q and the cache policy reads %q, so CloudFront stores no tag at all and every invalidation misses", got, cacheTagHeader)
+	if got := string(named[1]); got != bootstrap.EdgeCacheTagHeader {
+		t.Errorf("the origin writes its tags in %q and the cache policy reads %q, so CloudFront stores no tag at all and every invalidation misses", got, bootstrap.EdgeCacheTagHeader)
 	}
 }
 
 func TestResolverCodeShipsInline(t *testing.T) {
 	t.Parallel()
 
-	code := string(ResolverCode())
+	code := string(resolver.Code())
 	if len(code) == 0 {
 		t.Fatal("no resolver code is embedded")
 	}

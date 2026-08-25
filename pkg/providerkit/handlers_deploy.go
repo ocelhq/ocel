@@ -98,7 +98,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
-	features, err := RequiredFeatures(gate.Bootstrapper.Catalogue(), frameworksOf(req.GetManifest()), req.GetEdge().GetKind())
+	features, err := RequiredFeatures(gate.Bootstrapper.Catalogue(), frameworksOf(req.GetManifest()), string(gate.Edge))
 	if err != nil {
 		return nil, RefusalError(err)
 	}

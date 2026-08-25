@@ -29,12 +29,6 @@ const Kind edge.Kind = "cloudfront"
 const propagationBound = 5 * time.Second
 
 const (
-	edgeHeaderValue = string(Kind)
-
-	cacheKeyHeader = "x-ocel-cache-key"
-
-	cacheTagHeader = "cache-tag"
-
 	namespace = "ocel"
 
 	listPageCeiling = 200
@@ -212,9 +206,9 @@ func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (
 		return bootstrap.Deployed{}, err
 	}
 	if class == edge.ClassPreview {
-		return bootstrap.CheckDeployedPreview(ctx, c.CFN, p)
+		return bootstrap.CheckDeployedPreview(ctx, c.CFN)
 	}
-	return bootstrap.CheckDeployed(ctx, c.CFN, p)
+	return bootstrap.CheckDeployed(ctx, c.CFN)
 }
 
 func (p *provider) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
@@ -316,33 +310,6 @@ func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, er
 
 func distributionName(slug string, class edge.Class) string {
 	return naming.Join(naming.FieldSeparator, namespace, slug, string(class))
-}
-
-func keyValueStoreName(class edge.Class) string {
-	return setName("routes", class)
-}
-
-func functionName(class edge.Class) string {
-	return setName("resolver", class)
-}
-
-func cachePolicyName(class edge.Class) string {
-	return setName("cache", class)
-}
-
-func headersPolicyName(class edge.Class) string {
-	return setName("headers", class)
-}
-
-func originAccessControlName(class edge.Class) string {
-	return setName("assets", class)
-}
-
-func setName(what string, class edge.Class) string {
-	if class == edge.ClassPreview {
-		return naming.Join(naming.WordSeparator, namespace, what, string(edge.ClassPreview))
-	}
-	return naming.Join(naming.WordSeparator, namespace, what)
 }
 
 func assetOriginDomain(bucket, region string) string {

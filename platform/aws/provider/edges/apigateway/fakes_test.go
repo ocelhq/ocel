@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -82,15 +83,24 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if f.absent {
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
-	outputs := []cfntypes.Output{
-		{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(fakeStateTable)},
-		{OutputKey: aws.String("AssetBucketName"), OutputValue: aws.String(fakeAssetBucket)},
-	}
-	if !f.otherEdge {
-		outputs = append(outputs,
-			cfntypes.Output{OutputKey: aws.String(OutputInvokeRoleARN), OutputValue: aws.String(fakeInvokeRole)},
-			cfntypes.Output{OutputKey: aws.String(OutputNotFoundAPIID), OutputValue: aws.String(fakeNotFoundAPI)},
-		)
+	name, _ := strings.CutSuffix(aws.ToString(in.StackName), "-"+string(edge.ClassPreview))
+	var outputs []cfntypes.Output
+	switch name {
+	case bootstrap.StackName:
+		outputs = []cfntypes.Output{
+			{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(fakeStateTable)},
+			{OutputKey: aws.String("AssetBucketName"), OutputValue: aws.String(fakeAssetBucket)},
+		}
+	case bootstrap.StackName + "-" + bootstrap.FeatureAPIGatewayEdge:
+		if f.otherEdge {
+			return &cloudformation.DescribeStacksOutput{}, nil
+		}
+		outputs = []cfntypes.Output{
+			{OutputKey: aws.String(bootstrap.OutputEdgeInvokeRoleARN), OutputValue: aws.String(fakeInvokeRole)},
+			{OutputKey: aws.String(bootstrap.OutputEdgeNotFoundAPIID), OutputValue: aws.String(fakeNotFoundAPI)},
+		}
+	default:
+		return &cloudformation.DescribeStacksOutput{}, nil
 	}
 	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{
 		StackName: in.StackName,

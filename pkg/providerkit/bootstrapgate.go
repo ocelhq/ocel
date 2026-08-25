@@ -17,6 +17,7 @@ type Gate struct {
 	Bootstrapper Bootstrapper
 	Records      RecordStore
 	Writer       Writer
+	Edge         edge.Kind
 }
 
 type Standing struct {
@@ -110,7 +111,7 @@ func (g Gate) intended(ctx context.Context, class Class, req ApplyRequest) (inte
 	if err := RefuseSchemaAhead(standing.Schema, standing.Present, class); err != nil {
 		return intent{}, err
 	}
-	requested, err := featureClosure(catalogue, req.Features)
+	requested, err := featureClosure(catalogue, g.ensuringEdge(catalogue, standing, req.Features))
 	if err != nil {
 		return intent{}, err
 	}
@@ -120,6 +121,14 @@ func (g Gate) intended(ctx context.Context, class Class, req ApplyRequest) (inte
 		return intent{}, err
 	}
 	return intent{standing: standing, requested: requested, drop: drop, ordered: ordered}, nil
+}
+
+func (g Gate) ensuringEdge(catalogue []Feature, standing Standing, requested []string) []string {
+	fronting := FeatureNeedingEdge(catalogue, g.Edge)
+	if fronting == "" || slices.Contains(requested, fronting) || slices.Contains(standing.Features, fronting) {
+		return requested
+	}
+	return append(slices.Clone(requested), fronting)
 }
 
 func (i intent) request(class Class, req ApplyRequest, writer Writer) BootstrapRequest {

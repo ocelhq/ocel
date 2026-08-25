@@ -10,7 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func NameStacks(described providerkit.Bootstrap) providerkit.Bootstrap {
@@ -27,15 +26,12 @@ func NameStacks(described providerkit.Bootstrap) providerkit.Bootstrap {
 	})
 }
 
-func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, front edge.Edge, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
+func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
 	target, err := bootstrapFor(read.class)
 	if err != nil {
 		return nil, err
 	}
 	deployed, refs, class := read.Deployed, read.refs, read.class
-	if err := refuseEdgeSwitch(target, front, deployed); err != nil {
-		return nil, err
-	}
 	alongside := FeatureSet{}
 	for _, name := range req.Features {
 		alongside[name] = true
@@ -43,7 +39,7 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, front edge.Edge,
 
 	planned := make([]providerkit.ChangeGroup, 0, len(groups))
 	for _, group := range groups {
-		stack, ok := renderGroup(target, group.Feature, class, front, deployed.ArtifactBucket, refs, alongside)
+		stack, ok := renderGroup(target, group.Feature, class, deployed.ArtifactBucket, refs, alongside)
 		switch {
 		case !ok:
 			planned = append(planned, group)
@@ -61,9 +57,9 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, front edge.Edge,
 	return planned, nil
 }
 
-func renderGroup(target spec, feature, class string, front edge.Edge, artifactBucket string, refs stackRefs, alongside FeatureSet) (featureStack, bool) {
+func renderGroup(target spec, feature, class, artifactBucket string, refs stackRefs, alongside FeatureSet) (featureStack, bool) {
 	if feature == "" {
-		return featureStack{body: target.core(coreFragment(front, class))}, true
+		return featureStack{body: target.core()}, true
 	}
 	f, ok := featureNamed(feature)
 	if !ok {
@@ -196,18 +192,6 @@ func templateChanges(body string, action providerkit.ChangeAction) []providerkit
 type templateResource struct {
 	id   string
 	kind string
-}
-
-func templateOutputKeys(body string) []string {
-	outputs := templateSection(body, "Outputs")
-	if outputs == nil {
-		return nil
-	}
-	keys := make([]string, 0, len(outputs.Content)/2)
-	for i := 0; i+1 < len(outputs.Content); i += 2 {
-		keys = append(keys, outputs.Content[i].Value)
-	}
-	return keys
 }
 
 func templateResources(body string) []templateResource {

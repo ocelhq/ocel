@@ -1,67 +1,78 @@
-package cloudfront
+package bootstrap
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
-	cacheMaxTTL = int64(365 * 24 * time.Hour / time.Second)
+	KindCloudFront = "cloudfront"
 
-	rscQueryParameter = "_rsc"
+	OutputEdgeRoutesStoreARN = "EdgeRoutesStoreArn"
+	OutputEdgeResolverARN    = "EdgeResolverArn"
+	OutputEdgeCachePolicy    = "EdgeCachePolicyId"
+	OutputEdgeHeadersPolicy  = "EdgeHeadersPolicyId"
+	OutputEdgeAssetAccess    = "EdgeAssetAccessId"
 
-	outputRoutesStoreARN = "EdgeRoutesStoreArn"
-	outputResolverARN    = "EdgeResolverArn"
-	outputCachePolicy    = "EdgeCachePolicyId"
-	outputHeadersPolicy  = "EdgeHeadersPolicyId"
-	outputAssetAccess    = "EdgeAssetAccessId"
+	EdgeCacheTagHeader = "cache-tag"
+
+	edgeCacheKeyHeader = "x-ocel-cache-key"
+
+	edgeRSCQueryParameter = "_rsc"
+
+	edgeCacheMaxTTL = int64(365 * 24 * time.Hour / time.Second)
+
+	edgeNamespace = "ocel"
 )
 
-type edgeSet struct {
-	keyValueStoreARN    string
-	functionARN         string
-	cachePolicy         string
-	headersPolicy       string
-	originAccessControl string
+var cloudFrontEdgeFeature = feature{
+	name:       FeatureCloudFrontEdge,
+	summary:    "CloudFront as the front — routes store, resolver function, cache and headers policies, asset access",
+	needs:      []string{needsEdgePrefix + KindCloudFront},
+	template:   cloudFrontEdgeTemplate,
+	payloads:   noPayloads,
+	placements: noPlacements,
 }
 
-var _ bootstrap.CoreFront = (*provider)(nil)
+func EdgeRoutesStoreName(class edge.Class) string { return edgeSetName("routes", class) }
 
-func (p *provider) CoreStack(class string) bootstrap.CoreFragment {
-	held := edge.Class(class)
-	if knownClass(held) != nil {
-		return bootstrap.CoreFragment{}
+func EdgeResolverName(class edge.Class) string { return edgeSetName("resolver", class) }
+
+func edgeCachePolicyName(class edge.Class) string { return edgeSetName("cache", class) }
+
+func edgeHeadersPolicyName(class edge.Class) string { return edgeSetName("headers", class) }
+
+func edgeAssetAccessName(class edge.Class) string { return edgeSetName("assets", class) }
+
+func edgeSetName(what string, class edge.Class) string {
+	if class == edge.ClassPreview {
+		return naming.Join(naming.WordSeparator, edgeNamespace, what, string(edge.ClassPreview))
 	}
-	return bootstrap.CoreFragment{
-		Resources: routesStoreResource(held) +
-			resolverResource(held) +
-			cachePolicyResource(held) +
-			headersPolicyResource(held) +
+	return naming.Join(naming.WordSeparator, edgeNamespace, what)
+}
+
+func cloudFrontEdgeTemplate(in featureInputs) featureStack {
+	held := edge.Class(in.class)
+	return featureStack{
+		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
+Description: "Ocel bootstrap feature (%s, %s) - what a CloudFront front needs in this account before any deployment is fronted with it: the key value store one entry per hostname is written into, the resolver function every distribution runs, the cache and response-headers policies they answer by, and the origin access control they read the asset bucket through."
+Resources:
+%s%s%s%s%sOutputs:
+%s`,
+			FeatureCloudFrontEdge, in.class,
+			routesStoreResource(held),
+			resolverResource(held),
+			cachePolicyResource(held),
+			headersPolicyResource(held),
 			assetAccessResource(held),
-		Outputs: edgeSetOutputs(),
+			cloudFrontEdgeOutputs()),
 	}
-}
-
-func edgeSetOf(deployed bootstrap.Deployed, class edge.Class) (edgeSet, error) {
-	set := edgeSet{
-		keyValueStoreARN:    deployed.CoreOutputs[outputRoutesStoreARN],
-		functionARN:         deployed.CoreOutputs[outputResolverARN],
-		cachePolicy:         deployed.CoreOutputs[outputCachePolicy],
-		headersPolicy:       deployed.CoreOutputs[outputHeadersPolicy],
-		originAccessControl: deployed.CoreOutputs[outputAssetAccess],
-	}
-	if set.keyValueStoreARN == "" || set.functionARN == "" || set.cachePolicy == "" || set.headersPolicy == "" || set.originAccessControl == "" {
-		return edgeSet{}, unbootstrapped(class)
-	}
-	return set, nil
-}
-
-func unbootstrapped(class edge.Class) error {
-	return fmt.Errorf("the %s bootstrap in this account carries nothing the %q edge fronts deployments with: its resolver function, key value store and cache policies belong to the bootstrap stack, and this account's was written for a different edge. Run `%s` against this account, then deploy again", class, Kind, providerkit.BootstrapCommand(class))
 }
 
 func routesStoreResource(class edge.Class) string {
@@ -72,7 +83,7 @@ func routesStoreResource(class edge.Class) string {
     Properties:
       Name: %q
       Comment: "Ocel: one entry per hostname naming the release that answers on it. Written at promote, read by the resolver on every request."
-`, keyValueStoreName(class))
+`, EdgeRoutesStoreName(class))
 }
 
 func resolverResource(class edge.Class) string {
@@ -89,7 +100,7 @@ func resolverResource(class edge.Class) string {
         KeyValueStoreAssociations:
           - KeyValueStoreARN: !GetAtt EdgeRoutes.Arn
       FunctionCode: |
-%s`, functionName(class), bootstrap.Indent(string(ResolverCode()), 8))
+%s`, EdgeResolverName(class), indent(string(resolver.Code()), 8))
 }
 
 func cachePolicyResource(class edge.Class) string {
@@ -118,7 +129,7 @@ func cachePolicyResource(class edge.Class) string {
             QueryStringBehavior: allExcept
             QueryStrings:
               - %s
-`, cachePolicyName(class), cacheMaxTTL, cacheKeyHeader, rscQueryParameter)
+`, edgeCachePolicyName(class), edgeCacheMaxTTL, edgeCacheKeyHeader, edgeRSCQueryParameter)
 }
 
 func headersPolicyResource(class edge.Class) string {
@@ -138,7 +149,9 @@ func headersPolicyResource(class edge.Class) string {
         RemoveHeadersConfig:
           Items:
             - Header: %q
-`, headersPolicyName(class), fmt.Sprintf("Ocel: marks every response the %q edge served, so a probe can tell which front answered, and drops cache tags.", Kind), edge.HeaderEdge, edgeHeaderValue, cacheTagHeader)
+`, edgeHeadersPolicyName(class),
+		fmt.Sprintf("Ocel: marks every response the %q edge served, so a probe can tell which front answered, and drops cache tags.", KindCloudFront),
+		edge.HeaderEdge, KindCloudFront, EdgeCacheTagHeader)
 }
 
 func assetAccessResource(class edge.Class) string {
@@ -153,10 +166,11 @@ func assetAccessResource(class edge.Class) string {
         OriginAccessControlOriginType: s3
         SigningBehavior: always
         SigningProtocol: sigv4
-`, originAccessControlName(class), fmt.Sprintf("Ocel: signs the %q edge's reads of the asset bucket, so the bucket stays closed to everyone else.", Kind))
+`, edgeAssetAccessName(class),
+		fmt.Sprintf("Ocel: signs the %q edge's reads of the asset bucket, so the bucket stays closed to everyone else.", KindCloudFront))
 }
 
-func edgeSetOutputs() string {
+func cloudFrontEdgeOutputs() string {
 	return fmt.Sprintf(`  %s:
     Description: "Key value store the resolver reads a hostname's release out of. Every promote writes into it."
     Value: !GetAtt EdgeRoutes.Arn
@@ -172,5 +186,25 @@ func edgeSetOutputs() string {
   %s:
     Description: "Origin access control every distribution this account fronts signs its asset-bucket reads with."
     Value: !Ref EdgeAssetAccess
-`, outputRoutesStoreARN, outputResolverARN, outputCachePolicy, outputHeadersPolicy, outputAssetAccess)
+`, OutputEdgeRoutesStoreARN, OutputEdgeResolverARN, OutputEdgeCachePolicy, OutputEdgeHeadersPolicy, OutputEdgeAssetAccess)
+}
+
+func noPayloads(context.Context, ObjectStore, string) (stackPayloads, error) {
+	return stackPayloads{}, nil
+}
+
+func noPlacements(string) stackPayloads { return stackPayloads{} }
+
+func indent(body string, by int) string {
+	pad := strings.Repeat(" ", by)
+	lines := strings.Split(strings.TrimRight(body, "\n"), "\n")
+	var b strings.Builder
+	for _, line := range lines {
+		if line != "" {
+			b.WriteString(pad)
+			b.WriteString(line)
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
 }

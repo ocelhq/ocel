@@ -11,6 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
@@ -103,6 +105,14 @@ func TestNoneIsNotProgrammable(t *testing.T) {
 	var e edge.Edge = newWorld().edge()
 	if _, programmable := e.(edge.Programmable); programmable {
 		t.Error("the api-gateway edge is Programmable, but it declares only streaming; nothing of the app's code runs at this edge")
+	}
+}
+
+func TestTheEdgeKindReachesItsBootstrapFeature(t *testing.T) {
+	t.Parallel()
+
+	if got := providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != bootstrap.FeatureAPIGatewayEdge {
+		t.Errorf("bootstrapping with the %q edge raises the %q feature, want %q; nothing else stands the invoke role and the not-found API this edge fronts deployments with", Kind, got, bootstrap.FeatureAPIGatewayEdge)
 	}
 }
 
@@ -487,7 +497,7 @@ func TestAPINamesCannotCollideAcrossSlugsAndPointers(t *testing.T) {
 	if got := apiName("shop", edge.ClassProduction, ""); got != "ocel--shop--production" {
 		t.Errorf("apiName = %q, want the project stem the rest of the deploy path matches on", got)
 	}
-	if name := notFoundAPIName(edge.ClassProduction); deploy.ProjectOwnsWorker("not", name) || strings.Contains(name, "--") {
+	if name := bootstrap.EdgeNotFoundAPIName(edge.ClassProduction); deploy.ProjectOwnsWorker("not", name) || strings.Contains(name, "--") {
 		t.Errorf("the not-found API is named %q, which a project could claim as its own", name)
 	}
 }
@@ -673,7 +683,7 @@ func TestReconcileTakesTheInvokeRoleFromTheCoreStack(t *testing.T) {
 		t.Fatal("the API has no catch-all method")
 	}
 	if method.credentials != fakeInvokeRole {
-		t.Errorf("the entry integration invokes as %q, want the %s output %q", method.credentials, OutputInvokeRoleARN, fakeInvokeRole)
+		t.Errorf("the entry integration invokes as %q, want the %s output %q", method.credentials, bootstrap.OutputEdgeInvokeRoleARN, fakeInvokeRole)
 	}
 }
 

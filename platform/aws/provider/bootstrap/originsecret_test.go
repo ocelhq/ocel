@@ -59,7 +59,7 @@ func TestBootstrapParamsCarryTheOriginSecret(t *testing.T) {
 	params := fullProductionParams()
 	params[OriginSecretParamName] = "origin-1"
 
-	got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, ClassProduction, "proj-1")
+	got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, ClassProduction, KindCloudflare)
 	if err != nil {
 		t.Fatalf("ReadClassParams: %v", err)
 	}

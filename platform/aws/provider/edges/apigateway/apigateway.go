@@ -30,7 +30,7 @@ const (
 
 	edgeHeaderValue = string(Kind)
 
-	stageName = "live"
+	stageName = bootstrap.EdgeStageName
 
 	entryVariable  = "entry"
 	assetsVariable = "assets"
@@ -212,9 +212,9 @@ func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (
 		return bootstrap.Deployed{}, err
 	}
 	if class == edge.ClassPreview {
-		return bootstrap.CheckDeployedPreview(ctx, c.CFN, p)
+		return bootstrap.CheckDeployedPreview(ctx, c.CFN)
 	}
-	return bootstrap.CheckDeployed(ctx, c.CFN, p)
+	return bootstrap.CheckDeployed(ctx, c.CFN)
 }
 
 func (p *provider) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
@@ -331,10 +331,6 @@ func apiName(slug string, class edge.Class, pointer string) string {
 		fields = append(fields, p)
 	}
 	return naming.Join(naming.FieldSeparator, fields...)
-}
-
-func notFoundAPIName(class edge.Class) string {
-	return naming.Join(naming.WordSeparator, apiNamespace, "not-found", string(class))
 }
 
 func pointerOr(pointer string) string {

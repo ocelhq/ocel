@@ -278,12 +278,14 @@ func TestPlanBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureCache},
+		Edge:     &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
 	})
 	recordProject(t, provider, "shop", fake.FeatureCache)
 
 	planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
 		Tier:           environmentv1.Tier_TIER_PRODUCTION,
 		WithDependents: true,
+		Edge:           &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
 	})
 	if err != nil {
 		t.Fatalf("PlanBootstrap() error = %v", err)
@@ -486,6 +488,7 @@ func TestPlanRemoveBootstrapNamesTheClassAndWhatGoes(t *testing.T) {
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PREVIEW,
 		Features: []string{fake.FeatureCache},
+		Edge:     &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
 	})
 
 	plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PREVIEW})

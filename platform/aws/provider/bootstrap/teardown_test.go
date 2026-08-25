@@ -275,7 +275,7 @@ func TestTeardownRereadsTheSiblingBeforeDroppingThePassphrase(t *testing.T) {
 			if _, held := ssmc.params[PassphraseParamName]; !held {
 				t.Error("the preview bootstrap landed mid-teardown; its Pulumi state is encrypted under the passphrase that was deleted")
 			}
-			if _, held := ssmc.params[EdgeCredentialsParamName]; held {
+			if _, held := ssmc.params[cloudflareNames(ClassProduction).credentialsParam]; held {
 				t.Error("the torn-down bootstrap's own parameters must still go")
 			}
 		})
@@ -366,6 +366,8 @@ func TestTeardownRemovesEachFeatureStackBeforeCore(t *testing.T) {
 		FeatureStackName(FeatureCloudflareEdge, ClassProduction),
 		FeatureStackName(FeatureISR, ClassProduction),
 		FeatureStackName(FeatureImageOptimization, ClassProduction),
+		FeatureStackName(FeatureCloudFrontEdge, ClassProduction),
+		FeatureStackName(FeatureAPIGatewayEdge, ClassProduction),
 		StackName,
 	}
 	if !slices.Equal(cfn.deleted, want) {
