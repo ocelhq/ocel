@@ -40,27 +40,20 @@ func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, stdout i
 	printCatalogue(stdout, catalogue)
 
 	enabled := enabledFeatures(catalogue)
+	options := make([]huh.Option[string], 0, len(catalogue))
+	for _, f := range catalogue {
+		options = append(options, huh.NewOption(f.GetName(), f.GetName()).Selected(slices.Contains(enabled, f.GetName())))
+	}
+
 	chosen := slices.Clone(enabled)
 	field := huh.NewMultiSelect[string]().
 		Title("Select all that apply").
-		Value(&chosen).
-		OptionsFunc(func() []huh.Option[string] {
-			expanded := withDependencies(catalogue, chosen)
-			options := make([]huh.Option[string], 0, len(catalogue))
-			for _, f := range catalogue {
-				label := f.GetName()
-				if needed := directDependents(catalogue, f.GetName(), expanded); len(needed) > 0 {
-					label += "  (needed by " + strings.Join(needed, ", ") + ")"
-				}
-				options = append(options, huh.NewOption(label, f.GetName()).Selected(slices.Contains(expanded, f.GetName())))
-			}
-			return options
-		}, &chosen).
+		Options(options...).
 		// FIXME: huh v2.0.3 subtracts the title height from the multiselect viewport
 		// instead of the frame, so an unset Height scrolls one option at a time.
 		// Drop this once the viewport sizing is fixed upstream.
-		Height(len(catalogue) + 1).
-		Width(widestLabel(catalogue) + 4)
+		Height(len(options) + 1).
+		Value(&chosen)
 
 	err := huh.NewForm(huh.NewGroup(field)).
 		WithTheme(theme).
@@ -71,7 +64,25 @@ func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, stdout i
 	if err != nil {
 		return nil, false, err
 	}
-	return withDependencies(catalogue, chosen), true, nil
+	applied := withDependencies(catalogue, chosen)
+	printApplied(stdout, catalogue, applied, chosen)
+	return applied, true, nil
+}
+
+func printApplied(stdout io.Writer, catalogue []*contractv1.Feature, applied, chosen []string) {
+	if len(applied) == 0 {
+		fmt.Fprintln(stdout, "No features will be applied.")
+		return
+	}
+	parts := make([]string, 0, len(applied))
+	for _, name := range applied {
+		if slices.Contains(chosen, name) {
+			parts = append(parts, name)
+			continue
+		}
+		parts = append(parts, name+" "+needsStyle.Render("(needed by "+strings.Join(directDependents(catalogue, name, applied), ", ")+")"))
+	}
+	fmt.Fprintf(stdout, "Features to apply: %s\n", strings.Join(parts, ", "))
 }
 
 func printCatalogue(stdout io.Writer, catalogue []*contractv1.Feature) {
@@ -102,19 +113,6 @@ func directDependents(catalogue []*contractv1.Feature, name string, within []str
 		}
 	}
 	return dependents
-}
-
-func widestLabel(catalogue []*contractv1.Feature) int {
-	all := catalogueNames(catalogue)
-	widest := 0
-	for _, f := range catalogue {
-		label := f.GetName()
-		if needed := directDependents(catalogue, f.GetName(), all); len(needed) > 0 {
-			label += "  (needed by " + strings.Join(needed, ", ") + ")"
-		}
-		widest = max(widest, len(label))
-	}
-	return widest
 }
 
 func catalogueNames(catalogue []*contractv1.Feature) []string {
