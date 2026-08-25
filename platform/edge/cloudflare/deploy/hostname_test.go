@@ -1,9 +1,12 @@
 package cloudflare
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -41,6 +44,9 @@ type cfMock struct {
 	deletedCustomDomains []string
 	putScripts           []string
 	putBodies            map[string]putBody
+	scriptSecrets        map[string][]string
+	subdomainOn          map[string]bool
+	createdBuckets       []string
 	deletedScripts       []string
 	deletedBuckets       []string
 	deletedTokens        []string
@@ -148,7 +154,46 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 			m.putBodies = map[string]putBody{}
 		}
 		m.putBodies[name] = putBody{contentType: r.Header.Get("Content-Type"), content: content}
+		if m.scriptSecrets == nil {
+			m.scriptSecrets = map[string][]string{}
+		}
+		m.scriptSecrets[name] = uploadedSecretNames(m.putBodies[name], m.scriptSecrets[name])
 		writeResult(w, map[string]any{"id": name})
+	})
+
+	mux.HandleFunc("GET /accounts/acct/workers/scripts/{name}/content/v2", func(w http.ResponseWriter, r *http.Request) {
+		put, ok := m.putBodies[r.PathValue("name")]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", put.contentType)
+		_, _ = w.Write(put.content)
+	})
+
+	mux.HandleFunc("GET /accounts/acct/workers/scripts/{name}/secrets", func(w http.ResponseWriter, r *http.Request) {
+		secrets := []map[string]any{}
+		for _, name := range m.scriptSecrets[r.PathValue("name")] {
+			secrets = append(secrets, map[string]any{"name": name, "type": "secret_text"})
+		}
+		writeResult(w, secrets)
+	})
+
+	mux.HandleFunc("GET /accounts/acct/workers/scripts/{name}/subdomain", func(w http.ResponseWriter, r *http.Request) {
+		writeResult(w, map[string]any{"enabled": m.subdomainOn[r.PathValue("name")], "previews_enabled": false})
+	})
+
+	mux.HandleFunc("GET /accounts/acct/workers/subdomain", func(w http.ResponseWriter, _ *http.Request) {
+		writeResult(w, map[string]any{"subdomain": "acct-sub"})
+	})
+
+	mux.HandleFunc("POST /accounts/acct/r2/buckets", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		name := fmt.Sprint(body["name"])
+		m.createdBuckets = append(m.createdBuckets, name)
+		m.existingBuckets = append(m.existingBuckets, name)
+		writeResult(w, map[string]any{"name": name})
 	})
 
 	mux.HandleFunc("DELETE /accounts/acct/workers/scripts/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +210,10 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		enabled, _ := body["enabled"].(bool)
 		m.subdomainCalls = append(m.subdomainCalls, subdomainCall{script: r.PathValue("name"), enabled: enabled})
+		if m.subdomainOn == nil {
+			m.subdomainOn = map[string]bool{}
+		}
+		m.subdomainOn[r.PathValue("name")] = enabled
 		writeResult(w, map[string]any{"enabled": enabled, "previews_enabled": false})
 	})
 
@@ -267,6 +316,38 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	}))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+func uploadedSecretNames(put putBody, held []string) []string {
+	_, params, err := mime.ParseMediaType(put.contentType)
+	if err != nil {
+		return nil
+	}
+	mr := multipart.NewReader(bytes.NewReader(put.content), params["boundary"])
+	for {
+		part, err := mr.NextPart()
+		if err != nil {
+			return nil
+		}
+		if part.FormName() != "metadata" {
+			continue
+		}
+		data, _ := io.ReadAll(part)
+		var meta map[string]any
+		if err := json.Unmarshal(data, &meta); err != nil {
+			return nil
+		}
+		var names []string
+		for _, binding := range bindingsByType(meta, "secret_text") {
+			names = append(names, fmt.Sprint(binding["name"]))
+		}
+		for _, binding := range bindingsByType(meta, inheritedBindingType) {
+			if name := fmt.Sprint(binding["name"]); slices.Contains(held, name) {
+				names = append(names, name)
+			}
+		}
+		return names
+	}
 }
 
 func matchingRecords(records []map[string]any, query url.Values) []map[string]any {

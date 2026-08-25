@@ -17,7 +17,7 @@ import (
 
 func doMetadataFromMultipart(t *testing.T, worker edge.Worker, do durableObjectWorker, deployedClasses []string) map[string]any {
 	t.Helper()
-	body, contentType, err := buildDurableObjectScriptMultipart(worker, do, deployedClasses)
+	body, contentType, err := buildDurableObjectScriptMultipart(worker, do, deployedClasses, nil)
 	if err != nil {
 		t.Fatalf("buildDurableObjectScriptMultipart: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 	})
 
 	t.Run("a deployed class this build's log does not create is refused", func(t *testing.T) {
-		if _, _, err := buildDurableObjectScriptMultipart(testStoreWorker(), isrWriterWorker, []string{"IsrDeploy", "IsrFuture"}); err == nil {
+		if _, _, err := buildDurableObjectScriptMultipart(testStoreWorker(), isrWriterWorker, []string{"IsrDeploy", "IsrFuture"}, nil); err == nil {
 			t.Error("buildDurableObjectScriptMultipart(deployed IsrFuture) = nil error, want a refusal")
 		}
 	})

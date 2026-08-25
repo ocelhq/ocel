@@ -1,9 +1,38 @@
 package edge
 
+import "context"
+
 type BootstrapOutput struct {
 	Trust  TrustBoundary
 	Values map[string]string
 	Offers []Offer
+}
+
+type BootstrapPlanner interface {
+	PlanBootstrap(ctx context.Context, class Class) ([]PlanChange, error)
+}
+
+type PlanChange struct {
+	Kind   string
+	Name   string
+	Action PlanAction
+	Reason string
+}
+
+type PlanAction string
+
+const (
+	PlanCreate PlanAction = "create"
+	PlanUpdate PlanAction = "update"
+	PlanKeep   PlanAction = "keep"
+)
+
+func ValidPlanAction(action PlanAction) bool {
+	switch action {
+	case PlanCreate, PlanUpdate, PlanKeep:
+		return true
+	}
+	return false
 }
 
 type Class string
