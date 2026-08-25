@@ -368,6 +368,11 @@ func (s *deployFakeProviderServer) PlanBootstrap(ctx context.Context, req *contr
 			Enabled:   slices.Contains(enabled, name),
 		}
 	}
+	fronting := func(name, summary, kind string, dependsOn ...string) *contractv1.Feature {
+		f := feature(name, summary, dependsOn...)
+		f.Needs = []string{"edge:" + kind}
+		return f
+	}
 	journalPlanBootstrap(req)
 	if err := refuseBootstrapPlan(req); err != nil {
 		return nil, err
@@ -376,7 +381,8 @@ func (s *deployFakeProviderServer) PlanBootstrap(ctx context.Context, req *contr
 		Features: []*contractv1.Feature{
 			feature("isr", "incremental static regeneration"),
 			feature("image-optimization", "on-demand image optimization"),
-			feature("cloudflare-edge", "a Cloudflare front", "isr"),
+			fronting("cloudflare-edge", "a Cloudflare front", "cloudflare", "isr"),
+			fronting("cloudfront-edge", "a CloudFront front", "cloudfront"),
 		},
 		Bootstrap: fakeBootstrap(req.GetTier()),
 		Plan:      fakeChangePlan(req),

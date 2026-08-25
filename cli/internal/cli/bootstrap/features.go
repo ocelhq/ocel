@@ -18,6 +18,8 @@ import (
 const (
 	allFeatures = "all"
 	noFeatures  = "none"
+
+	needsEdgePrefix = "edge:"
 )
 
 func tint(stdout io.Writer, attrs ...color.Attribute) *color.Color {
@@ -148,6 +150,58 @@ func printCatalogue(stdout io.Writer, catalogue []*contractv1.Feature) {
 		fmt.Fprintln(stdout)
 	}
 	fmt.Fprintln(stdout)
+}
+
+type implication struct {
+	name   string
+	reason string
+}
+
+func impliedFeatures(catalogue []*contractv1.Feature, requested []string, kind string) []implication {
+	fronting := featureNeedingEdge(catalogue, kind)
+	named := slices.Clone(requested)
+	if fronting != "" && !slices.Contains(named, fronting) {
+		named = append(named, fronting)
+	}
+	applied := withDependencies(catalogue, inCatalogueOrder(catalogue, named))
+
+	var pulled []implication
+	if fronting != "" && !slices.Contains(requested, fronting) {
+		pulled = append(pulled, implication{name: fronting, reason: "required by this project's edge"})
+	}
+	for _, name := range applied {
+		if name == fronting || slices.Contains(requested, name) {
+			continue
+		}
+		pulled = append(pulled, implication{
+			name:   name,
+			reason: "needed by " + strings.Join(directDependents(catalogue, name, applied), ", "),
+		})
+	}
+	return pulled
+}
+
+func featureNeedingEdge(catalogue []*contractv1.Feature, kind string) string {
+	if kind == "" {
+		return ""
+	}
+	for _, f := range catalogue {
+		if slices.Contains(f.GetNeeds(), needsEdgePrefix+kind) {
+			return f.GetName()
+		}
+	}
+	return ""
+}
+
+func printImplied(stdout io.Writer, pulled []implication) {
+	if len(pulled) == 0 {
+		return
+	}
+	parts := make([]string, 0, len(pulled))
+	for _, p := range pulled {
+		parts = append(parts, p.name+" "+needsNote(stdout, "("+p.reason+")"))
+	}
+	fmt.Fprintf(stdout, "Also: %s\n", strings.Join(parts, ", "))
 }
 
 func directDependents(catalogue []*contractv1.Feature, name string, within []string) []string {

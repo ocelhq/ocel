@@ -234,6 +234,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		}
 
 		interactive := !opts.Yes && deps.StdinIsTerminal(stdin)
+		picked := interactive && !opts.FeaturesDeclared
 		requested, selected, err := chooseFeatures(ctx, opts, catalogue, standing, going, interactive, stdout)
 		if err != nil {
 			return err
@@ -283,6 +284,13 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
 				fmt.Fprintf(stdout, "These projects were deployed against it and break when it goes: %s\n", strings.Join(dependents, ", "))
 			}
+		}
+		if !picked {
+			kind := plan.GetEdgeKind()
+			if kind == "" {
+				kind = string(cfg.EdgeKind())
+			}
+			printImplied(stdout, impliedFeatures(catalogue, requested, kind))
 		}
 		status := planned.GetBootstrap()
 		if status.GetDowngrade() {

@@ -1946,6 +1946,7 @@ type Feature struct {
 	DependsOn     []string               `protobuf:"bytes,3,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
 	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	Dependents    []string               `protobuf:"bytes,5,rep,name=dependents,proto3" json:"dependents,omitempty"`
+	Needs         []string               `protobuf:"bytes,6,rep,name=needs,proto3" json:"needs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2011,6 +2012,13 @@ func (x *Feature) GetEnabled() bool {
 func (x *Feature) GetDependents() []string {
 	if x != nil {
 		return x.Dependents
+	}
+	return nil
+}
+
+func (x *Feature) GetNeeds() []string {
+	if x != nil {
+		return x.Needs
 	}
 	return nil
 }
@@ -3744,7 +3752,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x17CredentialPolicyRequest\x12B\n" +
 	"\x04tier\x18\x01 \x01(\x0e2$.provider.contract.v1.CredentialTierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\"6\n" +
 	"\x18CredentialPolicyResponse\x12\x1a\n" +
-	"\bdocument\x18\x01 \x01(\tR\bdocument\"\x90\x01\n" +
+	"\bdocument\x18\x01 \x01(\tR\bdocument\"\xa6\x01\n" +
 	"\aFeature\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12\x1d\n" +
@@ -3753,7 +3761,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\aenabled\x18\x04 \x01(\bR\aenabled\x12\x1e\n" +
 	"\n" +
 	"dependents\x18\x05 \x03(\tR\n" +
-	"dependents\"-\n" +
+	"dependents\x12\x14\n" +
+	"\x05needs\x18\x06 \x03(\tR\x05needs\"-\n" +
 	"\x03Dns\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04zone\x18\x02 \x01(\tR\x04zone\"w\n" +
