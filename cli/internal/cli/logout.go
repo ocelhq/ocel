@@ -8,8 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/authclient"
-	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/console/auth"
+	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 )
 
 var logoutCmd = &cobra.Command{
@@ -32,10 +33,10 @@ func runLogout(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not read stored credentials: %w", err)
 	}
 
-	if apiURL := effectiveAPIURL(creds.APIURL); apiURL != "" {
+	if apiURL := console.EffectiveBaseURL(creds.APIURL); apiURL != "" {
 		ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
 		defer cancel()
-		client := authclient.New(apiURL)
+		client := auth.New(apiURL)
 		if err := client.SignOut(ctx, creds.AccessToken); err != nil {
 			fmt.Fprintf(out, "Warning: could not revoke the session on the server (%v). Continuing with local logout.\n", err)
 		}

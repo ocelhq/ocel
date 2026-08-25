@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"

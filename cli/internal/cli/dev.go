@@ -18,7 +18,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
@@ -64,7 +65,7 @@ func runDev(ctx context.Context, deps cmddeps.Deps, cmd *cobra.Command, cwd stri
 		return err
 	}
 
-	apiURL := effectiveAPIURL(creds.APIURL)
+	apiURL := console.EffectiveBaseURL(creds.APIURL)
 
 	for range 3 {
 		role, err := election.Elect(cfg.Dir)

@@ -1,4 +1,4 @@
-package devserver
+package blob
 
 import (
 	"context"
@@ -16,7 +16,7 @@ func TestDetectorSweep(t *testing.T) {
 	t.Run("delivers callbacks", func(t *testing.T) {
 		t.Parallel()
 		var gotOp string
-		var gotCallback signedCompletion
+		var gotCallback SignedCompletion
 		callbackHit := make(chan struct{}, 1)
 
 		app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -28,20 +28,20 @@ func TestDetectorSweep(t *testing.T) {
 		defer app.Close()
 
 		var gotAuth string
-		var gotDetect detectRequestBody
+		var gotDetect DetectRequestBody
 		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotAuth = r.Header.Get("Authorization")
 			_ = json.NewDecoder(r.Body).Decode(&gotDetect)
-			json.NewEncoder(w).Encode(detectResponseBody{Completions: []completion{{
+			json.NewEncoder(w).Encode(DetectResponseBody{Completions: []Completion{{
 				CallbackBaseURL: app.URL,
 				SessionID:       "sess_1",
-				File:            completedFile{Key: "org/proj/user/a.png", Name: "a.png", Size: 3, MimeType: "image/png"},
+				File:            CompletedFile{Key: "org/proj/user/a.png", Name: "a.png", Size: 3, MimeType: "image/png"},
 				Signature:       "sig-abc",
 			}}})
 		}))
 		defer api.Close()
 
-		d := newDetector(api.URL, "leader-tok", "proj_1")
+		d := NewDetector(api.URL, "leader-tok", "proj_1")
 		if err := d.sweep(context.Background()); err != nil {
 			t.Fatalf("sweep: %v", err)
 		}
@@ -68,11 +68,11 @@ func TestDetectorSweep(t *testing.T) {
 		defer app.Close()
 
 		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			json.NewEncoder(w).Encode(detectResponseBody{})
+			json.NewEncoder(w).Encode(DetectResponseBody{})
 		}))
 		defer api.Close()
 
-		d := newDetector(api.URL, "tok", "proj_1")
+		d := NewDetector(api.URL, "tok", "proj_1")
 		if err := d.sweep(context.Background()); err != nil {
 			t.Fatalf("sweep: %v", err)
 		}
@@ -89,14 +89,14 @@ func TestDetectorSweep(t *testing.T) {
 		defer app.Close()
 
 		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			json.NewEncoder(w).Encode(detectResponseBody{Completions: []completion{{
+			json.NewEncoder(w).Encode(DetectResponseBody{Completions: []Completion{{
 				CallbackBaseURL: app.URL, SessionID: "s", Signature: "sig",
-				File: completedFile{Key: "k"},
+				File: CompletedFile{Key: "k"},
 			}}})
 		}))
 		defer api.Close()
 
-		d := newDetector(api.URL, "tok", "proj_1")
+		d := NewDetector(api.URL, "tok", "proj_1")
 		if err := d.sweep(context.Background()); err == nil {
 			t.Fatal("expected sweep error on app 401, got nil")
 		}
@@ -109,18 +109,18 @@ func TestDetectorRun(t *testing.T) {
 	t.Run("stops with its context", func(t *testing.T) {
 		t.Parallel()
 		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			json.NewEncoder(w).Encode(detectResponseBody{})
+			json.NewEncoder(w).Encode(DetectResponseBody{})
 		}))
 		defer api.Close()
 
-		d := newDetector(api.URL, "tok", "proj_1")
+		d := NewDetector(api.URL, "tok", "proj_1")
 		ctx, cancel := context.WithCancel(context.Background())
 
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			d.run(ctx, nil)
+			d.Run(ctx, nil)
 		}()
 		cancel()
 		wg.Wait()

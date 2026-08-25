@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"

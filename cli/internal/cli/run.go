@@ -12,7 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
@@ -53,7 +54,7 @@ func runRun(ctx context.Context, deps cmddeps.Deps, cmd *cobra.Command, cwd stri
 		return err
 	}
 
-	apiURL := effectiveAPIURL(creds.APIURL)
+	apiURL := console.EffectiveBaseURL(creds.APIURL)
 
 	leaderAddr, found, err := runningDevServer(cfg.Dir)
 	if err != nil {

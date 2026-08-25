@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/consolebinding"
+	"github.com/ocelhq/ocel/cli/internal/console/binding"
 )
 
 var consoleUnlinkCmd = &cobra.Command{
@@ -26,7 +26,7 @@ var consoleUnlinkCmd = &cobra.Command{
 }
 
 func runConsoleUnlink(projectDir string, stdout io.Writer) error {
-	removed, err := consolebinding.Clear(projectDir)
+	removed, err := binding.Clear(projectDir)
 	if err != nil {
 		return err
 	}

@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
@@ -144,14 +144,4 @@ func sessionFormat() deployui.Format {
 		return deployui.FormatJSON
 	}
 	return deployui.FormatHuman
-}
-
-func effectiveAPIURL(credsURL string) string {
-	if v := strings.TrimSpace(os.Getenv("OCEL_API_URL")); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	if credsURL != "" {
-		return credsURL
-	}
-	return resolveAPIURL()
 }

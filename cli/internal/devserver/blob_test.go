@@ -10,6 +10,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/console/blob"
 	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 )
@@ -34,7 +35,7 @@ func TestPresignUpload(t *testing.T) {
 		reached := false
 		client := serveBlob(t, func(w http.ResponseWriter, r *http.Request) {
 			reached = true
-			json.NewEncoder(w).Encode(presignResponseBody{SessionID: "sess_123"})
+			json.NewEncoder(w).Encode(blob.PresignResponseBody{SessionID: "sess_123"})
 		})
 
 		_, err := client.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
@@ -56,7 +57,7 @@ func TestPresignUpload(t *testing.T) {
 	t.Run("forwards to the Ocel API", func(t *testing.T) {
 		t.Parallel()
 		var gotAuth, gotPath string
-		var gotBody presignRequestBody
+		var gotBody blob.PresignRequestBody
 
 		client := serveBlob(t, func(w http.ResponseWriter, r *http.Request) {
 			gotAuth = r.Header.Get("Authorization")
@@ -65,9 +66,9 @@ func TestPresignUpload(t *testing.T) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			json.NewEncoder(w).Encode(presignResponseBody{
+			json.NewEncoder(w).Encode(blob.PresignResponseBody{
 				SessionID: "sess_123",
-				Files: []presignedTarget{
+				Files: []blob.PresignedTarget{
 					{URL: "http://minio.local/put", Key: "org/proj/user/a.png", Name: "a.png", ContentDisposition: "inline"},
 				},
 			})
@@ -141,13 +142,13 @@ func TestVerifyUploadSignature(t *testing.T) {
 	t.Run("forwards to the Ocel API", func(t *testing.T) {
 		t.Parallel()
 		var gotAuth, gotPath string
-		var gotBody signedCompletion
+		var gotBody blob.SignedCompletion
 		rawMetadata := []byte(`{"uploader":"avatar","metadata":{"userId":"u1"}}`)
 
 		client := serveBlob(t, func(w http.ResponseWriter, r *http.Request) {
 			gotAuth, gotPath = r.Header.Get("Authorization"), r.URL.Path
 			_ = json.NewDecoder(r.Body).Decode(&gotBody)
-			json.NewEncoder(w).Encode(verifyResponseBody{Valid: true, Metadata: rawMetadata})
+			json.NewEncoder(w).Encode(blob.VerifyResponseBody{Valid: true, Metadata: rawMetadata})
 		})
 
 		resp, err := client.VerifyUploadSignature(context.Background(), &blobv1.VerifyUploadSignatureRequest{
@@ -195,7 +196,7 @@ func TestGetUploadStatus(t *testing.T) {
 		var gotPath, gotQuery string
 		client := serveBlob(t, func(w http.ResponseWriter, r *http.Request) {
 			gotPath, gotQuery = r.URL.Path, r.URL.Query().Get("sessionId")
-			json.NewEncoder(w).Encode(statusResponseBody{State: "succeeded"})
+			json.NewEncoder(w).Encode(blob.StatusResponseBody{State: "succeeded"})
 		})
 
 		resp, err := client.GetUploadStatus(context.Background(), &blobv1.GetUploadStatusRequest{SessionId: "sess_9"})

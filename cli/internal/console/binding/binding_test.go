@@ -1,4 +1,4 @@
-package consolebinding
+package binding
 
 import (
 	"os"
