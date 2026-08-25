@@ -244,7 +244,7 @@ func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envvar
 	}
 	if target.GetEnvironment() != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"a reference resolves against %s's class-wide value; %q is an environment of the project holding the reference", target.GetKey(), target.GetEnvironment()))
+			"a reference resolves against the value %s sets for all environments; %q is an environment of the project holding the reference", target.GetKey(), target.GetEnvironment()))
 	}
 	if CoordinateOf(at) == CoordinateOf(target) {
 		return nil, deepens(describeCoordinate(at) + " would reference itself")

@@ -46,16 +46,12 @@ func (e *APIError) Error() string {
 
 func IsConflict(err error) bool {
 	var apiErr *APIError
-	return asAPIError(err, &apiErr) && apiErr.StatusCode == http.StatusConflict
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict
 }
 
 func IsUnauthorized(err error) bool {
 	var apiErr *APIError
-	return asAPIError(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized
-}
-
-func asAPIError(err error, target **APIError) bool {
-	return errors.As(err, target)
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized
 }
 
 func (c *Client) postJSON(ctx context.Context, path, accessToken string, body, out any) error {

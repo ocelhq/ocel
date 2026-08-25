@@ -7,7 +7,7 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
-func TestManifest(t *testing.T) {
+func TestRegistry(t *testing.T) {
 	t.Parallel()
 
 	t.Run("add and snapshot", func(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -31,7 +32,7 @@ func setUpFixture(t *testing.T, fixture string) string {
 	requireSDKBuild(t, repo)
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel", "env.ts"), fixture)
+	clitest.WriteFile(t, filepath.Join(root, "ocel", "env.ts"), fixture)
 
 	modules := filepath.Join(root, "node_modules")
 	if err := os.MkdirAll(modules, 0o755); err != nil {
@@ -73,16 +74,6 @@ func link(t *testing.T, target, name string) {
 		t.Fatalf("fixture dependency %s is missing: %v", target, err)
 	}
 	if err := os.Symlink(target, name); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func writeFile(t *testing.T, path, contents string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

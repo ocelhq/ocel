@@ -73,19 +73,19 @@ func TestEnvFragment(t *testing.T) {
 	}
 }
 
-func TestProvision(t *testing.T) {
+func TestResolve(t *testing.T) {
 	onePostgres := []resourceregistry.Entry{{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES}}
 
 	t.Run("an empty registry yields no resources without calling resolve", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			t.Error("Provision made an HTTP request for an empty resource list")
+			t.Error("Resolve made an HTTP request for an empty resource list")
 			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}))
 		defer ts.Close()
 
 		got, err := Resolve(context.Background(), Account{ProjectID: "proj_abc", APIURL: ts.URL}, nil)
 		if err != nil {
-			t.Fatalf("Provision: %v", err)
+			t.Fatalf("Resolve: %v", err)
 		}
 		if len(got) != 0 {
 			t.Fatalf("Resolve() = %+v, want empty", got)
@@ -123,7 +123,7 @@ func TestProvision(t *testing.T) {
 
 		got, err := Resolve(context.Background(), Account{ProjectID: "proj_abc", APIURL: ts.URL, Token: "tok_123"}, onePostgres)
 		if err != nil {
-			t.Fatalf("Provision: %v", err)
+			t.Fatalf("Resolve: %v", err)
 		}
 		if len(got) != 1 {
 			t.Fatalf("Resolve() len = %d, want 1", len(got))
@@ -152,7 +152,7 @@ func TestProvision(t *testing.T) {
 
 		got, err := Resolve(context.Background(), Account{ProjectID: "proj_abc", APIURL: ts.URL, Token: "tok_123"}, onePostgres)
 		if err != nil {
-			t.Fatalf("Provision: %v", err)
+			t.Fatalf("Resolve: %v", err)
 		}
 		if len(got) != 1 {
 			t.Fatalf("Resolve() len = %d, want 1", len(got))
@@ -181,7 +181,7 @@ func TestProvision(t *testing.T) {
 
 		_, err := Resolve(context.Background(), Account{ProjectID: "proj_abc", APIURL: ts.URL}, onePostgres)
 		if err == nil {
-			t.Fatal("Provision: expected error, got nil")
+			t.Fatal("Resolve: expected error, got nil")
 		}
 	})
 
@@ -193,7 +193,7 @@ func TestProvision(t *testing.T) {
 
 		_, err := Resolve(context.Background(), Account{ProjectID: "proj_abc", APIURL: ts.URL}, onePostgres)
 		if err == nil {
-			t.Fatal("Provision: expected error for missing env key, got nil")
+			t.Fatal("Resolve: expected error for missing env key, got nil")
 		}
 	})
 }
