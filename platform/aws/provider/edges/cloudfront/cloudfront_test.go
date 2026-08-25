@@ -153,7 +153,7 @@ func TestNativeIsNotProgrammable(t *testing.T) {
 func TestBootstrap(t *testing.T) {
 	t.Parallel()
 
-	t.Run("it creates the set the edge routes with, and creates it once", func(t *testing.T) {
+	t.Run("it writes nothing: the bootstrap stack owns the set the edge routes with", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
@@ -162,55 +162,20 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("Bootstrap again: %v", err)
 		}
 
-		assertSet(t, "the mutations bootstrap made", w.front.mutations(), []string{
-			"CreateKeyValueStore " + keyValueStoreName(edge.ClassProduction),
-			"CreateFunction " + functionName(edge.ClassProduction),
-			"PublishFunction " + functionName(edge.ClassProduction),
-			"CreateCachePolicy " + cachePolicyName(edge.ClassProduction),
-			"CreateResponseHeadersPolicy " + headersPolicyName(edge.ClassProduction),
-			"CreateOriginAccessControl " + originAccessControlName(edge.ClassProduction),
-		})
+		assertSet(t, "the mutations bootstrap made", w.front.mutations(), nil)
 	})
 
-	t.Run("the resolver function reads the key value store the same bootstrap made", func(t *testing.T) {
+	t.Run("an account fronted by another edge is refused by name", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
-		bootstrapped(t, w)
-
-		held := w.front.functions[functionName(edge.ClassProduction)]
-		if held == nil {
-			t.Fatal("bootstrap published no resolver function")
+		w.cfn.otherEdge = true
+		_, err := w.edge().Bootstrap(context.Background(), edge.ClassProduction)
+		if err == nil {
+			t.Fatal("Bootstrap error = nil, want a refusal: the bootstrap stack carries no cloudfront set")
 		}
-		if held.config.Runtime != cftypes.FunctionRuntimeCloudfrontJs20 {
-			t.Errorf("runtime = %q, want %q, the only one that reads a key value store", held.config.Runtime, cftypes.FunctionRuntimeCloudfrontJs20)
-		}
-		store := w.front.stores[keyValueStoreName(edge.ClassProduction)]
-		if store == nil {
-			t.Fatal("bootstrap made no key value store")
-		}
-		associations := held.config.KeyValueStoreAssociations
-		if associations == nil || len(associations.Items) != 1 || aws.ToString(associations.Items[0].KeyValueStoreARN) != store.arn {
-			t.Errorf("key value store associations = %+v, want only %q", associations, store.arn)
-		}
-	})
-
-	t.Run("every response the edge serves names the edge that served it", func(t *testing.T) {
-		t.Parallel()
-
-		w := newWorld()
-		bootstrapped(t, w)
-
-		var marked bool
-		for _, config := range w.front.headerPolicy {
-			for _, header := range config.CustomHeadersConfig.Items {
-				if aws.ToString(header.Header) == edge.HeaderEdge && aws.ToString(header.Value) == string(Kind) {
-					marked = true
-				}
-			}
-		}
-		if !marked {
-			t.Errorf("no response headers policy sets %s: %s, so a liveness probe cannot tell which front answered", edge.HeaderEdge, Kind)
+		if !strings.Contains(err.Error(), "ocel bootstrap production") {
+			t.Errorf("Bootstrap error = %v, want it to name the command that writes the set", err)
 		}
 	})
 
@@ -223,37 +188,20 @@ func TestBootstrap(t *testing.T) {
 	})
 }
 
-func TestTeardownRemovesExactlyTheBootstrapSet(t *testing.T) {
+func TestTeardownLeavesTheBootstrapSetToCloudFormation(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
 	e := bootstrapped(t, w)
 	before := len(w.front.mutations())
-	cachePolicy := slices.Sorted(maps.Keys(w.front.cachePolicies))[0]
-	headersPolicy := slices.Sorted(maps.Keys(w.front.headerPolicy))[0]
-	accessControl := slices.Sorted(maps.Keys(w.front.accessControl))[0]
 
 	if err := e.Teardown(context.Background(), edge.ClassProduction); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 
-	assertSet(t, "the mutations teardown made", w.front.mutations()[before:], []string{
-		"DeleteFunction " + functionName(edge.ClassProduction),
-		"DeleteKeyValueStore " + keyValueStoreName(edge.ClassProduction),
-		"DeleteCachePolicy " + cachePolicy,
-		"DeleteResponseHeadersPolicy " + headersPolicy,
-		"DeleteOriginAccessControl " + accessControl,
-	})
-	for what, left := range map[string]int{
-		"key value stores":          len(w.front.stores),
-		"functions":                 len(w.front.functions),
-		"cache policies":            len(w.front.cachePolicies),
-		"response headers policies": len(w.front.headerPolicy),
-		"origin access controls":    len(w.front.accessControl),
-	} {
-		if left != 0 {
-			t.Errorf("%d %s survived teardown, want none", left, what)
-		}
+	assertSet(t, "the mutations teardown made", w.front.mutations()[before:], nil)
+	if err := e.Teardown(context.Background(), "staging"); err == nil {
+		t.Error("Teardown(staging) error = nil, want a refusal naming the class")
 	}
 }
 
@@ -263,7 +211,9 @@ func TestReconcile(t *testing.T) {
 	t.Run("an account that was never bootstrapped is refused by name", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := newWorld().edge().Reconcile(context.Background(), testSpec(), edge.StackState{})
+		w := newWorld()
+		w.cfn.absent = true
+		_, err := w.edge().Reconcile(context.Background(), testSpec(), edge.StackState{})
 		if err == nil {
 			t.Fatal("Reconcile error = nil, want a refusal: nothing fronts this account yet")
 		}
@@ -613,27 +563,6 @@ func TestReconcileLeavesTheTagInvalidatorAFrontToReach(t *testing.T) {
 	}
 	if want := ownState(t, stack).Distribution; !slices.Equal(held, []string{want}) {
 		t.Errorf("invalidation targets = %v, want the distribution this reconcile fronts the project with (%q)", held, want)
-	}
-}
-
-func TestTheFrontKeepsTheOriginsCacheTagsOffTheWire(t *testing.T) {
-	t.Parallel()
-
-	w := newWorld()
-	reconciled(t, w)
-
-	for id, config := range w.front.headerPolicy {
-		removed := config.RemoveHeadersConfig
-		if removed == nil {
-			t.Fatalf("response headers policy %s removes nothing, so every viewer is told the release and tags of the page it was served", id)
-		}
-		var names []string
-		for _, item := range removed.Items {
-			names = append(names, aws.ToString(item.Header))
-		}
-		if !slices.Contains(names, cacheTagHeader) {
-			t.Errorf("response headers policy %s removes %v, want %q among them", id, names, cacheTagHeader)
-		}
 	}
 }
 

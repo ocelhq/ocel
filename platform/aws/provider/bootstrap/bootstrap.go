@@ -73,6 +73,7 @@ type Deployed struct {
 	RevalidateQueueURL string
 	AppBoundaryARN     string
 	Class              string
+	CoreOutputs        map[string]string
 }
 
 type CFNDescriber interface {
@@ -113,20 +114,20 @@ type Request struct {
 	AcceptReplacements bool
 }
 
-func CheckDeployed(ctx context.Context, api CFNDescriber) (Deployed, error) {
-	return CheckDeployedFor(ctx, api, ClassProduction)
+func CheckDeployed(ctx context.Context, api CFNDescriber, front edge.Edge) (Deployed, error) {
+	return CheckDeployedFor(ctx, api, ClassProduction, front)
 }
 
-func CheckDeployedPreview(ctx context.Context, api CFNDescriber) (Deployed, error) {
-	return CheckDeployedFor(ctx, api, ClassPreview)
+func CheckDeployedPreview(ctx context.Context, api CFNDescriber, front edge.Edge) (Deployed, error) {
+	return CheckDeployedFor(ctx, api, ClassPreview, front)
 }
 
-func CheckDeployedFor(ctx context.Context, api CFNDescriber, class string) (Deployed, error) {
-	deployed, _, err := readBootstrap(ctx, api, class)
+func CheckDeployedFor(ctx context.Context, api CFNDescriber, class string, front edge.Edge) (Deployed, error) {
+	deployed, _, err := readBootstrap(ctx, api, class, front)
 	return deployed, err
 }
 
-func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deployed, stackRefs, error) {
+func readBootstrap(ctx context.Context, api CFNDescriber, class string, front edge.Edge) (Deployed, stackRefs, error) {
 	coreStack, err := StackNameFor(class)
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
@@ -139,9 +140,9 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deploye
 		return Deployed{Present: false, Features: FeatureSet{}}, stackRefs{}, nil
 	}
 
-	d := Deployed{Present: true, Features: FeatureSet{}}
+	d := Deployed{Present: true, Features: FeatureSet{}, CoreOutputs: outputsOf(core)}
 	var refs stackRefs
-	if err := absorb(&d, &refs, outputsOf(core)); err != nil {
+	if err := absorb(&d, &refs, d.CoreOutputs); err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
 	coreStamp := readStamp(core.Tags)
@@ -172,7 +173,7 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deploye
 		Present:   true,
 		Schema:    coreStamp.Schema,
 		Digest:    coreStamp.Digest,
-		Intended:  TemplateDigest(target.template()),
+		Intended:  TemplateDigest(target.template(coreFragment(front, class))),
 		WrittenBy: coreStamp.WrittenBy,
 	})
 	for _, f := range featureRegistry {
@@ -297,7 +298,7 @@ type spec struct {
 	class     string
 	stackName string
 	stackStep string
-	template  func() string
+	template  func(CoreFragment) string
 }
 
 func productionBootstrap() spec {
@@ -375,12 +376,12 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	progressf(target.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	review := admitReplacements(req.AcceptReplacements, logf)
-	coreBody := target.template()
+	coreBody := target.template(coreFragment(apis.Edge, target.class))
 	coreTags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
 	if err := upsertCFNStack(ctx, apis.CFN, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
-	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.class)
+	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.class, apis.Edge)
 	if err != nil {
 		return err
 	}
@@ -863,32 +864,32 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func stackTemplate() string {
+func stackTemplate(front CoreFragment) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap (production) - the account-global core every production app Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store."
+Description: "Ocel bootstrap (production) - the account-global core every production app Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store and whatever the selected edge fronts them with."
 Resources:
-%s%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket holding the Pulumi state Ocel plans every production deploy and teardown from. One versioned object per app stack."
     Value: !Ref StateBucket
-%s%s%s%s%s  %s:
+%s%s%s%s%s%s  %s:
     Description: "Class this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
     Value: '%s'
-`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), appBoundaryResource(ClassProduction), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassProduction)
+`, stateBucketResource(ClassProduction), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassProduction), appBoundaryResource(ClassProduction), front.Resources, outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), front.Outputs, outputInfraClass, ClassProduction)
 }
 
-func previewStackTemplate() string {
+func previewStackTemplate(front CoreFragment) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap (preview) - the account-global core every preview environment Ocel deploys here is carved from, kept apart from the production bootstrap so a per-PR preview never reaches production state, variables or caches."
 Resources:
-%s%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%s%sOutputs:
   %s:
     Description: "S3 bucket holding the Pulumi state Ocel plans every preview deploy and teardown from. One versioned object per preview stack."
     Value: !Ref StateBucket
-%s%s%s%s%s  %s:
+%s%s%s%s%s%s  %s:
     Description: "Class this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
     Value: '%s'
-`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), appBoundaryResource(ClassPreview), outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, ClassPreview)
+`, stateBucketResource(ClassPreview), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(ClassPreview), appBoundaryResource(ClassPreview), front.Resources, outputStateBucket, stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), front.Outputs, outputInfraClass, ClassPreview)
 }
 
 func stateBucketResource(class string) string {

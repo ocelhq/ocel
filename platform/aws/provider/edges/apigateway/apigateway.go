@@ -2,7 +2,6 @@ package apigateway
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,9 +14,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/apigatewayv2"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -71,19 +70,10 @@ type RoutingAPI interface {
 	DeleteRoutingRule(context.Context, *apigatewayv2.DeleteRoutingRuleInput, ...func(*apigatewayv2.Options)) (*apigatewayv2.DeleteRoutingRuleOutput, error)
 }
 
-type IAMAPI interface {
-	GetRole(context.Context, *iam.GetRoleInput, ...func(*iam.Options)) (*iam.GetRoleOutput, error)
-	CreateRole(context.Context, *iam.CreateRoleInput, ...func(*iam.Options)) (*iam.CreateRoleOutput, error)
-	PutRolePolicy(context.Context, *iam.PutRolePolicyInput, ...func(*iam.Options)) (*iam.PutRolePolicyOutput, error)
-	DeleteRolePolicy(context.Context, *iam.DeleteRolePolicyInput, ...func(*iam.Options)) (*iam.DeleteRolePolicyOutput, error)
-	DeleteRole(context.Context, *iam.DeleteRoleInput, ...func(*iam.Options)) (*iam.DeleteRoleOutput, error)
-}
-
 type Clients struct {
 	APIGateway APIGatewayAPI
 	Routing    RoutingAPI
 	Dynamo     awsports.DynamoAPI
-	IAM        IAMAPI
 	CFN        bootstrap.CFNDescriber
 	Region     string
 }
@@ -115,7 +105,6 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 			APIGateway: apigateway.NewFromConfig(awscfg),
 			Routing:    apigatewayv2.NewFromConfig(awscfg),
 			Dynamo:     dynamodb.NewFromConfig(awscfg),
-			IAM:        iam.NewFromConfig(awscfg),
 			CFN:        cloudformation.NewFromConfig(awscfg),
 			Region:     awscfg.Region,
 		}, nil
@@ -224,9 +213,9 @@ func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (
 		return bootstrap.Deployed{}, err
 	}
 	if class == edge.ClassPreview {
-		return bootstrap.CheckDeployedPreview(ctx, c.CFN)
+		return bootstrap.CheckDeployedPreview(ctx, c.CFN, p)
 	}
-	return bootstrap.CheckDeployed(ctx, c.CFN)
+	return bootstrap.CheckDeployed(ctx, c.CFN, p)
 }
 
 func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
@@ -238,37 +227,24 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	if _, err := ensureInvokeRole(ctx, c, class, deployed.AssetBucket); err != nil {
-		return edge.BootstrapOutput{}, err
-	}
-	if _, err := ensureNotFoundAPI(ctx, c, class); err != nil {
+	if err := carriesEdge(deployed, class); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
 	return edge.BootstrapOutput{Trust: edge.TrustInternal}, nil
 }
 
+func carriesEdge(deployed bootstrap.Deployed, class edge.Class) error {
+	if !deployed.Present {
+		return fmt.Errorf("the %s bootstrap stack is not standing, so the account holds none of what the %q edge fronts deployments with: the role API Gateway invokes functions through, and the API answering every host no deployment claims. Both are part of that stack: run `%s`", class, Kind, providerkit.BootstrapCommand(class))
+	}
+	if deployed.CoreOutputs[OutputInvokeRoleARN] == "" || deployed.CoreOutputs[OutputNotFoundAPIID] == "" {
+		return fmt.Errorf("the %s bootstrap stack is standing but carries nothing the %q edge needs, so this account was bootstrapped against a different edge. An account fronts its deployments with one edge, and moving it to another is a destroy and a fresh bootstrap, not an upgrade: tear the deployments down, run `ocel bootstrap destroy %s`, then `%s` with this edge selected", class, Kind, class, providerkit.BootstrapCommand(class))
+	}
+	return nil
+}
+
 func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
-	if err := knownClass(class); err != nil {
-		return err
-	}
-	c, err := p.clientsFor(ctx)
-	if err != nil {
-		return err
-	}
-	var errs []error
-	id, found, err := findAPI(ctx, c, notFoundAPIName(class))
-	switch {
-	case err != nil:
-		errs = append(errs, err)
-	case found:
-		if err := p.deleter().drain(ctx, c, []string{id}); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if err := deleteInvokeRole(ctx, c, class); err != nil {
-		errs = append(errs, err)
-	}
-	return errors.Join(errs...)
+	return knownClass(class)
 }
 
 func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -286,7 +262,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	if !deployed.Present {
 		return nil, fmt.Errorf("the %s bootstrap is not standing, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
 	}
-	role, err := requireInvokeRole(ctx, c, spec.Class)
+	role, err := requireInvokeRole(deployed, spec.Class)
 	if err != nil {
 		return nil, err
 	}

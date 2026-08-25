@@ -70,6 +70,10 @@ func createError(what, name string, err error) error {
 	return fmt.Errorf("create the %s %q: %w", what, name, err)
 }
 
+func pagedForever(what string) error {
+	return fmt.Errorf("read the %s this account already holds: CloudFront handed back a %d-th page and kept asking for more, which it does not do for an account of any size. Wait a minute and run the same command again; if it keeps happening, this is an AWS-side fault and nothing in your account needs changing", what, listPageCeiling)
+}
+
 func aliasError(hostname, id string, err error) error {
 	var taken *cftypes.CNAMEAlreadyExists
 	if errors.As(err, &taken) {

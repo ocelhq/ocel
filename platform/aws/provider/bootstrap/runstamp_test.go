@@ -29,7 +29,7 @@ func TestRunStamps(t *testing.T) {
 				t.Errorf("%s was written by %q, want 1.9.0", name, stamp.WrittenBy)
 			}
 		}
-		deployed, err := CheckDeployed(context.Background(), cfn)
+		deployed, err := CheckDeployed(context.Background(), cfn, nil)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}

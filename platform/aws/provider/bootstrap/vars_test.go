@@ -81,8 +81,8 @@ func varsBootstraps() []struct {
 		class    string
 		template string
 	}{
-		{"production", ClassProduction, stackTemplate()},
-		{"preview", ClassPreview, previewStackTemplate()},
+		{"production", ClassProduction, stackTemplate(CoreFragment{})},
+		{"preview", ClassPreview, previewStackTemplate(CoreFragment{})},
 	}
 }
 
@@ -333,7 +333,7 @@ func TestRunVars(t *testing.T) {
 
 func preStoreTemplate(t *testing.T) string {
 	t.Helper()
-	tmpl := stackTemplate()
+	tmpl := stackTemplate(CoreFragment{})
 	for _, block := range []string{varsResources(ClassProduction), varsOutputs()} {
 		if block == "" || !strings.Contains(tmpl, block) {
 			t.Fatalf("cannot derive a pre-store template: the current one has no\n%s", block)
@@ -350,7 +350,7 @@ func TestCheckDeployedVars(t *testing.T) {
 			outputVarsKeyARN: "arn:aws:kms:eu-west-1:123456789012:key/abcd",
 		})}
 
-		got, err := CheckDeployed(context.Background(), api)
+		got, err := CheckDeployed(context.Background(), api, nil)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}

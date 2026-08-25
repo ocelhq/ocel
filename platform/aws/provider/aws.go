@@ -181,7 +181,7 @@ func (p *Provider) Buckets(ctx context.Context, class providerkit.Class) (awspor
 
 func (p *Provider) bootstrapped(ctx context.Context, class providerkit.Class) (bootstrap.Deployed, error) {
 	return p.deployed.resolve(class, func() (bootstrap.Deployed, error) {
-		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), string(class))
+		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), string(class), nil)
 	})
 }
 

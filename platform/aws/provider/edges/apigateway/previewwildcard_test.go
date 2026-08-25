@@ -93,10 +93,6 @@ func TestReconcilePreviewWildcardRoutesEverythingUnclaimedTo404(t *testing.T) {
 	if _, err := e.Bootstrap(ctx, edge.ClassPreview); err != nil {
 		t.Fatalf("Bootstrap(preview): %v", err)
 	}
-	notFound := w.gateway.named(notFoundAPIName(edge.ClassPreview))
-	if notFound == nil {
-		t.Fatal("bootstrap raised no not-found API for the preview class")
-	}
 	w.gateway.calls = nil
 
 	front, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec())
@@ -125,8 +121,8 @@ func TestReconcilePreviewWildcardRoutesEverythingUnclaimedTo404(t *testing.T) {
 	if catchAll == nil {
 		t.Fatalf("no catch-all rule; the wildcard holds %v", w.gateway.mutations())
 	}
-	if catchAll.api != notFound.id || catchAll.stage != stageName {
-		t.Errorf("catch-all rule serves %s/%s, want the bootstrap not-found API %s/%s", catchAll.api, catchAll.stage, notFound.id, stageName)
+	if catchAll.api != fakeNotFoundAPI || catchAll.stage != stageName {
+		t.Errorf("catch-all rule serves %s/%s, want the %s the core stack outputs, on %s", catchAll.api, catchAll.stage, OutputNotFoundAPIID, stageName)
 	}
 	if catchAll.priority != catchAllPriority {
 		t.Errorf("catch-all priority = %d, want %d; rules are evaluated lowest first, so the catch-all has to lose to every preview", catchAll.priority, catchAllPriority)
@@ -227,6 +223,7 @@ func TestReconcilePreviewWildcardRefusesAnAbsentBootstrap(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
+	w.cfn.absent = true
 	_, err := w.edge().ReconcilePreviewWildcard(context.Background(), previewWildcardSpec())
 	if err == nil {
 		t.Fatal("ReconcilePreviewWildcard succeeded without the not-found API every unclaimed host answers from")

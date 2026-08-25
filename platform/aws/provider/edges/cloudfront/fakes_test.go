@@ -115,20 +115,30 @@ func (w *world) edge() *provider {
 }
 
 type fakeCFN struct {
-	absent bool
+	absent    bool
+	otherEdge bool
 }
 
 func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
 	if f.absent {
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
-	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{
-		StackName: in.StackName,
-		Outputs: []cfntypes.Output{
-			{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(fakeStateTable)},
-			{OutputKey: aws.String("AssetBucketName"), OutputValue: aws.String(fakeAssetBucket)},
-		},
-	}}}, nil
+	held := map[string]string{
+		"StateTableName":  fakeStateTable,
+		"AssetBucketName": fakeAssetBucket,
+	}
+	if !f.otherEdge {
+		class := edge.ClassProduction
+		if strings.HasSuffix(aws.ToString(in.StackName), "-"+string(edge.ClassPreview)) {
+			class = edge.ClassPreview
+		}
+		maps.Copy(held, fakeEdgeOutputs(class))
+	}
+	out := make([]cfntypes.Output, 0, len(held))
+	for _, key := range slices.Sorted(maps.Keys(held)) {
+		out = append(out, cfntypes.Output{OutputKey: aws.String(key), OutputValue: aws.String(held[key])})
+	}
+	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{StackName: in.StackName, Outputs: out}}}, nil
 }
 
 type fakeSSM struct {
@@ -148,23 +158,8 @@ func (f *fakeSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ .
 }
 
 type fakeStore struct {
-	arn          string
-	etag         string
-	provisioning int
-}
-
-func (s *fakeStore) status() string {
-	if s.provisioning > 0 {
-		return "PROVISIONING"
-	}
-	return keyValueStoreReady
-}
-
-type fakeFunction struct {
-	code      []byte
-	etag      string
-	config    *cftypes.FunctionConfig
-	published bool
+	arn  string
+	etag string
 }
 
 type fakeDistribution struct {
@@ -190,30 +185,43 @@ type fakeCloudFront struct {
 	calls []string
 
 	stores        map[string]*fakeStore
-	functions     map[string]*fakeFunction
-	cachePolicies map[string]string
-	headerPolicy  map[string]*cftypes.ResponseHeadersPolicyConfig
-	accessControl map[string]string
 	distributions map[string]*fakeDistribution
 
 	createDistributionErr error
 	aliasErr              error
 	statusThrottles       int
 	rollout               int
-	cachePolicyPageSize   int
-	storeProvisions       int
 }
 
 func newFakeCloudFront(shared *trail) *fakeCloudFront {
-	return &fakeCloudFront{
+	f := &fakeCloudFront{
 		trail:         shared,
 		rollout:       1,
 		stores:        map[string]*fakeStore{},
-		functions:     map[string]*fakeFunction{},
-		cachePolicies: map[string]string{},
-		headerPolicy:  map[string]*cftypes.ResponseHeadersPolicyConfig{},
-		accessControl: map[string]string{},
 		distributions: map[string]*fakeDistribution{},
+	}
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
+		name := keyValueStoreName(class)
+		f.stores[name] = &fakeStore{arn: fakeRoutesARN(class), etag: "kvs-1"}
+	}
+	return f
+}
+
+func fakeRoutesARN(class edge.Class) string {
+	return "arn:aws:cloudfront::123456789012:key-value-store/" + keyValueStoreName(class)
+}
+
+func fakeResolverARN(class edge.Class) string {
+	return "arn:aws:cloudfront::123456789012:function/" + functionName(class)
+}
+
+func fakeEdgeOutputs(class edge.Class) map[string]string {
+	return map[string]string{
+		outputRoutesStoreARN: fakeRoutesARN(class),
+		outputResolverARN:    fakeResolverARN(class),
+		outputCachePolicy:    "cache-" + string(class),
+		outputHeadersPolicy:  "headers-" + string(class),
+		outputAssetAccess:    "oac-" + string(class),
 	}
 }
 
@@ -260,33 +268,6 @@ func (f *fakeCloudFront) named(comment string) *fakeDistribution {
 	return nil
 }
 
-const cloudFrontCommentCeiling = 128
-
-func overlongComment(field, value string) error {
-	if len(value) <= cloudFrontCommentCeiling {
-		return nil
-	}
-	return &cftypes.InvalidArgument{Message: aws.String(fmt.Sprintf(
-		"%s is %d characters; CloudFront allows %d", field, len(value), cloudFrontCommentCeiling))}
-}
-
-func (f *fakeCloudFront) CreateKeyValueStore(_ context.Context, in *cloudfront.CreateKeyValueStoreInput, _ ...func(*cloudfront.Options)) (*cloudfront.CreateKeyValueStoreOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.Name)
-	f.record("CreateKeyValueStore " + name)
-	if err := overlongComment("key value store comment", aws.ToString(in.Comment)); err != nil {
-		return nil, err
-	}
-	arn := "arn:aws:cloudfront::123456789012:key-value-store/" + name
-	held := &fakeStore{arn: arn, etag: "kvs-1", provisioning: f.storeProvisions}
-	f.stores[name] = held
-	return &cloudfront.CreateKeyValueStoreOutput{
-		ETag:          aws.String("kvs-1"),
-		KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(arn), Name: in.Name, Status: aws.String(held.status())},
-	}, nil
-}
-
 func (f *fakeCloudFront) DescribeKeyValueStore(_ context.Context, in *cloudfront.DescribeKeyValueStoreInput, _ ...func(*cloudfront.Options)) (*cloudfront.DescribeKeyValueStoreOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -296,267 +277,10 @@ func (f *fakeCloudFront) DescribeKeyValueStore(_ context.Context, in *cloudfront
 	if !ok {
 		return nil, &cftypes.EntityNotFound{Message: aws.String("no key value store " + name)}
 	}
-	if held.provisioning > 0 {
-		held.provisioning--
-	}
 	return &cloudfront.DescribeKeyValueStoreOutput{
 		ETag:          aws.String(held.etag),
-		KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(held.arn), Name: in.Name, Status: aws.String(held.status())},
+		KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(held.arn), Name: in.Name, Status: aws.String("READY")},
 	}, nil
-}
-
-func (f *fakeCloudFront) DeleteKeyValueStore(_ context.Context, in *cloudfront.DeleteKeyValueStoreInput, _ ...func(*cloudfront.Options)) (*cloudfront.DeleteKeyValueStoreOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.Name)
-	f.record("DeleteKeyValueStore " + name)
-	if _, ok := f.stores[name]; !ok {
-		return nil, &cftypes.EntityNotFound{Message: aws.String("no key value store " + name)}
-	}
-	delete(f.stores, name)
-	return &cloudfront.DeleteKeyValueStoreOutput{}, nil
-}
-
-func (f *fakeCloudFront) CreateFunction(_ context.Context, in *cloudfront.CreateFunctionInput, _ ...func(*cloudfront.Options)) (*cloudfront.CreateFunctionOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.Name)
-	f.record("CreateFunction " + name)
-	if err := overlongComment("function comment", aws.ToString(in.FunctionConfig.Comment)); err != nil {
-		return nil, err
-	}
-	f.functions[name] = &fakeFunction{code: slices.Clone(in.FunctionCode), etag: "fn-1", config: in.FunctionConfig}
-	return &cloudfront.CreateFunctionOutput{ETag: aws.String("fn-1")}, nil
-}
-
-func (f *fakeCloudFront) GetFunction(_ context.Context, in *cloudfront.GetFunctionInput, _ ...func(*cloudfront.Options)) (*cloudfront.GetFunctionOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.Name)
-	f.record("GetFunction " + name)
-	held, ok := f.functions[name]
-	if !ok {
-		return nil, &cftypes.NoSuchFunctionExists{Message: aws.String("no function " + name)}
-	}
-	return &cloudfront.GetFunctionOutput{ETag: aws.String(held.etag), FunctionCode: slices.Clone(held.code)}, nil
-}
-
-func (f *fakeCloudFront) DescribeFunction(_ context.Context, in *cloudfront.DescribeFunctionInput, _ ...func(*cloudfront.Options)) (*cloudfront.DescribeFunctionOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.Name)
-	f.record("DescribeFunction " + name + " " + string(in.Stage))
-	held, ok := f.functions[name]
-	if !ok {
-		return nil, &cftypes.NoSuchFunctionExists{Message: aws.String("no function " + name)}
-	}
-	if in.Stage == cftypes.FunctionStageLive && !held.published {
-		return nil, &cftypes.NoSuchFunctionExists{Message: aws.String("function " + name + " is not published")}
-	}
-	return &cloudfront.DescribeFunctionOutput{
-		ETag: aws.String(held.etag),
-		FunctionSummary: &cftypes.FunctionSummary{
-			Name:             in.Name,
-			FunctionConfig:   held.config,
-			FunctionMetadata: &cftypes.FunctionMetadata{FunctionARN: aws.String("arn:aws:cloudfront::123456789012:function/" + name)},
-		},
-	}, nil
-}
-
-func (f *fakeCloudFront) UpdateFunction(_ context.Context, in *cloudfront.UpdateFunctionInput, _ ...func(*cloudfront.Options)) (*cloudfront.UpdateFunctionOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.Name)
-	f.record("UpdateFunction " + name)
-	if err := overlongComment("function comment", aws.ToString(in.FunctionConfig.Comment)); err != nil {
-		return nil, err
-	}
-	held, ok := f.functions[name]
-	if !ok {
-		return nil, &cftypes.NoSuchFunctionExists{Message: aws.String("no function " + name)}
-	}
-	if aws.ToString(in.IfMatch) != held.etag {
-		return nil, &cftypes.InvalidIfMatchVersion{Message: aws.String("stale etag for " + name)}
-	}
-	held.code = slices.Clone(in.FunctionCode)
-	held.config = in.FunctionConfig
-	held.etag = f.id("fn-")
-	return &cloudfront.UpdateFunctionOutput{ETag: aws.String(held.etag)}, nil
-}
-
-func (f *fakeCloudFront) PublishFunction(_ context.Context, in *cloudfront.PublishFunctionInput, _ ...func(*cloudfront.Options)) (*cloudfront.PublishFunctionOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.Name)
-	f.record("PublishFunction " + name)
-	held, ok := f.functions[name]
-	if !ok {
-		return nil, &cftypes.NoSuchFunctionExists{Message: aws.String("no function " + name)}
-	}
-	if aws.ToString(in.IfMatch) != held.etag {
-		return nil, &cftypes.InvalidIfMatchVersion{Message: aws.String("stale etag for " + name)}
-	}
-	held.published = true
-	return &cloudfront.PublishFunctionOutput{FunctionSummary: &cftypes.FunctionSummary{
-		Name:             in.Name,
-		FunctionMetadata: &cftypes.FunctionMetadata{FunctionARN: aws.String("arn:aws:cloudfront::123456789012:function/" + name)},
-	}}, nil
-}
-
-func (f *fakeCloudFront) DeleteFunction(_ context.Context, in *cloudfront.DeleteFunctionInput, _ ...func(*cloudfront.Options)) (*cloudfront.DeleteFunctionOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.Name)
-	f.record("DeleteFunction " + name)
-	if _, ok := f.functions[name]; !ok {
-		return nil, &cftypes.NoSuchFunctionExists{Message: aws.String("no function " + name)}
-	}
-	delete(f.functions, name)
-	return &cloudfront.DeleteFunctionOutput{}, nil
-}
-
-func (f *fakeCloudFront) ListCachePolicies(_ context.Context, in *cloudfront.ListCachePoliciesInput, _ ...func(*cloudfront.Options)) (*cloudfront.ListCachePoliciesOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.record("ListCachePolicies")
-	ids := slices.Sorted(maps.Keys(f.cachePolicies))
-	if after := aws.ToString(in.Marker); after != "" {
-		at := slices.Index(ids, after)
-		if at < 0 {
-			return nil, fmt.Errorf("fake cloudfront got the marker %q, which it never handed out", after)
-		}
-		ids = ids[at+1:]
-	}
-	page, more := ids, ""
-	if size := f.cachePolicyPageSize; size > 0 && len(ids) > size {
-		page = ids[:size]
-		more = page[len(page)-1]
-	}
-	items := make([]cftypes.CachePolicySummary, 0, len(page))
-	for _, id := range page {
-		items = append(items, cftypes.CachePolicySummary{CachePolicy: &cftypes.CachePolicy{
-			Id:                aws.String(id),
-			CachePolicyConfig: &cftypes.CachePolicyConfig{Name: aws.String(f.cachePolicies[id])},
-		}})
-	}
-	list := &cftypes.CachePolicyList{Items: items}
-	if more != "" {
-		list.NextMarker = aws.String(more)
-	}
-	return &cloudfront.ListCachePoliciesOutput{CachePolicyList: list}, nil
-}
-
-func (f *fakeCloudFront) CreateCachePolicy(_ context.Context, in *cloudfront.CreateCachePolicyInput, _ ...func(*cloudfront.Options)) (*cloudfront.CreateCachePolicyOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.CachePolicyConfig.Name)
-	f.record("CreateCachePolicy " + name)
-	if err := overlongComment("cache policy comment", aws.ToString(in.CachePolicyConfig.Comment)); err != nil {
-		return nil, err
-	}
-	id := f.id("cache-")
-	f.cachePolicies[id] = name
-	return &cloudfront.CreateCachePolicyOutput{CachePolicy: &cftypes.CachePolicy{
-		Id:                aws.String(id),
-		CachePolicyConfig: in.CachePolicyConfig,
-	}}, nil
-}
-
-func (f *fakeCloudFront) DeleteCachePolicy(_ context.Context, in *cloudfront.DeleteCachePolicyInput, _ ...func(*cloudfront.Options)) (*cloudfront.DeleteCachePolicyOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	id := aws.ToString(in.Id)
-	f.record("DeleteCachePolicy " + id)
-	if _, ok := f.cachePolicies[id]; !ok {
-		return nil, &cftypes.NoSuchCachePolicy{Message: aws.String("no cache policy " + id)}
-	}
-	delete(f.cachePolicies, id)
-	return &cloudfront.DeleteCachePolicyOutput{}, nil
-}
-
-func (f *fakeCloudFront) ListResponseHeadersPolicies(_ context.Context, _ *cloudfront.ListResponseHeadersPoliciesInput, _ ...func(*cloudfront.Options)) (*cloudfront.ListResponseHeadersPoliciesOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.record("ListResponseHeadersPolicies")
-	items := make([]cftypes.ResponseHeadersPolicySummary, 0, len(f.headerPolicy))
-	for _, id := range slices.Sorted(maps.Keys(f.headerPolicy)) {
-		items = append(items, cftypes.ResponseHeadersPolicySummary{ResponseHeadersPolicy: &cftypes.ResponseHeadersPolicy{
-			Id:                          aws.String(id),
-			ResponseHeadersPolicyConfig: f.headerPolicy[id],
-		}})
-	}
-	return &cloudfront.ListResponseHeadersPoliciesOutput{
-		ResponseHeadersPolicyList: &cftypes.ResponseHeadersPolicyList{Items: items},
-	}, nil
-}
-
-func (f *fakeCloudFront) CreateResponseHeadersPolicy(_ context.Context, in *cloudfront.CreateResponseHeadersPolicyInput, _ ...func(*cloudfront.Options)) (*cloudfront.CreateResponseHeadersPolicyOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.ResponseHeadersPolicyConfig.Name)
-	f.record("CreateResponseHeadersPolicy " + name)
-	if err := overlongComment("response headers policy comment", aws.ToString(in.ResponseHeadersPolicyConfig.Comment)); err != nil {
-		return nil, err
-	}
-	id := f.id("headers-")
-	f.headerPolicy[id] = in.ResponseHeadersPolicyConfig
-	return &cloudfront.CreateResponseHeadersPolicyOutput{ResponseHeadersPolicy: &cftypes.ResponseHeadersPolicy{
-		Id:                          aws.String(id),
-		ResponseHeadersPolicyConfig: in.ResponseHeadersPolicyConfig,
-	}}, nil
-}
-
-func (f *fakeCloudFront) DeleteResponseHeadersPolicy(_ context.Context, in *cloudfront.DeleteResponseHeadersPolicyInput, _ ...func(*cloudfront.Options)) (*cloudfront.DeleteResponseHeadersPolicyOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	id := aws.ToString(in.Id)
-	f.record("DeleteResponseHeadersPolicy " + id)
-	if _, ok := f.headerPolicy[id]; !ok {
-		return nil, &cftypes.NoSuchResponseHeadersPolicy{Message: aws.String("no response headers policy " + id)}
-	}
-	delete(f.headerPolicy, id)
-	return &cloudfront.DeleteResponseHeadersPolicyOutput{}, nil
-}
-
-func (f *fakeCloudFront) ListOriginAccessControls(_ context.Context, _ *cloudfront.ListOriginAccessControlsInput, _ ...func(*cloudfront.Options)) (*cloudfront.ListOriginAccessControlsOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.record("ListOriginAccessControls")
-	items := make([]cftypes.OriginAccessControlSummary, 0, len(f.accessControl))
-	for _, id := range slices.Sorted(maps.Keys(f.accessControl)) {
-		items = append(items, cftypes.OriginAccessControlSummary{
-			Id:   aws.String(id),
-			Name: aws.String(f.accessControl[id]),
-		})
-	}
-	return &cloudfront.ListOriginAccessControlsOutput{
-		OriginAccessControlList: &cftypes.OriginAccessControlList{Items: items},
-	}, nil
-}
-
-func (f *fakeCloudFront) CreateOriginAccessControl(_ context.Context, in *cloudfront.CreateOriginAccessControlInput, _ ...func(*cloudfront.Options)) (*cloudfront.CreateOriginAccessControlOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.OriginAccessControlConfig.Name)
-	f.record("CreateOriginAccessControl " + name)
-	id := f.id("oac-")
-	f.accessControl[id] = name
-	return &cloudfront.CreateOriginAccessControlOutput{OriginAccessControl: &cftypes.OriginAccessControl{
-		Id:                        aws.String(id),
-		OriginAccessControlConfig: in.OriginAccessControlConfig,
-	}}, nil
-}
-
-func (f *fakeCloudFront) DeleteOriginAccessControl(_ context.Context, in *cloudfront.DeleteOriginAccessControlInput, _ ...func(*cloudfront.Options)) (*cloudfront.DeleteOriginAccessControlOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	id := aws.ToString(in.Id)
-	f.record("DeleteOriginAccessControl " + id)
-	if _, ok := f.accessControl[id]; !ok {
-		return nil, &cftypes.NoSuchOriginAccessControl{Message: aws.String("no origin access control " + id)}
-	}
-	delete(f.accessControl, id)
-	return &cloudfront.DeleteOriginAccessControlOutput{}, nil
 }
 
 func (f *fakeCloudFront) ListDistributions(_ context.Context, _ *cloudfront.ListDistributionsInput, _ ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error) {

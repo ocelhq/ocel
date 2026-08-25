@@ -24,11 +24,12 @@ func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.Previ
 	if err != nil {
 		return "", err
 	}
-	notFound, found, err := findAPI(ctx, c, notFoundAPIName(edge.ClassPreview))
+	deployed, err := p.bootstrap(ctx, c, edge.ClassPreview)
 	if err != nil {
 		return "", err
 	}
-	if !found {
+	notFound := deployed.CoreOutputs[OutputNotFoundAPIID]
+	if notFound == "" {
 		return "", fmt.Errorf("the preview bootstrap has no not-found API, so nothing would answer a hostname on %s that no preview claims; run `ocel bootstrap preview` first", wildcard)
 	}
 	front, err := ensurePreviewDomain(ctx, c, wildcard, spec.Certificate)

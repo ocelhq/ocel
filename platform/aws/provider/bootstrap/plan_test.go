@@ -17,7 +17,7 @@ func planned(t *testing.T, cfn CFNAPI, class string, req Request) []providerkit.
 	t.Helper()
 
 	ctx := context.Background()
-	deployed, err := CheckDeployedFor(ctx, cfn, class)
+	deployed, err := CheckDeployedFor(ctx, cfn, class, nil)
 	if err != nil {
 		t.Fatalf("CheckDeployedFor: %v", err)
 	}
@@ -31,7 +31,7 @@ func planned(t *testing.T, cfn CFNAPI, class string, req Request) []providerkit.
 			DigestCurrent: stack.Current(),
 		})
 	}
-	groups, err := PlanChanges(ctx, cfn, class, req, providerkit.DeriveGroups(
+	groups, err := PlanChanges(ctx, cfn, class, nil, req, providerkit.DeriveGroups(
 		NameStacks(described), Catalogue(),
 		providerkit.BootstrapRequest{Class: providerkit.Class(class), Features: req.Features, Drop: req.Drop}))
 	if err != nil {

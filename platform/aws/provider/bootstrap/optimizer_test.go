@@ -354,7 +354,7 @@ func TestCheckDeployedOptimizer(t *testing.T) {
 		cfn.seed(StackName, "Outputs:\n")
 		cfn.seed(optStack(ClassProduction), "Outputs:\n  "+outputImageOptimizerURL+":\n    Value: 'https://abc.lambda-url.us-east-1.on.aws/'\n")
 
-		deployed, err := CheckDeployed(context.Background(), cfn)
+		deployed, err := CheckDeployed(context.Background(), cfn, nil)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
@@ -364,7 +364,7 @@ func TestCheckDeployedOptimizer(t *testing.T) {
 
 		bare := newFakeCFN()
 		bare.seed(StackName, "Outputs:\n")
-		deployed, err = CheckDeployed(context.Background(), bare)
+		deployed, err = CheckDeployed(context.Background(), bare, nil)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}

@@ -20,8 +20,6 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
-	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -31,13 +29,14 @@ const (
 	fakeAssetBucket = "ocel-assets"
 	fakeRegion      = "eu-west-1"
 	fakeAccount     = "123456789012"
+	fakeInvokeRole  = "arn:aws:iam::" + fakeAccount + ":role/ocel-edge-invoke"
+	fakeNotFoundAPI = "nf404"
 )
 
 type world struct {
 	gateway *fakeGateway
 	routing *fakeRouting
 	dynamo  *fakeDynamo
-	iam     *fakeIAM
 	cfn     *fakeCFN
 }
 
@@ -47,13 +46,12 @@ func newWorld() *world {
 		gateway: gateway,
 		routing: &fakeRouting{g: gateway},
 		dynamo:  newFakeDynamo(),
-		iam:     newFakeIAM(),
 		cfn:     &fakeCFN{},
 	}
 }
 
 func (w *world) clients() Clients {
-	return Clients{APIGateway: w.gateway, Routing: w.routing, Dynamo: w.dynamo, IAM: w.iam, CFN: w.cfn, Region: fakeRegion}
+	return Clients{APIGateway: w.gateway, Routing: w.routing, Dynamo: w.dynamo, CFN: w.cfn, Region: fakeRegion}
 }
 
 func (w *world) edge() *provider {
@@ -76,92 +74,28 @@ func (w *world) deleter(attempts int) *Deleter {
 }
 
 type fakeCFN struct {
-	absent bool
+	absent    bool
+	otherEdge bool
 }
 
 func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
 	if f.absent {
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
+	outputs := []cfntypes.Output{
+		{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(fakeStateTable)},
+		{OutputKey: aws.String("AssetBucketName"), OutputValue: aws.String(fakeAssetBucket)},
+	}
+	if !f.otherEdge {
+		outputs = append(outputs,
+			cfntypes.Output{OutputKey: aws.String(OutputInvokeRoleARN), OutputValue: aws.String(fakeInvokeRole)},
+			cfntypes.Output{OutputKey: aws.String(OutputNotFoundAPIID), OutputValue: aws.String(fakeNotFoundAPI)},
+		)
+	}
 	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{
 		StackName: in.StackName,
-		Outputs: []cfntypes.Output{
-			{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(fakeStateTable)},
-			{OutputKey: aws.String("AssetBucketName"), OutputValue: aws.String(fakeAssetBucket)},
-		},
+		Outputs:   outputs,
 	}}}, nil
-}
-
-type fakeIAM struct {
-	mu       sync.Mutex
-	roles    map[string]string
-	policies map[string]string
-	calls    []string
-}
-
-func newFakeIAM() *fakeIAM {
-	return &fakeIAM{roles: map[string]string{}, policies: map[string]string{}}
-}
-
-func (f *fakeIAM) record(call string) {
-	f.calls = append(f.calls, call)
-}
-
-func (f *fakeIAM) GetRole(_ context.Context, in *iam.GetRoleInput, _ ...func(*iam.Options)) (*iam.GetRoleOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.RoleName)
-	f.record("GetRole " + name)
-	arn, ok := f.roles[name]
-	if !ok {
-		return nil, &iamtypes.NoSuchEntityException{Message: aws.String("no role " + name)}
-	}
-	return &iam.GetRoleOutput{Role: &iamtypes.Role{Arn: aws.String(arn)}}, nil
-}
-
-func (f *fakeIAM) CreateRole(_ context.Context, in *iam.CreateRoleInput, _ ...func(*iam.Options)) (*iam.CreateRoleOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.RoleName)
-	f.record("CreateRole " + name)
-	arn := "arn:aws:iam::" + fakeAccount + ":role/" + name
-	f.roles[name] = arn
-	return &iam.CreateRoleOutput{Role: &iamtypes.Role{
-		Arn:                      aws.String(arn),
-		AssumeRolePolicyDocument: in.AssumeRolePolicyDocument,
-	}}, nil
-}
-
-func (f *fakeIAM) PutRolePolicy(_ context.Context, in *iam.PutRolePolicyInput, _ ...func(*iam.Options)) (*iam.PutRolePolicyOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.record("PutRolePolicy " + aws.ToString(in.RoleName))
-	f.policies[aws.ToString(in.RoleName)] = aws.ToString(in.PolicyDocument)
-	return &iam.PutRolePolicyOutput{}, nil
-}
-
-func (f *fakeIAM) DeleteRolePolicy(_ context.Context, in *iam.DeleteRolePolicyInput, _ ...func(*iam.Options)) (*iam.DeleteRolePolicyOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.RoleName)
-	f.record("DeleteRolePolicy " + name)
-	if _, ok := f.policies[name]; !ok {
-		return nil, &iamtypes.NoSuchEntityException{Message: aws.String("no policy on " + name)}
-	}
-	delete(f.policies, name)
-	return &iam.DeleteRolePolicyOutput{}, nil
-}
-
-func (f *fakeIAM) DeleteRole(_ context.Context, in *iam.DeleteRoleInput, _ ...func(*iam.Options)) (*iam.DeleteRoleOutput, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	name := aws.ToString(in.RoleName)
-	f.record("DeleteRole " + name)
-	if _, ok := f.roles[name]; !ok {
-		return nil, &iamtypes.NoSuchEntityException{Message: aws.String("no role " + name)}
-	}
-	delete(f.roles, name)
-	return &iam.DeleteRoleOutput{}, nil
 }
 
 type fakeMethod struct {
