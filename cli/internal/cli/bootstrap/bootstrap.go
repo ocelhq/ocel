@@ -210,7 +210,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		catalogue := described.GetFeatures()
 
 		interactive := !opts.Yes && deps.StdinIsTerminal(stdin)
-		requested, selected, err := chooseFeatures(ctx, opts, tier, catalogue, interactive, stdout)
+		requested, selected, err := chooseFeatures(ctx, opts, catalogue, interactive, stdout)
 		if err != nil {
 			return err
 		}

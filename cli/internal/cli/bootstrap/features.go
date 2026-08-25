@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -19,7 +19,9 @@ const (
 	noFeatures  = "none"
 )
 
-func chooseFeatures(ctx context.Context, opts Options, tier environmentv1.Tier, catalogue []*contractv1.Feature, interactive bool, stdout io.Writer) ([]string, bool, error) {
+var needsStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffb86c"))
+
+func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.Feature, interactive bool, stdout io.Writer) ([]string, bool, error) {
 	if opts.FeaturesDeclared {
 		requested, err := parseFeatureFlag(opts.Features, catalogue)
 		return requested, err == nil, err
@@ -27,31 +29,38 @@ func chooseFeatures(ctx context.Context, opts Options, tier environmentv1.Tier, 
 	if !interactive {
 		return enabledFeatures(catalogue), true, nil
 	}
-	return pickFeatures(ctx, tier, catalogue, stdout)
+	return pickFeatures(ctx, catalogue, stdout)
 }
 
-func pickFeatures(ctx context.Context, tier environmentv1.Tier, catalogue []*contractv1.Feature, stdout io.Writer) ([]string, bool, error) {
+func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, stdout io.Writer) ([]string, bool, error) {
 	if len(catalogue) == 0 {
 		return nil, true, nil
 	}
 
-	printCatalogue(stdout, tier, catalogue)
+	printCatalogue(stdout, catalogue)
 
 	enabled := enabledFeatures(catalogue)
-	options := make([]huh.Option[string], 0, len(catalogue))
-	for _, f := range catalogue {
-		options = append(options, huh.NewOption(f.GetName(), f.GetName()).Selected(slices.Contains(enabled, f.GetName())))
-	}
-
 	chosen := slices.Clone(enabled)
 	field := huh.NewMultiSelect[string]().
-		Title("Features to keep").
-		Options(options...).
+		Title("Select all that apply").
+		Value(&chosen).
+		OptionsFunc(func() []huh.Option[string] {
+			expanded := withDependencies(catalogue, chosen)
+			options := make([]huh.Option[string], 0, len(catalogue))
+			for _, f := range catalogue {
+				label := f.GetName()
+				if needed := directDependents(catalogue, f.GetName(), expanded); len(needed) > 0 {
+					label += "  (needed by " + strings.Join(needed, ", ") + ")"
+				}
+				options = append(options, huh.NewOption(label, f.GetName()).Selected(slices.Contains(expanded, f.GetName())))
+			}
+			return options
+		}, &chosen).
 		// FIXME: huh v2.0.3 subtracts the title height from the multiselect viewport
 		// instead of the frame, so an unset Height scrolls one option at a time.
 		// Drop this once the viewport sizing is fixed upstream.
-		Height(len(options) + 1).
-		Value(&chosen)
+		Height(len(catalogue) + 1).
+		Width(widestLabel(catalogue) + 4)
 
 	err := huh.NewForm(huh.NewGroup(field)).
 		WithTheme(theme).
@@ -65,21 +74,47 @@ func pickFeatures(ctx context.Context, tier environmentv1.Tier, catalogue []*con
 	return withDependencies(catalogue, chosen), true, nil
 }
 
-func printCatalogue(stdout io.Writer, tier environmentv1.Tier, catalogue []*contractv1.Feature) {
+func printCatalogue(stdout io.Writer, catalogue []*contractv1.Feature) {
 	width := 0
 	for _, f := range catalogue {
 		width = max(width, len(f.GetName()))
 	}
 
-	fmt.Fprintf(stdout, "The %s bootstrap offers:\n\n", Name(tier))
+	fmt.Fprint(stdout, "This provider has optional features:\n\n")
 	for _, f := range catalogue {
 		fmt.Fprintf(stdout, "  %-*s   %s", width, f.GetName(), f.GetSummary())
 		if deps := f.GetDependsOn(); len(deps) > 0 {
-			fmt.Fprintf(stdout, "  (needs %s)", strings.Join(deps, ", "))
+			fmt.Fprintf(stdout, "  %s", needsStyle.Render("(needs "+strings.Join(deps, ", ")+")"))
 		}
 		fmt.Fprintln(stdout)
 	}
 	fmt.Fprintln(stdout)
+}
+
+func directDependents(catalogue []*contractv1.Feature, name string, within []string) []string {
+	var dependents []string
+	for _, f := range catalogue {
+		if f.GetName() == name || !slices.Contains(within, f.GetName()) {
+			continue
+		}
+		if slices.Contains(f.GetDependsOn(), name) {
+			dependents = append(dependents, f.GetName())
+		}
+	}
+	return dependents
+}
+
+func widestLabel(catalogue []*contractv1.Feature) int {
+	all := catalogueNames(catalogue)
+	widest := 0
+	for _, f := range catalogue {
+		label := f.GetName()
+		if needed := directDependents(catalogue, f.GetName(), all); len(needed) > 0 {
+			label += "  (needed by " + strings.Join(needed, ", ") + ")"
+		}
+		widest = max(widest, len(label))
+	}
+	return widest
 }
 
 func catalogueNames(catalogue []*contractv1.Feature) []string {
