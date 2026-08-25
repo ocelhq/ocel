@@ -142,20 +142,20 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		out := stdout.String()
 		for _, want := range []string{
 			"Proposed changes to the production bootstrap",
-			"~ stack ocel-production-core — content is behind this build",
-			"    ~ OcelRouterFunction (AWS::Lambda::Function)",
-			"    ± OcelOriginSecret (AWS::SecretsManager::Secret) — rotation forces replacement",
-			"+ stack ocel-production-image-optimization — image-optimization joins the feature set",
-			"– stack ocel-production-isr — isr leaves the set; web, api were deployed against it (this one is slow)",
-			"    – OcelRevalidationTable (AWS::DynamoDB::Table)",
-			"  stack ocel-production-secrets — already current",
+			"~ ocel-production-core  [core]",
+			"    ~ OcelRouterFunction  AWS::Lambda::Function",
+			"    ± OcelOriginSecret    AWS::SecretsManager::Secret   — rotation forces replacement",
+			"+ ocel-production-image-optimization  [image-optimization]",
+			"– ocel-production-isr  [isr]  — web, api were deployed against it (this one is slow)",
+			"    – OcelRevalidationTable  AWS::DynamoDB::Table",
+			"  ocel-production-secrets  [secrets]  — already current",
 			"1 to create, 1 to update, 1 to replace, 1 to delete.",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
 			}
 		}
-		if strings.Contains(out, "    stack ocel-production-secrets") {
+		if strings.Contains(out, "    ocel-production-secrets") {
 			t.Errorf("a kept group listed what it keeps; got:\n%s", out)
 		}
 		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
@@ -230,7 +230,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "– stack ocel-production-isr") {
+		if !strings.Contains(stdout.String(), "– ocel-production-isr") {
 			t.Errorf("stdout = %q, want the deletion shown before it is applied", stdout.String())
 		}
 		got := clitest.ReadJournal(t, journal)
@@ -272,7 +272,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "– stack ocel-production-isr") {
+		if !strings.Contains(stdout.String(), "– ocel-production-isr") {
 			t.Fatalf("stdout = %q, want the delete shown before the confirm that covers it", stdout.String())
 		}
 		if strings.Contains(stdout.String(), "Remove it anyway?") {
@@ -322,7 +322,7 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "– stack ocel-production-isr") {
+		if !strings.Contains(stdout.String(), "– ocel-production-isr") {
 			t.Errorf("stdout = %q, want --dry to show what the drop takes", stdout.String())
 		}
 		if _, err := os.Stat(journal); err == nil {

@@ -104,3 +104,26 @@ func TestWithDependencies(t *testing.T) {
 		t.Errorf("withDependencies = %v, want %v", got, want)
 	}
 }
+
+func TestPrintApplied(t *testing.T) {
+	t.Parallel()
+
+	var out strings.Builder
+	printApplied(&out, testCatalogue(), []string{featureISR, featureCloudflareEdge}, []string{featureCloudflareEdge})
+	got := out.String()
+	if !strings.HasPrefix(got, "✓ Selected isr ") {
+		t.Errorf("printApplied = %q, want the tick and the applied set", got)
+	}
+	if !strings.Contains(got, featureCloudflareEdge) || !strings.Contains(got, "needed by "+featureCloudflareEdge) {
+		t.Errorf("printApplied = %q, want the pulled-in dependency named by what needs it", got)
+	}
+	if strings.HasPrefix(got, "\x1b[") {
+		t.Errorf("printApplied = %q, want the tick left unpainted when the writer is not a terminal", got)
+	}
+
+	var empty strings.Builder
+	printApplied(&empty, testCatalogue(), nil, nil)
+	if empty.String() != "No features will be applied.\n" {
+		t.Errorf("printApplied = %q, want the empty set to say so", empty.String())
+	}
+}

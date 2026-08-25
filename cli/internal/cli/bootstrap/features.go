@@ -10,7 +10,9 @@ import (
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/fatih/color"
 
+	"github.com/ocelhq/ocel/cli/internal/deployui"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -20,6 +22,16 @@ const (
 )
 
 var needsStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffb86c"))
+
+func selectedMark(stdout io.Writer) string {
+	mark := color.New(color.FgGreen)
+	if deployui.IsTerminal(stdout) && !color.NoColor {
+		mark.EnableColor()
+	} else {
+		mark.DisableColor()
+	}
+	return mark.Sprint("✓")
+}
 
 func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.Feature, interactive bool, stdout io.Writer) ([]string, bool, error) {
 	if opts.FeaturesDeclared {
@@ -82,7 +94,7 @@ func printApplied(stdout io.Writer, catalogue []*contractv1.Feature, applied, ch
 		}
 		parts = append(parts, name+" "+needsStyle.Render("(needed by "+strings.Join(directDependents(catalogue, name, applied), ", ")+")"))
 	}
-	fmt.Fprintf(stdout, "Features to apply: %s\n", strings.Join(parts, ", "))
+	fmt.Fprintf(stdout, "%s Selected %s\n", selectedMark(stdout), strings.Join(parts, ", "))
 }
 
 func printCatalogue(stdout io.Writer, catalogue []*contractv1.Feature) {

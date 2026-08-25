@@ -166,7 +166,7 @@ func (g Gate) noteDependents(ctx context.Context, class Class, groups []ChangeGr
 		if len(dependents) == 0 {
 			continue
 		}
-		groups[i].Reason = group.Reason + "; " + strings.Join(dependents, ", ") + " were deployed against it"
+		groups[i].Reason = strings.Join(dependents, ", ") + " were deployed against it"
 	}
 	return nil
 }

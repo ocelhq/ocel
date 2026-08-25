@@ -63,7 +63,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		if err != nil {
 			return err
 		}
-		changeplan.Print(stdout, fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
+		changeplan.NewPrinter(stdout).Print(fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
 			"Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
 		if !skipConfirmation {
 			subject := plan.GetSubject()

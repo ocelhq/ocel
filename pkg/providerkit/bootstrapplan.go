@@ -98,7 +98,6 @@ func DeriveGroups(described Bootstrap, catalogue []Feature, req BootstrapRequest
 			Name:    stackName(standing[name], name),
 			Feature: name,
 			Action:  ActionDelete,
-			Reason:  name + " leaves the set",
 		})
 	}
 	return groups
@@ -108,9 +107,9 @@ func baselineGroup(described Bootstrap, stack BootstrapStack, class Class) Chang
 	group := ChangeGroup{Kind: StackGroupKind, Name: stackName(stack, string(class)+" bootstrap")}
 	switch {
 	case !described.Present || !stack.Present:
-		group.Action, group.Reason = ActionCreate, "new bootstrap"
+		group.Action = ActionCreate
 	case behind(stack):
-		group.Action, group.Reason = ActionUpdate, "content is behind this build"
+		group.Action = ActionUpdate
 	default:
 		group.Action, group.Reason = ActionKeep, "already current"
 	}
@@ -121,9 +120,9 @@ func featureGroup(stack BootstrapStack, name string) ChangeGroup {
 	group := ChangeGroup{Kind: StackGroupKind, Name: stackName(stack, name), Feature: name}
 	switch {
 	case !stack.Present:
-		group.Action, group.Reason = ActionCreate, name+" joins the feature set"
+		group.Action = ActionCreate
 	case behind(stack):
-		group.Action, group.Reason = ActionUpdate, "content is behind this build"
+		group.Action = ActionUpdate
 	default:
 		group.Action, group.Reason = ActionKeep, "already current"
 	}

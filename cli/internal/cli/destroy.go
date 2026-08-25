@@ -217,13 +217,13 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 
 func printDestroyPlan(out io.Writer, slug string, preview bool, plan *contractv1.ChangePlan) {
 	if preview {
-		changeplan.Print(out, fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
+		changeplan.NewPrinter(out).Print(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
 			"– all stored preview assets belonging to this project",
 			"– every preview variable value this project holds, including each preview's own overrides",
 			"The account-level preview bootstrap is left intact. This cannot be undone.")
 		return
 	}
-	changeplan.Print(out, fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
+	changeplan.NewPrinter(out).Print(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
 		"– all stored assets belonging to this project",
 		"– every production variable value this project holds, and their history",
 		"This cannot be undone.")

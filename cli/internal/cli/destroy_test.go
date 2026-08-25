@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -45,7 +46,7 @@ func TestPrintDestroyPlan(t *testing.T) {
 			"every production variable value",
 			"This cannot be undone.",
 			"Left in place:",
-			"  certificate shop.example.com — you pinned this certificate",
+			"  certificate shop.example.com  — you pinned this certificate",
 		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("printDestroyPlan output missing %q; got:\n%s", want, got)
@@ -79,7 +80,7 @@ func TestPrintDestroyPlan(t *testing.T) {
 	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
 		t.Parallel()
 
-		got := changeplan.GroupLine(&contractv1.ChangeGroup{
+		got := changeplan.NewPrinter(io.Discard).GroupLine(&contractv1.ChangeGroup{
 			Kind:   "certificate",
 			Name:   "shop.example.com",
 			Action: contractv1.Change_Action(97),
@@ -109,13 +110,13 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 			`ENTIRE preview footprint of project "test-app"`,
 			"fronted by the cloudfront edge",
 			"– edge workers test-app",
-			"– infra stack test-app--pr-1--infra — databases and buckets, INCLUDING ALL DATA",
+			"– infra stack test-app--pr-1--infra  — databases and buckets, INCLUDING ALL DATA",
 			"infra stack test-app--pr-2--infra",
 			"app stack test-app--pr-1--web--b1",
 			"every preview variable value",
 			"The account-level preview bootstrap is left intact. This cannot be undone.",
 			"Left in place:",
-			"  preview wildcard *.preview.acme.com — bootstrap-scoped",
+			"  preview wildcard *.preview.acme.com  — bootstrap-scoped",
 			"DESTROY PROJECT project=test-app dns= tier=TIER_PREVIEW",
 		} {
 			if !strings.Contains(out, want) {
@@ -218,7 +219,7 @@ func TestRunDestroy(t *testing.T) {
 			"fronted by the cloudfront edge",
 			"– edge stack test-app",
 			"– disable, then delete distribution E1test-app (this one is slow)",
-			"  certificate test-app.example.com — you pinned this certificate; Ocel never deletes one it did not request",
+			"  certificate test-app.example.com  — you pinned this certificate; Ocel never deletes one it did not request",
 			"infra stack test-app--infra",
 			"app stack test-app--web--b1",
 			"DESTROY PROJECT project=test-app",

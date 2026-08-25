@@ -398,10 +398,10 @@ func fakeChangePlan(req *contractv1.PlanBootstrapRequest) *contractv1.ChangePlan
 		return plan
 	case "mixed":
 	default:
-		core.Action, core.Reason = contractv1.Change_ACTION_CREATE, "new bootstrap"
+		core.Action = contractv1.Change_ACTION_CREATE
 		return plan
 	}
-	core.Action, core.Reason = contractv1.Change_ACTION_UPDATE, "content is behind this build"
+	core.Action = contractv1.Change_ACTION_UPDATE
 	core.Changes = []*contractv1.Change{
 		{Kind: "AWS::Lambda::Function", Name: "OcelRouterFunction", Action: contractv1.Change_ACTION_UPDATE},
 		{Kind: "AWS::SecretsManager::Secret", Name: "OcelOriginSecret", Action: contractv1.Change_ACTION_REPLACE, Reason: "rotation forces replacement"},
@@ -412,7 +412,6 @@ func fakeChangePlan(req *contractv1.PlanBootstrapRequest) *contractv1.ChangePlan
 			Name:    "ocel-" + class + "-image-optimization",
 			Feature: "image-optimization",
 			Action:  contractv1.Change_ACTION_CREATE,
-			Reason:  "image-optimization joins the feature set",
 			Changes: []*contractv1.Change{
 				{Kind: "AWS::Lambda::Function", Name: "OcelImageFunction", Action: contractv1.Change_ACTION_CREATE},
 			},
@@ -422,7 +421,7 @@ func fakeChangePlan(req *contractv1.PlanBootstrapRequest) *contractv1.ChangePlan
 			Name:    "ocel-" + class + "-isr",
 			Feature: "isr",
 			Action:  contractv1.Change_ACTION_DELETE,
-			Reason:  "isr leaves the set; web, api were deployed against it",
+			Reason:  "web, api were deployed against it",
 			Slow:    true,
 			Changes: []*contractv1.Change{
 				{Kind: "AWS::DynamoDB::Table", Name: "OcelRevalidationTable", Action: contractv1.Change_ACTION_DELETE},

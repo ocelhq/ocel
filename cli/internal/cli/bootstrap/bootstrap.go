@@ -255,7 +255,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		plan := intended.GetPlan()
 		rendered := len(plan.GetGroups()) > 0
 		if rendered {
-			changeplan.Render(stdout, fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan)
+			changeplan.NewPrinter(stdout).Render(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan)
 			if changeplan.AllKeep(plan) {
 				fmt.Fprint(stdout, "\nNo infrastructure changes — applying refreshes bootstrap seals and records.\n")
 			}
