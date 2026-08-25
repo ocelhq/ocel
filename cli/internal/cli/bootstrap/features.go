@@ -54,7 +54,7 @@ func pickFeatures(ctx context.Context, tier environmentv1.Tier, catalogue []*con
 		Value(&chosen)
 
 	err := huh.NewForm(huh.NewGroup(field)).
-		WithTheme(huh.ThemeFunc(huh.ThemeDracula)).
+		WithTheme(theme).
 		RunWithContext(ctx)
 	if errors.Is(err, huh.ErrUserAborted) {
 		return nil, false, nil

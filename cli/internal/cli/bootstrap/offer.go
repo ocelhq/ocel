@@ -106,7 +106,7 @@ func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.Boot
 			Affirmative("Yes").
 			Negative("No").
 			Value(&proceed),
-	)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).RunWithContext(ctx)
+	)).WithTheme(theme).RunWithContext(ctx)
 	if err != nil && !errors.Is(err, huh.ErrUserAborted) {
 		return err
 	}

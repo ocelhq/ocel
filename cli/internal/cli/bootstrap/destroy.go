@@ -72,7 +72,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 				huh.NewInput().
 					Title("Type the environment name (" + subject + ") to confirm").
 					Value(&typed),
-			)).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).RunWithContext(ctx)
+			)).WithTheme(theme).RunWithContext(ctx)
 			if err != nil && !errors.Is(err, huh.ErrUserAborted) {
 				return err
 			}
