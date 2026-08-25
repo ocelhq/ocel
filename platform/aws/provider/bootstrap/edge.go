@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -117,6 +118,13 @@ func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, kind e
 	if err != nil {
 		return err
 	}
+	stored, err := ReadEdgeValues(ctx, ssmClient, class, kind)
+	if err != nil {
+		return err
+	}
+	if maps.Equal(stored, values) {
+		return nil
+	}
 	payload, err := json.Marshal(values)
 	if err != nil {
 		return fmt.Errorf("marshal edge values: %w", err)
@@ -163,7 +171,7 @@ func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMA
 	}
 	paramName, userName := names.credentialsParam, names.user
 
-	recorded, err := recordedEdgeKeyID(ctx, ssmClient, paramName)
+	recorded, _, err := recordedEdgeKeyID(ctx, ssmClient, paramName)
 	if err != nil {
 		return false, err
 	}
@@ -212,7 +220,7 @@ func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMA
 	return true, nil
 }
 
-func recordedEdgeKeyID(ctx context.Context, ssmClient SSMAPI, paramName string) (string, error) {
+func recordedEdgeKeyID(ctx context.Context, ssmClient SSMAPI, paramName string) (keyID string, held bool, err error) {
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(paramName),
 		WithDecryption: aws.Bool(true),
@@ -220,15 +228,15 @@ func recordedEdgeKeyID(ctx context.Context, ssmClient SSMAPI, paramName string) 
 	if err != nil {
 		var notFound *ssmtypes.ParameterNotFound
 		if errors.As(err, &notFound) {
-			return "", nil
+			return "", false, nil
 		}
-		return "", fmt.Errorf("read edge credentials parameter: %w", err)
+		return "", false, fmt.Errorf("read edge credentials parameter: %w", err)
 	}
 	var creds EdgeCredentials
 	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &creds); err != nil {
-		return "", fmt.Errorf("parse edge credentials in %s: %w", paramName, err)
+		return "", true, fmt.Errorf("parse edge credentials in %s: %w", paramName, err)
 	}
-	return creds.AccessKeyID, nil
+	return creds.AccessKeyID, true, nil
 }
 
 func strandedKeys(recorded, paramName string) string {
@@ -281,14 +289,17 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, class string, 
 		ScriptName:    values[edge.OfferKeyStoreScriptName],
 		BootstrapCred: values[edge.OfferKeyStoreBootstrapCred],
 	}
+	stored, err := ReadDeploymentsStoreFor(ctx, ssmClient, class, kind)
+	if err != nil {
+		return err
+	}
 	if store.BootstrapCred == "" {
-		stored, err := ReadDeploymentsStoreFor(ctx, ssmClient, class, kind)
-		if err != nil {
-			return err
-		}
 		if store.BootstrapCred = stored.BootstrapCred; store.BootstrapCred == "" {
 			return standingCredMissing(kind, "deployments store", store.ScriptName, paramName)
 		}
+	}
+	if store == stored {
+		return nil
 	}
 	payload, err := json.Marshal(store)
 	if err != nil {
@@ -353,14 +364,17 @@ func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, class string, kind ed
 		ScriptName:    values[edge.OfferKeyISRWriterScriptName],
 		BootstrapCred: values[edge.OfferKeyISRWriterBootstrapCred],
 	}
+	stored, err := ReadISRWriterFor(ctx, ssmClient, class, kind)
+	if err != nil {
+		return err
+	}
 	if writer.BootstrapCred == "" {
-		stored, err := ReadISRWriterFor(ctx, ssmClient, class, kind)
-		if err != nil {
-			return err
-		}
 		if writer.BootstrapCred = stored.BootstrapCred; writer.BootstrapCred == "" {
 			return standingCredMissing(kind, "ISR writer", writer.ScriptName, paramName)
 		}
+	}
+	if writer == stored {
+		return nil
 	}
 	payload, err := json.Marshal(writer)
 	if err != nil {
@@ -449,11 +463,11 @@ func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, class string, kind e
 		SecretAccessKey: values[edge.OfferKeySecretAccessKey],
 	}
 
+	stored, err := ReadCacheStore(ctx, ssmClient, class, kind)
+	if err != nil {
+		return err
+	}
 	if store.SecretAccessKey == "" {
-		stored, err := ReadCacheStore(ctx, ssmClient, class, kind)
-		if err != nil {
-			return err
-		}
 		if stored.AccessKeyID != store.AccessKeyID || stored.SecretAccessKey == "" {
 			return fmt.Errorf(
 				"the %s edge reoffered cache-store credential %q without a secret, but %s holds no secret for it: "+
@@ -463,6 +477,9 @@ func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, class string, kind e
 			)
 		}
 		store.SecretAccessKey = stored.SecretAccessKey
+	}
+	if store == stored {
+		return nil
 	}
 
 	payload, err := json.Marshal(store)

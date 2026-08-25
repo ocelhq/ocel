@@ -67,7 +67,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanCreate},
 		{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanKeep, Reason: "already current"},
 	}}
-	b := Bootstrapper{CFN: &teardownCFN{present: map[string]bootstrap.Deployed{}}, Edge: front}
+	b := planningBootstrapper(front)
 
 	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
 		Class:    providerkit.ClassProduction,
@@ -76,8 +76,8 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
 	}
-	if len(plan.Groups) != 3 {
-		t.Fatalf("plan = %v, want the core stack, the isr stack and the edge", plan.Groups)
+	if len(plan.Groups) != 4 {
+		t.Fatalf("plan = %v, want the core stack, the isr stack, the parameters and the edge", plan.Groups)
 	}
 	for _, group := range plan.Groups[:2] {
 		if group.Kind != providerkit.StackGroupKind || !strings.HasPrefix(group.Name, "aws/") {
@@ -87,7 +87,11 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	if got := plan.Groups[0].Name; got != "aws/"+bootstrap.StackName {
 		t.Errorf("the core group is %q, want %q", got, "aws/"+bootstrap.StackName)
 	}
-	edgeGroup := plan.Groups[2]
+	params := plan.Groups[2]
+	if params.Kind != providerkit.ParameterGroupKind || params.Name != "aws/"+bootstrap.ParamGroupName {
+		t.Errorf("the parameters group = %+v, want it named under the account that holds them", params)
+	}
+	edgeGroup := plan.Groups[3]
 	if edgeGroup.Kind != providerkit.EdgeGroupKind || edgeGroup.Name != string(cloudflareKind)+"/edge" {
 		t.Errorf("the edge group = %+v, want the edge named under its own vendor", edgeGroup)
 	}
@@ -113,7 +117,7 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 		{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanUpdate},
 		{Kind: "Cloudflare::Worker", Name: "ocel-deployments", Action: edge.PlanCreate},
 	}}
-	b := Bootstrapper{CFN: &teardownCFN{present: map[string]bootstrap.Deployed{}}, Edge: front}
+	b := planningBootstrapper(front)
 
 	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
 		Class:  providerkit.ClassProduction,
@@ -148,7 +152,7 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 func TestPlanLeavesOutAnEdgeThatCannotPlanItsOwnBootstrap(t *testing.T) {
 	t.Parallel()
 
-	b := Bootstrapper{CFN: &teardownCFN{present: map[string]bootstrap.Deployed{}}, Edge: &teardownEdge{}}
+	b := planningBootstrapper(&teardownEdge{})
 
 	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{Class: providerkit.ClassProduction})
 	if err != nil {
@@ -164,14 +168,20 @@ func TestPlanLeavesOutAnEdgeThatCannotPlanItsOwnBootstrap(t *testing.T) {
 func TestPlanCarriesTheEdgesRefusalOut(t *testing.T) {
 	t.Parallel()
 
-	b := Bootstrapper{
-		CFN:  &teardownCFN{present: map[string]bootstrap.Deployed{}},
-		Edge: &planningEdge{err: errors.New("CLOUDFLARE_ACCOUNT_ID is not set")},
-	}
+	b := planningBootstrapper(&planningEdge{err: errors.New("CLOUDFLARE_ACCOUNT_ID is not set")})
 
 	_, err := b.Plan(context.Background(), providerkit.BootstrapRequest{Class: providerkit.ClassProduction})
 	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_ACCOUNT_ID") {
 		t.Fatalf("Plan error = %v, want the edge's own account error carried out whole", err)
+	}
+}
+
+func planningBootstrapper(front edge.Edge) Bootstrapper {
+	return Bootstrapper{
+		CFN:  &teardownCFN{present: map[string]bootstrap.Deployed{}},
+		SSM:  &teardownSSM{params: map[string]string{}},
+		IAM:  &teardownIAM{keys: map[string][]string{}},
+		Edge: front,
 	}
 }
 

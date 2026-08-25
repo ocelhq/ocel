@@ -313,3 +313,40 @@ func TestConfirmVerb(t *testing.T) {
 		t.Errorf("ConfirmVerb() = %q, want a mixed plan to read as one", got)
 	}
 }
+
+func TestRenderNamesTheParameterGroupBareAndSpellsItsRowsOut(t *testing.T) {
+	t.Parallel()
+
+	plan := &contractv1.ChangePlan{Groups: []*contractv1.ChangeGroup{
+		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: contractv1.Change_ACTION_KEEP, Reason: "already current"},
+		{
+			Kind:   "parameters",
+			Name:   "aws/parameters",
+			Action: contractv1.Change_ACTION_UPDATE,
+			Changes: []*contractv1.Change{
+				{Kind: "AWS::SSM::Parameter", Name: "/ocel/origin/secret", Action: contractv1.Change_ACTION_KEEP, Reason: "already current"},
+				{Kind: "AWS::SSM::Parameter", Name: "/ocel/edge/cloudflare/values", Action: contractv1.Change_ACTION_UPDATE, Reason: "what the edge hands back differs from what stands"},
+				{Kind: "AWS::SSM::Parameter", Name: "/ocel/edge/cloudflare/credentials", Action: contractv1.Change_ACTION_CREATE},
+				{Kind: "AWS::IAM::AccessKey", Name: "ocel-edge", Action: contractv1.Change_ACTION_CREATE},
+			},
+		},
+	}}
+	var out bytes.Buffer
+	changeplan.NewPrinter(&out).Render("Proposed changes to the production bootstrap", plan)
+
+	want := `Proposed changes to the production bootstrap:
+
+  aws/ocel-bootstrap  [core]  — already current
+
+~ aws/parameters
+      /ocel/origin/secret                AWS::SSM::Parameter   — already current
+    ~ /ocel/edge/cloudflare/values       AWS::SSM::Parameter   — what the edge hands back differs from what stands
+    + /ocel/edge/cloudflare/credentials  AWS::SSM::Parameter
+    + ocel-edge                          AWS::IAM::AccessKey
+
+2 to create, 1 to update.
+`
+	if out.String() != want {
+		t.Errorf("Render() =\n%s\nwant\n%s", out.String(), want)
+	}
+}

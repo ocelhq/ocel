@@ -32,7 +32,10 @@ const (
 	reasonMetadataDrift = "the deployed worker's compatibility settings or bindings differ from this build's"
 )
 
-var _ edge.BootstrapPlanner = (*provider)(nil)
+var (
+	_ edge.BootstrapPlanner = (*provider)(nil)
+	_ edge.BootstrapAdopter = (*provider)(nil)
+)
 
 func (p *provider) PlanBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
 	accountID, err := bootstrapCredentials()

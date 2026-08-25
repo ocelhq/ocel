@@ -661,3 +661,98 @@ func TestReadISRWriterSeedFor(t *testing.T) {
 		}
 	})
 }
+
+type adoption struct {
+	what  string
+	first func(context.Context, SSMAPI) error
+	again func(context.Context, SSMAPI) error
+}
+
+func adoptions() []adoption {
+	cacheStore := func(offer map[string]string) func(context.Context, SSMAPI) error {
+		return func(ctx context.Context, ssmc SSMAPI) error {
+			return adoptCacheStore(ctx, ssmc, ClassProduction, "fake", offer)
+		}
+	}
+	deploymentsStore := func(offer map[string]string) func(context.Context, SSMAPI) error {
+		return func(ctx context.Context, ssmc SSMAPI) error {
+			return adoptDeploymentsStore(ctx, ssmc, ClassProduction, "fake", offer)
+		}
+	}
+	isrWriter := func(offer map[string]string) func(context.Context, SSMAPI) error {
+		return func(ctx context.Context, ssmc SSMAPI) error {
+			return adoptISRWriter(ctx, ssmc, ClassProduction, "fake", offer)
+		}
+	}
+	edgeValues := func(ctx context.Context, ssmc SSMAPI) error {
+		return writeEdgeValues(ctx, ssmc, ClassProduction, "fake", map[string]string{"cacheBucket": "ocel-edge-cache"})
+	}
+	return []adoption{
+		{"the cache store", cacheStore(offeredStore()), cacheStore(without(offeredStore(), edge.OfferKeySecretAccessKey))},
+		{"the deployments store", deploymentsStore(offeredDeploymentsStore()), deploymentsStore(without(offeredDeploymentsStore(), edge.OfferKeyStoreBootstrapCred))},
+		{"the ISR writer", isrWriter(offeredISRWriter("", "cred-prod")), isrWriter(offeredISRWriter("", ""))},
+		{"the edge values", edgeValues, edgeValues},
+	}
+}
+
+func without(offer map[string]string, key string) map[string]string {
+	delete(offer, key)
+	return offer
+}
+
+func TestAdoptionWritesNothingWhenWhatStandsIsWhatItWouldWrite(t *testing.T) {
+	for _, tc := range adoptions() {
+		t.Run(tc.what, func(t *testing.T) {
+			ssmc := newFakeSSM()
+			if err := tc.first(context.Background(), ssmc); err != nil {
+				t.Fatalf("first adopt: %v", err)
+			}
+			if ssmc.puts != 1 {
+				t.Fatalf("puts = %d, want the first adopt to write once", ssmc.puts)
+			}
+			if err := tc.first(context.Background(), ssmc); err != nil {
+				t.Fatalf("second adopt: %v", err)
+			}
+			if ssmc.puts != 1 {
+				t.Errorf("puts = %d, want the second adopt to write nothing: what stands is what it would write", ssmc.puts)
+			}
+		})
+	}
+}
+
+func TestAdoptionWritesNothingWhenAReofferOmitsTheStandingCredential(t *testing.T) {
+	for _, tc := range adoptions() {
+		t.Run(tc.what, func(t *testing.T) {
+			ssmc := newFakeSSM()
+			if err := tc.first(context.Background(), ssmc); err != nil {
+				t.Fatalf("first adopt: %v", err)
+			}
+			if err := tc.again(context.Background(), ssmc); err != nil {
+				t.Fatalf("re-offer without the credential: %v", err)
+			}
+			if ssmc.puts != 1 {
+				t.Errorf("puts = %d, want the backfilled re-offer to write nothing", ssmc.puts)
+			}
+		})
+	}
+}
+
+func TestWriteEdgeValuesRewritesWhatDrifted(t *testing.T) {
+	ssmc := newFakeSSM()
+	if err := writeEdgeValues(context.Background(), ssmc, ClassProduction, "fake", map[string]string{"cacheBucket": "old"}); err != nil {
+		t.Fatalf("writeEdgeValues: %v", err)
+	}
+	if err := writeEdgeValues(context.Background(), ssmc, ClassProduction, "fake", map[string]string{"cacheBucket": "new"}); err != nil {
+		t.Fatalf("writeEdgeValues (drifted): %v", err)
+	}
+	if ssmc.puts != 2 {
+		t.Errorf("puts = %d, want the drifted values written", ssmc.puts)
+	}
+	values, err := ReadEdgeValues(context.Background(), ssmc, ClassProduction, "fake")
+	if err != nil {
+		t.Fatalf("ReadEdgeValues: %v", err)
+	}
+	if values["cacheBucket"] != "new" {
+		t.Errorf("stored values = %v, want the ones the edge last handed back", values)
+	}
+}

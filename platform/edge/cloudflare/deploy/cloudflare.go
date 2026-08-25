@@ -146,6 +146,25 @@ func (p *provider) SharedPreviewSurface() edge.Surface {
 
 func (p *provider) CodeRuntime() (string, []string) { return compatDate, compatFlags }
 
+func (p *provider) Adoption(_ context.Context, class edge.Class) (edge.Adoption, error) {
+	name, ok := cacheStoreNameByClass[class]
+	if !ok {
+		return edge.Adoption{}, fmt.Errorf("cloudflare: unknown class %q", class)
+	}
+	workers, err := bootstrapWorkers(class)
+	if err != nil {
+		return edge.Adoption{}, err
+	}
+	adoption := edge.Adoption{
+		Values: adoptedValues(name),
+		Offers: []edge.OfferKind{edge.OfferCacheStore},
+	}
+	for _, worker := range workers {
+		adoption.Offers = append(adoption.Offers, worker.offer)
+	}
+	return adoption, nil
+}
+
 func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
 	accountID, err := bootstrapCredentials()
 	if err != nil {

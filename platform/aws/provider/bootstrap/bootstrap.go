@@ -411,7 +411,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 		return err
 	}
 	steps := stepDeps{class: target.class, kind: apis.Edge.Kind(), ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
-	if droppingEdge(apis.Edge, req) {
+	if droppingEdge(apis.Edge.Kind(), req) {
 		if err := tearDownEdge(ctx, steps, apis.Edge); err != nil {
 			return err
 		}
@@ -508,8 +508,8 @@ func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, class string,
 	return deleteFeatureStacks(ctx, cfn, class, dropOrder, logf)
 }
 
-func droppingEdge(front edge.Edge, req Request) bool {
-	name := providerkit.FeatureNeedingEdge(Catalogue(), front.Kind())
+func droppingEdge(kind edge.Kind, req Request) bool {
+	name := providerkit.FeatureNeedingEdge(Catalogue(), kind)
 	return name != "" && slices.Contains(req.Remove, name) && !slices.Contains(req.Features, name)
 }
 
