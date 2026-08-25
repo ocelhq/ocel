@@ -21,7 +21,10 @@ const (
 )
 
 func tint(stdout io.Writer, attrs ...color.Attribute) *color.Color {
-	c := color.New(attrs...)
+	return gated(stdout, color.New(attrs...))
+}
+
+func gated(stdout io.Writer, c *color.Color) *color.Color {
 	if deployui.IsTerminal(stdout) && !color.NoColor {
 		c.EnableColor()
 	} else {
@@ -35,7 +38,7 @@ func selectedMark(stdout io.Writer) string {
 }
 
 func needsNote(stdout io.Writer, note string) string {
-	return tint(stdout, color.Faint).Sprint(note)
+	return gated(stdout, color.RGB(0xff, 0xb8, 0x6c)).Sprint(note)
 }
 
 func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.Feature, interactive bool, stdout io.Writer) ([]string, bool, error) {
