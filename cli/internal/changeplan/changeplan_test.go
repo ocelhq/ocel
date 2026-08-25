@@ -294,6 +294,90 @@ Left in place:
 	}
 }
 
+func TestPrintShowsAKeptGroupThatCarriesRows(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	changeplan.NewPrinter(&out).Print("This will permanently destroy production project \"shop\"", &contractv1.ChangePlan{
+		Groups: []*contractv1.ChangeGroup{
+			{Kind: "edge stack", Name: "shop", Action: contractv1.Change_ACTION_DELETE},
+			{
+				Kind:   "edge",
+				Name:   "cloudflare/edge",
+				Action: contractv1.Change_ACTION_KEEP,
+				Reason: "bootstrap-scoped",
+				Changes: []*contractv1.Change{
+					{Kind: "Cloudflare::Worker", Name: "ocel-preview-entry", Action: contractv1.Change_ACTION_KEEP, Reason: "every project's previews are served through it"},
+				},
+			},
+		},
+	})
+
+	want := `This will permanently destroy production project "shop":
+
+– edge stack shop
+
+Left in place:
+
+  cloudflare/edge  — bootstrap-scoped
+  ocel-preview-entry  — every project's previews are served through it
+
+1 to delete.
+`
+	if out.String() != want {
+		t.Errorf("Print() =\n%s\nwant\n%s", out.String(), want)
+	}
+}
+
+func keptGroupWithDeletes() *contractv1.ChangePlan {
+	return &contractv1.ChangePlan{Groups: []*contractv1.ChangeGroup{
+		{
+			Kind:   "edge",
+			Name:   "cloudflare/edge",
+			Action: contractv1.Change_ACTION_KEEP,
+			Reason: "already current",
+			Changes: []*contractv1.Change{
+				{Kind: "Cloudflare::WorkerRoute", Name: "*.preview.shop.com", Action: contractv1.Change_ACTION_DELETE},
+				{Kind: "Cloudflare::Worker", Name: "ocel-preview-entry", Action: contractv1.Change_ACTION_KEEP, Reason: "shared with every other wildcard"},
+			},
+		},
+	}}
+}
+
+func TestAGroupCalledKeptThatDeletesIsRenderedAsWhatItDoes(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	changeplan.NewPrinter(&out).Print("This will release the preview wildcard", keptGroupWithDeletes())
+
+	want := `This will release the preview wildcard:
+
+– cloudflare/edge
+    – *.preview.shop.com  Cloudflare::WorkerRoute
+
+Left in place:
+
+  ocel-preview-entry  — shared with every other wildcard
+
+1 to delete.
+`
+	if out.String() != want {
+		t.Errorf("Print() =\n%s\nwant\n%s", out.String(), want)
+	}
+	if changeplan.AllKeep(keptGroupWithDeletes()) {
+		t.Error("AllKeep() = true for a group called kept whose rows are deleted")
+	}
+	if got := changeplan.Tally(keptGroupWithDeletes()); got != "1 to delete." {
+		t.Errorf("Tally() = %q, want the delete the group carries counted", got)
+	}
+
+	out.Reset()
+	changeplan.NewPrinter(&out).Render("Proposed changes", keptGroupWithDeletes())
+	if !strings.Contains(out.String(), "*.preview.shop.com") {
+		t.Errorf("Render() =\n%s\nwant the row it deletes named", out.String())
+	}
+}
+
 func TestAllKeepIsNotAPlanWithoutGroups(t *testing.T) {
 	t.Parallel()
 

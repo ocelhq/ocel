@@ -48,7 +48,7 @@ func (p *Printer) Print(header string, plan *contractv1.ChangePlan, footer ...st
 	}
 	fmt.Fprintf(p.out, "%s:\n\n", header)
 
-	doomed, kept, keptRows := partition(plan.GetGroups())
+	doomed, kept, keptRows := partition(rolledUp(plan.GetGroups()))
 	p.writeGroups(doomed)
 	if len(footer) > 0 {
 		if len(doomed) > 0 {
@@ -73,14 +73,7 @@ func (p *Printer) Print(header string, plan *contractv1.ChangePlan, footer ...st
 func partition(groups []*contractv1.ChangeGroup) (doomed, kept []*contractv1.ChangeGroup, keptRows []*contractv1.Change) {
 	doomed = make([]*contractv1.ChangeGroup, 0, len(groups))
 	for _, group := range groups {
-		going := &contractv1.ChangeGroup{
-			Kind:    group.GetKind(),
-			Name:    group.GetName(),
-			Feature: group.GetFeature(),
-			Action:  group.GetAction(),
-			Reason:  group.GetReason(),
-			Slow:    group.GetSlow(),
-		}
+		going := headed(group, group.GetAction(), group.GetReason())
 		for _, change := range group.GetChanges() {
 			if change.GetAction() == contractv1.Change_ACTION_KEEP {
 				keptRows = append(keptRows, change)
@@ -88,14 +81,60 @@ func partition(groups []*contractv1.ChangeGroup) (doomed, kept []*contractv1.Cha
 			}
 			going.Changes = append(going.Changes, change)
 		}
-		switch {
-		case group.GetAction() != contractv1.Change_ACTION_KEEP:
-			doomed = append(doomed, going)
-		case len(group.GetChanges()) == 0:
+		if group.GetAction() == contractv1.Change_ACTION_KEEP {
 			kept = append(kept, going)
+			continue
 		}
+		doomed = append(doomed, going)
 	}
 	return doomed, kept, keptRows
+}
+
+func rolledUp(groups []*contractv1.ChangeGroup) []*contractv1.ChangeGroup {
+	rolled := make([]*contractv1.ChangeGroup, 0, len(groups))
+	for _, group := range groups {
+		if group.GetAction() != contractv1.Change_ACTION_KEEP || keepsAll(group.GetChanges()) {
+			rolled = append(rolled, group)
+			continue
+		}
+		going := headed(group, goingAction(group.GetChanges()), "")
+		going.Changes = group.GetChanges()
+		rolled = append(rolled, going)
+	}
+	return rolled
+}
+
+func headed(group *contractv1.ChangeGroup, action contractv1.Change_Action, reason string) *contractv1.ChangeGroup {
+	return &contractv1.ChangeGroup{
+		Kind:    group.GetKind(),
+		Name:    group.GetName(),
+		Feature: group.GetFeature(),
+		Action:  action,
+		Reason:  reason,
+		Slow:    group.GetSlow(),
+	}
+}
+
+func keepsAll(changes []*contractv1.Change) bool {
+	for _, change := range changes {
+		if change.GetAction() != contractv1.Change_ACTION_KEEP {
+			return false
+		}
+	}
+	return true
+}
+
+func goingAction(changes []*contractv1.Change) contractv1.Change_Action {
+	for _, change := range changes {
+		switch change.GetAction() {
+		case contractv1.Change_ACTION_KEEP,
+			contractv1.Change_ACTION_DELETE,
+			contractv1.Change_ACTION_DISABLE_THEN_DELETE:
+		default:
+			return contractv1.Change_ACTION_UPDATE
+		}
+	}
+	return contractv1.Change_ACTION_DELETE
 }
 
 func (p *Printer) Render(header string, plan *contractv1.ChangePlan) {
@@ -103,7 +142,7 @@ func (p *Printer) Render(header string, plan *contractv1.ChangePlan) {
 		header += fmt.Sprintf(" (%s edge)", kind)
 	}
 	fmt.Fprintf(p.out, "%s:\n\n", header)
-	p.writeGroups(plan.GetGroups())
+	p.writeGroups(rolledUp(plan.GetGroups()))
 	if tally := Tally(plan); tally != "" {
 		fmt.Fprintf(p.out, "\n%s\n", tally)
 	}
@@ -270,7 +309,7 @@ func AllKeep(plan *contractv1.ChangePlan) bool {
 	if len(groups) == 0 {
 		return false
 	}
-	for _, group := range groups {
+	for _, group := range rolledUp(groups) {
 		if group.GetAction() != contractv1.Change_ACTION_KEEP {
 			return false
 		}
@@ -320,7 +359,7 @@ func tallyVerb(action contractv1.Change_Action) string {
 
 func count(plan *contractv1.ChangePlan) map[contractv1.Change_Action]int {
 	counts := map[contractv1.Change_Action]int{}
-	for _, group := range plan.GetGroups() {
+	for _, group := range rolledUp(plan.GetGroups()) {
 		if group.GetAction() == contractv1.Change_ACTION_KEEP {
 			continue
 		}
