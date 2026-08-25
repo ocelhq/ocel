@@ -162,6 +162,24 @@ func (f *fakeCFN) DescribeStackEvents(_ context.Context, in *cloudformation.Desc
 	}}}, nil
 }
 
+func (f *fakeCFN) ListStackResources(_ context.Context, in *cloudformation.ListStackResourcesInput, _ ...func(*cloudformation.Options)) (*cloudformation.ListStackResourcesOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	name := aws.ToString(in.StackName)
+	body, ok := f.templates[name]
+	if !ok {
+		return nil, validationError{msg: "Stack with id " + name + " does not exist"}
+	}
+	out := &cloudformation.ListStackResourcesOutput{}
+	for _, resource := range templateResources(body) {
+		out.StackResourceSummaries = append(out.StackResourceSummaries, cfntypes.StackResourceSummary{
+			LogicalResourceId: aws.String(resource.id),
+			ResourceType:      aws.String(resource.kind),
+		})
+	}
+	return out, nil
+}
+
 type fakeChangeSet struct {
 	stack   string
 	body    string

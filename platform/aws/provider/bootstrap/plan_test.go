@@ -144,14 +144,24 @@ func TestPlanNamesTheTargetThatForcesAReplacement(t *testing.T) {
 	}
 }
 
-func TestPlanKeepsAStackCloudFormationReportsNoChangesFor(t *testing.T) {
+func TestPlanStillUpdatesAStackWhoseStampAloneIsBehind(t *testing.T) {
 	cfn, _ := standingBootstrap(t)
 	stack := isrStack(ClassProduction)
 	cfn.misstamp(stack)
 
-	group := groupNamed(t, planned(t, cfn, ClassProduction, everything()), stack)
-	if group.Action != providerkit.ActionKeep {
-		t.Errorf("%s is %q, want it kept where CloudFormation says the stack holds the content already", stack, group.Action)
+	groups := planned(t, cfn, ClassProduction, everything())
+	group := groupNamed(t, groups, stack)
+	if group.Action != providerkit.ActionUpdate {
+		t.Errorf("%s is %q, want it updated where only its stamp is behind — the restamp is on the apply path", stack, group.Action)
+	}
+	if len(group.Changes) != 0 {
+		t.Errorf("%s carries %v though CloudFormation reports no resource changes", stack, group.Changes)
+	}
+	if group.Reason == "" {
+		t.Errorf("%s says nothing about why it is updated with nothing under it", stack)
+	}
+	if other := groupNamed(t, groups, StackName); other.Action != providerkit.ActionKeep {
+		t.Errorf("%s is %q, want the stacks nothing is stale about kept", StackName, other.Action)
 	}
 	if left := cfn.leftBehind(); len(left) != 0 {
 		t.Errorf("change sets %v outlived the plan that made them", left)
@@ -196,5 +206,55 @@ func TestPlanListsWhatADroppedFeatureTakesWithIt(t *testing.T) {
 	queue := changeNamed(t, group, "RevalidateQueue")
 	if queue.Action != providerkit.ActionDelete || queue.Kind == "" {
 		t.Errorf("RevalidateQueue = %+v, want the queue the stack holds deleted", queue)
+	}
+}
+
+const leftoverTemplate = "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  LeftoverQueue:\n    Type: AWS::SQS::Queue\n"
+
+func (f *fakeCFN) holds(stackName, body string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.templates[stackName] = body
+}
+
+func TestPlanListsTheResourcesTheStandingStackHoldsNotTheOnesThisBuildWouldRender(t *testing.T) {
+	cfn, _ := standingBootstrap(t)
+	stack := isrStack(ClassProduction)
+	cfn.holds(stack, leftoverTemplate)
+
+	group := groupNamed(t, planned(t, cfn, ClassProduction, Request{
+		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
+		Drop:     []string{FeatureISR},
+	}), stack)
+	leftover := changeNamed(t, group, "LeftoverQueue")
+	if leftover.Kind != "AWS::SQS::Queue" || leftover.Action != providerkit.ActionDelete {
+		t.Errorf("LeftoverQueue = %+v, want what the account holds, deleted", leftover)
+	}
+	for _, change := range group.Changes {
+		if change.Name == "RevalidateQueue" {
+			t.Error("the plan lists RevalidateQueue, which this build's template declares and the standing stack does not hold")
+		}
+	}
+}
+
+type unlistable struct{ *fakeCFN }
+
+func (unlistable) ListStackResources(context.Context, *cloudformation.ListStackResourcesInput, ...func(*cloudformation.Options)) (*cloudformation.ListStackResourcesOutput, error) {
+	return nil, errors.New("this account may not list stack resources")
+}
+
+func TestPlanFallsBackToTheTemplateWhenItCannotReadTheStandingStack(t *testing.T) {
+	cfn, _ := standingBootstrap(t)
+	stack := isrStack(ClassProduction)
+
+	group := groupNamed(t, planned(t, unlistable{cfn}, ClassProduction, Request{
+		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
+		Drop:     []string{FeatureISR},
+	}), stack)
+	if queue := changeNamed(t, group, "RevalidateQueue"); queue.Action != providerkit.ActionDelete {
+		t.Errorf("RevalidateQueue = %+v, want the template's best guess at what goes", queue)
+	}
+	if !strings.Contains(group.Reason, providerkit.DetailUnavailable) {
+		t.Errorf("%s reads %q, want it to own up to reading the listing off a template rather than the account", stack, group.Reason)
 	}
 }

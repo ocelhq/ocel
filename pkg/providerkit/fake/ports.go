@@ -148,22 +148,9 @@ func (b *Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapReques
 }
 
 func (b *Bootstrapper) named(described providerkit.Bootstrap) providerkit.Bootstrap {
-	held := map[string]bool{}
-	for _, stack := range described.Stacks {
-		held[stack.Feature] = true
-	}
-	named := described
-	named.Stacks = slices.Clone(described.Stacks)
-	for _, feature := range append([]string{""}, FeatureCache, FeatureImages) {
-		if held[feature] {
-			continue
-		}
-		named.Stacks = append(named.Stacks, providerkit.BootstrapStack{
-			Name:    stackNameOf(described.Class, feature),
-			Feature: feature,
-		})
-	}
-	return named
+	return providerkit.NameStacks(described, b.Catalogue(), func(feature string) string {
+		return stackNameOf(described.Class, feature)
+	})
 }
 
 func (b *Bootstrapper) Apply(_ context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {

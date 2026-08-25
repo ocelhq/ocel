@@ -202,7 +202,10 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		if err != nil {
 			return err
 		}
-		planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: tier})
+		planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
+			Tier:           tier,
+			WithDependents: true,
+		})
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
 				return fmt.Errorf("%s cannot say which features a bootstrap has; it predates them. Upgrade the provider pinned in this project and try again", runner.Package())
@@ -221,20 +224,16 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			return nil
 		}
 
-		force := opts.Force
 		dropped := droppedFeatures(enabledFeatures(catalogue), requested)
-		if len(dropped) > 0 && !force {
-			if !interactive {
-				return fmt.Errorf("this would remove %s from the %s bootstrap; projects deployed against it break when it goes, so re-run with --force to remove it anyway",
-					strings.Join(dropped, ", "), Name(tier))
-			}
-			force = true
+		if len(dropped) > 0 && !opts.Force && !interactive && !opts.Dry {
+			return fmt.Errorf("this would remove %s from the %s bootstrap; projects deployed against it break when it goes, so re-run with --force to remove it anyway",
+				strings.Join(dropped, ", "), Name(tier))
 		}
 
 		req := &contractv1.BootstrapRequest{
 			Tier:               tier,
 			Features:           requested,
-			Force:              force,
+			Force:              opts.Force,
 			AcceptReplacements: opts.Yes,
 		}
 		if opts.AutoHealDeclared {
@@ -257,58 +256,61 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		rendered := len(plan.GetGroups()) > 0
 		if rendered {
 			changeplan.Render(stdout, fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan)
+			if changeplan.AllKeep(plan) {
+				fmt.Fprint(stdout, "\nNo infrastructure changes — applying refreshes bootstrap seals and records.\n")
+			}
 		} else if len(dropped) > 0 {
 			fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(dropped, ", "), Name(tier))
+		}
+		status := planned.GetBootstrap()
+		if status.GetDowngrade() {
+			fmt.Fprintln(stdout, downgradeWarning(tier, status))
 		}
 		if opts.Dry {
 			fmt.Fprintln(stdout, "Run without --dry to apply.")
 			return nil
 		}
-		if changeplan.AllKeep(plan) && !opts.AutoHealDeclared {
-			fmt.Fprintf(stdout, "Nothing to change — the %s bootstrap already matches.\n", Name(tier))
-			return nil
+
+		if interactive && status.GetDowngrade() {
+			proceed, err := confirm(ctx, "Write the older content anyway?", stdin)
+			if err != nil {
+				return err
+			}
+			if !proceed {
+				fmt.Fprintln(stdout, "Aborted.")
+				return nil
+			}
 		}
 
-		if status := planned.GetBootstrap(); status.GetDowngrade() {
-			fmt.Fprintln(stdout, downgradeWarning(tier, status))
-			if interactive {
-				var proceed bool
-				err := huh.NewForm(huh.NewGroup(
-					huh.NewConfirm().
-						Title("Write the older content anyway?").
-						Affirmative("Yes").
-						Negative("No").
-						Value(&proceed),
-				)).WithTheme(theme).RunWithContext(ctx)
-				if err != nil && !errors.Is(err, huh.ErrUserAborted) {
+		if len(dropped) > 0 && !req.Force && interactive {
+			if !planDrops(plan, dropped) {
+				proceed, err := confirmDrop(ctx, tier, dropped, dependentProjects(catalogue, dropped), stdout, stdin)
+				if err != nil {
 					return err
 				}
-				if errors.Is(err, huh.ErrUserAborted) || !proceed {
+				if !proceed {
 					fmt.Fprintln(stdout, "Aborted.")
 					return nil
 				}
 			}
+			req.Force = true
 		}
 
 		if interactive {
 			title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package())
-			if rendered {
+			if rendered && !changeplan.AllKeep(plan) {
 				title = fmt.Sprintf("%s with %s?", changeplan.ConfirmVerb(plan), runner.Package())
 			}
-			var proceed bool
-			err := huh.NewForm(huh.NewGroup(
-				huh.NewConfirm().
-					Title(title).
-					Affirmative("Yes").
-					Negative("No").
-					Value(&proceed),
-			)).WithTheme(theme).RunWithContext(ctx)
-			if err != nil && !errors.Is(err, huh.ErrUserAborted) {
+			proceed, err := confirm(ctx, title, stdin)
+			if err != nil {
 				return err
 			}
-			if errors.Is(err, huh.ErrUserAborted) || !proceed {
+			if !proceed {
 				fmt.Fprintln(stdout, "Aborted.")
 				return nil
+			}
+			if rendered {
+				req.AcceptReplacements = true
 			}
 		}
 
@@ -361,6 +363,49 @@ func credentialTier(requested string) (contractv1.CredentialTier, error) {
 		return contractv1.CredentialTier_CREDENTIAL_TIER_UNSPECIFIED,
 			fmt.Errorf("the credentials to print are bootstrap or deploy, not %q", requested)
 	}
+}
+
+func confirm(ctx context.Context, title string, stdin io.Reader) (bool, error) {
+	var proceed bool
+	err := huh.NewForm(huh.NewGroup(
+		huh.NewConfirm().
+			Title(title).
+			Affirmative("Yes").
+			Negative("No").
+			Value(&proceed),
+	)).WithTheme(theme).WithInput(stdin).RunWithContext(ctx)
+	if errors.Is(err, huh.ErrUserAborted) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return proceed, nil
+}
+
+func confirmDrop(ctx context.Context, tier environmentv1.Tier, dropped, dependents []string, stdout io.Writer, stdin io.Reader) (bool, error) {
+	fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(dropped, ", "), Name(tier))
+	if len(dependents) > 0 {
+		fmt.Fprintf(stdout, "These projects were deployed against it and break when it goes: %s\n", strings.Join(dependents, ", "))
+	} else {
+		fmt.Fprintln(stdout, "No project deployed here has recorded needing it, but anything relying on it breaks.")
+	}
+	return confirm(ctx, "Remove it anyway?", stdin)
+}
+
+func planDrops(plan *contractv1.ChangePlan, dropped []string) bool {
+	leaving := map[string]bool{}
+	for _, group := range plan.GetGroups() {
+		if group.GetAction() == contractv1.Change_ACTION_DELETE || group.GetAction() == contractv1.Change_ACTION_DISABLE_THEN_DELETE {
+			leaving[group.GetFeature()] = true
+		}
+	}
+	for _, name := range dropped {
+		if !leaving[name] {
+			return false
+		}
+	}
+	return true
 }
 
 func downgradeWarning(tier environmentv1.Tier, status *contractv1.BootstrapStatus) string {

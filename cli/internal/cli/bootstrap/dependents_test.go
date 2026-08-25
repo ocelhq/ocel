@@ -20,7 +20,7 @@ func describeJournal(t *testing.T) string {
 	return path
 }
 
-func TestNothingPaysForDependentsTheCommandsNoLongerRender(t *testing.T) {
+func TestOnlyWhatRendersDependentsPaysForThem(t *testing.T) {
 	t.Run("status reads the bootstrap and nothing that grows with the account", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
@@ -55,8 +55,8 @@ func TestNothingPaysForDependentsTheCommandsNoLongerRender(t *testing.T) {
 		if len(got) != 2 {
 			t.Fatalf("the provider was asked %d times, want the catalogue and then the plan: %v", len(got), got)
 		}
-		if slices.ContainsFunc(got, func(line string) bool { return strings.Contains(line, "withDependents=true") }) {
-			t.Errorf("bootstrap asked %v; the plan's own delete reasons name who breaks, and reading them costs one query per project in the account", got)
+		if !strings.Contains(got[0], "withDependents=true") {
+			t.Errorf("bootstrap asked %v; a provider that draws no plan leaves the dependent names nowhere else to come from", got)
 		}
 		if strings.Contains(got[0], "intent=") || !strings.Contains(got[1], "intent=features=isr,force=false") {
 			t.Errorf("the provider was asked %v, want the second ask to carry the apply it would send", got)

@@ -367,6 +367,34 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
 		}
 	})
 
+	t.Run("Plan shows a dropped feature leaving", func(t *testing.T) {
+		if len(catalogue) == 0 {
+			t.Skip("this provider offers no features, so nothing can be dropped")
+		}
+		class := providerkit.ClassProduction
+		drop := featureNames(catalogue)
+		plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Drop: drop})
+		if err != nil {
+			t.Fatalf("Plan(%s, drop %v) = %v", class, drop, err)
+		}
+		leaving := map[string]providerkit.ChangeAction{}
+		for _, group := range plan.Groups {
+			if group.Feature != "" {
+				leaving[group.Feature] = group.Action
+			}
+		}
+		for _, name := range drop {
+			action, planned := leaving[name]
+			if !planned {
+				t.Errorf("Plan() drops %q and shows no group for it; the plan is the only thing asked about before the apply", name)
+				continue
+			}
+			if action != providerkit.ActionDelete {
+				t.Errorf("Plan() shows %q as %q though it was dropped, and a drop takes its stack down", name, action)
+			}
+		}
+	})
+
 	t.Run("what Apply stands up, Describe reports and Remove takes down", func(t *testing.T) {
 		class := providerkit.ClassPreview
 		levels, err := providerkit.FeatureLevels(catalogue, featureNames(catalogue))
