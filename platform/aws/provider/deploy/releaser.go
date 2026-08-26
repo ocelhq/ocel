@@ -368,6 +368,41 @@ func (r *release) publishBuild(ctx context.Context, plan providerkit.StackPlan, 
 	return publishEdgeBundle(ctx, r.cfg, app, coord, work.bundle, report)
 }
 
+func (r *Releaser) Plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.ChangeGroup, error) {
+	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
+	if err != nil {
+		return providerkit.ChangeGroup{}, err
+	}
+	return held.plan(ctx, plan, report)
+}
+
+func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.ChangeGroup, error) {
+	if plan.Options == nil {
+		transformed, err := transformStackPlan(ctx, r.cfg.Transform, plan)
+		if err != nil {
+			return providerkit.ChangeGroup{}, err
+		}
+		if plan.App == nil {
+			plan.Options = &infraWork{transformed: transformed}
+		} else {
+			work, err := r.appWork(plan, transformed)
+			if err != nil {
+				return providerkit.ChangeGroup{}, err
+			}
+			plan.Options = work
+		}
+	}
+	return r.adapter.Plan(ctx, plan, report)
+}
+
+func (r *Releaser) PlanDestroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (providerkit.ChangeGroup, error) {
+	held, err := r.at(ctx, ref, "")
+	if err != nil {
+		return providerkit.ChangeGroup{}, err
+	}
+	return held.adapter.PlanDestroy(ctx, ref, report)
+}
+
 func (r *Releaser) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
 	held, err := r.at(ctx, ref, "")
 	if err != nil {

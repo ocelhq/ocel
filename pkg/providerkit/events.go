@@ -123,7 +123,7 @@ func (r *reporter) Say(message string) {
 }
 
 func (r *reporter) Detail(message string) {
-	r.sender.send(logEvent(sanitizeMessage(message)))
+	r.sender.send(stageLogEvent(r.stage.ID, sanitizeMessage(message)))
 }
 
 func (r *reporter) Span(name string, start, end time.Time, err error, attrs ...Attr) {
@@ -177,6 +177,15 @@ func dnsOwedEvent(headline string, records []edge.Record, notes ...string) *prog
 func logEvent(message string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Log{Log: &progressv1.LogEvent{Message: message}},
+	}
+}
+
+func stageLogEvent(id StageID, message string) *progressv1.OperationEvent {
+	if id == (StageID{}) {
+		return logEvent(message)
+	}
+	return &progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_Log{Log: &progressv1.LogEvent{Message: message, StageId: id[:]}},
 	}
 }
 

@@ -15,7 +15,7 @@ type deployOutcome struct {
 	flip        deployui.Flip
 }
 
-func (o *deployOutcome) collect(ui *deployui.Session) func(*progressv1.OperationEvent) {
+func (o *deployOutcome) collect(ui interface{ Event(*progressv1.OperationEvent) }) func(*progressv1.OperationEvent) {
 	return func(ev *progressv1.OperationEvent) {
 		ui.Event(ev)
 		res := ev.GetResult()

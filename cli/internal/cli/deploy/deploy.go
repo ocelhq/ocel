@@ -12,10 +12,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
+	"github.com/ocelhq/ocel/cli/internal/cli/runui"
 	"github.com/ocelhq/ocel/cli/internal/cli/style"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
@@ -45,6 +44,7 @@ type deployOptions struct {
 	tag      string
 	prebuilt bool
 	noUI     bool
+	dry      bool
 }
 
 func NewCommand(deps cmddeps.Deps) *cobra.Command {
@@ -58,6 +58,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			"into your provider account. Every deploy is kept: list them with `ocel deployments`, " +
 			"return to one with `ocel rollback`.",
 		Example: "  $ ocel deploy\n" +
+			"  $ ocel deploy --dry\n" +
 			"  $ ocel deploy --tag v1.2.0\n" +
 			"  $ ocel deploy --prebuilt\n" +
 			"  $ ocel deploy --yes",
@@ -80,6 +81,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	cmd.Flags().StringVar(&opts.tag, "tag", "", "Mark this deploy with an immutable `label` to roll back to by name (ocel rollback --tag)")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	cmd.Flags().BoolVar(&opts.noUI, "no-ui", false, noUIFlagUsage)
+	cmd.Flags().BoolVar(&opts.dry, "dry", false, "Show what deploying would change, and change nothing")
 
 	return cmd
 }
@@ -97,8 +99,8 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		return err
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel deploy", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		willConfirm := !opts.yes && deps.StdinIsTerminal(stdin)
+	return runui.Run(ctx, deps, cfg, runui.Spec{Command: "ocel deploy", Dry: opts.dry}, stdout, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		willConfirm := !opts.dry && !opts.yes && deps.StdinIsTerminal(stdin)
 		knownSlugs, err := preflightDeploy(ctx, deps, runner, cfg, willConfirm, stdout, stdin)
 		if err != nil {
 			return err
@@ -115,7 +117,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			}
 		}
 
-		ui.Building()
+		ui.Building(firstApp(cfg))
 		recovery := gateRecovery{
 			deps:   deps,
 			cfg:    cfg,
@@ -133,13 +135,14 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
+			ui.BuildOK(true)
 			return err
 		}
+		ui.BuildOK(false)
 		if manifest == nil {
 			ui.Finish("Nothing to deploy")
 			return nil
 		}
-		ui.BuildOK()
 
 		env := &environmentv1.Environment{
 			Tier:      environmentv1.Tier_TIER_PRODUCTION,
@@ -150,11 +153,15 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			Environment: env,
 			Tag:         opts.tag,
 			Edge:        edgewire.Selection(cfg),
+			Dry:         opts.dry,
 		}
 
 		var out deployOutcome
 		if err := provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.collect(ui)); err != nil {
 			return err
+		}
+		if opts.dry {
+			return nil
 		}
 
 		if err := recordDeployResult(cfg, manifest, env, opts.tag, out.promotionID, out.appURLs); err != nil {
@@ -163,9 +170,16 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		if err := publishServiceMap(cfg, manifest, env, opts.tag, out.promotionID, out.links); err != nil {
 			return err
 		}
-		ui.Deployed("Deployed", out.appURLs, out.urlNote, out.flip, out.links, out.functions)
+		ui.Finish("Deployed")
 		return nil
 	})
+}
+
+func firstApp(cfg *projectconfig.Config) string {
+	if len(cfg.Apps) == 0 {
+		return cfg.Slug
+	}
+	return cfg.Apps[0].Name
 }
 
 func confirmDeploy(ctx context.Context, slug, providerPackage string, knownSlugs []string, stdout io.Writer, stdin io.Reader) (bool, error) {

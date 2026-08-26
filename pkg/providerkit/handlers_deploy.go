@@ -34,22 +34,29 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 }
 
 type deployStages struct {
-	Uploading    Stage
-	Provisioning Stage
-	Infra        Stage
-	Apps         map[string]Stage
-	Promoting    Stage
+	Setup     Stage
+	Preparing Stage
+	Uploading Stage
+
+	Infra      Stage
+	InfraPhase Stage
+
+	Apps      map[string]Stage
+	AppPhases map[string]Stage
+
+	Promotion    Stage
+	PromotePhase Stage
 }
 
 func (s deployStages) declared(plan DeployPlan) []Stage {
-	stages := []Stage{s.Uploading, s.Provisioning}
+	stages := []Stage{s.Setup, s.Preparing, s.Uploading}
 	if !plan.Infra.IsZero() {
-		stages = append(stages, s.Infra)
+		stages = append(stages, s.Infra, s.InfraPhase)
 	}
 	for _, entry := range plan.Apps {
-		stages = append(stages, s.Apps[entry.App])
+		stages = append(stages, s.Apps[entry.App], s.AppPhases[entry.App])
 	}
-	return append(stages, s.Promoting)
+	return append(stages, s.Promotion, s.PromotePhase)
 }
 
 type deployRun struct {
@@ -73,6 +80,8 @@ type deployRun struct {
 
 	allowDegraded []string
 	withheld      string
+
+	dryRun bool
 
 	artifacts map[string]ArtifactRef
 	membrane  ArtifactRef
@@ -118,20 +127,27 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		functions: map[string][]Function{},
 
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
+		dryRun:        req.GetDry(),
 	}
 	run.published = &publishedLinks{store: run.values, scope: run.scope, environment: plan.linkEnvironment()}
 	if run.state, err = run.store.read(ctx); err != nil {
 		return nil, err
 	}
 	run.stages = deployStages{
-		Uploading:    NewRootStage("Uploading"),
-		Provisioning: NewRootStage("Provisioning"),
-		Promoting:    NewRootStage("Promoting"),
-		Apps:         map[string]Stage{},
+		Setup:     NewRootStage("environment"),
+		Promotion: NewRootStage("promotion"),
+		Apps:      map[string]Stage{},
+		AppPhases: map[string]Stage{},
 	}
-	run.stages.Infra = NewStage(run.stages.Provisioning, plan.Infra.String())
+	run.stages.Preparing = NewStage(run.stages.Setup, "preparing")
+	run.stages.Uploading = NewStage(run.stages.Setup, "uploading")
+	run.stages.PromotePhase = NewStage(run.stages.Promotion, "promoting")
+	run.stages.Infra = NewRootStage(plan.Infra.String())
+	run.stages.InfraPhase = NewStage(run.stages.Infra, "provisioning")
 	for _, entry := range plan.Apps {
-		run.stages.Apps[entry.App] = NewStage(run.stages.Provisioning, entry.App)
+		unit := NewRootStage(entry.App)
+		run.stages.Apps[entry.App] = unit
+		run.stages.AppPhases[entry.App] = NewStage(unit, "provisioning")
 	}
 	return run, nil
 }
@@ -160,6 +176,9 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	if err := r.preflight(ctx); err != nil {
 		return nil, err
 	}
+	if r.dryRun {
+		return r.dry(ctx)
+	}
 	if err := r.timed(r.stages.Uploading, func(report Reporter) error { return r.upload(ctx, report) }); err != nil {
 		return nil, err
 	}
@@ -184,7 +203,7 @@ func phaseOf(stage Stage, stages deployStages) progressv1.Phase {
 	switch stage.ID {
 	case stages.Uploading.ID:
 		return progressv1.Phase_PHASE_UPLOADING
-	case stages.Promoting.ID:
+	case stages.PromotePhase.ID:
 		return progressv1.Phase_PHASE_FINALIZING
 	default:
 		return progressv1.Phase_PHASE_PROVISIONING
@@ -192,7 +211,7 @@ func phaseOf(stage Stage, stages deployStages) progressv1.Phase {
 }
 
 func (r *deployRun) admit(ctx context.Context) error {
-	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, r.report(r.stages.Provisioning, progressv1.Phase_PHASE_PROVISIONING))
+	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, r.report(r.stages.Preparing, progressv1.Phase_PHASE_PROVISIONING))
 	return err
 }
 
@@ -316,7 +335,7 @@ func (r *deployRun) preflight(ctx context.Context) error {
 		Resources: resources,
 		Grants:    grants,
 		Apps:      apps,
-		Report:    r.report(r.stages.Provisioning, progressv1.Phase_PHASE_PROVISIONING),
+		Report:    r.report(r.stages.Preparing, progressv1.Phase_PHASE_PROVISIONING),
 	})
 }
 
@@ -370,7 +389,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return r.timed(r.stages.Infra, func(report Reporter) error {
+	return r.timed(r.stages.InfraPhase, func(report Reporter) error {
 		if err := r.refuseToAdopt(ctx, r.plan.Infra); err != nil {
 			return err
 		}
@@ -404,7 +423,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 }
 
 func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
-	return r.timed(r.stages.Apps[entry.App], func(report Reporter) error {
+	return r.timed(r.stages.AppPhases[entry.App], func(report Reporter) error {
 		if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
 			return err
 		}
@@ -714,7 +733,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		Tag:         r.plan.Tag,
 		Flip:        &flip,
 	}
-	if err := r.timed(r.stages.Promoting, func(report Reporter) error {
+	if err := r.timed(r.stages.PromotePhase, func(report Reporter) error {
 		report.Say("Promoting the deployment")
 		if err := r.stack.Promote(ctx, promotion, r.plan.Pointer); err != nil {
 			return err

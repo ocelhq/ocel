@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
@@ -18,6 +17,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
+
+type buildUI interface {
+	BuildWriter() io.Writer
+	Diagnostic(message string)
+	Waiting(reason, url string)
+	Resume()
+	RestartBuild()
+}
 
 type gateRecovery struct {
 	deps    cmddeps.Deps
@@ -27,7 +34,7 @@ type gateRecovery struct {
 
 	newGate func() *envgate.Gate
 
-	ui     *deployui.Session
+	ui     buildUI
 	stdout io.Writer
 
 	enabled bool
