@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 type recorder struct {
@@ -267,6 +267,46 @@ func TestAdmitReportsAHealTheCredentialsCannotDo(t *testing.T) {
 	}
 	if !strings.Contains(report.told(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
 		t.Errorf("Admit() said %q, want the provider's own account of why the heal was denied", report.told())
+	}
+	kit, _, _ := strings.Cut(refusedLine(t, report), ": ")
+	for _, vendored := range []string{"account", "stack"} {
+		if strings.Contains(kit, vendored) {
+			t.Errorf("the kit wrote %q, and it speaks %q at a host that has no such thing", kit, vendored)
+		}
+	}
+}
+
+func refusedLine(t *testing.T, report *recorder) string {
+	t.Helper()
+
+	for _, line := range strings.Split(report.told(), "\n") {
+		if strings.HasPrefix(line, "this run may not refresh") {
+			return line
+		}
+	}
+	t.Fatalf("nothing in %q says the heal was denied", report.told())
+	return ""
+}
+
+func TestADeniedHealWithNothingToSayStillReadsAsASentence(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gate, provider := gated(t, "2.0.0")
+	bootstrapper := provider.Bootstrapper()
+	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+	if err := gate.RecordBootstrap(ctx, providerkit.ClassProduction, providerkit.BootstrapState{AutoHeal: true}); err != nil {
+		t.Fatal(err)
+	}
+	bootstrapper.Behind(fake.FeatureCache)
+	bootstrapper.RefuseApply(providerkit.Refuse(providerkit.CodeDenied, ""))
+
+	report := &recorder{}
+	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, report); err != nil {
+		t.Fatalf("Admit() error = %v, want a refused heal to leave the run standing", err)
+	}
+	if line := refusedLine(t, report); strings.Contains(line, ": ") {
+		t.Errorf("the kit wrote %q, want no colon introducing a reason the provider never gave", line)
 	}
 }
 
