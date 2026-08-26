@@ -24,7 +24,7 @@ const (
 	helperRoot = "/usr/local/lib/ocel"
 
 	recordsHelper = helperRoot + "/records"
-	sealHelper    = helperRoot + "/seal"
+	SealHelper    = helperRoot + "/seal"
 
 	stampFile   = "stamp.json"
 	sealKeyFile = "seal.key"
@@ -67,7 +67,7 @@ func StorageItems(class providerkit.Class, keys []byte) []Item {
 	return []Item{
 		dir(helperRoot, 0o755, rootOwner),
 		{Kind: KindFile, Name: recordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript},
-		{Kind: KindFile, Name: sealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript},
+		{Kind: KindFile, Name: SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript},
 		principal(),
 		{Kind: KindFile, Name: sudoersSeal, Mode: 0o440, Owner: rootOwner, Content: sealSudoers()},
 		dir(stateRoot, 0o750, stateOwner),

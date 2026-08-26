@@ -221,7 +221,7 @@ func removing(read, sibling Reading) []removal {
 			removal{KindUser, deployUser, "the login every deploy onto this host runs as"},
 			removal{KindFile, sudoersSeal, ""},
 			removal{KindFile, recordsHelper, ""},
-			removal{KindFile, sealHelper, ""},
+			removal{KindFile, SealHelper, ""},
 			removal{KindDir, helperRoot, ""},
 		)
 	}

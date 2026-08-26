@@ -61,7 +61,7 @@ func sealing(items []Item, class providerkit.Class, held login) []Grant {
 		return nil
 	}
 	return []Grant{{
-		Name: "runs " + sealHelper + " as root, through one line in " + fragment.Name,
+		Name: "runs " + SealHelper + " as root, through one line in " + fragment.Name,
 		Detail: "the line is\n\n      " + strings.TrimSpace(string(fragment.Content)) +
 			"\n\n    and it is the whole of what sudo will let " + held.name +
 			" do. The helper seals and opens a value at a coordinate it is given; it never prints the key, and no other command on this host runs under sudo for " + held.name,
