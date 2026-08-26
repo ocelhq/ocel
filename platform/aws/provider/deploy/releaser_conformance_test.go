@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -24,7 +23,7 @@ type mockedEngine struct {
 	outputs   auto.OutputMap
 	mocks     sdk.MockResourceMonitor
 	ran       []string
-	previewed []apitype.StepEventMetadata
+	previewed []providerkit.Change
 }
 
 var _ kitpulumi.Engine = (*mockedEngine)(nil)
@@ -41,39 +40,38 @@ func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerki
 	return e.outputs, nil
 }
 
-func (e *mockedEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ providerkit.Reporter) ([]apitype.StepEventMetadata, error) {
+func (e *mockedEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ providerkit.Reporter) ([]providerkit.Change, error) {
 	if op == kitpulumi.OpDestroy {
-		steps := make([]apitype.StepEventMetadata, 0, len(e.previewed))
-		for _, step := range e.previewed {
-			step.Op = apitype.OpDelete
-			steps = append(steps, step)
+		rows := make([]providerkit.Change, 0, len(e.previewed))
+		for _, row := range e.previewed {
+			row.Action = providerkit.ActionDelete
+			rows = append(rows, row)
 		}
-		return steps, nil
+		return rows, nil
 	}
-	watcher := &previewing{inner: standInCloud{}, stack: setup.Stack}
+	watcher := &previewing{inner: standInCloud{}}
 	if e.mocks != nil {
 		watcher.inner = e.mocks
 	}
 	if err := sdk.RunErr(setup.Program, sdk.WithMocks("shop", setup.Stack, watcher)); err != nil {
 		return nil, err
 	}
-	e.previewed = watcher.steps
-	return watcher.steps, nil
+	e.previewed = watcher.rows
+	return watcher.rows, nil
 }
 
 type previewing struct {
 	inner sdk.MockResourceMonitor
-	stack string
 	mu    sync.Mutex
-	steps []apitype.StepEventMetadata
+	rows  []providerkit.Change
 }
 
 func (p *previewing) NewResource(args sdk.MockResourceArgs) (string, resource.PropertyMap, error) {
 	p.mu.Lock()
-	p.steps = append(p.steps, apitype.StepEventMetadata{
-		Op:   apitype.OpCreate,
-		Type: args.TypeToken,
-		URN:  "urn:pulumi:" + p.stack + "::shop::" + args.TypeToken + "::" + args.Name,
+	p.rows = append(p.rows, providerkit.Change{
+		Kind:   args.TypeToken,
+		Name:   args.Name,
+		Action: providerkit.ActionCreate,
 	})
 	p.mu.Unlock()
 	return p.inner.NewResource(args)

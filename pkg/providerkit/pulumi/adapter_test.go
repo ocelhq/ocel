@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -44,24 +43,19 @@ func plan() providerkit.StackPlan {
 	}
 }
 
-func step(op apitype.OpType, kind, name string) apitype.StepEventMetadata {
-	return apitype.StepEventMetadata{
-		Op:   op,
-		Type: kind,
-		URN:  "urn:pulumi:prod::ocel-shop::" + kind + "::" + name,
-	}
+func row(action providerkit.ChangeAction, kind, name string) providerkit.Change {
+	return providerkit.Change{Kind: kind, Name: name, Action: action}
 }
 
-func TestPreviewTurnsWhatTheEngineWouldDoIntoPlanRows(t *testing.T) {
+func TestPreviewGathersWhatTheEngineWouldDoIntoOneGroup(t *testing.T) {
 	t.Parallel()
 
-	engine := &recordingEngine{steps: []apitype.StepEventMetadata{
-		step(apitype.OpCreate, "aws:rds/cluster:Cluster", "orders"),
-		step(apitype.OpUpdate, "aws:s3/bucket:Bucket", "uploads"),
-		step(apitype.OpDelete, "aws:s3/bucket:Bucket", "exports"),
-		step(apitype.OpSame, "aws:iam/role:Role", "app"),
-		step(apitype.OpReplace, "aws:rds/instance:Instance", "reporting"),
-		step(apitype.OpSame, "pulumi:pulumi:Stack", "ocel-shop-prod"),
+	engine := &recordingEngine{rows: []providerkit.Change{
+		row(providerkit.ActionCreate, "Cluster", "orders"),
+		row(providerkit.ActionUpdate, "Bucket", "uploads"),
+		row(providerkit.ActionDelete, "Bucket", "exports"),
+		row(providerkit.ActionKeep, "Role", "app"),
+		row(providerkit.ActionReplace, "Instance", "reporting"),
 	}}
 
 	produced, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}, Engine: engine}).
@@ -91,17 +85,15 @@ func TestPreviewTurnsWhatTheEngineWouldDoIntoPlanRows(t *testing.T) {
 			t.Errorf("%s reads %q, want %q", name, rows[name], action)
 		}
 	}
-	if _, carried := rows["ocel-shop-prod"]; carried {
-		t.Error("the stack resource itself is a plan row, and nothing in the customer's account answers to it")
+	if produced.Groups[0].Name != naming.InfraStack("prod").String() {
+		t.Errorf("the group is named %q, want the stack the engine previewed", produced.Groups[0].Name)
 	}
 }
 
 func TestPreviewDestroyShowsWhatTheTeardownWouldTakeDown(t *testing.T) {
 	t.Parallel()
 
-	engine := &recordingEngine{steps: []apitype.StepEventMetadata{
-		step(apitype.OpDelete, "aws:s3/bucket:Bucket", "uploads"),
-	}}
+	engine := &recordingEngine{rows: []providerkit.Change{row(providerkit.ActionDelete, "Bucket", "uploads")}}
 
 	produced, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}, Engine: engine}).
 		PreviewDestroy(context.Background(), plan().Ref, nil)

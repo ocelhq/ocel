@@ -61,7 +61,7 @@ type Decoder interface {
 }
 
 type Engine interface {
-	Preview(ctx context.Context, setup Setup, op Op, report providerkit.Reporter) ([]apitype.StepEventMetadata, error)
+	Preview(ctx context.Context, setup Setup, op Op, report providerkit.Reporter) ([]providerkit.Change, error)
 
 	Up(ctx context.Context, setup Setup, report providerkit.Reporter) (auto.OutputMap, error)
 
@@ -235,11 +235,10 @@ func (a *Adapter) preview(ctx context.Context, plan providerkit.StackPlan, op Op
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	steps, err := a.engine().Preview(ctx, setup, op, report)
+	changes, err := a.engine().Preview(ctx, setup, op, report)
 	if err != nil {
 		return providerkit.Plan{}, busy(err, setup)
 	}
-	changes := planRows(steps)
 	if len(changes) == 0 {
 		return providerkit.Plan{}, nil
 	}
@@ -341,7 +340,7 @@ func busy(err error, setup Setup) error {
 
 type autoEngine struct{}
 
-func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, report providerkit.Reporter) ([]apitype.StepEventMetadata, error) {
+func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, report providerkit.Reporter) ([]providerkit.Change, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
@@ -364,7 +363,11 @@ func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, report provid
 	if err != nil {
 		return nil, fmt.Errorf("plan stack %s: %w", setup.Stack, err)
 	}
-	return awaitSteps(steps, engineDrainGrace), nil
+	drained, err := awaitSteps(steps, engineDrainGrace)
+	if err != nil {
+		return nil, fmt.Errorf("plan stack %s: %w", setup.Stack, err)
+	}
+	return planRows(drained), nil
 }
 
 func drainSteps(engineEvents <-chan events.EngineEvent) <-chan []apitype.StepEventMetadata {
@@ -381,12 +384,13 @@ func drainSteps(engineEvents <-chan events.EngineEvent) <-chan []apitype.StepEve
 	return drained
 }
 
-func awaitSteps(drained <-chan []apitype.StepEventMetadata, grace time.Duration) []apitype.StepEventMetadata {
+func awaitSteps(drained <-chan []apitype.StepEventMetadata, grace time.Duration) ([]apitype.StepEventMetadata, error) {
 	select {
 	case steps := <-drained:
-		return steps
+		return steps, nil
 	case <-time.After(grace):
-		return nil
+		return nil, fmt.Errorf(
+			"the engine's steps did not drain within %s, and the steps that did arrive would read as a plan doing less than the run would do", grace)
 	}
 }
 
