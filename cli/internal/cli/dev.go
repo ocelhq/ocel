@@ -29,8 +29,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
-	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
-	"github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1/watchv1connect"
 )
 
 var watchDebounce = 300 * time.Millisecond
@@ -214,37 +212,40 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 }
 
 func runFollower(ctx context.Context, deps cmddeps.Deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	client := watchv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
-
-	stream, err := client.Subscribe(ctx, &watchv1.SubscribeRequest{})
+	stream, err := subscribeEnv(ctx, leaderAddr)
 	if err != nil {
 		return fmt.Errorf("connect to leader: %w", err)
 	}
-	defer stream.Close()
+	defer stream.close()
 
-	if !stream.Receive() {
-		if err := stream.Err(); err != nil {
-			return fmt.Errorf("connect to leader: %w", err)
+	first, err := stream.next()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return errors.New("connect to leader: stream closed before first env push")
 		}
-		return errors.New("connect to leader: stream closed before first env push")
+		return fmt.Errorf("connect to leader: %w", err)
 	}
 
-	child, err := startFollowerChild(ctx, deps, appArgs, stream.Msg().Env, stdin, stdout, stderr)
+	child, err := startFollowerChild(ctx, deps, appArgs, first, stdin, stdout, stderr)
 	if err != nil {
 		return err
 	}
 
 	updates := make(chan map[string]string)
-	streamDone := make(chan error, 1)
+	streamDone := make(chan struct{}, 1)
 	go func() {
-		for stream.Receive() {
+		for {
+			env, err := stream.next()
+			if err != nil {
+				streamDone <- struct{}{}
+				return
+			}
 			select {
-			case updates <- stream.Msg().Env:
+			case updates <- env:
 			case <-ctx.Done():
 				return
 			}
 		}
-		streamDone <- stream.Err()
 	}()
 
 	for {

@@ -18,5 +18,4 @@ breaking:
   ignore:
     - proto/common/environment
     - proto/common/progress
-    - proto/devloop
     - proto/provider

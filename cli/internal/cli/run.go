@@ -20,8 +20,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
-	"github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1/watchv1connect"
 )
 
 var runCmd = &cobra.Command{
@@ -81,19 +79,18 @@ func runningDevServer(root string) (string, bool, error) {
 }
 
 func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	client := watchv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
-
-	stream, err := client.Subscribe(ctx, &watchv1.SubscribeRequest{})
+	stream, err := subscribeEnv(ctx, leaderAddr)
 	if err != nil {
 		return fmt.Errorf("connect to leader: %w", err)
 	}
-	defer stream.Close()
+	defer stream.close()
 
-	if !stream.Receive() {
-		return fmt.Errorf("connect to leader: %w", stream.Err())
+	env, err := stream.next()
+	if err != nil {
+		return fmt.Errorf("connect to leader: %w", err)
 	}
 
-	return runChildOnce(ctx, deps, appArgs, stream.Msg().Env, stdin, stdout, stderr)
+	return runChildOnce(ctx, deps, appArgs, env, stdin, stdout, stderr)
 }
 
 func runStandalone(ctx context.Context, deps cmddeps.Deps, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {

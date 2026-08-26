@@ -8,7 +8,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
 )
 
 type envState struct {
@@ -127,38 +126,40 @@ func (c *configCache) held() (resolve.Account, bool) {
 
 type envFanout struct {
 	mu          sync.Mutex
-	latest      *watchv1.EnvUpdate
-	subscribers map[chan *watchv1.EnvUpdate]struct{}
+	latest      map[string]string
+	hasLatest   bool
+	subscribers map[chan map[string]string]struct{}
 }
 
 func newEnvFanout() *envFanout {
-	return &envFanout{subscribers: make(map[chan *watchv1.EnvUpdate]struct{})}
+	return &envFanout{subscribers: make(map[chan map[string]string]struct{})}
 }
 
-func (f *envFanout) push(update *watchv1.EnvUpdate) {
+func (f *envFanout) push(env map[string]string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.latest = update
+	f.latest = env
+	f.hasLatest = true
 	for ch := range f.subscribers {
 		select {
-		case ch <- update:
+		case ch <- env:
 		default:
 		}
 	}
 }
 
-func (f *envFanout) subscribe() chan *watchv1.EnvUpdate {
-	ch := make(chan *watchv1.EnvUpdate, 1)
+func (f *envFanout) subscribe() chan map[string]string {
+	ch := make(chan map[string]string, 1)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.latest != nil {
+	if f.hasLatest {
 		ch <- f.latest
 	}
 	f.subscribers[ch] = struct{}{}
 	return ch
 }
 
-func (f *envFanout) unsubscribe(ch chan *watchv1.EnvUpdate) {
+func (f *envFanout) unsubscribe(ch chan map[string]string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.subscribers, ch)
