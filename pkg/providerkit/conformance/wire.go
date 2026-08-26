@@ -4,9 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/tls"
 	"crypto/x509"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -36,7 +34,7 @@ func runWire(t *testing.T, suite Suite) {
 		if suite.Spec.New == nil {
 			t.Skip("the suite carries no Spec, so there is no mux to serve")
 		}
-		server := httptest.NewServer(providerkit.NewMux(suite.Spec))
+		server := httptest.NewServer(providerkit.ConformanceMux(suite.Spec))
 		t.Cleanup(server.Close)
 
 		holdsTheSessionRules(t, client(server.Client(), server.URL), suite.Options)
@@ -74,11 +72,14 @@ func (s *spawned) refusesAnUnpairedClient(t *testing.T) {
 		{name: "a client presenting no certificate at all", identity: stranger, bare: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			config := tc.identity.ClientConfig(s.serverCert)
+			config, err := tc.identity.ClientConfig(s.serverCert)
+			if err != nil {
+				t.Fatalf("ClientConfig() error = %v", err)
+			}
 			if tc.bare {
 				config.Certificates = nil
 			}
-			unpaired := client(transportFor(s.network, s.address, config), providerURL)
+			unpaired := client(channel.HTTPClient(s.network, s.address, config), providerURL)
 			if _, err := unpaired.Configure(context.Background(), &contractv1.ConfigureRequest{}); err == nil {
 				t.Error("Configure() over an unpaired connection succeeded, want the provider to refuse the handshake")
 			}
@@ -176,17 +177,13 @@ func spawn(t *testing.T, binary string) *spawned {
 		provider.wait(readyTimeout)
 	})
 
-	type readiness struct {
-		addr string
-		cert *x509.Certificate
-	}
-	ready := make(chan readiness, 1)
+	ready := make(chan channel.Readiness, 1)
 	go func() {
 		defer close(ready)
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-			if addr, cert, ok := channel.ParseReadinessLine(scanner.Text()); ok {
-				ready <- readiness{addr: addr, cert: cert}
+			if signalled, ok := channel.ParseReadinessLine(scanner.Text()); ok {
+				ready <- signalled
 				return
 			}
 		}
@@ -197,13 +194,17 @@ func spawn(t *testing.T, binary string) *spawned {
 		if !ok {
 			t.Fatalf("%s exited before signalling readiness\n%s", binary, stderr.String())
 		}
-		network, address, err := channel.ParseAddr(signalled.addr)
+		network, address, err := channel.ParseAddr(signalled.Addr)
 		if err != nil {
-			t.Fatalf("ParseAddr(%q) error = %v", signalled.addr, err)
+			t.Fatalf("ParseAddr(%q) error = %v", signalled.Addr, err)
 		}
-		provider.serverCert = signalled.cert
+		config, err := identity.ClientConfig(signalled.Cert)
+		if err != nil {
+			t.Fatalf("ClientConfig() error = %v", err)
+		}
+		provider.serverCert = signalled.Cert
 		provider.network, provider.address = network, address
-		provider.http = transportFor(network, address, identity.ClientConfig(signalled.cert))
+		provider.http = channel.HTTPClient(network, address, config)
 	case <-time.After(readyTimeout):
 		t.Fatalf("%s did not signal readiness within %s", binary, readyTimeout)
 	}
@@ -239,26 +240,6 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
-}
-
-func transportFor(network, address string, config *tls.Config) *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			DialTLSContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				var d net.Dialer
-				raw, err := d.DialContext(ctx, network, address)
-				if err != nil {
-					return nil, err
-				}
-				conn := tls.Client(raw, config)
-				if err := conn.HandshakeContext(ctx); err != nil {
-					raw.Close()
-					return nil, err
-				}
-				return conn, nil
-			},
-		},
-	}
 }
 
 func (s *spawned) stopsOnSIGTERM(t *testing.T) {

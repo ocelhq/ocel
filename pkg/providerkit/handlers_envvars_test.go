@@ -38,7 +38,7 @@ func varsServedBy(t *testing.T, provider providerkit.Provider) envvarsv1connect.
 			return provider, nil
 		},
 	}
-	server := httptest.NewServer(providerkit.NewMux(spec))
+	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)
 
 	contract := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
@@ -436,7 +436,7 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 			return fake.NewProvider(fake.Options{}), nil
 		},
 	}
-	server := httptest.NewServer(providerkit.NewMux(spec))
+	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)
 
 	vars := envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL)

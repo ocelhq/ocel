@@ -36,7 +36,7 @@ func servedProvider(t *testing.T, version string, provider providerkit.Provider)
 			return provider, nil
 		},
 	}
-	server := httptest.NewServer(providerkit.NewMux(spec))
+	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)
 
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)

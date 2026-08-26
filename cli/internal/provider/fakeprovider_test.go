@@ -3,7 +3,6 @@ package provider
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -87,28 +86,42 @@ func runFakeProvider() int {
 	}
 	_ = os.Remove(sockPath)
 
-	clientCert, err := channel.ParseCertificatePEM(os.Getenv(channel.ClientCertEnvVar))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "fake provider: client certificate:", err)
-		return 1
-	}
-	identity, err := channel.NewIdentity()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "fake provider: identity:", err)
-		return 1
-	}
-
-	ln, err := net.Listen("unix", sockPath)
+	bound, err := net.Listen("unix", sockPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fake provider: listen:", err)
 		return 1
 	}
-	defer ln.Close()
+	defer bound.Close()
 
 	if mode == "legacy-ready" {
 		fmt.Println("OCEL_READY " + channel.FormatUnixAddr(sockPath))
 		select {}
 	}
+
+	mux := http.NewServeMux()
+	path, handler := contractv1connect.NewProviderServiceHandler(&fakeProviderServer{mode: mode})
+	mux.Handle(path, handler)
+
+	if mode == "plaintext" {
+		decoy, err := channel.NewIdentity()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fake provider: decoy identity:", err)
+			return 1
+		}
+		fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath), decoy.CertificateDER()))
+		srv := &http.Server{Handler: mux}
+		if err := srv.Serve(bound); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return 1
+		}
+		return 0
+	}
+
+	ln, identity, err := channel.SecureListener(bound)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider:", err)
+		return 1
+	}
+	defer ln.Close()
 
 	announced := identity
 	if mode == "impostor-cert" {
@@ -118,12 +131,6 @@ func runFakeProvider() int {
 			return 1
 		}
 	}
-
-	mux := http.NewServeMux()
-	path, handler := contractv1connect.NewProviderServiceHandler(&fakeProviderServer{mode: mode})
-	mux.Handle(path, handler)
-
-	ln = tls.NewListener(ln, identity.ServerConfig(clientCert))
 
 	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath), announced.CertificateDER()))
 

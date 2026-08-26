@@ -175,6 +175,22 @@ func TestHandshake(t *testing.T) {
 			t.Errorf("Ready() error = %q, want it to name the certificate that failed to verify", err)
 		}
 	})
+
+	t.Run("a provider serving plaintext is refused rather than downgraded to", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, _ := spawnFake(t, ctx, "plaintext", Config{
+			ProviderConfig:  &contractv1.ProviderConfig{},
+			ProviderPackage: "@ocel/provider-aws",
+			ReadyTimeout:    5 * time.Second,
+		})
+
+		err := r.Ready(ctx)
+		if err == nil {
+			t.Fatal("Ready() error = nil, want the CLI to refuse a provider that never negotiates TLS")
+		}
+	})
 }
 
 func TestConfigure(t *testing.T) {
