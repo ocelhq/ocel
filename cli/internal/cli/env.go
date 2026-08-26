@@ -192,7 +192,7 @@ func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts en
 		tier, hint = environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview"
 	}
 
-	return provider.Drive(ctx, cfg, stderr, stderr, func(runner *provider.Runner) error {
+	return provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
 		if err := preflight.Credentials(ctx, deps, runner, cfg, tier, hint, stderr); err != nil {
 			return err
 		}

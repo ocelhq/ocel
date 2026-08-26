@@ -20,6 +20,33 @@ func appStage(n byte) []byte {
 	return []byte{n, 0, 0, 0, 0, 0, 0, 0}
 }
 
+func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := newRendererForTest(&out, FormatHuman, true, false)
+	t.Cleanup(func() { _ = r.Close() })
+
+	app := appStage(1)
+	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{{Id: app, Title: "app-a"}}, Final: true})
+	r.Progress(app, progressv1.Phase_PHASE_UPLOADING, "uploading assets", 1, u32(10))
+
+	resume := r.Suspend()
+	if r.liveLines != 0 {
+		t.Errorf("liveLines = %d, want the live region erased before anything else takes the terminal", r.liveLines)
+	}
+
+	out.Reset()
+	r.Progress(app, progressv1.Phase_PHASE_UPLOADING, "uploading assets", 2, u32(10))
+	if out.Len() != 0 {
+		t.Errorf("wrote %q while suspended, want the terminal left to the prompt", out.String())
+	}
+
+	resume()
+	if !strings.Contains(out.String(), "app-a") {
+		t.Errorf("after resuming, out = %q, want the live region drawn again", out.String())
+	}
+}
+
 func TestLiveRegion(t *testing.T) {
 	t.Run("a parallel deploy shows one line per app, each with its own stage", func(t *testing.T) {
 		t.Parallel()

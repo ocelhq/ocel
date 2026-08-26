@@ -20,6 +20,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 )
 
@@ -109,6 +111,7 @@ func newDeps() cmddeps.Deps {
 		CurrentGitBranch:    gitBranch,
 		DiscoverPRNumber:    prNumberFromEnv,
 		RunPackageManager:   runPackageManagerCommand,
+		HostTrust:           provider.Trust{Ask: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr},
 		StdinIsTerminal:     isReaderTTY,
 		StdoutIsTerminal:    deployui.IsTerminal,
 		ConfigPath:          explicitConfigPath,

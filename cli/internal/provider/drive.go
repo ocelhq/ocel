@@ -15,7 +15,13 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func Drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, fn func(*Runner) error) error {
+func Drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, fn func(*Runner) error) error {
+	return driveTrusting(ctx, trust, func() error {
+		return driveOnce(ctx, cfg, stdout, stderr, fn)
+	})
+}
+
+func driveOnce(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, fn func(*Runner) error) error {
 	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}

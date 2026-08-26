@@ -153,6 +153,24 @@ func (r *Renderer) Close() error {
 	return nil
 }
 
+func (r *Renderer) Suspend() func() {
+	r.mu.Lock()
+	if !r.live || r.waiting {
+		r.mu.Unlock()
+		return func() {}
+	}
+	r.eraseLiveLocked()
+	r.waiting = true
+	r.mu.Unlock()
+
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.waiting = false
+		r.drawLiveLocked()
+	}
+}
+
 func (r *Renderer) Spin(msg string) func() {
 	r.mu.Lock()
 	if !r.live || r.waiting {
