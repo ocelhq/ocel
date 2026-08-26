@@ -2,9 +2,11 @@ package vps_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,11 +25,16 @@ import (
 
 const e2eSlug = "ocel-vps-e2e"
 
+const patience = 8 * time.Minute
+
 type journey struct {
 	vm       machine
 	bin      string
 	project  string
 	settings string
+	cache    string
+	shims    string
+	config   string
 	store    string
 }
 
@@ -45,53 +52,40 @@ func e2e(t *testing.T) journey {
 	if err := os.MkdirAll(run.project, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	run.store = borrowed(t, vm.addr)
+	run.apart(t)
 
 	root := repoRoot(t)
 	build(t, filepath.Join(root, "cli"), run.bin, "./ocel")
 	build(t, ".", filepath.Join(run.installed(), "bin", "deploy"), "./cmd/deploy")
-	write(t, filepath.Join(run.installed(), "package.json"), fmt.Sprintf("{\"name\":%q,\"version\":\"0.0.0\",\"bin\":{\"ocel-provider-vps-deploy\":\"bin/deploy\"}}\n", run.platformPackage()))
+	write(t, filepath.Join(run.installed(), "package.json"), run.manifest(t))
 	write(t, filepath.Join(run.project, "ocel.config.ts"), run.declaration(t))
 
 	return run
 }
 
-func borrowed(t *testing.T, address string) string {
+func (j *journey) apart(t *testing.T) {
 	t.Helper()
-	path := trustStore(t, address)
-	held, err := os.ReadFile(path)
-	switch {
-	case err == nil:
-		t.Cleanup(func() {
-			if err := os.WriteFile(path, held, 0o600); err != nil {
-				t.Errorf("%s was not given back as it was found: %v", path, err)
-			}
-		})
-	case os.IsNotExist(err):
-		t.Cleanup(func() { _ = os.Remove(path) })
-	default:
+	real, err := exec.LookPath("ssh")
+	if err != nil {
+		t.Fatalf("no ssh on PATH, and every machine the CLI reaches it reaches through ssh: %v", err)
+	}
+	dir, err := os.MkdirTemp("", "ocel-e2e-")
+	if err != nil {
 		t.Fatal(err)
 	}
-	return path
-}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
-func trustStore(t *testing.T, address string) string {
-	t.Helper()
-	rendered, err := exec.Command("ssh", "-G", address).Output()
-	if err != nil {
-		t.Fatalf("ssh -G %s: %v", address, err)
+	j.store = filepath.Join(dir, "known_hosts")
+	j.cache = filepath.Join(dir, "cache")
+	j.config = filepath.Join(dir, "ssh_config")
+	j.shims = filepath.Join(dir, "bin")
+
+	write(t, j.config, fmt.Sprintf("Host *\n  UserKnownHostsFile %s\n  GlobalKnownHostsFile /dev/null\n", j.store))
+	shim := filepath.Join(j.shims, "ssh")
+	write(t, shim, fmt.Sprintf("#!/bin/sh\nexec %s -F %s \"$@\"\n", real, j.config))
+	if err := os.Chmod(shim, 0o700); err != nil {
+		t.Fatal(err)
 	}
-	for line := range strings.Lines(string(rendered)) {
-		name, value, split := strings.Cut(strings.TrimSpace(line), " ")
-		if !split || name != "userknownhostsfile" {
-			continue
-		}
-		if files := strings.Fields(value); len(files) > 0 {
-			return files[0]
-		}
-	}
-	t.Fatalf("ssh -G %s named no known_hosts file, so there is no trust store to borrow", address)
-	return ""
 }
 
 func (j journey) platformPackage() string {
@@ -104,6 +98,19 @@ func (j journey) platformPackage() string {
 
 func (j journey) installed() string {
 	return filepath.Join(j.project, "node_modules", filepath.FromSlash(j.platformPackage()))
+}
+
+func (j journey) manifest(t *testing.T) string {
+	t.Helper()
+	written, err := json.Marshal(map[string]any{
+		"name":    j.platformPackage(),
+		"version": "0.0.0",
+		"bin":     map[string]any{"ocel-provider-vps-deploy": "bin/deploy"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(written) + "\n"
 }
 
 func (j journey) declaration(t *testing.T) string {
@@ -170,23 +177,33 @@ func (j journey) env() []string {
 	var kept []string
 	for _, entry := range os.Environ() {
 		switch name, _, _ := strings.Cut(entry, "="); name {
-		case "XDG_CONFIG_HOME", "SSH_AUTH_SOCK", "OCEL_CONFIG", "OCEL_ACCESS_TOKEN":
+		case "PATH", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "SSH_AUTH_SOCK", "OCEL_CONFIG", "OCEL_ACCESS_TOKEN":
 			continue
 		}
 		kept = append(kept, entry)
 	}
-	return append(kept, "XDG_CONFIG_HOME="+j.settings)
+	return append(kept,
+		"PATH="+j.shims+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"XDG_CONFIG_HOME="+j.settings,
+		"XDG_CACHE_HOME="+j.cache,
+	)
 }
 
 func (j journey) run(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	cmd := exec.Command(j.bin, args...)
+	ctx, done := context.WithTimeout(context.Background(), patience)
+	defer done()
+
+	cmd := exec.CommandContext(ctx, j.bin, args...)
 	cmd.Dir = j.project
 	cmd.Env = j.env()
 	var rendered bytes.Buffer
 	cmd.Stdout = &rendered
 	cmd.Stderr = &rendered
 	err := cmd.Run()
+	if ctx.Err() != nil {
+		err = fmt.Errorf("ocel %s was still running after %s: %w", strings.Join(args, " "), patience, ctx.Err())
+	}
 	return plain(rendered.String()), err
 }
 
@@ -235,28 +252,51 @@ func (j journey) onATerminal(t *testing.T, args []string, awaiting, answer strin
 	}()
 
 	if awaiting != "" {
-		if !appears(&seen, awaiting) {
+		if !appears(&seen, read, awaiting) {
 			_ = cmd.Process.Kill()
 			<-read
 			t.Fatalf("ocel %s never asked %q on a terminal:\n%s", strings.Join(args, " "), awaiting, plain(seen.String()))
 		}
 		if _, err := io.WriteString(terminal, answer); err != nil {
-			t.Fatal(err)
+			_ = cmd.Process.Kill()
+			<-read
+			t.Fatalf("answering %q to ocel %s on a terminal: %v\n%s", answer, strings.Join(args, " "), err, plain(seen.String()))
 		}
 	}
 
-	err = cmd.Wait()
+	waited := make(chan error, 1)
+	go func() { waited <- cmd.Wait() }()
+	giveUp := time.NewTimer(patience)
+	defer giveUp.Stop()
+	select {
+	case err = <-waited:
+	case <-giveUp.C:
+		_ = cmd.Process.Kill()
+		<-waited
+		<-read
+		t.Fatalf("ocel %s was still running on a terminal after %s:\n%s", strings.Join(args, " "), patience, plain(seen.String()))
+	}
 	<-read
 	return plain(seen.String()), err
 }
 
-func appears(seen *transcript, fragment string) bool {
-	for deadline := time.Now().Add(3 * time.Minute); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+func appears(seen *transcript, read <-chan struct{}, fragment string) bool {
+	beat := time.NewTicker(200 * time.Millisecond)
+	defer beat.Stop()
+	giveUp := time.NewTimer(3 * time.Minute)
+	defer giveUp.Stop()
+	for {
 		if strings.Contains(plain(seen.String()), fragment) {
 			return true
 		}
+		select {
+		case <-read:
+			return strings.Contains(plain(seen.String()), fragment)
+		case <-giveUp.C:
+			return false
+		case <-beat.C:
+		}
 	}
-	return false
 }
 
 var escapes = regexp.MustCompile("\x1b\\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]|\x1b\\][^\x07\x1b]*(\x07|\x1b\\\\)|\x1b[()][0-9A-B]|\x1b[=>]")
@@ -280,8 +320,9 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if !strings.Contains(applied, "Bootstrapped") {
 		t.Errorf("`ocel bootstrap production --yes` finished without saying it bootstrapped:\n%s", applied)
 	}
-	if stamp := stampOn(t, run.vm); stamp.State != host.StateComplete {
-		t.Errorf("the stamp the CLI left reads state %q, want %q", stamp.State, host.StateComplete)
+	stamped := stampOn(t, run.vm)
+	if stamped.State != host.StateComplete {
+		t.Errorf("the stamp the CLI left reads state %q, want %q", stamped.State, host.StateComplete)
 	}
 
 	standing := run.must(t, "bootstrap", "status")
@@ -293,7 +334,17 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if !strings.Contains(replanned, "No infrastructure changes") {
 		t.Errorf("a re-plan over a bootstrapped machine found work to do:\n%s", replanned)
 	}
-	run.must(t, "bootstrap", "production", "--yes")
+	reapplied := run.must(t, "bootstrap", "production", "--yes")
+	if !strings.Contains(reapplied, "No infrastructure changes") {
+		t.Errorf("a re-apply over a bootstrapped machine found work the re-plan said was not there:\n%s", reapplied)
+	}
+	again := stampOn(t, run.vm)
+	if again.Seal != stamped.Seal {
+		t.Errorf("the re-apply minted seal %+v over %+v, and a key nothing asked to rotate takes every value sealed under the old one", again.Seal, stamped.Seal)
+	}
+	if !maps.Equal(again.Digests, stamped.Digests) {
+		t.Errorf("the re-apply rewrote the host: digests %v, want %v", again.Digests, stamped.Digests)
+	}
 
 	bootstrapping := run.must(t, "permissions", "bootstrap")
 	if !strings.Contains(bootstrapping, "NOPASSWD: ALL") {
