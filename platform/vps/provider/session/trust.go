@@ -3,8 +3,6 @@ package session
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"slices"
 	"strconv"
@@ -49,7 +47,7 @@ func keysIn(rendered string) []providerkit.HostKey {
 		if len(fields) < 3 || strings.HasPrefix(fields[0], "#") || strings.HasPrefix(fields[0], "@") {
 			continue
 		}
-		if key := (providerkit.HostKey{Type: fields[1], Key: fields[2]}); fingerprint(&key) {
+		if key, err := (providerkit.HostKey{Type: fields[1], Key: fields[2]}).Fingerprinted(); err == nil {
 			keys = append(keys, key)
 		}
 	}
@@ -64,16 +62,6 @@ func markedIn(rendered string) bool {
 		}
 	}
 	return false
-}
-
-func fingerprint(key *providerkit.HostKey) bool {
-	blob, err := base64.StdEncoding.DecodeString(key.Key)
-	if err != nil {
-		return false
-	}
-	sum := sha256.Sum256(blob)
-	key.Fingerprint = "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:])
-	return true
 }
 
 func classify(dest Destination, offered []providerkit.HostKey, held known) (providerkit.HostKey, *providerkit.HostTrust) {
@@ -93,6 +81,7 @@ func classify(dest Destination, offered []providerkit.HostKey, held known) (prov
 		Host:       dest.Written,
 		Address:    dest.Address,
 		Port:       dest.Port,
+		KeyAlias:   dest.KeyAlias,
 		KnownHosts: dest.KnownHosts,
 		Got:        ordered[0],
 	}
@@ -119,16 +108,16 @@ func remedy(trust providerkit.HostTrust) string {
 		store = trust.KnownHosts[0]
 	}
 	if trust.Reason == providerkit.HostKeyMismatch {
-		return fmt.Sprintf("ssh-keygen -R %s -f %s", quoted(trust.Address, trust.Port), store)
+		return fmt.Sprintf("ssh-keygen -R %s -f %s", quoted(trust.KnownHostsEntry()), store)
 	}
 	return fmt.Sprintf("ssh-keyscan -t %s -p %d %s >> %s", trust.Got.Type, trust.Port, trust.Address, store)
 }
 
-func quoted(address string, port int) string {
-	if port == 22 {
-		return address
+func quoted(entry string) string {
+	if strings.HasPrefix(entry, "[") {
+		return "'" + entry + "'"
 	}
-	return fmt.Sprintf("'[%s]:%d'", address, port)
+	return entry
 }
 
 func preferred(keys []providerkit.HostKey) []providerkit.HostKey {

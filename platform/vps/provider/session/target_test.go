@@ -2,8 +2,11 @@ package session
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func TestResolutionIsSshsOwn(t *testing.T) {
@@ -58,5 +61,34 @@ func TestTheKnownHostsEntryBracketsOnlyUnusualPorts(t *testing.T) {
 	odd := Destination{Address: "203.0.113.10", Port: 2222}
 	if odd.entry() != "[203.0.113.10]:2222" {
 		t.Errorf("entry() = %q, want the bracketed form off port 22", odd.entry())
+	}
+}
+
+func TestAKeyAliasIsTheNameSshKeysOn(t *testing.T) {
+	t.Parallel()
+
+	config := filepath.Join(t.TempDir(), "ssh_config")
+	written := "Host web-1\n  HostName 203.0.113.10\n  Port 2222\n  HostKeyAlias ocel-vps\n"
+	if err := os.WriteFile(config, []byte(written), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dest, err := resolve(context.Background(), Target{Alias: "web-1", Config: config})
+	if err != nil {
+		t.Fatalf("resolve() = %v", err)
+	}
+	if dest.KeyAlias != "ocel-vps" {
+		t.Errorf("resolve() read the key alias as %q, want the ocel-vps ssh keys on", dest.KeyAlias)
+	}
+	if dest.entry() != "ocel-vps" {
+		t.Errorf("entry() = %q, want the alias verbatim, with no port bracketing", dest.entry())
+	}
+
+	_, trust := classify(dest, []providerkit.HostKey{{Type: "ssh-ed25519", Key: "AAAA"}}, known{})
+	if trust == nil {
+		t.Fatal("classify() = nil, want an unknown-host-key refusal")
+	}
+	if trust.KnownHostsEntry() != "ocel-vps" {
+		t.Errorf("the refusal keys on %q, want the alias the CLI must record under", trust.KnownHostsEntry())
 	}
 }
