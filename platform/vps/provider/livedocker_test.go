@@ -2,6 +2,7 @@ package vps_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ const (
 	unitName   = "docker.service"
 	socketName = "docker.socket"
 	initScript = "/etc/init.d/" + engineName
+	holding    = "/var/tmp/ocel-live-away"
 )
 
 func purged(t *testing.T, vm machine) {
@@ -25,6 +27,45 @@ func purged(t *testing.T, vm machine) {
 	if stood := strings.TrimSpace(vm.ssh(t, "command -v "+engineName+" || true")); stood != "" {
 		t.Fatalf("%s still stands at %q, so the absent-engine case cannot be proven on this machine", engineName, stood)
 	}
+}
+
+func carrying(t *testing.T, vm machine) []string {
+	t.Helper()
+	var paths []string
+	for _, line := range strings.Split(vm.ssh(t, "systemctl show -p FragmentPath,SourcePath,DropInPaths "+unitName), "\n") {
+		_, named, split := strings.Cut(strings.TrimSpace(line), "=")
+		if split {
+			paths = append(paths, strings.Fields(named)...)
+		}
+	}
+	return append(paths, strings.Fields(vm.ssh(t, "for p in "+initScript+" /etc/systemd/system/"+unitName+"; do [ -e \"$p\" ] && echo \"$p\"; done; true"))...)
+}
+
+func unmade(t *testing.T, vm machine) ([]string, string) {
+	t.Helper()
+	vm.ssh(t, "sudo systemctl stop "+socketName+" "+unitName+" >/dev/null 2>&1 || true")
+	var moved []string
+	for range 4 {
+		var fresh bool
+		for _, path := range carrying(t, vm) {
+			if slices.Contains(moved, path) {
+				continue
+			}
+			if away := strings.TrimSpace(vm.ssh(t, "if [ -e "+path+" ]; then sudo mkdir -p \"$(dirname "+holding+path+")\" && sudo mv "+path+" "+holding+path+" && echo "+path+"; fi")); away != "" {
+				moved, fresh = append(moved, away), true
+			}
+		}
+		vm.ssh(t, "sudo systemctl daemon-reload")
+		if _, err := vm.attempt(vm.user, "systemctl cat "+unitName); err != nil {
+			return moved, ""
+		}
+		if !fresh {
+			break
+		}
+	}
+	return moved, vm.ssh(t, "systemctl cat "+unitName+" 2>&1 | head -30; "+
+		"systemctl show -p Names,LoadState,UnitFileState,FragmentPath,SourcePath,DropInPaths "+unitName+"; "+
+		"ls -l /etc/init.d /etc/systemd/system /run/systemd/generator /run/systemd/generator.early /run/systemd/generator.late 2>&1 | head -60")
 }
 
 func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testing.T) {
@@ -152,28 +193,21 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("the engine binary was written again to start a daemon that was already installed, at %s where it stood at %s", now, written)
 	}
 
-	unitPath := strings.TrimSpace(vm.ssh(t, "systemctl show -p FragmentPath --value "+unitName))
-	if unitPath == "" {
+	if unitPath := strings.TrimSpace(vm.ssh(t, "systemctl show -p FragmentPath --value "+unitName)); unitPath == "" {
 		t.Fatalf("%s has no fragment on a machine this bootstrap installed docker onto", unitName)
 	}
-	carrying := []string{unitPath}
-	if held := strings.TrimSpace(vm.ssh(t, "test -f "+initScript+" && echo held || true")); held == "held" {
-		carrying = append(carrying, initScript)
-	}
-	vm.ssh(t, "sudo systemctl stop "+socketName+" "+unitName+" >/dev/null 2>&1 || true")
-	for _, path := range carrying {
-		vm.ssh(t, "sudo mv "+path+" "+path+".away")
-	}
-	vm.ssh(t, "sudo systemctl daemon-reload")
+	moved, surviving := unmade(t, vm)
 	defer func() {
-		for _, path := range carrying {
-			vm.ssh(t, "sudo mv "+path+".away "+path)
+		for i := len(moved) - 1; i >= 0; i-- {
+			vm.ssh(t, "if [ -e "+holding+moved[i]+" ]; then sudo mv "+holding+moved[i]+" "+moved[i]+"; fi")
 		}
+		vm.ssh(t, "sudo rm -rf "+holding)
 		vm.ssh(t, "sudo systemctl daemon-reload")
 		vm.ssh(t, "sudo systemctl enable --now "+unitName)
 	}()
-	if _, err := vm.attempt(vm.user, "systemctl cat "+unitName); err == nil {
-		t.Fatalf("%s still stands with %s moved aside, so a docker binary with no unit behind it cannot be proven on this machine", unitName, strings.Join(carrying, " and "))
+	if surviving != "" {
+		t.Fatalf("%s still stands with %s moved aside, so a docker binary with no unit behind it cannot be proven on this machine. The machine says:\n%s",
+			unitName, strings.Join(moved, ", "), surviving)
 	}
 
 	shimmed, err := bootstrapper.Describe(ctx, class)
