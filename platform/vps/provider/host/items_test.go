@@ -296,7 +296,7 @@ func TestASymlinkWhereAnItemsPathShouldBeIsRefusedRatherThanFollowed(t *testing.
 	}
 
 	for name, script := range map[string]string{
-		"a path the survey stats": survey([]Item{dir(pointed, 0o750, stateOwner)}),
+		"a path the survey stats": survey([]Item{dir(pointed, 0o750, stateOwner, "")}),
 		"the seal key's own probe": sealSurvey(Item{
 			Kind: KindSealKey, Name: pointed, Mode: sealKeyMode, Owner: rootOwner, Class: providerkit.ClassProduction,
 		}),

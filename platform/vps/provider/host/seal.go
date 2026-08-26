@@ -28,7 +28,7 @@ type Seal struct {
 }
 
 func sealKey(class providerkit.Class) Item {
-	return Item{Kind: KindSealKey, Name: SealKeyPath(class), Mode: sealKeyMode, Owner: rootOwner, Class: class}
+	return Item{Kind: KindSealKey, Name: SealKeyPath(class), Mode: sealKeyMode, Owner: rootOwner, Class: class, Note: "the key values are sealed with"}
 }
 
 func sealSudoers() []byte {
