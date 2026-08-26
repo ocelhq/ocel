@@ -219,10 +219,17 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Fatalf("Plan() over a docker binary with no unit behind it = %v", err)
 	}
 	shimming := onlyGroup(t, reinstalling)
-	if engine := planFor(shimming, engineName); engine.Action != providerkit.ActionCreate {
-		t.Errorf("a binary with no %s plans %q for the engine, and an apply would enable a unit the machine does not carry, on every run, forever", unitName, engine.Action)
+	if engine := planFor(shimming, engineName); engine.Action != providerkit.ActionUpdate {
+		t.Errorf("a binary with no %s plans %q for the engine, want the install shown over what stands: keeping it leaves an apply enabling a unit the machine does not carry, on every run, forever", unitName, engine.Action)
 	}
 	if unit := planFor(shimming, unitName); unit.Action != providerkit.ActionCreate {
 		t.Errorf("a binary with no %s plans %q for the unit, want the install that brings one", unitName, unit.Action)
+	}
+	refusal := refused(t, bootstrapper.Apply(ctx,
+		providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: shimmed.Held, Unattended: true}, nil),
+		providerkit.CodeNotReady)
+	if !strings.Contains(refusal.Message, engineName) {
+		t.Errorf("an unattended apply over a docker binary with no unit says %q, want it refused by name: nobody is there to consent to %s being run as root over an install that already stands",
+			refusal.Message, "https://get.docker.com")
 	}
 }

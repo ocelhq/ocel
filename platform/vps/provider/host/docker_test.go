@@ -2,6 +2,7 @@ package host
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -42,12 +43,30 @@ is-active) printf '%s\n' `+quoted(held.active)+` ;;
 is-enabled) printf '%s\n' `+quoted(held.enabled)+` ;;
 *) exit 1 ;;
 esac`)
+	for _, tool := range []string{"sha256sum", "cut"} {
+		found, err := exec.LookPath(tool)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(found, filepath.Join(dir, tool)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return dir
 }
 
 func probed(t *testing.T, held engine) map[string]string {
 	t.Helper()
-	observed, _, err := readSurvey(sh(t, daemon(t, held), engineProbe()+"\n"+unitProbe()))
+	dir := daemon(t, held)
+	cmd := exec.Command("/bin/sh", "-c", engineProbe()+"\n"+unitProbe())
+	cmd.Env = []string{"PATH=" + dir}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	rendered, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("probe the engine: %v\n%s", err, stderr.String())
+	}
+	observed, _, err := readSurvey(string(rendered))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,18 +95,26 @@ func TestAHostThatRunsNoContainersIsProbedAsHavingNeither(t *testing.T) {
 	}
 }
 
-func TestADockerBinaryWithNoUnitBehindItIsNoEngineAndPlansTheInstall(t *testing.T) {
+func TestADockerBinaryWithNoUnitBehindItStandsWithoutServingAndIsNeverRebuiltUnattended(t *testing.T) {
 	t.Parallel()
 
 	observed := probed(t, engine{installed: true})
-	for _, item := range EngineItems() {
-		if _, stood := observed[item.ID()]; stood {
-			t.Errorf("the probe read %s on a host whose docker binary carries no %s", item.ID(), dockerUnit)
-		}
+	if _, stood := observed[unitItem().ID()]; stood {
+		t.Errorf("the probe read %s on a host whose docker binary carries no unit file", unitItem().ID())
 	}
-	changes := planned(Reading{Class: providerkit.ClassProduction, Observed: observed})
-	if engine := planFor(changes, engineItem().ID()); engine.Action != providerkit.ActionCreate {
-		t.Errorf("a host carrying a docker binary and no %s plans %q for the engine, want the install: keeping it leaves apply enabling a unit that does not exist, on every run, forever", dockerUnit, engine.Action)
+	read := Reading{Class: providerkit.ClassProduction, Observed: observed}
+	if !read.standing(KindEngine, dockerEngine) {
+		t.Fatalf("the probe read no engine on a host carrying a docker binary, and an unattended run would fetch %s and run it as root over an install that is already there", dockerSource)
+	}
+	if read.current(engineItem()) {
+		t.Fatalf("a docker binary with no %s reads as serving, and apply would enable a unit that does not exist, on every run, forever", dockerUnit)
+	}
+	if engine := planFor(planned(read), engineItem().ID()); engine.Action != providerkit.ActionUpdate {
+		t.Errorf("a host carrying a docker binary and no %s plans %q for the engine, want the install shown as a change over what stands", dockerUnit, engine.Action)
+	}
+	refused := refuseReplacements(read, EngineItems())
+	if refused == nil || !strings.Contains(refused.Error(), engineItem().ID()) {
+		t.Errorf("an unattended apply over a docker binary with no unit = %v, want it refused: rebuilding an engine is what nobody there cannot consent to", refused)
 	}
 }
 
