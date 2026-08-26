@@ -19,6 +19,7 @@ type machine struct {
 	user   string
 	key    string
 	config string
+	known  string
 }
 
 func live(t *testing.T) machine {
@@ -34,6 +35,7 @@ func live(t *testing.T) machine {
 
 	dir := t.TempDir()
 	known := filepath.Join(dir, "known_hosts")
+	vm.known = known
 	scanned, err := exec.Command("ssh-keyscan", "-T", "10", vm.addr).Output()
 	if err != nil {
 		t.Fatalf("ssh-keyscan %s: %v", vm.addr, err)
