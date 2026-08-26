@@ -198,13 +198,14 @@ func healable(read Reading) ([]Item, error) {
 	var work []Item
 	var denied []string
 	for _, item := range Items(read.Class, read.Keys) {
-		switch {
-		case read.current(item):
-		case deployOwned(item):
-			work = append(work, item)
-		default:
-			denied = append(denied, item.ID())
+		if read.current(item) {
+			continue
 		}
+		if deployOwned(item) {
+			work = append(work, item)
+			continue
+		}
+		denied = append(denied, item.ID())
 	}
 	if len(denied) > 0 {
 		return nil, providerkit.Refuse(providerkit.CodeDenied,
