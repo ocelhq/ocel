@@ -93,8 +93,6 @@ type Config struct {
 
 	StackState edge.StackState
 
-	Tracer Tracer
-
 	Transform transform.Evaluator
 }
 
