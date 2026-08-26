@@ -13,6 +13,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/style"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -44,7 +46,7 @@ func needsNote(stdout io.Writer, note string) string {
 	return gated(stdout, color.RGB(0xff, 0xb8, 0x6c)).Sprint(note)
 }
 
-func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.Feature, standing, going []string, interactive bool, stdout io.Writer) ([]string, bool, error) {
+func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.Feature, standing, going []string, kind string, tier environmentv1.Tier, interactive bool, stdout io.Writer) ([]string, bool, error) {
 	if opts.FeaturesDeclared {
 		requested, err := parseFeatureFlag(opts.Features, catalogue)
 		return requested, err == nil, err
@@ -52,105 +54,151 @@ func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.F
 	if !interactive {
 		return without(standing, going), true, nil
 	}
-	return pickFeatures(ctx, catalogue, standing, going, stdout)
+	return pickFeatures(ctx, catalogue, standing, going, kind, tier, stdout)
 }
 
-func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, standing, going []string, stdout io.Writer) ([]string, bool, error) {
+func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, standing, going []string, kind string, tier environmentv1.Tier, stdout io.Writer) ([]string, bool, error) {
 	if len(catalogue) == 0 {
 		return nil, true, nil
 	}
 
 	kept := without(standing, going)
-	printCatalogue(stdout, catalogue)
-	printStanding(stdout, kept)
+	required := requiredFeature(catalogue, kept, kind)
 
-	addable := addableFeatures(catalogue, standing)
+	printIncluded(stdout, catalogue, kept, tier)
+	printRequired(stdout, catalogue, required, kind)
+
+	addable := addableFeatures(catalogue, standing, required)
+	width := nameWidth(addable)
 	options := make([]huh.Option[string], 0, len(addable))
 	for _, name := range addable {
-		options = append(options, huh.NewOption(name, name))
-	}
-	if len(options) == 0 {
-		fmt.Fprintln(stdout, "Every feature this provider offers is already standing, so there is nothing to add.")
-		return kept, true, nil
+		options = append(options, huh.NewOption(featureRow(stdout, catalogue, name, width), name))
 	}
 
 	var chosen []string
-	field := huh.NewMultiSelect[string]().
-		Title("Select the features to add").
-		Options(options...).
-		// FIXME: huh v2.0.3 subtracts the title height from the multiselect viewport
-		// instead of the frame, so an unset Height scrolls one option at a time.
-		// Drop this once the viewport sizing is fixed upstream.
-		Height(len(options) + 1).
-		Value(&chosen)
+	if len(options) == 0 {
+		if required == "" {
+			fmt.Fprintln(stdout, "Everything is already included.")
+			return kept, true, nil
+		}
+	} else {
+		field := huh.NewMultiSelect[string]().
+			Title("Select features to add").
+			Options(options...).
+			// FIXME: huh v2.0.3 subtracts the title height from the multiselect viewport
+			// instead of the frame, so an unset Height scrolls one option at a time.
+			// Drop this once the viewport sizing is fixed upstream.
+			Height(len(options) + 1).
+			Value(&chosen)
 
-	err := huh.NewForm(huh.NewGroup(field)).
-		WithTheme(style.Theme).
-		RunWithContext(ctx)
-	if errors.Is(err, huh.ErrUserAborted) {
-		return nil, false, nil
+		err := huh.NewForm(huh.NewGroup(field)).
+			WithTheme(style.Theme).
+			RunWithContext(ctx)
+		if errors.Is(err, huh.ErrUserAborted) {
+			return nil, false, nil
+		}
+		if err != nil {
+			return nil, false, err
+		}
 	}
-	if err != nil {
-		return nil, false, err
+
+	if required != "" {
+		chosen = append(chosen, required)
 	}
-	named := inCatalogueOrder(catalogue, append(slices.Clone(kept), chosen...))
-	applied := withDependencies(catalogue, named)
-	printApplied(stdout, catalogue, applied, named)
+	picked := inCatalogueOrder(catalogue, chosen)
+	applied := withDependencies(catalogue, inCatalogueOrder(catalogue, append(slices.Clone(kept), picked...)))
+	printAdded(stdout, catalogue, applied, kept, picked)
 	return applied, true, nil
 }
 
-func addableFeatures(catalogue []*contractv1.Feature, standing []string) []string {
+func requiredFeature(catalogue []*contractv1.Feature, included []string, kind string) string {
+	name := featureNeedingEdge(catalogue, kind)
+	if slices.Contains(included, name) {
+		return ""
+	}
+	return name
+}
+
+func addableFeatures(catalogue []*contractv1.Feature, standing []string, required string) []string {
 	var addable []string
 	for _, f := range catalogue {
-		if !slices.Contains(standing, f.GetName()) {
-			addable = append(addable, f.GetName())
+		if f.GetName() == required || slices.Contains(standing, f.GetName()) {
+			continue
 		}
+		addable = append(addable, f.GetName())
 	}
 	return addable
 }
 
-func printStanding(stdout io.Writer, standing []string) {
-	if len(standing) == 0 {
-		return
-	}
-	marked := make([]string, 0, len(standing))
-	for _, name := range standing {
-		marked = append(marked, selectedMark(stdout)+" "+name)
-	}
-	fmt.Fprintf(stdout, "Already standing, and this run keeps them: %s\n\n", strings.Join(marked, "  "))
-}
-
-func printApplied(stdout io.Writer, catalogue []*contractv1.Feature, applied, chosen []string) {
-	if len(applied) == 0 {
-		fmt.Fprintln(stdout, "No features will be applied.")
-		return
-	}
-	parts := make([]string, 0, len(applied))
-	for _, name := range applied {
-		if slices.Contains(chosen, name) {
-			parts = append(parts, name)
-			continue
-		}
-		parts = append(parts, name+" "+needsNote(stdout, "(needed by "+strings.Join(directDependents(catalogue, name, applied), ", ")+")"))
-	}
-	fmt.Fprintf(stdout, "%s Selected %s\n", selectedMark(stdout), strings.Join(parts, ", "))
-}
-
-func printCatalogue(stdout io.Writer, catalogue []*contractv1.Feature) {
+func nameWidth(names []string) int {
 	width := 0
-	for _, f := range catalogue {
-		width = max(width, len(f.GetName()))
+	for _, name := range names {
+		width = max(width, len(name))
 	}
+	return width
+}
 
-	fmt.Fprint(stdout, "This provider has optional features:\n\n")
-	for _, f := range catalogue {
-		fmt.Fprintf(stdout, "  %-*s   %s", width, f.GetName(), f.GetSummary())
-		if deps := f.GetDependsOn(); len(deps) > 0 {
-			fmt.Fprintf(stdout, "  %s", needsNote(stdout, "(needs "+strings.Join(deps, ", ")+")"))
-		}
-		fmt.Fprintln(stdout)
+func featureRow(stdout io.Writer, catalogue []*contractv1.Feature, name string, width int) string {
+	f := catalogueEntry(catalogue, name)
+	row := fmt.Sprintf("%-*s   %s", width, name, f.GetSummary())
+	if deps := f.GetDependsOn(); len(deps) > 0 {
+		row += "  " + needsNote(stdout, "(needs "+strings.Join(deps, ", ")+")")
 	}
-	fmt.Fprintln(stdout)
+	return row
+}
+
+func catalogueEntry(catalogue []*contractv1.Feature, name string) *contractv1.Feature {
+	for _, f := range catalogue {
+		if f.GetName() == name {
+			return f
+		}
+	}
+	return nil
+}
+
+func printIncluded(stdout io.Writer, catalogue []*contractv1.Feature, included []string, tier environmentv1.Tier) {
+	printSection(stdout, catalogue, included,
+		fmt.Sprintf("Included in the %s bootstrap:", Name(tier)),
+		fmt.Sprintf("To take one down: ocel bootstrap %s --remove <name>", Name(tier)))
+}
+
+func printRequired(stdout io.Writer, catalogue []*contractv1.Feature, required, kind string) {
+	if required == "" {
+		return
+	}
+	printSection(stdout, catalogue, []string{required}, "Required by this project:",
+		fmt.Sprintf("Your edge is %s. Change it in %s.", kind, projectconfig.ConfigFileName))
+}
+
+func printSection(stdout io.Writer, catalogue []*contractv1.Feature, names []string, heading, note string) {
+	if len(names) == 0 {
+		return
+	}
+	fmt.Fprintf(stdout, "%s\n\n", heading)
+	width := nameWidth(names)
+	for _, name := range names {
+		fmt.Fprintf(stdout, "  %s %s\n", selectedMark(stdout), featureRow(stdout, catalogue, name, width))
+	}
+	fmt.Fprintf(stdout, "\n  %s\n\n", note)
+}
+
+func printAdded(stdout io.Writer, catalogue []*contractv1.Feature, applied, included, picked []string) {
+	if len(picked) == 0 {
+		fmt.Fprintln(stdout, "Nothing to add.")
+		return
+	}
+	fmt.Fprintf(stdout, "%s Adding %s\n", selectedMark(stdout), strings.Join(picked, ", "))
+	for _, name := range without(without(applied, included), picked) {
+		fmt.Fprintf(stdout, "  + %s %s\n", name,
+			needsNote(stdout, "— "+needsItPhrase(directDependents(catalogue, name, applied))))
+	}
+}
+
+func needsItPhrase(dependents []string) string {
+	if len(dependents) > 1 {
+		return strings.Join(dependents, ", ") + " need it"
+	}
+	return strings.Join(dependents, ", ") + " needs it"
 }
 
 type implication struct {
@@ -168,7 +216,7 @@ func impliedFeatures(catalogue []*contractv1.Feature, requested []string, kind s
 
 	var pulled []implication
 	if fronting != "" && !slices.Contains(requested, fronting) {
-		pulled = append(pulled, implication{name: fronting, reason: "required by this project's edge"})
+		pulled = append(pulled, implication{name: fronting, reason: "this project's edge needs it"})
 	}
 	for _, name := range applied {
 		if name == fronting || slices.Contains(requested, name) {
@@ -176,7 +224,7 @@ func impliedFeatures(catalogue []*contractv1.Feature, requested []string, kind s
 		}
 		pulled = append(pulled, implication{
 			name:   name,
-			reason: "needed by " + strings.Join(directDependents(catalogue, name, applied), ", "),
+			reason: needsItPhrase(directDependents(catalogue, name, applied)),
 		})
 	}
 	return pulled
@@ -195,14 +243,9 @@ func featureNeedingEdge(catalogue []*contractv1.Feature, kind string) string {
 }
 
 func printImplied(stdout io.Writer, pulled []implication) {
-	if len(pulled) == 0 {
-		return
-	}
-	parts := make([]string, 0, len(pulled))
 	for _, p := range pulled {
-		parts = append(parts, p.name+" "+needsNote(stdout, "("+p.reason+")"))
+		fmt.Fprintf(stdout, "Also adding: %s %s\n", p.name, needsNote(stdout, "— "+p.reason))
 	}
-	fmt.Fprintf(stdout, "Also: %s\n", strings.Join(parts, ", "))
 }
 
 func directDependents(catalogue []*contractv1.Feature, name string, within []string) []string {

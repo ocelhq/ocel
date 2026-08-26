@@ -69,7 +69,7 @@ func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []s
 		Short:   fmt.Sprintf("Set up or update the %s environment", name),
 		Long: fmt.Sprintf("Set up or update the %s environment.\n\n", name) +
 			"A bootstrap only ever builds up: --features and the interactive picker add and refresh, " +
-			"and a feature they leave out is left standing. --remove is the only way anything goes.\n\n" +
+			"and a feature they leave out stays included. --remove is the only way anything goes.\n\n" +
 			"Every run prints the changes it would make before asking; --dry prints them and stops.",
 		Example: fmt.Sprintf("  $ ocel bootstrap %s\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --features core,queues\n", name) +
@@ -197,7 +197,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 
 		interactive := !opts.Yes && deps.StdinIsTerminal(stdin)
 		picked := interactive && !opts.FeaturesDeclared
-		requested, selected, err := chooseFeatures(ctx, opts, catalogue, standing, going, interactive, stdout)
+		requested, selected, err := chooseFeatures(ctx, opts, catalogue, standing, going, string(cfg.EdgeKind()), tier, interactive, stdout)
 		if err != nil {
 			return err
 		}

@@ -606,7 +606,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		want := "Also: cloudflare-edge (required by this project's edge), isr (needed by cloudflare-edge)\n"
+		want := "Also adding: cloudflare-edge — this project's edge needs it\nAlso adding: isr — cloudflare-edge needs it\n"
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout = %q, want it to carry %q", stdout.String(), want)
 		}
@@ -620,7 +620,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		want := "Also: cloudfront-edge (required by this project's edge)\n"
+		want := "Also adding: cloudfront-edge — this project's edge needs it\n"
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout = %q, want it to carry %q", stdout.String(), want)
 		}
@@ -634,7 +634,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if strings.Contains(stdout.String(), "Also:") {
+		if strings.Contains(stdout.String(), "Also adding:") {
 			t.Errorf("stdout = %q, want nothing said where the set named everything applied", stdout.String())
 		}
 	})
