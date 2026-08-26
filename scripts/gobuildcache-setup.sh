@@ -186,6 +186,11 @@ finish() {
 TOTAL_STAGES=5
 ENV_FILE=".env.gobuildcache"
 
+if [[ ! -t 0 ]]; then
+  printf 'This wizard prompts for values — run it from an interactive terminal.\n' >&2
+  exit 1
+fi
+
 cd "$(dirname "$0")/.."
 
 banner "gobuildcache — remote Go build cache"
