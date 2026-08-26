@@ -167,6 +167,19 @@ func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T
 	}
 }
 
+func TestDestroyLeavesTheTrustStoreAloneAndSpellsTheLineThatEditsIt(t *testing.T) {
+	t.Parallel()
+
+	forget := "ssh-keygen -R '[203.0.113.10]:2222' -f /home/ada/.ssh/known_hosts"
+	note := leavingKnownHosts(forget)
+	if !strings.Contains(note, forget) {
+		t.Errorf("the destroy note reads %q, and a user who wants the entry gone is never told what to run", note)
+	}
+	if !strings.Contains(note, "known_hosts") {
+		t.Errorf("the destroy note reads %q, and it never says which of the user's own files ocel left alone", note)
+	}
+}
+
 func planFor(changes []providerkit.Change, id string) providerkit.Change {
 	for _, change := range changes {
 		if change.Kind+" "+change.Name == id {

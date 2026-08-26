@@ -85,6 +85,14 @@ func (h *Host) Principal(ctx context.Context) (string, error) {
 	return principal, nil
 }
 
+func (h *Host) forgetting(ctx context.Context) (string, error) {
+	live, err := h.dial(ctx)
+	if err != nil {
+		return "", err
+	}
+	return live.Destination().Forget(), nil
+}
+
 func (h *Host) elevate(ctx context.Context) (string, error) {
 	h.elevating.Lock()
 	defer h.elevating.Unlock()

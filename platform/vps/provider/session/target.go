@@ -54,6 +54,8 @@ type Destination struct {
 
 func (d Destination) Principal() string { return d.User + "@" + d.Written }
 
+func (d Destination) Forget() string { return forgetting(d.entry(), d.KnownHosts) }
+
 func (d Destination) entry() string {
 	return providerkit.KnownHostsEntry(d.Address, d.KeyAlias, d.Port)
 }
