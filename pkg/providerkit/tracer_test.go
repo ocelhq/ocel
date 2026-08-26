@@ -21,7 +21,7 @@ func TestEventTracerDeclareStagesSendsAStagePlanEvent(t *testing.T) {
 	tracer := newEventTracer(sender)
 
 	unit := UnitStage(naming.UnitEnvironment, "Environment")
-	phase := PhaseStage(unit, progressv1.Phase_PHASE_PROVISIONING)
+	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISIONING)
 	DeclareStages(tracer, unit)
 	DeclareStages(tracer, phase)
 
@@ -63,8 +63,8 @@ func TestDeclaredUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 	unit := UnitStage(naming.UnitEnvironment, "Environment")
 	DeclareStages(tracer,
 		unit,
-		PhaseStage(unit, progressv1.Phase_PHASE_BUILDING),
-		PhaseStage(unit, progressv1.Phase_PHASE_PROVISIONING),
+		PhaseStage(unit.Name, progressv1.Phase_PHASE_BUILDING),
+		PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISIONING),
 	)
 
 	if err := sender.close(); err != nil {
@@ -85,7 +85,7 @@ func TestDetailStagesMintTheirOwnIDUnderTheirPhase(t *testing.T) {
 	t.Parallel()
 
 	unit := UnitStage(naming.UnitPromotion, "Promotion")
-	phase := PhaseStage(unit, progressv1.Phase_PHASE_FINALIZING)
+	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_FINALIZING)
 	first := NewStage(phase, "detail")
 	second := NewStage(phase, "detail")
 

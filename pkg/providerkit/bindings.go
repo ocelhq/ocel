@@ -6,11 +6,10 @@ import (
 	"slices"
 	"strings"
 
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
 
-func (r *deployRun) admitLinks(ctx context.Context) error {
+func (r *deployRun) admitLinks(ctx context.Context, report Reporter) error {
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
@@ -25,7 +24,7 @@ func (r *deployRun) admitLinks(ctx context.Context) error {
 		published[link.Name] = link
 		names = append(names, link.Name)
 	}
-	r.warnShadowed(resources, names)
+	r.warnShadowed(report, resources, names)
 
 	var missing []string
 	for _, resource := range resources {
@@ -123,8 +122,7 @@ func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map
 	return found
 }
 
-func (r *deployRun) warnShadowed(resources []Resource, published []string) {
-	report := r.report(r.stages.Environment, progressv1.Phase_PHASE_PROVISIONING)
+func (r *deployRun) warnShadowed(report Reporter, resources []Resource, published []string) {
 	for _, resource := range resources {
 		if resource.Linked || !slices.Contains(published, resource.Declared) {
 			continue

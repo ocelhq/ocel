@@ -178,14 +178,14 @@ func TestEventSenderFailPassesARefusalBackToTheCaller(t *testing.T) {
 	}
 }
 
-var testStage = PhaseStage(UnitStage(naming.UnitEnvironment, "Environment"), progressv1.Phase_PHASE_PROVISIONING)
+var testStage = PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISIONING)
 
 func TestReporterTagsEverythingWithItsStage(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventSender(context.Background(), stream.send)
-	stage := PhaseStage(UnitStage(naming.UnitEnvironment, "Environment"), progressv1.Phase_PHASE_PROVISIONING)
+	stage := PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISIONING)
 	report := newReporter(sender, stage)
 
 	report.Say("provisioning the infra stack")

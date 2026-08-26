@@ -128,29 +128,15 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 }
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
-	if err := r.admit(ctx); err != nil {
-		return nil, err
-	}
-	if err := r.admitDomains(ctx); err != nil {
-		return nil, err
-	}
-	if err := r.admitLinks(ctx); err != nil {
-		return nil, err
-	}
-	if err := r.rememberProject(ctx); err != nil {
-		return nil, err
-	}
-	if err := r.reconcileEdge(ctx); err != nil {
-		return nil, err
-	}
-	if err := r.checkNeeds(ctx); err != nil {
-		return nil, err
-	}
-	if err := r.preflight(ctx); err != nil {
-		return nil, err
-	}
-	if err := r.timed(r.stages.Environment, progressv1.Phase_PHASE_UPLOADING, func(report Reporter) error {
-		return r.upload(ctx, report)
+	if err := r.unit(r.stages.Environment, func(env *unitRun) error {
+		if err := env.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
+			return r.settle(ctx, report)
+		}); err != nil {
+			return err
+		}
+		return env.phase(progressv1.Phase_PHASE_UPLOADING, func(report Reporter) error {
+			return r.upload(ctx, report)
+		})
 	}); err != nil {
 		return nil, err
 	}
@@ -160,11 +146,37 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	return r.promote(ctx)
 }
 
-func (r *deployRun) declare(unit Stage, phase progressv1.Phase) Stage {
-	working := PhaseStage(unit, phase)
+func (r *deployRun) settle(ctx context.Context, report Reporter) error {
+	if err := r.admit(ctx, report); err != nil {
+		return err
+	}
+	if err := r.admitDomains(ctx); err != nil {
+		return err
+	}
+	if err := r.admitLinks(ctx, report); err != nil {
+		return err
+	}
+	if err := r.rememberProject(ctx); err != nil {
+		return err
+	}
+	if err := r.reconcileEdge(ctx); err != nil {
+		return err
+	}
+	if err := r.checkNeeds(ctx); err != nil {
+		return err
+	}
+	return r.preflight(ctx, report)
+}
+
+type unitRun struct {
+	run   *deployRun
+	stage Stage
+}
+
+func (r *deployRun) declare(stages ...Stage) {
 	r.declaredMu.Lock()
 	var fresh []Stage
-	for _, stage := range []Stage{unit, working} {
+	for _, stage := range stages {
 		if !r.declared[stage.ID] {
 			r.declared[stage.ID] = true
 			fresh = append(fresh, stage)
@@ -172,25 +184,27 @@ func (r *deployRun) declare(unit Stage, phase progressv1.Phase) Stage {
 	}
 	r.declaredMu.Unlock()
 	r.tracer.DeclareStages(fresh...)
-	return working
 }
 
-func (r *deployRun) report(unit Stage, phase progressv1.Phase) Reporter {
-	return &reporter{sender: r.sender, tracer: r.tracer, stage: r.declare(unit, phase)}
-}
-
-func (r *deployRun) timed(unit Stage, phase progressv1.Phase, do func(Reporter) error) error {
-	working := r.declare(unit, phase)
+func (r *deployRun) unit(stage Stage, do func(*unitRun) error) error {
+	r.declare(stage)
 	start := time.Now()
-	err := do(&reporter{sender: r.sender, tracer: r.tracer, stage: working})
-	end := time.Now()
-	r.tracer.Span(working.ID, working.ParentID, working.Title, start, end, err)
-	r.tracer.Span(unit.ID, unit.ParentID, unit.Title, start, end, err)
+	err := do(&unitRun{run: r, stage: stage})
+	r.tracer.Span(stage.ID, stage.ParentID, stage.Title, start, time.Now(), err)
 	return err
 }
 
-func (r *deployRun) admit(ctx context.Context) error {
-	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, r.report(r.stages.Environment, progressv1.Phase_PHASE_PROVISIONING))
+func (u *unitRun) phase(phase progressv1.Phase, do func(Reporter) error) error {
+	working := PhaseStage(u.stage.Name, phase)
+	u.run.declare(working)
+	start := time.Now()
+	err := do(&reporter{sender: u.run.sender, tracer: u.run.tracer, stage: working})
+	u.run.tracer.Span(working.ID, working.ParentID, working.Title, start, time.Now(), err)
+	return err
+}
+
+func (r *deployRun) admit(ctx context.Context, report Reporter) error {
+	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, report)
 	return err
 }
 
@@ -379,7 +393,7 @@ func (r *deployRun) checkNeeds(ctx context.Context) error {
 	return nil
 }
 
-func (r *deployRun) preflight(ctx context.Context) error {
+func (r *deployRun) preflight(ctx context.Context, report Reporter) error {
 	preflighter, ok := r.provider.(DeployPreflighter)
 	if !ok {
 		return nil
@@ -402,7 +416,7 @@ func (r *deployRun) preflight(ctx context.Context) error {
 		Resources: resources,
 		Grants:    grants,
 		Apps:      apps,
-		Report:    r.report(r.stages.Environment, progressv1.Phase_PHASE_PROVISIONING),
+		Report:    report,
 	})
 }
 
@@ -456,109 +470,113 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return r.timed(r.stages.Infra, progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
-		if err := r.refuseToAdopt(ctx, r.plan.Infra); err != nil {
-			return err
-		}
-		report.Say("Provisioning the environment's infrastructure")
-		result, err := r.provider.Releases().Provision(ctx, StackPlan{
-			Ref:       r.ref(r.plan.Infra),
-			Kind:      StackInfra,
-			Edge:      r.front,
-			Tags:      r.plan.infraTags(),
-			Resources: resources,
-			Links:     r.reader(),
-		}, report)
-		if err != nil {
-			return err
-		}
-		for _, link := range result.Links {
-			if err := VerifyProperties(link); err != nil {
+	return r.unit(r.stages.Infra, func(u *unitRun) error {
+		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
+			if err := r.refuseToAdopt(ctx, r.plan.Infra); err != nil {
 				return err
 			}
-		}
-		if err := r.publish(ctx, result.Links); err != nil {
-			return err
-		}
-		r.links = result.Links
-		return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, r.plan.Infra, Stack{
-			Kind:   StackInfra,
-			Links:  result.Links,
-			Writer: WriterFor(""),
+			report.Say("Provisioning the environment's infrastructure")
+			result, err := r.provider.Releases().Provision(ctx, StackPlan{
+				Ref:       r.ref(r.plan.Infra),
+				Kind:      StackInfra,
+				Edge:      r.front,
+				Tags:      r.plan.infraTags(),
+				Resources: resources,
+				Links:     r.reader(),
+			}, report)
+			if err != nil {
+				return err
+			}
+			for _, link := range result.Links {
+				if err := VerifyProperties(link); err != nil {
+					return err
+				}
+			}
+			if err := r.publish(ctx, result.Links); err != nil {
+				return err
+			}
+			r.links = result.Links
+			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, r.plan.Infra, Stack{
+				Kind:   StackInfra,
+				Links:  result.Links,
+				Writer: WriterFor(""),
+			})
 		})
 	})
 }
 
 func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
-	return r.timed(r.stages.Apps[entry.App], progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
-		if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
-			return err
-		}
-		report.Say("Provisioning " + entry.App)
-		grants, err := r.grants(ctx, entry)
-		if err != nil {
-			return err
-		}
-		facts, err := r.serving(entry)
-		if err != nil {
-			return err
-		}
-		values, err := r.appValues(entry, grants)
-		if err != nil {
-			return err
-		}
-		pack, err := r.pack(ctx, entry, values, report)
-		if err != nil {
-			return err
-		}
-		if err := r.uploadApp(ctx, entry, pack, facts.Routing, report); err != nil {
-			return err
-		}
-		plan := StackPlan{
-			Ref:   r.ref(entry.Stack),
-			Kind:  StackApp,
-			Edge:  r.front,
-			Tags:  r.plan.tags(entry),
-			Links: r.reader(),
-			App: &AppPlan{
-				App:             entry.App,
-				Framework:       entry.Manifest.GetFramework(),
-				Entry:           entryFunction(r.manifest, entry.App),
-				Deployment:      entry.Build.DeploymentID(),
-				Functions:       r.functionSpecs(entry),
-				Values:          values,
-				Grants:          grants,
-				Routing:         facts.Routing,
-				ISR:             facts.ISR,
-				Bytecode:        facts.Bytecode,
-				AssetPrefix:     facts.AssetPrefix,
-				Membrane:        r.membrane,
-				Guard:           facts.Guard,
-				Packed:          pack.Carry,
-				CrossesMembrane: crossesMembrane(r.crossesMembrane, grants),
-			},
-		}
-		result, err := r.provider.Releases().Provision(ctx, plan, report)
-		if err != nil {
-			return err
-		}
-		r.functions[entry.App] = result.Functions
-		if err := r.warm(ctx, result.Functions, report); err != nil {
-			return err
-		}
-		if err := r.embed(ctx, entry, result.Functions, report); err != nil {
-			return err
-		}
-		if err := r.stage(ctx, entry, result.Functions, grants); err != nil {
-			return err
-		}
-		return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, Stack{
-			Kind:      StackApp,
-			App:       entry.App,
-			Release:   entry.Build.Release().String(),
-			Identity:  entry.Build.String(),
-			Functions: result.Functions,
-			Writer:    WriterFor(""),
+	return r.unit(r.stages.Apps[entry.App], func(u *unitRun) error {
+		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
+			if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
+				return err
+			}
+			report.Say("Provisioning " + entry.App)
+			grants, err := r.grants(ctx, entry)
+			if err != nil {
+				return err
+			}
+			facts, err := r.serving(entry)
+			if err != nil {
+				return err
+			}
+			values, err := r.appValues(entry, grants)
+			if err != nil {
+				return err
+			}
+			pack, err := r.pack(ctx, entry, values, report)
+			if err != nil {
+				return err
+			}
+			if err := r.uploadApp(ctx, entry, pack, facts.Routing, report); err != nil {
+				return err
+			}
+			plan := StackPlan{
+				Ref:   r.ref(entry.Stack),
+				Kind:  StackApp,
+				Edge:  r.front,
+				Tags:  r.plan.tags(entry),
+				Links: r.reader(),
+				App: &AppPlan{
+					App:             entry.App,
+					Framework:       entry.Manifest.GetFramework(),
+					Entry:           entryFunction(r.manifest, entry.App),
+					Deployment:      entry.Build.DeploymentID(),
+					Functions:       r.functionSpecs(entry),
+					Values:          values,
+					Grants:          grants,
+					Routing:         facts.Routing,
+					ISR:             facts.ISR,
+					Bytecode:        facts.Bytecode,
+					AssetPrefix:     facts.AssetPrefix,
+					Membrane:        r.membrane,
+					Guard:           facts.Guard,
+					Packed:          pack.Carry,
+					CrossesMembrane: crossesMembrane(r.crossesMembrane, grants),
+				},
+			}
+			result, err := r.provider.Releases().Provision(ctx, plan, report)
+			if err != nil {
+				return err
+			}
+			r.functions[entry.App] = result.Functions
+			if err := r.warm(ctx, result.Functions, report); err != nil {
+				return err
+			}
+			if err := r.embed(ctx, entry, result.Functions, report); err != nil {
+				return err
+			}
+			if err := r.stage(ctx, entry, result.Functions, grants); err != nil {
+				return err
+			}
+			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, Stack{
+				Kind:      StackApp,
+				App:       entry.App,
+				Release:   entry.Build.Release().String(),
+				Identity:  entry.Build.String(),
+				Functions: result.Functions,
+				Writer:    WriterFor(""),
+			})
 		})
 	})
 }
@@ -800,12 +818,14 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		Tag:         r.plan.Tag,
 		Flip:        &flip,
 	}
-	if err := r.timed(r.stages.Promotion, progressv1.Phase_PHASE_FINALIZING, func(report Reporter) error {
-		report.Say("Promoting the deployment")
-		if err := r.stack.Promote(ctx, promotion, r.plan.Pointer); err != nil {
-			return err
-		}
-		return r.checkpoint(ctx)
+	if err := r.unit(r.stages.Promotion, func(u *unitRun) error {
+		return u.phase(progressv1.Phase_PHASE_FINALIZING, func(report Reporter) error {
+			report.Say("Promoting the deployment")
+			if err := r.stack.Promote(ctx, promotion, r.plan.Pointer); err != nil {
+				return err
+			}
+			return r.checkpoint(ctx)
+		})
 	}); err != nil {
 		return nil, err
 	}
