@@ -371,7 +371,7 @@ func (g Gate) heal(ctx context.Context, standing Standing, required []string, re
 	}, report)
 	var refusal Refusal
 	if errors.As(err, &refusal) && refusal.Code == CodeDenied {
-		detail(report, "refreshing this account's stale bootstrap stacks needs bootstrap-tier credentials and this run holds deploy-tier ones, so the bootstrap is left as it stands")
+		detail(report, "this run may not refresh the account's stale bootstrap stacks, so they are left as they stand: "+refusal.Message)
 		return false
 	}
 	if err != nil {

@@ -257,14 +257,15 @@ func TestAdmitReportsAHealTheCredentialsCannotDo(t *testing.T) {
 		t.Fatal(err)
 	}
 	bootstrapper.Behind(fake.FeatureCache)
-	bootstrapper.RefuseApply(providerkit.Refuse(providerkit.CodeDenied, "these credentials may not write the bootstrap"))
+	bootstrapper.RefuseApply(providerkit.Refuse(providerkit.CodeDenied,
+		"ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password"))
 
 	report := &recorder{}
 	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, report); err != nil {
 		t.Fatalf("Admit() error = %v, want a refused heal to leave the run standing", err)
 	}
-	if !strings.Contains(report.told(), "needs bootstrap-tier credentials") {
-		t.Errorf("Admit() said %q, want it to say why the heal did not run", report.told())
+	if !strings.Contains(report.told(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
+		t.Errorf("Admit() said %q, want the provider's own account of why the heal was denied", report.told())
 	}
 }
 
