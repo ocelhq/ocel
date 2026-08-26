@@ -4,13 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -98,11 +94,6 @@ func (e *OutdatedProviderError) Error() string {
 	return "the installed provider package is too old for this ocel CLI: it signalled readiness without the channel certificate the CLI now requires. Update the provider package and try again."
 }
 
-type readiness struct {
-	addr string
-	cert *x509.Certificate
-}
-
 type Runner struct {
 	cmd             *exec.Cmd
 	identity        *channel.Identity
@@ -114,7 +105,7 @@ type Runner struct {
 	gracePeriod     time.Duration
 	reapTimeout     time.Duration
 
-	readyCh chan readiness
+	readyCh chan channel.Readiness
 	scanErr chan error
 	done    chan struct{}
 	waitErr error
@@ -177,7 +168,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 		readyTimeout:    resolveReadyTimeout(cfg.ReadyTimeout),
 		gracePeriod:     resolveDuration(cfg.GracePeriod, DefaultGracePeriod),
 		reapTimeout:     resolveDuration(cfg.ReapTimeout, DefaultReapTimeout),
-		readyCh:         make(chan readiness, 1),
+		readyCh:         make(chan channel.Readiness, 1),
 		scanErr:         make(chan error, 1),
 		done:            make(chan struct{}),
 	}
@@ -257,7 +248,7 @@ func (r *Runner) Ready(ctx context.Context) error {
 	}
 }
 
-func (r *Runner) open(ctx context.Context, ready readiness) error {
+func (r *Runner) open(ctx context.Context, ready channel.Readiness) error {
 	if err := r.dial(ready); err != nil {
 		return err
 	}
@@ -282,30 +273,17 @@ func (r *Runner) configure(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) dial(ready readiness) error {
-	network, address, err := channel.ParseAddr(ready.addr)
+func (r *Runner) dial(ready channel.Readiness) error {
+	network, address, err := channel.ParseAddr(ready.Addr)
 	if err != nil {
 		return fmt.Errorf("provider: parse readiness address: %w", err)
 	}
 
-	config := r.identity.ClientConfig(ready.cert)
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			DialTLSContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				var d net.Dialer
-				raw, err := d.DialContext(ctx, network, address)
-				if err != nil {
-					return nil, err
-				}
-				conn := tls.Client(raw, config)
-				if err := conn.HandshakeContext(ctx); err != nil {
-					raw.Close()
-					return nil, err
-				}
-				return conn, nil
-			},
-		},
+	config, err := r.identity.ClientConfig(ready.Cert)
+	if err != nil {
+		return fmt.Errorf("provider: pin the provider certificate: %w", err)
 	}
+	httpClient := channel.HTTPClient(network, address, config)
 
 	opts := connect.WithInterceptors(traceParentInterceptor{}, validate.NewInterceptor())
 
@@ -494,9 +472,9 @@ func (r *Runner) drainStdout(stdout io.Reader) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !ready {
-			if addr, cert, ok := channel.ParseReadinessLine(line); ok {
+			if signalled, ok := channel.ParseReadinessLine(line); ok {
 				ready = true
-				r.readyCh <- readiness{addr: addr, cert: cert}
+				r.readyCh <- signalled
 				continue
 			}
 			if channel.LooksLikeReadinessLine(line) {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -115,20 +114,16 @@ func RunFakeProvider() int {
 	}
 	_ = os.Remove(sockPath)
 
-	clientCert, err := channel.ParseCertificatePEM(os.Getenv(channel.ClientCertEnvVar))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "fake provider: client certificate:", err)
-		return 1
-	}
-	identity, err := channel.NewIdentity()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "fake provider: identity:", err)
-		return 1
-	}
-
-	ln, err := net.Listen("unix", sockPath)
+	bound, err := net.Listen("unix", sockPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fake provider: listen:", err)
+		return 1
+	}
+	defer bound.Close()
+
+	ln, identity, err := channel.SecureListener(bound)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider:", err)
 		return 1
 	}
 	defer ln.Close()
@@ -141,8 +136,6 @@ func RunFakeProvider() int {
 
 	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(fake)
 	mux.Handle(path, handler)
-
-	ln = tls.NewListener(ln, identity.ServerConfig(clientCert))
 
 	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath), identity.CertificateDER()))
 

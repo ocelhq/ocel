@@ -516,7 +516,7 @@ func servedBy(t *testing.T, provider providerkit.Provider) contractv1connect.Pro
 		Version: "1.0.0",
 		New:     func(context.Context, providerkit.Options) (providerkit.Provider, error) { return provider, nil },
 	}
-	server := httptest.NewServer(providerkit.NewMux(spec))
+	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)
 
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
@@ -616,7 +616,7 @@ func operatorServed(t *testing.T) (contractv1connect.ProviderServiceClient, envv
 		Version: "1.0.0",
 		New:     func(context.Context, providerkit.Options) (providerkit.Provider, error) { return provider, nil },
 	}
-	server := httptest.NewServer(providerkit.NewMux(spec))
+	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)
 
 	deploys := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)

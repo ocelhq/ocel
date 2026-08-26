@@ -46,30 +46,35 @@ func LooksLikeReadinessLine(line string) bool {
 	return strings.HasPrefix(strings.TrimRight(line, "\r\n"), readinessSentinelPrefix+" ")
 }
 
-func ParseReadinessLine(line string) (addr string, cert *x509.Certificate, ok bool) {
+type Readiness struct {
+	Addr string
+	Cert *x509.Certificate
+}
+
+func ParseReadinessLine(line string) (Readiness, bool) {
 	prefix := readinessSentinelPrefix + " "
 	line = strings.TrimRight(line, "\r\n")
 	if !strings.HasPrefix(line, prefix) {
-		return "", nil, false
+		return Readiness{}, false
 	}
 	rest := line[len(prefix):]
 	split := strings.LastIndex(rest, " ")
 	if split <= 0 {
-		return "", nil, false
+		return Readiness{}, false
 	}
 	addr, encoded := rest[:split], rest[split+1:]
 	if addr == "" || encoded == "" {
-		return "", nil, false
+		return Readiness{}, false
 	}
 	der, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
-		return "", nil, false
+		return Readiness{}, false
 	}
-	cert, err = x509.ParseCertificate(der)
+	cert, err := x509.ParseCertificate(der)
 	if err != nil {
-		return "", nil, false
+		return Readiness{}, false
 	}
-	return addr, cert, true
+	return Readiness{Addr: addr, Cert: cert}, true
 }
 
 func FormatUnixAddr(path string) string {

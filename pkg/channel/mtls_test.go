@@ -67,13 +67,13 @@ func TestNewIdentity(t *testing.T) {
 		}
 	})
 
-	t.Run("lives one subprocess, and tolerates a skewed clock", func(t *testing.T) {
+	t.Run("outlives any session, and tolerates a skewed clock", func(t *testing.T) {
 		now := time.Now()
 		if skew := now.Sub(leaf.NotBefore); skew < 25*time.Second || skew > 90*time.Second {
 			t.Errorf("leaf NotBefore is %s before now, want roughly 30s of skew tolerance", skew)
 		}
-		if life := leaf.NotAfter.Sub(now); life < 5*time.Hour || life > 7*time.Hour {
-			t.Errorf("leaf lifetime is %s, want roughly 6h", life)
+		if life := leaf.NotAfter.Sub(now); life < 10*365*24*time.Hour {
+			t.Errorf("leaf lifetime is %s, want an expiry no deploy can outlive", life)
 		}
 	})
 
@@ -146,14 +146,14 @@ func TestReadinessLineCarriesTheServerCertificate(t *testing.T) {
 			if strings.Contains(line, "\n") {
 				t.Fatalf("FormatReadinessLine() = %q, want a single stdout line", line)
 			}
-			gotAddr, gotCert, ok := ParseReadinessLine(line)
+			got, ok := ParseReadinessLine(line)
 			if !ok {
 				t.Fatalf("ParseReadinessLine(%q) ok = false, want true", line)
 			}
-			if gotAddr != addr {
-				t.Fatalf("ParseReadinessLine(%q) addr = %q, want %q", line, gotAddr, addr)
+			if got.Addr != addr {
+				t.Fatalf("ParseReadinessLine(%q) addr = %q, want %q", line, got.Addr, addr)
 			}
-			if !gotCert.Equal(identity.Leaf()) {
+			if !got.Cert.Equal(identity.Leaf()) {
 				t.Fatalf("ParseReadinessLine(%q) returned a different certificate", line)
 			}
 		}
@@ -178,7 +178,7 @@ func TestReadinessLineCarriesTheServerCertificate(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
-				if _, _, ok := ParseReadinessLine(tc.line); ok {
+				if _, ok := ParseReadinessLine(tc.line); ok {
 					t.Fatalf("ParseReadinessLine(%q) ok = true, want false", tc.line)
 				}
 			})
@@ -229,16 +229,16 @@ func TestPinnedHandshake(t *testing.T) {
 
 	t.Run("the paired client is served", func(t *testing.T) {
 		t.Parallel()
-		addr := listenTLS(t, server.ServerConfig(client.Leaf()))
-		if err := shake(addr, client.ClientConfig(server.Leaf())); err != nil {
+		addr := listenTLS(t, serverConfig(t, server, client))
+		if err := shake(addr, clientConfig(t, client, server)); err != nil {
 			t.Fatalf("the paired client was refused: %v", err)
 		}
 	})
 
 	t.Run("a client presenting no certificate is refused", func(t *testing.T) {
 		t.Parallel()
-		addr := listenTLS(t, server.ServerConfig(client.Leaf()))
-		anonymous := client.ClientConfig(server.Leaf())
+		addr := listenTLS(t, serverConfig(t, server, client))
+		anonymous := clientConfig(t, client, server)
 		anonymous.Certificates = nil
 		if err := shake(addr, anonymous); err == nil {
 			t.Fatal("a client with no certificate completed the handshake, want it refused")
@@ -247,36 +247,76 @@ func TestPinnedHandshake(t *testing.T) {
 
 	t.Run("a client presenting another certificate is refused", func(t *testing.T) {
 		t.Parallel()
-		addr := listenTLS(t, server.ServerConfig(client.Leaf()))
-		if err := shake(addr, stranger.ClientConfig(server.Leaf())); err == nil {
+		addr := listenTLS(t, serverConfig(t, server, client))
+		if err := shake(addr, clientConfig(t, stranger, server)); err == nil {
 			t.Fatal("a client with an unpaired certificate completed the handshake, want it refused")
 		}
 	})
 
 	t.Run("a server presenting another certificate is refused", func(t *testing.T) {
 		t.Parallel()
-		addr := listenTLS(t, stranger.ServerConfig(client.Leaf()))
-		if err := shake(addr, client.ClientConfig(server.Leaf())); err == nil {
+		addr := listenTLS(t, serverConfig(t, stranger, client))
+		if err := shake(addr, clientConfig(t, client, server)); err == nil {
 			t.Fatal("an impersonating server completed the handshake, want it refused")
 		}
 	})
 
 	t.Run("trusts nothing beyond the one certificate it was handed", func(t *testing.T) {
 		t.Parallel()
-		if pool := client.ClientConfig(server.Leaf()).RootCAs; len(pool.Subjects()) != 1 {
+		if pool := clientConfig(t, client, server).RootCAs; len(pool.Subjects()) != 1 {
 			t.Errorf("the client pins %d roots, want exactly the server certificate", len(pool.Subjects()))
 		}
-		config := server.ServerConfig(client.Leaf())
+		config := serverConfig(t, server, client)
 		if len(config.ClientCAs.Subjects()) != 1 {
 			t.Errorf("the server pins %d client anchors, want exactly the client certificate", len(config.ClientCAs.Subjects()))
 		}
 		if config.ClientAuth != tls.RequireAndVerifyClientCert {
 			t.Errorf("the server ClientAuth = %v, want RequireAndVerifyClientCert", config.ClientAuth)
 		}
-		if config.MinVersion != tls.VersionTLS12 {
-			t.Errorf("the server MinVersion = %x, want TLS 1.2", config.MinVersion)
+	})
+
+	t.Run("speaks only TLS 1.3 over http/1.1", func(t *testing.T) {
+		t.Parallel()
+		for name, config := range map[string]*tls.Config{
+			"server": serverConfig(t, server, client),
+			"client": clientConfig(t, client, server),
+		} {
+			if config.MinVersion != tls.VersionTLS13 {
+				t.Errorf("the %s MinVersion = %x, want TLS 1.3", name, config.MinVersion)
+			}
+			if len(config.NextProtos) != 1 || config.NextProtos[0] != "http/1.1" {
+				t.Errorf("the %s NextProtos = %v, want exactly [http/1.1]", name, config.NextProtos)
+			}
 		}
 	})
+
+	t.Run("refuses to build a config with nothing to pin", func(t *testing.T) {
+		t.Parallel()
+		if _, err := server.ServerConfig(nil); err == nil {
+			t.Error("ServerConfig(nil) error = nil, want a refusal")
+		}
+		if _, err := client.ClientConfig(nil); err == nil {
+			t.Error("ClientConfig(nil) error = nil, want a refusal")
+		}
+	})
+}
+
+func serverConfig(t *testing.T, server, client *Identity) *tls.Config {
+	t.Helper()
+	config, err := server.ServerConfig(client.Leaf())
+	if err != nil {
+		t.Fatalf("ServerConfig() error = %v", err)
+	}
+	return config
+}
+
+func clientConfig(t *testing.T, client, server *Identity) *tls.Config {
+	t.Helper()
+	config, err := client.ClientConfig(server.Leaf())
+	if err != nil {
+		t.Fatalf("ClientConfig() error = %v", err)
+	}
+	return config
 }
 
 func listenTLS(t *testing.T, config *tls.Config) string {
