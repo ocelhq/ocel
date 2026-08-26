@@ -13,18 +13,18 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 )
 
-func newBuildManifestSession(t *testing.T) (*deployui.Session, *bytes.Buffer) {
+func newBuildManifestSession(t *testing.T) (*runui.Session, *bytes.Buffer) {
 	t.Helper()
 	_, run, err := runtrace.Start(context.Background(), t.TempDir(), "ocel deploy")
 	if err != nil {
@@ -33,7 +33,7 @@ func newBuildManifestSession(t *testing.T) (*deployui.Session, *bytes.Buffer) {
 	t.Cleanup(func() { _ = run.Close() })
 
 	var out bytes.Buffer
-	s := deployui.New(&out, run, deployui.FormatHuman, true)
+	s := runui.New(&out, run, runui.Resolve(runui.Origin{Verbose: true}))
 	t.Cleanup(func() { _ = s.Close() })
 	return s, &out
 }

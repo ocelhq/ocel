@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
 const fakeLinkPassword = "pw-never-listed-7c31"
@@ -64,7 +65,7 @@ func jsonOutput(t *testing.T) {
 	t.Helper()
 	orig := logFormatFlag
 	t.Cleanup(func() { logFormatFlag = orig })
-	logFormatFlag = logFormatJSON
+	logFormatFlag = string(runui.FormatJSON)
 }
 
 func TestRunLinkSet(t *testing.T) {

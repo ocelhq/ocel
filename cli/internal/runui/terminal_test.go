@@ -1,4 +1,4 @@
-package deployui
+package runui
 
 import (
 	"bytes"
@@ -169,11 +169,9 @@ func TestTruncateToWidthHandlesRowsWithNothingToShow(t *testing.T) {
 }
 
 func TestColoredLiveRowFitsTheTerminal(t *testing.T) {
-	t.Setenv("COLUMNS", "40")
-
 	drawnRow := func(colorEnabled bool) string {
 		var out bytes.Buffer
-		r := newRendererForTest(&out, FormatHuman, true, colorEnabled)
+		r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Color: colorEnabled, Width: 40})
 		r.useClock(func() time.Time { return time.Unix(0, 0) })
 
 		app := appStage(1)

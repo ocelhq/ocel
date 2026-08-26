@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -17,12 +16,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -191,8 +189,8 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 		return err
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel domain use", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain use", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
 			return err
 		}
 		req := &contractv1.UsePreviewWildcardRequest{
@@ -232,17 +230,17 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 	if err := requirePreviewClass("ocel domain release", opts.preview); err != nil {
 		return err
 	}
-	if !opts.yes && !isReaderTTY(stdin) {
-		return errors.New("`ocel domain release --preview` needs an interactive terminal to confirm the domain; re-run with --yes to release it non-interactively")
-	}
-
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel domain release", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
+	spec := deps.Spec(runui.PlanFirst, "ocel domain release", cfg, stdout)
+	spec.Yes, spec.Interactive = opts.yes, isReaderTTY(stdin)
+	spec.Unattended = "pass --yes"
+
+	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
 			return err
 		}
 		client, err := runner.Client()
@@ -250,7 +248,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 			return err
 		}
 
-		spinner := deployui.StartSpinner(stdout, "Enumerating what releasing the domain would remove")
+		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Enumerating what releasing the domain would remove")
 		plan, err := client.PlanRemovePreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{
 			Tier: environmentv1.Tier_TIER_PREVIEW,
 		})
@@ -264,7 +262,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 			return nil
 		}
 
-		changeplan.NewPrinter(stdout).Print(fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
+		changeplan.NewPrinter(stdout, ui.Presentation()).Print(fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
 			"This cannot be undone.")
 
 		if !opts.yes {
@@ -296,8 +294,8 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 	if len(configured) == 0 {
 		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
 	}
-	return providerui.Run(ctx, deps, cfg, "ocel domain add", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain add", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 		req := &contractv1.HostnameRequest{
@@ -327,8 +325,8 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdou
 		return err
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel domain rm", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain rm", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 		req := &contractv1.HostnameRequest{
@@ -350,14 +348,14 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdou
 }
 
 func listGlobalPreviewDomain(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer) (*contractv1.GetPreviewWildcardResponse, error) {
-	if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", out); err != nil {
+	if err := preflight.Tier(ctx, deps.Presentation(out), runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", out); err != nil {
 		return nil, err
 	}
 	client, err := runner.Client()
 	if err != nil {
 		return nil, err
 	}
-	spinner := deployui.StartSpinner(out, "Reading the global preview domain")
+	spinner := runui.StartSpinner(deps.Presentation(out), out, "Reading the global preview domain")
 	resp, err := client.GetPreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
 	spinner.Stop()
 	if err != nil {
@@ -455,7 +453,7 @@ func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts do
 	configured := preflight.Hostnames(cfg, "production")
 
 	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
-		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflight.Tier(ctx, deps.Presentation(stdout), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 		client, err := runner.Client()
@@ -467,11 +465,11 @@ func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts do
 			Configured: configured,
 			Edge:       edgewire.Selection(cfg),
 		}
-		resp, err := awaitDomainStatus(ctx, client, req, opts.wait, stdout)
+		resp, err := awaitDomainStatus(ctx, client, req, opts.wait, deps.Presentation(stdout), stdout)
 		if err != nil {
 			return err
 		}
-		if logFormat() == logFormatJSON {
+		if deps.Presentation(stdout).Format == runui.FormatJSON {
 			return writeDomainStatusJSON(stdout, resp)
 		}
 		renderDomainStatus(stdout, resp, filepath.Base(cfg.Path))
@@ -481,7 +479,7 @@ func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts do
 
 const domainWaitFailures = 4
 
-func awaitDomainStatus(ctx context.Context, client contractv1connect.ProviderServiceClient, req *contractv1.HostnameRequest, wait bool, out io.Writer) (*contractv1.GetHostnameStatusResponse, error) {
+func awaitDomainStatus(ctx context.Context, client contractv1connect.ProviderServiceClient, req *contractv1.HostnameRequest, wait bool, present runui.Presentation, out io.Writer) (*contractv1.GetHostnameStatusResponse, error) {
 	resp, err := client.GetHostnameStatus(ctx, req)
 	if err != nil || !wait || resp.GetReady() {
 		return resp, err
@@ -490,7 +488,7 @@ func awaitDomainStatus(ctx context.Context, client contractv1connect.ProviderSer
 		return resp, fmt.Errorf("this project declares no production hostname, so there is nothing to wait for: declare one under domains.production and run `ocel domain add`")
 	}
 
-	spinner := deployui.StartSpinner(out, "Waiting for every declared hostname to answer")
+	spinner := runui.StartSpinner(present, out, "Waiting for every declared hostname to answer")
 	defer spinner.Stop()
 
 	giveUp := time.Now().Add(domainWait.deadline)

@@ -1,7 +1,7 @@
 package deploy
 
 import (
-	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -12,10 +12,10 @@ type deployOutcome struct {
 	appURLs     []string
 	urlNote     string
 	promotionID string
-	flip        deployui.Flip
+	flip        runui.Flip
 }
 
-func (o *deployOutcome) collect(ui *deployui.Session) func(*progressv1.OperationEvent) {
+func (o *deployOutcome) collect(ui *runui.Session) func(*progressv1.OperationEvent) {
 	return func(ev *progressv1.OperationEvent) {
 		ui.Event(ev)
 		res := ev.GetResult()
@@ -27,6 +27,6 @@ func (o *deployOutcome) collect(ui *deployui.Session) func(*progressv1.Operation
 		o.appURLs = res.GetAppUrls()
 		o.urlNote = res.GetUrlNote()
 		o.promotionID = res.GetPromotionId()
-		o.flip = deployui.FlipFor(res.GetFlipBound())
+		o.flip = runui.FlipFor(res.GetFlipBound())
 	}
 }

@@ -14,17 +14,18 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func preflightPreview(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer) error {
-	return preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", out)
+func preflightPreview(ctx context.Context, present runui.Presentation, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer) error {
+	return preflight.Tier(ctx, present, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", out)
 }
 
-func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, stdin io.Reader) error {
-	resp, err := preflight.Run(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Hostnames(cfg, "preview"), preflight.Frameworks(cfg), "ocel bootstrap preview", out)
+func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, present runui.Presentation, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, stdin io.Reader) error {
+	resp, err := preflight.Run(ctx, present, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Hostnames(cfg, "preview"), preflight.Frameworks(cfg), "ocel bootstrap preview", out)
 	if err != nil {
 		return err
 	}
@@ -37,13 +38,13 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, runner *provider
 	return requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, out)
 }
 
-func preflightDeploy(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, interactive bool, out io.Writer, stdin io.Reader) ([]string, error) {
+func preflightDeploy(ctx context.Context, deps cmddeps.Deps, present runui.Presentation, runner *provider.Runner, cfg *projectconfig.Config, interactive bool, out io.Writer, stdin io.Reader) ([]string, error) {
 	domains := preflight.Hostnames(cfg, "production")
 	var slug string
 	if interactive || len(domains) > 0 {
 		slug = cfg.Slug
 	}
-	resp, err := preflight.Run(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slug, domains, preflight.Frameworks(cfg), "ocel bootstrap production", out)
+	resp, err := preflight.Run(ctx, present, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slug, domains, preflight.Frameworks(cfg), "ocel bootstrap production", out)
 	if err != nil {
 		return nil, err
 	}

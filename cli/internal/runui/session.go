@@ -1,4 +1,4 @@
-package deployui
+package runui
 
 import (
 	"fmt"
@@ -21,7 +21,7 @@ type Session struct {
 	r       *Renderer
 	run     *runtrace.Run
 	command string
-	verbose bool
+	present Presentation
 	waiting bool
 
 	logMu     sync.Mutex
@@ -30,12 +30,12 @@ type Session struct {
 	logWriter *syncFileWriter
 }
 
-func New(stdout io.Writer, run *runtrace.Run, format Format, verbose bool) *Session {
+func New(stdout io.Writer, run *runtrace.Run, present Presentation) *Session {
 	s := &Session{
-		r:       NewRenderer(stdout, format, verbose),
+		r:       NewRenderer(stdout, present),
 		run:     run,
 		command: run.Command(),
-		verbose: verbose,
+		present: present,
 	}
 	p := filepath.Join(run.Dir(), run.TraceID()+".log")
 	if f, err := os.Create(p); err == nil {
@@ -46,12 +46,14 @@ func New(stdout io.Writer, run *runtrace.Run, format Format, verbose bool) *Sess
 	return s
 }
 
+func (s *Session) Presentation() Presentation { return s.present }
+
 func (s *Session) LogPath() string {
 	return s.logPath
 }
 
 func (s *Session) BuildWriter() io.Writer {
-	if s.r.Live() || !s.verbose {
+	if !s.present.Verbose {
 		if s.logWriter != nil {
 			return s.logWriter
 		}
@@ -67,7 +69,7 @@ func (s *Session) Suspend() func() { return s.r.Suspend() }
 
 func (s *Session) Diagnostic(message string) {
 	s.logf("[diagnostic] %s", message)
-	if s.r.format == FormatJSON {
+	if s.present.Format == FormatJSON {
 		s.r.emitJSON("diagnostic", map[string]any{"message": message})
 		return
 	}
@@ -100,13 +102,15 @@ func (s *Session) Resume() {
 
 func (s *Session) Event(ev *progressv1.OperationEvent) {
 	if p := ev.GetProgress(); p != nil {
-		s.logf("[progress] %s", progressLogLine(p.GetMessage(), p.GetCurrent(), p.Total))
-		s.r.Progress(p.GetStageId(), p.GetMessage(), p.GetCurrent(), p.Total)
+		message := collapseRewrites(p.GetMessage())
+		s.logf("[progress] %s", progressLogLine(message, p.GetCurrent(), p.Total))
+		s.r.Progress(p.GetStageId(), message, p.GetCurrent(), p.Total)
 		return
 	}
 	if l := ev.GetLog(); l != nil {
-		s.logf("[log] %s", l.GetMessage())
-		s.r.Log(l.GetMessage())
+		message := collapseRewrites(l.GetMessage())
+		s.logf("[log] %s", message)
+		s.r.Log(message)
 		return
 	}
 	if d := ev.GetDegraded(); d != nil {
@@ -230,6 +234,24 @@ func (w *syncFileWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.f.Write(p)
+}
+
+func collapseRewrites(message string) string {
+	if !strings.ContainsRune(message, '\r') {
+		return message
+	}
+	lines := strings.Split(message, "\n")
+	for i, line := range lines {
+		drafts := strings.Split(line, "\r")
+		lines[i] = ""
+		for d := len(drafts) - 1; d >= 0; d-- {
+			if drafts[d] != "" {
+				lines[i] = drafts[d]
+				break
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func withoutFragment(url string) string {

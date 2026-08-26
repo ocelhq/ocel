@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -142,7 +143,7 @@ func runLinkSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io.Rea
 		if err != nil {
 			return err
 		}
-		if logFormat() == logFormatJSON {
+		if deps.Presentation(stdout).Format == runui.FormatJSON {
 			return writeLinkJSON(stdout, linkSetReport{Name: link.GetName(), Owner: owner, Version: resp.GetVersion()})
 		}
 		fmt.Fprintf(stdout, "Published %s as %s (version %d).\n", describeLink(link.GetName(), opts), owner, resp.GetVersion())
@@ -180,7 +181,7 @@ func runLinkRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opts li
 		if err != nil {
 			return err
 		}
-		if logFormat() == logFormatJSON {
+		if deps.Presentation(stdout).Format == runui.FormatJSON {
 			return writeLinkJSON(stdout, linkRemoveReport{Name: name, Removed: resp.GetRemoved()})
 		}
 		if !resp.GetRemoved() {
@@ -206,7 +207,7 @@ func runLinkLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts linkOpti
 		if err != nil {
 			return err
 		}
-		if logFormat() == logFormatJSON {
+		if deps.Presentation(stdout).Format == runui.FormatJSON {
 			return writeLinkJSON(stdout, linkListReport{Links: linkReports(resp.GetLinks())})
 		}
 		renderLinks(stdout, resp.GetLinks())
@@ -234,7 +235,7 @@ func runLinkGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opts li
 			return fmt.Errorf("write %s: %w", linkTypesFileName, err)
 		}
 
-		if logFormat() == logFormatJSON {
+		if deps.Presentation(stdout).Format == runui.FormatJSON {
 			return writeLinkJSON(stdout, linkGenerateReport{Path: path, Links: linkReports(resp.GetLinks())})
 		}
 		if len(resp.GetLinks()) == 0 {

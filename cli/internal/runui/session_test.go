@@ -1,4 +1,4 @@
-package deployui
+package runui
 
 import (
 	"bytes"
@@ -32,7 +32,7 @@ func newTestSession(t *testing.T, command string) (*Session, *bytes.Buffer, stri
 	dir := t.TempDir()
 	run := startTestRun(t, dir, command)
 	var out bytes.Buffer
-	s := New(&out, run, FormatHuman, false)
+	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 	return s, &out, s.LogPath()
 }
@@ -102,7 +102,7 @@ func TestSession(t *testing.T) {
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
 		var out bytes.Buffer
-		s := New(&out, run, FormatHuman, true)
+		s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
 		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
@@ -111,6 +111,49 @@ func TestSession(t *testing.T) {
 
 		if !strings.Contains(out.String(), "pulumi engine line") {
 			t.Errorf("stdout = %q, want verbose to surface the raw log line", out.String())
+		}
+	})
+
+	t.Run("a line rewritten with carriage returns arrives as the last thing it said", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		run := startTestRun(t, dir, "ocel deploy")
+		var out bytes.Buffer
+		s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
+		logPath := s.LogPath()
+
+		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+			Log: &progressv1.LogEvent{Message: "uploading 10%\ruploading 60%\ruploaded"},
+		}})
+		s.Event(progress("provisioning 1%\rprovisioning done"))
+		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+			Log: &progressv1.LogEvent{Message: "carriage returned\r"},
+		}})
+		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+			Log: &progressv1.LogEvent{Message: "first of two\r\nsecond of two"},
+		}})
+		if err := s.Close(); err != nil {
+			t.Fatalf("Close() = %v", err)
+		}
+
+		for _, surface := range []struct {
+			name string
+			text string
+		}{
+			{"stdout", out.String()},
+			{"the log file", readLog(t, logPath)},
+		} {
+			for _, want := range []string{"uploaded", "provisioning done", "carriage returned", "first of two", "second of two"} {
+				if !strings.Contains(surface.text, want) {
+					t.Errorf("%s = %q, want %q, the last thing that line said", surface.name, surface.text, want)
+				}
+			}
+			if strings.Contains(surface.text, "60%") || strings.Contains(surface.text, "1%") {
+				t.Errorf("%s = %q, want the overwritten drafts gone", surface.name, surface.text)
+			}
+			if strings.Contains(surface.text, "\r") {
+				t.Errorf("%s = %q, want no carriage return left to redraw a line nobody is watching", surface.name, surface.text)
+			}
 		}
 	})
 
@@ -326,7 +369,7 @@ func TestSession(t *testing.T) {
 				t.Fatalf("runtrace.Start() = %v", err)
 			}
 			var out bytes.Buffer
-			s := New(&out, run, FormatHuman, false)
+			s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 			s.Building()
 			if err := s.Close(); err != nil {
 				t.Fatalf("Close() = %v", err)
@@ -377,7 +420,7 @@ func TestIngestedSpanResourceIdentityReachesTheTraceFile(t *testing.T) {
 	dir := t.TempDir()
 	run := startTestRun(t, dir, "ocel deploy")
 	var out bytes.Buffer
-	s := New(&out, run, FormatHuman, false)
+	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
 	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
@@ -414,7 +457,7 @@ func TestNumericSpanAttributesLandAsIntValueInTheTraceFile(t *testing.T) {
 	dir := t.TempDir()
 	run := startTestRun(t, dir, "ocel deploy")
 	var out bytes.Buffer
-	s := New(&out, run, FormatHuman, false)
+	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
 	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
@@ -469,7 +512,7 @@ func TestNonNumericValueForANumericKeyDegradesToStringValue(t *testing.T) {
 	dir := t.TempDir()
 	run := startTestRun(t, dir, "ocel deploy")
 	var out bytes.Buffer
-	s := New(&out, run, FormatHuman, false)
+	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
 	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
@@ -538,23 +581,23 @@ func traceSpanAttrs(t *testing.T, run *runtrace.Run, spanName string) []traceAtt
 	return nil
 }
 
-func TestBuildWriterHonoursVerbosityIndependentlyOfLiveness(t *testing.T) {
+func TestBuildWriterSendsTheRawFirehoseToTheTerminalOnlyWhenVerbose(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name         string
-		live         bool
-		verbose      bool
+		origin       Origin
 		wantTerminal bool
 	}{
-		{"live, non-verbose: log only", true, false, false},
-		{"live, verbose: log only (live already implies non-verbose, but the writer must not double up)", true, true, false},
-		{"non-live, non-verbose: log only, no firehose to a non-TTY non-verbose terminal", false, false, false},
-		{"non-live, verbose: terminal and log", false, true, true},
+		{"a terminal, no --verbose: the live view owns the screen", Origin{LogFormat: "human", TTY: true}, false},
+		{"a terminal with --verbose: terminal and log", Origin{LogFormat: "human", TTY: true, Verbose: true}, true},
+		{"a pipe, no --verbose: log only, no firehose to a non-verbose terminal", Origin{LogFormat: "human"}, false},
+		{"a pipe with --verbose: terminal and log", Origin{LogFormat: "human", Verbose: true}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var out bytes.Buffer
-			r := newRendererForTest(&out, FormatHuman, tc.live, false)
+			present := Resolve(tc.origin)
+			r := NewRenderer(&out, present)
 
 			logFile, err := os.CreateTemp(t.TempDir(), "session-*.log")
 			if err != nil {
@@ -562,7 +605,7 @@ func TestBuildWriterHonoursVerbosityIndependentlyOfLiveness(t *testing.T) {
 			}
 			defer logFile.Close()
 
-			s := &Session{r: r, verbose: tc.verbose, log: logFile}
+			s := &Session{r: r, present: present, log: logFile}
 			s.logWriter = &syncFileWriter{f: logFile, mu: &s.logMu}
 
 			const marker = "raw subprocess output"
@@ -599,7 +642,7 @@ func TestDiagnosticAlwaysReachesTheTerminalRegardlessOfVerbosity(t *testing.T) {
 			dir := t.TempDir()
 			run := startTestRun(t, dir, "ocel deploy")
 			var out bytes.Buffer
-			s := New(&out, run, FormatHuman, tc.verbose)
+			s := New(&out, run, Presentation{Format: FormatHuman, Verbose: tc.verbose})
 			t.Cleanup(func() { _ = s.Close() })
 
 			s.Diagnostic("no functions to deploy; deploying infrastructure only")
@@ -616,7 +659,7 @@ func TestDiagnosticEmitsAStructuredRecordUnderJSONFormat(t *testing.T) {
 	dir := t.TempDir()
 	run := startTestRun(t, dir, "ocel deploy")
 	var out bytes.Buffer
-	s := New(&out, run, FormatJSON, false)
+	s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
 	s.Diagnostic("warning: POSTHOG_ID is scoped to /web, which no app binds")
@@ -639,7 +682,7 @@ func TestFormatAxis(t *testing.T) {
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
 		var out bytes.Buffer
-		s := New(&out, run, FormatJSON, false)
+		s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
 		s.Building()
@@ -669,7 +712,7 @@ func TestFormatAxis(t *testing.T) {
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
 		var out bytes.Buffer
-		s := New(&out, run, FormatJSON, true)
+		s := New(&out, run, Presentation{Format: FormatJSON, Verbose: true, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
 		s.Event(progress("Building"))
@@ -684,7 +727,7 @@ func TestFormatAxis(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
-		s := New(&bytes.Buffer{}, run, FormatJSON, false)
+		s := New(&bytes.Buffer{}, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 		if s.r.Live() {
 			t.Error("json format entered the live-region view, which only makes sense for human output on a terminal")
@@ -696,7 +739,7 @@ func TestFormatAxis(t *testing.T) {
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
 		var out bytes.Buffer
-		s := New(&out, run, FormatHuman, true)
+		s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
 		s.Event(progress("Building project"))
@@ -730,7 +773,7 @@ func TestSpanWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
 			dir := t.TempDir()
 			run := startTestRun(t, dir, "ocel deploy")
 			var out bytes.Buffer
-			s := New(&out, run, FormatHuman, false)
+			s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 			t.Cleanup(func() { _ = s.Close() })
 			s.r.useClock(func() time.Time { return now })
 

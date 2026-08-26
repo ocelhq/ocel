@@ -18,12 +18,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
 func NewDeps() cmddeps.Deps {
@@ -37,10 +37,8 @@ func NewDeps() cmddeps.Deps {
 		ServeVarsUI:         envwire.ServeVarsUI,
 		DiscoverPRNumber:    func() string { return os.Getenv("OCEL_PR_NUMBER") },
 		StdinIsTerminal:     func(io.Reader) bool { return false },
-		StdoutIsTerminal:    deployui.IsTerminal,
 		ConfigPath:          func() string { return os.Getenv("OCEL_CONFIG") },
-		Verbose:             func() bool { return false },
-		Format:              func() deployui.Format { return deployui.FormatHuman },
+		Presentation:        func(io.Writer) runui.Presentation { return runui.Resolve(runui.Origin{}) },
 		Interrupt: func(ctx context.Context, _ io.Writer) (context.Context, context.CancelFunc) {
 			return context.WithCancel(ctx)
 		},

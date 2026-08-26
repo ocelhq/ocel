@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
 const needsRefusal = "app web needs edge-middleware and the \"cloudfront\" edge does not serve it: middleware runs in the origin's Node server the way `next start` runs it, so every request pays the round trip to the origin before it is routed. " +
@@ -20,7 +21,9 @@ const degradedDetail = "web: middleware runs in the origin's Node server the way
 
 func useJSONLogFormat(t *testing.T, deps *cmddeps.Deps) {
 	t.Helper()
-	deps.Format = func() deployui.Format { return deployui.FormatJSON }
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
 }
 
 func jsonRecords(t *testing.T, out string) []map[string]any {

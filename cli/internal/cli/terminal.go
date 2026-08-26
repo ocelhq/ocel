@@ -7,7 +7,7 @@ import (
 
 	"github.com/mattn/go-isatty"
 
-	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
 func isReaderTTY(r io.Reader) bool {
@@ -19,12 +19,13 @@ func isReaderTTY(r io.Reader) bool {
 }
 
 func withSpinner(stdout io.Writer, label string, fn func() error) error {
-	if !deployui.IsTerminal(stdout) {
+	present := presentation(stdout)
+	if !present.TTY {
 		fmt.Fprintln(stdout, label)
 		return fn()
 	}
 
-	s := deployui.StartSpinner(stdout, label)
+	s := runui.StartSpinner(present, stdout, label)
 	defer s.Stop()
 
 	return fn()

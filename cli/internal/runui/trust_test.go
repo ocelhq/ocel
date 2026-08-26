@@ -1,4 +1,4 @@
-package providerui
+package runui
 
 import (
 	"bytes"
@@ -6,8 +6,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
@@ -26,19 +24,15 @@ func TestTheTrustIsTheProcessTerminalNotTheProvidersLogStream(t *testing.T) {
 	t.Cleanup(func() { run.Close() })
 
 	var terminal bytes.Buffer
-	deps := cmddeps.Deps{
-		HostTrust: provider.Trust{Ask: terminalAsker{}, Out: &terminal},
-		Verbose:   func() bool { return false },
-		Format:    func() deployui.Format { return deployui.FormatHuman },
-	}
-	ui := deployui.New(io.Discard, run, deps.Format(), deps.Verbose())
+	host := provider.Trust{Ask: terminalAsker{}, Out: &terminal}
+	ui := New(io.Discard, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { ui.Close() })
 
-	trust := trustFor(deps, ui)
-	if trust.Ask != deps.HostTrust.Ask {
+	trust := trustFor(host, ui)
+	if trust.Ask != host.Ask {
 		t.Errorf("the trust asks through %#v, want the terminal the process was started on", trust.Ask)
 	}
-	if trust.Out != deps.HostTrust.Out {
+	if trust.Out != host.Out {
 		t.Errorf("the trust offers on %#v, want the terminal, not the provider's log stream", trust.Out)
 	}
 	if trust.Out == ui.BuildWriter() {

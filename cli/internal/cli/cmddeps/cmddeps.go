@@ -6,12 +6,12 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/declare"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 )
 
@@ -29,9 +29,18 @@ type Deps struct {
 	RunPackageManager   func(ctx context.Context, dir string, argv []string, output io.Writer) error
 	HostTrust           provider.Trust
 	StdinIsTerminal     func(r io.Reader) bool
-	StdoutIsTerminal    func(w io.Writer) bool
 	ConfigPath          func() string
-	Verbose             func() bool
-	Format              func() deployui.Format
+	Presentation        func(w io.Writer) runui.Presentation
 	Interrupt           func(ctx context.Context, stderr io.Writer) (context.Context, context.CancelFunc)
+}
+
+func (d Deps) Spec(consent runui.Consent, command string, cfg *projectconfig.Config, stdout io.Writer) runui.Spec {
+	return runui.Spec{
+		Command: command,
+		Consent: consent,
+		Config:  cfg,
+		Present: d.Presentation(stdout),
+		Trust:   d.HostTrust,
+		Stdout:  stdout,
+	}
 }

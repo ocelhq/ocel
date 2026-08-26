@@ -9,7 +9,7 @@ import (
 
 	"github.com/fatih/color"
 
-	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -34,8 +34,8 @@ type Printer struct {
 	color bool
 }
 
-func NewPrinter(out io.Writer) *Printer {
-	return newPrinter(out, deployui.IsTerminal(out) && !color.NoColor)
+func NewPrinter(out io.Writer, present runui.Presentation) *Printer {
+	return newPrinter(out, present.Color)
 }
 
 func newPrinter(out io.Writer, colorEnabled bool) *Printer {
