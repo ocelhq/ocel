@@ -470,7 +470,7 @@ func (s Store) PublishedNames(ctx context.Context, scope Scope, environment stri
 	}
 	names := map[string]bool{}
 	for _, record := range held {
-		at := unescape(record.Name[len(record.Name)-1])
+		at := ports.Unescape(record.Name[len(record.Name)-1])
 		if !bindsTo(at, environment) {
 			continue
 		}
@@ -518,8 +518,8 @@ func (s Store) claims(ctx context.Context, scope Scope) (map[string][]claim, err
 		if len(record.Name) < 2 {
 			continue
 		}
-		owner := unescape(record.Name[len(record.Name)-2])
-		at := unescape(record.Name[len(record.Name)-1])
+		owner := ports.Unescape(record.Name[len(record.Name)-2])
+		at := ports.Unescape(record.Name[len(record.Name)-1])
 		var index ownerIndex
 		if err := json.Unmarshal(record.Bytes, &index); err != nil {
 			return nil, fmt.Errorf("read %s's published links: %w", scope.Project, err)

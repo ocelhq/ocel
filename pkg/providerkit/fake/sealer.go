@@ -1,12 +1,10 @@
 package fake
 
 import (
-	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -32,7 +30,7 @@ func (s *Sealer) Seal(_ context.Context, at providerkit.Coordinate, plaintext []
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
-	return gcm.Seal(nonce, nonce, plaintext, additionalData(at)), nil
+	return gcm.Seal(nonce, nonce, plaintext, at.Binding()), nil
 }
 
 func (s *Sealer) Open(_ context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
@@ -44,9 +42,9 @@ func (s *Sealer) Open(_ context.Context, at providerkit.Coordinate, sealed []byt
 		return nil, providerkit.Refuse(providerkit.CodeInvalid, "sealed value is truncated")
 	}
 	nonce, body := sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():]
-	plaintext, err := gcm.Open(nil, nonce, body, additionalData(at))
+	plaintext, err := gcm.Open(nil, nonce, body, at.Binding())
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeDenied, "sealed value does not open at %s", additionalData(at))
+		return nil, providerkit.Refuse(providerkit.CodeDenied, "sealed value does not open at %s", at.Binding())
 	}
 	return plaintext, nil
 }
@@ -57,13 +55,4 @@ func (s *Sealer) gcm() (cipher.AEAD, error) {
 		return nil, err
 	}
 	return cipher.NewGCM(block)
-}
-
-func additionalData(at providerkit.Coordinate) []byte {
-	var b bytes.Buffer
-	for _, part := range []string{at.Project, string(at.Class), at.Env, at.Folder, at.Link, at.Name} {
-		b.WriteString(strings.ReplaceAll(part, "/", "%2F"))
-		b.WriteByte('/')
-	}
-	return b.Bytes()
 }
