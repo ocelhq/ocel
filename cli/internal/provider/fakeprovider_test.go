@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -86,6 +87,17 @@ func runFakeProvider() int {
 	}
 	_ = os.Remove(sockPath)
 
+	clientCert, err := channel.ParseCertificatePEM(os.Getenv(channel.ClientCertEnvVar))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider: client certificate:", err)
+		return 1
+	}
+	identity, err := channel.NewIdentity()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider: identity:", err)
+		return 1
+	}
+
 	ln, err := net.Listen("unix", sockPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fake provider: listen:", err)
@@ -93,14 +105,27 @@ func runFakeProvider() int {
 	}
 	defer ln.Close()
 
+	if mode == "legacy-ready" {
+		fmt.Println("OCEL_READY " + channel.FormatUnixAddr(sockPath))
+		select {}
+	}
+
+	announced := identity
+	if mode == "impostor-cert" {
+		announced, err = channel.NewIdentity()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fake provider: impostor identity:", err)
+			return 1
+		}
+	}
+
 	mux := http.NewServeMux()
-	path, handler := contractv1connect.NewProviderServiceHandler(&fakeProviderServer{
-		mode:  mode,
-		token: os.Getenv(channel.SessionTokenEnvVar),
-	})
+	path, handler := contractv1connect.NewProviderServiceHandler(&fakeProviderServer{mode: mode})
 	mux.Handle(path, handler)
 
-	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath)))
+	ln = tls.NewListener(ln, identity.ServerConfig(clientCert))
+
+	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath), announced.CertificateDER()))
 
 	srv := &http.Server{Handler: mux}
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -111,8 +136,7 @@ func runFakeProvider() int {
 
 type fakeProviderServer struct {
 	contractv1connect.UnimplementedProviderServiceHandler
-	mode  string
-	token string
+	mode string
 }
 
 func (s *fakeProviderServer) Configure(_ context.Context, _ *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
@@ -123,15 +147,6 @@ func (s *fakeProviderServer) Configure(_ context.Context, _ *contractv1.Configur
 }
 
 func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	info, _ := connect.CallInfoForHandlerContext(ctx)
-	var authHeader string
-	if info != nil {
-		authHeader = info.RequestHeader().Get("Authorization")
-	}
-	if token, ok := channel.ParseAuthHeader(authHeader); !ok || token != s.token {
-		return connect.NewError(connect.CodeUnauthenticated, errors.New("bad or missing session token"))
-	}
-
 	if err := stream.Send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "step 1"}},
 	}); err != nil {
@@ -154,15 +169,6 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 }
 
 func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	info, _ := connect.CallInfoForHandlerContext(ctx)
-	var authHeader string
-	if info != nil {
-		authHeader = info.RequestHeader().Get("Authorization")
-	}
-	if token, ok := channel.ParseAuthHeader(authHeader); !ok || token != s.token {
-		return connect.NewError(connect.CodeUnauthenticated, errors.New("bad or missing session token"))
-	}
-
 	if err := recordDrive(); err != nil {
 		return err
 	}

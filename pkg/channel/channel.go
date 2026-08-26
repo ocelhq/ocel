@@ -42,6 +42,10 @@ func FormatReadinessLine(addr string, certDER []byte) string {
 	return readinessSentinelPrefix + " " + addr + " " + base64.StdEncoding.EncodeToString(certDER)
 }
 
+func LooksLikeReadinessLine(line string) bool {
+	return strings.HasPrefix(strings.TrimRight(line, "\r\n"), readinessSentinelPrefix+" ")
+}
+
 func ParseReadinessLine(line string) (addr string, cert *x509.Certificate, ok bool) {
 	prefix := readinessSentinelPrefix + " "
 	line = strings.TrimRight(line, "\r\n")

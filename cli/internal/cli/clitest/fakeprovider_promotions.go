@@ -14,9 +14,6 @@ var fakePromotions = []*contractv1.PromotionHistoryEntry{
 }
 
 func (s *deployFakeProviderServer) ListPromotions(ctx context.Context, req *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	history := make([]*contractv1.PromotionHistoryEntry, 0, len(fakePromotions))
 	for _, entry := range fakePromotions {
 		p := proto.Clone(entry.GetPromotion()).(*contractv1.Promotion)

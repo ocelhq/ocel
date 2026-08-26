@@ -179,9 +179,6 @@ func (s *deployFakeProviderServer) addressable(ctx context.Context, at *envvarsv
 }
 
 func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envvarsv1.SetValueRequest) (*envvarsv1.SetValueResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	if err := s.addressable(ctx, req.GetCoordinate(), req.GetTier()); err != nil {
 		return nil, err
 	}
@@ -226,9 +223,6 @@ func CoordinateOf(c *envvarsv1.Coordinate) FakeCoordinate {
 }
 
 func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envvarsv1.SetReferenceRequest) (*envvarsv1.SetReferenceResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	if err := s.addressable(ctx, req.GetCoordinate(), req.GetTier()); err != nil {
 		return nil, err
 	}
@@ -266,9 +260,6 @@ func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envvar
 }
 
 func (s *deployFakeProviderServer) ListReferences(ctx context.Context, req *envvarsv1.ListReferencesRequest) (*envvarsv1.ListReferencesResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
@@ -277,9 +268,6 @@ func (s *deployFakeProviderServer) ListReferences(ctx context.Context, req *envv
 }
 
 func (s *deployFakeProviderServer) ListValues(ctx context.Context, req *envvarsv1.ListValuesRequest) (*envvarsv1.ListValuesResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
@@ -299,9 +287,6 @@ func (s *deployFakeProviderServer) ListValues(ctx context.Context, req *envvarsv
 }
 
 func (s *deployFakeProviderServer) GetValue(ctx context.Context, req *envvarsv1.GetValueRequest) (*envvarsv1.GetValueResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
@@ -321,9 +306,6 @@ func (s *deployFakeProviderServer) GetValue(ctx context.Context, req *envvarsv1.
 }
 
 func (s *deployFakeProviderServer) RevealValues(ctx context.Context, req *envvarsv1.RevealValuesRequest) (*envvarsv1.RevealValuesResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	if reason := os.Getenv(FakeRevealFailureEnvVar); reason != "" {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New(reason))
 	}
@@ -349,9 +331,6 @@ func (s *deployFakeProviderServer) RevealValues(ctx context.Context, req *envvar
 }
 
 func (s *deployFakeProviderServer) DeleteValue(ctx context.Context, req *envvarsv1.DeleteValueRequest) (*envvarsv1.DeleteValueResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
@@ -372,9 +351,6 @@ func (s *deployFakeProviderServer) DeleteValue(ctx context.Context, req *envvars
 }
 
 func (s *deployFakeProviderServer) ListVersions(ctx context.Context, req *envvarsv1.ListVersionsRequest) (*envvarsv1.ListVersionsResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err

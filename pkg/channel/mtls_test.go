@@ -186,6 +186,31 @@ func TestReadinessLineCarriesTheServerCertificate(t *testing.T) {
 	})
 }
 
+func TestLooksLikeReadinessLine(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		line string
+		want bool
+	}{
+		{name: "a line the older wire format produced", line: "OCEL_READY unix:/tmp/x.sock", want: true},
+		{name: "a line this wire format produces", line: "OCEL_READY unix:/tmp/x.sock Zm9v", want: true},
+		{name: "an unrelated log line", line: "listening on socket..."},
+		{name: "the bare sentinel with nothing after it", line: "OCEL_READY"},
+		{name: "the sentinel named midway through a line", line: "some log line mentioning OCEL_READY midway"},
+		{name: "a sentinel with a typo", line: "OCEL_READY_TYPO unix:/tmp/x.sock"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := LooksLikeReadinessLine(tc.line); got != tc.want {
+				t.Fatalf("LooksLikeReadinessLine(%q) = %v, want %v", tc.line, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPinnedHandshake(t *testing.T) {
 	t.Parallel()
 

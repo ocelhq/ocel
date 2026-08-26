@@ -10,10 +10,6 @@ import (
 )
 
 func (s *deployFakeProviderServer) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := s.checkToken(ctx); err != nil {
-		return err
-	}
-
 	var lines []string
 	if req.GetKeepN() == 0 {
 		lines = []string{"Nothing to prune."}
