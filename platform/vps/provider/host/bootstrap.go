@@ -280,12 +280,15 @@ func removing(read, sibling Reading) []removal {
 	beside := sibling.Class
 	last := !sibling.standing(KindDir, ClassDir(beside)) && !sibling.standing(KindDir, StateDir(beside))
 
-	ordered := []removal{
+	beneath := []removal{
 		taking(KindDir, StateDir(read.Class), "every record ocel holds for this class on this host, and nothing writes them again"),
 		taking(KindSealKey, SealKeyPath(read.Class), "the key every value this class holds was sealed to, and no other machine ever held it: what it sealed, nothing opens again"),
 	}
+	stamp := []removal{taking(KindDir, ClassDir(read.Class),
+		"the stamp that says what this host carries, taken last so an interrupted destroy leaves a host that still says what it is")}
+	var above []removal
 	if last {
-		ordered = append(ordered,
+		beneath = append(beneath,
 			taking(KindDir, stateRoot, ""),
 			taking(KindUser, deployUser, "the login every deploy onto this host runs as"),
 			taking(KindFile, sudoersSeal, ""),
@@ -293,14 +296,11 @@ func removing(read, sibling Reading) []removal {
 			taking(KindFile, SealHelper, ""),
 			taking(KindDir, helperRoot, ""),
 		)
+		above = []removal{taking(KindDir, classRoot, "")}
 	}
-	ordered = append(ordered, taking(KindDir, ClassDir(read.Class),
-		"the stamp that says what this host carries, taken last so an interrupted destroy leaves a host that still says what it is"))
-	if last {
-		ordered = append(ordered, taking(KindDir, classRoot, ""))
-	}
+	ordered := slices.Concat(beneath, stamp, above)
 
-	standing := make([]removal, 0, len(ordered)+1)
+	standing := make([]removal, 0, len(ordered))
 	for _, candidate := range ordered {
 		if read.standing(candidate.kind, candidate.path) || sibling.standing(candidate.kind, candidate.path) {
 			standing = append(standing, candidate)

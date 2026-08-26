@@ -167,6 +167,31 @@ func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T
 	}
 }
 
+func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
+	t.Parallel()
+
+	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	keys := []byte(aKey + "\n")
+	standing := Reading{Class: production, Keys: keys, Observed: digests(Items(production, keys))}
+
+	for name, sibling := range map[string]Reading{
+		"the last class on the host": {Class: preview, Observed: map[string]string{}},
+		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys))},
+	} {
+		taken := removing(standing, sibling)
+		stamp := index(taken, ClassDir(production))
+		if stamp < 0 {
+			t.Fatalf("destroying %s never takes %s, and the stamp stands over a host that holds nothing", name, ClassDir(production))
+		}
+		for at, r := range taken {
+			if r.action != providerkit.ActionDelete || at <= stamp || r.path == classRoot {
+				continue
+			}
+			t.Errorf("destroying %s takes %s after the stamp, so an interrupted destroy leaves a host that lies about what it carries", name, r.path)
+		}
+	}
+}
+
 func TestDestroyOfAHalfWrittenHostNamesWhatStandsAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
