@@ -42,10 +42,6 @@ func FormatReadinessLine(addr string, certDER []byte) string {
 	return readinessSentinelPrefix + " " + addr + " " + base64.StdEncoding.EncodeToString(certDER)
 }
 
-func LooksLikeReadinessLine(line string) bool {
-	return strings.HasPrefix(strings.TrimRight(line, "\r\n"), readinessSentinelPrefix+" ")
-}
-
 type Readiness struct {
 	Addr string
 	Cert *x509.Certificate

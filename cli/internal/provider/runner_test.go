@@ -135,28 +135,6 @@ func TestReady(t *testing.T) {
 func TestHandshake(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a provider that signals readiness without a certificate is named as too old to run", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := context.Background()
-		r, _ := spawnFake(t, ctx, "legacy-ready", Config{
-			ProviderPackage: "@ocel/provider-aws",
-			ReadyTimeout:    5 * time.Second,
-		})
-
-		err := r.Ready(ctx)
-
-		var outdated *OutdatedProviderError
-		if !errors.As(err, &outdated) {
-			t.Fatalf("Ready() error = %v (%T), want *OutdatedProviderError", err, err)
-		}
-		for _, want := range []string{"@ocel/provider-aws", "too old", "npm install @ocel/provider-aws@latest"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("Ready() error = %q, want it to contain %q", err, want)
-			}
-		}
-	})
-
 	t.Run("a provider serving a certificate other than the one it announced is refused", func(t *testing.T) {
 		t.Parallel()
 

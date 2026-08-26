@@ -83,17 +83,6 @@ func (e *OperationFailedError) Error() string {
 	return e.Message
 }
 
-type OutdatedProviderError struct {
-	Package string
-}
-
-func (e *OutdatedProviderError) Error() string {
-	if pkg := strings.TrimSpace(e.Package); pkg != "" {
-		return fmt.Sprintf("%s is too old for this ocel CLI: it signalled readiness without the channel certificate the CLI now requires. Update it with `npm install %s@latest` and try again.", pkg, pkg)
-	}
-	return "the installed provider package is too old for this ocel CLI: it signalled readiness without the channel certificate the CLI now requires. Update the provider package and try again."
-}
-
 type Runner struct {
 	cmd             *exec.Cmd
 	identity        *channel.Identity
@@ -475,14 +464,6 @@ func (r *Runner) drainStdout(stdout io.Reader) {
 			if signalled, ok := channel.ParseReadinessLine(line); ok {
 				ready = true
 				r.readyCh <- signalled
-				continue
-			}
-			if channel.LooksLikeReadinessLine(line) {
-				ready = true
-				select {
-				case r.scanErr <- &OutdatedProviderError{Package: r.providerPackage}:
-				default:
-				}
 				continue
 			}
 		}
