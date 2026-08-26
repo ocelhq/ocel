@@ -79,7 +79,7 @@ jobs:
         if: steps.reach.outputs.run == 'true'
         run: |
           set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh run ocel-live-${GITHUB_RUN_ID} -- go test -C platform/vps/provider -race -count=1 -run '^TestLive' -json ./..." | tee live.json
+          sg incus-admin -c "scripts/incus.sh run ocel-live-${GITHUB_RUN_ID} -- go test -C platform/vps/provider -race -count=1 -timeout 40m -run '^TestLive' -json ./..." | tee live.json
 
       - name: Assert the live suite ran
         if: steps.reach.outputs.run == 'true'

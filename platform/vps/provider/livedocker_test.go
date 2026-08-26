@@ -1,0 +1,149 @@
+package vps_test
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
+)
+
+const (
+	engineName = "docker"
+	unitName   = "docker.service"
+)
+
+func purged(t *testing.T, vm machine) {
+	t.Helper()
+	vm.ssh(t, "sudo systemctl disable --now docker.socket "+unitName+" >/dev/null 2>&1 || true")
+	vm.ssh(t, "sudo DEBIAN_FRONTEND=noninteractive apt-get purge -y "+
+		"docker-ce docker-ce-cli docker-ce-rootless-extras containerd.io docker-buildx-plugin docker-compose-plugin docker.io "+
+		">/dev/null 2>&1 || true")
+	vm.ssh(t, "sudo rm -rf /var/lib/docker /var/lib/containerd /etc/docker")
+	if stood := strings.TrimSpace(vm.ssh(t, "command -v "+engineName+" || true")); stood != "" {
+		t.Fatalf("%s still stands at %q, so the absent-engine case cannot be proven on this machine", engineName, stood)
+	}
+}
+
+func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testing.T) {
+	vm := live(t)
+	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	purged(t, vm)
+
+	p := vm.provider(t)
+	defer closing(t, p)
+
+	ctx := context.Background()
+	class := providerkit.ClassProduction
+	bootstrapper, err := p.Bootstrap("")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	absent, err := bootstrapper.Describe(ctx, class)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: absent.Held}
+	plan, err := bootstrapper.Plan(ctx, req)
+	if err != nil {
+		t.Fatalf("Plan() over a machine with no engine = %v", err)
+	}
+	group := onlyGroup(t, plan)
+
+	engine := planFor(group, engineName)
+	if engine.Action != providerkit.ActionCreate {
+		t.Fatalf("Plan() over a machine with no engine shows %s as %q, want the install a user consents to", engineName, engine.Action)
+	}
+	if !strings.Contains(engine.Reason, "https://get.docker.com") {
+		t.Errorf("the engine is planned as %q, and the user consenting never learns what runs on their machine", engine.Reason)
+	}
+	if unit := planFor(group, unitName); unit.Action != providerkit.ActionCreate {
+		t.Errorf("Plan() shows %s as %q on a machine that has no engine at all", unitName, unit.Action)
+	}
+	var slow bool
+	for _, change := range group.Changes {
+		if change.Slow {
+			slow = true
+			continue
+		}
+		if slow {
+			t.Errorf("Plan() puts %s after the slow work, and the minutes-long change closes the plan", change.Name)
+		}
+	}
+
+	if err := bootstrapper.Apply(ctx, req, nil); err != nil {
+		t.Fatalf("Apply() over a machine with no engine = %v", err)
+	}
+	defer func() {
+		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+			t.Errorf("Remove() = %v", err)
+		}
+	}()
+
+	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active "+unitName)); active != "active" {
+		t.Errorf("%s is %q after an apply that installed it, want a daemon that serves", unitName, active)
+	}
+	if groups := vm.ssh(t, "id -nG "+deployLogin); !strings.Contains(groups, engineName) {
+		t.Errorf("%s is in %q, and a deploy that cannot reach the engine socket deploys nothing", deployLogin, strings.TrimSpace(groups))
+	}
+	if _, err := vm.attempt(deployLogin, "docker version --format '{{.Server.Version}}'"); err != nil {
+		t.Errorf("%s cannot reach the daemon this bootstrap installed: %v", deployLogin, err)
+	}
+
+	standing, err := bootstrapper.Describe(ctx, class)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !standing.Stacks[0].DigestCurrent {
+		t.Error("Describe() calls a machine that has just been bootstrapped, engine and all, drifted")
+	}
+	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: standing.Held})
+	if err != nil {
+		t.Fatal(err)
+	}
+	settled := onlyGroup(t, again)
+	if settled.Action != providerkit.ActionKeep {
+		t.Errorf("a re-run over a fully bootstrapped machine plans %q for the stack, want nothing left to do", settled.Action)
+	}
+	for _, change := range settled.Changes {
+		if change.Action != providerkit.ActionKeep {
+			t.Errorf("a re-run plans %q for %s, and bootstrap is a statement of state rather than a stack of side effects", change.Action, change.Name)
+		}
+	}
+
+	written := strings.TrimSpace(vm.ssh(t, "stat -c %Y \"$(command -v "+engineName+")\""))
+	vm.ssh(t, "sudo systemctl disable --now docker.socket "+unitName)
+
+	idle, err := bootstrapper.Describe(ctx, class)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stopped := providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: idle.Held}
+	restarting, err := bootstrapper.Plan(ctx, stopped)
+	if err != nil {
+		t.Fatalf("Plan() over an installed engine whose daemon is idle = %v", err)
+	}
+	waking := onlyGroup(t, restarting)
+	if kept := planFor(waking, engineName); kept.Action != providerkit.ActionKeep {
+		t.Errorf("an idle daemon plans %q for %s, want the engine kept: presence is never remediated by a second install", kept.Action, engineName)
+	}
+	if unit := planFor(waking, unitName); unit.Action != providerkit.ActionUpdate {
+		t.Errorf("an idle daemon plans %q for %s, want the unit enabled", unit.Action, unitName)
+	}
+	for _, change := range waking.Changes {
+		if change.Name != unitName && change.Action != providerkit.ActionKeep {
+			t.Errorf("stopping the daemon re-planned %s as %q, and nothing but the unit moved", change.Name, change.Action)
+		}
+	}
+
+	if err := bootstrapper.Apply(ctx, stopped, nil); err != nil {
+		t.Fatalf("Apply() over an idle daemon = %v", err)
+	}
+	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active "+unitName)); active != "active" {
+		t.Errorf("%s is %q after the apply that was meant to start it", unitName, active)
+	}
+	if now := strings.TrimSpace(vm.ssh(t, "stat -c %Y \"$(command -v "+engineName+")\"")); now != written {
+		t.Errorf("the engine binary was written again to start a daemon that was already installed, at %s where it stood at %s", now, written)
+	}
+}
