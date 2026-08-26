@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 type said struct{ lines []string }
@@ -141,6 +142,26 @@ func TestTheHostRemovesNothingItCannotNameAsAPathItWrote(t *testing.T) {
 	}
 	if ran := stood.commands(); len(ran) != 0 {
 		t.Errorf("Remove() ran %q over a host, and what ocel never wrote it never takes", ran)
+	}
+}
+
+func TestADeployLoginSomethingStillHoldsDoesNotStrandTheDestroy(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	stood.answer = func(command string) (session.Result, bool) {
+		if !strings.HasPrefix(command, "userdel ") || strings.Contains(command, " -f ") {
+			return session.Result{}, false
+		}
+		return session.Result{Code: 8, Stderr: "userdel: user " + deployUser + " is currently used by process 4021"}, true
+	}
+
+	if err := Bootstrap(stood.host()).Remove(context.Background(), class, nil); err != nil {
+		t.Fatalf("Remove() = %v over a login a lingering session still holds, and every re-run would fail there again", err)
+	}
+	if stood.took(quoted(ClassDir(class))) < 0 {
+		t.Errorf("Remove() stopped at the login and left %s standing:\n%s", ClassDir(class), strings.Join(stood.taking(), "\n"))
 	}
 }
 
