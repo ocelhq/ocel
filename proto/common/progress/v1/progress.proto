@@ -49,8 +49,12 @@ enum Phase {
 //
 // Declaration is additive, imminent and required: a unit is declared when the run
 // commits to it, a phase when its unit reaches it, and detail needs no declaration.
-// A stage is never redeclared, and the plan is never final — more stages may arrive at
-// any point until the run ends.
+// The plan is never final — more stages may arrive at any point until the run ends.
+//
+// Because ids are derived and not exchanged, two producers may name the same stage:
+// the CLI declares a unit it knows about and the provider independently declares the
+// same derived id. Redeclaring an id is idempotent, and a consumer takes first-write
+// wins — later declarations of an id it already holds change nothing, title included.
 message Stage {
   bytes id = 1 [(buf.validate.field).bytes.len = 8];
 
