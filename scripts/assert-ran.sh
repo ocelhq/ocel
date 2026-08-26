@@ -5,9 +5,8 @@ usage() {
     cat <<'EOF'
 usage: scripts/assert-ran.sh <go-test-json> <test-name-prefix>
 
-  Fails when any top-level test named <test-name-prefix>... skipped, and
-  when none of them passed. A suite that quietly skips proves nothing, and
-  a required job that lets it is a job that proves nothing either.
+  Fails when any top-level test named <test-name-prefix>... skipped or
+  failed, and when none of them passed.
 EOF
     exit 2
 }
@@ -15,6 +14,11 @@ EOF
 [ $# -eq 2 ] || usage
 report=$1
 prefix=$2
+
+if [ ! -f "$report" ]; then
+    echo "::error::$report does not exist, so no $prefix run was reported"
+    exit 1
+fi
 
 named() {
     jq -rR --arg action "$1" --arg prefix "$prefix" \
@@ -26,6 +30,13 @@ skipped=$(named skip)
 if [ -n "$skipped" ]; then
     echo "::error::$prefix skipped, so nothing was proven against a machine:"
     echo "$skipped"
+    exit 1
+fi
+
+failed=$(named fail)
+if [ -n "$failed" ]; then
+    echo "::error::$prefix failed against the machine:"
+    echo "$failed"
     exit 1
 fi
 
