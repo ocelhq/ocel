@@ -10,7 +10,14 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-type Dial func(ctx context.Context) (*session.Session, error)
+type Conn interface {
+	Exec(ctx context.Context, command string, stdin []byte) (session.Result, error)
+	Run(ctx context.Context, command string) (string, error)
+	Preflight(ctx context.Context) (session.Facts, error)
+	Destination() session.Destination
+}
+
+type Dial func(ctx context.Context) (Conn, error)
 
 type Host struct {
 	dial   Dial
@@ -114,7 +121,7 @@ func (h *Host) elevate(ctx context.Context) (string, error) {
 	return h.elevation, nil
 }
 
-func (h *Host) rootOrSudo(ctx context.Context, live *session.Session) (string, error) {
+func (h *Host) rootOrSudo(ctx context.Context, live Conn) (string, error) {
 	h.rooting.Lock()
 	defer h.rooting.Unlock()
 	if h.knows {

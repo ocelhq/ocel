@@ -101,6 +101,14 @@ func (p *Provider) Session(ctx context.Context) (*session.Session, error) {
 	return p.live, nil
 }
 
+func (p *Provider) conn(ctx context.Context) (host.Conn, error) {
+	live, err := p.Session(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return live, nil
+}
+
 func (p *Provider) Close() error {
 	p.dial.Lock()
 	defer p.dial.Unlock()
@@ -131,7 +139,7 @@ func NewProvider(options Options) *Provider {
 		options:   options,
 		artifacts: fake.NewArtifacts(),
 	}
-	p.host = host.New(p.Session, host.Keys{Path: options.DeployKey})
+	p.host = host.New(p.conn, host.Keys{Path: options.DeployKey})
 	p.records = host.NewRecords(p.host)
 	p.sealer = host.NewSealer(p.host)
 	return p
