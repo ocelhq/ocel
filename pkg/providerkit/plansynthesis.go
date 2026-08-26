@@ -1,0 +1,87 @@
+package providerkit
+
+import "slices"
+
+const (
+	functionKind = "function"
+
+	reasonUndeclared = "this release no longer declares it"
+)
+
+func SynthesizedPlan(plan StackPlan, standing StackResult) Plan {
+	changes := make([]Change, 0, len(plan.Resources)+len(standing.Links))
+	for _, resource := range plan.Resources {
+		changes = append(changes, Change{
+			Kind:   string(resource.Type),
+			Name:   resource.Name,
+			Action: standsOrCreates(slices.ContainsFunc(standing.Links, linking(resource))),
+		})
+	}
+	declared := DeclaredFunctions(plan)
+	for _, function := range declared {
+		changes = append(changes, Change{
+			Kind:   functionKind,
+			Name:   function,
+			Action: standsOrCreates(slices.ContainsFunc(standing.Functions, calling(function))),
+		})
+	}
+	for _, link := range standing.Links {
+		if slices.ContainsFunc(plan.Resources, func(resource Resource) bool { return linking(resource)(link) }) {
+			continue
+		}
+		changes = append(changes, Change{Kind: string(link.Type), Name: link.Name, Action: ActionDelete, Reason: reasonUndeclared})
+	}
+	for _, function := range standing.Functions {
+		if slices.Contains(declared, function.Name) {
+			continue
+		}
+		changes = append(changes, Change{Kind: functionKind, Name: function.Name, Action: ActionDelete, Reason: reasonUndeclared})
+	}
+	return stackPlan(plan.Ref, changes)
+}
+
+func SynthesizedRemoval(ref StackRef, standing StackResult) Plan {
+	changes := make([]Change, 0, len(standing.Links)+len(standing.Functions))
+	for _, link := range standing.Links {
+		changes = append(changes, Change{Kind: string(link.Type), Name: link.Name, Action: ActionDelete})
+	}
+	for _, function := range standing.Functions {
+		changes = append(changes, Change{Kind: functionKind, Name: function.Name, Action: ActionDelete})
+	}
+	return stackPlan(ref, changes)
+}
+
+func DeclaredFunctions(plan StackPlan) []string {
+	if plan.App == nil {
+		return nil
+	}
+	names := make([]string, 0, len(plan.App.Functions))
+	for _, function := range plan.App.Functions {
+		names = append(names, function.Name)
+	}
+	return names
+}
+
+func standsOrCreates(stands bool) ChangeAction {
+	if stands {
+		return ActionKeep
+	}
+	return ActionCreate
+}
+
+func linking(resource Resource) func(Link) bool {
+	return func(link Link) bool { return link.Name == resource.Name && link.Type == resource.Type }
+}
+
+func calling(function string) func(Function) bool {
+	return func(held Function) bool { return held.Name == function }
+}
+
+func stackPlan(ref StackRef, changes []Change) Plan {
+	if len(changes) == 0 {
+		return Plan{}
+	}
+	group := ChangeGroup{Kind: StackGroupKind, Name: ref.Name.String(), Changes: changes}
+	group.Action, group.Reason = RollUp(changes)
+	return Plan{Groups: []ChangeGroup{group}}
+}

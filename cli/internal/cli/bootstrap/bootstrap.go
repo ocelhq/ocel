@@ -210,29 +210,31 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			return err
 		}
 
-		req := &contractv1.BootstrapRequest{
-			Tier:               tier,
-			Features:           requested,
-			Remove:             going,
-			Force:              opts.Force,
-			AcceptReplacements: opts.Yes,
-			Edge:               edgewire.Selection(cfg),
-		}
-		if opts.AutoHealDeclared {
-			req.AutoHeal = &opts.AutoHeal
+		request := func(dry bool) *contractv1.BootstrapRequest {
+			req := &contractv1.BootstrapRequest{
+				Tier:               tier,
+				Features:           requested,
+				Remove:             going,
+				Force:              opts.Force,
+				AcceptReplacements: opts.Yes,
+				Edge:               edgewire.Selection(cfg),
+				Dry:                dry,
+			}
+			if opts.AutoHealDeclared {
+				req.AutoHeal = &opts.AutoHeal
+			}
+			return req
 		}
 
 		var plan *planv1.ChangePlan
-		req.Dry = true
 		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Planning changes")
-		err = provider.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap,
+		err = provider.Stream(ctx, runner, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap,
 			func(ev *progressv1.OperationEvent) {
 				if shown := ev.GetPlan(); shown != nil {
 					plan = shown
 				}
 			})
 		spinner.Stop()
-		req.Dry = false
 		if err != nil {
 			return err
 		}
@@ -277,6 +279,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			}
 		}
 
+		req := request(false)
 		if interactive {
 			title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package())
 			if rendered && !changeplan.AllKeep(plan) {
