@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -15,6 +16,7 @@ const (
 	dockerGroup = "docker"
 
 	lockedPassword = "*"
+	lockedFact     = "locked"
 )
 
 const (
@@ -24,53 +26,104 @@ const (
 
 func DeployUser() string { return deployUser }
 
+type login struct {
+	name     string
+	shell    string
+	home     string
+	group    string
+	password string
+}
+
+func deployLogin() login {
+	return login{name: deployUser, shell: deployShell, home: stateRoot, group: dockerGroup, password: lockedFact}
+}
+
+func (l login) described() []byte {
+	return fmt.Appendf(nil, "shell=%s\nhome=%s\ngroup=%s\npassword=%s\n", l.shell, l.home, l.group, l.password)
+}
+
 func principal() Item {
-	return Item{Kind: KindUser, Name: deployUser, Owner: deployUser, Content: accountFacts(deployShell, stateRoot, dockerGroup, "locked")}
+	held := deployLogin()
+	return Item{Kind: KindUser, Name: held.name, Owner: held.name, Content: held.described()}
 }
 
-func accountFacts(shell, home, group, password string) []byte {
-	return fmt.Appendf(nil, "shell=%s\nhome=%s\ngroup=%s\npassword=%s\n", shell, home, group, password)
+func (l login) joined(flag string) string {
+	if l.group == "" {
+		return ""
+	}
+	return " " + flag + " " + quoted(l.group)
 }
 
-func accountCommand(name string) string {
-	return strings.Join([]string{
-		"set -e",
-		"getent group " + quoted(dockerGroup) + " >/dev/null 2>&1 || groupadd -r " + quoted(dockerGroup),
-		"getent group " + quoted(name) + " >/dev/null 2>&1 || groupadd -r " + quoted(name),
-		"if getent passwd " + quoted(name) + " >/dev/null 2>&1; then",
-		"usermod -g " + quoted(name) + " -G " + quoted(dockerGroup) + " -d " + quoted(stateRoot) + " -s " + quoted(deployShell) + " " + quoted(name),
+func (l login) command() string {
+	lines := []string{"set -e"}
+	if l.group != "" {
+		lines = append(lines, "getent group "+quoted(l.group)+" >/dev/null 2>&1 || groupadd -r "+quoted(l.group))
+	}
+	fields := " -d " + quoted(l.home) + " -s " + quoted(l.shell) + " " + quoted(l.name)
+	return strings.Join(append(lines,
+		"getent group "+quoted(l.name)+" >/dev/null 2>&1 || groupadd -r "+quoted(l.name),
+		"if getent passwd "+quoted(l.name)+" >/dev/null 2>&1; then",
+		"usermod -g "+quoted(l.name)+l.joined("-aG")+fields,
 		"else",
-		"useradd -r -M -g " + quoted(name) + " -G " + quoted(dockerGroup) + " -d " + quoted(stateRoot) + " -s " + quoted(deployShell) + " " + quoted(name),
+		"useradd -r -M -g "+quoted(l.name)+l.joined("-G")+fields,
 		"fi",
-		"usermod -p " + quoted(lockedPassword) + " " + quoted(name),
-	}, "\n")
+		"usermod -p "+quoted(lockedPassword)+" "+quoted(l.name),
+	), "\n")
 }
 
-func accountSurvey(name string) string {
-	return `if entry=$(getent passwd ` + quoted(name) + ` 2>/dev/null); then
+func (l login) survey() string {
+	membership := ""
+	if l.group != "" {
+		membership = "if id -nG " + quoted(l.name) + " 2>/dev/null | tr ' ' '\\n' | grep -qx " + quoted(l.group) + "; then held=" + quoted(l.group) + "; fi\n"
+	}
+	return `if entry=$(getent passwd ` + quoted(l.name) + ` 2>/dev/null); then
 held=''
-if id -nG ` + quoted(name) + ` 2>/dev/null | tr ' ' '\n' | grep -qx ` + quoted(dockerGroup) + `; then held=` + quoted(dockerGroup) + `; fi
-password=unlocked
-if [ "$(getent shadow ` + quoted(name) + ` 2>/dev/null | cut -d: -f2)" = ` + quoted(lockedPassword) + ` ]; then password=locked; fi
+` + membership + `line=$(getent shadow ` + quoted(l.name) + ` 2>/dev/null || true)
+if [ -z "$line" ] && [ -r /etc/shadow ]; then line=$(grep ` + quoted("^"+l.name+":") + ` /etc/shadow 2>/dev/null || true); fi
+if [ -z "$line" ]; then password=unreadable
+elif [ "$(printf '%s' "$line" | cut -d: -f2)" = ` + quoted(lockedPassword) + ` ]; then password=` + quoted(lockedFact) + `
+else password=unlocked
+fi
 sum=$(printf 'shell=%s\nhome=%s\ngroup=%s\npassword=%s\n' "$(printf '%s' "$entry" | cut -d: -f7)" "$(printf '%s' "$entry" | cut -d: -f6)" "$held" "$password" | sha256sum | cut -d' ' -f1)
-printf '%s\t%s\t%s\t%s\t%s\n' ` + quoted(KindUser) + ` ` + quoted(name) + ` 0 ` + quoted(name) + ` "$sum"
+printf '%s\t%s\t%s\t%s\t%s\n' ` + quoted(KindUser) + ` ` + quoted(l.name) + ` 0 ` + quoted(l.name) + ` "$sum"
 fi`
 }
 
 type Keys struct{ Path string }
 
 func (k Keys) named() ([]byte, error) {
-	raw, err := os.ReadFile(k.Path)
+	path, err := resolved(k.Path)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"option %q names %s, which ocel cannot read: %s", "deployKey", k.Path, err)
+			"option %q names %s, which ocel cannot read: %s", "deployKey", path, err)
 	}
 	keys := authorized(raw)
 	if len(keys) == 0 {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"option %q names %s, which carries no public key", "deployKey", k.Path)
+			"option %q names %s, which carries no public key", "deployKey", path)
 	}
 	return keys, nil
+}
+
+func resolved(path string) (string, error) {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", providerkit.Refuse(providerkit.CodeInvalid,
+				"option %q names %s and this run has no home directory to resolve it against: %s", "deployKey", path, err)
+		}
+		return filepath.Join(home, strings.TrimPrefix(path, "~")), nil
+	}
+	if !filepath.IsAbs(path) {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"option %q names %s, and a provider is never told which directory a relative path is relative to, so ocel will not guess one.\nSpell it from / or from ~/ and try again",
+			"deployKey", path)
+	}
+	return path, nil
 }
 
 func authorized(raw []byte) []byte {

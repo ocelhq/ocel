@@ -68,7 +68,7 @@ func Requirements() []Requirement {
 			Detail: "the commands a bootstrap surveys and writes with, on root's PATH",
 			Met:    func(facts Facts) bool { return len(absent(facts.Tools)) == 0 },
 			Unmet: func(facts Facts, principal string) string {
-				return fmt.Sprintf("%s answers to none of %s, and a bootstrap is those commands and little else.\nInstall them, then try again", principal, strings.Join(absent(facts.Tools), ", "))
+				return fmt.Sprintf("%s is missing %s, and a bootstrap is those commands and little else.\nInstall what it lacks, then try again", principal, strings.Join(absent(facts.Tools), ", "))
 			},
 		},
 	}

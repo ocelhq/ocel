@@ -24,7 +24,8 @@ const (
 
 	recordsHelper = helperRoot + "/records"
 
-	stampFile = "stamp.json"
+	stampFile   = "stamp.json"
+	sudoersRoot = "/etc/sudoers.d"
 )
 
 const rootOwner = "root"
@@ -91,7 +92,7 @@ func (i Item) Digest() string {
 func (i Item) command() string {
 	switch i.Kind {
 	case KindUser:
-		return accountCommand(i.Name)
+		return deployLogin().command()
 	case KindDir:
 		return fmt.Sprintf("install -d -m %04o -o %s -g %s %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
 	default:

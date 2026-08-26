@@ -186,11 +186,11 @@ type removal struct {
 }
 
 func (b Bootstrapper) removals(ctx context.Context, class providerkit.Class) ([]removal, error) {
-	read, err := b.host.Read(ctx, class)
+	read, err := b.host.Survey(ctx, class)
 	if err != nil {
 		return nil, err
 	}
-	sibling, err := b.host.Read(ctx, other(class))
+	sibling, err := b.host.Survey(ctx, other(class))
 	if err != nil {
 		return nil, err
 	}

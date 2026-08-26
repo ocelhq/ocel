@@ -38,8 +38,10 @@ func stubs(t *testing.T, held *account) string {
 	identity := "exit 1\n"
 	if held != nil {
 		passwd = deployUser + ":x:997:997::" + held.home + ":" + held.shell
-		shadow = deployUser + ":" + held.password + ":20000:0:99999:7:::"
 		identity = "printf '%s\\n' " + quoted(held.groups) + "\n"
+		if held.password != "" {
+			shadow = deployUser + ":" + held.password + ":20000:0:99999:7:::"
+		}
 	}
 	write("getent", said+`case "$1 $2" in
 'passwd `+deployUser+`') [ -n `+quoted(passwd)+` ] && printf '%s\n' `+quoted(passwd)+` || exit 2 ;;
@@ -111,8 +113,8 @@ func TestAPrincipalThatAlreadyStandsIsMovedRatherThanRemade(t *testing.T) {
 	if strings.Contains(log, "useradd") {
 		t.Errorf("writing a principal that already stands ran\n%s\nwant the account it found brought to what ocel writes", log)
 	}
-	if !strings.Contains(log, "usermod -g "+deployUser+" -G docker -d /var/lib/ocel -s /bin/sh "+deployUser) {
-		t.Errorf("writing a principal that already stands ran\n%s\nwant every field ocel names set on it", log)
+	if !strings.Contains(log, "usermod -g "+deployUser+" -aG docker -d /var/lib/ocel -s /bin/sh "+deployUser) {
+		t.Errorf("writing a principal that already stands ran\n%s\nwant every field ocel names set on it, and the supplementary list appended to rather than replaced", log)
 	}
 }
 
@@ -120,7 +122,7 @@ func TestTheProbeAndTheWriteAgreeOnWhatAStandingPrincipalIs(t *testing.T) {
 	t.Parallel()
 
 	held := standing()
-	observed, err := readSurvey(sh(t, stubs(t, &held), accountSurvey(deployUser)))
+	observed, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +146,7 @@ func TestAPrincipalThatDriftedFromWhatOcelWroteIsNotCurrent(t *testing.T) {
 
 			held := standing()
 			drift(&held)
-			observed, err := readSurvey(sh(t, stubs(t, &held), accountSurvey(deployUser)))
+			observed, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -176,11 +178,85 @@ func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 func TestAPrincipalNothingCreatedIsNotStanding(t *testing.T) {
 	t.Parallel()
 
-	observed, err := readSurvey(sh(t, stubs(t, nil), accountSurvey(deployUser)))
+	observed, err := readSurvey(sh(t, stubs(t, nil), deployLogin().survey()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, stood := observed[principal().ID()]; stood {
 		t.Error("the probe read an account on a host that has none")
+	}
+}
+
+func described(t *testing.T) map[string]string {
+	t.Helper()
+	facts := map[string]string{}
+	for _, line := range strings.Split(strings.TrimRight(string(principal().Content), "\n"), "\n") {
+		key, value, split := strings.Cut(line, "=")
+		if !split {
+			t.Fatalf("the account description carries %q, which names no fact", line)
+		}
+		facts[key] = value
+	}
+	return facts
+}
+
+func TestEveryFactTheAccountDescriptionCarriesIsOneTheWriteSets(t *testing.T) {
+	t.Parallel()
+
+	facts := described(t)
+	written := deployLogin().command()
+	for fact, flag := range map[string]string{"shell": "-s ", "home": "-d "} {
+		if !strings.Contains(written, flag+quoted(facts[fact])) {
+			t.Errorf("the account description reads %s=%s and the write never sets it:\n%s", fact, facts[fact], written)
+		}
+	}
+	if locked := facts["password"] == lockedFact; locked != strings.Contains(written, "usermod -p "+quoted(lockedPassword)) {
+		t.Errorf("the account description reads password=%s and the write locks it %v:\n%s", facts["password"], !locked, written)
+	}
+}
+
+func TestTheGroupTheAccountDescriptionNamesIsTheGroupBothBranchesAdd(t *testing.T) {
+	t.Parallel()
+
+	group := described(t)["group"]
+	written := deployLogin().command()
+	branches := 0
+	for _, line := range strings.Split(written, "\n") {
+		if !strings.HasPrefix(line, "useradd ") && !strings.HasPrefix(line, "usermod -g ") {
+			continue
+		}
+		branches++
+		if adds := group != "" && strings.Contains(line, "G "+quoted(group)); adds != (group != "") {
+			t.Errorf("the account description reads group=%s and %q adds it %v, so the document would claim a membership nothing writes", group, line, adds)
+		}
+	}
+	if branches != 2 {
+		t.Errorf("the write carries %d branches that create or move the account, want the group held on both:\n%s", branches, written)
+	}
+}
+
+func TestAPasswordFieldTheHostWillNotShowIsNotReadAsUnlocked(t *testing.T) {
+	t.Parallel()
+
+	probed := func(password string) string {
+		t.Helper()
+		held := standing()
+		held.password = password
+		observed, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, stood := observed[principal().ID()]; !stood {
+			t.Fatal("the probe read no account where one stands")
+		}
+		return observed[principal().ID()]
+	}
+
+	unreadable := probed("")
+	if unreadable == principal().Digest() {
+		t.Error("a shadow field the host will not show reads as the locked one ocel wrote, and drift would never be seen")
+	}
+	if unreadable == probed("$6$salt$hash") {
+		t.Error("a shadow field the host will not show reads as a password of its own, so a host with no shadow database re-plans the principal every run for a reason nobody can name")
 	}
 }
