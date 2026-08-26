@@ -205,7 +205,31 @@ func (f *fanout) removeOrphans(ctx context.Context, plan providerkit.StackPlan, 
 			return err
 		}
 	}
-	return nil
+	return f.removeOrphanFunctions(ctx, plan, recorded, report)
+}
+
+func (f *fanout) removeOrphanFunctions(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, report providerkit.Reporter) error {
+	declared := providerkit.DeclaredFunctions(plan)
+	var orphans []providerkit.Function
+	for _, held := range recorded.Functions {
+		if slices.Contains(declared, held.Name) {
+			continue
+		}
+		if report != nil {
+			report.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", held.Name))
+		}
+		orphans = append(orphans, held)
+	}
+	if len(orphans) == 0 {
+		return nil
+	}
+	functions, serves := f.impl.(Functions)
+	if !serves {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"%s recorded %d function(s) this release no longer declares and this provider stands up none, so nothing here can take them down",
+			plan.Ref.Name, len(orphans))
+	}
+	return functions.RemoveFunctions(ctx, plan.Ref, orphans, report)
 }
 
 func (f *fanout) remove(ctx context.Context, ref providerkit.StackRef, link providerkit.Link, report providerkit.Reporter) error {

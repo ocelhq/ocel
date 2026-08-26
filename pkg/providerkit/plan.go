@@ -111,7 +111,7 @@ func SynthesizedPlan(plan StackPlan, standing StackResult) Plan {
 			Action: standsOrCreates(slices.ContainsFunc(standing.Links, linking(resource))),
 		})
 	}
-	declared := declaredFunctions(plan)
+	declared := DeclaredFunctions(plan)
 	for _, function := range declared {
 		changes = append(changes, Change{
 			Kind:   functionKind,
@@ -160,7 +160,7 @@ func calling(function string) func(Function) bool {
 	return func(held Function) bool { return held.Name == function }
 }
 
-func declaredFunctions(plan StackPlan) []string {
+func DeclaredFunctions(plan StackPlan) []string {
 	if plan.App == nil {
 		return nil
 	}
