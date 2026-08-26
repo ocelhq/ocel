@@ -47,8 +47,13 @@ ssh_opts() {
         -o LogLevel=ERROR
 }
 
+cloud_init_settled() {
+    incus exec "$1" -- cloud-init status 2>/dev/null |
+        grep -qE '^status: (done|error|degraded)'
+}
+
 wait_ssh() {
-    local name=$1 addr deadline=$((SECONDS + SSH_WAIT_SECS))
+    local name=$1 addr grace=15 deadline=$((SECONDS + SSH_WAIT_SECS))
     while [ "$SECONDS" -lt "$deadline" ]; do
         addr=$(addr_of "$name")
         if [ -n "$addr" ]; then
@@ -57,6 +62,9 @@ wait_ssh() {
                 echo "$addr"
                 return 0
             fi
+        fi
+        if [ "$deadline" -gt $((SECONDS + grace)) ] && cloud_init_settled "$name"; then
+            deadline=$((SECONDS + grace))
         fi
         sleep 2
     done

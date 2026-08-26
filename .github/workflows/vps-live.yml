@@ -65,6 +65,16 @@ jobs:
           sudo incus admin init --auto
           sudo usermod -aG incus-admin "$(id -un)"
 
+      - name: Let the incus bridge past Docker's FORWARD drop
+        if: steps.reach.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          for cmd in iptables ip6tables; do
+            sudo "$cmd" -nL DOCKER-USER >/dev/null 2>&1 || continue
+            sudo "$cmd" -I DOCKER-USER -i incusbr0 -j ACCEPT
+            sudo "$cmd" -I DOCKER-USER -o incusbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+          done
+
       - name: Run the live conformance suite
         if: steps.reach.outputs.run == 'true'
         run: |
