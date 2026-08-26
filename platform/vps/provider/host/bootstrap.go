@@ -219,7 +219,14 @@ func deployOwned(item Item) bool {
 	if item.Kind != KindDir && item.Kind != KindFile {
 		return false
 	}
-	return item.Owner == stateOwner && (item.Name == stateRoot || strings.HasPrefix(item.Name, stateRoot+"/"))
+	if beneath(sshDir, item.Name) {
+		return false
+	}
+	return item.Owner == stateOwner && beneath(stateRoot, item.Name)
+}
+
+func beneath(root, name string) bool {
+	return name == root || strings.HasPrefix(name, root+"/")
 }
 
 func admitReplacements(read Reading, items []Item) error {

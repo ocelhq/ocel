@@ -76,12 +76,13 @@ func TestHealRefusesAMixedSetWholeRatherThanDoingThePartItMay(t *testing.T) {
 	}
 }
 
-func TestHealWritesNothingOutsideTheStateDirectoryUnderAnyIdentity(t *testing.T) {
+func TestHealRefusesEveryItemOutsideTheRecordTier(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
 	for _, name := range []string{
 		ClassDir(class), SealKeyPath(class), SealHelper, sudoersSeal, deployUser, dockerEngine, dockerUnit,
+		sshDir, authorizedKeys,
 	} {
 		read := drifted(t, standingHost(t), name)
 		refused := refusal(t, second(healable(read)), providerkit.CodeDenied)
