@@ -167,6 +167,31 @@ func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T
 	}
 }
 
+func TestDestroyOfAHalfWrittenHostNamesWhatStandsAndNothingBeside(t *testing.T) {
+	t.Parallel()
+
+	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	half := map[string]string{}
+	for _, item := range ClassItems(production) {
+		half[item.ID()] = item.Digest()
+	}
+	taken := removing(
+		Reading{Class: production, Observed: half},
+		Reading{Class: preview, Observed: map[string]string{}},
+	)
+	for _, r := range taken {
+		if _, stands := half[r.kind+" "+r.path]; !stands {
+			t.Errorf("destroy takes %s %s off a host that never had it, and an apply that died halfway needs no mode of its own", r.kind, r.path)
+		}
+	}
+	if last := taken[len(taken)-1]; last.path != classRoot {
+		t.Errorf("destroy of a half-written host ends at %s, want the shared root taken after the class tier beneath it", last.path)
+	}
+	if index(taken, ClassDir(production)) > index(taken, classRoot) {
+		t.Error("the class directory carrying the stamp is taken after the root above it, so an interrupted destroy loses what the host says it is")
+	}
+}
+
 func TestDestroyLeavesTheTrustStoreAloneAndSpellsTheLineThatEditsIt(t *testing.T) {
 	t.Parallel()
 
