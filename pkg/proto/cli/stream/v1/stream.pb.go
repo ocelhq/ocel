@@ -76,12 +76,8 @@ func (DiagnosticLevel) EnumDescriptor() ([]byte, []int) {
 	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{0}
 }
 
-// One event of a run as the CLI tells it. Providers own `OperationEvent`, which
-// arrives here under `operation`.
-//
-// Stable: the arm, `DiagnosticEvent.code`, and typed fields. Presentation, and free to
-// change: human text, level, and the order of concurrent events. Versioning rides the
-// proto package version.
+// One event of a run as the CLI tells it. Stable: the arm and its typed fields.
+// Presentation, free to change: human text, level, order of concurrent events.
 type RunEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Event:
