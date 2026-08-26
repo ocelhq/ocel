@@ -1,0 +1,22 @@
+Plan for acme production on vps web-1, fronted by the cloudflare edge:
+
+  shared infrastructure
+    ~ acme.example.com  caddy site  — upstream port moved
+
+  app web  [nextjs]
+    + acme/web:8f3c1a        image  — pushed to the host
+    ± ocel-acme-web          container  — image changed
+    ~ ocel-acme-web.service  systemd unit
+    – ocel-acme-web-4b2e     container  — superseded by this deploy
+
+  app api  [go]
+    + acme/api:8f3c1a  image  — pushed to the host
+    ± ocel-acme-api    container  — image changed
+
+  edge cloudflare
+    + api.acme.example.com    dns record
+    ~ acme.example.com/api/*  origin rule
+
+3 to create, 3 to update, 2 to replace, 1 to delete. 4 unchanged.
+
+  Nothing was applied. Drop --dry to deploy.

@@ -1,0 +1,81 @@
+Plan for acme production on aws (compute: serverless), fronted by the cloudfront edge:
+
+  shared infrastructure
+    ~ acme-prod/env  aws:secretsmanager/SecretVersion  — 2 values changed
+
+  app web  [nextjs]
+    + web/8f3c1a/server.zip     aws:s3/BucketObjectv2  — 18 MB
+    + web/8f3c1a/assets.tar     aws:s3/BucketObjectv2  — 6 MB, 214 files
+    + web/8f3c1a/prerender.tar  aws:s3/BucketObjectv2  — 28 pages
+    ~ acme-prod-web             aws:lambda/Function  — code digest changed
+    ~ acme-prod-web:live        aws:lambda/Alias
+    – web/7d1b02/server.zip     aws:s3/BucketObjectv2  — 3 deploys back
+    – web/7d1b02/assets.tar     aws:s3/BucketObjectv2  — 3 deploys back
+
+  app api  [go]
+    + api/8f3c1a/bootstrap.zip  aws:s3/BucketObjectv2  — 9 MB
+    + acme-prod-api             aws:lambda/Function
+    + acme-prod-api:live        aws:lambda/Alias
+    + acme-prod-api-fn          aws:iam/Role
+    + ANY /api/{proxy+}         aws:apigatewayv2/Route
+
+  edge cloudfront
+    + /api/*  behaviour
+    + /*      invalidation (this one is slow)
+
+10 to create, 3 to update, 2 to delete. 4 unchanged.
+
+  Deploying — this plan is convergent, so it applies without asking.
+
+#1 Building web
+#2 Building api
+#1 | ▲ Next.js 15.4.2
+#1 |    Creating an optimized production build ...
+#1 |  ✓ Compiled successfully
+#1 |    Generating static pages (28/28)
+#1 |    Bundling server for the lambda target ...
+#2 | go: building bootstrap for linux/arm64
+✓ Building api  <1s
+✓ Building web  <1s
+#3 Provisioning
+#4 shared infrastructure — aws:secretsmanager/SecretVersion acme-prod/env
+#5 web
+#6 api
+#7 aws:s3/BucketObjectv2 web/8f3c1a/server.zip
+#8 aws:s3/BucketObjectv2 web/8f3c1a/assets.tar
+#9 aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar
+#10 aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip
+#11 aws:iam/Role acme-prod-api-fn
+#7 aws:s3/BucketObjectv2 web/8f3c1a/server.zip — uploading 18 MB 0/18
+#8 aws:s3/BucketObjectv2 web/8f3c1a/assets.tar — uploading 6 MB 0/6
+#10 aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip — uploading 9 MB 0/9
+#8 aws:s3/BucketObjectv2 web/8f3c1a/assets.tar — uploading 6 MB 6/6
+  ✓ shared infrastructure  <1s
+    ✓ aws:s3/BucketObjectv2 web/8f3c1a/server.zip  <1s
+    ✓ aws:s3/BucketObjectv2 web/8f3c1a/assets.tar  <1s
+    ✓ aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar  <1s
+    ✓ aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip  <1s
+    ✓ aws:iam/Role acme-prod-api-fn  <1s
+#12 aws:lambda/Function acme-prod-web
+#13 aws:lambda/Function acme-prod-api
+    ✓ aws:lambda/Function acme-prod-web  <1s
+    ✓ aws:lambda/Function acme-prod-api  <1s
+#14 aws:lambda/Alias acme-prod-web:live
+#15 aws:apigatewayv2/Route ANY /api/{proxy+}
+    ✓ aws:lambda/Alias acme-prod-web:live  <1s
+    ✓ aws:apigatewayv2/Route ANY /api/{proxy+}  <1s
+#16 2 superseded objects
+    ✓ 2 superseded objects  <1s
+  ✓ web  <1s
+  ✓ api  <1s
+✓ Provisioning  <1s
+#17 Reconciling the cloudfront edge — invalidating /*
+✓ Reconciling the cloudfront edge  <1s
+#18 Promoting
+✓ Promoting  <1s
+
+✓ Deployed acme to production in <1s
+
+  https://acme.example.com
+
+  Stream: .ocel/runs/2026-08-26T14-44-52Z.ndjson

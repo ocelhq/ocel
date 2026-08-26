@@ -1,0 +1,28 @@
+Plan for acme production on aws (compute: serverless), fronted by the cloudfront edge:
+
+  shared infrastructure
+    ~ acme-prod/env  aws:secretsmanager/SecretVersion  — 2 values changed
+
+  app web  [nextjs]
+    + web/8f3c1a/server.zip     aws:s3/BucketObjectv2  — 18 MB
+    + web/8f3c1a/assets.tar     aws:s3/BucketObjectv2  — 6 MB, 214 files
+    + web/8f3c1a/prerender.tar  aws:s3/BucketObjectv2  — 28 pages
+    ~ acme-prod-web             aws:lambda/Function  — code digest changed
+    ~ acme-prod-web:live        aws:lambda/Alias
+    – web/7d1b02/server.zip     aws:s3/BucketObjectv2  — 3 deploys back
+    – web/7d1b02/assets.tar     aws:s3/BucketObjectv2  — 3 deploys back
+
+  app api  [go]
+    + api/8f3c1a/bootstrap.zip  aws:s3/BucketObjectv2  — 9 MB
+    + acme-prod-api             aws:lambda/Function
+    + acme-prod-api:live        aws:lambda/Alias
+    + acme-prod-api-fn          aws:iam/Role
+    + ANY /api/{proxy+}         aws:apigatewayv2/Route
+
+  edge cloudfront
+    + /api/*  behaviour
+    + /*      invalidation (this one is slow)
+
+10 to create, 3 to update, 2 to delete. 4 unchanged.
+
+  Nothing was applied. Drop --dry to deploy.

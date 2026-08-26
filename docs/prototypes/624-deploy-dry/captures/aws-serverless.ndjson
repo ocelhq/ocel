@@ -1,0 +1,61 @@
+{"plan":{"edgeKind":"cloudfront","groups":[{"changes":[{"action":"ACTION_KEEP","kind":"aws:s3/Bucket","name":"acme-prod-artifacts"},{"action":"ACTION_KEEP","kind":"aws:apigatewayv2/Api","name":"acme-prod"},{"action":"ACTION_UPDATE","kind":"aws:secretsmanager/SecretVersion","name":"acme-prod/env","reason":"2 values changed"}],"kind":"shared","name":"infrastructure"},{"changes":[{"action":"ACTION_CREATE","kind":"aws:s3/BucketObjectv2","name":"web/8f3c1a/server.zip","reason":"18 MB"},{"action":"ACTION_CREATE","kind":"aws:s3/BucketObjectv2","name":"web/8f3c1a/assets.tar","reason":"6 MB, 214 files"},{"action":"ACTION_CREATE","kind":"aws:s3/BucketObjectv2","name":"web/8f3c1a/prerender.tar","reason":"28 pages"},{"action":"ACTION_UPDATE","kind":"aws:lambda/Function","name":"acme-prod-web","reason":"code digest changed"},{"action":"ACTION_UPDATE","kind":"aws:lambda/Alias","name":"acme-prod-web:live"},{"action":"ACTION_KEEP","kind":"aws:apigatewayv2/Route","name":"ANY /{proxy+}"},{"action":"ACTION_DELETE","kind":"aws:s3/BucketObjectv2","name":"web/7d1b02/server.zip","reason":"3 deploys back"},{"action":"ACTION_DELETE","kind":"aws:s3/BucketObjectv2","name":"web/7d1b02/assets.tar","reason":"3 deploys back"}],"kind":"app","name":"web"},{"changes":[{"action":"ACTION_CREATE","kind":"aws:s3/BucketObjectv2","name":"api/8f3c1a/bootstrap.zip","reason":"9 MB"},{"action":"ACTION_CREATE","kind":"aws:lambda/Function","name":"acme-prod-api"},{"action":"ACTION_CREATE","kind":"aws:lambda/Alias","name":"acme-prod-api:live"},{"action":"ACTION_CREATE","kind":"aws:iam/Role","name":"acme-prod-api-fn"},{"action":"ACTION_CREATE","kind":"aws:apigatewayv2/Route","name":"ANY /api/{proxy+}"}],"kind":"app","name":"api"},{"changes":[{"action":"ACTION_KEEP","kind":"behaviour","name":"/_next/static/*"},{"action":"ACTION_CREATE","kind":"behaviour","name":"/api/*"},{"action":"ACTION_CREATE","kind":"invalidation","name":"/*"}],"kind":"edge","name":"cloudfront"}],"subject":"Plan for acme production on aws (compute: serverless)"}}
+{"stagePlan":{"stages":[{"id":"build-web","title":"Building web"},{"id":"build-api","title":"Building api"},{"id":"provision","title":"Provisioning"},{"id":"infra","parentId":"provision","title":"shared infrastructure"},{"id":"app-web","parentId":"provision","title":"web"},{"id":"app-api","parentId":"provision","title":"api"},{"id":"edge","title":"Reconciling the cloudfront edge"},{"id":"promote","title":"Promoting"}]}}
+{"progress":{"message":"","stageId":"build-web"}}
+{"progress":{"message":"","stageId":"build-api"}}
+{"log":{"message":"▲ Next.js 15.4.2","stageId":"build-web"}}
+{"log":{"message":"   Creating an optimized production build ...","stageId":"build-web"}}
+{"log":{"message":" ✓ Compiled successfully","stageId":"build-web"}}
+{"log":{"message":"   Generating static pages (28/28)","stageId":"build-web"}}
+{"log":{"message":"   Bundling server for the lambda target ...","stageId":"build-web"}}
+{"log":{"message":"go: building bootstrap for linux/arm64","stageId":"build-api"}}
+{"spanEnd":{"failed":false,"stageId":"build-api"}}
+{"spanEnd":{"failed":false,"stageId":"build-web"}}
+{"stagePlan":{"stages":[{"id":"web-server","parentId":"app-web","title":"aws:s3/BucketObjectv2 web/8f3c1a/server.zip"},{"id":"web-assets","parentId":"app-web","title":"aws:s3/BucketObjectv2 web/8f3c1a/assets.tar"},{"id":"web-pre","parentId":"app-web","title":"aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar"},{"id":"web-fn","parentId":"app-web","title":"aws:lambda/Function acme-prod-web"},{"id":"web-alias","parentId":"app-web","title":"aws:lambda/Alias acme-prod-web:live"},{"id":"web-gc","parentId":"app-web","title":"2 superseded objects"},{"id":"api-zip","parentId":"app-api","title":"aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip"},{"id":"api-role","parentId":"app-api","title":"aws:iam/Role acme-prod-api-fn"},{"id":"api-fn","parentId":"app-api","title":"aws:lambda/Function acme-prod-api"},{"id":"api-route","parentId":"app-api","title":"aws:apigatewayv2/Route ANY /api/{proxy+}"}]}}
+{"progress":{"message":"","stageId":"provision"}}
+{"progress":{"message":"aws:secretsmanager/SecretVersion acme-prod/env","stageId":"infra"}}
+{"progress":{"message":"","stageId":"app-web"}}
+{"progress":{"message":"","stageId":"app-api"}}
+{"progress":{"message":"","stageId":"web-server"}}
+{"progress":{"message":"","stageId":"web-assets"}}
+{"progress":{"message":"","stageId":"web-pre"}}
+{"progress":{"message":"","stageId":"api-zip"}}
+{"progress":{"message":"","stageId":"api-role"}}
+{"progress":{"current":0,"message":"uploading 18 MB","stageId":"web-server","total":18}}
+{"progress":{"current":0,"message":"uploading 6 MB","stageId":"web-assets","total":6}}
+{"progress":{"current":0,"message":"uploading 9 MB","stageId":"api-zip","total":9}}
+{"progress":{"current":4,"message":"uploading 18 MB","stageId":"web-server","total":18}}
+{"progress":{"current":2,"message":"uploading 6 MB","stageId":"web-assets","total":6}}
+{"progress":{"current":2,"message":"uploading 9 MB","stageId":"api-zip","total":9}}
+{"progress":{"current":8,"message":"uploading 18 MB","stageId":"web-server","total":18}}
+{"progress":{"current":4,"message":"uploading 6 MB","stageId":"web-assets","total":6}}
+{"progress":{"current":4,"message":"uploading 9 MB","stageId":"api-zip","total":9}}
+{"progress":{"current":12,"message":"uploading 18 MB","stageId":"web-server","total":18}}
+{"progress":{"current":6,"message":"uploading 6 MB","stageId":"web-assets","total":6}}
+{"progress":{"current":6,"message":"uploading 9 MB","stageId":"api-zip","total":9}}
+{"progress":{"current":16,"message":"uploading 18 MB","stageId":"web-server","total":18}}
+{"progress":{"current":8,"message":"uploading 6 MB","stageId":"web-assets","total":6}}
+{"progress":{"current":8,"message":"uploading 9 MB","stageId":"api-zip","total":9}}
+{"spanEnd":{"failed":false,"stageId":"infra"}}
+{"spanEnd":{"failed":false,"stageId":"web-server"}}
+{"spanEnd":{"failed":false,"stageId":"web-assets"}}
+{"spanEnd":{"failed":false,"stageId":"web-pre"}}
+{"spanEnd":{"failed":false,"stageId":"api-zip"}}
+{"spanEnd":{"failed":false,"stageId":"api-role"}}
+{"progress":{"message":"","stageId":"web-fn"}}
+{"progress":{"message":"","stageId":"api-fn"}}
+{"spanEnd":{"failed":false,"stageId":"web-fn"}}
+{"spanEnd":{"failed":false,"stageId":"api-fn"}}
+{"progress":{"message":"","stageId":"web-alias"}}
+{"progress":{"message":"","stageId":"api-route"}}
+{"spanEnd":{"failed":false,"stageId":"web-alias"}}
+{"spanEnd":{"failed":false,"stageId":"api-route"}}
+{"progress":{"message":"","stageId":"web-gc"}}
+{"spanEnd":{"failed":false,"stageId":"web-gc"}}
+{"spanEnd":{"failed":false,"stageId":"app-web"}}
+{"spanEnd":{"failed":false,"stageId":"app-api"}}
+{"spanEnd":{"failed":false,"stageId":"provision"}}
+{"progress":{"message":"invalidating /*","stageId":"edge"}}
+{"spanEnd":{"failed":false,"stageId":"edge"}}
+{"progress":{"message":"","stageId":"promote"}}
+{"spanEnd":{"failed":false,"stageId":"promote"}}
+{"result":{"appUrls":["https://acme.example.com"],"headline":"Deployed acme to production","success":true}}

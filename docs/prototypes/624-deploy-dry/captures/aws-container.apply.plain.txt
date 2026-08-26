@@ -1,0 +1,87 @@
+Plan for acme production on aws (compute: container), fronted by the cloudfront edge:
+
+  shared infrastructure
+    + acme-prod/api  aws:ecr/Repository
+    ~ acme-prod/env  aws:secretsmanager/SecretVersion  — 2 values changed
+
+  app web  [nextjs]
+    + web:8f3c1a          ocel:artifact/EcrImage  — 142 MB
+    ± acme-prod-web       aws:ecs/TaskDefinition  — image digest changed
+    ~ acme-prod-web       aws:ecs/Service (this one is slow)
+    + acme-prod-web-8f3c  aws:lb/TargetGroup
+
+  app api  [go]
+    + api:8f3c1a           ocel:artifact/EcrImage  — 31 MB
+    + acme-prod-api        aws:ecs/TaskDefinition
+    + acme-prod-api        aws:ecs/Service (this one is slow)
+    + acme-prod-api-8f3c   aws:lb/TargetGroup
+    + acme-prod-api-task   aws:iam/Role
+    + /ocel/acme-prod/api  aws:cloudwatch/LogGroup
+
+  edge cloudfront
+    + acme.example.com/api/*  route
+
+10 to create, 2 to update, 1 to replace. 5 unchanged.
+
+  Deploying — this plan is convergent, so it applies without asking.
+
+#1 Building web
+#2 Building api
+#3 [internal] load metadata for node:22-alpine
+  ✓ [internal] load metadata for node:22-alpine  <1s CACHED
+#4 [build 4/9] RUN pnpm install --frozen-lockfile
+#5 [build 2/5] RUN go build -trimpath ./cmd/api
+#4 | Packages: +812
+#4 | Progress: resolved 1204, reused 1204, downloaded 0, added 812, done
+  ✓ [build 4/9] RUN pnpm install --frozen-lockfile  <1s
+#6 [build 7/9] RUN pnpm build
+#6 | ▲ Next.js 15.4.2
+#6 |    Creating an optimized production build ...
+#6 |  ✓ Compiled successfully
+#6 |    Collecting page data ...
+#6 |    Generating static pages (28/28)
+  ✓ [build 2/5] RUN go build -trimpath ./cmd/api  <1s
+#7 exporting to image
+  ✓ exporting to image  <1s
+✓ Building api  <1s
+  ✓ [build 7/9] RUN pnpm build  <1s
+#8 exporting to image
+  ✓ exporting to image  <1s
+✓ Building web  <1s
+#9 Provisioning
+#10 shared infrastructure — aws:ecr/Repository acme-prod/api
+#10 shared infrastructure — aws:secretsmanager/SecretVersion acme-prod/env
+  ✓ shared infrastructure  <1s
+#11 web
+#12 api
+#13 ocel:artifact/EcrImage web:8f3c1a
+#14 ocel:artifact/EcrImage api:8f3c1a
+#13 ocel:artifact/EcrImage web:8f3c1a — pushing 142 MB 0/142
+#14 ocel:artifact/EcrImage api:8f3c1a — pushing 31 MB 0/31
+    ✓ ocel:artifact/EcrImage web:8f3c1a  <1s
+    ✓ ocel:artifact/EcrImage api:8f3c1a  <1s
+#15 aws:ecs/TaskDefinition acme-prod-web
+#16 aws:iam/Role acme-prod-api-task
+    ✓ aws:ecs/TaskDefinition acme-prod-web  <1s
+    ✓ aws:iam/Role acme-prod-api-task  <1s
+#17 aws:ecs/TaskDefinition acme-prod-api
+    ✓ aws:ecs/TaskDefinition acme-prod-api  <1s
+#18 aws:ecs/Service acme-prod-web — 1 of 2 tasks healthy
+#19 aws:ecs/Service acme-prod-api — 0 of 2 tasks healthy
+#18 aws:ecs/Service acme-prod-web — 2 of 2 tasks healthy
+    ✓ aws:ecs/Service acme-prod-web  <1s
+  ✓ web  <1s
+#19 aws:ecs/Service acme-prod-api — 2 of 2 tasks healthy
+    ✓ aws:ecs/Service acme-prod-api  <1s
+  ✓ api  <1s
+✓ Provisioning  <1s
+#20 Reconciling the cloudfront edge — acme.example.com/api/*
+✓ Reconciling the cloudfront edge  <1s
+#21 Promoting
+✓ Promoting  <1s
+
+✓ Deployed acme to production in <1s
+
+  https://acme.example.com
+
+  Stream: .ocel/runs/2026-08-26T14-31-08Z.ndjson

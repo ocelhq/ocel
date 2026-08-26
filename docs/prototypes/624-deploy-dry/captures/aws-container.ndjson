@@ -1,0 +1,69 @@
+{"plan":{"edgeKind":"cloudfront","groups":[{"changes":[{"action":"ACTION_KEEP","kind":"aws:ec2/Vpc","name":"acme-prod"},{"action":"ACTION_KEEP","kind":"aws:ecs/Cluster","name":"acme-prod"},{"action":"ACTION_KEEP","kind":"aws:lb/LoadBalancer","name":"acme-prod"},{"action":"ACTION_CREATE","kind":"aws:ecr/Repository","name":"acme-prod/api"},{"action":"ACTION_UPDATE","kind":"aws:secretsmanager/SecretVersion","name":"acme-prod/env","reason":"2 values changed"}],"kind":"shared","name":"infrastructure"},{"changes":[{"action":"ACTION_CREATE","kind":"ocel:artifact/EcrImage","name":"web:8f3c1a","reason":"142 MB"},{"action":"ACTION_REPLACE","kind":"aws:ecs/TaskDefinition","name":"acme-prod-web","reason":"image digest changed"},{"action":"ACTION_UPDATE","kind":"aws:ecs/Service","name":"acme-prod-web"},{"action":"ACTION_CREATE","kind":"aws:lb/TargetGroup","name":"acme-prod-web-8f3c"},{"action":"ACTION_KEEP","kind":"aws:cloudwatch/LogGroup","name":"/ocel/acme-prod/web"}],"kind":"app","name":"web"},{"changes":[{"action":"ACTION_CREATE","kind":"ocel:artifact/EcrImage","name":"api:8f3c1a","reason":"31 MB"},{"action":"ACTION_CREATE","kind":"aws:ecs/TaskDefinition","name":"acme-prod-api"},{"action":"ACTION_CREATE","kind":"aws:ecs/Service","name":"acme-prod-api"},{"action":"ACTION_CREATE","kind":"aws:lb/TargetGroup","name":"acme-prod-api-8f3c"},{"action":"ACTION_CREATE","kind":"aws:iam/Role","name":"acme-prod-api-task"},{"action":"ACTION_CREATE","kind":"aws:cloudwatch/LogGroup","name":"/ocel/acme-prod/api"}],"kind":"app","name":"api"},{"changes":[{"action":"ACTION_KEEP","kind":"route","name":"acme.example.com/*"},{"action":"ACTION_CREATE","kind":"route","name":"acme.example.com/api/*"}],"kind":"edge","name":"cloudfront"}],"subject":"Plan for acme production on aws (compute: container)"}}
+{"stagePlan":{"stages":[{"id":"build-web","title":"Building web"},{"id":"build-api","title":"Building api"},{"id":"provision","title":"Provisioning"},{"id":"infra","parentId":"provision","title":"shared infrastructure"},{"id":"app-web","parentId":"provision","title":"web"},{"id":"app-api","parentId":"provision","title":"api"},{"id":"edge","title":"Reconciling the cloudfront edge"},{"id":"promote","title":"Promoting"}]}}
+{"stagePlan":{"stages":[{"id":"web-v1","parentId":"build-web","title":"[internal] load metadata for node:22-alpine"},{"id":"web-v2","parentId":"build-web","title":"[build 4/9] RUN pnpm install --frozen-lockfile"},{"id":"web-v3","parentId":"build-web","title":"[build 7/9] RUN pnpm build"},{"id":"web-v4","parentId":"build-web","title":"exporting to image"},{"id":"api-v1","parentId":"build-api","title":"[build 2/5] RUN go build -trimpath ./cmd/api"},{"id":"api-v2","parentId":"build-api","title":"exporting to image"}]}}
+{"progress":{"message":"","stageId":"build-web"}}
+{"progress":{"message":"","stageId":"build-api"}}
+{"progress":{"cached":true,"message":"","stageId":"web-v1"}}
+{"spanEnd":{"failed":false,"stageId":"web-v1"}}
+{"progress":{"message":"","stageId":"web-v2"}}
+{"progress":{"message":"","stageId":"api-v1"}}
+{"log":{"message":"Packages: +812","stageId":"web-v2"}}
+{"log":{"message":"Progress: resolved 1204, reused 1204, downloaded 0, added 812, done","stageId":"web-v2"}}
+{"spanEnd":{"failed":false,"stageId":"web-v2"}}
+{"progress":{"message":"","stageId":"web-v3"}}
+{"log":{"message":"▲ Next.js 15.4.2","stageId":"web-v3"}}
+{"log":{"message":"   Creating an optimized production build ...","stageId":"web-v3"}}
+{"log":{"message":" ✓ Compiled successfully","stageId":"web-v3"}}
+{"log":{"message":"   Collecting page data ...","stageId":"web-v3"}}
+{"log":{"message":"   Generating static pages (28/28)","stageId":"web-v3"}}
+{"spanEnd":{"failed":false,"stageId":"api-v1"}}
+{"progress":{"message":"","stageId":"api-v2"}}
+{"spanEnd":{"failed":false,"stageId":"api-v2"}}
+{"spanEnd":{"failed":false,"stageId":"build-api"}}
+{"spanEnd":{"failed":false,"stageId":"web-v3"}}
+{"progress":{"message":"","stageId":"web-v4"}}
+{"spanEnd":{"failed":false,"stageId":"web-v4"}}
+{"spanEnd":{"failed":false,"stageId":"build-web"}}
+{"progress":{"message":"","stageId":"provision"}}
+{"progress":{"message":"aws:ecr/Repository acme-prod/api","stageId":"infra"}}
+{"progress":{"message":"aws:secretsmanager/SecretVersion acme-prod/env","stageId":"infra"}}
+{"spanEnd":{"failed":false,"stageId":"infra"}}
+{"stagePlan":{"stages":[{"id":"web-img","parentId":"app-web","title":"ocel:artifact/EcrImage web:8f3c1a"},{"id":"web-td","parentId":"app-web","title":"aws:ecs/TaskDefinition acme-prod-web"},{"id":"web-svc","parentId":"app-web","title":"aws:ecs/Service acme-prod-web"},{"id":"api-img","parentId":"app-api","title":"ocel:artifact/EcrImage api:8f3c1a"},{"id":"api-role","parentId":"app-api","title":"aws:iam/Role acme-prod-api-task"},{"id":"api-td","parentId":"app-api","title":"aws:ecs/TaskDefinition acme-prod-api"},{"id":"api-svc","parentId":"app-api","title":"aws:ecs/Service acme-prod-api"}]}}
+{"progress":{"message":"","stageId":"app-web"}}
+{"progress":{"message":"","stageId":"app-api"}}
+{"progress":{"message":"","stageId":"web-img"}}
+{"progress":{"message":"","stageId":"api-img"}}
+{"progress":{"current":0,"message":"pushing 142 MB","stageId":"web-img","total":142}}
+{"progress":{"current":0,"message":"pushing 31 MB","stageId":"api-img","total":31}}
+{"progress":{"current":28,"message":"pushing 142 MB","stageId":"web-img","total":142}}
+{"progress":{"current":6,"message":"pushing 31 MB","stageId":"api-img","total":31}}
+{"progress":{"current":56,"message":"pushing 142 MB","stageId":"web-img","total":142}}
+{"progress":{"current":12,"message":"pushing 31 MB","stageId":"api-img","total":31}}
+{"progress":{"current":84,"message":"pushing 142 MB","stageId":"web-img","total":142}}
+{"progress":{"current":18,"message":"pushing 31 MB","stageId":"api-img","total":31}}
+{"progress":{"current":112,"message":"pushing 142 MB","stageId":"web-img","total":142}}
+{"progress":{"current":24,"message":"pushing 31 MB","stageId":"api-img","total":31}}
+{"progress":{"current":140,"message":"pushing 142 MB","stageId":"web-img","total":142}}
+{"progress":{"current":30,"message":"pushing 31 MB","stageId":"api-img","total":31}}
+{"spanEnd":{"failed":false,"stageId":"web-img"}}
+{"spanEnd":{"failed":false,"stageId":"api-img"}}
+{"progress":{"message":"","stageId":"web-td"}}
+{"progress":{"message":"","stageId":"api-role"}}
+{"spanEnd":{"failed":false,"stageId":"web-td"}}
+{"spanEnd":{"failed":false,"stageId":"api-role"}}
+{"progress":{"message":"","stageId":"api-td"}}
+{"spanEnd":{"failed":false,"stageId":"api-td"}}
+{"progress":{"message":"1 of 2 tasks healthy","stageId":"web-svc"}}
+{"progress":{"message":"0 of 2 tasks healthy","stageId":"api-svc"}}
+{"progress":{"message":"2 of 2 tasks healthy","stageId":"web-svc"}}
+{"spanEnd":{"failed":false,"stageId":"web-svc"}}
+{"spanEnd":{"failed":false,"stageId":"app-web"}}
+{"progress":{"message":"2 of 2 tasks healthy","stageId":"api-svc"}}
+{"spanEnd":{"failed":false,"stageId":"api-svc"}}
+{"spanEnd":{"failed":false,"stageId":"app-api"}}
+{"spanEnd":{"failed":false,"stageId":"provision"}}
+{"progress":{"message":"acme.example.com/api/*","stageId":"edge"}}
+{"spanEnd":{"failed":false,"stageId":"edge"}}
+{"progress":{"message":"","stageId":"promote"}}
+{"spanEnd":{"failed":false,"stageId":"promote"}}
+{"result":{"appUrls":["https://acme.example.com"],"headline":"Deployed acme to production","success":true}}

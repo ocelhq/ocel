@@ -1,0 +1,26 @@
+Plan for acme production on aws (compute: container), fronted by the cloudfront edge:
+
+  shared infrastructure
+    + acme-prod/api  aws:ecr/Repository
+    ~ acme-prod/env  aws:secretsmanager/SecretVersion  — 2 values changed
+
+  app web  [nextjs]
+    + web:8f3c1a          ocel:artifact/EcrImage  — 142 MB
+    ± acme-prod-web       aws:ecs/TaskDefinition  — image digest changed
+    ~ acme-prod-web       aws:ecs/Service (this one is slow)
+    + acme-prod-web-8f3c  aws:lb/TargetGroup
+
+  app api  [go]
+    + api:8f3c1a           ocel:artifact/EcrImage  — 31 MB
+    + acme-prod-api        aws:ecs/TaskDefinition
+    + acme-prod-api        aws:ecs/Service (this one is slow)
+    + acme-prod-api-8f3c   aws:lb/TargetGroup
+    + acme-prod-api-task   aws:iam/Role
+    + /ocel/acme-prod/api  aws:cloudwatch/LogGroup
+
+  edge cloudfront
+    + acme.example.com/api/*  route
+
+10 to create, 2 to update, 1 to replace. 5 unchanged.
+
+  Nothing was applied. Drop --dry to deploy.
