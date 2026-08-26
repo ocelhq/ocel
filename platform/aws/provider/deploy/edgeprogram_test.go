@@ -152,6 +152,31 @@ func TestEdgeProgramForAPreviewProject(t *testing.T) {
 	}
 }
 
+func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
+	setWorkerBundle(t)
+
+	project := programmed("proj", providerkit.ClassPreview)
+	project.Apps = []string{"web", "admin"}
+
+	built, err := project.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if _, carried := built.Spec.Worker.Vars[envPreviewBaseDomain]; carried {
+		t.Errorf("Vars carries %s = %q, want none: the shared preview entry holds the base domain, not the project's worker",
+			envPreviewBaseDomain, built.Spec.Worker.Vars[envPreviewBaseDomain])
+	}
+	for name, want := range map[string]string{envPreview: "1", envPreviewApps: "web,admin"} {
+		if built.Spec.Worker.Vars[name] != want {
+			t.Errorf("Vars[%s] = %q, want %q", name, built.Spec.Worker.Vars[name], want)
+		}
+	}
+	if built.Spec.Name != previewWorkerName("proj") || built.Spec.PruneWorkerStem != previewWorkerStem("proj") {
+		t.Errorf("name = %q, stem = %q, want the project's preview worker named so the edge can sweep it",
+			built.Spec.Name, built.Spec.PruneWorkerStem)
+	}
+}
+
 func TestEdgeProgramForAProductionProject(t *testing.T) {
 	setWorkerBundle(t)
 

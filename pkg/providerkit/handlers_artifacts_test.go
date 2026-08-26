@@ -154,7 +154,7 @@ func previewRequest() *contractv1.DeployRequest {
 	req := deployRequest()
 	req.Manifest.Domains = []*contractv1.TierDomains{{
 		Tier:      environmentv1.Tier_TIER_PREVIEW,
-		Hostnames: []string{"pr-7.preview.example"},
+		Hostnames: []string{"*.preview.example"},
 	}}
 	req.Environment = &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"}
 	return req
