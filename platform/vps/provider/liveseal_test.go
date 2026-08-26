@@ -133,4 +133,8 @@ func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 	if !strings.Contains(vm.ssh(t, "sudo cat "+host.StampPath(class)), host.SealAlgorithm) {
 		t.Errorf("the stamp says nothing about how a value is sealed, and %q is what the record claims", host.SealAlgorithm)
 	}
+
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err == nil {
+		t.Error("an apply over a replaced key finished, and the stamp now records a key that opens nothing this class ever sealed")
+	}
 }

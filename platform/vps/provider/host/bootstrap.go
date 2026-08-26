@@ -89,6 +89,9 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err != nil {
 		return err
 	}
+	if err := standing.adopting(); err != nil {
+		return err
+	}
 	items := Items(req.Class, standing.Keys)
 	for _, item := range items {
 		if shown.current(item) && !standing.current(item) {
@@ -123,8 +126,29 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 			"%s stands with no seal key, and a class that seals nothing is a class no deploy can hold a value for",
 			req.Class)
 	}
+	held := Reading{Class: req.Class, Present: true, Seal: minted.Seal, Stamp: standing.Stamp}
+	if err := held.adopting(); err != nil {
+		return err
+	}
 	stamp.State, stamp.Seal = StateComplete, minted.Seal
 	return b.host.Stamp(ctx, req.Class, stamp)
+}
+
+func (r Reading) adopting() error {
+	recorded := r.Stamp.Seal.Fingerprint
+	if !r.Present || recorded == "" || r.Seal.Fingerprint == recorded {
+		return nil
+	}
+	standing := r.Seal.Fingerprint
+	if standing == "" {
+		standing = "no key at all"
+	}
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"%s records the seal key %s and %s now holds %s.\n"+
+			"Every value this class holds was sealed to the key the stamp records, and nothing opens them under another: "+
+			"this apply will not adopt the key that replaced it.\n"+
+			"Put the recorded key back, or `ocel destroy` the class and seal its values again",
+		StampPath(r.Class), recorded, SealKeyPath(r.Class), standing)
 }
 
 func (b Bootstrapper) write(ctx context.Context, standing Reading, items []Item, report providerkit.Reporter) error {
