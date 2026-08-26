@@ -14,8 +14,9 @@ const (
 )
 
 const (
-	engineFact = "engine=present\n"
-	unitFacts  = "active=active\nenabled=enabled\n"
+	engineFact   = "engine=present\n"
+	unservedFact = "unserved"
+	unitFacts    = "active=active\nenabled=enabled\n"
 )
 
 func EngineItems() []Item {
@@ -69,8 +70,10 @@ func unitCommand() string {
 }
 
 func engineProbe() string {
-	return `if command -v ` + quoted(dockerEngine) + ` >/dev/null 2>&1 && systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then
-` + reports(quoted(KindEngine), quoted(dockerEngine), "0", quoted(rootOwner), quoted(contentSum([]byte(engineFact)))) + `
+	return `if command -v ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then
+if systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then engine=present; else engine=` + quoted(unservedFact) + `; fi
+` + reports(quoted(KindEngine), quoted(dockerEngine), "0", quoted(rootOwner),
+		`"$(printf 'engine=%s\n' "$engine" | sha256sum | cut -d' ' -f1)"`) + `
 fi`
 }
 

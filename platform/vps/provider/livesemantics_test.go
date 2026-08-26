@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	helperDir  = "/usr/local/lib/ocel"
-	recordsDir = "/var/lib/ocel/production/records"
+	helperDir     = "/usr/local/lib/ocel"
+	recordsHelper = helperDir + "/records"
+	recordsDir    = "/var/lib/ocel/production/records"
 )
 
 type killer struct {
@@ -171,24 +172,37 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	}
 
 	vm.ssh(t, "sudo chmod 700 "+helperDir)
+	converging, err := bootstrapper.Describe(ctx, class)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unattended.Held = converging.Held
+	if err := bootstrapper.Apply(ctx, unattended, nil); err != nil {
+		t.Fatalf("an unattended apply over a host whose %s has moved mode = %v, want a converge that destroys nothing to proceed", helperDir, err)
+	}
+	if held := mode(t, vm, helperDir); held != "755" {
+		t.Errorf("%s stands at %q after the unattended converge, want 755", helperDir, held)
+	}
+
+	vm.ssh(t, "sudo chmod 700 "+recordsHelper)
 	moved, err := bootstrapper.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
 	unattended.Held = moved.Held
 	refusal := refused(t, bootstrapper.Apply(ctx, unattended, nil), providerkit.CodeNotReady)
-	if !strings.Contains(refusal.Message, helperDir) {
-		t.Errorf("the refusal says %q, want it to name %s as what it would write over", refusal.Message, helperDir)
+	if !strings.Contains(refusal.Message, recordsHelper) {
+		t.Errorf("the refusal says %q, want it to name %s as what it would write over", refusal.Message, recordsHelper)
 	}
-	if held := mode(t, vm, helperDir); held != "700" {
-		t.Errorf("%s stands at %q after the apply that refused it, want the refusal to have written nothing", helperDir, held)
+	if held := mode(t, vm, recordsHelper); held != "700" {
+		t.Errorf("%s stands at %q after the apply that refused it, want the refusal to have written nothing", recordsHelper, held)
 	}
 
 	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: moved.Held}, nil); err != nil {
 		t.Fatalf("the same apply with somebody there to accept it = %v", err)
 	}
-	if held := mode(t, vm, helperDir); held != "755" {
-		t.Errorf("%s stands at %q after the apply that accepted the write, want 755", helperDir, held)
+	if held := mode(t, vm, recordsHelper); held != "755" {
+		t.Errorf("%s stands at %q after the apply that accepted the write, want 755", recordsHelper, held)
 	}
 }
 

@@ -130,7 +130,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	}
 
 	if req.Unattended {
-		if err := admitReplacements(standing, items); err != nil {
+		if err := refuseReplacements(standing, items); err != nil {
 			return err
 		}
 	}
@@ -229,10 +229,19 @@ func beneath(root, name string) bool {
 	return name == root || strings.HasPrefix(name, root+"/")
 }
 
-func admitReplacements(read Reading, items []Item) error {
+func replacing(item Item) bool {
+	switch item.Kind {
+	case KindDir, KindUnit:
+		return false
+	default:
+		return true
+	}
+}
+
+func refuseReplacements(standing Reading, items []Item) error {
 	var over []string
 	for _, item := range items {
-		if !read.current(item) && read.standing(item.Kind, item.Name) {
+		if !standing.current(item) && standing.standing(item.Kind, item.Name) && replacing(item) {
 			over = append(over, item.ID())
 		}
 	}
@@ -240,7 +249,7 @@ func admitReplacements(read Reading, items []Item) error {
 		return nil
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"%s already stands as something other than what ocel writes, so this apply would write over it rather than install it, and nothing here is present to accept that.\n"+
+		"%s already stands as something other than what ocel writes, so this apply would write over it rather than install it, and what is there now does not survive that.\n"+
 			"Re-run with --yes to write it anyway",
 		strings.Join(over, ", "))
 }

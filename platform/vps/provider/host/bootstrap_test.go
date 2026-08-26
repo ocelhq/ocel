@@ -126,7 +126,7 @@ func TestAnUnattendedApplyInstallsWhatIsAbsent(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	fresh := Reading{Class: class, Observed: map[string]string{}}
-	if err := admitReplacements(fresh, Items(class, nil)); err != nil {
+	if err := refuseReplacements(fresh, Items(class, nil)); err != nil {
 		t.Errorf("an unattended apply over a machine nothing has bootstrapped = %v, want the installs to proceed", err)
 	}
 }
@@ -134,12 +134,38 @@ func TestAnUnattendedApplyInstallsWhatIsAbsent(t *testing.T) {
 func TestAnUnattendedApplyWillNotWriteOverWhatAlreadyStands(t *testing.T) {
 	t.Parallel()
 
-	read := drifted(t, standingHost(t), recordsHelper)
-	refused := refusal(t, admitReplacements(read, Items(read.Class, read.Keys)), providerkit.CodeNotReady)
-	if !strings.Contains(refused.Message, recordsHelper) {
-		t.Errorf("the refusal says %q, want it to name %s as the thing it would write over", refused.Message, recordsHelper)
+	class := providerkit.ClassProduction
+	for _, name := range []string{recordsHelper, SealKeyPath(class), deployUser, dockerEngine} {
+		read := drifted(t, standingHost(t), name)
+		refused := refusal(t, refuseReplacements(read, Items(read.Class, read.Keys)), providerkit.CodeNotReady)
+		if !strings.Contains(refused.Message, name) {
+			t.Errorf("the refusal says %q, want it to name %s as the thing it would write over", refused.Message, name)
+		}
+		if !strings.Contains(refused.Message, "--yes") {
+			t.Errorf("the refusal says %q, want it to name the flag that accepts the write", refused.Message)
+		}
 	}
-	if !strings.Contains(refused.Message, "--yes") {
-		t.Errorf("the refusal says %q, want it to name the flag that accepts the write", refused.Message)
+}
+
+func TestAnUnattendedApplyConvergesAHostRatherThanRefusingEveryChange(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	for _, name := range []string{dockerUnit, RecordsDir(class), stateRoot, helperRoot} {
+		read := drifted(t, standingHost(t), name)
+		if err := refuseReplacements(read, Items(read.Class, read.Keys)); err != nil {
+			t.Errorf("an unattended apply over a host whose %s has moved = %v, want a converge that destroys nothing to proceed", name, err)
+		}
+	}
+}
+
+func TestNothingHealMayWriteIsAReplacementClassChange(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	for _, item := range Items(class, []byte(aKey+"\n")) {
+		if deployOwned(item) && replacing(item) {
+			t.Errorf("heal may write %s and writing it replaces rather than converges, so the one unattended path with nobody watching would rebuild it", item.ID())
+		}
 	}
 }
