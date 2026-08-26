@@ -373,7 +373,7 @@ func (g Gate) heal(ctx context.Context, standing Standing, required []string, re
 	}, report)
 	var refusal Refusal
 	if errors.As(err, &refusal) && refusal.Code == CodeDenied {
-		detail(report, "this run may not refresh the account's stale bootstrap stacks, so they are left as they stand: "+refusal.Message)
+		detail(report, denied(refusal))
 		return false
 	}
 	if err != nil {
@@ -381,6 +381,14 @@ func (g Gate) heal(ctx context.Context, standing Standing, required []string, re
 		return false
 	}
 	return true
+}
+
+func denied(refusal Refusal) string {
+	said := "this run may not refresh what this bootstrap has fallen behind on, so it is left as it stands"
+	if refusal.Message == "" {
+		return said
+	}
+	return said + ": " + refusal.Message
 }
 
 func (g Gate) autoHeal(ctx context.Context, class Class) (bool, error) {
