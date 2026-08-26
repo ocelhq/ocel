@@ -263,12 +263,12 @@ func TestPinnedHandshake(t *testing.T) {
 
 	t.Run("trusts nothing beyond the one certificate it was handed", func(t *testing.T) {
 		t.Parallel()
-		if pool := clientConfig(t, client, server).RootCAs; len(pool.Subjects()) != 1 {
-			t.Errorf("the client pins %d roots, want exactly the server certificate", len(pool.Subjects()))
+		if pool := clientConfig(t, client, server).RootCAs; !pool.Equal(only(server.Leaf())) {
+			t.Error("the client roots hold more than the server certificate")
 		}
 		config := serverConfig(t, server, client)
-		if len(config.ClientCAs.Subjects()) != 1 {
-			t.Errorf("the server pins %d client anchors, want exactly the client certificate", len(config.ClientCAs.Subjects()))
+		if !config.ClientCAs.Equal(only(client.Leaf())) {
+			t.Error("the server client anchors hold more than the client certificate")
 		}
 		if config.ClientAuth != tls.RequireAndVerifyClientCert {
 			t.Errorf("the server ClientAuth = %v, want RequireAndVerifyClientCert", config.ClientAuth)
@@ -299,6 +299,12 @@ func TestPinnedHandshake(t *testing.T) {
 			t.Error("ClientConfig(nil) error = nil, want a refusal")
 		}
 	})
+}
+
+func only(cert *x509.Certificate) *x509.CertPool {
+	pool := x509.NewCertPool()
+	pool.AddCert(cert)
+	return pool
 }
 
 func serverConfig(t *testing.T, server, client *Identity) *tls.Config {
