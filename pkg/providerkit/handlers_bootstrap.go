@@ -74,7 +74,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 		}
 		err = inUnit(sender, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISIONING,
 			func(_ *eventSender, report Reporter) error {
-				return gate.Apply(ctx, class, intent, report)
+				return gate.Apply(ctx, plan, class, intent, report)
 			})
 		if err != nil {
 			return nil, err
