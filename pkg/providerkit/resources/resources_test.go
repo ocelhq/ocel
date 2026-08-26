@@ -206,6 +206,122 @@ func TestDestroyTakesDownEveryLinkTheStackRecorded(t *testing.T) {
 	}
 }
 
+func rowsOf(plan providerkit.Plan) map[string]providerkit.ChangeAction {
+	rows := map[string]providerkit.ChangeAction{}
+	for _, group := range plan.Groups {
+		for _, change := range group.Changes {
+			rows[change.Name] = change.Action
+		}
+	}
+	return rows
+}
+
+func TestPlanOverAStackNothingRecordedCreatesEveryResourceItDeclares(t *testing.T) {
+	t.Parallel()
+
+	plan, err := resources.Releaser(fake.NewRecords(), neon{&buckets{}}).Plan(context.Background(), providerkit.StackPlan{
+		Ref:  infraRef(),
+		Kind: providerkit.StackInfra,
+		Resources: []providerkit.Resource{
+			{Name: "orders", Type: providerkit.LinkPostgres},
+			{Name: "uploads", Type: providerkit.LinkBucket},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	if len(plan.Groups) != 1 {
+		t.Fatalf("Plan() returned %d groups, want the one stack it releases", len(plan.Groups))
+	}
+	if plan.Groups[0].Action != providerkit.ActionCreate {
+		t.Errorf("the group reads %q, want the stack shown as a create", plan.Groups[0].Action)
+	}
+	rows := rowsOf(plan)
+	for _, name := range []string{"orders", "uploads"} {
+		if rows[name] != providerkit.ActionCreate {
+			t.Errorf("%s reads %q, want it created: nothing recorded stands", name, rows[name])
+		}
+	}
+}
+
+func TestPlanKeepsWhatStandsAndDeletesWhatThePlanDropped(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := infraRef()
+	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
+		Kind: providerkit.StackInfra,
+		Links: []providerkit.Link{
+			{Type: providerkit.LinkBucket, Name: "uploads"},
+			{Type: providerkit.LinkBucket, Name: "exports"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := resources.Releaser(records, &buckets{}).Plan(ctx, providerkit.StackPlan{
+		Ref:  ref,
+		Kind: providerkit.StackInfra,
+		Resources: []providerkit.Resource{
+			{Name: "uploads", Type: providerkit.LinkBucket},
+			{Name: "invoices", Type: providerkit.LinkBucket},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	rows := rowsOf(plan)
+	want := map[string]providerkit.ChangeAction{
+		"uploads":  providerkit.ActionKeep,
+		"invoices": providerkit.ActionCreate,
+		"exports":  providerkit.ActionDelete,
+	}
+	for name, action := range want {
+		if rows[name] != action {
+			t.Errorf("%s reads %q, want %q", name, rows[name], action)
+		}
+	}
+	for name, action := range rows {
+		if action == providerkit.ActionUpdate {
+			t.Errorf("%s reads as an update, and a fan-out with no engine cannot know a resource changed", name)
+		}
+	}
+}
+
+func TestPlanDestroyTakesDownEveryLinkTheStackRecorded(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := infraRef()
+	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
+		Kind:  providerkit.StackInfra,
+		Links: []providerkit.Link{{Type: providerkit.LinkBucket, Name: "uploads"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	releaser := resources.Releaser(records, &buckets{})
+	plan, err := releaser.PlanDestroy(ctx, ref, nil)
+	if err != nil {
+		t.Fatalf("PlanDestroy() = %v", err)
+	}
+	if rows := rowsOf(plan); rows["uploads"] != providerkit.ActionDelete {
+		t.Errorf("uploads reads %q, want the recorded link shown as going", rows["uploads"])
+	}
+
+	absent := ref
+	absent.Name = naming.InfraStack("never-provisioned")
+	empty, err := releaser.PlanDestroy(ctx, absent, nil)
+	if err != nil {
+		t.Fatalf("PlanDestroy() of a stack nothing recorded = %v", err)
+	}
+	if len(empty.Groups) != 0 {
+		t.Errorf("PlanDestroy() of a stack nothing recorded returned %+v, want nothing to take down", empty.Groups)
+	}
+}
+
 type embedded struct {
 	*fake.Provider
 	fanout providerkit.Releaser

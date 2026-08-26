@@ -142,10 +142,10 @@ func (b *Bootstrapper) stack(class providerkit.Class, feature string) providerki
 	}
 }
 
-func (b *Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
+func (b *Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
 	described, err := b.Describe(ctx, req.Class)
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	groups := providerkit.DeriveGroups(b.named(described), b.Catalogue(), req)
 	for i, group := range groups {
@@ -158,7 +158,7 @@ func (b *Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapReques
 			Action: group.Action,
 		}}
 	}
-	return providerkit.BootstrapPlan{Groups: groups}, nil
+	return providerkit.Plan{Groups: groups}, nil
 }
 
 func (b *Bootstrapper) named(described providerkit.Bootstrap) providerkit.Bootstrap {
@@ -182,14 +182,14 @@ func (b *Bootstrapper) Apply(_ context.Context, req providerkit.BootstrapRequest
 	return nil
 }
 
-func (b *Bootstrapper) PlanRemoval(_ context.Context, class providerkit.Class) (providerkit.BootstrapPlan, error) {
+func (b *Bootstrapper) PlanRemoval(_ context.Context, class providerkit.Class) (providerkit.Plan, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
 	if !present {
-		return providerkit.BootstrapPlan{}, nil
+		return providerkit.Plan{}, nil
 	}
-	plan := providerkit.BootstrapPlan{Groups: make([]providerkit.ChangeGroup, 0, len(features)+1)}
+	plan := providerkit.Plan{Groups: make([]providerkit.ChangeGroup, 0, len(features)+1)}
 	for _, feature := range features {
 		plan.Groups = append(plan.Groups, providerkit.ChangeGroup{
 			Kind:    providerkit.StackGroupKind,
@@ -256,6 +256,14 @@ func (r *Releaser) Plans() []providerkit.StackPlan {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.plans)
+}
+
+func (r *Releaser) Plan(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
+	return providerkit.SynthesizedPlan(plan, r.State(plan.Ref).Result), nil
+}
+
+func (r *Releaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {
+	return providerkit.SynthesizedRemoval(ref, r.State(ref).Result), nil
 }
 
 func (r *Releaser) Provision(_ context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {

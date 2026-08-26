@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -219,9 +220,9 @@ func TestPlanRemovePreviewWildcardNamesWhatGoesAndWhatStays(t *testing.T) {
 	var deletes, keeps int
 	for _, item := range plan.GetGroups() {
 		switch item.GetAction() {
-		case contractv1.Change_ACTION_DELETE:
+		case planv1.Change_ACTION_DELETE:
 			deletes++
-		case contractv1.Change_ACTION_KEEP:
+		case planv1.Change_ACTION_KEEP:
 			keeps++
 		}
 	}

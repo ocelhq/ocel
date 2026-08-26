@@ -7,6 +7,7 @@ import "app/resources/v1/resources.proto";
 import "app/resources/v1/variables.proto";
 import "buf/validate/validate.proto";
 import "common/environment/v1/environment.proto";
+import "common/plan/v1/plan.proto";
 import "common/progress/v1/progress.proto";
 import "google/protobuf/struct.proto";
 
@@ -17,19 +18,19 @@ service ProviderService {
 
     rpc Bootstrap(BootstrapRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc PlanBootstrap(PlanBootstrapRequest) returns (PlanBootstrapResponse);
+    rpc DescribeBootstrap(DescribeBootstrapRequest) returns (DescribeBootstrapResponse);
 
     rpc GetCredentialPermissions(CredentialPermissionsRequest) returns (CredentialPermissionsResponse);
 
     rpc RemoveBootstrap(BootstrapScope) returns (stream common.progress.v1.OperationEvent);
 
-    rpc PlanRemoveBootstrap(BootstrapScope) returns (ChangePlan);
+    rpc PlanRemoveBootstrap(BootstrapScope) returns (common.plan.v1.ChangePlan);
 
     rpc RemoveEnvironment(RemoveEnvironmentRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc RemoveProject(ProjectRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc PlanRemoveProject(ProjectRequest) returns (ChangePlan);
+    rpc PlanRemoveProject(ProjectRequest) returns (common.plan.v1.ChangePlan);
 
     rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
 
@@ -45,7 +46,7 @@ service ProviderService {
 
     rpc GetPreviewWildcard(PreviewWildcardRequest) returns (GetPreviewWildcardResponse);
 
-    rpc PlanRemovePreviewWildcard(PreviewWildcardRequest) returns (ChangePlan);
+    rpc PlanRemovePreviewWildcard(PreviewWildcardRequest) returns (common.plan.v1.ChangePlan);
 
     rpc RemovePreviewWildcard(PreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent);
 
@@ -237,24 +238,23 @@ message BootstrapRequest {
   EdgeSelection edge = 6;
 
   repeated string remove = 7;
+
+  // Draw the plan, emit it as a plan event and stop: the stream changes nothing.
+  bool dry = 8;
 }
 
-message PlanBootstrapRequest {
+message DescribeBootstrapRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   bool with_dependents = 2;
 
-  BootstrapRequest intent = 3;
-
-  EdgeSelection edge = 4;
+  EdgeSelection edge = 3;
 }
 
-message PlanBootstrapResponse {
+message DescribeBootstrapResponse {
   repeated Feature features = 1;
 
   BootstrapStatus bootstrap = 2;
-
-  ChangePlan plan = 3;
 }
 
 message BootstrapStack {
@@ -365,52 +365,6 @@ message ProjectRequest {
   common.environment.v1.Environment environment = 2;
 
   EdgeSelection edge = 3;
-}
-
-message ChangePlan {
-  string subject = 1;
-
-  string edge_kind = 2;
-
-  repeated ChangeGroup groups = 3;
-}
-
-message ChangeGroup {
-  string kind = 1;
-
-  string name = 2;
-
-  string feature = 3;
-
-  Change.Action action = 4;
-
-  string reason = 5;
-
-  bool slow = 6;
-
-  repeated Change changes = 7;
-}
-
-message Change {
-  enum Action {
-    ACTION_UNSPECIFIED = 0;
-    ACTION_CREATE = 1;
-    ACTION_UPDATE = 2;
-    ACTION_REPLACE = 3;
-    ACTION_DELETE = 4;
-    ACTION_DISABLE_THEN_DELETE = 5;
-    ACTION_KEEP = 6;
-  }
-
-  string kind = 1;
-
-  string name = 2;
-
-  Action action = 3;
-
-  string reason = 4;
-
-  bool slow = 5;
 }
 
 message ListEnvironmentsRequest {

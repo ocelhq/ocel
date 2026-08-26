@@ -8,7 +8,8 @@ package progressv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	v11 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	v1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -226,6 +227,7 @@ type OperationEvent struct {
 	//	*OperationEvent_Span
 	//	*OperationEvent_Degraded
 	//	*OperationEvent_DnsOwed
+	//	*OperationEvent_Plan
 	Event         isOperationEvent_Event `protobuf_oneof:"event"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -331,6 +333,15 @@ func (x *OperationEvent) GetDnsOwed() *DnsOwedEvent {
 	return nil
 }
 
+func (x *OperationEvent) GetPlan() *v1.ChangePlan {
+	if x != nil {
+		if x, ok := x.Event.(*OperationEvent_Plan); ok {
+			return x.Plan
+		}
+	}
+	return nil
+}
+
 type isOperationEvent_Event interface {
 	isOperationEvent_Event()
 }
@@ -363,6 +374,10 @@ type OperationEvent_DnsOwed struct {
 	DnsOwed *DnsOwedEvent `protobuf:"bytes,7,opt,name=dns_owed,json=dnsOwed,proto3,oneof"`
 }
 
+type OperationEvent_Plan struct {
+	Plan *v1.ChangePlan `protobuf:"bytes,8,opt,name=plan,proto3,oneof"`
+}
+
 func (*OperationEvent_Progress) isOperationEvent_Event() {}
 
 func (*OperationEvent_Log) isOperationEvent_Event() {}
@@ -376,6 +391,8 @@ func (*OperationEvent_Span) isOperationEvent_Event() {}
 func (*OperationEvent_Degraded) isOperationEvent_Event() {}
 
 func (*OperationEvent_DnsOwed) isOperationEvent_Event() {}
+
+func (*OperationEvent_Plan) isOperationEvent_Event() {}
 
 // A node of the run's stage tree, app-major: a parentless stage is a unit, a child of a
 // unit is a phase, deeper is detail. Events attach at phase depth or deeper, never at a
@@ -947,7 +964,7 @@ type ResultEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	Links         []*v1.Link             `protobuf:"bytes,3,rep,name=links,proto3" json:"links,omitempty"`
+	Links         []*v11.Link            `protobuf:"bytes,3,rep,name=links,proto3" json:"links,omitempty"`
 	Functions     []*FunctionOutput      `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
 	AppUrls       []string               `protobuf:"bytes,5,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
 	PromotionId   string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
@@ -1001,7 +1018,7 @@ func (x *ResultEvent) GetError() string {
 	return ""
 }
 
-func (x *ResultEvent) GetLinks() []*v1.Link {
+func (x *ResultEvent) GetLinks() []*v11.Link {
 	if x != nil {
 		return x.Links
 	}
@@ -1151,7 +1168,7 @@ var File_common_progress_v1_progress_proto protoreflect.FileDescriptor
 
 const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\n" +
-	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1bcommon/links/v1/links.proto\"\xc8\x03\n" +
+	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1bcommon/links/v1/links.proto\x1a\x19common/plan/v1/plan.proto\"\xfa\x03\n" +
 	"\x0eOperationEvent\x12?\n" +
 	"\bprogress\x18\x01 \x01(\v2!.common.progress.v1.ProgressEventH\x00R\bprogress\x120\n" +
 	"\x03log\x18\x02 \x01(\v2\x1c.common.progress.v1.LogEventH\x00R\x03log\x129\n" +
@@ -1160,7 +1177,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"stage_plan\x18\x04 \x01(\v2\".common.progress.v1.StagePlanEventH\x00R\tstagePlan\x123\n" +
 	"\x04span\x18\x05 \x01(\v2\x1d.common.progress.v1.SpanEventH\x00R\x04span\x12?\n" +
 	"\bdegraded\x18\x06 \x01(\v2!.common.progress.v1.DegradedEventH\x00R\bdegraded\x12=\n" +
-	"\bdns_owed\x18\a \x01(\v2 .common.progress.v1.DnsOwedEventH\x00R\adnsOwedB\x0e\n" +
+	"\bdns_owed\x18\a \x01(\v2 .common.progress.v1.DnsOwedEventH\x00R\adnsOwed\x120\n" +
+	"\x04plan\x18\b \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04planB\x0e\n" +
 	"\x05event\x12\x05\xbaH\x02\b\x01\"\x90\x01\n" +
 	"\x05Stage\x12\x17\n" +
 	"\x02id\x18\x01 \x01(\fB\a\xbaH\x04z\x02h\bR\x02id\x12'\n" +
@@ -1285,7 +1303,8 @@ var file_common_progress_v1_progress_proto_goTypes = []any{
 	(*ResultEvent)(nil),    // 13: common.progress.v1.ResultEvent
 	(*FunctionOutput)(nil), // 14: common.progress.v1.FunctionOutput
 	(*FlipBound)(nil),      // 15: common.progress.v1.FlipBound
-	(*v1.Link)(nil),        // 16: common.links.v1.Link
+	(*v1.ChangePlan)(nil),  // 16: common.plan.v1.ChangePlan
+	(*v11.Link)(nil),       // 17: common.links.v1.Link
 }
 var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	8,  // 0: common.progress.v1.OperationEvent.progress:type_name -> common.progress.v1.ProgressEvent
@@ -1295,20 +1314,21 @@ var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	7,  // 4: common.progress.v1.OperationEvent.span:type_name -> common.progress.v1.SpanEvent
 	12, // 5: common.progress.v1.OperationEvent.degraded:type_name -> common.progress.v1.DegradedEvent
 	11, // 6: common.progress.v1.OperationEvent.dns_owed:type_name -> common.progress.v1.DnsOwedEvent
-	0,  // 7: common.progress.v1.Stage.phase:type_name -> common.progress.v1.Phase
-	4,  // 8: common.progress.v1.StagePlanEvent.stages:type_name -> common.progress.v1.Stage
-	2,  // 9: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
-	1,  // 10: common.progress.v1.SpanEvent.status:type_name -> common.progress.v1.SpanStatus
-	6,  // 11: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
-	10, // 12: common.progress.v1.DnsOwedEvent.records:type_name -> common.progress.v1.DnsRecord
-	16, // 13: common.progress.v1.ResultEvent.links:type_name -> common.links.v1.Link
-	14, // 14: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
-	15, // 15: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	16, // 7: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
+	0,  // 8: common.progress.v1.Stage.phase:type_name -> common.progress.v1.Phase
+	4,  // 9: common.progress.v1.StagePlanEvent.stages:type_name -> common.progress.v1.Stage
+	2,  // 10: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
+	1,  // 11: common.progress.v1.SpanEvent.status:type_name -> common.progress.v1.SpanStatus
+	6,  // 12: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
+	10, // 13: common.progress.v1.DnsOwedEvent.records:type_name -> common.progress.v1.DnsRecord
+	17, // 14: common.progress.v1.ResultEvent.links:type_name -> common.links.v1.Link
+	14, // 15: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
+	15, // 16: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_common_progress_v1_progress_proto_init() }
@@ -1324,6 +1344,7 @@ func file_common_progress_v1_progress_proto_init() {
 		(*OperationEvent_Span)(nil),
 		(*OperationEvent_Degraded)(nil),
 		(*OperationEvent_DnsOwed)(nil),
+		(*OperationEvent_Plan)(nil),
 	}
 	file_common_progress_v1_progress_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}

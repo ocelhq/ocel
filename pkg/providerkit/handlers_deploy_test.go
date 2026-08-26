@@ -348,6 +348,14 @@ func (r refusingReleaser) Releases() providerkit.Releaser { return r.releaser }
 
 type halfLinkReleaser struct{}
 
+func (halfLinkReleaser) Plan(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
+	return providerkit.SynthesizedPlan(plan, providerkit.StackResult{}), nil
+}
+
+func (halfLinkReleaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {
+	return providerkit.SynthesizedRemoval(ref, providerkit.StackResult{}), nil
+}
+
 func (halfLinkReleaser) Provision(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.StackResult, error) {
 	var result providerkit.StackResult
 	for _, resource := range plan.Resources {
@@ -452,6 +460,14 @@ func (r *resolvingReleaser) Resolved() []providerkit.Link {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.resolved)
+}
+
+func (r *resolvingReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
+	return r.inner.Plan(ctx, plan, report)
+}
+
+func (r *resolvingReleaser) PlanDestroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (providerkit.Plan, error) {
+	return r.inner.PlanDestroy(ctx, ref, report)
 }
 
 func (r *resolvingReleaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
@@ -734,12 +750,12 @@ func TestDeployRecordsTheFeaturesItsProjectDependsOn(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
+	planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
 		Tier:           environmentv1.Tier_TIER_PRODUCTION,
 		WithDependents: true,
 	})
 	if err != nil {
-		t.Fatalf("PlanBootstrap() error = %v", err)
+		t.Fatalf("DescribeBootstrap() error = %v", err)
 	}
 	for _, feature := range planned.GetFeatures() {
 		if feature.GetName() != fake.FeatureCache {

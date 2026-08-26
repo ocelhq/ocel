@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -20,9 +21,10 @@ import (
 )
 
 type mockedEngine struct {
-	outputs auto.OutputMap
-	mocks   sdk.MockResourceMonitor
-	ran     []string
+	outputs   auto.OutputMap
+	mocks     sdk.MockResourceMonitor
+	ran       []string
+	previewed []apitype.StepEventMetadata
 }
 
 var _ kitpulumi.Engine = (*mockedEngine)(nil)
@@ -37,6 +39,48 @@ func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerki
 	}
 	e.ran = append(e.ran, setup.Stack)
 	return e.outputs, nil
+}
+
+func (e *mockedEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ providerkit.Reporter) ([]apitype.StepEventMetadata, error) {
+	if op == kitpulumi.OpDestroy {
+		steps := make([]apitype.StepEventMetadata, 0, len(e.previewed))
+		for _, step := range e.previewed {
+			step.Op = apitype.OpDelete
+			steps = append(steps, step)
+		}
+		return steps, nil
+	}
+	watcher := &previewing{inner: standInCloud{}, stack: setup.Stack}
+	if e.mocks != nil {
+		watcher.inner = e.mocks
+	}
+	if err := sdk.RunErr(setup.Program, sdk.WithMocks("shop", setup.Stack, watcher)); err != nil {
+		return nil, err
+	}
+	e.previewed = watcher.steps
+	return watcher.steps, nil
+}
+
+type previewing struct {
+	inner sdk.MockResourceMonitor
+	stack string
+	mu    sync.Mutex
+	steps []apitype.StepEventMetadata
+}
+
+func (p *previewing) NewResource(args sdk.MockResourceArgs) (string, resource.PropertyMap, error) {
+	p.mu.Lock()
+	p.steps = append(p.steps, apitype.StepEventMetadata{
+		Op:   apitype.OpCreate,
+		Type: args.TypeToken,
+		URN:  "urn:pulumi:" + p.stack + "::shop::" + args.TypeToken + "::" + args.Name,
+	})
+	p.mu.Unlock()
+	return p.inner.NewResource(args)
+}
+
+func (p *previewing) Call(args sdk.MockCallArgs) (resource.PropertyMap, error) {
+	return p.inner.Call(args)
 }
 
 func (e *mockedEngine) Destroy(context.Context, kitpulumi.Setup, providerkit.Reporter) error {

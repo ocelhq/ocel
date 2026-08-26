@@ -12,8 +12,16 @@ import (
 
 type releaser struct{}
 
+func (releaser) Plan(context.Context, providerkit.StackPlan, providerkit.Reporter) (providerkit.Plan, error) {
+	return providerkit.Plan{}, nil
+}
+
 func (releaser) Provision(context.Context, providerkit.StackPlan, providerkit.Reporter) (providerkit.StackResult, error) {
 	return providerkit.StackResult{}, nil
+}
+
+func (releaser) PlanDestroy(context.Context, providerkit.StackRef, providerkit.Reporter) (providerkit.Plan, error) {
+	return providerkit.Plan{}, nil
 }
 
 func (releaser) Destroy(context.Context, providerkit.StackRef, providerkit.Reporter) error {

@@ -7,11 +7,11 @@ type Bootstrapper interface {
 
 	Describe(ctx context.Context, class Class) (Bootstrap, error)
 
-	Plan(ctx context.Context, req BootstrapRequest) (BootstrapPlan, error)
+	Plan(ctx context.Context, req BootstrapRequest) (Plan, error)
 
 	Apply(ctx context.Context, req BootstrapRequest, report Reporter) error
 
-	PlanRemoval(ctx context.Context, class Class) (BootstrapPlan, error)
+	PlanRemoval(ctx context.Context, class Class) (Plan, error)
 
 	Remove(ctx context.Context, class Class, report Reporter) error
 }

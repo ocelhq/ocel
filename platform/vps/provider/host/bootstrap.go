@@ -46,18 +46,18 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 	}, nil
 }
 
-func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
+func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
 	read, err := b.reading(ctx, req)
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	described, err := b.described(ctx, read)
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	groups := providerkit.DeriveGroups(described, b.Catalogue(), req)
 	groups[0].Changes = planned(read)
-	return providerkit.BootstrapPlan{Groups: providerkit.Vendored(groupVendor, groups)}, nil
+	return providerkit.Plan{Groups: providerkit.Vendored(groupVendor, groups)}, nil
 }
 
 func planned(read Reading) []providerkit.Change {
@@ -83,6 +83,14 @@ func planned(read Reading) []providerkit.Change {
 		changes = append(changes, change)
 	}
 	return slowLast(changes)
+}
+
+func itemPlan(read Reading) providerkit.Plan {
+	return providerkit.Plan{Groups: []providerkit.ChangeGroup{{
+		Kind:    providerkit.StackGroupKind,
+		Name:    string(read.Class),
+		Changes: planned(read),
+	}}}
 }
 
 func slowLast(changes []providerkit.Change) []providerkit.Change {
@@ -122,12 +130,8 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 		return err
 	}
 	items := Items(req.Class, standing.Keys)
-	for _, item := range items {
-		if shown.current(item) && !standing.current(item) {
-			return providerkit.Refuse(providerkit.CodeInvalid,
-				"%s stood as the plan was drawn and no longer does, so this apply would do work nobody consented to.\nRun bootstrap again to see the plan as the host now stands",
-				item.ID())
-		}
+	if err := providerkit.RefuseGrowth(itemPlan(shown), itemPlan(standing)); err != nil {
+		return err
 	}
 
 	if req.Unattended {
@@ -319,14 +323,14 @@ func say(report providerkit.Reporter, message string) {
 	}
 }
 
-func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.BootstrapPlan, error) {
+func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
 	removals, err := b.removals(ctx, class)
 	if err != nil || len(removals) == 0 {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	principal, err := b.host.Principal(ctx)
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	changes := make([]providerkit.Change, 0, len(removals))
 	for _, removal := range removals {
@@ -343,7 +347,7 @@ func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 		Action:  providerkit.ActionDelete,
 		Changes: changes,
 	}
-	return providerkit.BootstrapPlan{Groups: providerkit.Vendored(groupVendor, []providerkit.ChangeGroup{group})}, nil
+	return providerkit.Plan{Groups: providerkit.Vendored(groupVendor, []providerkit.ChangeGroup{group})}, nil
 }
 
 func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {

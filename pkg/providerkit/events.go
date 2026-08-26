@@ -8,6 +8,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -96,16 +97,28 @@ func streamed(
 	do func(*eventSender, Reporter) error,
 ) error {
 	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
-		err := newStageScope(sender).unit(UnitStage(unit, title), func(u *unitRun) error {
-			return u.phase(phase, func(report Reporter) error {
-				return do(sender, report)
-			})
-		})
-		if err != nil {
+		if err := inUnit(sender, unit, title, phase, do); err != nil {
 			return nil, err
 		}
 		return okResult(), nil
 	})
+}
+
+func inUnit(
+	sender *eventSender,
+	unit, title string,
+	phase progressv1.Phase,
+	do func(*eventSender, Reporter) error,
+) error {
+	return newStageScope(sender).unit(UnitStage(unit, title), func(u *unitRun) error {
+		return u.phase(phase, func(report Reporter) error {
+			return do(sender, report)
+		})
+	})
+}
+
+func planEvent(plan *planv1.ChangePlan) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Plan{Plan: plan}}
 }
 
 type reporter struct {

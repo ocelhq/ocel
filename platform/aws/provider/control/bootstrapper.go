@@ -76,32 +76,32 @@ func described(class providerkit.Class, deployed bootstrap.Deployed) providerkit
 	return described
 }
 
-func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
+func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
 	read, err := b.reading(ctx, req)
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read,
 		bootstrap.Request{Features: req.Features, Remove: req.Remove, Writer: req.Writer},
 		providerkit.DeriveGroups(bootstrap.NameStacks(described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	adoptions, err := b.adoptions(ctx, req)
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	params, err := bootstrap.PlanParameters(ctx,
 		bootstrap.ParamAPIs{SSM: b.SSM, IAM: b.IAM},
 		string(req.Class), adoptions,
 		bootstrap.Request{Features: req.Features, Remove: req.Remove})
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
-	plan := providerkit.BootstrapPlan{Groups: providerkit.Vendored(groupVendor, append(groups, params))}
+	plan := providerkit.Plan{Groups: providerkit.Vendored(groupVendor, append(groups, params))}
 	fronts, err := b.edgeGroups(ctx, req)
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	plan.Groups = append(plan.Groups, fronts...)
 	return plan, nil

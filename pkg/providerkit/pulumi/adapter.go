@@ -12,7 +12,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/optpreview"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
@@ -59,6 +61,8 @@ type Decoder interface {
 }
 
 type Engine interface {
+	Preview(ctx context.Context, setup Setup, op Op, report providerkit.Reporter) ([]apitype.StepEventMetadata, error)
+
 	Up(ctx context.Context, setup Setup, report providerkit.Reporter) (auto.OutputMap, error)
 
 	Destroy(ctx context.Context, setup Setup, report providerkit.Reporter) error
@@ -218,6 +222,74 @@ func (a *Adapter) engine() Engine {
 	return autoEngine{}
 }
 
+func (a *Adapter) Preview(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
+	return a.preview(ctx, plan, OpProvision, report)
+}
+
+func (a *Adapter) PreviewDestroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (providerkit.Plan, error) {
+	return a.preview(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, report)
+}
+
+func (a *Adapter) preview(ctx context.Context, plan providerkit.StackPlan, op Op, report providerkit.Reporter) (providerkit.Plan, error) {
+	setup, err := a.setup(ctx, plan, op, report)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	steps, err := a.engine().Preview(ctx, setup, op, report)
+	if err != nil {
+		return providerkit.Plan{}, busy(err, setup)
+	}
+	changes := planRows(steps)
+	if len(changes) == 0 {
+		return providerkit.Plan{}, nil
+	}
+	group := providerkit.ChangeGroup{
+		Kind:    providerkit.StackGroupKind,
+		Name:    setup.Stack,
+		Changes: changes,
+	}
+	group.Action, group.Reason = providerkit.RollUp(changes)
+	return providerkit.Plan{Groups: []providerkit.ChangeGroup{group}}, nil
+}
+
+const stackResourceType = "pulumi:pulumi:Stack"
+
+func planRows(steps []apitype.StepEventMetadata) []providerkit.Change {
+	changes := make([]providerkit.Change, 0, len(steps))
+	for _, step := range steps {
+		if step.Type == stackResourceType {
+			continue
+		}
+		action, rendered := plannedAction(step.Op)
+		if !rendered {
+			continue
+		}
+		changes = append(changes, providerkit.Change{
+			Kind:   capIdentifier(step.Type),
+			Name:   resourceNameFromURN(step.URN),
+			Action: action,
+		})
+	}
+	return changes
+}
+
+func plannedAction(op apitype.OpType) (providerkit.ChangeAction, bool) {
+	switch op {
+	case apitype.OpCreate, apitype.OpCreateReplacement, apitype.OpImport:
+		return providerkit.ActionCreate, true
+	case apitype.OpUpdate:
+		return providerkit.ActionUpdate, true
+	case apitype.OpReplace, apitype.OpImportReplacement:
+		return providerkit.ActionReplace, true
+	case apitype.OpDelete, apitype.OpDeleteReplaced:
+		return providerkit.ActionDelete, true
+	case apitype.OpSame:
+		return providerkit.ActionKeep, true
+	default:
+		return "", false
+	}
+}
+
 func (a *Adapter) Run(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
 	setup, err := a.setup(ctx, plan, OpProvision, report)
 	if err != nil {
@@ -268,6 +340,55 @@ func busy(err error, setup Setup) error {
 }
 
 type autoEngine struct{}
+
+func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, report providerkit.Reporter) ([]apitype.StepEventMetadata, error) {
+	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
+	if err != nil {
+		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
+	}
+	if err := applyConfig(ctx, stack, setup.Config); err != nil {
+		return nil, err
+	}
+
+	engineEvents := make(chan events.EngineEvent, 256)
+	steps := drainSteps(engineEvents)
+	if report != nil {
+		report.Say("Working out what would change")
+	}
+
+	if op == OpDestroy {
+		_, err = stack.PreviewDestroy(ctx, optdestroy.EventStreams(engineEvents), optdestroy.Parallel(setup.Parallel))
+	} else {
+		_, err = stack.Preview(ctx, optpreview.EventStreams(engineEvents), optpreview.Parallel(setup.Parallel))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("plan stack %s: %w", setup.Stack, err)
+	}
+	return awaitSteps(steps, engineDrainGrace), nil
+}
+
+func drainSteps(engineEvents <-chan events.EngineEvent) <-chan []apitype.StepEventMetadata {
+	drained := make(chan []apitype.StepEventMetadata, 1)
+	go func() {
+		var steps []apitype.StepEventMetadata
+		for ev := range engineEvents {
+			if ev.ResourcePreEvent != nil {
+				steps = append(steps, ev.ResourcePreEvent.Metadata)
+			}
+		}
+		drained <- steps
+	}()
+	return drained
+}
+
+func awaitSteps(drained <-chan []apitype.StepEventMetadata, grace time.Duration) []apitype.StepEventMetadata {
+	select {
+	case steps := <-drained:
+		return steps
+	case <-time.After(grace):
+		return nil
+	}
+}
 
 func (autoEngine) Up(ctx context.Context, setup Setup, report providerkit.Reporter) (auto.OutputMap, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)

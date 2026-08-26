@@ -306,7 +306,7 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 			}
 			got.keep(resp.GetCredentialProblems())
 
-			planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: tier, Edge: edgewire.Selection(cfg)})
+			planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: edgewire.Selection(cfg)})
 			if err != nil {
 				if connect.CodeOf(err) == connect.CodeUnimplemented {
 					got.tiers[tier] = &tierAnswer{problem: got.pkg + " cannot report what a bootstrap has; it predates the report"}

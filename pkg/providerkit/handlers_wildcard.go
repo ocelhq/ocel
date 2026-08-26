@@ -11,6 +11,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -321,13 +322,13 @@ func (w *wildcards) holding() (edge.Edge, error) {
 	return w.provider.Edges().Open(holder)
 }
 
-func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.ChangePlan, error) {
+func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*planv1.ChangePlan, error) {
 	w, err := h.wildcard(ctx, req.GetEdge())
 	if err != nil {
 		return nil, RefusalError(err)
 	}
 	if w.held.BaseDomain == "" {
-		return &contractv1.ChangePlan{}, nil
+		return &planv1.ChangePlan{}, nil
 	}
 	front, err := w.holding()
 	if err != nil {
@@ -340,36 +341,36 @@ func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	return &contractv1.ChangePlan{
+	return &planv1.ChangePlan{
 		EdgeKind: string(front.Kind()),
 		Groups:   groups,
 		Subject:  w.held.BaseDomain,
 	}, nil
 }
 
-func (w *wildcards) releaseGroups(front edge.Edge) ([]*contractv1.ChangeGroup, error) {
+func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error) {
 	removed, kept := front.PreviewWildcardRemovals(w.held.Hostname())
 	removedGroup, err := edgeGroupProto(removed)
 	if err != nil {
 		return nil, err
 	}
-	groups := []*contractv1.ChangeGroup{removedGroup}
+	groups := []*planv1.ChangeGroup{removedGroup}
 	for _, cert := range w.held.Settled.certificates() {
 		groups = append(groups, certificateGroup(cert))
 	}
 	for _, rec := range w.held.Settled.WrittenRecords() {
-		groups = append(groups, &contractv1.ChangeGroup{
+		groups = append(groups, &planv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: contractv1.Change_ACTION_DELETE,
+			Action: planv1.Change_ACTION_DELETE,
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
 	for _, rec := range w.held.Settled.OwedRecords() {
-		groups = append(groups, &contractv1.ChangeGroup{
+		groups = append(groups, &planv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: contractv1.Change_ACTION_KEEP,
+			Action: planv1.Change_ACTION_KEEP,
 			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
 		})
 	}
@@ -380,7 +381,7 @@ func (w *wildcards) releaseGroups(front edge.Edge) ([]*contractv1.ChangeGroup, e
 	return append(groups, keptGroup), nil
 }
 
-func edgeGroupProto(group edge.PlanGroup) (*contractv1.ChangeGroup, error) {
+func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 	converted, err := EdgeGroupOf(group)
 	if err != nil {
 		return nil, err

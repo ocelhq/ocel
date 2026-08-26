@@ -59,7 +59,7 @@ func removingBootstrapper(t *testing.T, class string) Bootstrapper {
 	return b
 }
 
-func groupNamed(plan providerkit.BootstrapPlan, name string) *providerkit.ChangeGroup {
+func groupNamed(plan providerkit.Plan, name string) *providerkit.ChangeGroup {
 	for i, group := range plan.Groups {
 		if group.Name == name {
 			return &plan.Groups[i]
@@ -80,7 +80,7 @@ func changeNamed(group *providerkit.ChangeGroup, name string) *providerkit.Chang
 	return nil
 }
 
-func groupNames(plan providerkit.BootstrapPlan) string {
+func groupNames(plan providerkit.Plan) string {
 	names := make([]string, 0, len(plan.Groups))
 	for _, group := range plan.Groups {
 		names = append(names, group.Name)

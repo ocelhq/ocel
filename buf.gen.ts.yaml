@@ -4,6 +4,7 @@ inputs:
     exclude_paths:
       - proto/cli/stream
       - proto/common/environment
+      - proto/common/plan
       - proto/common/progress
       - proto/provider
 plugins:

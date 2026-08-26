@@ -10,7 +10,7 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/ocelhq/ocel/cli/internal/runui"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 )
 
 const BypassEnv = "OCEL_DESTROY_BYPASS_CONFIRMATION"
@@ -42,7 +42,7 @@ func newPrinter(out io.Writer, colorEnabled bool) *Printer {
 	return &Printer{out: out, color: colorEnabled}
 }
 
-func (p *Printer) Print(header string, plan *contractv1.ChangePlan, footer ...string) {
+func (p *Printer) Print(header string, plan *planv1.ChangePlan, footer ...string) {
 	if kind := plan.GetEdgeKind(); kind != "" {
 		header += fmt.Sprintf(", fronted by the %s edge", kind)
 	}
@@ -70,18 +70,18 @@ func (p *Printer) Print(header string, plan *contractv1.ChangePlan, footer ...st
 	}
 }
 
-func partition(groups []*contractv1.ChangeGroup) (doomed, kept []*contractv1.ChangeGroup, keptRows []*contractv1.Change) {
-	doomed = make([]*contractv1.ChangeGroup, 0, len(groups))
+func partition(groups []*planv1.ChangeGroup) (doomed, kept []*planv1.ChangeGroup, keptRows []*planv1.Change) {
+	doomed = make([]*planv1.ChangeGroup, 0, len(groups))
 	for _, group := range groups {
 		going := headed(group, group.GetAction(), group.GetReason())
 		for _, change := range group.GetChanges() {
-			if change.GetAction() == contractv1.Change_ACTION_KEEP {
+			if change.GetAction() == planv1.Change_ACTION_KEEP {
 				keptRows = append(keptRows, change)
 				continue
 			}
 			going.Changes = append(going.Changes, change)
 		}
-		if group.GetAction() == contractv1.Change_ACTION_KEEP {
+		if group.GetAction() == planv1.Change_ACTION_KEEP {
 			kept = append(kept, going)
 			continue
 		}
@@ -90,10 +90,10 @@ func partition(groups []*contractv1.ChangeGroup) (doomed, kept []*contractv1.Cha
 	return doomed, kept, keptRows
 }
 
-func rolledUp(groups []*contractv1.ChangeGroup) []*contractv1.ChangeGroup {
-	rolled := make([]*contractv1.ChangeGroup, 0, len(groups))
+func rolledUp(groups []*planv1.ChangeGroup) []*planv1.ChangeGroup {
+	rolled := make([]*planv1.ChangeGroup, 0, len(groups))
 	for _, group := range groups {
-		if group.GetAction() != contractv1.Change_ACTION_KEEP || keepsAll(group.GetChanges()) {
+		if group.GetAction() != planv1.Change_ACTION_KEEP || keepsAll(group.GetChanges()) {
 			rolled = append(rolled, group)
 			continue
 		}
@@ -104,8 +104,8 @@ func rolledUp(groups []*contractv1.ChangeGroup) []*contractv1.ChangeGroup {
 	return rolled
 }
 
-func headed(group *contractv1.ChangeGroup, action contractv1.Change_Action, reason string) *contractv1.ChangeGroup {
-	return &contractv1.ChangeGroup{
+func headed(group *planv1.ChangeGroup, action planv1.Change_Action, reason string) *planv1.ChangeGroup {
+	return &planv1.ChangeGroup{
 		Kind:    group.GetKind(),
 		Name:    group.GetName(),
 		Feature: group.GetFeature(),
@@ -115,29 +115,29 @@ func headed(group *contractv1.ChangeGroup, action contractv1.Change_Action, reas
 	}
 }
 
-func keepsAll(changes []*contractv1.Change) bool {
+func keepsAll(changes []*planv1.Change) bool {
 	for _, change := range changes {
-		if change.GetAction() != contractv1.Change_ACTION_KEEP {
+		if change.GetAction() != planv1.Change_ACTION_KEEP {
 			return false
 		}
 	}
 	return true
 }
 
-func goingAction(changes []*contractv1.Change) contractv1.Change_Action {
+func goingAction(changes []*planv1.Change) planv1.Change_Action {
 	for _, change := range changes {
 		switch change.GetAction() {
-		case contractv1.Change_ACTION_KEEP,
-			contractv1.Change_ACTION_DELETE,
-			contractv1.Change_ACTION_DISABLE_THEN_DELETE:
+		case planv1.Change_ACTION_KEEP,
+			planv1.Change_ACTION_DELETE,
+			planv1.Change_ACTION_DISABLE_THEN_DELETE:
 		default:
-			return contractv1.Change_ACTION_UPDATE
+			return planv1.Change_ACTION_UPDATE
 		}
 	}
-	return contractv1.Change_ACTION_DELETE
+	return planv1.Change_ACTION_DELETE
 }
 
-func (p *Printer) Render(header string, plan *contractv1.ChangePlan) {
+func (p *Printer) Render(header string, plan *planv1.ChangePlan) {
 	if kind := plan.GetEdgeKind(); kind != "" {
 		header += fmt.Sprintf(" (%s edge)", kind)
 	}
@@ -148,13 +148,13 @@ func (p *Printer) Render(header string, plan *contractv1.ChangePlan) {
 	}
 }
 
-func (p *Printer) writeGroups(groups []*contractv1.ChangeGroup) {
+func (p *Printer) writeGroups(groups []*planv1.ChangeGroup) {
 	for i, group := range groups {
 		if i > 0 && (rendersChanges(groups[i-1]) || rendersChanges(group)) {
 			fmt.Fprintln(p.out)
 		}
 		fmt.Fprintln(p.out, p.GroupLine(group))
-		if group.GetAction() == contractv1.Change_ACTION_KEEP {
+		if group.GetAction() == planv1.Change_ACTION_KEEP {
 			continue
 		}
 		for _, line := range p.changeLines(group.GetChanges()) {
@@ -163,11 +163,11 @@ func (p *Printer) writeGroups(groups []*contractv1.ChangeGroup) {
 	}
 }
 
-func rendersChanges(group *contractv1.ChangeGroup) bool {
-	return group.GetAction() != contractv1.Change_ACTION_KEEP && len(group.GetChanges()) > 0
+func rendersChanges(group *planv1.ChangeGroup) bool {
+	return group.GetAction() != planv1.Change_ACTION_KEEP && len(group.GetChanges()) > 0
 }
 
-func (p *Printer) GroupLine(group *contractv1.ChangeGroup) string {
+func (p *Printer) GroupLine(group *planv1.ChangeGroup) string {
 	var b strings.Builder
 	b.WriteString(p.paint(group.GetAction()) + " ")
 	if words := actionWords(group.GetAction()); words != "" {
@@ -185,7 +185,7 @@ func (p *Printer) GroupLine(group *contractv1.ChangeGroup) string {
 	return b.String()
 }
 
-func (p *Printer) changeLines(changes []*contractv1.Change) []string {
+func (p *Printer) changeLines(changes []*planv1.Change) []string {
 	width := 0
 	for _, change := range changes {
 		width = max(width, utf8.RuneCountInString(changeLabel(change)))
@@ -202,7 +202,7 @@ func (p *Printer) changeLines(changes []*contractv1.Change) []string {
 	return lines
 }
 
-func changeLabel(change *contractv1.Change) string {
+func changeLabel(change *planv1.Change) string {
 	if words := actionWords(change.GetAction()); words != "" {
 		return words + " " + change.GetName()
 	}
@@ -211,7 +211,7 @@ func changeLabel(change *contractv1.Change) string {
 
 var bootstrapKinds = map[string]bool{stackKind: true, edgeKind: true, parameterKind: true}
 
-func groupTag(group *contractv1.ChangeGroup) string {
+func groupTag(group *planv1.ChangeGroup) string {
 	if feature := group.GetFeature(); feature != "" {
 		return feature
 	}
@@ -251,7 +251,7 @@ var sigilAttrs = map[string][]color.Attribute{
 	"–": {color.FgRed},
 }
 
-func (p *Printer) paint(action contractv1.Change_Action) string {
+func (p *Printer) paint(action planv1.Change_Action) string {
 	glyph := sigil(action)
 	attrs, ok := sigilAttrs[glyph]
 	if !ok {
@@ -272,67 +272,67 @@ func (p *Printer) style(attrs ...color.Attribute) *color.Color {
 	return c
 }
 
-func sigil(action contractv1.Change_Action) string {
+func sigil(action planv1.Change_Action) string {
 	switch action {
-	case contractv1.Change_ACTION_CREATE:
+	case planv1.Change_ACTION_CREATE:
 		return "+"
-	case contractv1.Change_ACTION_UPDATE:
+	case planv1.Change_ACTION_UPDATE:
 		return "~"
-	case contractv1.Change_ACTION_REPLACE:
+	case planv1.Change_ACTION_REPLACE:
 		return "±"
-	case contractv1.Change_ACTION_DELETE, contractv1.Change_ACTION_DISABLE_THEN_DELETE:
+	case planv1.Change_ACTION_DELETE, planv1.Change_ACTION_DISABLE_THEN_DELETE:
 		return "–"
-	case contractv1.Change_ACTION_KEEP:
+	case planv1.Change_ACTION_KEEP:
 		return " "
 	default:
 		return "?"
 	}
 }
 
-func actionWords(action contractv1.Change_Action) string {
+func actionWords(action planv1.Change_Action) string {
 	switch action {
-	case contractv1.Change_ACTION_DISABLE_THEN_DELETE:
+	case planv1.Change_ACTION_DISABLE_THEN_DELETE:
 		return "disable, then delete"
-	case contractv1.Change_ACTION_CREATE,
-		contractv1.Change_ACTION_UPDATE,
-		contractv1.Change_ACTION_REPLACE,
-		contractv1.Change_ACTION_DELETE,
-		contractv1.Change_ACTION_KEEP:
+	case planv1.Change_ACTION_CREATE,
+		planv1.Change_ACTION_UPDATE,
+		planv1.Change_ACTION_REPLACE,
+		planv1.Change_ACTION_DELETE,
+		planv1.Change_ACTION_KEEP:
 		return ""
 	default:
 		return fmt.Sprintf("act on (%s, an action this CLI does not know)", action)
 	}
 }
 
-func AllKeep(plan *contractv1.ChangePlan) bool {
+func AllKeep(plan *planv1.ChangePlan) bool {
 	groups := plan.GetGroups()
 	if len(groups) == 0 {
 		return false
 	}
 	for _, group := range rolledUp(groups) {
-		if group.GetAction() != contractv1.Change_ACTION_KEEP {
+		if group.GetAction() != planv1.Change_ACTION_KEEP {
 			return false
 		}
 	}
 	return true
 }
 
-func ConfirmVerb(plan *contractv1.ChangePlan) string {
+func ConfirmVerb(plan *planv1.ChangePlan) string {
 	counts := count(plan)
-	if counts[contractv1.Change_ACTION_CREATE] > 0 && len(counts) == 1 {
+	if counts[planv1.Change_ACTION_CREATE] > 0 && len(counts) == 1 {
 		return "Create these"
 	}
 	return "Apply these changes"
 }
 
-func Tally(plan *contractv1.ChangePlan) string {
+func Tally(plan *planv1.ChangePlan) string {
 	counts := count(plan)
 	var parts []string
-	for _, action := range []contractv1.Change_Action{
-		contractv1.Change_ACTION_CREATE,
-		contractv1.Change_ACTION_UPDATE,
-		contractv1.Change_ACTION_REPLACE,
-		contractv1.Change_ACTION_DELETE,
+	for _, action := range []planv1.Change_Action{
+		planv1.Change_ACTION_CREATE,
+		planv1.Change_ACTION_UPDATE,
+		planv1.Change_ACTION_REPLACE,
+		planv1.Change_ACTION_DELETE,
 	} {
 		if n := counts[action]; n > 0 {
 			parts = append(parts, fmt.Sprintf("%d to %s", n, tallyVerb(action)))
@@ -344,23 +344,23 @@ func Tally(plan *contractv1.ChangePlan) string {
 	return strings.Join(parts, ", ") + "."
 }
 
-func tallyVerb(action contractv1.Change_Action) string {
+func tallyVerb(action planv1.Change_Action) string {
 	switch action {
-	case contractv1.Change_ACTION_CREATE:
+	case planv1.Change_ACTION_CREATE:
 		return "create"
-	case contractv1.Change_ACTION_UPDATE:
+	case planv1.Change_ACTION_UPDATE:
 		return "update"
-	case contractv1.Change_ACTION_REPLACE:
+	case planv1.Change_ACTION_REPLACE:
 		return "replace"
 	default:
 		return "delete"
 	}
 }
 
-func count(plan *contractv1.ChangePlan) map[contractv1.Change_Action]int {
-	counts := map[contractv1.Change_Action]int{}
+func count(plan *planv1.ChangePlan) map[planv1.Change_Action]int {
+	counts := map[planv1.Change_Action]int{}
 	for _, group := range rolledUp(plan.GetGroups()) {
-		if group.GetAction() == contractv1.Change_ACTION_KEEP {
+		if group.GetAction() == planv1.Change_ACTION_KEEP {
 			continue
 		}
 		if len(group.GetChanges()) == 0 {
@@ -374,14 +374,14 @@ func count(plan *contractv1.ChangePlan) map[contractv1.Change_Action]int {
 	return counts
 }
 
-func tally(counts map[contractv1.Change_Action]int, action contractv1.Change_Action) {
+func tally(counts map[planv1.Change_Action]int, action planv1.Change_Action) {
 	switch action {
-	case contractv1.Change_ACTION_CREATE,
-		contractv1.Change_ACTION_UPDATE,
-		contractv1.Change_ACTION_REPLACE,
-		contractv1.Change_ACTION_DELETE:
+	case planv1.Change_ACTION_CREATE,
+		planv1.Change_ACTION_UPDATE,
+		planv1.Change_ACTION_REPLACE,
+		planv1.Change_ACTION_DELETE:
 		counts[action]++
-	case contractv1.Change_ACTION_DISABLE_THEN_DELETE:
-		counts[contractv1.Change_ACTION_DELETE]++
+	case planv1.Change_ACTION_DISABLE_THEN_DELETE:
+		counts[planv1.Change_ACTION_DELETE]++
 	}
 }

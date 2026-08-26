@@ -2,6 +2,7 @@ package providerkit_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -10,7 +11,69 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func groupFor(t *testing.T, plan providerkit.BootstrapPlan, feature string) providerkit.ChangeGroup {
+func TestAnApplyMayShrinkThePlanItShowedAndNeverGrowIt(t *testing.T) {
+	t.Parallel()
+
+	shown := providerkit.Plan{Groups: []providerkit.ChangeGroup{{
+		Kind: providerkit.StackGroupKind,
+		Name: "core",
+		Changes: []providerkit.Change{
+			{Kind: "dir", Name: "/etc/ocel", Action: providerkit.ActionCreate},
+			{Kind: "unit", Name: "docker", Action: providerkit.ActionKeep},
+		},
+	}}}
+
+	shrunk := providerkit.Plan{Groups: []providerkit.ChangeGroup{{
+		Kind: providerkit.StackGroupKind,
+		Name: "core",
+		Changes: []providerkit.Change{
+			{Kind: "dir", Name: "/etc/ocel", Action: providerkit.ActionKeep},
+			{Kind: "unit", Name: "docker", Action: providerkit.ActionKeep},
+		},
+	}}}
+	if err := providerkit.RefuseGrowth(shown, shrunk); err != nil {
+		t.Fatalf("RefuseGrowth() over a plan that only shrank = %v, want the apply to run", err)
+	}
+
+	grown := providerkit.Plan{Groups: []providerkit.ChangeGroup{{
+		Kind: providerkit.StackGroupKind,
+		Name: "core",
+		Changes: []providerkit.Change{
+			{Kind: "dir", Name: "/etc/ocel", Action: providerkit.ActionCreate},
+			{Kind: "unit", Name: "docker", Action: providerkit.ActionCreate},
+		},
+	}}}
+	err := providerkit.RefuseGrowth(shown, grown)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("RefuseGrowth() over work the plan never showed = %v, want an invalid refusal", err)
+	}
+	if !strings.Contains(refusal.Message, "docker") {
+		t.Errorf("the refusal reads %q, want it to name the row that moved", refusal.Message)
+	}
+}
+
+func TestAGroupTheShownPlanNeverCarriedIsWorkNobodyConsentedTo(t *testing.T) {
+	t.Parallel()
+
+	shown := providerkit.Plan{Groups: []providerkit.ChangeGroup{
+		{Kind: providerkit.StackGroupKind, Name: "core", Action: providerkit.ActionKeep},
+	}}
+	grown := providerkit.Plan{Groups: []providerkit.ChangeGroup{
+		{Kind: providerkit.StackGroupKind, Name: "core", Action: providerkit.ActionKeep},
+		{Kind: providerkit.StackGroupKind, Name: "cache-stack", Action: providerkit.ActionCreate},
+	}}
+
+	err := providerkit.RefuseGrowth(shown, grown)
+	if err == nil {
+		t.Fatal("RefuseGrowth() let a group the plan never showed through, and consent was attached to the plan")
+	}
+	if !strings.Contains(err.Error(), "cache-stack") {
+		t.Errorf("the refusal reads %q, want it to name the group that appeared", err)
+	}
+}
+
+func groupFor(t *testing.T, plan providerkit.Plan, feature string) providerkit.ChangeGroup {
 	t.Helper()
 
 	for _, group := range plan.Groups {

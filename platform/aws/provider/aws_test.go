@@ -25,16 +25,16 @@ func (stubBootstrapper) Describe(context.Context, providerkit.Class) (providerki
 	return providerkit.Bootstrap{}, nil
 }
 
-func (s stubBootstrapper) Plan(context.Context, providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
-	return providerkit.BootstrapPlan{}, s.err
+func (s stubBootstrapper) Plan(context.Context, providerkit.BootstrapRequest) (providerkit.Plan, error) {
+	return providerkit.Plan{}, s.err
 }
 
 func (s stubBootstrapper) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Reporter) error {
 	return s.err
 }
 
-func (stubBootstrapper) PlanRemoval(context.Context, providerkit.Class) (providerkit.BootstrapPlan, error) {
-	return providerkit.BootstrapPlan{}, nil
+func (stubBootstrapper) PlanRemoval(context.Context, providerkit.Class) (providerkit.Plan, error) {
+	return providerkit.Plan{}, nil
 }
 
 func (s stubBootstrapper) Remove(context.Context, providerkit.Class, providerkit.Reporter) error {

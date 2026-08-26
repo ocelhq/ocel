@@ -5,6 +5,7 @@ option go_package = "github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progres
 
 import "buf/validate/validate.proto";
 import "common/links/v1/links.proto";
+import "common/plan/v1/plan.proto";
 
 message OperationEvent {
   oneof event {
@@ -17,6 +18,7 @@ message OperationEvent {
     SpanEvent span = 5;
     DegradedEvent degraded = 6;
     DnsOwedEvent dns_owed = 7;
+    common.plan.v1.ChangePlan plan = 8;
   }
 }
 
