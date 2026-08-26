@@ -15,7 +15,7 @@ jobs:
   live:
     name: vps live conformance
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
           run=false
           while IFS= read -r file; do
             case "$file" in
-              platform/vps/* | pkg/providerkit/* | platform/edge/contract/* | scripts/incus.sh | .github/workflows/vps-live.yml)
+              platform/vps/* | pkg/providerkit/* | platform/edge/contract/* | scripts/incus.sh | scripts/assert-ran.sh | .github/workflows/vps-live.yml)
                 run=true
                 break
                 ;;
@@ -48,7 +48,30 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: platform/vps/provider/go.mod
-          cache-dependency-path: platform/vps/provider/go.sum
+          cache-dependency-path: |
+            platform/vps/provider/go.sum
+            cli/go.sum
+
+      - name: Setup pnpm
+        if: steps.reach.outputs.run == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+
+      - name: Setup Node
+        if: steps.reach.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: The node bundle the CLI binary is built around
+        if: steps.reach.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --filter ocel build
+          go generate -C cli ./...
 
       - name: Virtualisation the qemu driver hard-requires
         if: steps.reach.outputs.run == 'true'
@@ -83,19 +106,14 @@ jobs:
 
       - name: Assert the live suite ran
         if: steps.reach.outputs.run == 'true'
+        run: scripts/assert-ran.sh live.json TestLive
+
+      - name: Run the CLI e2e on a machine of its own
+        if: steps.reach.outputs.run == 'true'
         run: |
           set -euo pipefail
-          top() { jq -rR --arg action "$1" 'fromjson? | objects | select(.Action == $action and .Test != null and (.Test | startswith("TestLive")) and (.Test | contains("/") | not)) | .Test' live.json | sort -u; }
-          skipped=$(top skip)
-          if [ -n "$skipped" ]; then
-            echo "::error::the live suite skipped, so nothing was proven against a machine:"
-            echo "$skipped"
-            exit 1
-          fi
-          passed=$(top pass)
-          if [ -z "$passed" ]; then
-            echo "::error::no TestLive test ran at all"
-            exit 1
-          fi
-          echo "ran against the VM:"
-          echo "$passed"
+          sg incus-admin -c "scripts/incus.sh run ocel-e2e-${GITHUB_RUN_ID} -- go test -C platform/vps/provider -race -count=1 -timeout 40m -run '^TestE2E' -json ./..." | tee e2e.json
+
+      - name: Assert the e2e ran
+        if: steps.reach.outputs.run == 'true'
+        run: scripts/assert-ran.sh e2e.json TestE2E
