@@ -23,9 +23,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// The phase a stage stands for. Canonical phase names live in `pkg/naming`, and a
-// phase's id is the digest of the (unit, phase) canonical name pair, so both sides of
-// the stream derive the same id without exchanging it.
 type Phase int32
 
 const (
@@ -380,35 +377,15 @@ func (*OperationEvent_Degraded) isOperationEvent_Event() {}
 
 func (*OperationEvent_DnsOwed) isOperationEvent_Event() {}
 
-// A node of the run's stage tree.
-//
-// The tree is app-major, and depth alone says what a node is: a parentless stage is a
-// unit, a child of a unit is a phase, anything deeper is detail inside that phase's
-// block. There is no role enum, because a declared role could disagree with the tree
-// and become a second source of truth. Events attach at phase depth or deeper, never
-// at a unit.
-//
-// Unit and phase ids are the first 8 bytes of a sha256 over the length-prefixed
-// canonical name of the unit, and over the length-prefixed (unit, phase) pair, so the
-// CLI and the provider derive identical ids for the same stage without either telling
-// the other. Detail nodes below phase depth have one producer and may mint their ids
-// at random. `title` is free presentation, split from identity: no consumer recomputes
-// an id from it.
-//
-// Declaration is additive, imminent and required: a unit is declared when the run
-// commits to it, a phase when its unit reaches it, and detail needs no declaration.
-// The plan is never final — more stages may arrive at any point until the run ends.
-//
-// Because ids are derived and not exchanged, two producers may name the same stage:
-// the CLI declares a unit it knows about and the provider independently declares the
-// same derived id. Redeclaring an id is idempotent, and a consumer takes first-write
-// wins — later declarations of an id it already holds change nothing, title included.
+// A node of the run's stage tree, app-major: a parentless stage is a unit, a child of a
+// unit is a phase, deeper is detail. Events attach at phase depth or deeper, never at a
+// unit. Unit and phase ids are derived from canonical names (`pkg/naming`), so both
+// sides derive them independently; redeclaring an id is idempotent, first write wins.
 type Stage struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Empty on a unit, which is a root of the tree.
-	ParentId []byte `protobuf:"bytes,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
-	Title    string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Id       []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ParentId []byte                 `protobuf:"bytes,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
+	Title    string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
 	// Set on a phase-depth stage; PHASE_UNSPECIFIED on a unit and on detail.
 	Phase         Phase `protobuf:"varint,4,opt,name=phase,proto3,enum=common.progress.v1.Phase" json:"phase,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -570,9 +547,8 @@ func (x *SpanAttribute) GetValue() string {
 	return ""
 }
 
-// The end of a stage, and the only one there is: a span whose `span_id` equals a
-// declared stage id closes that stage with its status and timing. There is no
-// first-class stage-end message.
+// A span whose `span_id` equals a declared stage id closes that stage. This is the only
+// end-of-stage signal there is.
 type SpanEvent struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	SpanId            []byte                 `protobuf:"bytes,1,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
@@ -665,19 +641,14 @@ func (x *SpanEvent) GetAttributes() []*SpanAttribute {
 	return nil
 }
 
-// A line of progress inside one declared stage.
-//
-// `current`/`total` are the protocol's only grouping counter: the producer declares
-// it, because only the producer knows what it is working through, and `total` may grow
-// while a phase runs. A consumer never counts stages itself to synthesise one.
+// A line of progress inside one declared stage. `current`/`total` are producer-declared
+// and the only counter; `total` may grow while a phase runs.
 type ProgressEvent struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Message string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Current *uint32                `protobuf:"varint,3,opt,name=current,proto3,oneof" json:"current,omitempty"`
-	Total   *uint32                `protobuf:"varint,4,opt,name=total,proto3,oneof" json:"total,omitempty"`
-	// The declared stage this line belongs to, at phase depth or deeper. Required:
-	// there is no bucket for progress that belongs to no stage.
-	StageId       []byte `protobuf:"bytes,5,opt,name=stage_id,json=stageId,proto3" json:"stage_id,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Current       *uint32                `protobuf:"varint,3,opt,name=current,proto3,oneof" json:"current,omitempty"`
+	Total         *uint32                `protobuf:"varint,4,opt,name=total,proto3,oneof" json:"total,omitempty"`
+	StageId       []byte                 `protobuf:"bytes,5,opt,name=stage_id,json=stageId,proto3" json:"stage_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -740,8 +711,8 @@ func (x *ProgressEvent) GetStageId() []byte {
 	return nil
 }
 
-// Detail text inside one declared stage. Text that belongs to the run rather than to
-// any stage is a diagnostic on the CLI's own stream, not a log event without a stage.
+// Detail text inside one declared stage. Run-scoped text is a `cli.stream.v1`
+// diagnostic instead.
 type LogEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
