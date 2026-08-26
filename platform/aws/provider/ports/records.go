@@ -221,7 +221,7 @@ func writingOf(record kit.Record) (writing, error) {
 	}
 	if record.Revision != "" {
 		written.condition = "#rev = :rev"
-		written.names["#rev"] = revisionAttribute
+		written.names = map[string]string{"#rev": revisionAttribute}
 		written.values = map[string]ddbtypes.AttributeValue{
 			":rev": &ddbtypes.AttributeValueMemberS{Value: string(record.Revision)},
 		}

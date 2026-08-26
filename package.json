@@ -24,6 +24,7 @@
     "@bufbuild/protoc-gen-es": "^2.12.1",
     "@changesets/cli": "^2.31.0",
     "@ocel/provider-aws": "workspace:^",
+    "@ocel/provider-vps": "workspace:^",
     "@types/node": "^26.1.1",
     "ocel": "workspace:*"
   }

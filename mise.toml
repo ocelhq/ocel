@@ -7,4 +7,3 @@ node = "26.7.0"
 [env]
 OCEL_ENV = 'dev'
 NODE_ENV = 'development'
-OCEL_CONFIG = './ocel.aws.config.ts'

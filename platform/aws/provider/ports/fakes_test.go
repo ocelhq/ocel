@@ -40,6 +40,9 @@ func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...
 func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := namesAndValuesUsed(in.ExpressionAttributeNames, in.ExpressionAttributeValues, aws.ToString(in.ConditionExpression)); err != nil {
+		return nil, err
+	}
 	pk, sk := stringAttr(in.Item, "pk"), stringAttr(in.Item, "sk")
 	held, exists := f.items[pk][sk]
 	if !f.holds(aws.ToString(in.ConditionExpression), held, exists, in.ExpressionAttributeValues) {
@@ -55,6 +58,9 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := namesAndValuesUsed(in.ExpressionAttributeNames, in.ExpressionAttributeValues, aws.ToString(in.ConditionExpression)); err != nil {
+		return nil, err
+	}
 	pk, sk := stringAttr(in.Key, "pk"), stringAttr(in.Key, "sk")
 	held, exists := f.items[pk][sk]
 	if !f.holds(aws.ToString(in.ConditionExpression), held, exists, in.ExpressionAttributeValues) {
@@ -74,6 +80,9 @@ func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.Transact
 	for _, write := range in.TransactItems {
 		if write.Put == nil {
 			return nil, fmt.Errorf("fakeDynamo: this transaction carries an operation that is not a put")
+		}
+		if err := namesAndValuesUsed(write.Put.ExpressionAttributeNames, write.Put.ExpressionAttributeValues, aws.ToString(write.Put.ConditionExpression)); err != nil {
+			return nil, err
 		}
 		pk, sk := stringAttr(write.Put.Item, "pk"), stringAttr(write.Put.Item, "sk")
 		held, exists := f.items[pk][sk]
@@ -107,9 +116,26 @@ func (f *fakeDynamo) holds(expression string, held map[string]ddbtypes.Attribute
 	panic("fakeDynamo: unrecognized condition " + expression)
 }
 
+func namesAndValuesUsed(names map[string]string, values map[string]ddbtypes.AttributeValue, expression string) error {
+	for _, key := range slices.Sorted(maps.Keys(names)) {
+		if !strings.Contains(expression, key) {
+			return fmt.Errorf("fakeDynamo: ValidationException: Value provided in ExpressionAttributeNames unused in expressions: keys: {%s}", key)
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(values)) {
+		if !strings.Contains(expression, key) {
+			return fmt.Errorf("fakeDynamo: ValidationException: Value provided in ExpressionAttributeValues unused in expressions: keys: {%s}", key)
+		}
+	}
+	return nil
+}
+
 func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := namesAndValuesUsed(in.ExpressionAttributeNames, in.ExpressionAttributeValues, aws.ToString(in.KeyConditionExpression)); err != nil {
+		return nil, err
+	}
 	switch got := aws.ToString(in.KeyConditionExpression); got {
 	case "#pk = :pk", "#pk = :pk AND begins_with(#sk, :prefix)":
 	default:

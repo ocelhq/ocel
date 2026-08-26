@@ -14,6 +14,7 @@ cli:
 
 provider:
 	node scripts/build-native.mjs --host --target provider-aws
+	node scripts/build-native.mjs --host --target provider-vps
 
 proto:
 	pnpm gen
