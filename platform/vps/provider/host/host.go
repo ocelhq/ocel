@@ -256,13 +256,11 @@ func (h *Host) Read(ctx context.Context, class providerkit.Class) (Reading, erro
 }
 
 func (h *Host) Survey(ctx context.Context, class providerkit.Class) (Reading, error) {
-	return h.read(ctx, class, nil)
+	return h.observe(ctx, class, nil)
 }
 
-func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte) (Reading, error) {
-	items := Items(class, keys)
-
-	rendered, err := h.run(ctx, "survey what "+string(class)+" holds", survey(items, StampPath(class)), nil)
+func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte) (Reading, error) {
+	rendered, err := h.run(ctx, "survey what "+string(class)+" holds", survey(Items(class, keys), StampPath(class)), nil)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -270,9 +268,15 @@ func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte) (
 	if err != nil {
 		return Reading{}, err
 	}
+	return Reading{Class: class, Keys: keys, Seal: held, Observed: observed}, nil
+}
 
-	read := Reading{Class: class, Keys: keys, Seal: held, Observed: observed}
-	if _, stamped := observed[KindFile+" "+StampPath(class)]; !stamped {
+func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte) (Reading, error) {
+	read, err := h.observe(ctx, class, keys)
+	if err != nil {
+		return Reading{}, err
+	}
+	if _, stamped := read.Observed[KindFile+" "+StampPath(class)]; !stamped {
 		return read, nil
 	}
 	stamp, err := h.readStamp(ctx, class)
