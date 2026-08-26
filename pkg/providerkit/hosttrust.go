@@ -1,8 +1,12 @@
 package providerkit
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	connect "connectrpc.com/connect"
@@ -24,15 +28,65 @@ type HostKey struct {
 
 func (k HostKey) IsZero() bool { return k == HostKey{} }
 
+var (
+	keyTypeShape = regexp.MustCompile(`^[a-z0-9-]+(@[a-z0-9.-]+)?$`)
+	keyBlobShape = regexp.MustCompile(`^[A-Za-z0-9+/]+={0,2}$`)
+	entryShape   = regexp.MustCompile(`^[A-Za-z0-9._:\-\[\]]+$`)
+)
+
+func (k HostKey) Fingerprinted() (HostKey, error) {
+	if !keyTypeShape.MatchString(k.Type) {
+		return k, fmt.Errorf("%q is not the name of an ssh host key type", k.Type)
+	}
+	if !keyBlobShape.MatchString(k.Key) {
+		return k, fmt.Errorf("the offered %s key is not a base64 key blob", k.Type)
+	}
+	blob, err := base64.StdEncoding.Strict().DecodeString(k.Key)
+	if err != nil || len(blob) == 0 {
+		return k, fmt.Errorf("the offered %s key is not a base64 key blob", k.Type)
+	}
+	sum := sha256.Sum256(blob)
+	fingerprint := "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:])
+	if k.Fingerprint != "" && k.Fingerprint != fingerprint {
+		return k, fmt.Errorf("the offered %s key hashes to %s, not the %s the provider named", k.Type, fingerprint, k.Fingerprint)
+	}
+	k.Fingerprint = fingerprint
+	return k, nil
+}
+
+func KnownHostsEntry(address, keyAlias string, port int) string {
+	if keyAlias != "" {
+		return keyAlias
+	}
+	if address == "" {
+		return ""
+	}
+	if port == 0 || port == 22 {
+		return address
+	}
+	return "[" + address + "]:" + strconv.Itoa(port)
+}
+
+func ValidKnownHostsEntry(entry string) bool { return entryShape.MatchString(entry) }
+
 type HostTrust struct {
 	Reason     HostTrustReason
 	Host       string
 	Address    string
 	Port       int
+	KeyAlias   string
 	Got        HostKey
 	Want       HostKey
 	KnownHosts []string
 	Remedy     string
+}
+
+func (t HostTrust) KnownHostsEntry() string {
+	address := t.Address
+	if address == "" {
+		address = t.Host
+	}
+	return KnownHostsEntry(address, t.KeyAlias, t.Port)
 }
 
 func (t HostTrust) Terminal() bool { return t.Reason == HostKeyMismatch }
@@ -57,9 +111,15 @@ func (t HostTrust) Message() string {
 		fmt.Fprintf(&b, "\nEither that machine was rebuilt or something sits between you and it.\nIf it was rebuilt, drop the old key and try again:\n  %s", t.Remedy)
 		return b.String()
 	}
+	b.WriteString(t.Offer())
+	fmt.Fprintf(&b, "\nCheck that fingerprint against the machine itself, then record it:\n  %s", t.Remedy)
+	return b.String()
+}
+
+func (t HostTrust) Offer() string {
+	var b strings.Builder
 	fmt.Fprintf(&b, "the host key for %s is in none of %s", t.Where(), strings.Join(t.KnownHosts, ", "))
 	fmt.Fprintf(&b, "\n  %s %s", t.Got.Type, t.Got.Fingerprint)
-	fmt.Fprintf(&b, "\nCheck that fingerprint against the machine itself, then record it:\n  %s", t.Remedy)
 	return b.String()
 }
 
@@ -113,6 +173,7 @@ func HostTrustProto(trust HostTrust) *contractv1.HostTrustRefusal {
 		Want:       hostKeyProto(trust.Want),
 		KnownHosts: trust.KnownHosts,
 		Remedy:     trust.Remedy,
+		KeyAlias:   trust.KeyAlias,
 	}
 }
 
@@ -132,6 +193,7 @@ func hostTrustFrom(carried *contractv1.HostTrustRefusal) HostTrust {
 		Want:       hostKeyFrom(carried.GetWant()),
 		KnownHosts: carried.GetKnownHosts(),
 		Remedy:     carried.GetRemedy(),
+		KeyAlias:   carried.GetKeyAlias(),
 	}
 	for reason, encoded := range hostTrustReasons {
 		if encoded == carried.GetReason() {

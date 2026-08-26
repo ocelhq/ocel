@@ -3730,6 +3730,7 @@ type HostTrustRefusal struct {
 	Want          *HostKey               `protobuf:"bytes,6,opt,name=want,proto3" json:"want,omitempty"`
 	KnownHosts    []string               `protobuf:"bytes,7,rep,name=known_hosts,json=knownHosts,proto3" json:"known_hosts,omitempty"`
 	Remedy        string                 `protobuf:"bytes,8,opt,name=remedy,proto3" json:"remedy,omitempty"`
+	KeyAlias      string                 `protobuf:"bytes,9,opt,name=key_alias,json=keyAlias,proto3" json:"key_alias,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3816,6 +3817,13 @@ func (x *HostTrustRefusal) GetKnownHosts() []string {
 func (x *HostTrustRefusal) GetRemedy() string {
 	if x != nil {
 		return x.Remedy
+	}
+	return ""
+}
+
+func (x *HostTrustRefusal) GetKeyAlias() string {
+	if x != nil {
+		return x.KeyAlias
 	}
 	return ""
 }
@@ -4176,7 +4184,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x1e\n" +
 	"\x06keep_n\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x05keepN\x12D\n" +
 	"\venvironment\x18\x03 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x127\n" +
-	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xb0\x02\n" +
+	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xcd\x02\n" +
 	"\x10HostTrustRefusal\x12=\n" +
 	"\x06reason\x18\x01 \x01(\x0e2%.provider.contract.v1.HostTrustReasonR\x06reason\x12\x12\n" +
 	"\x04host\x18\x02 \x01(\tR\x04host\x12\x18\n" +
@@ -4186,7 +4194,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04want\x18\x06 \x01(\v2\x1d.provider.contract.v1.HostKeyR\x04want\x12\x1f\n" +
 	"\vknown_hosts\x18\a \x03(\tR\n" +
 	"knownHosts\x12\x16\n" +
-	"\x06remedy\x18\b \x01(\tR\x06remedy\"Q\n" +
+	"\x06remedy\x18\b \x01(\tR\x06remedy\x12\x1b\n" +
+	"\tkey_alias\x18\t \x01(\tR\bkeyAlias\"Q\n" +
 	"\aHostKey\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12 \n" +
