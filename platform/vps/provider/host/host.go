@@ -207,12 +207,21 @@ func (h *Host) Install(ctx context.Context, item Item) error {
 }
 
 func (h *Host) Remove(ctx context.Context, kind, name string) error {
-	if kind == KindUser {
+	switch kind {
+	case KindUser:
 		_, err := h.run(ctx, "remove "+kind+" "+name, "userdel "+quoted(name), nil)
 		return err
+	case KindDir, KindFile, KindSealKey:
+		if !strings.HasPrefix(name, "/") {
+			return providerkit.Refuse(providerkit.CodeInvalid,
+				"%q names no path on this host, and ocel takes nothing it cannot name in full", name)
+		}
+		_, err := h.run(ctx, "remove "+name, "rm -rf "+quoted(name), nil)
+		return err
+	default:
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"%s %s is not ocel's to take: what this host runs stays when ocel goes", kind, name)
 	}
-	_, err := h.run(ctx, "remove "+name, "rm -rf "+quoted(name), nil)
-	return err
 }
 
 type Reading struct {
