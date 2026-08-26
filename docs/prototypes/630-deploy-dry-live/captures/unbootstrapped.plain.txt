@@ -1,0 +1,3 @@
+
+[31;1m✗ Deploy failed
+  no infrastructure is set up yet; run `ocel bootstrap production` to create it

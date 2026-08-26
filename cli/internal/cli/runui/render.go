@@ -138,6 +138,12 @@ func (r *Renderer) Emit(env Envelope) {
 		r.erase()
 		NewPlanPrinter(r.w, r.cfg.Color).Print(env.Plan)
 		r.draw()
+	case len(env.Diagnostic) > 0:
+		r.erase()
+		for _, line := range env.Diagnostic {
+			r.paint(color.FgYellow).Fprintf(r.w, "%s %s\n", warnMark, line)
+		}
+		r.draw()
 	case len(env.Stages) > 0:
 		for _, decl := range env.Stages {
 			r.tree.declare(decl)
@@ -352,6 +358,8 @@ func (r *Renderer) emitJSON(env Envelope) {
 	switch {
 	case env.Plan != nil:
 		rec["plan"] = planJSON(env.Plan)
+	case len(env.Diagnostic) > 0:
+		rec["diagnostic"] = map[string]any{"lines": env.Diagnostic}
 	case len(env.Stages) > 0:
 		stages := make([]map[string]any, 0, len(env.Stages))
 		for _, s := range env.Stages {

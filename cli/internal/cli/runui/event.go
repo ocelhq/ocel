@@ -72,12 +72,13 @@ type Result struct {
 type Envelope struct {
 	At time.Duration
 
-	Plan     *Plan
-	Stages   []StageDecl
-	Progress *Progress
-	Log      *Log
-	End      *StageEnd
-	Result   *Result
+	Plan       *Plan
+	Diagnostic []string
+	Stages     []StageDecl
+	Progress   *Progress
+	Log        *Log
+	End        *StageEnd
+	Result     *Result
 }
 
 type Script struct {

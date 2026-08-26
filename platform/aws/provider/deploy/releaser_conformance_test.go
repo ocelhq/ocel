@@ -27,6 +27,14 @@ type mockedEngine struct {
 
 var _ kitpulumi.Engine = (*mockedEngine)(nil)
 
+func (e *mockedEngine) Preview(context.Context, kitpulumi.Setup, providerkit.Reporter) ([]providerkit.Change, error) {
+	return nil, nil
+}
+
+func (e *mockedEngine) PreviewDestroy(context.Context, kitpulumi.Setup, providerkit.Reporter) ([]providerkit.Change, error) {
+	return nil, nil
+}
+
 func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) (auto.OutputMap, error) {
 	var monitor sdk.MockResourceMonitor = standInCloud{}
 	if e.mocks != nil {

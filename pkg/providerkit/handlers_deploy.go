@@ -164,6 +164,15 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	if err := r.admitLinks(ctx); err != nil {
 		return nil, err
 	}
+	if r.dryRun {
+		if err := r.checkNeeds(ctx); err != nil {
+			return nil, err
+		}
+		if err := r.preflight(ctx); err != nil {
+			return nil, err
+		}
+		return r.dry(ctx)
+	}
 	if err := r.rememberProject(ctx); err != nil {
 		return nil, err
 	}
@@ -175,9 +184,6 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	}
 	if err := r.preflight(ctx); err != nil {
 		return nil, err
-	}
-	if r.dryRun {
-		return r.dry(ctx)
 	}
 	if err := r.timed(r.stages.Uploading, func(report Reporter) error { return r.upload(ctx, report) }); err != nil {
 		return nil, err
@@ -211,6 +217,10 @@ func phaseOf(stage Stage, stages deployStages) progressv1.Phase {
 }
 
 func (r *deployRun) admit(ctx context.Context) error {
+	if r.dryRun {
+		_, err := r.gate.Inspect(ctx, r.plan.Class, r.features)
+		return err
+	}
 	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, r.report(r.stages.Preparing, progressv1.Phase_PHASE_PROVISIONING))
 	return err
 }

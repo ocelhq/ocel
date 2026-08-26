@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/mattn/go-isatty"
 	"golang.org/x/term"
@@ -50,7 +51,7 @@ func Run(
 		if ctx.Err() != nil {
 			return &exitsig.ExitError{Code: exitsig.InterruptCode}
 		}
-		renderer.Emit(Envelope{Result: &Result{Error: err.Error()}})
+		renderer.Emit(Envelope{Result: &Result{Headline: "Deploy failed", Error: err.Error()}})
 		return &exitsig.ExitError{Code: 1}
 	}
 	return nil
@@ -103,7 +104,9 @@ func (w buildWriter) Write(p []byte) (int, error) {
 	if w.s.unit == "" {
 		return len(p), nil
 	}
-	w.s.r.Emit(Envelope{Log: &Log{StageID: buildID(w.s.unit), Line: string(p)}})
+	for line := range strings.SplitSeq(strings.TrimRight(string(p), "\n"), "\n") {
+		w.s.r.Emit(Envelope{Log: &Log{StageID: buildID(w.s.unit), Line: line}})
+	}
 	return len(p), nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
@@ -120,7 +121,7 @@ func collectChanges(stream <-chan events.EngineEvent, report providerkit.Reporte
 			}
 			seen[m.URN] = true
 			action, renders := planAction(m.Op)
-			if !renders {
+			if !renders || !remote(m.Type) {
 				continue
 			}
 			c.changes = append(c.changes, providerkit.Change{
@@ -141,7 +142,17 @@ func awaitChanges(c *changeCollector) []providerkit.Change {
 	case <-c.done:
 	case <-time.After(engineDrainGrace):
 	}
+	sort.Slice(c.changes, func(i, j int) bool {
+		if c.changes[i].Kind != c.changes[j].Kind {
+			return c.changes[i].Kind < c.changes[j].Kind
+		}
+		return c.changes[i].Name < c.changes[j].Name
+	})
 	return c.changes
+}
+
+func remote(typ string) bool {
+	return typ != "pulumi:pulumi:Stack" && !strings.HasPrefix(typ, "pulumi:providers:")
 }
 
 func planAction(op apitype.OpType) (providerkit.ChangeAction, bool) {

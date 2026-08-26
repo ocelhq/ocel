@@ -12,8 +12,20 @@ import (
 type recordingEngine struct {
 	up      pulumi.Setup
 	down    pulumi.Setup
+	preview pulumi.Setup
+	changes []providerkit.Change
 	outputs auto.OutputMap
 	err     error
+}
+
+func (e *recordingEngine) Preview(_ context.Context, setup pulumi.Setup, _ providerkit.Reporter) ([]providerkit.Change, error) {
+	e.preview = setup
+	return e.changes, e.err
+}
+
+func (e *recordingEngine) PreviewDestroy(_ context.Context, setup pulumi.Setup, _ providerkit.Reporter) ([]providerkit.Change, error) {
+	e.preview = setup
+	return e.changes, e.err
 }
 
 func (e *recordingEngine) Up(_ context.Context, setup pulumi.Setup, _ providerkit.Reporter) (auto.OutputMap, error) {

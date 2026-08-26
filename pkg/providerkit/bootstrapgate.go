@@ -315,6 +315,17 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
+func (g Gate) Inspect(ctx context.Context, class Class, required []string) (Standing, error) {
+	standing, err := g.Standing(ctx, class)
+	if err != nil {
+		return Standing{}, err
+	}
+	if err := CheckSchema(standing.Schema, standing.Present, class); err != nil {
+		return standing, err
+	}
+	return standing, standing.lacking(required, BootstrapCommand(class))
+}
+
 func (g Gate) Admit(ctx context.Context, class Class, required []string, report Reporter) (Standing, error) {
 	standing, err := g.Standing(ctx, class)
 	if err != nil {

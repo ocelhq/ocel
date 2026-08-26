@@ -18,6 +18,14 @@ type fakeEngine struct {
 
 var _ kitpulumi.Engine = (*fakeEngine)(nil)
 
+func (f *fakeEngine) Preview(context.Context, kitpulumi.Setup, providerkit.Reporter) ([]providerkit.Change, error) {
+	return nil, nil
+}
+
+func (f *fakeEngine) PreviewDestroy(context.Context, kitpulumi.Setup, providerkit.Reporter) ([]providerkit.Change, error) {
+	return nil, nil
+}
+
 func (f *fakeEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) (auto.OutputMap, error) {
 	f.record("up-stack " + setup.Stack)
 	return auto.OutputMap{}, nil

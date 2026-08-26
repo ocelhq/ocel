@@ -57,10 +57,14 @@ func Envelopes(ev *progressv1.OperationEvent) []Envelope {
 		return []Envelope{{Result: resultOf(e.Result)}}
 
 	case *progressv1.OperationEvent_Degraded:
-		return []Envelope{{Result: &Result{
-			Success:    true,
-			Diagnostic: []string{e.Degraded.GetNeed() + ": " + e.Degraded.GetDetail()},
-		}}}
+		return []Envelope{{Diagnostic: []string{e.Degraded.GetNeed() + ": " + e.Degraded.GetDetail()}}}
+
+	case *progressv1.OperationEvent_DnsOwed:
+		lines := []string{e.DnsOwed.GetHeadline()}
+		for _, rec := range e.DnsOwed.GetRecords() {
+			lines = append(lines, "  "+rec.GetType()+" "+rec.GetName()+" -> "+rec.GetValue())
+		}
+		return []Envelope{{Diagnostic: append(lines, e.DnsOwed.GetNotes()...)}}
 	}
 	return nil
 }
@@ -115,8 +119,9 @@ func resultOf(pb *progressv1.ResultEvent) *Result {
 		Error:   pb.GetError(),
 		AppURLs: pb.GetAppUrls(),
 	}
-	if pb.GetSuccess() {
-		res.Headline = "Deployed"
+	res.Headline = "Deployed"
+	if !pb.GetSuccess() {
+		res.Headline = "Deploy failed"
 	}
 	if note := pb.GetUrlNote(); note != "" {
 		res.Diagnostic = append(res.Diagnostic, note)
