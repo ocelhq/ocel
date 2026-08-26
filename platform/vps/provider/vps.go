@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const Vendor providerkit.Vendor = "vps"
@@ -70,6 +72,22 @@ type Provider struct {
 	records   *fake.Records
 	artifacts *fake.Artifacts
 	sealer    *fake.Sealer
+	dial      sync.Once
+	live      *session.Session
+	dialed    error
+}
+
+func (p *Provider) Session(ctx context.Context) (*session.Session, error) {
+	p.dial.Do(func() {
+		p.live, p.dialed = session.Open(ctx, session.Target{
+			Alias:        p.options.SSH.Alias,
+			Host:         p.options.SSH.Host,
+			Port:         p.options.SSH.Port,
+			User:         p.options.SSH.User,
+			IdentityFile: p.options.SSH.IdentityFile,
+		})
+	})
+	return p.live, p.dialed
 }
 
 func New(_ context.Context, options providerkit.Options) (providerkit.Provider, error) {
@@ -113,7 +131,7 @@ func (p *Provider) Records() providerkit.RecordStore { return p.records }
 
 func (p *Provider) Sealer() providerkit.Sealer { return p.sealer }
 
-func (p *Provider) Credentials() providerkit.Credentials { return credentials{} }
+func (p *Provider) Credentials() providerkit.Credentials { return credentials{p} }
 
 func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{} }
 

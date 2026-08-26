@@ -2,9 +2,11 @@ package vps
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 type bootstrapper struct{}
@@ -45,10 +47,48 @@ func (releaser) Destroy(context.Context, providerkit.StackRef, providerkit.Repor
 	return nil
 }
 
-type credentials struct{}
+type credentials struct{ provider *Provider }
 
-func (credentials) Whoami(context.Context) (providerkit.Identity, error) {
-	return providerkit.Identity{Provider: Vendor}, nil
+func (c credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
+	live, err := c.provider.Session(ctx)
+	if err != nil {
+		return providerkit.Identity{}, err
+	}
+	facts, err := live.Preflight(ctx)
+	if err != nil {
+		return providerkit.Identity{}, err
+	}
+	dest := live.Destination()
+	return providerkit.Identity{
+		Provider:  Vendor,
+		Account:   live.Fingerprint(),
+		Principal: dest.Principal(),
+		Details: details(
+			"address", fmt.Sprintf("%s port %d", dest.Address, dest.Port),
+			"host key", live.HostKey().Type,
+			"os", facts.OS,
+			"arch", facts.Arch,
+			"elevation", elevation(facts),
+		),
+	}, nil
+}
+
+func elevation(facts session.Facts) string {
+	if facts.Root {
+		return "root"
+	}
+	return "sudo without a password"
+}
+
+func details(pairs ...string) []providerkit.Detail {
+	var out []providerkit.Detail
+	for at := 0; at+1 < len(pairs); at += 2 {
+		if pairs[at+1] == "" {
+			continue
+		}
+		out = append(out, providerkit.Detail{Label: pairs[at], Value: pairs[at+1]})
+	}
+	return out
 }
 
 func (credentials) Permissions(providerkit.CredentialTier) (edge.CredentialDocument, error) {

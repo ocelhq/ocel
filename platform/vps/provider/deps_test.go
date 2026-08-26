@@ -17,13 +17,17 @@ var reachable = map[string]bool{
 
 var forbidden = []string{
 	"github.com/ocelhq/ocel/pkg/providerkit/pulumi",
+	"golang.org/x/crypto/ssh",
+	"github.com/gliderlabs/ssh",
+	"github.com/melbahja/goph",
+	"github.com/pkg/sftp",
 	"github.com/aws/aws-sdk-go",
 	"github.com/pulumi/",
 	"github.com/cloudflare/",
 	"cloud.google.com/go",
 }
 
-func TestTheStubReachesNoCloud(t *testing.T) {
+func TestTheProviderReachesNoCloudAndNoGoSSHStack(t *testing.T) {
 	t.Parallel()
 
 	out, err := exec.Command("go", "list", "-deps", "./...").CombinedOutput()
@@ -33,11 +37,11 @@ func TestTheStubReachesNoCloud(t *testing.T) {
 
 	for _, pkg := range strings.Fields(string(out)) {
 		if module, ok := ocelModuleOf(pkg); ok && !reachable[module] {
-			t.Errorf("the vps stub reaches %s, which the module's dependency list does not allow", pkg)
+			t.Errorf("the vps provider reaches %s, which the module's dependency list does not allow", pkg)
 		}
 		for _, engine := range forbidden {
 			if strings.HasPrefix(pkg, engine) {
-				t.Errorf("the vps stub reaches %s: the kit's interface is not shaped by any one cloud", pkg)
+				t.Errorf("the vps provider reaches %s: it speaks to hosts through the OpenSSH binaries, so ssh_config and known_hosts stay the user's own", pkg)
 			}
 		}
 	}
