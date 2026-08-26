@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -23,33 +23,33 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &contractv1.ChangePlan{
+		printDestroyPlan(&out, "proj_shop", false, &planv1.ChangePlan{
 			EdgeKind: "cloudfront",
 			Subject:  "proj_shop",
-			Groups: []*contractv1.ChangeGroup{
+			Groups: []*planv1.ChangeGroup{
 				{
 					Kind:    "stack",
 					Name:    "aws/shop--infra",
 					Feature: "infra",
-					Action:  contractv1.Change_ACTION_DELETE,
+					Action:  planv1.Change_ACTION_DELETE,
 					Reason:  "databases and buckets, INCLUDING ALL DATA",
 				},
-				{Kind: "stack", Name: "aws/shop--web--b1", Feature: "web", Action: contractv1.Change_ACTION_DELETE},
+				{Kind: "stack", Name: "aws/shop--web--b1", Feature: "web", Action: planv1.Change_ACTION_DELETE},
 				{
 					Kind:   "edge",
 					Name:   "cloudfront/edge",
-					Action: contractv1.Change_ACTION_DELETE,
-					Changes: []*contractv1.Change{
+					Action: planv1.Change_ACTION_DELETE,
+					Changes: []*planv1.Change{
 						{
 							Kind:   "AWS::CloudFront::Distribution",
 							Name:   "E1SHOP",
-							Action: contractv1.Change_ACTION_DISABLE_THEN_DELETE,
+							Action: planv1.Change_ACTION_DISABLE_THEN_DELETE,
 							Slow:   true,
 						},
-						{Kind: "AWS::CloudFront::KeyValueStore", Name: "shop.example.com", Action: contractv1.Change_ACTION_DELETE},
+						{Kind: "AWS::CloudFront::KeyValueStore", Name: "shop.example.com", Action: planv1.Change_ACTION_DELETE},
 					},
 				},
-				{Kind: "certificate", Name: "shop.example.com", Action: contractv1.Change_ACTION_KEEP, Reason: "you pinned this certificate"},
+				{Kind: "certificate", Name: "shop.example.com", Action: planv1.Change_ACTION_KEEP, Reason: "you pinned this certificate"},
 			},
 		})
 		got := out.String()
@@ -80,15 +80,15 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &contractv1.ChangePlan{
+		printDestroyPlan(&out, "proj_shop", false, &planv1.ChangePlan{
 			EdgeKind: "api-gateway",
-			Groups: []*contractv1.ChangeGroup{{
+			Groups: []*planv1.ChangeGroup{{
 				Kind:   "edge",
 				Name:   "api-gateway/edge",
-				Action: contractv1.Change_ACTION_DELETE,
-				Changes: []*contractv1.Change{
-					{Kind: "AWS::ApiGateway::RestApi", Name: "shop", Action: contractv1.Change_ACTION_DELETE, Slow: true},
-					{Kind: "AWS::ApiGateway::DomainName", Name: "shop.example.com", Action: contractv1.Change_ACTION_DELETE},
+				Action: planv1.Change_ACTION_DELETE,
+				Changes: []*planv1.Change{
+					{Kind: "AWS::ApiGateway::RestApi", Name: "shop", Action: planv1.Change_ACTION_DELETE, Slow: true},
+					{Kind: "AWS::ApiGateway::DomainName", Name: "shop.example.com", Action: planv1.Change_ACTION_DELETE},
 				},
 			}},
 		})
@@ -104,10 +104,10 @@ func TestPrintDestroyPlan(t *testing.T) {
 	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
 		t.Parallel()
 
-		got := changeplan.NewPrinter(io.Discard).GroupLine(&contractv1.ChangeGroup{
+		got := changeplan.NewPrinter(io.Discard).GroupLine(&planv1.ChangeGroup{
 			Kind:   "certificate",
 			Name:   "shop.example.com",
-			Action: contractv1.Change_Action(97),
+			Action: planv1.Change_Action(97),
 		})
 		if !strings.Contains(got, "an action this CLI does not know") || !strings.HasSuffix(got, "certificate shop.example.com") {
 			t.Errorf("changeplan.GroupLine() = %q, want the unknown action named before the resource", got)

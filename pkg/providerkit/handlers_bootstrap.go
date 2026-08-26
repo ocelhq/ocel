@@ -10,6 +10,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -157,16 +158,16 @@ func namedEdge(kind string) string {
 	return kind
 }
 
-func ChangePlanProto(plan BootstrapPlan, subject, kind string) *contractv1.ChangePlan {
-	out := &contractv1.ChangePlan{Subject: subject, EdgeKind: kind}
+func ChangePlanProto(plan BootstrapPlan, subject, kind string) *planv1.ChangePlan {
+	out := &planv1.ChangePlan{Subject: subject, EdgeKind: kind}
 	for _, group := range plan.Groups {
 		out.Groups = append(out.Groups, GroupProto(group))
 	}
 	return out
 }
 
-func GroupProto(group ChangeGroup) *contractv1.ChangeGroup {
-	rendered := &contractv1.ChangeGroup{
+func GroupProto(group ChangeGroup) *planv1.ChangeGroup {
+	rendered := &planv1.ChangeGroup{
 		Kind:    group.Kind,
 		Name:    group.Name,
 		Feature: group.Feature,
@@ -175,7 +176,7 @@ func GroupProto(group ChangeGroup) *contractv1.ChangeGroup {
 		Slow:    group.Slow,
 	}
 	for _, change := range group.Changes {
-		rendered.Changes = append(rendered.Changes, &contractv1.Change{
+		rendered.Changes = append(rendered.Changes, &planv1.Change{
 			Kind:   change.Kind,
 			Name:   change.Name,
 			Action: planAction(change.Action),
@@ -186,22 +187,22 @@ func GroupProto(group ChangeGroup) *contractv1.ChangeGroup {
 	return rendered
 }
 
-func planAction(action ChangeAction) contractv1.Change_Action {
+func planAction(action ChangeAction) planv1.Change_Action {
 	switch action {
 	case ActionCreate:
-		return contractv1.Change_ACTION_CREATE
+		return planv1.Change_ACTION_CREATE
 	case ActionUpdate:
-		return contractv1.Change_ACTION_UPDATE
+		return planv1.Change_ACTION_UPDATE
 	case ActionReplace:
-		return contractv1.Change_ACTION_REPLACE
+		return planv1.Change_ACTION_REPLACE
 	case ActionDelete:
-		return contractv1.Change_ACTION_DELETE
+		return planv1.Change_ACTION_DELETE
 	case ActionDisableThenDelete:
-		return contractv1.Change_ACTION_DISABLE_THEN_DELETE
+		return planv1.Change_ACTION_DISABLE_THEN_DELETE
 	case ActionKeep:
-		return contractv1.Change_ACTION_KEEP
+		return planv1.Change_ACTION_KEEP
 	default:
-		return contractv1.Change_ACTION_UNSPECIFIED
+		return planv1.Change_ACTION_UNSPECIFIED
 	}
 }
 
@@ -230,7 +231,7 @@ func BootstrapStatusProto(standing Standing, writing Writer, tier environmentv1.
 	return status
 }
 
-func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*contractv1.ChangePlan, error) {
+func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*planv1.ChangePlan, error) {
 	class, err := classOf(req.GetTier())
 	if err != nil {
 		return nil, err

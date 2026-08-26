@@ -1,0 +1,50 @@
+syntax = "proto3";
+package common.plan.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/common/plan/v1;planv1";
+
+message ChangePlan {
+  string subject = 1;
+
+  string edge_kind = 2;
+
+  repeated ChangeGroup groups = 3;
+}
+
+message ChangeGroup {
+  string kind = 1;
+
+  string name = 2;
+
+  string feature = 3;
+
+  Change.Action action = 4;
+
+  string reason = 5;
+
+  bool slow = 6;
+
+  repeated Change changes = 7;
+}
+
+message Change {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    ACTION_CREATE = 1;
+    ACTION_UPDATE = 2;
+    ACTION_REPLACE = 3;
+    ACTION_DELETE = 4;
+    ACTION_DISABLE_THEN_DELETE = 5;
+    ACTION_KEEP = 6;
+  }
+
+  string kind = 1;
+
+  string name = 2;
+
+  Action action = 3;
+
+  string reason = 4;
+
+  bool slow = 5;
+}

@@ -5,29 +5,29 @@ import (
 	"strings"
 	"testing"
 
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 )
 
 func TestRenderPaintsTheSigilAndDimsTheMetadata(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	newPrinter(&out, true).Render("Proposed changes to the production bootstrap", &contractv1.ChangePlan{
-		Groups: []*contractv1.ChangeGroup{
+	newPrinter(&out, true).Render("Proposed changes to the production bootstrap", &planv1.ChangePlan{
+		Groups: []*planv1.ChangeGroup{
 			{
 				Kind:    "stack",
 				Name:    "ocel-production-queues",
 				Feature: "queues",
-				Action:  contractv1.Change_ACTION_CREATE,
-				Changes: []*contractv1.Change{
-					{Kind: "AWS::SQS::Queue", Name: "OcelQueue", Action: contractv1.Change_ACTION_CREATE},
+				Action:  planv1.Change_ACTION_CREATE,
+				Changes: []*planv1.Change{
+					{Kind: "AWS::SQS::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE},
 				},
 			},
 			{
 				Kind:    "stack",
 				Name:    "ocel-production-isr",
 				Feature: "isr",
-				Action:  contractv1.Change_ACTION_DELETE,
+				Action:  planv1.Change_ACTION_DELETE,
 				Reason:  "web, api were deployed against it",
 			},
 		},
@@ -52,9 +52,9 @@ func TestRenderOnANonTerminalStaysPlain(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	NewPrinter(&out).Render("Proposed changes to the production bootstrap", &contractv1.ChangePlan{
-		Groups: []*contractv1.ChangeGroup{
-			{Kind: "stack", Name: "ocel-production-core", Action: contractv1.Change_ACTION_CREATE},
+	NewPrinter(&out).Render("Proposed changes to the production bootstrap", &planv1.ChangePlan{
+		Groups: []*planv1.ChangeGroup{
+			{Kind: "stack", Name: "ocel-production-core", Action: planv1.Change_ACTION_CREATE},
 		},
 	})
 	if strings.Contains(out.String(), "\x1b[") {

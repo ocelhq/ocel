@@ -6,49 +6,49 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 )
 
-func mixedPlan() *contractv1.ChangePlan {
-	return &contractv1.ChangePlan{
+func mixedPlan() *planv1.ChangePlan {
+	return &planv1.ChangePlan{
 		Subject: "production",
-		Groups: []*contractv1.ChangeGroup{
+		Groups: []*planv1.ChangeGroup{
 			{
 				Kind:   "stack",
 				Name:   "ocel-production-core",
-				Action: contractv1.Change_ACTION_UPDATE,
-				Changes: []*contractv1.Change{
-					{Kind: "AWS::Lambda::Function", Name: "OcelRouterFunction", Action: contractv1.Change_ACTION_UPDATE},
-					{Kind: "AWS::SecretsManager::Secret", Name: "OcelOriginSecret", Action: contractv1.Change_ACTION_REPLACE, Reason: "rotation forces replacement"},
+				Action: planv1.Change_ACTION_UPDATE,
+				Changes: []*planv1.Change{
+					{Kind: "AWS::Lambda::Function", Name: "OcelRouterFunction", Action: planv1.Change_ACTION_UPDATE},
+					{Kind: "AWS::SecretsManager::Secret", Name: "OcelOriginSecret", Action: planv1.Change_ACTION_REPLACE, Reason: "rotation forces replacement"},
 				},
 			},
 			{
 				Kind:    "stack",
 				Name:    "ocel-production-queues",
 				Feature: "queues",
-				Action:  contractv1.Change_ACTION_CREATE,
-				Changes: []*contractv1.Change{
-					{Kind: "AWS::SQS::Queue", Name: "OcelQueue", Action: contractv1.Change_ACTION_CREATE},
-					{Kind: "AWS::SQS::Queue", Name: "OcelQueueDLQ", Action: contractv1.Change_ACTION_CREATE},
+				Action:  planv1.Change_ACTION_CREATE,
+				Changes: []*planv1.Change{
+					{Kind: "AWS::SQS::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE},
+					{Kind: "AWS::SQS::Queue", Name: "OcelQueueDLQ", Action: planv1.Change_ACTION_CREATE},
 				},
 			},
 			{
 				Kind:    "stack",
 				Name:    "ocel-production-isr",
 				Feature: "isr",
-				Action:  contractv1.Change_ACTION_DELETE,
+				Action:  planv1.Change_ACTION_DELETE,
 				Reason:  "web, api were deployed against it",
-				Changes: []*contractv1.Change{
-					{Kind: "AWS::DynamoDB::Table", Name: "OcelRevalidationTable", Action: contractv1.Change_ACTION_DELETE},
+				Changes: []*planv1.Change{
+					{Kind: "AWS::DynamoDB::Table", Name: "OcelRevalidationTable", Action: planv1.Change_ACTION_DELETE},
 				},
 			},
 			{
 				Kind:    "stack",
 				Name:    "ocel-production-secrets",
 				Feature: "secrets",
-				Action:  contractv1.Change_ACTION_KEEP,
+				Action:  planv1.Change_ACTION_KEEP,
 				Reason:  "already current",
-				Changes: []*contractv1.Change{{Kind: "AWS::SecretsManager::Secret", Name: "OcelSecret", Action: contractv1.Change_ACTION_KEEP}},
+				Changes: []*planv1.Change{{Kind: "AWS::SecretsManager::Secret", Name: "OcelSecret", Action: planv1.Change_ACTION_KEEP}},
 			},
 		},
 	}
@@ -82,46 +82,46 @@ func TestRender(t *testing.T) {
 	}
 }
 
-func bootstrapPlan() *contractv1.ChangePlan {
-	return &contractv1.ChangePlan{
+func bootstrapPlan() *planv1.ChangePlan {
+	return &planv1.ChangePlan{
 		Subject: "production",
-		Groups: []*contractv1.ChangeGroup{
+		Groups: []*planv1.ChangeGroup{
 			{
 				Kind:   "stack",
 				Name:   "aws/ocel-bootstrap",
-				Action: contractv1.Change_ACTION_UPDATE,
-				Changes: []*contractv1.Change{
-					{Kind: "AWS::Lambda::Function", Name: "OcelRouterFunction", Action: contractv1.Change_ACTION_UPDATE},
+				Action: planv1.Change_ACTION_UPDATE,
+				Changes: []*planv1.Change{
+					{Kind: "AWS::Lambda::Function", Name: "OcelRouterFunction", Action: planv1.Change_ACTION_UPDATE},
 				},
 			},
 			{
 				Kind:    "stack",
 				Name:    "aws/ocel-bootstrap-cloudflare-edge",
 				Feature: "cloudflare-edge",
-				Action:  contractv1.Change_ACTION_CREATE,
-				Changes: []*contractv1.Change{
-					{Kind: "AWS::IAM::User", Name: "EdgeUser", Action: contractv1.Change_ACTION_CREATE},
-					{Kind: "AWS::Lambda::Function", Name: "TagPublisher", Action: contractv1.Change_ACTION_CREATE},
+				Action:  planv1.Change_ACTION_CREATE,
+				Changes: []*planv1.Change{
+					{Kind: "AWS::IAM::User", Name: "EdgeUser", Action: planv1.Change_ACTION_CREATE},
+					{Kind: "AWS::Lambda::Function", Name: "TagPublisher", Action: planv1.Change_ACTION_CREATE},
 				},
 			},
 			{
 				Kind:    "stack",
 				Name:    "aws/ocel-bootstrap-isr",
 				Feature: "isr",
-				Action:  contractv1.Change_ACTION_KEEP,
+				Action:  planv1.Change_ACTION_KEEP,
 				Reason:  "already current",
 			},
 			{
 				Kind:    "edge",
 				Name:    "cloudflare/edge",
 				Feature: "cloudflare-edge",
-				Action:  contractv1.Change_ACTION_CREATE,
-				Changes: []*contractv1.Change{
-					{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: contractv1.Change_ACTION_CREATE},
-					{Kind: "Cloudflare::APIToken", Name: "ocel-edge-cache", Action: contractv1.Change_ACTION_CREATE},
-					{Kind: "Cloudflare::Worker", Name: "ocel-deployments-store", Action: contractv1.Change_ACTION_CREATE},
-					{Kind: "Cloudflare::WorkerSecret", Name: "ocel-deployments-store/BOOTSTRAP_SECRET", Action: contractv1.Change_ACTION_CREATE},
-					{Kind: "Cloudflare::WorkerSubdomain", Name: "ocel-deployments-store", Action: contractv1.Change_ACTION_CREATE},
+				Action:  planv1.Change_ACTION_CREATE,
+				Changes: []*planv1.Change{
+					{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: planv1.Change_ACTION_CREATE},
+					{Kind: "Cloudflare::APIToken", Name: "ocel-edge-cache", Action: planv1.Change_ACTION_CREATE},
+					{Kind: "Cloudflare::Worker", Name: "ocel-deployments-store", Action: planv1.Change_ACTION_CREATE},
+					{Kind: "Cloudflare::WorkerSecret", Name: "ocel-deployments-store/BOOTSTRAP_SECRET", Action: planv1.Change_ACTION_CREATE},
+					{Kind: "Cloudflare::WorkerSubdomain", Name: "ocel-deployments-store", Action: planv1.Change_ACTION_CREATE},
 				},
 			},
 		},
@@ -168,16 +168,16 @@ func TestRenderNamesTheVendorAndLeavesTheKindUnsaid(t *testing.T) {
 func TestRenderKeepsAnEdgeThatIsAlreadyCurrent(t *testing.T) {
 	t.Parallel()
 
-	plan := &contractv1.ChangePlan{Groups: []*contractv1.ChangeGroup{
-		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: contractv1.Change_ACTION_KEEP, Reason: "already current"},
+	plan := &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
+		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
 		{
 			Kind:    "edge",
 			Name:    "cloudflare/edge",
 			Feature: "cloudflare-edge",
-			Action:  contractv1.Change_ACTION_KEEP,
+			Action:  planv1.Change_ACTION_KEEP,
 			Reason:  "already current",
-			Changes: []*contractv1.Change{
-				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: contractv1.Change_ACTION_KEEP, Reason: "already current"},
+			Changes: []*planv1.Change{
+				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
 			},
 		},
 	}}
@@ -200,13 +200,13 @@ func TestRenderKeepsAnEdgeThatIsAlreadyCurrent(t *testing.T) {
 func TestRenderLeavesAnEdgeWithNoFeatureUntagged(t *testing.T) {
 	t.Parallel()
 
-	plan := &contractv1.ChangePlan{Groups: []*contractv1.ChangeGroup{
+	plan := &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
 		{
 			Kind:   "edge",
 			Name:   "cloudflare/edge",
-			Action: contractv1.Change_ACTION_CREATE,
-			Changes: []*contractv1.Change{
-				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: contractv1.Change_ACTION_CREATE},
+			Action: planv1.Change_ACTION_CREATE,
+			Changes: []*planv1.Change{
+				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: planv1.Change_ACTION_CREATE},
 			},
 		},
 	}}
@@ -222,10 +222,10 @@ func TestRenderCountsAChildlessGroupAsOneItem(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Render("Proposed changes to the preview bootstrap", &contractv1.ChangePlan{
-		Groups: []*contractv1.ChangeGroup{
-			{Kind: "stack", Name: "ocel-preview-core", Action: contractv1.Change_ACTION_CREATE},
-			{Kind: "distribution", Name: "E1PREVIEW", Action: contractv1.Change_ACTION_DISABLE_THEN_DELETE, Slow: true},
+	changeplan.NewPrinter(&out).Render("Proposed changes to the preview bootstrap", &planv1.ChangePlan{
+		Groups: []*planv1.ChangeGroup{
+			{Kind: "stack", Name: "ocel-preview-core", Action: planv1.Change_ACTION_CREATE},
+			{Kind: "distribution", Name: "E1PREVIEW", Action: planv1.Change_ACTION_DISABLE_THEN_DELETE, Slow: true},
 		},
 	})
 
@@ -244,8 +244,8 @@ func TestRenderCountsAChildlessGroupAsOneItem(t *testing.T) {
 func TestRenderTalliesNothingWhenEverythingIsKept(t *testing.T) {
 	t.Parallel()
 
-	plan := &contractv1.ChangePlan{Groups: []*contractv1.ChangeGroup{
-		{Kind: "stack", Name: "ocel-production-core", Action: contractv1.Change_ACTION_KEEP, Reason: "already current"},
+	plan := &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
+		{Kind: "stack", Name: "ocel-production-core", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
 	}}
 	var out bytes.Buffer
 	changeplan.NewPrinter(&out).Render("Proposed changes to the production bootstrap", plan)
@@ -266,12 +266,12 @@ func TestPrintSeparatesTheDoomedFromTheKept(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Print("This will permanently destroy production project \"shop\"", &contractv1.ChangePlan{
+	changeplan.NewPrinter(&out).Print("This will permanently destroy production project \"shop\"", &planv1.ChangePlan{
 		EdgeKind: "cloudflare",
-		Groups: []*contractv1.ChangeGroup{
-			{Kind: "edge stack", Name: "shop", Action: contractv1.Change_ACTION_DELETE},
-			{Kind: "infra stack", Name: "shop--infra", Action: contractv1.Change_ACTION_DELETE, Reason: "databases and buckets, INCLUDING ALL DATA"},
-			{Kind: "certificate", Name: "shop.example.com", Action: contractv1.Change_ACTION_KEEP, Reason: "you pinned this certificate"},
+		Groups: []*planv1.ChangeGroup{
+			{Kind: "edge stack", Name: "shop", Action: planv1.Change_ACTION_DELETE},
+			{Kind: "infra stack", Name: "shop--infra", Action: planv1.Change_ACTION_DELETE, Reason: "databases and buckets, INCLUDING ALL DATA"},
+			{Kind: "certificate", Name: "shop.example.com", Action: planv1.Change_ACTION_KEEP, Reason: "you pinned this certificate"},
 		},
 	}, "– all stored assets belonging to this project", "This cannot be undone.")
 
@@ -298,16 +298,16 @@ func TestPrintShowsAKeptGroupThatCarriesRows(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Print("This will permanently destroy production project \"shop\"", &contractv1.ChangePlan{
-		Groups: []*contractv1.ChangeGroup{
-			{Kind: "edge stack", Name: "shop", Action: contractv1.Change_ACTION_DELETE},
+	changeplan.NewPrinter(&out).Print("This will permanently destroy production project \"shop\"", &planv1.ChangePlan{
+		Groups: []*planv1.ChangeGroup{
+			{Kind: "edge stack", Name: "shop", Action: planv1.Change_ACTION_DELETE},
 			{
 				Kind:   "edge",
 				Name:   "cloudflare/edge",
-				Action: contractv1.Change_ACTION_KEEP,
+				Action: planv1.Change_ACTION_KEEP,
 				Reason: "bootstrap-scoped",
-				Changes: []*contractv1.Change{
-					{Kind: "Cloudflare::Worker", Name: "ocel-preview-entry", Action: contractv1.Change_ACTION_KEEP, Reason: "every project's previews are served through it"},
+				Changes: []*planv1.Change{
+					{Kind: "Cloudflare::Worker", Name: "ocel-preview-entry", Action: planv1.Change_ACTION_KEEP, Reason: "every project's previews are served through it"},
 				},
 			},
 		},
@@ -329,16 +329,16 @@ Left in place:
 	}
 }
 
-func keptGroupWithDeletes() *contractv1.ChangePlan {
-	return &contractv1.ChangePlan{Groups: []*contractv1.ChangeGroup{
+func keptGroupWithDeletes() *planv1.ChangePlan {
+	return &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
 		{
 			Kind:   "edge",
 			Name:   "cloudflare/edge",
-			Action: contractv1.Change_ACTION_KEEP,
+			Action: planv1.Change_ACTION_KEEP,
 			Reason: "already current",
-			Changes: []*contractv1.Change{
-				{Kind: "Cloudflare::WorkerRoute", Name: "*.preview.shop.com", Action: contractv1.Change_ACTION_DELETE},
-				{Kind: "Cloudflare::Worker", Name: "ocel-preview-entry", Action: contractv1.Change_ACTION_KEEP, Reason: "shared with every other wildcard"},
+			Changes: []*planv1.Change{
+				{Kind: "Cloudflare::WorkerRoute", Name: "*.preview.shop.com", Action: planv1.Change_ACTION_DELETE},
+				{Kind: "Cloudflare::Worker", Name: "ocel-preview-entry", Action: planv1.Change_ACTION_KEEP, Reason: "shared with every other wildcard"},
 			},
 		},
 	}}
@@ -381,7 +381,7 @@ Left in place:
 func TestAllKeepIsNotAPlanWithoutGroups(t *testing.T) {
 	t.Parallel()
 
-	if changeplan.AllKeep(&contractv1.ChangePlan{}) {
+	if changeplan.AllKeep(&planv1.ChangePlan{}) {
 		t.Error("AllKeep() = true for a provider that sent no plan; silence is not a promise that nothing changes")
 	}
 }
@@ -389,8 +389,8 @@ func TestAllKeepIsNotAPlanWithoutGroups(t *testing.T) {
 func TestConfirmVerb(t *testing.T) {
 	t.Parallel()
 
-	creates := &contractv1.ChangePlan{Groups: []*contractv1.ChangeGroup{
-		{Kind: "stack", Name: "ocel-preview-core", Action: contractv1.Change_ACTION_CREATE},
+	creates := &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
+		{Kind: "stack", Name: "ocel-preview-core", Action: planv1.Change_ACTION_CREATE},
 	}}
 	if got := changeplan.ConfirmVerb(creates); got != "Create these" {
 		t.Errorf("ConfirmVerb() = %q, want a plan of pure creates to read as one", got)
@@ -403,17 +403,17 @@ func TestConfirmVerb(t *testing.T) {
 func TestRenderNamesTheParameterGroupBareAndSpellsItsRowsOut(t *testing.T) {
 	t.Parallel()
 
-	plan := &contractv1.ChangePlan{Groups: []*contractv1.ChangeGroup{
-		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: contractv1.Change_ACTION_KEEP, Reason: "already current"},
+	plan := &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
+		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
 		{
 			Kind:   "parameters",
 			Name:   "aws/parameters",
-			Action: contractv1.Change_ACTION_UPDATE,
-			Changes: []*contractv1.Change{
-				{Kind: "AWS::SSM::Parameter", Name: "/ocel/origin/secret", Action: contractv1.Change_ACTION_KEEP, Reason: "already current"},
-				{Kind: "AWS::SSM::Parameter", Name: "/ocel/edge/cloudflare/values", Action: contractv1.Change_ACTION_UPDATE, Reason: "what the edge hands back differs from what stands"},
-				{Kind: "AWS::SSM::Parameter", Name: "/ocel/edge/cloudflare/credentials", Action: contractv1.Change_ACTION_CREATE},
-				{Kind: "AWS::IAM::AccessKey", Name: "ocel-edge", Action: contractv1.Change_ACTION_CREATE},
+			Action: planv1.Change_ACTION_UPDATE,
+			Changes: []*planv1.Change{
+				{Kind: "AWS::SSM::Parameter", Name: "/ocel/origin/secret", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
+				{Kind: "AWS::SSM::Parameter", Name: "/ocel/edge/cloudflare/values", Action: planv1.Change_ACTION_UPDATE, Reason: "what the edge hands back differs from what stands"},
+				{Kind: "AWS::SSM::Parameter", Name: "/ocel/edge/cloudflare/credentials", Action: planv1.Change_ACTION_CREATE},
+				{Kind: "AWS::IAM::AccessKey", Name: "ocel-edge", Action: planv1.Change_ACTION_CREATE},
 			},
 		},
 	}}

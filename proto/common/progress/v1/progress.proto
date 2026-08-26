@@ -5,6 +5,7 @@ option go_package = "github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progres
 
 import "buf/validate/validate.proto";
 import "common/links/v1/links.proto";
+import "common/plan/v1/plan.proto";
 
 message OperationEvent {
   oneof event {
@@ -17,6 +18,7 @@ message OperationEvent {
     SpanEvent span = 5;
     DegradedEvent degraded = 6;
     DnsOwedEvent dns_owed = 7;
+    common.plan.v1.ChangePlan plan = 8;
   }
 }
 
@@ -26,6 +28,7 @@ enum Phase {
   PHASE_PROVISIONING = 2;
   PHASE_FINALIZING = 3;
   PHASE_DELETING = 4;
+  PHASE_BUILDING = 5;
 }
 
 message Stage {
@@ -63,6 +66,7 @@ enum AttributeKey {
   ATTRIBUTE_KEY_DURATION_MS = 11;
   ATTRIBUTE_KEY_RESOURCE_TYPE = 12;
   ATTRIBUTE_KEY_RESOURCE_NAME = 13;
+  ATTRIBUTE_KEY_CACHED = 14;
 }
 
 message SpanAttribute {
@@ -97,6 +101,8 @@ message ProgressEvent {
 
 message LogEvent {
   string message = 1;
+
+  bytes stage_id = 2;
 }
 
 message DnsRecord {

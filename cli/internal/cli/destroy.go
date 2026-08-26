@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -240,7 +241,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 	})
 }
 
-func printDestroyPlan(out io.Writer, slug string, preview bool, plan *contractv1.ChangePlan) {
+func printDestroyPlan(out io.Writer, slug string, preview bool, plan *planv1.ChangePlan) {
 	if preview {
 		changeplan.NewPrinter(out).Print(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
 			"– all stored preview assets belonging to this project",

@@ -12,6 +12,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -372,7 +373,7 @@ func TestPlanBootstrapPlansTheApplyItsIntentNames(t *testing.T) {
 		t.Fatalf("plan = %v, want the baseline and the closure of images", plan.GetGroups())
 	}
 	for _, group := range plan.GetGroups() {
-		if group.GetAction() != contractv1.Change_ACTION_CREATE {
+		if group.GetAction() != planv1.Change_ACTION_CREATE {
 			t.Errorf("%s is %s, want it created on an account holding nothing", group.GetName(), group.GetAction())
 		}
 		if len(group.GetChanges()) == 0 {
@@ -573,7 +574,7 @@ func TestPlanRemoveBootstrapNamesTheClassAndWhatGoes(t *testing.T) {
 		t.Fatalf("PlanRemoveBootstrap() planned %d items, want the feature stack, the core and the edge", len(plan.GetGroups()))
 	}
 	for _, item := range plan.GetGroups() {
-		if item.GetAction() != contractv1.Change_ACTION_DELETE {
+		if item.GetAction() != planv1.Change_ACTION_DELETE {
 			t.Errorf("item %s planned action %v, want it deleted", item.GetName(), item.GetAction())
 		}
 		if item.GetKind() == "" || item.GetName() == "" {
@@ -711,7 +712,7 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenMoreThanOneEdgeStands(t *testi
 		t.Errorf("PlanRemoveBootstrap() says this account is fronted by the %q edge, want no single edge named where two stand", plan.GetEdgeKind())
 	}
 	for _, kind := range []edge.Kind{fake.KindRelay, fake.KindDirect} {
-		if !slices.ContainsFunc(plan.GetGroups(), func(g *contractv1.ChangeGroup) bool {
+		if !slices.ContainsFunc(plan.GetGroups(), func(g *planv1.ChangeGroup) bool {
 			return g.GetName() == string(kind)+"/edge"
 		}) {
 			t.Errorf("plan groups = %+v, want a group named for the %q edge that stands", plan.GetGroups(), kind)

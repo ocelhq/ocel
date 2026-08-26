@@ -63,6 +63,10 @@ type Engine interface {
 
 	Destroy(ctx context.Context, setup Setup, report providerkit.Reporter) error
 
+	Preview(ctx context.Context, setup Setup, report providerkit.Reporter) ([]providerkit.Change, error)
+
+	PreviewDestroy(ctx context.Context, setup Setup, report providerkit.Reporter) ([]providerkit.Change, error)
+
 	Outputs(ctx context.Context, setup Setup) (auto.OutputMap, error)
 }
 

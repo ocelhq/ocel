@@ -8,7 +8,8 @@ package progressv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	v11 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	v1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -31,6 +32,7 @@ const (
 	Phase_PHASE_PROVISIONING Phase = 2
 	Phase_PHASE_FINALIZING   Phase = 3
 	Phase_PHASE_DELETING     Phase = 4
+	Phase_PHASE_BUILDING     Phase = 5
 )
 
 // Enum value maps for Phase.
@@ -41,6 +43,7 @@ var (
 		2: "PHASE_PROVISIONING",
 		3: "PHASE_FINALIZING",
 		4: "PHASE_DELETING",
+		5: "PHASE_BUILDING",
 	}
 	Phase_value = map[string]int32{
 		"PHASE_UNSPECIFIED":  0,
@@ -48,6 +51,7 @@ var (
 		"PHASE_PROVISIONING": 2,
 		"PHASE_FINALIZING":   3,
 		"PHASE_DELETING":     4,
+		"PHASE_BUILDING":     5,
 	}
 )
 
@@ -144,6 +148,7 @@ const (
 	AttributeKey_ATTRIBUTE_KEY_DURATION_MS    AttributeKey = 11
 	AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE  AttributeKey = 12
 	AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME  AttributeKey = 13
+	AttributeKey_ATTRIBUTE_KEY_CACHED         AttributeKey = 14
 )
 
 // Enum value maps for AttributeKey.
@@ -163,6 +168,7 @@ var (
 		11: "ATTRIBUTE_KEY_DURATION_MS",
 		12: "ATTRIBUTE_KEY_RESOURCE_TYPE",
 		13: "ATTRIBUTE_KEY_RESOURCE_NAME",
+		14: "ATTRIBUTE_KEY_CACHED",
 	}
 	AttributeKey_value = map[string]int32{
 		"ATTRIBUTE_KEY_UNSPECIFIED":    0,
@@ -179,6 +185,7 @@ var (
 		"ATTRIBUTE_KEY_DURATION_MS":    11,
 		"ATTRIBUTE_KEY_RESOURCE_TYPE":  12,
 		"ATTRIBUTE_KEY_RESOURCE_NAME":  13,
+		"ATTRIBUTE_KEY_CACHED":         14,
 	}
 )
 
@@ -220,6 +227,7 @@ type OperationEvent struct {
 	//	*OperationEvent_Span
 	//	*OperationEvent_Degraded
 	//	*OperationEvent_DnsOwed
+	//	*OperationEvent_Plan
 	Event         isOperationEvent_Event `protobuf_oneof:"event"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -325,6 +333,15 @@ func (x *OperationEvent) GetDnsOwed() *DnsOwedEvent {
 	return nil
 }
 
+func (x *OperationEvent) GetPlan() *v1.ChangePlan {
+	if x != nil {
+		if x, ok := x.Event.(*OperationEvent_Plan); ok {
+			return x.Plan
+		}
+	}
+	return nil
+}
+
 type isOperationEvent_Event interface {
 	isOperationEvent_Event()
 }
@@ -357,6 +374,10 @@ type OperationEvent_DnsOwed struct {
 	DnsOwed *DnsOwedEvent `protobuf:"bytes,7,opt,name=dns_owed,json=dnsOwed,proto3,oneof"`
 }
 
+type OperationEvent_Plan struct {
+	Plan *v1.ChangePlan `protobuf:"bytes,8,opt,name=plan,proto3,oneof"`
+}
+
 func (*OperationEvent_Progress) isOperationEvent_Event() {}
 
 func (*OperationEvent_Log) isOperationEvent_Event() {}
@@ -370,6 +391,8 @@ func (*OperationEvent_Span) isOperationEvent_Event() {}
 func (*OperationEvent_Degraded) isOperationEvent_Event() {}
 
 func (*OperationEvent_DnsOwed) isOperationEvent_Event() {}
+
+func (*OperationEvent_Plan) isOperationEvent_Event() {}
 
 type Stage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -706,6 +729,7 @@ func (x *ProgressEvent) GetStageId() []byte {
 type LogEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	StageId       []byte                 `protobuf:"bytes,2,opt,name=stage_id,json=stageId,proto3" json:"stage_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -745,6 +769,13 @@ func (x *LogEvent) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+func (x *LogEvent) GetStageId() []byte {
+	if x != nil {
+		return x.StageId
+	}
+	return nil
 }
 
 type DnsRecord struct {
@@ -931,7 +962,7 @@ type ResultEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	Links         []*v1.Link             `protobuf:"bytes,3,rep,name=links,proto3" json:"links,omitempty"`
+	Links         []*v11.Link            `protobuf:"bytes,3,rep,name=links,proto3" json:"links,omitempty"`
 	Functions     []*FunctionOutput      `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
 	AppUrls       []string               `protobuf:"bytes,5,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
 	PromotionId   string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
@@ -985,7 +1016,7 @@ func (x *ResultEvent) GetError() string {
 	return ""
 }
 
-func (x *ResultEvent) GetLinks() []*v1.Link {
+func (x *ResultEvent) GetLinks() []*v11.Link {
 	if x != nil {
 		return x.Links
 	}
@@ -1135,7 +1166,7 @@ var File_common_progress_v1_progress_proto protoreflect.FileDescriptor
 
 const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\n" +
-	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1bcommon/links/v1/links.proto\"\xc8\x03\n" +
+	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1bcommon/links/v1/links.proto\x1a\x19common/plan/v1/plan.proto\"\xfa\x03\n" +
 	"\x0eOperationEvent\x12?\n" +
 	"\bprogress\x18\x01 \x01(\v2!.common.progress.v1.ProgressEventH\x00R\bprogress\x120\n" +
 	"\x03log\x18\x02 \x01(\v2\x1c.common.progress.v1.LogEventH\x00R\x03log\x129\n" +
@@ -1144,7 +1175,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"stage_plan\x18\x04 \x01(\v2\".common.progress.v1.StagePlanEventH\x00R\tstagePlan\x123\n" +
 	"\x04span\x18\x05 \x01(\v2\x1d.common.progress.v1.SpanEventH\x00R\x04span\x12?\n" +
 	"\bdegraded\x18\x06 \x01(\v2!.common.progress.v1.DegradedEventH\x00R\bdegraded\x12=\n" +
-	"\bdns_owed\x18\a \x01(\v2 .common.progress.v1.DnsOwedEventH\x00R\adnsOwedB\x0e\n" +
+	"\bdns_owed\x18\a \x01(\v2 .common.progress.v1.DnsOwedEventH\x00R\adnsOwed\x120\n" +
+	"\x04plan\x18\b \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04planB\x0e\n" +
 	"\x05event\x12\x05\xbaH\x02\b\x01\"J\n" +
 	"\x05Stage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\fR\x02id\x12\x1b\n" +
@@ -1175,9 +1207,10 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\bstage_id\x18\x05 \x01(\fR\astageIdB\n" +
 	"\n" +
 	"\b_currentB\b\n" +
-	"\x06_total\"$\n" +
+	"\x06_total\"?\n" +
 	"\bLogEvent\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"c\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12\x19\n" +
+	"\bstage_id\x18\x02 \x01(\fR\astageId\"c\n" +
 	"\tDnsRecord\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
@@ -1206,18 +1239,19 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\tFlipBound\x12\x1d\n" +
 	"\n" +
 	"typical_ms\x18\x01 \x01(\x03R\ttypicalMs\x12\x1c\n" +
-	"\tpublished\x18\x02 \x01(\bR\tpublished*u\n" +
+	"\tpublished\x18\x02 \x01(\bR\tpublished*\x89\x01\n" +
 	"\x05Phase\x12\x15\n" +
 	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fPHASE_UPLOADING\x10\x01\x12\x16\n" +
 	"\x12PHASE_PROVISIONING\x10\x02\x12\x14\n" +
 	"\x10PHASE_FINALIZING\x10\x03\x12\x12\n" +
-	"\x0ePHASE_DELETING\x10\x04*T\n" +
+	"\x0ePHASE_DELETING\x10\x04\x12\x12\n" +
+	"\x0ePHASE_BUILDING\x10\x05*T\n" +
 	"\n" +
 	"SpanStatus\x12\x1b\n" +
 	"\x17SPAN_STATUS_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eSPAN_STATUS_OK\x10\x01\x12\x15\n" +
-	"\x11SPAN_STATUS_ERROR\x10\x02*\xa3\x03\n" +
+	"\x11SPAN_STATUS_ERROR\x10\x02*\xbd\x03\n" +
 	"\fAttributeKey\x12\x1d\n" +
 	"\x19ATTRIBUTE_KEY_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15ATTRIBUTE_KEY_COMMAND\x10\x01\x12\x17\n" +
@@ -1233,7 +1267,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x12\x1d\n" +
 	"\x19ATTRIBUTE_KEY_DURATION_MS\x10\v\x12\x1f\n" +
 	"\x1bATTRIBUTE_KEY_RESOURCE_TYPE\x10\f\x12\x1f\n" +
-	"\x1bATTRIBUTE_KEY_RESOURCE_NAME\x10\rB@Z>github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progressv1b\x06proto3"
+	"\x1bATTRIBUTE_KEY_RESOURCE_NAME\x10\r\x12\x18\n" +
+	"\x14ATTRIBUTE_KEY_CACHED\x10\x0eB@Z>github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progressv1b\x06proto3"
 
 var (
 	file_common_progress_v1_progress_proto_rawDescOnce sync.Once
@@ -1266,7 +1301,8 @@ var file_common_progress_v1_progress_proto_goTypes = []any{
 	(*ResultEvent)(nil),    // 13: common.progress.v1.ResultEvent
 	(*FunctionOutput)(nil), // 14: common.progress.v1.FunctionOutput
 	(*FlipBound)(nil),      // 15: common.progress.v1.FlipBound
-	(*v1.Link)(nil),        // 16: common.links.v1.Link
+	(*v1.ChangePlan)(nil),  // 16: common.plan.v1.ChangePlan
+	(*v11.Link)(nil),       // 17: common.links.v1.Link
 }
 var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	8,  // 0: common.progress.v1.OperationEvent.progress:type_name -> common.progress.v1.ProgressEvent
@@ -1276,20 +1312,21 @@ var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	7,  // 4: common.progress.v1.OperationEvent.span:type_name -> common.progress.v1.SpanEvent
 	12, // 5: common.progress.v1.OperationEvent.degraded:type_name -> common.progress.v1.DegradedEvent
 	11, // 6: common.progress.v1.OperationEvent.dns_owed:type_name -> common.progress.v1.DnsOwedEvent
-	4,  // 7: common.progress.v1.StagePlanEvent.stages:type_name -> common.progress.v1.Stage
-	2,  // 8: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
-	1,  // 9: common.progress.v1.SpanEvent.status:type_name -> common.progress.v1.SpanStatus
-	6,  // 10: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
-	0,  // 11: common.progress.v1.ProgressEvent.phase:type_name -> common.progress.v1.Phase
-	10, // 12: common.progress.v1.DnsOwedEvent.records:type_name -> common.progress.v1.DnsRecord
-	16, // 13: common.progress.v1.ResultEvent.links:type_name -> common.links.v1.Link
-	14, // 14: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
-	15, // 15: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	16, // 7: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
+	4,  // 8: common.progress.v1.StagePlanEvent.stages:type_name -> common.progress.v1.Stage
+	2,  // 9: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
+	1,  // 10: common.progress.v1.SpanEvent.status:type_name -> common.progress.v1.SpanStatus
+	6,  // 11: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
+	0,  // 12: common.progress.v1.ProgressEvent.phase:type_name -> common.progress.v1.Phase
+	10, // 13: common.progress.v1.DnsOwedEvent.records:type_name -> common.progress.v1.DnsRecord
+	17, // 14: common.progress.v1.ResultEvent.links:type_name -> common.links.v1.Link
+	14, // 15: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
+	15, // 16: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_common_progress_v1_progress_proto_init() }
@@ -1305,6 +1342,7 @@ func file_common_progress_v1_progress_proto_init() {
 		(*OperationEvent_Span)(nil),
 		(*OperationEvent_Degraded)(nil),
 		(*OperationEvent_DnsOwed)(nil),
+		(*OperationEvent_Plan)(nil),
 	}
 	file_common_progress_v1_progress_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
