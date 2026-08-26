@@ -96,6 +96,7 @@ type Edge struct {
 	owners   map[string]string
 	wildcard string
 	specs    []edge.PreviewWildcardSpec
+	stacks   []edge.StackSpec
 	bindings []edge.DomainBinding
 	serving  map[string]string
 	serves   *[]edge.Need
@@ -196,7 +197,16 @@ func (e *Edge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, err
 
 func (e *Edge) Teardown(context.Context, edge.Class) error { return nil }
 
+func (e *Edge) Stacks() []edge.StackSpec {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.stacks)
+}
+
 func (e *Edge) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+	e.mu.Lock()
+	e.stacks = append(e.stacks, spec)
+	e.mu.Unlock()
 	state := prior
 	state.Slug, state.Class = spec.Slug, spec.Class
 	state.Front = e.front(spec.Slug)
