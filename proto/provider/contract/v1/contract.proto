@@ -557,3 +557,37 @@ message RemoveStalePromotionsRequest {
 
   EdgeSelection edge = 4;
 }
+
+message HostTrustRefusal {
+  HostTrustReason reason = 1;
+
+  string host = 2;
+
+  string address = 3;
+
+  uint32 port = 4;
+
+  HostKey got = 5;
+
+  HostKey want = 6;
+
+  repeated string known_hosts = 7;
+
+  string remedy = 8;
+}
+
+message HostKey {
+  string type = 1;
+
+  string key = 2;
+
+  string fingerprint = 3;
+}
+
+enum HostTrustReason {
+  HOST_TRUST_REASON_UNSPECIFIED = 0;
+
+  HOST_TRUST_REASON_UNKNOWN_HOST_KEY = 1;
+
+  HOST_TRUST_REASON_HOST_KEY_MISMATCH = 2;
+}

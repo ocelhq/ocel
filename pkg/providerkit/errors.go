@@ -17,6 +17,10 @@ func RefusalError(err error) error {
 	if err == nil {
 		return nil
 	}
+	var trust HostTrustRefusal
+	if errors.As(err, &trust) {
+		return hostTrustError(trust)
+	}
 	var refusal Refusal
 	if !errors.As(err, &refusal) {
 		var already *connect.Error
