@@ -346,3 +346,105 @@ func TestAWarmerBehindTheFanOutIsStillFoundOnTheRoot(t *testing.T) {
 		t.Errorf("Serves() = %v, want the Postgres the override advertises", provider.Serves())
 	}
 }
+
+type withFunctions struct {
+	*buckets
+	removed []providerkit.Function
+}
+
+func (w *withFunctions) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.Function, error) {
+	var standing []providerkit.Function
+	for _, spec := range plan.App.Functions {
+		standing = append(standing, function(plan.Ref, spec.Name))
+	}
+	return standing, nil
+}
+
+func (w *withFunctions) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ providerkit.Reporter) error {
+	w.removed = append(w.removed, functions...)
+	return nil
+}
+
+func appRef() providerkit.StackRef {
+	return providerkit.StackRef{
+		Project: "shop",
+		Class:   providerkit.ClassProduction,
+		Name:    naming.AppStack("prod", "web", naming.NewRelease("d1", "f1")),
+	}
+}
+
+func function(ref providerkit.StackRef, name string) providerkit.Function {
+	return providerkit.Function{Name: name, Physical: ref.Name.String() + "-" + name}
+}
+
+func recordFunctions(t *testing.T, records providerkit.RecordStore, ref providerkit.StackRef, names ...string) {
+	t.Helper()
+
+	stack := providerkit.Stack{Kind: providerkit.StackApp}
+	for _, name := range names {
+		stack.Functions = append(stack.Functions, function(ref, name))
+	}
+	if err := providerkit.WriteStack(context.Background(), records, ref.Class, ref.Project, ref.Name, stack); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTheFanOutTakesDownTheFunctionItsPlanShowsGoing(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := appRef()
+	recordFunctions(t, records, ref, "api", "legacy")
+
+	own := &withFunctions{buckets: &buckets{}}
+	releaser := resources.Releaser(records, own)
+	plan := providerkit.StackPlan{
+		Ref:  ref,
+		Kind: providerkit.StackApp,
+		App:  &providerkit.AppPlan{App: "web", Functions: []providerkit.FunctionSpec{{Name: "api"}}},
+	}
+
+	shown, err := releaser.Plan(ctx, plan, nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	if rows := rowsOf(shown); rows["legacy"] != providerkit.ActionDelete {
+		t.Fatalf("legacy reads %q, want the function this release stopped declaring shown as going", rows["legacy"])
+	}
+
+	if _, err := releaser.Provision(ctx, plan, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(own.removed) != 1 || own.removed[0].Name != "legacy" {
+		t.Fatalf("the fan-out took down %v, want the legacy function its plan showed going", own.removed)
+	}
+}
+
+func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := appRef()
+	recordFunctions(t, records, ref, "api")
+
+	own := &withFunctions{buckets: &buckets{}}
+	releaser := resources.Releaser(records, own)
+	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra}
+
+	shown, err := releaser.Plan(ctx, plan, nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	if rows := rowsOf(shown); rows["api"] != providerkit.ActionDelete {
+		t.Fatalf("api reads %q, want the function no release declares shown as going", rows["api"])
+	}
+
+	if _, err := releaser.Provision(ctx, plan, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(own.removed) != 1 || own.removed[0].Name != "api" {
+		t.Fatalf("the fan-out took down %v, want the function its plan showed going", own.removed)
+	}
+}
