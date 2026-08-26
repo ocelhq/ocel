@@ -89,9 +89,9 @@ type recordedFailure struct {
 
 func errorForKind(kind string) error {
 	switch kind {
-	case ErrorKindCanceled:
+	case providerkit.ErrorKindCanceled:
 		return context.Canceled
-	case ErrorKindTimeout:
+	case providerkit.ErrorKindTimeout:
 		return context.DeadlineExceeded
 	default:
 		return errUploadBatchFailed
@@ -132,8 +132,8 @@ func (s *uploadBatchStats) record(o uploadOutcome) {
 	}
 
 	if o.Failed {
-		kind := ClassifyError(o.Err)
-		if kind == ErrorKindCanceled {
+		kind := providerkit.ClassifyError(o.Err)
+		if kind == providerkit.ErrorKindCanceled {
 			return
 		}
 		if len(s.failures) < maxUploadFailureStandouts {
