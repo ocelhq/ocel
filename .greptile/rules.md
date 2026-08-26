@@ -1,6 +1,6 @@
 # Review rules
 
-Every change is reviewed against these seven rules. Flat set, no precedence — except
+Every change is reviewed against these rules. Flat set, no precedence — except
 **Blast radius**, which blocks a merge on its own.
 
 Each rule states the target behaviour, then the signals that fail it. Cite the rule name
@@ -152,3 +152,22 @@ Fails when:
 - A gap marker carries no actionable content — a bare `TODO` with no what or why.
 - An exported symbol in `packages/` or `sdk/` lacks a doc-comment, or its doc-comment
   describes internals rather than the contract a user consumes.
+
+## Clean break
+
+<!-- TODO(alpha): remove this rule when the first non-alpha version is released. -->
+
+Nothing is released, so nothing has consumers to protect. A change replaces the old
+behaviour outright: one code path, the new one, and the old one is deleted in the same
+diff. "It would break existing users" is not a valid finding — there are none — and
+review must not request compatibility with prior unreleased behaviour.
+
+Fails when:
+
+- A deprecated symbol, flag, field, or endpoint is kept alongside its replacement instead
+  of being deleted.
+- A shim, alias, adapter, or fallback exists only so an old shape keeps working.
+- Code branches on a version, format, or schema that no released artifact ever produced.
+- A migration path is written for state only unreleased builds could have created.
+- A rename is done halfway — the old name re-exported, wrapped, or left accepting input —
+  rather than renamed everywhere in one diff.

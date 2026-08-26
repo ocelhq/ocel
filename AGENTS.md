@@ -9,6 +9,10 @@
   not precedent: never match it, never extend it, delete it when touching nearby code.
 - The commits are the ADRs. Rationale belongs in the commit message and PR bodies. Nowhere else.
 - Do not generate changesets unless explicitly instructed.
+- **Clean break** — TODO(alpha): remove when the first non-alpha version ships. Nothing
+  is released, so nothing has consumers: replace old behaviour outright and delete the
+  old path in the same diff. No shims, aliases, deprecated fallbacks, or migrations for
+  unreleased state. Reviewers enforce this as the "Clean break" review rule.
 - The code is the source of truth for memory too: write nothing to agent memory.
   Remembering is a user-initiated act — only an explicit "remember this" saves an entry.
 
