@@ -89,7 +89,7 @@ func (s *Session) args() []string {
 	if s.control != "" {
 		args = append(args,
 			"-o", "ControlMaster=auto",
-			"-o", "ControlPath="+filepath.Join(s.control, "%C"),
+			"-o", "ControlPath="+s.control,
 			"-o", "ControlPersist="+masterIdle,
 		)
 	}
@@ -108,7 +108,7 @@ func multiplex() string {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ""
 	}
-	return dir
+	return filepath.Join(dir, "%C-"+strconv.Itoa(os.Getpid()))
 }
 
 func output(ctx context.Context, name string, args ...string) (string, error) {

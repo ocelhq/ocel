@@ -98,6 +98,17 @@ func (p *Provider) Session(ctx context.Context) (*session.Session, error) {
 	return p.live, nil
 }
 
+func (p *Provider) Close() error {
+	p.dial.Lock()
+	defer p.dial.Unlock()
+	live := p.live
+	p.live = nil
+	if live == nil {
+		return nil
+	}
+	return live.Close()
+}
+
 func New(_ context.Context, options providerkit.Options) (providerkit.Provider, error) {
 	decoded, err := providerkit.Decode[Options](options)
 	if err != nil {

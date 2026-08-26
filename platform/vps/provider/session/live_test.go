@@ -211,8 +211,9 @@ func TestLiveALoginWithoutPasswordlessSudoIsRefused(t *testing.T) {
 	}
 }
 
-const lodger = `set -e
-sudo useradd -m -s /bin/bash ocel-lodger 2>/dev/null || true
-sudo install -d -m 0700 -o ocel-lodger -g ocel-lodger ~ocel-lodger/.ssh
-sudo cp ~/.ssh/authorized_keys ~ocel-lodger/.ssh/authorized_keys
-sudo chown ocel-lodger:ocel-lodger ~ocel-lodger/.ssh/authorized_keys`
+const lodger = `set -eu
+getent passwd ocel-lodger >/dev/null || sudo useradd -m -s /bin/bash ocel-lodger
+sudo usermod -p '*' ocel-lodger
+home=$(getent passwd ocel-lodger | cut -d: -f6)
+sudo install -d -m 0700 -o ocel-lodger -g ocel-lodger "$home/.ssh"
+sudo install -m 0600 -o ocel-lodger -g ocel-lodger "$HOME/.ssh/authorized_keys" "$home/.ssh/authorized_keys"`
