@@ -5,7 +5,7 @@ STATE_DIR="${OCEL_INCUS_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/ocel-incus}
 KEY="$STATE_DIR/id_ed25519"
 IMAGE="images:ubuntu/24.04/cloud"
 SSH_USER=ubuntu
-SSH_WAIT_SECS=300
+SSH_WAIT_SECS="${OCEL_INCUS_SSH_WAIT:-300}"
 
 usage() {
     cat <<'EOF'
@@ -60,7 +60,17 @@ wait_ssh() {
         fi
         sleep 2
     done
+    diagnose_no_ssh "$name" >&2
     die "$name: no SSH after ${SSH_WAIT_SECS}s"
+}
+
+diagnose_no_ssh() {
+    local name=$1
+    echo "incus.sh: cloud-init installs sshd over the network, so no SSH usually"
+    echo "incus.sh: means the VM has no egress. cloud-init reports:"
+    incus exec "$name" -- cloud-init status --long 2>&1 | sed 's/^/    /' || true
+    echo "incus.sh: check egress with:"
+    echo "incus.sh:   incus exec $name -- curl -4 -sS -o /dev/null -w '%{http_code}\\n' http://archive.ubuntu.com/ubuntu/"
 }
 
 print_info() {
@@ -74,6 +84,7 @@ print_info() {
 cmd_create() {
     local name=$1
     ensure_key
+    trap 'discard_half_made "'"$name"'" $?' EXIT
     incus init "$IMAGE" "$name" --vm \
         -c limits.cpu=2 \
         -c limits.memory=2GiB \
@@ -90,7 +101,21 @@ EOF
     local addr
     addr=$(wait_ssh "$name")
     incus snapshot create "$name" clean
+    trap - EXIT
     print_info "$name" "$addr"
+}
+
+discard_half_made() {
+    local name=$1 status=$2
+    trap - EXIT
+    [ "$status" -eq 0 ] && return 0
+    if [ -n "${OCEL_INCUS_KEEP:-}" ]; then
+        echo "incus.sh: leaving $name behind to inspect (OCEL_INCUS_KEEP is set)" >&2
+        return 0
+    fi
+    echo "incus.sh: deleting half-made $name (OCEL_INCUS_KEEP=1 keeps it)" >&2
+    incus delete -f "$name" 2>/dev/null || true
+    return 0
 }
 
 cmd_restore() {
