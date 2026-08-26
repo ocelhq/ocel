@@ -174,7 +174,11 @@ func (r *Records) helper(ctx context.Context, class providerkit.Class, stdin []b
 	for _, arg := range args {
 		command += " " + quoted(arg)
 	}
-	result, err := r.host.exec(ctx, command, stdin)
+	elevation, err := r.host.elevate(ctx)
+	if err != nil {
+		return "", err
+	}
+	result, err := r.host.exec(ctx, command, stdin, elevation)
 	if err != nil {
 		return "", err
 	}

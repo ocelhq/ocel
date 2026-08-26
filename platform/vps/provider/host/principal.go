@@ -80,12 +80,14 @@ func (l login) survey() string {
 held=''
 ` + membership + `line=$(getent shadow ` + quoted(l.name) + ` 2>/dev/null || true)
 if [ -z "$line" ] && [ -r /etc/shadow ]; then line=$(grep ` + quoted("^"+l.name+":") + ` /etc/shadow 2>/dev/null || true); fi
-if [ -z "$line" ]; then password=unreadable
-elif [ "$(printf '%s' "$line" | cut -d: -f2)" = ` + quoted(lockedPassword) + ` ]; then password=` + quoted(lockedFact) + `
-else password=unlocked
+password=''
+if [ -n "$line" ] && [ "$(printf '%s' "$line" | cut -d: -f2)" = ` + quoted(lockedPassword) + ` ]; then password=` + quoted(lockedFact) + `
+elif [ -n "$line" ]; then password=unlocked
 fi
+if [ -n "$password" ]; then
 sum=$(printf 'shell=%s\nhome=%s\ngroup=%s\npassword=%s\n' "$(printf '%s' "$entry" | cut -d: -f7)" "$(printf '%s' "$entry" | cut -d: -f6)" "$held" "$password" | sha256sum | cut -d' ' -f1)
 ` + reports(quoted(KindUser), quoted(l.name), "0", quoted(l.name), `"$sum"`) + `
+fi
 fi`
 }
 

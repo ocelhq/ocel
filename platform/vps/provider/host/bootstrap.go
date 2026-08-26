@@ -172,15 +172,28 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 }
 
 func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
-	read, err := b.host.Read(ctx, req.Class)
+	read, err := b.host.Own(ctx, req.Class)
 	if err != nil {
 		return err
 	}
+	work, err := healing(read, req.Unattended)
+	if err != nil {
+		return err
+	}
+	return b.writing(ctx, read, work, report, b.host.Reassert)
+}
+
+func healing(read Reading, unattended bool) ([]Item, error) {
 	work, err := healable(read)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return b.write(ctx, read, work, report)
+	if unattended {
+		if err := refuseReplacements(read, work); err != nil {
+			return nil, err
+		}
+	}
+	return work, nil
 }
 
 func healable(read Reading) ([]Item, error) {
@@ -195,6 +208,9 @@ func healable(read Reading) ([]Item, error) {
 			"%s records an apply that never finished, and heal finishes nothing it did not start.\nRun `%s` to plan the work that is left and finish it",
 			StampPath(read.Class), command)
 	}
+	if err := read.adopting(); err != nil {
+		return nil, err
+	}
 	var work []Item
 	var denied []string
 	for _, item := range Items(read.Class, read.Keys) {
@@ -203,6 +219,9 @@ func healable(read Reading) ([]Item, error) {
 		}
 		if deployOwned(item) {
 			work = append(work, item)
+			continue
+		}
+		if !read.standing(item.Kind, item.Name) {
 			continue
 		}
 		denied = append(denied, item.ID())
@@ -261,6 +280,9 @@ func (r Reading) adopting() error {
 	}
 	standing := r.Seal.Fingerprint
 	if standing == "" {
+		if r.standing(KindSealKey, SealKeyPath(r.Class)) {
+			return nil
+		}
 		standing = "no key at all"
 	}
 	return providerkit.Refuse(providerkit.CodeInvalid,
@@ -272,12 +294,17 @@ func (r Reading) adopting() error {
 }
 
 func (b Bootstrapper) write(ctx context.Context, standing Reading, items []Item, report providerkit.Reporter) error {
+	return b.writing(ctx, standing, items, report, b.host.Install)
+}
+
+func (b Bootstrapper) writing(ctx context.Context, standing Reading, items []Item, report providerkit.Reporter,
+	install func(context.Context, Item) error) error {
 	for _, item := range items {
 		if standing.current(item) {
 			say(report, item.ID()+": "+reasonStanding)
 			continue
 		}
-		if err := b.host.Install(ctx, item); err != nil {
+		if err := install(ctx, item); err != nil {
 			return err
 		}
 		say(report, "wrote "+item.ID())

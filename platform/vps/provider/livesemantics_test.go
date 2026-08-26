@@ -269,7 +269,7 @@ func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *t
 	}
 }
 
-func TestLiveHealAsTheDeployLoginCarriesTheHostsOwnReason(t *testing.T) {
+func TestLiveHealAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.T) {
 	vm := live(t)
 	class := providerkit.ClassProduction
 	bootstrapped(t, vm, class)
@@ -278,10 +278,25 @@ func TestLiveHealAsTheDeployLoginCarriesTheHostsOwnReason(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = bootstrapper.Apply(context.Background(),
-		providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Heal: true, Unattended: true}, nil)
-	refusal := refused(t, err, providerkit.CodeDenied)
-	if !strings.Contains(refusal.Message, deployLogin) || !strings.Contains(refusal.Message, "sudo") {
-		t.Errorf("heal as %s says %q, want the host's own account of what that login may not do", deployLogin, refusal.Message)
+	ctx := context.Background()
+	healing := providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Heal: true, Unattended: true}
+
+	vm.sshAs(t, deployLogin, "chmod 700 "+recordsDir)
+	if err := bootstrapper.Apply(ctx, healing, nil); err != nil {
+		t.Fatalf("heal as %s over its own drifted record tier = %v, want what that login owns reasserted without asking for root", deployLogin, err)
+	}
+	if held := mode(t, vm, recordsDir); held != "750" {
+		t.Errorf("%s stands at %q after a heal driven by the login that owns it, want 750", recordsDir, held)
+	}
+
+	vm.sshAs(t, deployLogin, "chmod 700 "+recordsDir)
+	vm.ssh(t, "sudo chmod 700 "+helperDir)
+	defer vm.ssh(t, "sudo chmod 755 "+helperDir)
+	refusal := refused(t, bootstrapper.Apply(ctx, healing, nil), providerkit.CodeDenied)
+	if !strings.Contains(refusal.Message, helperDir) {
+		t.Errorf("heal as %s over a mixed set says %q, want %s named as what that login may not write", deployLogin, refusal.Message, helperDir)
+	}
+	if held := mode(t, vm, recordsDir); held != "700" {
+		t.Errorf("%s stands at %q after a heal that refused, want a mixed set refused whole rather than half-done", recordsDir, held)
 	}
 }

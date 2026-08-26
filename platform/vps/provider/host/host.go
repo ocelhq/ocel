@@ -25,6 +25,8 @@ type Host struct {
 
 	elevating sync.Mutex
 	settled   bool
+	floored   bool
+	refusal   error
 	elevation string
 
 	rooting sync.Mutex
@@ -106,12 +108,16 @@ func (h *Host) elevate(ctx context.Context) (string, error) {
 	if h.settled {
 		return h.elevation, nil
 	}
+	if h.floored {
+		return "", h.refusal
+	}
 	live, err := h.dial(ctx)
 	if err != nil {
 		return "", err
 	}
 	facts, err := live.Preflight(ctx)
 	if err != nil {
+		h.floored, h.refusal = true, err
 		return "", err
 	}
 	if !facts.Root {
@@ -119,6 +125,14 @@ func (h *Host) elevate(ctx context.Context) (string, error) {
 	}
 	h.settled = true
 	return h.elevation, nil
+}
+
+func (h *Host) reaching(ctx context.Context) string {
+	elevation, err := h.elevate(ctx)
+	if err != nil {
+		return ""
+	}
+	return elevation
 }
 
 func (h *Host) rootOrSudo(ctx context.Context, live Conn) (string, error) {
@@ -138,16 +152,12 @@ func (h *Host) rootOrSudo(ctx context.Context, live Conn) (string, error) {
 	return h.prefix, nil
 }
 
-func (h *Host) exec(ctx context.Context, command string, stdin []byte) (session.Result, error) {
+func (h *Host) exec(ctx context.Context, command string, stdin []byte, elevation string) (session.Result, error) {
 	live, err := h.dial(ctx)
 	if err != nil {
 		return session.Result{}, err
 	}
 	h.remember(live.Destination().Principal())
-	elevation, err := h.elevate(ctx)
-	if err != nil {
-		return session.Result{}, err
-	}
 	if elevation != "" {
 		command = elevation + "sh -c " + quoted(command)
 	}
@@ -182,8 +192,22 @@ func words(argv []string) string {
 	return strings.Join(written, " ")
 }
 
+type asking func(ctx context.Context, what, command string, stdin []byte) (string, error)
+
 func (h *Host) run(ctx context.Context, what, command string, stdin []byte) (string, error) {
-	result, err := h.exec(ctx, command, stdin)
+	elevation, err := h.elevate(ctx)
+	if err != nil {
+		return "", err
+	}
+	return h.ran(ctx, what, command, stdin, elevation)
+}
+
+func (h *Host) reach(ctx context.Context, what, command string, stdin []byte) (string, error) {
+	return h.ran(ctx, what, command, stdin, h.reaching(ctx))
+}
+
+func (h *Host) ran(ctx context.Context, what, command string, stdin []byte, elevation string) (string, error) {
+	result, err := h.exec(ctx, command, stdin, elevation)
 	if err != nil {
 		return "", err
 	}
@@ -193,16 +217,26 @@ func (h *Host) run(ctx context.Context, what, command string, stdin []byte) (str
 	return result.Stdout, nil
 }
 
+const saidLines = 4
+
 func (h *Host) refuse(what string, result session.Result) error {
 	said := strings.TrimSpace(result.Stderr)
 	if said == "" {
 		said = "it said nothing about why"
+	}
+	if lines := strings.Split(said, "\n"); len(lines) > saidLines {
+		said = strings.Join(lines[:saidLines], "\n")
 	}
 	return providerkit.Refuse(providerkit.CodeDenied, "%s on %s: %s", what, h.named(), said)
 }
 
 func (h *Host) Install(ctx context.Context, item Item) error {
 	_, err := h.run(ctx, "write "+item.ID(), item.command(), item.stdin())
+	return err
+}
+
+func (h *Host) Reassert(ctx context.Context, item Item) error {
+	_, err := h.reach(ctx, "write "+item.ID(), item.command(), item.stdin())
 	return err
 }
 
@@ -261,15 +295,23 @@ func (h *Host) Read(ctx context.Context, class providerkit.Class) (Reading, erro
 	if err != nil {
 		return Reading{}, err
 	}
-	return h.read(ctx, class, keys)
+	return h.read(ctx, class, keys, h.run)
+}
+
+func (h *Host) Own(ctx context.Context, class providerkit.Class) (Reading, error) {
+	keys, err := h.keys(ctx)
+	if err != nil {
+		return Reading{}, err
+	}
+	return h.read(ctx, class, keys, h.reach)
 }
 
 func (h *Host) Survey(ctx context.Context, class providerkit.Class) (Reading, error) {
-	return h.observe(ctx, class, nil)
+	return h.observe(ctx, class, nil, h.run)
 }
 
-func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte) (Reading, error) {
-	rendered, err := h.run(ctx, "survey what "+string(class)+" holds", survey(Items(class, keys), StampPath(class)), nil)
+func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte, ask asking) (Reading, error) {
+	rendered, err := ask(ctx, "survey what "+string(class)+" holds", survey(Items(class, keys), StampPath(class)), nil)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -280,15 +322,15 @@ func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte
 	return Reading{Class: class, Keys: keys, Seal: held, Observed: observed}, nil
 }
 
-func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte) (Reading, error) {
-	read, err := h.observe(ctx, class, keys)
+func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte, ask asking) (Reading, error) {
+	read, err := h.observe(ctx, class, keys, ask)
 	if err != nil {
 		return Reading{}, err
 	}
 	if _, stamped := read.Observed[KindFile+" "+StampPath(class)]; !stamped {
 		return read, nil
 	}
-	stamp, err := h.readStamp(ctx, class)
+	stamp, err := h.readStamp(ctx, class, ask)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -296,8 +338,8 @@ func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte) (
 	return read, nil
 }
 
-func (h *Host) readStamp(ctx context.Context, class providerkit.Class) (Stamp, error) {
-	rendered, err := h.run(ctx, "read the stamp", "cat "+quoted(StampPath(class)), nil)
+func (h *Host) readStamp(ctx context.Context, class providerkit.Class, ask asking) (Stamp, error) {
+	rendered, err := ask(ctx, "read the stamp", "cat "+quoted(StampPath(class)), nil)
 	if err != nil {
 		return Stamp{}, err
 	}
