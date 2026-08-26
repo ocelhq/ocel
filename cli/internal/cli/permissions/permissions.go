@@ -1,4 +1,4 @@
-package cli
+package permissions
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func newPermissionsCommand(deps cmddeps.Deps) *cobra.Command {
+func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:     "permissions <bootstrap|deploy>",
 		Aliases: []string{"perms"},
@@ -28,7 +28,7 @@ func newPermissionsCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel permissions deploy",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			tier, err := credentialTierArg(args)
+			tier, err := tierArg(args)
 			if err != nil {
 				_ = cmd.Help()
 				return err
@@ -42,12 +42,12 @@ func newPermissionsCommand(deps cmddeps.Deps) *cobra.Command {
 			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
 
-			return RunPermissions(ctx, deps, cwd, tier, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return Run(ctx, deps, cwd, tier, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 }
 
-func RunPermissions(ctx context.Context, deps cmddeps.Deps, cwd string, tier contractv1.CredentialTier, stdout, stderr io.Writer) error {
+func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier contractv1.CredentialTier, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
@@ -64,13 +64,13 @@ func RunPermissions(ctx context.Context, deps cmddeps.Deps, cwd string, tier con
 		})
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				return predatesPermissions(runner.Package())
+				return predates(runner.Package())
 			}
 			return err
 		}
 		groups := permissions.GetGroups()
 		if len(groups) == 0 {
-			return predatesPermissions(runner.Package())
+			return predates(runner.Package())
 		}
 		if len(groups) == 1 {
 			fmt.Fprintln(stdout, groups[0].GetDocument())
@@ -90,11 +90,11 @@ func RunPermissions(ctx context.Context, deps cmddeps.Deps, cwd string, tier con
 	})
 }
 
-func predatesPermissions(pkg string) error {
+func predates(pkg string) error {
 	return fmt.Errorf("%s cannot say what permissions these credentials need; it predates them. Upgrade the provider pinned in this project and try again", pkg)
 }
 
-func credentialTierArg(args []string) (contractv1.CredentialTier, error) {
+func tierArg(args []string) (contractv1.CredentialTier, error) {
 	if len(args) == 0 {
 		return contractv1.CredentialTier_CREDENTIAL_TIER_UNSPECIFIED,
 			errors.New("name the credentials to print, bootstrap or deploy")

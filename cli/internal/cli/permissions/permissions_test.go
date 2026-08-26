@@ -1,4 +1,4 @@
-package cli
+package permissions
 
 import (
 	"bytes"
@@ -24,7 +24,7 @@ func TestPermissionsNeedsATier(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cmd := newPermissionsCommand(cmddeps.Deps{})
+			cmd := NewCommand(cmddeps.Deps{})
 			var out bytes.Buffer
 			cmd.SetOut(&out)
 			cmd.SetErr(&out)
@@ -45,18 +45,18 @@ func TestPermissionsNeedsATier(t *testing.T) {
 	}
 }
 
-func TestCredentialTierArg(t *testing.T) {
+func TestPermissionsTierArg(t *testing.T) {
 	t.Parallel()
 
-	got, err := credentialTierArg([]string{"deploy"})
+	got, err := tierArg([]string{"deploy"})
 	if err != nil {
-		t.Fatalf("credentialTierArg err = %v", err)
+		t.Fatalf("tierArg err = %v", err)
 	}
 	if got != contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY {
-		t.Errorf("credentialTierArg = %v, want the deploy tier", got)
+		t.Errorf("tierArg = %v, want the deploy tier", got)
 	}
-	if _, err := credentialTierArg([]string{"admin"}); err == nil || !strings.Contains(err.Error(), `"admin"`) {
-		t.Errorf("credentialTierArg err = %v, want it to name what was typed", err)
+	if _, err := tierArg([]string{"admin"}); err == nil || !strings.Contains(err.Error(), `"admin"`) {
+		t.Errorf("tierArg err = %v, want it to name what was typed", err)
 	}
 }
 
@@ -68,8 +68,8 @@ func TestRunPermissions(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := RunPermissions(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout, &stderr); err != nil {
-			t.Fatalf("RunPermissions err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout, &stderr); err != nil {
+			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "CREDENTIAL_TIER_DEPLOY") {
 			t.Errorf("stdout = %q, want the deploy tier's document", stdout.String())
@@ -83,8 +83,8 @@ func TestRunPermissions(t *testing.T) {
 		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\", options: {} },\n")
 
 		var stdout, stderr bytes.Buffer
-		if err := RunPermissions(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout, &stderr); err != nil {
-			t.Fatalf("RunPermissions err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout, &stderr); err != nil {
+			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		for _, want := range []string{
 			"AWS credentials",
