@@ -145,6 +145,43 @@ func TestTheDeployDocumentSaysWhatTheDockerGroupIs(t *testing.T) {
 	}
 }
 
+func TestTheDeployDocumentCarriesTheOneSudoersLineTheSealHelperNeeds(t *testing.T) {
+	t.Parallel()
+
+	document := rendered(t, providerkit.TierDeploy).Document
+	for _, item := range host.Items(providerkit.ClassProduction, nil) {
+		if !strings.HasPrefix(item.Name, "/etc/sudoers.d/") {
+			continue
+		}
+		if !strings.Contains(document, strings.TrimSpace(string(item.Content))) {
+			t.Errorf("a bootstrap writes %s and the document never prints the line it holds:\n%s", item.Name, document)
+		}
+		return
+	}
+	t.Fatal("nothing in the item set whitelists the seal helper, so the deploy login seals nothing")
+}
+
+func TestTheDeployDocumentSaysTheSealKeyIsNotTheDeployLoginsToRead(t *testing.T) {
+	t.Parallel()
+
+	document := rendered(t, providerkit.TierDeploy).Document
+	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+		if !strings.Contains(document, host.SealKeyPath(class)) {
+			t.Errorf("the document says nothing about %s, and a login that opens values should know what it never holds:\n%s",
+				host.SealKeyPath(class), document)
+		}
+	}
+}
+
+func TestTheDeployDocumentSaysTheKeyIsNeverRotated(t *testing.T) {
+	t.Parallel()
+
+	document := rendered(t, providerkit.TierDeploy).Document
+	if !strings.Contains(document, "rotat") {
+		t.Errorf("the document never says whether a seal key can be rotated, and a key nothing rotates is a fact a user needs before they seal to it:\n%s", document)
+	}
+}
+
 func TestCredentialsThatAreNeitherTierAreRefused(t *testing.T) {
 	t.Parallel()
 

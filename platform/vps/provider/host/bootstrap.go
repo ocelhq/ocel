@@ -113,7 +113,17 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err := b.write(ctx, standing, StorageItems(req.Class, standing.Keys), report); err != nil {
 		return err
 	}
-	stamp.State = StateComplete
+
+	minted, err := b.host.Read(ctx, req.Class)
+	if err != nil {
+		return err
+	}
+	if minted.Seal.Fingerprint == "" {
+		return providerkit.Refuse(providerkit.CodeDenied,
+			"%s stands with no seal key, and a class that seals nothing is a class no deploy can hold a value for",
+			req.Class)
+	}
+	stamp.State, stamp.Seal = StateComplete, minted.Seal
 	return b.host.Stamp(ctx, req.Class, stamp)
 }
 
@@ -203,12 +213,15 @@ func removing(read, sibling Reading) []removal {
 
 	ordered := []removal{
 		{KindDir, StateDir(read.Class), "every record ocel holds for this class on this host, and nothing writes them again"},
+		{KindSealKey, SealKeyPath(read.Class), "the key every value this class holds was sealed to, and no other machine ever held it: what it sealed, nothing opens again"},
 	}
 	if last {
 		ordered = append(ordered,
 			removal{KindDir, stateRoot, ""},
 			removal{KindUser, deployUser, "the login every deploy onto this host runs as"},
+			removal{KindFile, sudoersSeal, ""},
 			removal{KindFile, recordsHelper, ""},
+			removal{KindFile, sealHelper, ""},
 			removal{KindDir, helperRoot, ""},
 		)
 	}

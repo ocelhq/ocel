@@ -122,7 +122,7 @@ func TestTheProbeAndTheWriteAgreeOnWhatAStandingPrincipalIs(t *testing.T) {
 	t.Parallel()
 
 	held := standing()
-	observed, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
+	observed, _, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestAPrincipalThatDriftedFromWhatOcelWroteIsNotCurrent(t *testing.T) {
 
 			held := standing()
 			drift(&held)
-			observed, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
+			observed, _, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -166,7 +166,7 @@ func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 	held := standing()
 	class := providerkit.ClassProduction
 	items := Items(class, []byte(aKey+"\n"))
-	observed, err := readSurvey(sh(t, stubs(t, &held), survey(items, StampPath(class))))
+	observed, _, err := readSurvey(sh(t, stubs(t, &held), survey(items, StampPath(class))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 func TestAPrincipalNothingCreatedIsNotStanding(t *testing.T) {
 	t.Parallel()
 
-	observed, err := readSurvey(sh(t, stubs(t, nil), deployLogin().survey()))
+	observed, _, err := readSurvey(sh(t, stubs(t, nil), deployLogin().survey()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestAPasswordFieldTheHostWillNotShowIsNotReadAsUnlocked(t *testing.T) {
 		t.Helper()
 		held := standing()
 		held.password = password
-		observed, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
+		observed, _, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
 		if err != nil {
 			t.Fatal(err)
 		}

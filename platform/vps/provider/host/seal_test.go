@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const sealClass = "production"
@@ -191,6 +193,168 @@ func TestWhatTheSealHelperWritesIsAES256GCMOverTheKeyOnDisk(t *testing.T) {
 	if string(opened) != plaintext {
 		t.Errorf("what the helper sealed opens as %q, want %q", opened, plaintext)
 	}
+}
+
+func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	items := Items(class, []byte(aKey+"\n"))
+
+	key := written(items, SealKeyPath(class))
+	if key.Kind == "" {
+		t.Fatalf("nothing in the item set mints %s, so a bootstrapped host seals nothing", SealKeyPath(class))
+	}
+	if key.Mode != sealKeyMode || key.Owner != rootOwner {
+		t.Errorf("%s is written %04o to %q, want %04o to %s: the deploy login opens values, it does not hold the key",
+			key.Name, key.Mode, key.Owner, sealKeyMode, rootOwner)
+	}
+	if len(key.Content) != 0 {
+		t.Error("the seal key is written with content from this machine, and a key that leaves the host is no key sealed to it")
+	}
+
+	helper := written(items, sealHelper)
+	if helper.Kind != KindFile || helper.Owner != rootOwner || helper.Mode&0o022 != 0 {
+		t.Errorf("%s is written %04o to %q, and a helper the caller can rewrite is a key the caller can read", sealHelper, helper.Mode, helper.Owner)
+	}
+	if at(items, sealHelper) > at(items, key.Name) {
+		t.Error("the seal key is minted before the helper that mints it exists")
+	}
+}
+
+func TestTheDeployLoginIsWhitelistedOnTheHelperAndOnNothingBeside(t *testing.T) {
+	t.Parallel()
+
+	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"))
+
+	var lines []Item
+	for _, item := range items {
+		if strings.HasPrefix(item.Name, sudoersRoot+"/") {
+			lines = append(lines, item)
+		}
+	}
+	if len(lines) != 1 {
+		t.Fatalf("a bootstrap writes %d files under %s, want the one line the seal helper needs", len(lines), sudoersRoot)
+	}
+
+	fragment := lines[0]
+	if fragment.Owner != rootOwner || fragment.Mode != 0o440 {
+		t.Errorf("%s is written %04o to %q, want 0440 to %s or sudo refuses to read it", fragment.Name, fragment.Mode, fragment.Owner, rootOwner)
+	}
+	written := strings.TrimSpace(string(fragment.Content))
+	if want := deployUser + " ALL=(root) NOPASSWD: " + sealHelper; written != want {
+		t.Errorf("the fragment reads %q, want %q: one helper, and no path beside it", written, want)
+	}
+	if at(items, principal().Name) > at(items, fragment.Name) {
+		t.Error("the sudoers line is written before the login it names exists")
+	}
+}
+
+func TestTheSurveyReadsTheKeysFingerprintWithoutReadingTheKey(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	fingerprint := "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+	rendered := KindSealKey + "\t" + SealKeyPath(class) + "\t400\troot\t" + fingerprint + "\t2026-08-26T09:00:00Z\n"
+
+	observed, held, err := readSurvey(rendered)
+	if err != nil {
+		t.Fatalf("readSurvey() over the row a host answers with = %v", err)
+	}
+	if held.Fingerprint != fingerprint {
+		t.Errorf("the survey read the fingerprint %q, want %q", held.Fingerprint, fingerprint)
+	}
+	if held.CreatedAt != "2026-08-26T09:00:00Z" {
+		t.Errorf("the survey read %q as when the key came into being", held.CreatedAt)
+	}
+	if got := observed[sealKey(class).ID()]; got != sealKey(class).Digest() {
+		t.Errorf("a key standing as ocel minted it surveys as %q, want %q: the bytes of a key are never what says it is current", got, sealKey(class).Digest())
+	}
+}
+
+func TestAReplacedKeyIsDriftThoughEveryPathStillStandsAsItWasWritten(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	keys := []byte(aKey + "\n")
+	observed := digests(Items(class, keys))
+	minted := Seal{Fingerprint: "9f86d081884c7d659a", Algorithm: SealAlgorithm, CreatedAt: "2026-08-26T09:00:00Z"}
+
+	read := Reading{
+		Class: class, Keys: keys, Present: true, Observed: observed, Seal: minted,
+		Stamp: Stamp{State: StateComplete, Digests: observed, Seal: minted},
+	}
+	if !read.settled() {
+		t.Fatal("a host standing exactly as it was applied reads as drifted")
+	}
+
+	read.Seal = Seal{Fingerprint: "0000000000000000", Algorithm: SealAlgorithm, CreatedAt: "2026-08-26T10:00:00Z"}
+	if read.settled() {
+		t.Error("a host whose seal key was replaced reads as settled, so drift in what every secret opens to is invisible")
+	}
+}
+
+func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *testing.T) {
+	t.Parallel()
+
+	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	keys := []byte(aKey + "\n")
+	held := digests(Items(production, keys))
+
+	alone := removing(Reading{Class: production, Keys: keys, Observed: held}, Reading{Class: preview, Observed: map[string]string{}})
+	key := removalOf(alone, SealKeyPath(production))
+	if key.path == "" {
+		t.Fatalf("destroy leaves %s behind, and a key nothing takes is every sealed value still openable", SealKeyPath(production))
+	}
+	if key.reason == "" {
+		t.Error("destroy takes the seal key with no reason, and the typed confirmation must name what is unrecoverable")
+	}
+	if index(alone, key.path) > index(alone, ClassDir(production)) {
+		t.Error("the class directory is removed before the key it carries is named, so the confirmation names bytes that are already gone")
+	}
+	for _, singleton := range []string{sealHelper, sudoersSeal} {
+		if removalOf(alone, singleton).path == "" {
+			t.Errorf("destroying the last class leaves %s behind", singleton)
+		}
+	}
+
+	beside := digests(Items(preview, keys))
+	shared := removing(Reading{Class: production, Keys: keys, Observed: held}, Reading{Class: preview, Keys: keys, Observed: beside})
+	for _, singleton := range []string{sealHelper, sudoersSeal} {
+		if removalOf(shared, singleton).path != "" {
+			t.Errorf("destroying one class takes %s, which a standing sibling still seals through", singleton)
+		}
+	}
+	if removalOf(shared, SealKeyPath(production)).path == "" {
+		t.Error("destroying one class leaves its own key behind, and a class is what a key is scoped to")
+	}
+}
+
+func removalOf(removals []removal, path string) removal {
+	for _, r := range removals {
+		if r.path == path {
+			return r
+		}
+	}
+	return removal{}
+}
+
+func index(removals []removal, path string) int {
+	for i, r := range removals {
+		if r.path == path {
+			return i
+		}
+	}
+	return -1
+}
+
+func at(items []Item, name string) int {
+	for i, item := range items {
+		if item.Name == name {
+			return i
+		}
+	}
+	return -1
 }
 
 func decoded(t *testing.T, rendered string) string {
