@@ -2,7 +2,6 @@ package values
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/ports"
 )
@@ -78,12 +77,12 @@ func cellsName(scope Scope) ports.RecordName { return Under(scope, "cells") }
 
 func cellName(scope Scope, at Coordinate) ports.RecordName {
 	at = at.canonical()
-	return Under(scope, "cells", escape(at.Folder), escape(at.Key), escape(at.Environment))
+	return Under(scope, "cells", ports.Escape(at.Folder), ports.Escape(at.Key), ports.Escape(at.Environment))
 }
 
 func historyName(scope Scope, at Coordinate) ports.RecordName {
 	at = at.canonical()
-	return Under(scope, "history", escape(at.Folder), escape(at.Key), escape(at.Environment))
+	return Under(scope, "history", ports.Escape(at.Folder), ports.Escape(at.Key), ports.Escape(at.Environment))
 }
 
 func versionName(scope Scope, at Coordinate, version int64) ports.RecordName {
@@ -93,21 +92,21 @@ func versionName(scope Scope, at Coordinate, version int64) ports.RecordName {
 func linksName(scope Scope) ports.RecordName { return Under(scope, "links") }
 
 func linkName(scope Scope, link string) ports.RecordName {
-	return Under(scope, "links", escape(link))
+	return Under(scope, "links", ports.Escape(link))
 }
 
 func linkRecordName(scope Scope, link, environment string) ports.RecordName {
-	return append(linkName(scope, link), "records", escape(canonicalEnvironment(environment)))
+	return append(linkName(scope, link), "records", ports.Escape(canonicalEnvironment(environment)))
 }
 
 func linkValueName(scope Scope, link, environment string) ports.RecordName {
-	return append(linkName(scope, link), "values", escape(canonicalEnvironment(environment)))
+	return append(linkName(scope, link), "values", ports.Escape(canonicalEnvironment(environment)))
 }
 
 func linkOwnersName(scope Scope) ports.RecordName { return Under(scope, "linkowners") }
 
 func linkOwnerName(scope Scope, owner, environment string) ports.RecordName {
-	return Under(scope, "linkowners", escape(owner), escape(canonicalEnvironment(environment)))
+	return Under(scope, "linkowners", ports.Escape(owner), ports.Escape(canonicalEnvironment(environment)))
 }
 
 func Refs(scope Scope) ports.RecordName {
@@ -116,12 +115,12 @@ func Refs(scope Scope) ports.RecordName {
 
 func refsName(target Scope, at Coordinate) ports.RecordName {
 	at = at.canonical()
-	return append(Refs(target), escape(at.Folder), escape(at.Key))
+	return append(Refs(target), ports.Escape(at.Folder), ports.Escape(at.Key))
 }
 
 func refName(target Scope, at Coordinate, from Scope, holds Coordinate) ports.RecordName {
 	holds = holds.canonical()
-	return append(refsName(target, at), from.Project, escape(holds.Folder), escape(holds.Key), escape(holds.Environment))
+	return append(refsName(target, at), from.Project, ports.Escape(holds.Folder), ports.Escape(holds.Key), ports.Escape(holds.Environment))
 }
 
 func cellOf(name ports.RecordName) (Coordinate, bool) {
@@ -129,17 +128,9 @@ func cellOf(name ports.RecordName) (Coordinate, bool) {
 		return Coordinate{}, false
 	}
 	tail := name[len(name)-3:]
-	folder, key, environment := unescape(tail[0]), unescape(tail[1]), unescape(tail[2])
+	folder, key, environment := ports.Unescape(tail[0]), ports.Unescape(tail[1]), ports.Unescape(tail[2])
 	if folder == "" || key == "" || environment == "" {
 		return Coordinate{}, false
 	}
 	return Coordinate{Cell: Cell{Folder: plainFolder(folder), Key: key}, Environment: plainEnvironment(environment)}, true
-}
-
-func escape(value string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(value, "%", "%25"), "/", "%2F")
-}
-
-func unescape(value string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(value, "%2F", "/"), "%25", "%")
 }
