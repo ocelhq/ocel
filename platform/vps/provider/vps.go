@@ -23,6 +23,7 @@ type Options struct {
 
 type Target struct {
 	Alias        string `json:"-"`
+	Config       string `json:"-"`
 	Host         string `json:"host"`
 	Port         int    `json:"port"`
 	User         string `json:"user"`
@@ -84,6 +85,7 @@ func (p *Provider) Session(ctx context.Context) (*session.Session, error) {
 	}
 	live, err := session.Open(ctx, session.Target{
 		Alias:        p.options.SSH.Alias,
+		Config:       p.options.SSH.Config,
 		Host:         p.options.SSH.Host,
 		Port:         p.options.SSH.Port,
 		User:         p.options.SSH.User,

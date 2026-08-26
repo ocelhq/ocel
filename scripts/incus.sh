@@ -85,6 +85,8 @@ cmd_create() {
     local name=$1
     ensure_key
     trap 'discard_half_made "'"$name"'" $?' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     incus init "$IMAGE" "$name" --vm \
         -c limits.cpu=2 \
         -c limits.memory=2GiB \
@@ -160,8 +162,11 @@ cmd_run() {
     shift
     [ $# -gt 0 ] || usage
     trap 'incus delete -f "'"$name"'" 2>/dev/null || true' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     local addr
     addr=$(cmd_create "$name" | sed -n 's/^OCEL_INCUS_ADDR=//p')
+    [ -n "$addr" ] || die "$name: created without an address, so there is nothing to hand the command"
     OCEL_INCUS_NAME=$name \
         OCEL_INCUS_ADDR=$addr \
         OCEL_INCUS_USER=$SSH_USER \
