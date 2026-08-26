@@ -139,7 +139,7 @@ func TestRemovingAnEdgeFeatureNamesTheProjectsBehindIt(t *testing.T) {
 	if reason == "" {
 		t.Fatalf("removing %s says nothing about the projects deployed against it", fake.FeatureImages)
 	}
-	if err := gate.Apply(context.Background(), providerkit.ClassProduction, req, nil); err == nil {
+	if err := gate.Apply(context.Background(), plan, providerkit.ClassProduction, req, nil); err == nil {
 		t.Fatal("removing an edge feature a deployed project needs was admitted, want it refused")
 	}
 }
@@ -190,9 +190,13 @@ func TestRemovingAnEdgeFeatureThatFrontsNothingHereGoesAhead(t *testing.T) {
 	gate, provider := fronting(t, fake.KindDirect)
 	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
-	if err := gate.Apply(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
-		Remove: []string{fake.FeatureImages},
-	}, nil); err != nil {
+	ctx := context.Background()
+	req := providerkit.ApplyRequest{Remove: []string{fake.FeatureImages}}
+	plan, err := gate.Plan(ctx, providerkit.ClassProduction, req)
+	if err != nil {
+		t.Fatalf("Plan(): %v", err)
+	}
+	if err := gate.Apply(ctx, plan, providerkit.ClassProduction, req, nil); err != nil {
 		t.Fatalf("removing an edge feature no project here fronts with: %v", err)
 	}
 }

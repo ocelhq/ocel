@@ -73,6 +73,53 @@ func TestAGroupTheShownPlanNeverCarriedIsWorkNobodyConsentedTo(t *testing.T) {
 	}
 }
 
+func TestApplyRefusesWorkThatAppearedAfterThePlanWasDrawn(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gate, provider := gated(t, "1.2.3")
+	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+
+	req := providerkit.ApplyRequest{Features: []string{fake.FeatureCache}}
+	shown, err := gate.Plan(ctx, providerkit.ClassProduction, req)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if action := groupFor(t, shown, fake.FeatureCache).Action; action != providerkit.ActionKeep {
+		t.Fatalf("the cache group is %q, want the plan to show nothing owed on it", action)
+	}
+
+	provider.Bootstrapper().Behind(fake.FeatureCache)
+
+	err = gate.Apply(ctx, shown, providerkit.ClassProduction, req, nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Apply() over work that appeared after the plan was drawn = %v, want an invalid refusal", err)
+	}
+	if !strings.Contains(refusal.Message, fake.FeatureCache) {
+		t.Errorf("the refusal reads %q, want it to name what moved under the plan", refusal.Message)
+	}
+}
+
+func TestApplyRunsThePlanItWasShown(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gate, provider := gated(t, "1.2.3")
+
+	req := providerkit.ApplyRequest{Features: []string{fake.FeatureCache}}
+	shown, err := gate.Plan(ctx, providerkit.ClassProduction, req)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if err := gate.Apply(ctx, shown, providerkit.ClassProduction, req, nil); err != nil {
+		t.Fatalf("Apply() of the plan it was shown = %v, want it applied", err)
+	}
+	if len(provider.Bootstrapper().Applied()) == 0 {
+		t.Error("Apply() stood nothing up for the plan it was shown")
+	}
+}
+
 func groupFor(t *testing.T, plan providerkit.Plan, feature string) providerkit.ChangeGroup {
 	t.Helper()
 
@@ -156,7 +203,7 @@ func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 	if !strings.Contains(removed.Reason, "shop") {
 		t.Errorf("the images group reads %q, want it to name the project deployed against it", removed.Reason)
 	}
-	if err := gate.Apply(ctx, providerkit.ClassProduction, req, nil); err == nil {
+	if err := gate.Apply(ctx, plan, providerkit.ClassProduction, req, nil); err == nil {
 		t.Error("Apply() took the removal the plan warned about without --force")
 	}
 }

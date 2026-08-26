@@ -220,7 +220,7 @@ func (g Gate) noteDependents(ctx context.Context, class Class, groups []ChangeGr
 	return nil
 }
 
-func (g Gate) Apply(ctx context.Context, class Class, req ApplyRequest, report Reporter) error {
+func (g Gate) Apply(ctx context.Context, shown Plan, class Class, req ApplyRequest, report Reporter) error {
 	standing, err := g.Standing(ctx, class)
 	if err != nil {
 		return err
@@ -230,6 +230,13 @@ func (g Gate) Apply(ctx context.Context, class Class, req ApplyRequest, report R
 		return err
 	}
 	if err := g.admitRemovals(ctx, class, intended.removing, req.Force); err != nil {
+		return err
+	}
+	drawn, err := g.Bootstrapper.Plan(ctx, intended.request(class, req, g.Writer))
+	if err != nil {
+		return err
+	}
+	if err := RefuseGrowth(shown, drawn); err != nil {
 		return err
 	}
 
