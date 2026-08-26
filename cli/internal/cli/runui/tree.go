@@ -1,6 +1,9 @@
 package runui
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type nodeState int
 
@@ -10,10 +13,16 @@ const (
 	done
 )
 
+const (
+	depthUnit = iota
+	depthPhase
+)
+
 type node struct {
 	id, parent string
 	title      string
 	children   []string
+	depth      int
 
 	state   nodeState
 	message string
@@ -21,7 +30,9 @@ type node struct {
 	total   uint32
 	hasBar  bool
 	cached  bool
-	logs    []string
+
+	body []string
+	live string
 
 	started time.Time
 	dur     time.Duration
@@ -32,18 +43,15 @@ type node struct {
 type tree struct {
 	nodes  map[string]*node
 	roots  []string
-	order  []string
-	tailN  int
-	now    func() time.Time
 	orphan map[string][]string
+	now    func() time.Time
 }
 
-func newTree(tailN int, now func() time.Time) *tree {
+func newTree(now func() time.Time) *tree {
 	return &tree{
 		nodes:  map[string]*node{},
-		tailN:  tailN,
-		now:    now,
 		orphan: map[string][]string{},
+		now:    now,
 	}
 }
 
@@ -53,12 +61,12 @@ func (t *tree) declare(d StageDecl) {
 	}
 	n := &node{id: d.ID, parent: d.Parent, title: d.Title}
 	t.nodes[d.ID] = n
-	t.order = append(t.order, d.ID)
 	t.link(n)
 }
 
 func (t *tree) link(n *node) {
 	if n.parent == "" {
+		n.depth = depthUnit
 		t.roots = append(t.roots, n.id)
 		t.adopt(n.id)
 		return
@@ -68,18 +76,38 @@ func (t *tree) link(n *node) {
 		t.orphan[n.parent] = append(t.orphan[n.parent], n.id)
 		return
 	}
+	n.depth = parent.depth + 1
 	parent.children = append(parent.children, n.id)
 	t.adopt(n.id)
 }
 
 func (t *tree) adopt(id string) {
-	pending := t.orphan[id]
+	waiting := t.orphan[id]
 	delete(t.orphan, id)
-	for _, child := range pending {
+	for _, child := range waiting {
 		if n, ok := t.nodes[child]; ok {
 			t.link(n)
 		}
 	}
+}
+
+func (t *tree) phaseOf(id string) *node {
+	n := t.nodes[id]
+	for n != nil && n.depth > depthPhase {
+		n = t.nodes[n.parent]
+	}
+	if n == nil || n.depth != depthPhase {
+		return nil
+	}
+	return n
+}
+
+func (t *tree) unitOf(id string) *node {
+	n := t.nodes[id]
+	for n != nil && n.depth > depthUnit {
+		n = t.nodes[n.parent]
+	}
+	return n
 }
 
 func (t *tree) progress(p *Progress) *node {
@@ -102,14 +130,29 @@ func (t *tree) progress(p *Progress) *node {
 	return n
 }
 
-func (t *tree) log(l *Log) {
-	n, ok := t.nodes[l.StageID]
-	if !ok {
-		return
+func collapseCarriage(line string) string {
+	if i := strings.LastIndex(line, "\r"); i >= 0 {
+		return line[i+1:]
 	}
-	n.logs = append(n.logs, l.Line)
-	if len(n.logs) > 200 {
-		n.logs = n.logs[len(n.logs)-200:]
+	return line
+}
+
+func (t *tree) log(l *Log) *node {
+	phase := t.phaseOf(l.StageID)
+	if phase == nil {
+		return nil
+	}
+	line := collapseCarriage(l.Line)
+	phase.body = append(phase.body, line)
+	if strings.TrimSpace(line) != "" {
+		phase.live = line
+	}
+	return phase
+}
+
+func (t *tree) record(id, line string) {
+	if phase := t.phaseOf(id); phase != nil && phase.id != id {
+		phase.body = append(phase.body, line)
 	}
 }
 
@@ -138,167 +181,43 @@ func (t *tree) failedDescendants(id string) int {
 		if c == nil {
 			continue
 		}
-		if c.failed {
-			lost++
-			continue
-		}
-		if t.failedDescendants(child) > 0 {
+		if c.failed || t.failedDescendants(child) > 0 {
 			lost++
 		}
 	}
 	return lost
 }
 
-func (t *tree) siblings(id string) (index, count int) {
-	n, ok := t.nodes[id]
+func (t *tree) activePhase(unitID string) *node {
+	n, ok := t.nodes[unitID]
 	if !ok {
-		return 0, 0
-	}
-	list := t.roots
-	if n.parent != "" {
-		parent, ok := t.nodes[n.parent]
-		if !ok {
-			return 0, 0
-		}
-		list = parent.children
-	}
-	for i, sib := range list {
-		if sib == id {
-			return i + 1, len(list)
-		}
-	}
-	return 0, 0
-}
-
-func (t *tree) hasActiveDescendant(id string) bool {
-	n, ok := t.nodes[id]
-	if !ok {
-		return false
-	}
-	for _, child := range n.children {
-		c := t.nodes[child]
-		if c == nil {
-			continue
-		}
-		if c.state == active || t.hasActiveDescendant(child) {
-			return true
-		}
-	}
-	return false
-}
-
-type line struct {
-	n      *node
-	depth  int
-	tail   string
-	extra  int
-	isTail bool
-}
-
-func (t *tree) frame(budget int) []line {
-	if budget < 1 {
-		budget = 1
-	}
-	live := make([]string, 0, len(t.roots))
-	for _, id := range t.roots {
-		if t.subtreeActive(id) {
-			live = append(live, id)
-		}
-	}
-	if len(live) == 0 {
 		return nil
 	}
-
-	share := budget / len(live)
-	if share < 1 {
-		share = 1
+	for _, child := range n.children {
+		if c := t.nodes[child]; c != nil && c.state == active {
+			return c
+		}
 	}
-	spare := budget - share*len(live)
+	return nil
+}
 
-	var out []line
-	for _, id := range live {
-		allowance := share
-		if spare > 0 {
-			allowance++
-			spare--
+type unitRow struct {
+	unit  *node
+	phase *node
+}
+
+func (t *tree) live() []unitRow {
+	var out []unitRow
+	for _, id := range t.roots {
+		u := t.nodes[id]
+		if u == nil || u.state == done {
+			continue
 		}
-		rows, dropped := t.subtree(id, 0, allowance)
-		out = append(out, rows...)
-		if dropped > 0 {
-			out = append(out, line{depth: 1, extra: dropped})
+		phase := t.activePhase(id)
+		if phase == nil && u.state != active {
+			continue
 		}
+		out = append(out, unitRow{unit: u, phase: phase})
 	}
 	return out
-}
-
-func (t *tree) subtreeActive(id string) bool {
-	n, ok := t.nodes[id]
-	if !ok {
-		return false
-	}
-	return n.state == active || t.hasActiveDescendant(id)
-}
-
-func (t *tree) subtree(id string, depth, allowance int) (rows []line, dropped int) {
-	n, ok := t.nodes[id]
-	if !ok {
-		return nil, 0
-	}
-	rows = append(rows, line{n: n, depth: depth})
-	allowance--
-
-	kids := make([]string, 0, len(n.children))
-	for _, child := range n.children {
-		if t.subtreeActive(child) {
-			kids = append(kids, child)
-		}
-	}
-
-	if len(kids) == 0 {
-		for _, tail := range t.tail(n) {
-			if allowance <= 0 {
-				dropped++
-				continue
-			}
-			rows = append(rows, line{n: n, depth: depth + 1, tail: tail, isTail: true})
-			allowance--
-		}
-		return rows, dropped
-	}
-
-	for _, child := range kids {
-		if allowance <= 0 {
-			dropped += t.weight(child)
-			continue
-		}
-		sub, subDropped := t.subtree(child, depth+1, allowance)
-		rows = append(rows, sub...)
-		allowance -= len(sub)
-		dropped += subDropped
-	}
-	return rows, dropped
-}
-
-func (t *tree) weight(id string) int {
-	n, ok := t.nodes[id]
-	if !ok {
-		return 0
-	}
-	total := 1
-	for _, child := range n.children {
-		if t.subtreeActive(child) {
-			total += t.weight(child)
-		}
-	}
-	return total
-}
-
-func (t *tree) tail(n *node) []string {
-	if t.tailN <= 0 || len(n.logs) == 0 || n.state != active {
-		return nil
-	}
-	if len(n.logs) <= t.tailN {
-		return n.logs
-	}
-	return n.logs[len(n.logs)-t.tailN:]
 }

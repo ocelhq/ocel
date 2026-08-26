@@ -18,8 +18,6 @@ func (s *script) push(e runui.Envelope) {
 
 func (s *script) wait(d time.Duration) { s.at += d }
 
-func (s *script) plan(p *runui.Plan) { s.push(runui.Envelope{Plan: p}) }
-
 func (s *script) declare(decls ...runui.StageDecl) {
 	s.push(runui.Envelope{Stages: decls})
 }
@@ -28,8 +26,8 @@ func (s *script) prog(id, msg string) {
 	s.push(runui.Envelope{Progress: &runui.Progress{StageID: id, Message: msg}})
 }
 
-func (s *script) cached(id, msg string) {
-	s.push(runui.Envelope{Progress: &runui.Progress{StageID: id, Message: msg, Cached: true}})
+func (s *script) cached(id string) {
+	s.push(runui.Envelope{Progress: &runui.Progress{StageID: id, Cached: true}})
 }
 
 func (s *script) bar(id, msg string, cur, total uint32) {
@@ -55,8 +53,8 @@ func (s *script) failed(id string) {
 
 func (s *script) result(r *runui.Result) { s.push(runui.Envelope{Result: r}) }
 
-func stage(id, title string) runui.StageDecl { return runui.StageDecl{ID: id, Title: title} }
+func unit(id, title string) runui.StageDecl { return runui.StageDecl{ID: id, Title: title} }
 
-func child(id, parent, title string) runui.StageDecl {
+func sub(id, parent, title string) runui.StageDecl {
 	return runui.StageDecl{ID: id, Parent: parent, Title: title}
 }

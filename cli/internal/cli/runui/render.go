@@ -25,6 +25,8 @@ const (
 	warnMark  = "⚠"
 	barWidth  = 12
 	frameRate = 80 * time.Millisecond
+	bodyPad   = "    "
+	pathSep   = " › "
 )
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -35,7 +37,6 @@ type Config struct {
 	Width   int
 	Height  int
 	MaxRows int
-	TailN   int
 }
 
 type Renderer struct {
@@ -46,9 +47,6 @@ type Renderer struct {
 	tree      *tree
 	liveLines int
 	start     time.Time
-	prefixes  map[string]int
-	lastPlain map[string]string
-	nextIndex int
 }
 
 func New(w io.Writer, cfg Config) *Renderer {
@@ -61,14 +59,7 @@ func New(w io.Writer, cfg Config) *Renderer {
 	if cfg.Height == 0 {
 		cfg.Height = 40
 	}
-	return &Renderer{
-		w:         w,
-		cfg:       cfg,
-		tree:      newTree(cfg.TailN, time.Now),
-		start:     time.Now(),
-		prefixes:  map[string]int{},
-		lastPlain: map[string]string{},
-	}
+	return &Renderer{w: w, cfg: cfg, tree: newTree(time.Now), start: time.Now()}
 }
 
 func (r *Renderer) Start() {
@@ -83,10 +74,6 @@ func (r *Renderer) tick() {
 	defer t.Stop()
 	for range t.C {
 		r.mu.Lock()
-		if r.liveLines == 0 && len(r.tree.roots) == 0 {
-			r.mu.Unlock()
-			continue
-		}
 		for _, n := range r.tree.nodes {
 			if n.state == active {
 				n.frame++
@@ -117,82 +104,180 @@ func (r *Renderer) Emit(env Envelope) {
 			r.tree.declare(decl)
 		}
 	case env.Progress != nil:
-		r.erase()
-		r.tree.progress(env.Progress)
-		if r.cfg.Format == Plain {
-			r.plainProgress(env.Progress)
-		}
-		r.draw()
+		r.onProgress(env.Progress)
 	case env.Log != nil:
 		r.tree.log(env.Log)
-		if r.cfg.Format == Plain {
-			fmt.Fprintf(r.w, "#%d | %s\n", r.prefix(env.Log.StageID), env.Log.Line)
-		}
+		r.refresh()
 	case env.End != nil:
-		r.erase()
-		if n := r.tree.end(env.End); n != nil {
-			fmt.Fprintln(r.w, r.doneLine(n, r.depthOf(n)))
-		}
-		r.draw()
+		r.onEnd(env.End)
 	case env.Result != nil:
 		r.erase()
 		r.result(env.Result)
 	}
 }
 
-func (r *Renderer) depthOf(n *node) int {
-	depth := 0
-	for cur := n; cur.parent != ""; depth++ {
-		next, ok := r.tree.nodes[cur.parent]
-		if !ok {
+func (r *Renderer) onProgress(p *Progress) {
+	n := r.tree.progress(p)
+	if phase := r.tree.phaseOf(p.StageID); phase != nil {
+		phase.live = r.summary(n)
+	}
+	r.refresh()
+}
+
+func (r *Renderer) onEnd(e *StageEnd) {
+	n := r.tree.end(e)
+	if n == nil {
+		return
+	}
+	switch {
+	case n.depth > depthPhase:
+		r.tree.record(n.id, r.detailRow(n))
+		r.refresh()
+	case n.depth == depthPhase:
+		r.erase()
+		r.flush(n)
+		r.draw()
+	default:
+		r.refresh()
+	}
+}
+
+func (r *Renderer) flush(phase *node) {
+	unit := r.tree.unitOf(phase.id)
+	name := phase.title
+	if unit != nil && unit != phase && len(unit.children) > 1 {
+		name = unit.title + pathSep + phase.title
+	} else if unit != nil {
+		name = unit.title
+	}
+
+	mark, tone := okMark, r.paint(color.FgGreen, color.Bold)
+	note := dur(phase.dur)
+	switch {
+	case phase.failed:
+		mark, tone, note = failMark, r.paint(color.FgRed, color.Bold), "failed after "+dur(phase.dur)
+	case r.tree.failedDescendants(phase.id) > 0:
+		mark, tone = warnMark, r.paint(color.FgYellow, color.Bold)
+	}
+
+	if len(phase.body) == 0 && phase.hasBar && phase.message != "" {
+		phase.body = append(phase.body, fmt.Sprintf("%s %s  %d/%d",
+			r.paint(color.FgGreen).Sprint(okMark), phase.message, phase.total, phase.total))
+	}
+
+	fmt.Fprintln(r.w)
+	fmt.Fprintf(r.w, "%s %s  %s\n", tone.Sprint(mark), tone.Sprint(name), r.paint(color.Faint).Sprint(note))
+	for _, line := range phase.body {
+		fmt.Fprintf(r.w, "%s%s\n", bodyPad, line)
+	}
+}
+
+func (r *Renderer) detailRow(n *node) string {
+	if n.failed {
+		return r.paint(color.FgRed).Sprintf("%s %s failed", failMark, n.title)
+	}
+	note := dur(n.dur)
+	if n.cached {
+		note += " CACHED"
+	}
+	return fmt.Sprintf("%s %s  %s",
+		r.paint(color.FgGreen).Sprint(okMark),
+		n.title,
+		r.paint(color.Faint).Sprint(note))
+}
+
+func (r *Renderer) summary(n *node) string {
+	var b strings.Builder
+	if n.depth > depthPhase {
+		b.WriteString(n.title)
+	}
+	switch {
+	case n.cached:
+		join(&b, r.paint(color.Faint).Sprint("CACHED"))
+	case n.hasBar && n.total > 0:
+		join(&b, fmt.Sprintf("%s %d/%d", bar(n.current, n.total), n.current, n.total))
+	case n.message != "" && n.message != n.title:
+		join(&b, n.message)
+	}
+	if b.Len() == 0 && n.depth <= depthPhase {
+		return ""
+	}
+	return b.String()
+}
+
+func join(b *strings.Builder, s string) {
+	if b.Len() > 0 {
+		b.WriteString("  ")
+	}
+	b.WriteString(s)
+}
+
+func (r *Renderer) refresh() {
+	if r.cfg.Format != Live {
+		return
+	}
+	r.erase()
+	r.draw()
+}
+
+func (r *Renderer) erase() {
+	if r.cfg.Format != Live || r.liveLines == 0 {
+		return
+	}
+	fmt.Fprintf(r.w, "\033[%dA\033[J", r.liveLines)
+	r.liveLines = 0
+}
+
+func (r *Renderer) draw() {
+	if r.cfg.Format != Live {
+		return
+	}
+	rows := r.tree.live()
+	budget := r.cfg.MaxRows
+	if room := r.cfg.Height - 4; room < budget {
+		budget = room
+	}
+
+	lines := 0
+	for _, row := range rows {
+		if lines+2 > budget {
+			fmt.Fprintln(r.w, r.paint(color.Faint).Sprintf("  +%d more", len(rows)-lines/2))
+			lines++
 			break
 		}
-		cur = next
-	}
-	return depth
-}
-
-func (r *Renderer) prefix(stageID string) int {
-	if idx, ok := r.prefixes[stageID]; ok {
-		return idx
-	}
-	r.nextIndex++
-	r.prefixes[stageID] = r.nextIndex
-	return r.nextIndex
-}
-
-func (r *Renderer) plainProgress(p *Progress) {
-	if p.HasBar && p.Current != 0 && p.Current != p.Total {
-		return
-	}
-	idx := r.prefix(p.StageID)
-	n := r.tree.nodes[p.StageID]
-	title := p.Message
-	if n != nil && n.title != "" {
-		title = n.title
-		if p.Message != "" && p.Message != n.title {
-			title += " — " + p.Message
+		fmt.Fprintln(r.w, truncate(r.unitLine(row), r.cfg.Width))
+		lines++
+		if tail := r.tailLine(row); tail != "" {
+			fmt.Fprintln(r.w, truncate(tail, r.cfg.Width))
+			lines++
 		}
 	}
-	if p.HasBar && p.Total > 0 {
-		title += fmt.Sprintf(" %d/%d", p.Current, p.Total)
+	r.liveLines = lines
+}
+
+func (r *Renderer) unitLine(row unitRow) string {
+	n := row.unit
+	glyph := r.paint(color.FgCyan).Sprint(spinnerFrames[n.frame%len(spinnerFrames)])
+	name := n.title
+	if row.phase != nil && len(n.children) > 1 {
+		name += r.paint(color.Faint).Sprint(pathSep) + row.phase.title
 	}
-	if r.lastPlain[p.StageID] == title {
-		return
+	started := n.started
+	if row.phase != nil {
+		started = row.phase.started
 	}
-	r.lastPlain[p.StageID] = title
-	fmt.Fprintf(r.w, "#%d %s\n", idx, title)
+	return fmt.Sprintf("%s %s  %s", glyph, r.paint(color.Bold).Sprint(name),
+		r.paint(color.Faint).Sprint(dur(time.Since(started))))
+}
+
+func (r *Renderer) tailLine(row unitRow) string {
+	if row.phase == nil || row.phase.live == "" {
+		return ""
+	}
+	return bodyPad + r.paint(color.Faint).Sprint(truncate(row.phase.live, r.cfg.Width-len(bodyPad)))
 }
 
 func (r *Renderer) result(res *Result) {
-	if r.cfg.Format == Plain || r.cfg.Format == Live {
-		for _, n := range r.tree.nodes {
-			if n.state == active {
-				n.state = done
-				n.dur = time.Since(n.started)
-			}
-		}
-	}
 	fmt.Fprintln(r.w)
 	if res.Success {
 		r.paint(color.FgGreen, color.Bold).Fprintf(r.w, "%s %s in %s\n", okMark, res.Headline, dur(time.Since(r.start)))
@@ -223,81 +308,6 @@ func (r *Renderer) result(res *Result) {
 	}
 }
 
-func (r *Renderer) erase() {
-	if r.cfg.Format != Live || r.liveLines == 0 {
-		return
-	}
-	fmt.Fprintf(r.w, "\033[%dA\033[J", r.liveLines)
-	r.liveLines = 0
-}
-
-func (r *Renderer) draw() {
-	if r.cfg.Format != Live {
-		return
-	}
-	budget := r.cfg.MaxRows
-	if room := r.cfg.Height - 3; room < budget {
-		budget = room
-	}
-	lines := r.tree.frame(budget)
-	for _, l := range lines {
-		fmt.Fprintln(r.w, truncate(r.line(l), r.cfg.Width))
-	}
-	r.liveLines = len(lines)
-}
-
-func (r *Renderer) line(l line) string {
-	indent := strings.Repeat("  ", l.depth)
-	if l.isTail {
-		return indent + r.paint(color.Faint).Sprint(truncate(l.tail, r.cfg.Width-len(indent)))
-	}
-	if l.extra > 0 {
-		return indent + r.paint(color.Faint).Sprintf("+%d more", l.extra)
-	}
-	n := l.n
-	if n.state == done {
-		return r.doneLine(n, l.depth)
-	}
-
-	var b strings.Builder
-	glyph := r.paint(color.FgCyan).Sprint(spinnerFrames[n.frame%len(spinnerFrames)])
-	fmt.Fprintf(&b, "%s%s %s", indent, glyph, n.title)
-	if n.parent != "" {
-		if idx, count := r.tree.siblings(n.id); count > 1 {
-			fmt.Fprintf(&b, " %s", r.paint(color.Faint).Sprintf("(%d/%d)", idx, count))
-		}
-	}
-	fmt.Fprintf(&b, "  %s", r.paint(color.Faint).Sprint(dur(time.Since(n.started))))
-	switch {
-	case n.cached:
-		fmt.Fprintf(&b, "  %s", r.paint(color.Faint).Sprint("CACHED"))
-	case n.hasBar && n.total > 0:
-		fmt.Fprintf(&b, "  %s %d/%d", bar(n.current, n.total), n.current, n.total)
-	case n.message != "" && n.message != n.title:
-		fmt.Fprintf(&b, "  %s", r.paint(color.Faint).Sprintf("— %s", n.message))
-	}
-	return b.String()
-}
-
-func (r *Renderer) doneLine(n *node, depth int) string {
-	indent := strings.Repeat("  ", depth)
-	if n.failed {
-		return indent + r.paint(color.FgRed, color.Bold).Sprintf("%s %s failed", failMark, n.title)
-	}
-	if lost := r.tree.failedDescendants(n.id); lost > 0 {
-		return indent + r.paint(color.FgYellow, color.Bold).Sprintf("%s %s  %d of %d failed",
-			warnMark, n.title, lost, len(r.tree.nodes[n.id].children))
-	}
-	note := dur(n.dur)
-	if n.cached {
-		note += " CACHED"
-	}
-	return fmt.Sprintf("%s%s  %s",
-		indent,
-		r.paint(color.FgGreen).Sprintf("%s %s", okMark, n.title),
-		r.paint(color.Faint).Sprint(note))
-}
-
 func (r *Renderer) emitJSON(env Envelope) {
 	rec := map[string]any{}
 	switch {
@@ -324,7 +334,7 @@ func (r *Renderer) emitJSON(env Envelope) {
 		}
 		rec["progress"] = p
 	case env.Log != nil:
-		rec["log"] = map[string]any{"stageId": env.Log.StageID, "message": env.Log.Line}
+		rec["log"] = map[string]any{"stageId": env.Log.StageID, "message": collapseCarriage(env.Log.Line)}
 	case env.End != nil:
 		rec["spanEnd"] = map[string]any{"stageId": env.End.StageID, "failed": env.End.Failed}
 	case env.Result != nil:

@@ -19,7 +19,6 @@ func main() {
 	fail := flag.Bool("fail", false, "one app fails: siblings finish, promotion is withheld")
 	speed := flag.Float64("speed", 1, "playback multiplier; 0 renders the final frame with no waiting")
 	maxRows := flag.Int("max-rows", 20, "row budget for the live window")
-	tail := flag.Int("tail", 6, "log lines kept under an active leaf stage")
 	flag.Parse()
 
 	plan, apply, ok := pick(*variant, *fail)
@@ -43,7 +42,6 @@ func main() {
 		Width:   width,
 		Height:  height,
 		MaxRows: *maxRows,
-		TailN:   *tail,
 	})
 
 	r.Emit(runui.Envelope{Plan: plan})

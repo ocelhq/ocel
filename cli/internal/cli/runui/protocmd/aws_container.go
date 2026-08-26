@@ -58,134 +58,180 @@ func awsContainerApply(fail bool) *script {
 	s := &script{}
 
 	s.declare(
-		stage("build-web", "Building web"),
-		stage("build-api", "Building api"),
-		stage("provision", "Provisioning"),
-		child("infra", "provision", "shared infrastructure"),
-		child("app-web", "provision", "web"),
-		child("app-api", "provision", "api"),
-		stage("edge", "Reconciling the cloudfront edge"),
-		stage("promote", "Promoting"),
+		unit("infra", "shared infrastructure"),
+		sub("infra-prov", "infra", "provisioning"),
+
+		unit("web", "web"),
+		sub("web-build", "web", "building"),
+		sub("web-prov", "web", "provisioning"),
+
+		unit("api", "api"),
+		sub("api-build", "api", "building"),
+		sub("api-prov", "api", "provisioning"),
+
+		unit("edge", "cloudfront edge"),
+		sub("edge-rec", "edge", "reconciling"),
+
+		unit("promo", "promotion"),
+		sub("promo-go", "promo", "promoting"),
 	)
 
 	s.declare(
-		child("web-v1", "build-web", "[internal] load metadata for node:22-alpine"),
-		child("web-v2", "build-web", "[build 4/9] RUN pnpm install --frozen-lockfile"),
-		child("web-v3", "build-web", "[build 7/9] RUN pnpm build"),
-		child("web-v4", "build-web", "exporting to image"),
-		child("api-v1", "build-api", "[build 2/5] RUN go build -trimpath ./cmd/api"),
-		child("api-v2", "build-api", "exporting to image"),
+		sub("wb1", "web-build", "[internal] load metadata for node:22-alpine"),
+		sub("wb2", "web-build", "[build 4/9] RUN pnpm install --frozen-lockfile"),
+		sub("wb3", "web-build", "[build 7/9] RUN pnpm build"),
+		sub("wb4", "web-build", "exporting to image"),
+
+		sub("ab1", "api-build", "[build 2/5] RUN go build -trimpath ./cmd/api"),
+		sub("ab2", "api-build", "exporting to image"),
+
+		sub("if1", "infra-prov", "aws:ecr/Repository acme-prod/api"),
+		sub("if2", "infra-prov", "aws:secretsmanager/SecretVersion acme-prod/env"),
+
+		sub("wp1", "web-prov", "ocel:artifact/EcrImage web:8f3c1a"),
+		sub("wp2", "web-prov", "aws:lb/TargetGroup acme-prod-web-8f3c"),
+		sub("wp3", "web-prov", "aws:ecs/TaskDefinition acme-prod-web"),
+		sub("wp4", "web-prov", "aws:ecs/Service acme-prod-web"),
+
+		sub("ap1", "api-prov", "ocel:artifact/EcrImage api:8f3c1a"),
+		sub("ap2", "api-prov", "aws:iam/Role acme-prod-api-task"),
+		sub("ap3", "api-prov", "aws:ecs/TaskDefinition acme-prod-api"),
+		sub("ap4", "api-prov", "aws:ecs/Service acme-prod-api"),
 	)
 
-	s.prog("build-web", "")
-	s.prog("build-api", "")
-	s.cached("web-v1", "")
+	s.prog("infra", "")
+	s.prog("infra-prov", "")
+	s.prog("if1", "")
+	s.prog("web", "")
+	s.prog("web-build", "")
+	s.prog("api", "")
+	s.prog("api-build", "")
+
+	s.cached("wb1")
 	s.wait(350 * time.Millisecond)
-	s.end("web-v1")
-	s.prog("web-v2", "")
-	s.prog("api-v1", "")
-	s.log("web-v2", "Packages: +812", "Progress: resolved 1204, reused 1204, downloaded 0, added 812, done")
-	s.wait(800 * time.Millisecond)
-	s.end("web-v2")
-	s.prog("web-v3", "")
-	s.log("web-v3",
+	s.end("wb1")
+	s.end("if1")
+	s.prog("if2", "")
+
+	s.prog("wb2", "")
+	s.prog("ab1", "")
+	s.log("wb2",
+		"Progress: resolved 210, reused 0, downloaded 0\rProgress: resolved 1204, reused 1204, downloaded 0, added 812, done",
+		"Packages: +812",
+	)
+	s.wait(500 * time.Millisecond)
+	s.end("if2")
+	s.end("infra-prov")
+	s.end("infra")
+
+	s.wait(400 * time.Millisecond)
+	s.end("wb2")
+	s.prog("wb3", "")
+	s.log("wb3",
 		"▲ Next.js 15.4.2",
 		"   Creating an optimized production build ...",
 		" ✓ Compiled successfully",
 		"   Collecting page data ...",
 		"   Generating static pages (28/28)",
+		"",
+		"Route (app)                     Size     First Load JS",
+		"┌ ○ /                           1.2 kB        94.3 kB",
+		"├ ● /blog/[slug]                  842 B        92.1 kB",
+		"└ λ /api/revalidate               128 B        87.4 kB",
 	)
-	s.wait(700 * time.Millisecond)
-	s.end("api-v1")
-	s.prog("api-v2", "")
 	s.wait(400 * time.Millisecond)
-	s.end("api-v2")
-	s.end("build-api")
-	s.wait(500 * time.Millisecond)
-	s.end("web-v3")
-	s.prog("web-v4", "")
-	s.wait(400 * time.Millisecond)
-	s.end("web-v4")
-	s.end("build-web")
-
-	s.prog("provision", "")
-	s.prog("infra", "aws:ecr/Repository acme-prod/api")
-	s.wait(500 * time.Millisecond)
-	s.prog("infra", "aws:secretsmanager/SecretVersion acme-prod/env")
-	s.wait(500 * time.Millisecond)
-	s.end("infra")
-
-	s.declare(
-		child("web-img", "app-web", "ocel:artifact/EcrImage web:8f3c1a"),
-		child("web-td", "app-web", "aws:ecs/TaskDefinition acme-prod-web"),
-		child("web-svc", "app-web", "aws:ecs/Service acme-prod-web"),
-		child("api-img", "app-api", "ocel:artifact/EcrImage api:8f3c1a"),
-		child("api-role", "app-api", "aws:iam/Role acme-prod-api-task"),
-		child("api-td", "app-api", "aws:ecs/TaskDefinition acme-prod-api"),
-		child("api-svc", "app-api", "aws:ecs/Service acme-prod-api"),
-	)
-
-	s.prog("app-web", "")
-	s.prog("app-api", "")
-	s.prog("web-img", "")
-	s.prog("api-img", "")
-	for i := uint32(0); i <= 5; i++ {
-		s.bar("web-img", "pushing 142 MB", i*28, 142)
-		s.bar("api-img", "pushing 31 MB", i*6, 31)
-		s.wait(200 * time.Millisecond)
-	}
-	s.end("web-img")
-	s.end("api-img")
-
-	s.prog("web-td", "")
-	s.prog("api-role", "")
-	s.wait(400 * time.Millisecond)
-	s.end("web-td")
-	s.end("api-role")
-	s.prog("api-td", "")
+	s.end("ab1")
+	s.prog("ab2", "")
 	s.wait(300 * time.Millisecond)
-	s.end("api-td")
+	s.end("ab2")
+	s.end("api-build")
 
-	s.prog("web-svc", "1 of 2 tasks healthy")
-	s.prog("api-svc", "0 of 2 tasks healthy")
-	s.wait(900 * time.Millisecond)
-	s.prog("web-svc", "2 of 2 tasks healthy")
-	s.wait(500 * time.Millisecond)
-	s.end("web-svc")
-	s.end("app-web")
+	s.prog("api-prov", "")
+	s.prog("ap1", "")
+	for i := uint32(0); i <= 4; i++ {
+		s.bar("ap1", "pushing 31 MB", i*8, 31)
+		s.wait(170 * time.Millisecond)
+	}
+	s.end("ap1")
+	s.prog("ap2", "")
+	s.wait(300 * time.Millisecond)
+	s.end("ap2")
+	s.prog("ap3", "")
+	s.wait(250 * time.Millisecond)
+	s.end("ap3")
+	s.prog("ap4", "0 of 2 tasks healthy")
+
+	s.wait(400 * time.Millisecond)
+	s.end("wb3")
+	s.prog("wb4", "")
+	s.wait(350 * time.Millisecond)
+	s.end("wb4")
+	s.end("web-build")
+
+	s.prog("web-prov", "")
+	s.prog("wp1", "")
+	for i := uint32(0); i <= 5; i++ {
+		s.bar("wp1", "pushing 142 MB", i*28, 142)
+		s.wait(180 * time.Millisecond)
+	}
+	s.end("wp1")
+	s.prog("wp2", "")
+	s.wait(250 * time.Millisecond)
+	s.end("wp2")
+	s.prog("wp3", "")
+	s.wait(250 * time.Millisecond)
+	s.end("wp3")
+	s.prog("wp4", "1 of 2 tasks healthy")
+	s.wait(600 * time.Millisecond)
+	s.prog("wp4", "2 of 2 tasks healthy")
+	s.wait(300 * time.Millisecond)
+	s.end("wp4")
+	s.end("web-prov")
+	s.end("web")
 
 	if fail {
-		s.prog("api-svc", "0 of 2 tasks healthy")
-		s.wait(900 * time.Millisecond)
-		s.failed("api-svc")
-		s.failed("app-api")
-		s.end("provision")
+		s.log("api-prov",
+			"aws:ecs/Service acme-prod-api: waiting for steady state",
+			"task 3f9a1c stopped: Essential container in task exited (exit 1)",
+			"  container api exited with code 1",
+			"  last 3 lines from /ocel/acme-prod/api:",
+			"    panic: OCEL_DATABASE_URL is not set",
+			"    goroutine 1 [running]:",
+			"    main.main()",
+		)
+		s.wait(600 * time.Millisecond)
+		s.failed("ap4")
+		s.failed("api-prov")
+		s.failed("api")
 		s.result(&runui.Result{
 			Headline: "Deploy failed",
-			Error: "api: aws:ecs/Service acme-prod-api never reached a steady state\n" +
-				"  task stopped: Essential container in task exited (exit 1)\n" +
-				"  CannotPullContainerError is not the cause — the image pulled\n" +
-				"web finished and is holding its new task set; nothing was promoted.",
-			Withheld:   "Promotion withheld: the live deployment still serves every hostname.",
-			Diagnostic: []string{"Replay:  ocel run replay --stage api"},
-			StreamAt:   ".ocel/runs/2026-08-26T14-31-08Z.ndjson",
+			Error:    "api: aws:ecs/Service acme-prod-api never reached a steady state",
+			Withheld: "Promotion withheld: the live deployment still serves every hostname.",
+			Diagnostic: []string{
+				"The api block above holds its full output.",
+			},
+			StreamAt: ".ocel/runs/2026-08-26T14-31-08Z.ndjson",
 		})
 		return s
 	}
 
-	s.wait(700 * time.Millisecond)
-	s.prog("api-svc", "2 of 2 tasks healthy")
+	s.prog("ap4", "2 of 2 tasks healthy")
 	s.wait(400 * time.Millisecond)
-	s.end("api-svc")
-	s.end("app-api")
-	s.end("provision")
+	s.end("ap4")
+	s.end("api-prov")
+	s.end("api")
 
-	s.prog("edge", "acme.example.com/api/*")
+	s.prog("edge", "")
+	s.prog("edge-rec", "acme.example.com/api/*")
 	s.wait(600 * time.Millisecond)
+	s.end("edge-rec")
 	s.end("edge")
-	s.prog("promote", "")
-	s.wait(700 * time.Millisecond)
-	s.end("promote")
+
+	s.prog("promo", "")
+	s.prog("promo-go", "")
+	s.wait(600 * time.Millisecond)
+	s.end("promo-go")
+	s.end("promo")
 
 	s.result(&runui.Result{
 		Success:  true,

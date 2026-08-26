@@ -53,135 +53,187 @@ func vpsApply(fail bool) *script {
 	s := &script{}
 
 	s.declare(
-		stage("build-web", "Building web"),
-		stage("build-api", "Building api"),
-		stage("push", "Pushing images to web-1"),
-		stage("provision", "Provisioning"),
-		child("app-web", "provision", "web"),
-		child("app-api", "provision", "api"),
-		stage("edge", "Reconciling the cloudflare edge"),
-		stage("promote", "Promoting"),
+		unit("infra", "shared infrastructure"),
+		sub("infra-prov", "infra", "provisioning"),
+
+		unit("web", "web"),
+		sub("web-build", "web", "building"),
+		sub("web-push", "web", "pushing"),
+		sub("web-prov", "web", "provisioning"),
+
+		unit("api", "api"),
+		sub("api-build", "api", "building"),
+		sub("api-push", "api", "pushing"),
+		sub("api-prov", "api", "provisioning"),
+
+		unit("edge", "cloudflare edge"),
+		sub("edge-rec", "edge", "reconciling"),
+
+		unit("promo", "promotion"),
+		sub("promo-go", "promo", "promoting"),
 	)
 
 	s.declare(
-		child("web-v1", "build-web", "[internal] load build definition"),
-		child("web-v2", "build-web", "[internal] load metadata for node:22-alpine"),
-		child("web-v3", "build-web", "[build 3/9] RUN pnpm install --frozen-lockfile"),
-		child("web-v4", "build-web", "[build 6/9] RUN pnpm build"),
-		child("web-v5", "build-web", "exporting layers"),
-		child("api-v1", "build-api", "[internal] load build definition"),
-		child("api-v2", "build-api", "[build 2/5] RUN go build ./cmd/api"),
-		child("api-v3", "build-api", "exporting layers"),
+		sub("wb1", "web-build", "[internal] load build definition"),
+		sub("wb2", "web-build", "[internal] load metadata for node:22-alpine"),
+		sub("wb3", "web-build", "[build 3/9] RUN pnpm install --frozen-lockfile"),
+		sub("wb4", "web-build", "[build 6/9] RUN pnpm build"),
+		sub("wb5", "web-build", "exporting layers"),
+
+		sub("ab1", "api-build", "[internal] load build definition"),
+		sub("ab2", "api-build", "[build 2/5] RUN go build ./cmd/api"),
+		sub("ab3", "api-build", "exporting layers"),
+
+		sub("wp1", "web-prov", "container ocel-acme-web"),
+		sub("wp2", "web-prov", "systemd unit ocel-acme-web.service"),
+		sub("wp3", "web-prov", "removing container ocel-acme-web-4b2e"),
+
+		sub("ap1", "api-prov", "container ocel-acme-api"),
+		sub("ap2", "api-prov", "health check 127.0.0.1:8080"),
 	)
 
-	s.prog("build-web", "")
-	s.prog("build-api", "")
-	s.cached("web-v1", "")
-	s.cached("web-v2", "")
-	s.cached("api-v1", "")
-	s.wait(400 * time.Millisecond)
-	s.end("web-v1")
-	s.end("web-v2")
-	s.end("api-v1")
+	s.prog("infra", "")
+	s.prog("infra-prov", "caddy site acme.example.com")
+	s.prog("web", "")
+	s.prog("web-build", "")
+	s.prog("api", "")
+	s.prog("api-build", "")
 
-	s.prog("web-v3", "")
-	s.prog("api-v2", "")
-	s.wait(600 * time.Millisecond)
-	s.log("web-v3",
+	s.cached("wb1")
+	s.cached("wb2")
+	s.cached("ab1")
+	s.wait(400 * time.Millisecond)
+	s.end("wb1")
+	s.end("wb2")
+	s.end("ab1")
+	s.end("infra-prov")
+	s.end("infra")
+
+	s.prog("wb3", "")
+	s.prog("ab2", "")
+	s.wait(500 * time.Millisecond)
+	s.log("wb3",
 		"Lockfile is up to date, resolution step is skipped",
-		"Progress: resolved 1204, reused 1204, downloaded 0, added 0",
+		"Progress: resolved 340, reused 0, downloaded 0\rProgress: resolved 912, reused 640, downloaded 44\rProgress: resolved 1204, reused 1204, downloaded 0, added 812, done",
 		"Packages: +812",
-		"++++++++++++++++++++++++++++++++++++++++++++++++++",
-		"Progress: resolved 1204, reused 1204, downloaded 0, added 812, done",
 		"dependencies:",
 		"+ next 15.4.2",
 		"+ react 19.1.0",
 	)
-	s.log("api-v2",
-		"go: downloading github.com/ocelhq/ocel/sdk v0.4.1",
-		"go: downloading connectrpc.com/connect v1.18.1",
-	)
-	s.wait(900 * time.Millisecond)
-	s.end("web-v3")
-
-	s.prog("web-v4", "")
-	s.log("web-v4",
-		"▲ Next.js 15.4.2",
-		"  Creating an optimized production build ...",
-		" ✓ Compiled successfully",
-		"   Linting and checking validity of types ...",
-		"   Collecting page data ...",
-		"   Generating static pages (0/28)",
-		"   Generating static pages (14/28)",
-		"   Generating static pages (28/28)",
-		" ✓ Finalizing page optimization",
-	)
+	s.log("ab2", "go: downloading github.com/ocelhq/ocel/sdk v0.4.1")
 	s.wait(700 * time.Millisecond)
-	s.end("api-v2")
-	s.prog("api-v3", "")
+	s.end("wb3")
+
+	s.prog("wb4", "")
+	s.log("wb4",
+		"▲ Next.js 15.4.2",
+		"   Creating an optimized production build ...",
+		" ✓ Compiled successfully",
+		"   Collecting page data ...",
+		"   Generating static pages (28/28)",
+		"",
+		"Route (app)                     Size     First Load JS",
+		"┌ ○ /                           1.2 kB        94.3 kB",
+		"├ ● /blog/[slug]                  842 B        92.1 kB",
+		"└ λ /api/revalidate               128 B        87.4 kB",
+		"○  (Static)   prerendered as static content",
+		"●  (SSG)      prerendered as static HTML",
+		"λ  (Dynamic)  server-rendered on demand",
+	)
 	s.wait(400 * time.Millisecond)
-	s.end("api-v3")
-	s.end("build-api")
+	s.end("ab2")
+	s.prog("ab3", "")
+	s.wait(350 * time.Millisecond)
+	s.end("ab3")
+	s.end("api-build")
 
-	s.wait(500 * time.Millisecond)
-	s.end("web-v4")
-	s.prog("web-v5", "")
-	s.wait(500 * time.Millisecond)
-	s.end("web-v5")
-	s.end("build-web")
-
-	s.prog("push", "acme/web:8f3c1a")
-	for i := uint32(0); i <= 6; i++ {
-		s.bar("push", "acme/web:8f3c1a", i, 6)
-		s.wait(180 * time.Millisecond)
-	}
-	s.prog("push", "acme/api:8f3c1a")
+	s.prog("api-push", "acme/api:8f3c1a")
 	for i := uint32(0); i <= 3; i++ {
-		s.bar("push", "acme/api:8f3c1a", i, 3)
+		s.bar("api-push", "acme/api:8f3c1a", i, 3)
+		s.wait(160 * time.Millisecond)
+	}
+	s.end("api-push")
+
+	s.prog("api-prov", "")
+	s.prog("ap1", "pulling acme/api:8f3c1a")
+	s.wait(500 * time.Millisecond)
+	s.end("wb4")
+	s.prog("wb5", "")
+	s.wait(400 * time.Millisecond)
+	s.end("wb5")
+	s.end("web-build")
+
+	s.prog("web-push", "acme/web:8f3c1a")
+	for i := uint32(0); i <= 6; i++ {
+		s.bar("web-push", "acme/web:8f3c1a", i, 6)
 		s.wait(150 * time.Millisecond)
 	}
-	s.end("push")
+	s.end("web-push")
 
-	s.prog("provision", "")
-	s.prog("app-web", "pulling acme/web:8f3c1a")
-	s.prog("app-api", "pulling acme/api:8f3c1a")
-	s.wait(700 * time.Millisecond)
-	s.prog("app-web", "starting ocel-acme-web")
-	s.prog("app-api", "starting ocel-acme-api")
+	s.end("ap1")
+	s.prog("ap2", "attempt 1")
+	s.prog("web-prov", "")
+	s.prog("wp1", "pulling acme/web:8f3c1a")
 	s.wait(600 * time.Millisecond)
-	s.prog("app-web", "waiting for health check")
-	s.prog("app-api", "waiting for health check")
-	s.wait(900 * time.Millisecond)
 
 	if fail {
-		s.failed("app-api")
-		s.wait(900 * time.Millisecond)
-		s.prog("app-web", "removing ocel-acme-web-4b2e")
-		s.wait(400 * time.Millisecond)
-		s.end("app-web")
-		s.end("provision")
+		s.prog("ap2", "attempt 7")
+		s.wait(700 * time.Millisecond)
+		s.log("api-prov",
+			"2026/08/26 14:22:58 listen tcp 0.0.0.0:8080: bind: address already in use",
+			"2026/08/26 14:22:58 exit status 1",
+		)
+		s.failed("ap2")
+		s.failed("api-prov")
+		s.failed("api")
+		s.end("wp1")
+		s.prog("wp2", "")
+		s.wait(300 * time.Millisecond)
+		s.end("wp2")
+		s.prog("wp3", "")
+		s.wait(300 * time.Millisecond)
+		s.end("wp3")
+		s.end("web-prov")
+		s.end("web")
 		s.result(&runui.Result{
 			Headline: "Deploy failed",
-			Error:    "api: health check never passed on 127.0.0.1:8080 (12 attempts over 60s)\nthe running deployment is untouched",
-			Withheld: "web deployed to its slot but was not promoted — promotion needs every app.",
+			Error:    "api never became healthy on 127.0.0.1:8080 after 7 attempts",
+			Withheld: "web is built and staged but was not promoted — promotion needs every app.",
+			Diagnostic: []string{
+				"The api block above holds its full output.",
+			},
 			StreamAt: ".ocel/runs/2026-08-26T14-22-31Z.ndjson",
 		})
 		return s
 	}
 
-	s.end("app-api")
-	s.prog("app-web", "removing ocel-acme-web-4b2e")
-	s.wait(400 * time.Millisecond)
-	s.end("app-web")
-	s.end("provision")
+	s.prog("ap2", "attempt 2")
+	s.wait(500 * time.Millisecond)
+	s.end("ap2")
+	s.end("api-prov")
+	s.end("api")
 
-	s.prog("edge", "api.acme.example.com")
-	s.wait(700 * time.Millisecond)
+	s.end("wp1")
+	s.prog("wp2", "")
+	s.wait(300 * time.Millisecond)
+	s.end("wp2")
+	s.prog("wp3", "")
+	s.wait(300 * time.Millisecond)
+	s.end("wp3")
+	s.end("web-prov")
+	s.end("web")
+
+	s.prog("edge", "")
+	s.prog("edge-rec", "api.acme.example.com")
+	s.wait(600 * time.Millisecond)
+	s.end("edge-rec")
 	s.end("edge")
 
-	s.prog("promote", "")
-	s.wait(600 * time.Millisecond)
-	s.end("promote")
+	s.prog("promo", "")
+	s.prog("promo-go", "")
+	s.wait(500 * time.Millisecond)
+	s.end("promo-go")
+	s.end("promo")
 
 	s.result(&runui.Result{
 		Success:  true,

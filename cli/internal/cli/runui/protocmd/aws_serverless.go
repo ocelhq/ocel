@@ -59,89 +59,128 @@ func awsServerlessApply() *script {
 	s := &script{}
 
 	s.declare(
-		stage("build-web", "Building web"),
-		stage("build-api", "Building api"),
-		stage("provision", "Provisioning"),
-		child("infra", "provision", "shared infrastructure"),
-		child("app-web", "provision", "web"),
-		child("app-api", "provision", "api"),
-		stage("edge", "Reconciling the cloudfront edge"),
-		stage("promote", "Promoting"),
+		unit("infra", "shared infrastructure"),
+		sub("infra-prov", "infra", "provisioning"),
+
+		unit("web", "web"),
+		sub("web-build", "web", "building"),
+		sub("web-prov", "web", "provisioning"),
+
+		unit("api", "api"),
+		sub("api-build", "api", "building"),
+		sub("api-prov", "api", "provisioning"),
+
+		unit("edge", "cloudfront edge"),
+		sub("edge-rec", "edge", "reconciling"),
+
+		unit("promo", "promotion"),
+		sub("promo-go", "promo", "promoting"),
 	)
 
-	s.prog("build-web", "")
-	s.prog("build-api", "")
-	s.log("build-web",
+	s.declare(
+		sub("if1", "infra-prov", "aws:secretsmanager/SecretVersion acme-prod/env"),
+
+		sub("wp1", "web-prov", "aws:s3/BucketObjectv2 web/8f3c1a/server.zip"),
+		sub("wp2", "web-prov", "aws:s3/BucketObjectv2 web/8f3c1a/assets.tar"),
+		sub("wp3", "web-prov", "aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar"),
+		sub("wp4", "web-prov", "aws:lambda/Function acme-prod-web"),
+		sub("wp5", "web-prov", "aws:lambda/Alias acme-prod-web:live"),
+		sub("wp6", "web-prov", "reclaiming 2 superseded objects"),
+
+		sub("ap1", "api-prov", "aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip"),
+		sub("ap2", "api-prov", "aws:iam/Role acme-prod-api-fn"),
+		sub("ap3", "api-prov", "aws:lambda/Function acme-prod-api"),
+		sub("ap4", "api-prov", "aws:apigatewayv2/Route ANY /api/{proxy+}"),
+	)
+
+	s.prog("infra", "")
+	s.prog("infra-prov", "")
+	s.prog("if1", "")
+	s.prog("web", "")
+	s.prog("web-build", "")
+	s.prog("api", "")
+	s.prog("api-build", "")
+
+	s.log("web-build",
 		"▲ Next.js 15.4.2",
 		"   Creating an optimized production build ...",
 		" ✓ Compiled successfully",
 		"   Generating static pages (28/28)",
 		"   Bundling server for the lambda target ...",
+		"",
+		"Route (app)                     Size     First Load JS",
+		"┌ ○ /                           1.2 kB        94.3 kB",
+		"├ ● /blog/[slug]                  842 B        92.1 kB",
+		"└ λ /api/revalidate               128 B        87.4 kB",
 	)
-	s.log("build-api", "go: building bootstrap for linux/arm64")
-	s.wait(1200 * time.Millisecond)
-	s.end("build-api")
-	s.wait(600 * time.Millisecond)
-	s.end("build-web")
-
-	s.declare(
-		child("web-server", "app-web", "aws:s3/BucketObjectv2 web/8f3c1a/server.zip"),
-		child("web-assets", "app-web", "aws:s3/BucketObjectv2 web/8f3c1a/assets.tar"),
-		child("web-pre", "app-web", "aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar"),
-		child("web-fn", "app-web", "aws:lambda/Function acme-prod-web"),
-		child("web-alias", "app-web", "aws:lambda/Alias acme-prod-web:live"),
-		child("web-gc", "app-web", "2 superseded objects"),
-		child("api-zip", "app-api", "aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip"),
-		child("api-role", "app-api", "aws:iam/Role acme-prod-api-fn"),
-		child("api-fn", "app-api", "aws:lambda/Function acme-prod-api"),
-		child("api-route", "app-api", "aws:apigatewayv2/Route ANY /api/{proxy+}"),
-	)
-
-	s.prog("provision", "")
-	s.prog("infra", "aws:secretsmanager/SecretVersion acme-prod/env")
-	s.prog("app-web", "")
-	s.prog("app-api", "")
-	s.prog("web-server", "")
-	s.prog("web-assets", "")
-	s.prog("web-pre", "")
-	s.prog("api-zip", "")
-	s.prog("api-role", "")
-	for i := uint32(0); i <= 4; i++ {
-		s.bar("web-server", "uploading 18 MB", i*4, 18)
-		s.bar("web-assets", "uploading 6 MB", i*2, 6)
-		s.bar("api-zip", "uploading 9 MB", i*2, 9)
-		s.wait(220 * time.Millisecond)
-	}
-	s.end("infra")
-	s.end("web-server")
-	s.end("web-assets")
-	s.end("web-pre")
-	s.end("api-zip")
-	s.end("api-role")
-
-	s.prog("web-fn", "")
-	s.prog("api-fn", "")
-	s.wait(600 * time.Millisecond)
-	s.end("web-fn")
-	s.end("api-fn")
-	s.prog("web-alias", "")
-	s.prog("api-route", "")
+	s.log("api-build", "go: building bootstrap for linux/arm64")
 	s.wait(400 * time.Millisecond)
-	s.end("web-alias")
-	s.end("api-route")
-	s.prog("web-gc", "")
+	s.end("if1")
+	s.end("infra-prov")
+	s.end("infra")
 	s.wait(300 * time.Millisecond)
-	s.end("web-gc")
-	s.end("app-web")
-	s.end("app-api")
-	s.end("provision")
+	s.end("api-build")
 
-	s.prog("edge", "invalidating /*")
-	s.wait(1100 * time.Millisecond)
+	s.prog("api-prov", "")
+	s.prog("ap1", "")
+	for i := uint32(0); i <= 3; i++ {
+		s.bar("ap1", "uploading 9 MB", i*3, 9)
+		s.wait(170 * time.Millisecond)
+	}
+	s.end("ap1")
+	s.prog("ap2", "")
+	s.wait(250 * time.Millisecond)
+	s.end("ap2")
+
+	s.wait(400 * time.Millisecond)
+	s.end("web-build")
+
+	s.prog("web-prov", "")
+	s.prog("wp1", "")
+	for i := uint32(0); i <= 4; i++ {
+		s.bar("wp1", "uploading 18 MB", i*4, 18)
+		s.wait(160 * time.Millisecond)
+	}
+	s.end("wp1")
+	s.prog("wp2", "")
+	s.wait(250 * time.Millisecond)
+	s.end("wp2")
+
+	s.prog("ap3", "")
+	s.wait(300 * time.Millisecond)
+	s.end("ap3")
+	s.prog("ap4", "")
+	s.wait(250 * time.Millisecond)
+	s.end("ap4")
+	s.end("api-prov")
+	s.end("api")
+
+	s.prog("wp3", "")
+	s.wait(300 * time.Millisecond)
+	s.end("wp3")
+	s.prog("wp4", "")
+	s.wait(350 * time.Millisecond)
+	s.end("wp4")
+	s.prog("wp5", "")
+	s.wait(250 * time.Millisecond)
+	s.end("wp5")
+	s.prog("wp6", "")
+	s.wait(250 * time.Millisecond)
+	s.end("wp6")
+	s.end("web-prov")
+	s.end("web")
+
+	s.prog("edge", "")
+	s.prog("edge-rec", "invalidating /*")
+	s.wait(1000 * time.Millisecond)
+	s.end("edge-rec")
 	s.end("edge")
-	s.prog("promote", "")
+
+	s.prog("promo", "")
+	s.prog("promo-go", "")
 	s.wait(500 * time.Millisecond)
-	s.end("promote")
+	s.end("promo-go")
+	s.end("promo")
 
 	s.result(&runui.Result{
 		Success:  true,

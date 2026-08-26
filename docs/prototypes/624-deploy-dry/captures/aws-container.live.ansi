@@ -25,369 +25,444 @@
 
   Deploying — this plan is convergent, so it applies without asking.
 
-[36m⠋[0m Building web  [2m<1s[22m
-[1A[J[36m⠋[0m Building web  [2m<1s[22m
-[36m⠋[0m Building api  [2m<1s[22m
-[2A[J[36m⠋[0m Building web  [2m<1s[22m
-  [36m⠋[0m [internal] load metadata for node:22-alpine [2m(1/4)[22m  [2m<1s[22m  [2mCACHED[22m
-[36m⠋[0m Building api  [2m<1s[22m
-[3A[J[36m⠙[0m Building web  [2m<1s[22m
-  [36m⠙[0m [internal] load metadata for node:22-alpine [2m(1/4)[22m  [2m<1s[22m  [2mCACHED[22m
-[36m⠙[0m Building api  [2m<1s[22m
-[3A[J  [32m✓ [internal] load metadata for node:22-alpine[0m  [2m<1s CACHED[22m
-[36m⠙[0m Building web  [2m<1s[22m
-[36m⠙[0m Building api  [2m<1s[22m
-[2A[J[36m⠙[0m Building web  [2m<1s[22m
-  [36m⠋[0m [build 4/9] RUN pnpm install --frozen-lockfile [2m(2/4)[22m  [2m<1s[22m
-[36m⠙[0m Building api  [2m<1s[22m
-[3A[J[36m⠙[0m Building web  [2m<1s[22m
-  [36m⠋[0m [build 4/9] RUN pnpm install --frozen-lockfile [2m(2/4)[22m  [2m<1s[22m
-[36m⠙[0m Building api  [2m<1s[22m
-  [36m⠋[0m [build 2/5] RUN go build -trimpath ./cmd/api [2m(1/2)[22m  [2m<1s[22m
-[4A[J[36m⠹[0m Building web  [2m<1s[22m
-  [36m⠙[0m [build 4/9] RUN pnpm install --frozen-lockfile [2m(2/4)[22m  [2m<1s[22m
-    [2mPackages: +812[22m
+[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+[1A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+[1A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:ecr/Repository acme-prod/api[22m
+[2A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:ecr/Repository acme-prod/api[22m
+[36m⠋[0m [1mweb[22m  [2m<1s[22m
+[3A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:ecr/Repository acme-prod/api[22m
+[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+[3A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:ecr/Repository acme-prod/api[22m
+[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+[36m⠋[0m [1mapi[22m  [2m<1s[22m
+[4A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:ecr/Repository acme-prod/api[22m
+[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+[36m⠋[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[4A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:ecr/Repository acme-prod/api[22m
+[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[internal] load metadata for node:22-alpine  [2mCACHED[22m[22m
+[36m⠋[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:ecr/Repository acme-prod/api[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[internal] load metadata for node:22-alpine  [2mCACHED[22m[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:ecr/Repository acme-prod/api[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[internal] load metadata for node:22-alpine  [2mCACHED[22m[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:ecr/Repository acme-prod/api[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[internal] load metadata for node:22-alpine  [2mCACHED[22m[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[internal] load metadata for node:22-alpine  [2mCACHED[22m[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 4/9] RUN pnpm install --frozen-lockfile[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 4/9] RUN pnpm install --frozen-lockfile[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[6A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
     [2mProgress: resolved 1204, reused 1204, downloaded 0, added 812, done[22m
-[36m⠹[0m Building api  [2m<1s[22m
-  [36m⠙[0m [build 2/5] RUN go build -trimpath ./cmd/api [2m(1/2)[22m  [2m<1s[22m
-[6A[J[36m⠸[0m Building web  [2m<1s[22m
-  [36m⠹[0m [build 4/9] RUN pnpm install --frozen-lockfile [2m(2/4)[22m  [2m<1s[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[6A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
     [2mPackages: +812[22m
-    [2mProgress: resolved 1204, reused 1204, downloaded 0, added 812, done[22m
-[36m⠸[0m Building api  [2m<1s[22m
-  [36m⠹[0m [build 2/5] RUN go build -trimpath ./cmd/api [2m(1/2)[22m  [2m<1s[22m
-[6A[J[36m⠼[0m Building web  [2m<1s[22m
-  [36m⠸[0m [build 4/9] RUN pnpm install --frozen-lockfile [2m(2/4)[22m  [2m<1s[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[6A[J[36m⠹[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠹[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
     [2mPackages: +812[22m
-    [2mProgress: resolved 1204, reused 1204, downloaded 0, added 812, done[22m
-[36m⠼[0m Building api  [2m<1s[22m
-  [36m⠸[0m [build 2/5] RUN go build -trimpath ./cmd/api [2m(1/2)[22m  [2m<1s[22m
-[6A[J  [32m✓ [build 4/9] RUN pnpm install --frozen-lockfile[0m  [2m<1s[22m
-[36m⠼[0m Building web  [2m<1s[22m
-[36m⠼[0m Building api  [2m<1s[22m
-  [36m⠸[0m [build 2/5] RUN go build -trimpath ./cmd/api [2m(1/2)[22m  [2m<1s[22m
-[3A[J[36m⠼[0m Building web  [2m<1s[22m
-  [36m⠋[0m [build 7/9] RUN pnpm build [2m(3/4)[22m  [2m<1s[22m
-[36m⠼[0m Building api  [2m<1s[22m
-  [36m⠸[0m [build 2/5] RUN go build -trimpath ./cmd/api [2m(1/2)[22m  [2m<1s[22m
-[4A[J[36m⠴[0m Building web  [2m<1s[22m
-  [36m⠙[0m [build 7/9] RUN pnpm build [2m(3/4)[22m  [2m<1s[22m
+[36m⠹[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[6A[J[36m⠸[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠸[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mPackages: +812[22m
+[36m⠸[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[6A[J[36m⠸[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠸[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mPackages: +812[22m
+[36m⠸[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[6A[J
+[32;1m✓[0;22m [32;1mshared infrastructure[0;22m  [2m<1s[22m
+    [32m✓[0m aws:ecr/Repository acme-prod/api  [2m<1s[22m
+    [32m✓[0m aws:secretsmanager/SecretVersion acme-prod/env  [2m<1s[22m
+[36m⠸[0m [1mshared infrastructure[22m  [2m<1s[22m
+[36m⠸[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mPackages: +812[22m
+[36m⠸[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[5A[J[36m⠸[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mPackages: +812[22m
+[36m⠸[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mPackages: +812[22m
+[36m⠼[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mPackages: +812[22m
+[36m⠼[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 7/9] RUN pnpm build[22m
+[36m⠼[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
     [2m▲ Next.js 15.4.2[22m
+[36m⠼[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
     [2m   Creating an optimized production build ...[22m
-    [2m ✓ Compiled successfully[22m
-[36m⠴[0m Building api  [2m<1s[22m
-  [36m⠼[0m [build 2/5] RUN go build -trimpath ./cmd/api [2m(1/2)[22m  [2m<1s[22m
-[7A[J[36m⠦[0m Building web  [2m<1s[22m
-  [36m⠹[0m [build 7/9] RUN pnpm build [2m(3/4)[22m  [2m<1s[22m
-    [2m▲ Next.js 15.4.2[22m
+[36m⠼[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
     [2m   Creating an optimized production build ...[22m
+[36m⠴[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
     [2m ✓ Compiled successfully[22m
+[36m⠴[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
     [2m   Collecting page data ...[22m
+[36m⠴[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
     [2m   Generating static pages (28/28)[22m
-[36m⠦[0m Building api  [2m<1s[22m
-  [36m⠴[0m [build 2/5] RUN go build -trimpath ./cmd/api [2m(1/2)[22m  [2m<1s[22m
-[9A[J[36m⠧[0m Building web  [2m1s[22m
-  [36m⠸[0m [build 7/9] RUN pnpm build [2m(3/4)[22m  [2m<1s[22m
-    [2m▲ Next.js 15.4.2[22m
-    [2m   Creating an optimized production build ...[22m
-    [2m ✓ Compiled successfully[22m
-    [2m   Collecting page data ...[22m
+[36m⠴[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
     [2m   Generating static pages (28/28)[22m
-[36m⠧[0m Building api  [2m1s[22m
-  [36m⠦[0m [build 2/5] RUN go build -trimpath ./cmd/api [2m(1/2)[22m  [2m<1s[22m
-[9A[J  [32m✓ [build 2/5] RUN go build -trimpath ./cmd/api[0m  [2m1s[22m
-[36m⠧[0m Building web  [2m1s[22m
-  [36m⠸[0m [build 7/9] RUN pnpm build [2m(3/4)[22m  [2m<1s[22m
-    [2m▲ Next.js 15.4.2[22m
-    [2m   Creating an optimized production build ...[22m
-    [2m ✓ Compiled successfully[22m
-    [2m   Collecting page data ...[22m
+[36m⠴[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠦[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
     [2m   Generating static pages (28/28)[22m
-[36m⠧[0m Building api  [2m1s[22m
-[8A[J[36m⠧[0m Building web  [2m1s[22m
-  [36m⠸[0m [build 7/9] RUN pnpm build [2m(3/4)[22m  [2m<1s[22m
-    [2m▲ Next.js 15.4.2[22m
-    [2m   Creating an optimized production build ...[22m
-    [2m ✓ Compiled successfully[22m
-    [2m   Collecting page data ...[22m
-    [2m   Generating static pages (28/28)[22m
-[36m⠧[0m Building api  [2m1s[22m
-  [36m⠋[0m exporting to image [2m(2/2)[22m  [2m<1s[22m
-[9A[J[36m⠇[0m Building web  [2m1s[22m
-  [36m⠼[0m [build 7/9] RUN pnpm build [2m(3/4)[22m  [2m<1s[22m
-    [2m▲ Next.js 15.4.2[22m
-    [2m   Creating an optimized production build ...[22m
-    [2m ✓ Compiled successfully[22m
-    [2m   Collecting page data ...[22m
-    [2m   Generating static pages (28/28)[22m
-[36m⠇[0m Building api  [2m1s[22m
-  [36m⠙[0m exporting to image [2m(2/2)[22m  [2m<1s[22m
-[9A[J[36m⠏[0m Building web  [2m1s[22m
-  [36m⠴[0m [build 7/9] RUN pnpm build [2m(3/4)[22m  [2m<1s[22m
-    [2m▲ Next.js 15.4.2[22m
-    [2m   Creating an optimized production build ...[22m
-    [2m ✓ Compiled successfully[22m
-    [2m   Collecting page data ...[22m
-    [2m   Generating static pages (28/28)[22m
-[36m⠏[0m Building api  [2m1s[22m
-  [36m⠹[0m exporting to image [2m(2/2)[22m  [2m<1s[22m
-[9A[J  [32m✓ exporting to image[0m  [2m<1s[22m
-[36m⠏[0m Building web  [2m1s[22m
-  [36m⠴[0m [build 7/9] RUN pnpm build [2m(3/4)[22m  [2m<1s[22m
-    [2m▲ Next.js 15.4.2[22m
-    [2m   Creating an optimized production build ...[22m
-    [2m ✓ Compiled successfully[22m
-    [2m   Collecting page data ...[22m
-    [2m   Generating static pages (28/28)[22m
-[36m⠏[0m Building api  [2m1s[22m
-[8A[J[32m✓ Building api[0m  [2m1s[22m
-[36m⠏[0m Building web  [2m1s[22m
-  [36m⠴[0m [build 7/9] RUN pnpm build [2m(3/4)[22m  [2m<1s[22m
-    [2m▲ Next.js 15.4.2[22m
-    [2m   Creating an optimized production build ...[22m
-    [2m ✓ Compiled successfully[22m
-    [2m   Collecting page data ...[22m
-    [2m   Generating static pages (28/28)[22m
-[7A[J[36m⠋[0m Building web  [2m1s[22m
-  [36m⠦[0m [build 7/9] RUN pnpm build [2m(3/4)[22m  [2m<1s[22m
-    [2m▲ Next.js 15.4.2[22m
-    [2m   Creating an optimized production build ...[22m
-    [2m ✓ Compiled successfully[22m
-    [2m   Collecting page data ...[22m
-    [2m   Generating static pages (28/28)[22m
-[7A[J  [32m✓ [build 7/9] RUN pnpm build[0m  [2m1s[22m
-[36m⠋[0m Building web  [2m1s[22m
-[1A[J[36m⠋[0m Building web  [2m1s[22m
-  [36m⠋[0m exporting to image [2m(4/4)[22m  [2m<1s[22m
-[2A[J[36m⠙[0m Building web  [2m1s[22m
-  [36m⠙[0m exporting to image [2m(4/4)[22m  [2m<1s[22m
-[2A[J  [32m✓ exporting to image[0m  [2m<1s[22m
-[36m⠙[0m Building web  [2m1s[22m
-[1A[J[32m✓ Building web[0m  [2m1s[22m
-[36m⠋[0m Provisioning  [2m<1s[22m
-[1A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:ecr/Repository acme-prod/api[22m
-[2A[J[36m⠙[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:ecr/Repository acme-prod/api[22m
-[2A[J[36m⠹[0m Provisioning  [2m<1s[22m
-  [36m⠹[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:ecr/Repository acme-prod/api[22m
-[2A[J[36m⠹[0m Provisioning  [2m<1s[22m
-  [36m⠹[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-[2A[J[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-[2A[J[36m⠼[0m Provisioning  [2m<1s[22m
-  [36m⠼[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-[2A[J  [32m✓ shared infrastructure[0m  [2m<1s[22m
-[36m⠼[0m Provisioning  [2m<1s[22m
-[1A[J[36m⠼[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-[2A[J[36m⠼[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-[3A[J[36m⠼[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-[4A[J[36m⠼[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m
-[5A[J[36m⠼[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/142
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m
-[5A[J[36m⠼[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/142
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/31
-[5A[J[36m⠼[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [██░░░░░░░░░░] 28/142
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/31
-[5A[J[36m⠼[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [██░░░░░░░░░░] 28/142
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [██░░░░░░░░░░] 6/31
-[5A[J[36m⠴[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [██░░░░░░░░░░] 28/142
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [██░░░░░░░░░░] 6/31
-[5A[J[36m⠴[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [████░░░░░░░░] 56/142
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [██░░░░░░░░░░] 6/31
-[5A[J[36m⠴[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [████░░░░░░░░] 56/142
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [████░░░░░░░░] 12/31
-[5A[J[36m⠴[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [███████░░░░░] 84/142
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [████░░░░░░░░] 12/31
-[5A[J[36m⠴[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [███████░░░░░] 84/142
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [██████░░░░░░] 18/31
-[5A[J[36m⠦[0m Provisioning  [2m<1s[22m
-  [36m⠹[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠹[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [███████░░░░░] 84/142
-  [36m⠹[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠹[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [██████░░░░░░] 18/31
-[5A[J[36m⠦[0m Provisioning  [2m<1s[22m
-  [36m⠹[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠹[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [█████████░░░] 112/142
-  [36m⠹[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠹[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [██████░░░░░░] 18/31
-[5A[J[36m⠦[0m Provisioning  [2m<1s[22m
-  [36m⠹[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠹[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [█████████░░░] 112/142
-  [36m⠹[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠹[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [█████████░░░] 24/31
-[5A[J[36m⠧[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠸[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [█████████░░░] 112/142
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [█████████░░░] 24/31
-[5A[J[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠸[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [███████████░] 140/142
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [█████████░░░] 24/31
-[5A[J[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠸[0m ocel:artifact/EcrImage web:8f3c1a [2m(1/3)[22m  [2m<1s[22m  [███████████░] 140/142
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [███████████░] 30/31
-[5A[J    [32m✓ ocel:artifact/EcrImage web:8f3c1a[0m  [2m<1s[22m
-[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m ocel:artifact/EcrImage api:8f3c1a [2m(1/4)[22m  [2m<1s[22m  [███████████░] 30/31
-[4A[J    [32m✓ ocel:artifact/EcrImage api:8f3c1a[0m  [2m<1s[22m
-[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-[3A[J[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:ecs/TaskDefinition acme-prod-web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-[4A[J[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:ecs/TaskDefinition acme-prod-web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:iam/Role acme-prod-api-task [2m(2/4)[22m  [2m<1s[22m
-[5A[J[36m⠇[0m Provisioning  [2m1s[22m
-  [36m⠼[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:ecs/TaskDefinition acme-prod-web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠼[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:iam/Role acme-prod-api-task [2m(2/4)[22m  [2m<1s[22m
-[5A[J[36m⠏[0m Provisioning  [2m1s[22m
-  [36m⠴[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:ecs/TaskDefinition acme-prod-web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠴[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:iam/Role acme-prod-api-task [2m(2/4)[22m  [2m<1s[22m
-[5A[J    [32m✓ aws:ecs/TaskDefinition acme-prod-web[0m  [2m<1s[22m
-[36m⠏[0m Provisioning  [2m1s[22m
-  [36m⠴[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠴[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:iam/Role acme-prod-api-task [2m(2/4)[22m  [2m<1s[22m
-[4A[J    [32m✓ aws:iam/Role acme-prod-api-task[0m  [2m<1s[22m
-[36m⠏[0m Provisioning  [2m1s[22m
-  [36m⠴[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠴[0m api [2m(3/3)[22m  [2m<1s[22m
-[3A[J[36m⠏[0m Provisioning  [2m1s[22m
-  [36m⠴[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠴[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:ecs/TaskDefinition acme-prod-api [2m(3/4)[22m  [2m<1s[22m
-[4A[J[36m⠋[0m Provisioning  [2m1s[22m
-  [36m⠦[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠦[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:ecs/TaskDefinition acme-prod-api [2m(3/4)[22m  [2m<1s[22m
-[4A[J    [32m✓ aws:ecs/TaskDefinition acme-prod-api[0m  [2m<1s[22m
-[36m⠋[0m Provisioning  [2m1s[22m
-  [36m⠦[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠦[0m api [2m(3/3)[22m  [2m<1s[22m
-[3A[J[36m⠋[0m Provisioning  [2m1s[22m
-  [36m⠦[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:ecs/Service acme-prod-web [2m(3/3)[22m  [2m<1s[22m  [2m— 1 of 2 tasks healthy[22m
-  [36m⠦[0m api [2m(3/3)[22m  [2m<1s[22m
-[4A[J[36m⠋[0m Provisioning  [2m1s[22m
-  [36m⠦[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:ecs/Service acme-prod-web [2m(3/3)[22m  [2m<1s[22m  [2m— 1 of 2 tasks healthy[22m
-  [36m⠦[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m<1s[22m  [2m— 0 of 2 tasks healthy[22m
-[5A[J[36m⠙[0m Provisioning  [2m1s[22m
-  [36m⠧[0m web [2m(2/3)[22m  [2m1s[22m
-    [36m⠙[0m aws:ecs/Service acme-prod-web [2m(3/3)[22m  [2m<1s[22m  [2m— 1 of 2 tasks healthy[22m
-  [36m⠧[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠙[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m<1s[22m  [2m— 0 of 2 tasks healthy[22m
-[5A[J[36m⠹[0m Provisioning  [2m1s[22m
-  [36m⠇[0m web [2m(2/3)[22m  [2m1s[22m
-    [36m⠹[0m aws:ecs/Service acme-prod-web [2m(3/3)[22m  [2m<1s[22m  [2m— 1 of 2 tasks healthy[22m
-  [36m⠇[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠹[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m<1s[22m  [2m— 0 of 2 tasks healthy[22m
-[5A[J[36m⠹[0m Provisioning  [2m1s[22m
-  [36m⠇[0m web [2m(2/3)[22m  [2m1s[22m
-    [36m⠹[0m aws:ecs/Service acme-prod-web [2m(3/3)[22m  [2m<1s[22m  [2m— 2 of 2 tasks healthy[22m
-  [36m⠇[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠹[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m<1s[22m  [2m— 0 of 2 tasks healthy[22m
-[5A[J[36m⠸[0m Provisioning  [2m1s[22m
-  [36m⠏[0m web [2m(2/3)[22m  [2m1s[22m
-    [36m⠸[0m aws:ecs/Service acme-prod-web [2m(3/3)[22m  [2m<1s[22m  [2m— 2 of 2 tasks healthy[22m
-  [36m⠏[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠸[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m<1s[22m  [2m— 0 of 2 tasks healthy[22m
-[5A[J[36m⠼[0m Provisioning  [2m1s[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m1s[22m
-    [36m⠼[0m aws:ecs/Service acme-prod-web [2m(3/3)[22m  [2m<1s[22m  [2m— 2 of 2 tasks healthy[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠼[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m<1s[22m  [2m— 0 of 2 tasks healthy[22m
-[5A[J    [32m✓ aws:ecs/Service acme-prod-web[0m  [2m<1s[22m
-[36m⠼[0m Provisioning  [2m1s[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠼[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m<1s[22m  [2m— 0 of 2 tasks healthy[22m
-[4A[J  [32m✓ web[0m  [2m1s[22m
-[36m⠼[0m Provisioning  [2m1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠼[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m<1s[22m  [2m— 0 of 2 tasks healthy[22m
-[3A[J[36m⠴[0m Provisioning  [2m1s[22m
-  [36m⠙[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠴[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m<1s[22m  [2m— 0 of 2 tasks healthy[22m
-[3A[J[36m⠦[0m Provisioning  [2m1s[22m
-  [36m⠹[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠦[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m<1s[22m  [2m— 0 of 2 tasks healthy[22m
-[3A[J[36m⠦[0m Provisioning  [2m1s[22m
-  [36m⠹[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠦[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m1s[22m  [2m— 2 of 2 tasks healthy[22m
-[3A[J[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠧[0m aws:ecs/Service acme-prod-api [2m(4/4)[22m  [2m1s[22m  [2m— 2 of 2 tasks healthy[22m
-[3A[J    [32m✓ aws:ecs/Service acme-prod-api[0m  [2m1s[22m
-[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m1s[22m
-[2A[J  [32m✓ api[0m  [2m1s[22m
-[36m⠧[0m Provisioning  [2m1s[22m
-[1A[J[32m✓ Provisioning[0m  [2m1s[22m
-[36m⠋[0m Reconciling the cloudfront edge  [2m<1s[22m  [2m— acme.example.com/api/*[22m
-[1A[J[36m⠙[0m Reconciling the cloudfront edge  [2m<1s[22m  [2m— acme.example.com/api/*[22m
-[1A[J[36m⠹[0m Reconciling the cloudfront edge  [2m<1s[22m  [2m— acme.example.com/api/*[22m
-[1A[J[32m✓ Reconciling the cloudfront edge[0m  [2m<1s[22m
-[36m⠋[0m Promoting  [2m<1s[22m
-[1A[J[36m⠙[0m Promoting  [2m<1s[22m
-[1A[J[36m⠹[0m Promoting  [2m<1s[22m
-[1A[J[32m✓ Promoting[0m  [2m<1s[22m
-
-[32;1m✓ Deployed acme to production in 3s
+[36m⠦[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠦[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mRoute (app)                     Size     First Load JS[22m
+[36m⠦[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠦[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m┌ ○ /                           1.2 kB        94.3 kB[22m
+[36m⠦[0m [1mapi[2m › [22mbuilding[22m  [2m1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠦[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m├ ● /blog/[slug]                  842 B        92.1 kB[22m
+[36m⠦[0m [1mapi[2m › [22mbuilding[22m  [2m1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠧[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m├ ● /blog/[slug]                  842 B        92.1 kB[22m
+[36m⠧[0m [1mapi[2m › [22mbuilding[22m  [2m1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠧[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠧[0m [1mapi[2m › [22mbuilding[22m  [2m1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠇[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠇[0m [1mapi[2m › [22mbuilding[22m  [2m1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠇[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠇[0m [1mapi[2m › [22mbuilding[22m  [2m1s[22m
+    [2m[build 2/5] RUN go build -trimpath ./cmd/api[22m
+[4A[J[36m⠇[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠇[0m [1mapi[2m › [22mbuilding[22m  [2m1s[22m
+    [2mexporting to image[22m
+[4A[J[36m⠏[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠏[0m [1mapi[2m › [22mbuilding[22m  [2m1s[22m
+    [2mexporting to image[22m
+[4A[J[36m⠏[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠏[0m [1mapi[2m › [22mbuilding[22m  [2m1s[22m
+    [2mexporting to image[22m
+[4A[J
+[32;1m✓[0;22m [32;1mapi › building[0;22m  [2m1s[22m
+    [32m✓[0m [build 2/5] RUN go build -trimpath ./cmd/api  [2m1s[22m
+    [32m✓[0m exporting to image  [2m<1s[22m
+[36m⠏[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠏[0m [1mapi[22m  [2m1s[22m
+[3A[J[36m⠏[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+[3A[J[36m⠏[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage api:8f3c1a[22m
+[4A[J[36m⠏[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage api:8f3c1a  [░░░░░░░░░░░░] 0/31[22m
+[4A[J[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage api:8f3c1a  [░░░░░░░░░░░░] 0/31[22m
+[4A[J[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage api:8f3c1a  [███░░░░░░░░░] 8/31[22m
+[4A[J[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage api:8f3c1a  [██████░░░░░░] 16/31[22m
+[4A[J[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠙[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage api:8f3c1a  [██████░░░░░░] 16/31[22m
+[4A[J[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠙[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage api:8f3c1a  [█████████░░░] 24/31[22m
+[4A[J[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠙[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage api:8f3c1a  [████████████] 32/31[22m
+[4A[J[36m⠹[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠹[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage api:8f3c1a  [████████████] 32/31[22m
+[4A[J[36m⠹[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠹[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage api:8f3c1a  [████████████] 32/31[22m
+[4A[J[36m⠹[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠹[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-task[22m
+[4A[J[36m⠸[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠸[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-task[22m
+[4A[J[36m⠸[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠸[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-task[22m
+[4A[J[36m⠸[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠸[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/TaskDefinition acme-prod-api[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠼[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/TaskDefinition acme-prod-api[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠼[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/TaskDefinition acme-prod-api[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠼[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠴[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠴[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2mexporting to image[22m
+[36m⠴[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠦[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2mexporting to image[22m
+[36m⠦[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠦[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2mexporting to image[22m
+[36m⠦[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J
+[32;1m✓[0;22m [32;1mweb › building[0;22m  [2m1s[22m
+    [32m✓[0m [internal] load metadata for node:22-alpine  [2m<1s CACHED[22m
+    Progress: resolved 1204, reused 1204, downloaded 0, added 812, done
+    Packages: +812
+    [32m✓[0m [build 4/9] RUN pnpm install --frozen-lockfile  [2m<1s[22m
+    ▲ Next.js 15.4.2
+       Creating an optimized production build ...
+     ✓ Compiled successfully
+       Collecting page data ...
+       Generating static pages (28/28)
+    
+    Route (app)                     Size     First Load JS
+    ┌ ○ /                           1.2 kB        94.3 kB
+    ├ ● /blog/[slug]                  842 B        92.1 kB
+    └ λ /api/revalidate               128 B        87.4 kB
+    [32m✓[0m [build 7/9] RUN pnpm build  [2m1s[22m
+    [32m✓[0m exporting to image  [2m<1s[22m
+[36m⠦[0m [1mweb[22m  [2m1s[22m
+[36m⠦[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[3A[J[36m⠦[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+[36m⠦[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[3A[J[36m⠦[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage web:8f3c1a[22m
+[36m⠦[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠦[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage web:8f3c1a  [░░░░░░░░░░░░] 0/142[22m
+[36m⠦[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠦[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage web:8f3c1a  [██░░░░░░░░░░] 28/142[22m
+[36m⠦[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠧[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage web:8f3c1a  [██░░░░░░░░░░] 28/142[22m
+[36m⠧[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠧[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage web:8f3c1a  [████░░░░░░░░] 56/142[22m
+[36m⠧[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠇[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage web:8f3c1a  [████░░░░░░░░] 56/142[22m
+[36m⠇[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠇[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage web:8f3c1a  [███████░░░░░] 84/142[22m
+[36m⠇[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠇[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage web:8f3c1a  [█████████░░░] 112/142[22m
+[36m⠇[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠏[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage web:8f3c1a  [█████████░░░] 112/142[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠏[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage web:8f3c1a  [███████████░] 140/142[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠏[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mocel:artifact/EcrImage web:8f3c1a  [███████████░] 140/142[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠏[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:lb/TargetGroup acme-prod-web-8f3c[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠋[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:lb/TargetGroup acme-prod-web-8f3c[22m
+[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠋[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:lb/TargetGroup acme-prod-web-8f3c[22m
+[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠋[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/TaskDefinition acme-prod-web[22m
+[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠙[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/TaskDefinition acme-prod-web[22m
+[36m⠙[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠙[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/TaskDefinition acme-prod-web[22m
+[36m⠙[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠙[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/Service acme-prod-web  1 of 2 tasks healthy[22m
+[36m⠙[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠹[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:ecs/Service acme-prod-web  1 of 2 tasks healthy[22m
+[36m⠹[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠸[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-web  1 of 2 tasks healthy[22m
+[36m⠸[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠸[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-web  2 of 2 tasks healthy[22m
+[36m⠸[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-web  2 of 2 tasks healthy[22m
+[36m⠼[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-web  2 of 2 tasks healthy[22m
+[36m⠼[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[4A[J
+[32;1m✓[0;22m [32;1mweb › provisioning[0;22m  [2m1s[22m
+    [32m✓[0m ocel:artifact/EcrImage web:8f3c1a  [2m<1s[22m
+    [32m✓[0m aws:lb/TargetGroup acme-prod-web-8f3c  [2m<1s[22m
+    [32m✓[0m aws:ecs/TaskDefinition acme-prod-web  [2m<1s[22m
+    [32m✓[0m aws:ecs/Service acme-prod-web  [2m<1s[22m
+[36m⠼[0m [1mweb[22m  [2m2s[22m
+[36m⠼[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[3A[J[36m⠼[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  0 of 2 tasks healthy[22m
+[2A[J[36m⠼[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  2 of 2 tasks healthy[22m
+[2A[J[36m⠴[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  2 of 2 tasks healthy[22m
+[2A[J[36m⠴[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:ecs/Service acme-prod-api  2 of 2 tasks healthy[22m
+[2A[J
+[32;1m✓[0;22m [32;1mapi › provisioning[0;22m  [2m1s[22m
+    [32m✓[0m ocel:artifact/EcrImage api:8f3c1a  [2m<1s[22m
+    [32m✓[0m aws:iam/Role acme-prod-api-task  [2m<1s[22m
+    [32m✓[0m aws:ecs/TaskDefinition acme-prod-api  [2m<1s[22m
+    [32m✓[0m aws:ecs/Service acme-prod-api  [2m1s[22m
+[36m⠴[0m [1mapi[22m  [2m2s[22m
+[1A[J[36m⠋[0m [1mcloudfront edge[22m  [2m<1s[22m
+[1A[J[36m⠋[0m [1mcloudfront edge[22m  [2m<1s[22m
+    [2macme.example.com/api/*[22m
+[2A[J[36m⠙[0m [1mcloudfront edge[22m  [2m<1s[22m
+    [2macme.example.com/api/*[22m
+[2A[J[36m⠹[0m [1mcloudfront edge[22m  [2m<1s[22m
+    [2macme.example.com/api/*[22m
+[2A[J
+[32;1m✓[0;22m [32;1mcloudfront edge[0;22m  [2m<1s[22m
+[36m⠹[0m [1mcloudfront edge[22m  [2m<1s[22m
+[1A[J[36m⠋[0m [1mpromotion[22m  [2m<1s[22m
+[1A[J[36m⠋[0m [1mpromotion[22m  [2m<1s[22m
+[1A[J[36m⠙[0m [1mpromotion[22m  [2m<1s[22m
+[1A[J[36m⠹[0m [1mpromotion[22m  [2m<1s[22m
+[1A[J
+[32;1m✓[0;22m [32;1mpromotion[0;22m  [2m<1s[22m
+[36m⠹[0m [1mpromotion[22m  [2m<1s[22m
+[1A[J
+[32;1m✓ Deployed acme to production in 2s
 [0m
 [36;1m  https://acme.example.com
 [0m

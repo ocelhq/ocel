@@ -27,393 +27,334 @@
 
   Deploying — this plan is convergent, so it applies without asking.
 
-[36m⠋[0m Building web  [2m<1s[22m
-[1A[J[36m⠋[0m Building web  [2m<1s[22m
-[36m⠋[0m Building api  [2m<1s[22m
-[2A[J[36m⠙[0m Building web  [2m<1s[22m
-  [2m▲ Next.js 15.4.2[22m
-  [2m   Creating an optimized production build ...[22m
-  [2m ✓ Compiled successfully[22m
-  [2m   Generating static pages (28/28)[22m
-[36m⠙[0m Building api  [2m<1s[22m
-[6A[J[36m⠹[0m Building web  [2m<1s[22m
-  [2m▲ Next.js 15.4.2[22m
-  [2m   Creating an optimized production build ...[22m
-  [2m ✓ Compiled successfully[22m
-  [2m   Generating static pages (28/28)[22m
-  [2m   Bundling server for the lambda target ...[22m
-[36m⠹[0m Building api  [2m<1s[22m
-  [2mgo: building bootstrap for linux/arm64[22m
-[8A[J[36m⠸[0m Building web  [2m<1s[22m
-  [2m▲ Next.js 15.4.2[22m
-  [2m   Creating an optimized production build ...[22m
-  [2m ✓ Compiled successfully[22m
-  [2m   Generating static pages (28/28)[22m
-  [2m   Bundling server for the lambda target ...[22m
-[36m⠸[0m Building api  [2m<1s[22m
-  [2mgo: building bootstrap for linux/arm64[22m
-[8A[J[36m⠼[0m Building web  [2m<1s[22m
-  [2m▲ Next.js 15.4.2[22m
-  [2m   Creating an optimized production build ...[22m
-  [2m ✓ Compiled successfully[22m
-  [2m   Generating static pages (28/28)[22m
-  [2m   Bundling server for the lambda target ...[22m
-[36m⠼[0m Building api  [2m<1s[22m
-  [2mgo: building bootstrap for linux/arm64[22m
-[8A[J[36m⠴[0m Building web  [2m<1s[22m
-  [2m▲ Next.js 15.4.2[22m
-  [2m   Creating an optimized production build ...[22m
-  [2m ✓ Compiled successfully[22m
-  [2m   Generating static pages (28/28)[22m
-  [2m   Bundling server for the lambda target ...[22m
-[36m⠴[0m Building api  [2m<1s[22m
-  [2mgo: building bootstrap for linux/arm64[22m
-[8A[J[32m✓ Building api[0m  [2m<1s[22m
-[36m⠴[0m Building web  [2m<1s[22m
-  [2m▲ Next.js 15.4.2[22m
-  [2m   Creating an optimized production build ...[22m
-  [2m ✓ Compiled successfully[22m
-  [2m   Generating static pages (28/28)[22m
-  [2m   Bundling server for the lambda target ...[22m
-[6A[J[36m⠦[0m Building web  [2m<1s[22m
-  [2m▲ Next.js 15.4.2[22m
-  [2m   Creating an optimized production build ...[22m
-  [2m ✓ Compiled successfully[22m
-  [2m   Generating static pages (28/28)[22m
-  [2m   Bundling server for the lambda target ...[22m
-[6A[J[36m⠧[0m Building web  [2m1s[22m
-  [2m▲ Next.js 15.4.2[22m
-  [2m   Creating an optimized production build ...[22m
-  [2m ✓ Compiled successfully[22m
-  [2m   Generating static pages (28/28)[22m
-  [2m   Bundling server for the lambda target ...[22m
-[6A[J[32m✓ Building web[0m  [2m1s[22m
-[36m⠋[0m Provisioning  [2m<1s[22m
-[1A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-[2A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-[3A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-[4A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-[5A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-[6A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-[7A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m
-[8A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m
-    [36m⠋[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/18
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m
-    [36m⠋[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/18
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/6
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m
-    [36m⠋[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠋[0m Provisioning  [2m<1s[22m
-  [36m⠋[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠋[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/18
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/6
-    [36m⠋[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠋[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/9
-    [36m⠋[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠙[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/18
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/6
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/9
-    [36m⠙[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠙[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [██░░░░░░░░░░] 4/18
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/6
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/9
-    [36m⠙[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠙[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [██░░░░░░░░░░] 4/18
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████░░░░░░░░] 2/6
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [░░░░░░░░░░░░] 0/9
-    [36m⠙[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠙[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [██░░░░░░░░░░] 4/18
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████░░░░░░░░] 2/6
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [██░░░░░░░░░░] 2/9
-    [36m⠙[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠙[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [█████░░░░░░░] 8/18
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████░░░░░░░░] 2/6
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [██░░░░░░░░░░] 2/9
-    [36m⠙[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠙[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [█████░░░░░░░] 8/18
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████░░░░] 4/6
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [██░░░░░░░░░░] 2/9
-    [36m⠙[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠙[0m Provisioning  [2m<1s[22m
-  [36m⠙[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠙[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [█████░░░░░░░] 8/18
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████░░░░] 4/6
-    [36m⠙[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠙[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [█████░░░░░░░] 4/9
-    [36m⠙[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠹[0m Provisioning  [2m<1s[22m
-  [36m⠹[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠹[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [█████░░░░░░░] 8/18
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████░░░░] 4/6
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠹[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [█████░░░░░░░] 4/9
-    [36m⠹[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠹[0m Provisioning  [2m<1s[22m
-  [36m⠹[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠹[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [████████░░░░] 12/18
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████░░░░] 4/6
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠹[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [█████░░░░░░░] 4/9
-    [36m⠹[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠹[0m Provisioning  [2m<1s[22m
-  [36m⠹[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠹[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [████████░░░░] 12/18
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████████] 6/6
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠹[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [█████░░░░░░░] 4/9
-    [36m⠹[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠹[0m Provisioning  [2m<1s[22m
-  [36m⠹[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠹[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [████████░░░░] 12/18
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████████] 6/6
-    [36m⠹[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠹[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [████████░░░░] 6/9
-    [36m⠹[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [████████░░░░] 12/18
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████████] 6/6
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [████████░░░░] 6/9
-    [36m⠸[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [██████████░░] 16/18
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████████] 6/6
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [████████░░░░] 6/9
-    [36m⠸[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [██████████░░] 16/18
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████████] 8/6
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [████████░░░░] 6/9
-    [36m⠸[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m shared infrastructure [2m(1/3)[22m  [2m<1s[22m  [2m— aws:secretsmanager/SecretVersion acme-prod/env[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [██████████░░] 16/18
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████████] 8/6
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [██████████░░] 8/9
-    [36m⠸[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[9A[J  [32m✓ shared infrastructure[0m  [2m<1s[22m
-[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip [2m(1/6)[22m  [2m<1s[22m  [██████████░░] 16/18
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████████] 8/6
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [██████████░░] 8/9
-    [36m⠸[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[8A[J    [32m✓ aws:s3/BucketObjectv2 web/8f3c1a/server.zip[0m  [2m<1s[22m
-[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar [2m(2/6)[22m  [2m<1s[22m  [████████████] 8/6
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [██████████░░] 8/9
-    [36m⠸[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[7A[J    [32m✓ aws:s3/BucketObjectv2 web/8f3c1a/assets.tar[0m  [2m<1s[22m
-[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar [2m(3/6)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [██████████░░] 8/9
-    [36m⠸[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[6A[J    [32m✓ aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar[0m  [2m<1s[22m
-[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip [2m(1/4)[22m  [2m<1s[22m  [██████████░░] 8/9
-    [36m⠸[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[5A[J    [32m✓ aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip[0m  [2m<1s[22m
-[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠸[0m aws:iam/Role acme-prod-api-fn [2m(2/4)[22m  [2m<1s[22m
-[4A[J    [32m✓ aws:iam/Role acme-prod-api-fn[0m  [2m<1s[22m
-[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-[3A[J[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:lambda/Function acme-prod-web [2m(4/6)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-[4A[J[36m⠸[0m Provisioning  [2m<1s[22m
-  [36m⠸[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:lambda/Function acme-prod-web [2m(4/6)[22m  [2m<1s[22m
-  [36m⠸[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:lambda/Function acme-prod-api [2m(3/4)[22m  [2m<1s[22m
-[5A[J[36m⠼[0m Provisioning  [2m<1s[22m
-  [36m⠼[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:lambda/Function acme-prod-web [2m(4/6)[22m  [2m<1s[22m
-  [36m⠼[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:lambda/Function acme-prod-api [2m(3/4)[22m  [2m<1s[22m
-[5A[J[36m⠴[0m Provisioning  [2m<1s[22m
-  [36m⠴[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:lambda/Function acme-prod-web [2m(4/6)[22m  [2m<1s[22m
-  [36m⠴[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:lambda/Function acme-prod-api [2m(3/4)[22m  [2m<1s[22m
-[5A[J    [32m✓ aws:lambda/Function acme-prod-web[0m  [2m<1s[22m
-[36m⠴[0m Provisioning  [2m<1s[22m
-  [36m⠴[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠴[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠹[0m aws:lambda/Function acme-prod-api [2m(3/4)[22m  [2m<1s[22m
-[4A[J    [32m✓ aws:lambda/Function acme-prod-api[0m  [2m<1s[22m
-[36m⠴[0m Provisioning  [2m<1s[22m
-  [36m⠴[0m web [2m(2/3)[22m  [2m<1s[22m
-  [36m⠴[0m api [2m(3/3)[22m  [2m<1s[22m
-[3A[J[36m⠴[0m Provisioning  [2m<1s[22m
-  [36m⠴[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:lambda/Alias acme-prod-web:live [2m(5/6)[22m  [2m<1s[22m
-  [36m⠴[0m api [2m(3/3)[22m  [2m<1s[22m
-[4A[J[36m⠴[0m Provisioning  [2m<1s[22m
-  [36m⠴[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:lambda/Alias acme-prod-web:live [2m(5/6)[22m  [2m<1s[22m
-  [36m⠴[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠋[0m aws:apigatewayv2/Route ANY /api/{proxy+} [2m(4/4)[22m  [2m<1s[22m
-[5A[J[36m⠦[0m Provisioning  [2m<1s[22m
-  [36m⠦[0m web [2m(2/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:lambda/Alias acme-prod-web:live [2m(5/6)[22m  [2m<1s[22m
-  [36m⠦[0m api [2m(3/3)[22m  [2m<1s[22m
-    [36m⠙[0m aws:apigatewayv2/Route ANY /api/{proxy+} [2m(4/4)[22m  [2m<1s[22m
-[5A[J[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠧[0m web [2m(2/3)[22m  [2m1s[22m
-    [36m⠹[0m aws:lambda/Alias acme-prod-web:live [2m(5/6)[22m  [2m<1s[22m
-  [36m⠧[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠹[0m aws:apigatewayv2/Route ANY /api/{proxy+} [2m(4/4)[22m  [2m<1s[22m
-[5A[J    [32m✓ aws:lambda/Alias acme-prod-web:live[0m  [2m<1s[22m
-[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠧[0m web [2m(2/3)[22m  [2m1s[22m
-  [36m⠧[0m api [2m(3/3)[22m  [2m1s[22m
-    [36m⠹[0m aws:apigatewayv2/Route ANY /api/{proxy+} [2m(4/4)[22m  [2m<1s[22m
-[4A[J    [32m✓ aws:apigatewayv2/Route ANY /api/{proxy+}[0m  [2m<1s[22m
-[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠧[0m web [2m(2/3)[22m  [2m1s[22m
-  [36m⠧[0m api [2m(3/3)[22m  [2m1s[22m
-[3A[J[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠧[0m web [2m(2/3)[22m  [2m1s[22m
-    [36m⠋[0m 2 superseded objects [2m(6/6)[22m  [2m<1s[22m
-  [36m⠧[0m api [2m(3/3)[22m  [2m1s[22m
-[4A[J    [32m✓ 2 superseded objects[0m  [2m<1s[22m
-[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠧[0m web [2m(2/3)[22m  [2m1s[22m
-  [36m⠧[0m api [2m(3/3)[22m  [2m1s[22m
-[3A[J  [32m✓ web[0m  [2m1s[22m
-[36m⠧[0m Provisioning  [2m1s[22m
-  [36m⠧[0m api [2m(3/3)[22m  [2m1s[22m
-[2A[J  [32m✓ api[0m  [2m1s[22m
-[36m⠧[0m Provisioning  [2m1s[22m
-[1A[J[32m✓ Provisioning[0m  [2m1s[22m
-[36m⠋[0m Reconciling the cloudfront edge  [2m<1s[22m  [2m— invalidating /*[22m
-[1A[J[36m⠙[0m Reconciling the cloudfront edge  [2m<1s[22m  [2m— invalidating /*[22m
-[1A[J[36m⠹[0m Reconciling the cloudfront edge  [2m<1s[22m  [2m— invalidating /*[22m
-[1A[J[36m⠸[0m Reconciling the cloudfront edge  [2m<1s[22m  [2m— invalidating /*[22m
-[1A[J[36m⠼[0m Reconciling the cloudfront edge  [2m<1s[22m  [2m— invalidating /*[22m
-[1A[J[32m✓ Reconciling the cloudfront edge[0m  [2m<1s[22m
-[36m⠋[0m Promoting  [2m<1s[22m
-[1A[J[36m⠙[0m Promoting  [2m<1s[22m
-[1A[J[32m✓ Promoting[0m  [2m<1s[22m
-
+[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+[1A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+[1A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[2A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠋[0m [1mweb[22m  [2m<1s[22m
+[3A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+[3A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+[36m⠋[0m [1mapi[22m  [2m<1s[22m
+[4A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+[36m⠋[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[4A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m▲ Next.js 15.4.2[22m
+[36m⠋[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m   Creating an optimized production build ...[22m
+[36m⠋[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m ✓ Compiled successfully[22m
+[36m⠋[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠋[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠋[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m   Generating static pages (28/28)[22m
+[36m⠋[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m   Generating static pages (28/28)[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m   Bundling server for the lambda target ...[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m   Bundling server for the lambda target ...[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠙[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠙[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mRoute (app)                     Size     First Load JS[22m
+[36m⠙[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠹[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠹[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mRoute (app)                     Size     First Load JS[22m
+[36m⠹[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠹[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠹[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m┌ ○ /                           1.2 kB        94.3 kB[22m
+[36m⠹[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠹[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠹[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m├ ● /blog/[slug]                  842 B        92.1 kB[22m
+[36m⠹[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠹[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠹[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠹[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+[5A[J[36m⠹[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠹[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠹[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mgo: building bootstrap for linux/arm64[22m
+[6A[J[36m⠸[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠸[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠸[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mgo: building bootstrap for linux/arm64[22m
+[6A[J[36m⠼[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠼[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mgo: building bootstrap for linux/arm64[22m
+[6A[J[36m⠼[0m [1mshared infrastructure[22m  [2m<1s[22m
+    [2maws:secretsmanager/SecretVersion acme-prod/env[22m
+[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠼[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mgo: building bootstrap for linux/arm64[22m
+[6A[J
+[32;1m✓[0;22m [32;1mshared infrastructure[0;22m  [2m<1s[22m
+    [32m✓[0m aws:secretsmanager/SecretVersion acme-prod/env  [2m<1s[22m
+[36m⠼[0m [1mshared infrastructure[22m  [2m<1s[22m
+[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠼[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mgo: building bootstrap for linux/arm64[22m
+[5A[J[36m⠼[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠼[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mgo: building bootstrap for linux/arm64[22m
+[4A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠴[0m [1mapi[2m › [22mbuilding[22m  [2m<1s[22m
+    [2mgo: building bootstrap for linux/arm64[22m
+[4A[J
+[32;1m✓[0;22m [32;1mapi › building[0;22m  [2m<1s[22m
+    go: building bootstrap for linux/arm64
+[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠴[0m [1mapi[22m  [2m<1s[22m
+[3A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠴[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+[3A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠴[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip[22m
+[4A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠴[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip  [░░░░░░░░░░░░] 0/9[22m
+[4A[J[36m⠴[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠴[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip  [████░░░░░░░░] 3/9[22m
+[4A[J[36m⠦[0m [1mweb[2m › [22mbuilding[22m  [2m<1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠦[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip  [████░░░░░░░░] 3/9[22m
+[4A[J[36m⠦[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠦[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip  [████████░░░░] 6/9[22m
+[4A[J[36m⠧[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠧[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip  [████████░░░░] 6/9[22m
+[4A[J[36m⠧[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠧[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip  [████████████] 9/9[22m
+[4A[J[36m⠧[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠧[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip  [████████████] 9/9[22m
+[4A[J[36m⠧[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠧[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠇[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠇[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠇[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠇[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠏[0m [1mweb[2m › [22mbuilding[22m  [2m1s[22m
+    [2m└ λ /api/revalidate               128 B        87.4 kB[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J
+[32;1m✓[0;22m [32;1mweb › building[0;22m  [2m1s[22m
+    ▲ Next.js 15.4.2
+       Creating an optimized production build ...
+     ✓ Compiled successfully
+       Generating static pages (28/28)
+       Bundling server for the lambda target ...
+    
+    Route (app)                     Size     First Load JS
+    ┌ ○ /                           1.2 kB        94.3 kB
+    ├ ● /blog/[slug]                  842 B        92.1 kB
+    └ λ /api/revalidate               128 B        87.4 kB
+[36m⠏[0m [1mweb[22m  [2m1s[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[3A[J[36m⠏[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[3A[J[36m⠏[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/server.zip[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠏[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/server.zip  [░░░░░░░░░░░░] 0/18[22m
+[36m⠏[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠋[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/server.zip  [░░░░░░░░░░░░] 0/18[22m
+[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠋[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/server.zip  [██░░░░░░░░░░] 4/18[22m
+[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠋[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/server.zip  [█████░░░░░░░] 8/18[22m
+[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠙[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/server.zip  [█████░░░░░░░] 8/18[22m
+[36m⠙[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠙[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/server.zip  [████████░░░░] 12/18[22m
+[36m⠙[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠙[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/server.zip  [██████████░░] 16/18[22m
+[36m⠙[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠹[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/server.zip  [██████████░░] 16/18[22m
+[36m⠹[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠹[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/server.zip  [██████████░░] 16/18[22m
+[36m⠹[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠹[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/assets.tar[22m
+[36m⠹[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠹[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/assets.tar[22m
+[36m⠹[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:iam/Role acme-prod-api-fn[22m
+[4A[J[36m⠹[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/assets.tar[22m
+[36m⠹[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:lambda/Function acme-prod-api[22m
+[4A[J[36m⠸[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/assets.tar[22m
+[36m⠸[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:lambda/Function acme-prod-api[22m
+[4A[J[36m⠸[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/assets.tar[22m
+[36m⠸[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:lambda/Function acme-prod-api[22m
+[4A[J[36m⠸[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/assets.tar[22m
+[36m⠸[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:apigatewayv2/Route ANY /api/{proxy+}[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/assets.tar[22m
+[36m⠼[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:apigatewayv2/Route ANY /api/{proxy+}[22m
+[4A[J[36m⠼[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/assets.tar[22m
+[36m⠼[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:apigatewayv2/Route ANY /api/{proxy+}[22m
+[4A[J
+[32;1m✓[0;22m [32;1mapi › provisioning[0;22m  [2m1s[22m
+    [32m✓[0m aws:s3/BucketObjectv2 api/8f3c1a/bootstrap.zip  [2m<1s[22m
+    [32m✓[0m aws:iam/Role acme-prod-api-fn  [2m<1s[22m
+    [32m✓[0m aws:lambda/Function acme-prod-api  [2m<1s[22m
+    [32m✓[0m aws:apigatewayv2/Route ANY /api/{proxy+}  [2m<1s[22m
+[36m⠼[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/assets.tar[22m
+[36m⠼[0m [1mapi[22m  [2m1s[22m
+[3A[J[36m⠼[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/assets.tar[22m
+[2A[J[36m⠼[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/prerender.tar[22m
+[2A[J[36m⠴[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/prerender.tar[22m
+[2A[J[36m⠴[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:s3/BucketObjectv2 web/8f3c1a/prerender.tar[22m
+[2A[J[36m⠴[0m [1mweb[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2maws:lambda/Function acme-prod-web[22m
+[2A[J[36m⠦[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:lambda/Function acme-prod-web[22m
+[2A[J[36m⠦[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:lambda/Function acme-prod-web[22m
+[2A[J[36m⠦[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:lambda/Alias acme-prod-web:live[22m
+[2A[J[36m⠧[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:lambda/Alias acme-prod-web:live[22m
+[2A[J[36m⠧[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2maws:lambda/Alias acme-prod-web:live[22m
+[2A[J[36m⠧[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mreclaiming 2 superseded objects[22m
+[2A[J[36m⠇[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mreclaiming 2 superseded objects[22m
+[2A[J[36m⠇[0m [1mweb[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mreclaiming 2 superseded objects[22m
+[2A[J
+[32;1m✓[0;22m [32;1mweb › provisioning[0;22m  [2m1s[22m
+    [32m✓[0m aws:s3/BucketObjectv2 web/8f3c1a/server.zip  [2m<1s[22m
+    [32m✓[0m aws:s3/BucketObjectv2 web/8f3c1a/assets.tar  [2m<1s[22m
+    [32m✓[0m aws:s3/BucketObjectv2 web/8f3c1a/prerender.tar  [2m<1s[22m
+    [32m✓[0m aws:lambda/Function acme-prod-web  [2m<1s[22m
+    [32m✓[0m aws:lambda/Alias acme-prod-web:live  [2m<1s[22m
+    [32m✓[0m reclaiming 2 superseded objects  [2m<1s[22m
+[36m⠇[0m [1mweb[22m  [2m1s[22m
+[1A[J[36m⠋[0m [1mcloudfront edge[22m  [2m<1s[22m
+[1A[J[36m⠋[0m [1mcloudfront edge[22m  [2m<1s[22m
+    [2minvalidating /*[22m
+[2A[J[36m⠙[0m [1mcloudfront edge[22m  [2m<1s[22m
+    [2minvalidating /*[22m
+[2A[J[36m⠹[0m [1mcloudfront edge[22m  [2m<1s[22m
+    [2minvalidating /*[22m
+[2A[J[36m⠸[0m [1mcloudfront edge[22m  [2m<1s[22m
+    [2minvalidating /*[22m
+[2A[J
+[32;1m✓[0;22m [32;1mcloudfront edge[0;22m  [2m<1s[22m
+[36m⠸[0m [1mcloudfront edge[22m  [2m<1s[22m
+[1A[J[36m⠋[0m [1mpromotion[22m  [2m<1s[22m
+[1A[J[36m⠋[0m [1mpromotion[22m  [2m<1s[22m
+[1A[J[36m⠙[0m [1mpromotion[22m  [2m<1s[22m
+[1A[J
+[32;1m✓[0;22m [32;1mpromotion[0;22m  [2m<1s[22m
+[36m⠙[0m [1mpromotion[22m  [2m<1s[22m
+[1A[J
 [32;1m✓ Deployed acme to production in 2s
 [0m
 [36;1m  https://acme.example.com
