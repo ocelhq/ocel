@@ -90,8 +90,8 @@ func TestLiveAKeyTheUserHoldsOpensTheSession(t *testing.T) {
 	}
 	defer live.Close()
 
-	if live.Fingerprint() != key.Fingerprint {
-		t.Errorf("Fingerprint() = %s, want the key known_hosts holds, %s", live.Fingerprint(), key.Fingerprint)
+	if live.HostKey().Fingerprint != key.Fingerprint {
+		t.Errorf("Fingerprint() = %s, want the key known_hosts holds, %s", live.HostKey().Fingerprint, key.Fingerprint)
 	}
 	if want := os.Getenv("OCEL_INCUS_USER") + "@" + alias; live.Destination().Principal() != want {
 		t.Errorf("Principal() = %q, want %q", live.Destination().Principal(), want)
@@ -147,8 +147,8 @@ func TestLiveAChangedHostKeyIsTerminal(t *testing.T) {
 	if trust.Got.Fingerprint != offered.Fingerprint || trust.Want.Fingerprint != other.Fingerprint {
 		t.Errorf("Open() refused with got %s want %s, want %s and %s", trust.Got.Fingerprint, trust.Want.Fingerprint, offered.Fingerprint, other.Fingerprint)
 	}
-	if !strings.Contains(trust.Remedy(), "ssh-keygen -R "+h.addr) {
-		t.Errorf("Remedy() = %q, want the ssh-keygen -R line for this host", trust.Remedy())
+	if !strings.Contains(trust.Remedy, "ssh-keygen -R "+h.addr) {
+		t.Errorf("Remedy() = %q, want the ssh-keygen -R line for this host", trust.Remedy)
 	}
 }
 

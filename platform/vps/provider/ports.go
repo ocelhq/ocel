@@ -61,15 +61,15 @@ func (c credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 	dest := live.Destination()
 	return providerkit.Identity{
 		Provider:  Vendor,
-		Account:   live.Fingerprint(),
+		Account:   live.HostKey().Fingerprint,
 		Principal: dest.Principal(),
-		Details: details(
-			"address", fmt.Sprintf("%s port %d", dest.Address, dest.Port),
-			"host key", live.HostKey().Type,
-			"os", facts.OS,
-			"arch", facts.Arch,
-			"elevation", elevation(facts),
-		),
+		Details: named([]providerkit.Detail{
+			{Label: "address", Value: fmt.Sprintf("%s port %d", dest.Address, dest.Port)},
+			{Label: "host key", Value: live.HostKey().Type},
+			{Label: "os", Value: facts.OS},
+			{Label: "arch", Value: facts.Arch},
+			{Label: "elevation", Value: elevation(facts)},
+		}),
 	}, nil
 }
 
@@ -80,13 +80,12 @@ func elevation(facts session.Facts) string {
 	return "sudo without a password"
 }
 
-func details(pairs ...string) []providerkit.Detail {
+func named(details []providerkit.Detail) []providerkit.Detail {
 	var out []providerkit.Detail
-	for at := 0; at+1 < len(pairs); at += 2 {
-		if pairs[at+1] == "" {
-			continue
+	for _, detail := range details {
+		if detail.Value != "" {
+			out = append(out, detail)
 		}
-		out = append(out, providerkit.Detail{Label: pairs[at], Value: pairs[at+1]})
 	}
 	return out
 }

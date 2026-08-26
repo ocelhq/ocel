@@ -32,6 +32,7 @@ type HostTrust struct {
 	Got        HostKey
 	Want       HostKey
 	KnownHosts []string
+	Remedy     string
 }
 
 func (t HostTrust) Terminal() bool { return t.Reason == HostKeyMismatch }
@@ -47,46 +48,18 @@ func (t HostTrust) Where() string {
 	return fmt.Sprintf("%s port %d", place, t.Port)
 }
 
-func (t HostTrust) Remedy() string {
-	if t.Reason == HostKeyMismatch {
-		return fmt.Sprintf("ssh-keygen -R %s -f %s", t.entry(), t.trustStore())
-	}
-	return fmt.Sprintf("ssh-keyscan -p %d %s >> %s", t.port(), t.Address, t.trustStore())
-}
-
-func (t HostTrust) trustStore() string {
-	if len(t.KnownHosts) == 0 {
-		return "~/.ssh/known_hosts"
-	}
-	return t.KnownHosts[0]
-}
-
-func (t HostTrust) entry() string {
-	if t.port() == 22 {
-		return t.Address
-	}
-	return fmt.Sprintf("'[%s]:%d'", t.Address, t.Port)
-}
-
-func (t HostTrust) port() int {
-	if t.Port == 0 {
-		return 22
-	}
-	return t.Port
-}
-
 func (t HostTrust) Message() string {
 	var b strings.Builder
 	if t.Reason == HostKeyMismatch {
 		fmt.Fprintf(&b, "the host key for %s changed", t.Where())
 		fmt.Fprintf(&b, "\n  got  %s %s", t.Got.Type, t.Got.Fingerprint)
 		fmt.Fprintf(&b, "\n  want %s %s, held in %s", t.Want.Type, t.Want.Fingerprint, strings.Join(t.KnownHosts, ", "))
-		fmt.Fprintf(&b, "\nEither that machine was rebuilt or something sits between you and it.\nIf it was rebuilt, drop the old key and try again:\n  %s", t.Remedy())
+		fmt.Fprintf(&b, "\nEither that machine was rebuilt or something sits between you and it.\nIf it was rebuilt, drop the old key and try again:\n  %s", t.Remedy)
 		return b.String()
 	}
 	fmt.Fprintf(&b, "the host key for %s is in none of %s", t.Where(), strings.Join(t.KnownHosts, ", "))
 	fmt.Fprintf(&b, "\n  %s %s", t.Got.Type, t.Got.Fingerprint)
-	fmt.Fprintf(&b, "\nCheck that fingerprint against the machine itself, then record it:\n  %s", t.Remedy())
+	fmt.Fprintf(&b, "\nCheck that fingerprint against the machine itself, then record it:\n  %s", t.Remedy)
 	return b.String()
 }
 
@@ -139,7 +112,7 @@ func HostTrustProto(trust HostTrust) *contractv1.HostTrustRefusal {
 		Got:        hostKeyProto(trust.Got),
 		Want:       hostKeyProto(trust.Want),
 		KnownHosts: trust.KnownHosts,
-		Remedy:     trust.Remedy(),
+		Remedy:     trust.Remedy,
 	}
 }
 
@@ -158,6 +131,7 @@ func hostTrustFrom(carried *contractv1.HostTrustRefusal) HostTrust {
 		Got:        hostKeyFrom(carried.GetGot()),
 		Want:       hostKeyFrom(carried.GetWant()),
 		KnownHosts: carried.GetKnownHosts(),
+		Remedy:     carried.GetRemedy(),
 	}
 	for reason, encoded := range hostTrustReasons {
 		if encoded == carried.GetReason() {
