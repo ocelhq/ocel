@@ -69,6 +69,8 @@ const FakeEnabledFeaturesEnvVar = "OCEL_TEST_FAKE_ENABLED_FEATURES"
 
 const FakeBootstrapEnvVar = "OCEL_TEST_FAKE_BOOTSTRAP"
 
+const FakePreviewBootstrapEnvVar = "OCEL_TEST_FAKE_PREVIEW_BOOTSTRAP"
+
 const FakeBootstrapPlanEnvVar = "OCEL_TEST_FAKE_BOOTSTRAP_PLAN"
 
 const FakeDescribeJournalEnvVar = "OCEL_TEST_FAKE_DESCRIBE_JOURNAL"
@@ -504,7 +506,10 @@ func journalPlanBootstrap(req *contractv1.PlanBootstrapRequest) {
 
 func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
 	shape := os.Getenv(FakeBootstrapEnvVar)
-	if shape == "" || tier == environmentv1.Tier_TIER_PREVIEW {
+	if tier == environmentv1.Tier_TIER_PREVIEW {
+		shape = os.Getenv(FakePreviewBootstrapEnvVar)
+	}
+	if shape == "" {
 		return &contractv1.BootstrapStatus{Tier: tier, RequiredSchema: 1, Writer: "1.4.0"}
 	}
 	status := &contractv1.BootstrapStatus{
