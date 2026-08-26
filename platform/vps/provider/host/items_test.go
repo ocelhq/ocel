@@ -209,8 +209,9 @@ func TestDestroyOfAHalfWrittenHostNamesWhatStandsAndNothingBeside(t *testing.T) 
 			t.Errorf("destroy takes %s %s off a host that never had it, and an apply that died halfway needs no mode of its own", r.kind, r.path)
 		}
 	}
-	if last := taken[len(taken)-1]; last.path != classRoot {
-		t.Errorf("destroy of a half-written host ends at %s, want the shared root taken after the class tier beneath it", last.path)
+	if last := index(taken, classRoot); last != len(taken)-1 {
+		t.Errorf("destroy of a half-written host takes %s at %d of %d rows, want the shared root taken after the class tier beneath it",
+			classRoot, last, len(taken))
 	}
 	if index(taken, ClassDir(production)) > index(taken, classRoot) {
 		t.Error("the class directory carrying the stamp is taken after the root above it, so an interrupted destroy loses what the host says it is")

@@ -120,7 +120,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 		t.Errorf("known_hosts changed under a destroy, and ocel never edits the trust store its user owns:\nbefore %q\nafter  %q", before, after)
 	}
 
-	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active docker.service")); active != "active" {
+	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active docker.service || true")); active != "active" {
 		t.Errorf("docker.service is %q after a destroy, want a daemon that still serves the workloads on this host", active)
 	}
 	if !vm.running(t, workload) {
@@ -185,6 +185,9 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	if err != nil {
 		t.Fatalf("Describe(%s) after destroying its sibling = %v", preview, err)
 	}
+	if len(standing.Stacks) != 1 {
+		t.Fatalf("Describe(%s) carries %d stacks after its sibling was destroyed, want the one this host stands up", preview, len(standing.Stacks))
+	}
 	if !standing.Present || !standing.Stacks[0].DigestCurrent {
 		t.Errorf("Describe(%s) = %+v after its sibling was destroyed, want a class untouched by a destroy beside it", preview, standing.Stacks)
 	}
@@ -214,7 +217,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 		t.Errorf("%s still stands as %q after the last class went", deployLogin, entry)
 	}
 
-	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active docker.service")); active != "active" {
+	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active docker.service || true")); active != "active" {
 		t.Errorf("docker.service is %q after both classes went, want the engine ocel never prunes", active)
 	}
 	if !vm.running(t, workload) {

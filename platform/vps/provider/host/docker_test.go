@@ -221,8 +221,11 @@ func TestDestroyKeepsTheEngineWhicheverClassIsTheLastOne(t *testing.T) {
 			t.Errorf("destroying %s keeps %s and never says why it stays", name, dockerEngine)
 		}
 		for _, r := range taken {
-			if r.action == providerkit.ActionDelete && (r.path == dockerEngine || r.path == dockerUnit) {
+			if r.action == providerkit.ActionDelete && r.path == dockerEngine {
 				t.Errorf("destroying %s takes %s, and a host loses the engine every container it runs needs", name, r.path)
+			}
+			if r.path == dockerUnit {
+				t.Errorf("destroying %s plans %q over %s, and the unit that starts the engine is not ocel's to touch", name, r.action, dockerUnit)
 			}
 		}
 	}
