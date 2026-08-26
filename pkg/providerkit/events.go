@@ -96,10 +96,12 @@ func streamed(
 	do func(*eventSender, Reporter) error,
 ) error {
 	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
-		root := UnitStage(unit, title)
-		working := PhaseStage(unit, phase)
-		newEventTracer(sender).DeclareStages(root, working)
-		if err := do(sender, newReporter(sender, working)); err != nil {
+		err := newStageScope(sender).unit(UnitStage(unit, title), func(u *unitRun) error {
+			return u.phase(phase, func(report Reporter) error {
+				return do(sender, report)
+			})
+		})
+		if err != nil {
 			return nil, err
 		}
 		return okResult(), nil

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -189,6 +190,53 @@ func ClassifyError(err error) string {
 	default:
 		return ErrorKindFailed
 	}
+}
+
+type stageScope struct {
+	sender *eventSender
+	tracer *eventTracer
+
+	mu       sync.Mutex
+	declared map[StageID]bool
+}
+
+func newStageScope(sender *eventSender) *stageScope {
+	return &stageScope{sender: sender, tracer: newEventTracer(sender), declared: map[StageID]bool{}}
+}
+
+func (s *stageScope) declare(stages ...Stage) {
+	s.mu.Lock()
+	var fresh []Stage
+	for _, stage := range stages {
+		if !s.declared[stage.ID] {
+			s.declared[stage.ID] = true
+			fresh = append(fresh, stage)
+		}
+	}
+	s.mu.Unlock()
+	s.tracer.DeclareStages(fresh...)
+}
+
+func (s *stageScope) unit(stage Stage, do func(*unitRun) error) error {
+	s.declare(stage)
+	start := time.Now()
+	err := do(&unitRun{scope: s, stage: stage})
+	s.tracer.Span(stage.ID, stage.ParentID, stage.Title, start, time.Now(), err)
+	return err
+}
+
+type unitRun struct {
+	scope *stageScope
+	stage Stage
+}
+
+func (u *unitRun) phase(phase progressv1.Phase, do func(Reporter) error) error {
+	working := PhaseStage(u.stage.Name, phase)
+	u.scope.declare(working)
+	start := time.Now()
+	err := do(newReporter(u.scope.sender, working))
+	u.scope.tracer.Span(working.ID, working.ParentID, working.Title, start, time.Now(), err)
+	return err
 }
 
 type eventTracer struct {
