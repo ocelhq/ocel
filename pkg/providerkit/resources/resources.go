@@ -100,6 +100,9 @@ type fanout struct {
 }
 
 func (f *fanout) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
+	if err := f.serves(plan); err != nil {
+		return providerkit.Plan{}, err
+	}
 	recorded, err := f.recorded(ctx, plan.Ref)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -120,6 +123,9 @@ func standing(recorded providerkit.Stack) providerkit.StackResult {
 }
 
 func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+	if err := f.serves(plan); err != nil {
+		return providerkit.StackResult{}, err
+	}
 	recorded, err := f.recorded(ctx, plan.Ref)
 	if err != nil {
 		return providerkit.StackResult{}, err
@@ -154,17 +160,34 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 }
 
 func (f *fanout) provision(ctx context.Context, plan providerkit.StackPlan, resource providerkit.Resource, report providerkit.Reporter) (providerkit.Link, error) {
+	serving, err := f.serving(resource)
+	if err != nil {
+		return providerkit.Link{}, err
+	}
 	in := Instruction{Ref: plan.Ref, Tags: plan.Tags, Links: plan.Links, Resource: resource}
-	for _, primitive := range primitives {
-		if primitive.kind != resource.Type {
+	return serving.call(f.impl, ctx, in, report)
+}
+
+func (f *fanout) serves(plan providerkit.StackPlan) error {
+	for _, resource := range plan.Resources {
+		if _, err := f.serving(resource); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *fanout) serving(resource providerkit.Resource) (primitive, error) {
+	for _, serving := range primitives {
+		if serving.kind != resource.Type {
 			continue
 		}
-		if !primitive.servedBy(f.impl) {
+		if !serving.servedBy(f.impl) {
 			break
 		}
-		return primitive.call(f.impl, ctx, in, report)
+		return serving, nil
 	}
-	return providerkit.Link{}, providerkit.Refuse(providerkit.CodeInvalid,
+	return primitive{}, providerkit.Refuse(providerkit.CodeInvalid,
 		"resource %s is a %s, and this provider serves %s",
 		resource.Name, resource.Type, served(Serves(f.impl)))
 }

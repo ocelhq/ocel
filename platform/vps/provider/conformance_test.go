@@ -1,11 +1,14 @@
 package vps_test
 
 import (
+	"context"
+	"errors"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -46,6 +49,30 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 		if held {
 			t.Errorf("the root carries %s, which the optional-set tier must be told to expect on it", name)
 		}
+	}
+}
+
+func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	release := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).Releases()
+	plan := providerkit.StackPlan{
+		Ref: providerkit.StackRef{
+			Project: "shop",
+			Class:   providerkit.ClassProduction,
+			Name:    naming.InfraStack("prod"),
+		},
+		Kind:      providerkit.StackInfra,
+		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.LinkPostgres}},
+	}
+
+	var refusal providerkit.Refusal
+	if _, err := release.Plan(ctx, plan, nil); !errors.As(err, &refusal) {
+		t.Errorf("Plan() of a resource this provider serves none of = %v, want a refusal", err)
+	}
+	if _, err := release.Provision(ctx, plan, nil); !errors.As(err, &refusal) {
+		t.Errorf("Provision() of a resource this provider serves none of = %v, want a refusal rather than a release that reads as done", err)
 	}
 }
 

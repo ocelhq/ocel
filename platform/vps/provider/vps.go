@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -149,13 +150,13 @@ func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
 
 func (p *Provider) Target() Target { return p.options.SSH }
 
-func (p *Provider) Serves() []providerkit.LinkType { return nil }
+func (p *Provider) Serves() []providerkit.LinkType { return resources.Serves(p) }
 
 func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
 	return host.Bootstrap(p.host), nil
 }
 
-func (p *Provider) Releases() providerkit.Releaser { return releaser{} }
+func (p *Provider) Releases() providerkit.Releaser { return resources.Releaser(p.records, p) }
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return p.artifacts }
 

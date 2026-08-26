@@ -10,24 +10,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-type releaser struct{}
-
-func (releaser) Plan(context.Context, providerkit.StackPlan, providerkit.Reporter) (providerkit.Plan, error) {
-	return providerkit.Plan{}, nil
-}
-
-func (releaser) Provision(context.Context, providerkit.StackPlan, providerkit.Reporter) (providerkit.StackResult, error) {
-	return providerkit.StackResult{}, nil
-}
-
-func (releaser) PlanDestroy(context.Context, providerkit.StackRef, providerkit.Reporter) (providerkit.Plan, error) {
-	return providerkit.Plan{}, nil
-}
-
-func (releaser) Destroy(context.Context, providerkit.StackRef, providerkit.Reporter) error {
-	return nil
-}
-
 type credentials struct{ provider *Provider }
 
 func (c credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
@@ -111,7 +93,6 @@ func (dns) Open(kind providerkit.DNSKind, _ string) (edge.DNSWriter, error) {
 }
 
 var (
-	_ providerkit.Releaser     = releaser{}
 	_ providerkit.Credentials  = credentials{}
 	_ providerkit.EdgeRegistry = edges{}
 	_ providerkit.DNSRegistry  = dns{}

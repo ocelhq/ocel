@@ -717,12 +717,16 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, serves []providerk
 	})
 
 	t.Run("a refusal names a code the CLI can render", func(t *testing.T) {
-		_, err := releaser.Provision(ctx, providerkit.StackPlan{
+		unserved := providerkit.StackPlan{
 			Ref:       ref,
 			Kind:      providerkit.StackInfra,
 			Resources: []providerkit.Resource{{Name: "unserved", Type: "no-such-primitive"}},
-		}, nil)
+		}
+		result, err := releaser.Provision(ctx, unserved, nil)
 		if err == nil {
+			if len(result.Links) == 0 {
+				t.Fatal("Provision() of a primitive this provider does not serve stood nothing up and refused nothing, so a release reads as done where nothing happened")
+			}
 			if derr := releaser.Destroy(ctx, ref, nil); derr != nil {
 				t.Fatal(derr)
 			}
@@ -737,6 +741,9 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, serves []providerk
 			refusal.Code,
 		) {
 			t.Errorf("Provision() refused with code %q, which is none the kit maps", refusal.Code)
+		}
+		if planned, err := releaser.Plan(ctx, unserved, nil); err == nil {
+			t.Errorf("Plan() showed %+v for a release its own provision refuses, and the plan is the diff the apply runs", planned.Groups)
 		}
 	})
 }
