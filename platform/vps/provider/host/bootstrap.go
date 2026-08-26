@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -125,6 +126,12 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 		}
 	}
 
+	if req.Unattended {
+		if err := admitReplacements(standing, items); err != nil {
+			return err
+		}
+	}
+
 	stamp := Stamp{
 		Schema:  providerkit.BootstrapSchema,
 		State:   StateApplying,
@@ -159,6 +166,22 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	}
 	stamp.State, stamp.Seal = StateComplete, minted.Seal
 	return b.host.Stamp(ctx, req.Class, stamp)
+}
+
+func admitReplacements(read Reading, items []Item) error {
+	var over []string
+	for _, item := range items {
+		if !read.current(item) && read.standing(item.Kind, item.Name) {
+			over = append(over, item.ID())
+		}
+	}
+	if len(over) == 0 {
+		return nil
+	}
+	return providerkit.Refuse(providerkit.CodeNotReady,
+		"%s already stands as something other than what ocel writes, so this apply would write over it rather than install it, and nothing here is present to accept that.\n"+
+			"Re-run with --yes to write it anyway",
+		strings.Join(over, ", "))
 }
 
 func (r Reading) adopting() error {
