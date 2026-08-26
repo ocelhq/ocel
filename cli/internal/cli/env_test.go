@@ -75,7 +75,7 @@ export {};
 
 func setUpDeclaringFixture(t *testing.T, definitions string) (root, log string) {
 	t.Helper()
-	root = setUpEnvGateFixtureWith(t, "[]", envDeclaringScript(definitions))
+	root = clitest.SetUpEnvGateFixtureWith(t, "[]", envDeclaringScript(definitions))
 	log = filepath.Join(t.TempDir(), "discovery.log")
 	t.Setenv("OCEL_TEST_DISCOVERY_LOG", log)
 	return root, log
@@ -196,7 +196,7 @@ func TestRunEnvSet(t *testing.T) {
 	})
 
 	t.Run("refuses a root value for a scoped key", func(t *testing.T) {
-		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
+		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newDeps(), root, "POSTHOG_ID", "ph_root", envOptions{}, &stdout, &stderr)
@@ -211,7 +211,7 @@ func TestRunEnvSet(t *testing.T) {
 	})
 
 	t.Run("refuses a scoped key in a folder it does not name", func(t *testing.T) {
-		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), newDeps(), root, "POSTHOG_ID", "ph", envOptions{folder: "/admin"}, &stdout, &stderr)
@@ -224,7 +224,7 @@ func TestRunEnvSet(t *testing.T) {
 	})
 
 	t.Run("accepts a scoped key in a folder it names", func(t *testing.T) {
-		root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
 		if out := envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"}); !strings.Contains(out, "/web") {
 			t.Errorf("set stdout = %q, want the folder it wrote named", out)
@@ -232,7 +232,7 @@ func TestRunEnvSet(t *testing.T) {
 	})
 
 	t.Run("leaves an unscoped key writable at root and in a folder", func(t *testing.T) {
-		root := setUpEnvGateFixture(t, `[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+		root := clitest.SetUpEnvGateFixture(t, `[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 
 		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
 		envSet(t, root, "LOG_LEVEL", "debug", envOptions{folder: "/web"})
@@ -279,7 +279,7 @@ func TestRunEnvSet(t *testing.T) {
 	})
 
 	t.Run("does not trust a cached absence for a conditionally scoped key", func(t *testing.T) {
-		root := setUpEnvGateFixtureWith(t, "[]", envDeclareOnlyScript)
+		root := clitest.SetUpEnvGateFixtureWith(t, "[]", clitest.EnvDeclareOnlyScript)
 
 		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
 

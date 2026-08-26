@@ -2,18 +2,24 @@ package clitest
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
@@ -27,6 +33,8 @@ func NewDeps() cmddeps.Deps {
 		BuildApp:            appbuilder.Build,
 		CollectAppFunctions: appbuilder.CollectFunctions,
 		DeploymentID:        appbuilder.DeploymentID,
+		CollectDeclarations: deploycollector.Collect,
+		ServeVarsUI:         envwire.ServeVarsUI,
 		DiscoverPRNumber:    func() string { return os.Getenv("OCEL_PR_NUMBER") },
 		StdinIsTerminal:     func(io.Reader) bool { return false },
 		StdoutIsTerminal:    deployui.IsTerminal,
@@ -36,6 +44,41 @@ func NewDeps() cmddeps.Deps {
 		Interrupt: func(ctx context.Context, _ io.Writer) (context.Context, context.CancelFunc) {
 			return context.WithCancel(ctx)
 		},
+	}
+}
+
+func WritePrebuiltFunction(t *testing.T, root, app, route string) {
+	t.Helper()
+	dir := filepath.Join(root, ".ocel", "output", "apps", app, "functions", route+".func")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	config, err := json.Marshal(map[string]string{
+		"runtime":   "nodejs24.x",
+		"handler":   "index.handler",
+		"framework": "express",
+		"app":       app,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), config, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func WaitForNoStaleSocket(t *testing.T, sockPath string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(sockPath); errors.Is(err, fs.ErrNotExist) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("stale socket file left behind at %s", sockPath)
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
+	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
@@ -148,7 +149,7 @@ func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.
 		return nil, err
 	}
 	reportUnreadableLines(stdout, file.Unreadable)
-	srv.UseValues(storeValues(projectEnv, file.Values), envScope(cfg, false, ""))
+	srv.UseValues(storeValues(projectEnv, file.Values), envwire.Scope(cfg, false, ""))
 	return discoverAndSync(ctx, srv, cfg, file.Values, stdout, stderr)
 }
 

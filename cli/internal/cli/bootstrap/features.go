@@ -11,6 +11,7 @@ import (
 	"charm.land/huh/v2"
 	"github.com/fatih/color"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/style"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -84,7 +85,7 @@ func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, standing
 		Value(&chosen)
 
 	err := huh.NewForm(huh.NewGroup(field)).
-		WithTheme(theme).
+		WithTheme(style.Theme).
 		RunWithContext(ctx)
 	if errors.Is(err, huh.ErrUserAborted) {
 		return nil, false, nil

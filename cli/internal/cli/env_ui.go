@@ -5,17 +5,15 @@ import (
 	"fmt"
 	"io"
 
-	connect "connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
-	"github.com/ocelhq/ocel/cli/node"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
 var envUICmd = &cobra.Command{
@@ -76,42 +74,6 @@ func serveAndOpenVarsUI(
 	return varsSession, nil
 }
 
-func serveVarsUI(
-	ctx context.Context,
-	cfg *projectconfig.Config,
-	runner *provider.Runner,
-	preview bool,
-	gate *envgate.Gate,
-) (*varsui.Session, error) {
-	assets, err := node.VarsUI()
-	if err != nil {
-		return nil, fmt.Errorf("read the bundled variables UI: %w", err)
-	}
-
-	store := runnerValues{
-		runner: runner,
-		slug:   cfg.Slug,
-		tier:   envTier(envOptions{preview: preview}),
-	}
-
-	var environments []string
-	if preview {
-		var err error
-		if environments, err = namedEnvironments(ctx, runner, cfg.Slug); err != nil {
-			return nil, err
-		}
-	}
-
-	return varsui.Serve(ctx, varsui.Options{
-		Assets:       assets,
-		Gate:         gate,
-		Store:        store,
-		Slug:         cfg.Slug,
-		Preview:      preview,
-		Environments: environments,
-	})
-}
-
 func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, opts envOptions, stderr io.Writer) (*envgate.Gate, error) {
 	gate := envGate(cfg, runner, opts)
 	if _, err := deploycollector.Collect(ctx, cfg, gate, io.Discard, stderr); err != nil {
@@ -121,71 +83,9 @@ func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *p
 }
 
 func envGate(cfg *projectconfig.Config, runner *provider.Runner, opts envOptions) *envgate.Gate {
-	return envgate.New(runnerValues{
-		runner: runner,
-		slug:   cfg.Slug,
-		tier:   envTier(opts),
-	}, envScope(cfg, opts.preview, ""))
-}
-
-func (v runnerValues) coordinate(at envgate.Address) *envvarsv1.Coordinate {
-	return &envvarsv1.Coordinate{Slug: v.slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
-}
-
-func (v runnerValues) Set(ctx context.Context, at envgate.Address, value string, expected *int64) error {
-	vars, err := v.runner.Vars()
-	if err != nil {
-		return err
-	}
-	_, err = vars.SetValue(ctx, &envvarsv1.SetValueRequest{
-		Tier:            v.tier,
-		Coordinate:      v.coordinate(at),
-		Value:           value,
-		ExpectedVersion: expected,
-	})
-	return staleOrBroken(err)
-}
-
-func (v runnerValues) Delete(ctx context.Context, at envgate.Address, expected *int64) error {
-	vars, err := v.runner.Vars()
-	if err != nil {
-		return err
-	}
-	_, err = vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
-		Tier:            v.tier,
-		Coordinate:      v.coordinate(at),
-		ExpectedVersion: expected,
-	})
-	return staleOrBroken(err)
-}
-
-func staleOrBroken(err error) error {
-	if err != nil && connect.CodeOf(err) == connect.CodeFailedPrecondition {
-		return varsui.ErrStaleValue
-	}
-	return err
-}
-
-func (v runnerValues) History(ctx context.Context, at envgate.Address) ([]varsui.Version, error) {
-	vars, err := v.runner.Vars()
-	if err != nil {
-		return nil, err
-	}
-	resp, err := vars.ListVersions(ctx, &envvarsv1.ListVersionsRequest{
-		Tier:       v.tier,
-		Coordinate: v.coordinate(at),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	versions := make([]varsui.Version, 0, len(resp.GetVersions()))
-	for _, entry := range resp.GetVersions() {
-		versions = append(versions, varsui.Version{
-			Version:   entry.GetVersion(),
-			CreatedAt: entry.GetCreatedAt(),
-			Size:      entry.GetSize(),
-		})
-	}
-	return versions, nil
+	return envgate.New(envwire.Values{
+		Runner: runner,
+		Slug:   cfg.Slug,
+		Tier:   envTier(opts),
+	}, envwire.Scope(cfg, opts.preview, ""))
 }

@@ -123,7 +123,7 @@ func TestRunDomainStatusJSON(t *testing.T) {
 	if len(written) != 1 || written[0] != "shop.app.com AAAA 100::" {
 		t.Errorf("json recordsWritten = %v, want the record ocel wrote", host["recordsWritten"])
 	}
-	waitForNoStaleSocket(t, sockPath)
+	clitest.WaitForNoStaleSocket(t, sockPath)
 }
 
 func TestRunDomain(t *testing.T) {
@@ -166,7 +166,7 @@ func TestRunDomain(t *testing.T) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("use without a dns prints the record to add", func(t *testing.T) {
@@ -189,7 +189,7 @@ func TestRunDomain(t *testing.T) {
 		if strings.Contains(out, "Writing") {
 			t.Errorf("stdout = %q, want no record written without a dns", out)
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("use with cloudflareDns writes the record", func(t *testing.T) {
@@ -217,7 +217,7 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("use refuses an argument that is not a leading wildcard", func(t *testing.T) {
@@ -255,7 +255,7 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("ls shows the certificate, the records and the last probe", func(t *testing.T) {
@@ -285,7 +285,7 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("ls says an unprobed domain has never been probed", func(t *testing.T) {
@@ -312,7 +312,7 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("ls says so when no global domain is configured", func(t *testing.T) {
@@ -332,7 +332,7 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("release refuses while projects still hold previews on the wildcard", func(t *testing.T) {
@@ -357,7 +357,7 @@ export default {
 		if strings.Contains(stdout.String(), "RELEASE DOMAIN") {
 			t.Errorf("stdout = %q, want nothing released while previews are still served", stdout.String())
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("release plans, then releases with --yes once nothing is served", func(t *testing.T) {
@@ -390,7 +390,7 @@ export default {
 		if strings.Index(out, "  DNS record") < strings.Index(out, "This cannot be undone.") {
 			t.Errorf("stdout listed a kept item among the doomed ones:\n%s", out)
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("add renders every step over the configured hosts", func(t *testing.T) {
@@ -426,7 +426,7 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("add with a host settles only that one", func(t *testing.T) {
@@ -456,7 +456,7 @@ export default {
 		if strings.Contains(out, "shop.app.com") {
 			t.Errorf("stdout = %q, want the host that was not named left out", out)
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("add exits non-zero when a wait times out, naming what is outstanding", func(t *testing.T) {
@@ -485,7 +485,7 @@ export default {
 				t.Errorf("rendered output = %q, want it to contain %q", rendered, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("add refuses a host the config does not declare", func(t *testing.T) {
@@ -556,7 +556,7 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("rm with a host unbinds it", func(t *testing.T) {
@@ -576,7 +576,7 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("status shows the certificate, the records, the probe and what serves each host", func(t *testing.T) {
@@ -608,7 +608,7 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("status --wait polls until every hostname is ready", func(t *testing.T) {
@@ -632,7 +632,7 @@ export default {
 		if strings.Contains(out, "PENDING") {
 			t.Errorf("stdout = %q, want only the settled status rendered", out)
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("status without --wait renders what is outstanding and does not poll", func(t *testing.T) {
@@ -654,7 +654,7 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("status says so when the project declares no production hostname", func(t *testing.T) {
@@ -671,7 +671,7 @@ export default {
 		if !strings.Contains(stdout.String(), "declares no domains.production") {
 			t.Errorf("stdout = %q, want it to say nothing is declared", stdout.String())
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("status --wait rides out a provider that is briefly unreachable", func(t *testing.T) {
@@ -692,7 +692,7 @@ export default {
 		if !strings.Contains(stdout.String(), "shop.app.com  READY") {
 			t.Errorf("stdout = %q, want the wait to reach ready", stdout.String())
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("status --wait gives up once the provider keeps failing", func(t *testing.T) {
@@ -711,7 +711,7 @@ export default {
 		if err == nil || !strings.Contains(err.Error(), "failed checks in a row") {
 			t.Fatalf("runDomainStatus --wait err = %v, want it to give up naming the repeated failures", err)
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("status --wait fails fast when the project declares no production hostname", func(t *testing.T) {
@@ -727,7 +727,7 @@ export default {
 		if err == nil || !strings.Contains(err.Error(), "nothing to wait for") {
 			t.Fatalf("runDomainStatus --wait err = %v, want it to refuse at once with nothing declared", err)
 		}
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("release refuses non-interactively without --yes", func(t *testing.T) {

@@ -36,7 +36,7 @@ func TestRunDeploymentsLs(t *testing.T) {
 			t.Errorf("stdout = %q, want promo-2 (newest) listed before promo-1", out)
 		}
 
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("it shows each app's shipped identity under an aligned column", func(t *testing.T) {
@@ -67,7 +67,7 @@ func TestRunDeploymentsLs(t *testing.T) {
 			t.Errorf("DEPLOYED column starts at %d in the header and %d in the row:\n%s", a, b, out)
 		}
 
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
@@ -119,7 +119,7 @@ func TestRunDeploymentsPrune(t *testing.T) {
 			t.Errorf("stdout = %q, want it to report the kept promotion count", out)
 		}
 
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
