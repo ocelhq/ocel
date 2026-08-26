@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -58,7 +59,7 @@ func TestRender(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Render("Proposed changes to the production bootstrap", mixedPlan())
+	changeplan.NewPrinter(&out, runui.Presentation{}).Render("Proposed changes to the production bootstrap", mixedPlan())
 
 	want := `Proposed changes to the production bootstrap:
 
@@ -132,7 +133,7 @@ func TestRenderNamesTheVendorAndLeavesTheKindUnsaid(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Render("Proposed changes to the production bootstrap", bootstrapPlan())
+	changeplan.NewPrinter(&out, runui.Presentation{}).Render("Proposed changes to the production bootstrap", bootstrapPlan())
 
 	want := `Proposed changes to the production bootstrap:
 
@@ -182,7 +183,7 @@ func TestRenderKeepsAnEdgeThatIsAlreadyCurrent(t *testing.T) {
 		},
 	}}
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Render("Proposed changes to the production bootstrap", plan)
+	changeplan.NewPrinter(&out, runui.Presentation{}).Render("Proposed changes to the production bootstrap", plan)
 
 	want := `Proposed changes to the production bootstrap:
 
@@ -211,7 +212,7 @@ func TestRenderLeavesAnEdgeWithNoFeatureUntagged(t *testing.T) {
 		},
 	}}
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Render("Proposed changes to the production bootstrap", plan)
+	changeplan.NewPrinter(&out, runui.Presentation{}).Render("Proposed changes to the production bootstrap", plan)
 
 	if strings.Contains(out.String(), "[core]") {
 		t.Errorf("Render() =\n%s\nwant an edge belonging to no feature not tagged as the core stack", out.String())
@@ -222,7 +223,7 @@ func TestRenderCountsAChildlessGroupAsOneItem(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Render("Proposed changes to the preview bootstrap", &contractv1.ChangePlan{
+	changeplan.NewPrinter(&out, runui.Presentation{}).Render("Proposed changes to the preview bootstrap", &contractv1.ChangePlan{
 		Groups: []*contractv1.ChangeGroup{
 			{Kind: "stack", Name: "ocel-preview-core", Action: contractv1.Change_ACTION_CREATE},
 			{Kind: "distribution", Name: "E1PREVIEW", Action: contractv1.Change_ACTION_DISABLE_THEN_DELETE, Slow: true},
@@ -248,7 +249,7 @@ func TestRenderTalliesNothingWhenEverythingIsKept(t *testing.T) {
 		{Kind: "stack", Name: "ocel-production-core", Action: contractv1.Change_ACTION_KEEP, Reason: "already current"},
 	}}
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Render("Proposed changes to the production bootstrap", plan)
+	changeplan.NewPrinter(&out, runui.Presentation{}).Render("Proposed changes to the production bootstrap", plan)
 
 	want := `Proposed changes to the production bootstrap:
 
@@ -266,7 +267,7 @@ func TestPrintSeparatesTheDoomedFromTheKept(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Print("This will permanently destroy production project \"shop\"", &contractv1.ChangePlan{
+	changeplan.NewPrinter(&out, runui.Presentation{}).Print("This will permanently destroy production project \"shop\"", &contractv1.ChangePlan{
 		EdgeKind: "cloudflare",
 		Groups: []*contractv1.ChangeGroup{
 			{Kind: "edge stack", Name: "shop", Action: contractv1.Change_ACTION_DELETE},
@@ -298,7 +299,7 @@ func TestPrintShowsAKeptGroupThatCarriesRows(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Print("This will permanently destroy production project \"shop\"", &contractv1.ChangePlan{
+	changeplan.NewPrinter(&out, runui.Presentation{}).Print("This will permanently destroy production project \"shop\"", &contractv1.ChangePlan{
 		Groups: []*contractv1.ChangeGroup{
 			{Kind: "edge stack", Name: "shop", Action: contractv1.Change_ACTION_DELETE},
 			{
@@ -348,7 +349,7 @@ func TestAGroupCalledKeptThatDeletesIsRenderedAsWhatItDoes(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Print("This will release the preview wildcard", keptGroupWithDeletes())
+	changeplan.NewPrinter(&out, runui.Presentation{}).Print("This will release the preview wildcard", keptGroupWithDeletes())
 
 	want := `This will release the preview wildcard:
 
@@ -372,7 +373,7 @@ Left in place:
 	}
 
 	out.Reset()
-	changeplan.NewPrinter(&out).Render("Proposed changes", keptGroupWithDeletes())
+	changeplan.NewPrinter(&out, runui.Presentation{}).Render("Proposed changes", keptGroupWithDeletes())
 	if !strings.Contains(out.String(), "*.preview.shop.com") {
 		t.Errorf("Render() =\n%s\nwant the row it deletes named", out.String())
 	}
@@ -418,7 +419,7 @@ func TestRenderNamesTheParameterGroupBareAndSpellsItsRowsOut(t *testing.T) {
 		},
 	}}
 	var out bytes.Buffer
-	changeplan.NewPrinter(&out).Render("Proposed changes to the production bootstrap", plan)
+	changeplan.NewPrinter(&out, runui.Presentation{}).Render("Proposed changes to the production bootstrap", plan)
 
 	want := `Proposed changes to the production bootstrap:
 

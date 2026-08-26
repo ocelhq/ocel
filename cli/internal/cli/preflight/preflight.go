@@ -9,22 +9,21 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
-	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func Run(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string, out io.Writer) (*contractv1.PreflightResponse, error) {
+func Run(ctx context.Context, present runui.Presentation, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string, out io.Writer) (*contractv1.PreflightResponse, error) {
 	client, err := runner.Client()
 	if err != nil {
 		return nil, err
 	}
 
-	spinner := deployui.StartSpinner(out, "Checking credentials")
+	spinner := runui.StartSpinner(present, out, "Checking credentials")
 	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
 		RequiredTier: required,
 		Slug:         slug,
@@ -36,7 +35,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *p
 	if err != nil {
 		return nil, err
 	}
-	if deps.StdoutIsTerminal(out) {
+	if present.TTY {
 		fmt.Fprint(out, identityBanner(resp.GetIdentity()))
 	}
 	if err := credentialProblems(resp.GetCredentialProblems()); err != nil {
@@ -51,16 +50,16 @@ func Run(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *p
 	return resp, nil
 }
 
-func Tier(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
-	resp, err := Run(ctx, deps, runner, cfg, required, "", nil, Frameworks(cfg), bootstrapHint, out)
+func Tier(ctx context.Context, present runui.Presentation, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
+	resp, err := Run(ctx, present, runner, cfg, required, "", nil, Frameworks(cfg), bootstrapHint, out)
 	if err != nil {
 		return err
 	}
 	return bootstrap.PlanFor(resp.GetBootstrap()).Refusal(required)
 }
 
-func Credentials(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
-	_, err := Run(ctx, deps, runner, cfg, required, "", nil, nil, bootstrapHint, out)
+func Credentials(ctx context.Context, present runui.Presentation, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string, out io.Writer) error {
+	_, err := Run(ctx, present, runner, cfg, required, "", nil, nil, bootstrapHint, out)
 	return err
 }
 

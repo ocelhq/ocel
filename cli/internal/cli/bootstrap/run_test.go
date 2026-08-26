@@ -173,7 +173,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		if err == nil {
 			t.Fatal("RunDestroy err = nil, want the no-terminal refusal")
 		}
-		for _, want := range []string{"interactive terminal", "--yes", changeplan.BypassEnv} {
+		for _, want := range []string{"needs a terminal", "--yes", changeplan.BypassEnv} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to name %q", err, want)
 			}

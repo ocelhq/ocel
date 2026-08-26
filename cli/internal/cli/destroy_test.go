@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -23,7 +24,7 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &contractv1.ChangePlan{
+		printDestroyPlan(&out, runui.Presentation{}, "proj_shop", false, &contractv1.ChangePlan{
 			EdgeKind: "cloudfront",
 			Subject:  "proj_shop",
 			Groups: []*contractv1.ChangeGroup{
@@ -80,7 +81,7 @@ func TestPrintDestroyPlan(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		printDestroyPlan(&out, "proj_shop", false, &contractv1.ChangePlan{
+		printDestroyPlan(&out, runui.Presentation{}, "proj_shop", false, &contractv1.ChangePlan{
 			EdgeKind: "api-gateway",
 			Groups: []*contractv1.ChangeGroup{{
 				Kind:   "edge",
@@ -104,7 +105,7 @@ func TestPrintDestroyPlan(t *testing.T) {
 	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
 		t.Parallel()
 
-		got := changeplan.NewPrinter(io.Discard).GroupLine(&contractv1.ChangeGroup{
+		got := changeplan.NewPrinter(io.Discard, runui.Presentation{}).GroupLine(&contractv1.ChangeGroup{
 			Kind:   "certificate",
 			Name:   "shop.example.com",
 			Action: contractv1.Change_Action(97),
@@ -207,26 +208,34 @@ export default {
 	})
 
 	t.Run("without --yes it refuses without a terminal", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+
 		var stdout, stderr bytes.Buffer
-		err := runDestroyPreviewProject(context.Background(), newDeps(), t.TempDir(), false, false, &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyPreviewProject(context.Background(), deps, root, false, false, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyPreviewProject without a TTY err = nil, want a refusal")
 		}
-		if !strings.Contains(err.Error(), "interactive terminal") {
-			t.Errorf("err = %v, want the no-TTY refusal", err)
+		if !strings.Contains(err.Error(), "--yes") {
+			t.Errorf("err = %v, want the no-TTY refusal to point at --yes", err)
 		}
 	})
 }
 
 func TestRunDestroy(t *testing.T) {
 	t.Run("it refuses without a terminal", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+
 		var stdout, stderr bytes.Buffer
-		err := runDestroyProduction(context.Background(), newDeps(), t.TempDir(), false, &stdout, &stderr, strings.NewReader(""))
+		err := runDestroyProduction(context.Background(), deps, root, false, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDestroyProduction without a TTY err = nil, want a refusal")
 		}
-		if !strings.Contains(err.Error(), "interactive terminal") {
-			t.Errorf("err = %v, want the no-TTY refusal", err)
+		if !strings.Contains(err.Error(), changeplan.BypassEnv) {
+			t.Errorf("err = %v, want the no-TTY refusal to name %s, the only way production destroys unattended", err, changeplan.BypassEnv)
 		}
 	})
 
@@ -239,7 +248,7 @@ func TestRunDestroy(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		err := runDestroyProduction(context.Background(), deps, root, false, &stdout, &stderr, strings.NewReader(""))
-		if err != nil && strings.Contains(err.Error(), "interactive terminal") {
+		if err != nil && strings.Contains(err.Error(), "needs a terminal") {
 			t.Errorf("err = %v, want the bypass to get past the TTY requirement", err)
 		}
 		if strings.Contains(stdout.String(), "Type the project name") {
@@ -349,10 +358,14 @@ func TestRunDestroy(t *testing.T) {
 	})
 
 	t.Run("an unset bypass is not a bypass", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
 		t.Setenv(changeplan.BypassEnv, "")
+
 		var stdout, stderr bytes.Buffer
-		err := runDestroyProduction(context.Background(), newDeps(), t.TempDir(), false, &stdout, &stderr, strings.NewReader(""))
-		if err == nil || !strings.Contains(err.Error(), "interactive terminal") {
+		err := runDestroyProduction(context.Background(), deps, root, false, &stdout, &stderr, strings.NewReader(""))
+		if err == nil || !strings.Contains(err.Error(), changeplan.BypassEnv) {
 			t.Errorf("err = %v, want the no-TTY refusal", err)
 		}
 	})

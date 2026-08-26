@@ -1,4 +1,4 @@
-package deployui
+package runui
 
 import (
 	"encoding/hex"

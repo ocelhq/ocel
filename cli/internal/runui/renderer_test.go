@@ -1,4 +1,4 @@
-package deployui
+package runui
 
 import (
 	"bytes"
@@ -23,7 +23,7 @@ func appStage(n byte) []byte {
 func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	app := appStage(1)
@@ -51,7 +51,7 @@ func TestLiveRegion(t *testing.T) {
 	t.Run("a parallel deploy shows one line per app, each with its own stage", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := newRendererForTest(&out, FormatHuman, true, false)
+		r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		appA, appB := appStage(1), appStage(2)
@@ -76,7 +76,7 @@ func TestLiveRegion(t *testing.T) {
 	t.Run("one app finishing does not stop the other's line from updating", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := newRendererForTest(&out, FormatHuman, true, false)
+		r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		appA, appB := appStage(1), appStage(2)
@@ -87,7 +87,7 @@ func TestLiveRegion(t *testing.T) {
 
 		r.Progress(appA, "uploading", 1, u32(2))
 		r.Progress(appB, "uploading", 1, u32(2))
-		r.StageEnd(appA, false, time.Second) // app-a finishes
+		r.StageEnd(appA, false, time.Second)
 
 		if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(appB) {
 			t.Fatalf("activeOrder = %v, want only app-b still live", r.plan.activeOrder)
@@ -105,7 +105,7 @@ func TestLiveRegion(t *testing.T) {
 	t.Run("which app is stuck stays answerable: a slow app keeps its own row", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := newRendererForTest(&out, FormatHuman, true, false)
+		r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		fast, slow := appStage(1), appStage(2)
@@ -153,8 +153,8 @@ func TestOrphanStageAttachesRecursively(t *testing.T) {
 func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 	t.Parallel()
 
-	var out bytes.Buffer // not a *os.File, so never a terminal regardless of the test process's own stdout
-	r := NewRenderer(&out, FormatHuman, false)
+	var out bytes.Buffer
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	r.Building()
@@ -166,15 +166,9 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 	}
 }
 
-// TestRendererSingleOwnerRaceFree writes into a plain, unsynchronized
-// bytes.Buffer from three concurrent goroutines — one repaint tick loop
-// (started by the live renderer) plus two callers, mirroring the subprocess
-// drain goroutines a real deploy has. It is the renderer's own mutex being
-// the only thing standing between this and a torn write, so it must be run
-// with -race.
 func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 
 	appA, appB := appStage(1), appStage(2)
 	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
@@ -237,7 +231,7 @@ func TestFormatDurationRoundsToWholeSeconds(t *testing.T) {
 func TestRestartBuildStageDiscardsElapsedTime(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	var nowNanos atomic.Int64
@@ -264,7 +258,7 @@ func TestRestartBuildStageDiscardsElapsedTime(t *testing.T) {
 func TestStageEndCommitsRowsAsSpansArrive(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	appA, appB := appStage(1), appStage(2)
@@ -298,7 +292,7 @@ func TestStageEndCommitsRowsAsSpansArrive(t *testing.T) {
 func TestFinishedBarWaitsForItsSpan(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	uploading := appStage(1)
@@ -325,7 +319,7 @@ func TestFinishedBarWaitsForItsSpan(t *testing.T) {
 func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	provisioning, app := appStage(1), appStage(2)
@@ -369,7 +363,7 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 func TestBuildOKLeavesNoStaleSpinnerRow(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	r.Building()
@@ -388,7 +382,7 @@ func TestBuildOKLeavesNoStaleSpinnerRow(t *testing.T) {
 func TestLiveModeHoldsBackRawLogLines(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	r.Progress(appStage(1), "provisioning", 0, nil)
@@ -402,7 +396,7 @@ func TestLiveModeHoldsBackRawLogLines(t *testing.T) {
 func TestProgressWithoutAStageIsDropped(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	r.Progress(nil, "Reclaimed 3 promotion(s): a, b, c", 0, nil)
@@ -418,7 +412,7 @@ func TestProgressWithoutAStageIsDropped(t *testing.T) {
 func TestTheBuildStageIsTheEnvironmentUnitsBuildingPhase(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	if got := stageKey(buildStageID); got != "4b5ac07b8124802c" {
@@ -444,7 +438,7 @@ func TestTheBuildStageIsTheEnvironmentUnitsBuildingPhase(t *testing.T) {
 func TestFailedSpanNamesAStageThatNeverReportedProgress(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	app := appStage(1)
@@ -462,7 +456,7 @@ func TestFailedSpanNamesAStageThatNeverReportedProgress(t *testing.T) {
 func TestParentSpanLeavesAStillRunningChildLive(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	r := newRendererForTest(&out, FormatHuman, true, false)
+	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = r.Close() })
 
 	parent, child := appStage(1), appStage(2)
@@ -492,7 +486,7 @@ func TestDeployedFlip(t *testing.T) {
 	t.Run("the human render sets the note off from the urls, indented", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := NewRenderer(&out, FormatHuman, false)
+		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{Note: "propagates within ~5 s"}, "")
@@ -520,7 +514,7 @@ func TestDeployedFlip(t *testing.T) {
 			{&withBound, Flip{Bound: &progressv1.FlipBound{}}},
 			{&without, Flip{}},
 		} {
-			r := NewRenderer(tc.out, FormatHuman, false)
+			r := NewRenderer(tc.out, Presentation{Format: FormatHuman, Width: defaultWidth})
 			r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", tc.flip, "")
 			_ = r.Close()
 		}
@@ -532,7 +526,7 @@ func TestDeployedFlip(t *testing.T) {
 	t.Run("json carries the bound as numbers, never as prose", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := NewRenderer(&out, FormatJSON, false)
+		r := NewRenderer(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		r.Deployed("Deployed", nil, "", Flip{
@@ -563,7 +557,7 @@ func TestDeployedFlip(t *testing.T) {
 	t.Run("a deploy with no address of its own prints why, and never a vendor hostname", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := NewRenderer(&out, FormatHuman, false)
+		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		r.Deployed("Deployed", nil, "run `ocel domain add` to settle shop.app.com", Flip{}, "")
@@ -576,7 +570,7 @@ func TestDeployedFlip(t *testing.T) {
 	t.Run("json carries the note the provider sent instead of addresses", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := NewRenderer(&out, FormatJSON, false)
+		r := NewRenderer(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		r.Deployed("Deployed", nil, "run `ocel domain add`", Flip{}, "")
@@ -593,7 +587,7 @@ func TestDeployedFlip(t *testing.T) {
 	t.Run("json omits the bound when none was recorded", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := NewRenderer(&out, FormatJSON, false)
+		r := NewRenderer(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		r.Deployed("Deployed", nil, "", Flip{}, "")

@@ -17,11 +17,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -277,7 +277,7 @@ const upgradeProvider = "upgrade the provider pinned in this project"
 func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, stdout, stderr io.Writer) *answers {
 	got := &answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
 
-	spinner := deployui.StartSpinner(stdout, "Checking your setup")
+	spinner := runui.StartSpinner(deps.Presentation(stdout), stdout, "Checking your setup")
 	err := provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
 		*got = answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
 		got.pkg = runner.Package()
@@ -588,7 +588,7 @@ func newPaint(out io.Writer) paint {
 
 func tint(out io.Writer, attrs ...color.Attribute) *color.Color {
 	c := color.New(attrs...)
-	if deployui.IsTerminal(out) && !color.NoColor {
+	if runui.IsTerminal(out) && !color.NoColor {
 		c.EnableColor()
 	} else {
 		c.DisableColor()

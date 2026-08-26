@@ -14,11 +14,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -76,7 +75,7 @@ func runPromotionsLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout,
 	}
 
 	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
-		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflight.Tier(ctx, deps.Presentation(stdout), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -102,8 +101,8 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keep
 		return err
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel deployments prune", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel deployments prune", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -127,7 +126,7 @@ func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistor
 	}
 
 	activeStatus := "active"
-	if deployui.IsTerminal(stdout) {
+	if runui.IsTerminal(stdout) {
 		activeStatus = color.New(color.FgGreen).Sprint("active")
 	}
 
@@ -143,7 +142,7 @@ func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistor
 		if entry.GetActive() {
 			status = activeStatus
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, deployui.EpochDateTime(p.GetTs()), deployedIdentities(p.GetBuilds()), status)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, runui.EpochDateTime(p.GetTs()), deployedIdentities(p.GetBuilds()), status)
 	}
 	_ = tw.Flush()
 }

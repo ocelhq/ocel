@@ -10,12 +10,11 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/cli/style"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -45,18 +44,18 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		fmt.Fprintf(stderr, "%s is set to %q, not this bootstrap (%s); confirming interactively instead\n", changeplan.BypassEnv, requested, name)
 	}
 	skipConfirmation := opts.Yes || bypass
-	if !opts.Dry && !skipConfirmation && !tty {
-		return fmt.Errorf("`%s` needs an interactive terminal to confirm the environment name; re-run with --yes, or set %s to %q, to remove it unattended",
-			destroyCommand(tier), changeplan.BypassEnv, name)
-	}
 
-	return providerui.Run(ctx, deps, cfg, destroyCommand(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+	spec := deps.Spec(runui.PlanFirst, destroyCommand(tier), cfg, stdout)
+	spec.Yes, spec.Dry, spec.Interactive = skipConfirmation, opts.Dry, tty
+	spec.Unattended = fmt.Sprintf("pass --yes, or set %s to %q", changeplan.BypassEnv, name)
+
+	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		client, err := runner.Client()
 		if err != nil {
 			return err
 		}
 
-		spinner := deployui.StartSpinner(stdout, "Enumerating what would be removed")
+		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Enumerating what would be removed")
 		plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
 			Tier: tier,
 			Edge: edgewire.Selection(cfg),
@@ -69,7 +68,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 			ui.Finish(fmt.Sprintf("Nothing to destroy: the %s environment is not bootstrapped", name))
 			return nil
 		}
-		changeplan.NewPrinter(stdout).Print(fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
+		changeplan.NewPrinter(stdout, ui.Presentation()).Print(fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
 			"Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
 		if opts.Dry {
 			fmt.Fprintln(stdout, "Run without --dry to destroy.")

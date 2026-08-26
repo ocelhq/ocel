@@ -14,11 +14,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/declcache"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -193,7 +193,7 @@ func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts en
 	}
 
 	return provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
-		if err := preflight.Credentials(ctx, deps, runner, cfg, tier, hint, stderr); err != nil {
+		if err := preflight.Credentials(ctx, deps.Presentation(stderr), runner, cfg, tier, hint, stderr); err != nil {
 			return err
 		}
 		return drive(runner, cfg)
@@ -325,11 +325,11 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		}
 		m := resp.GetMetadata()
 		if target := m.GetTarget(); target != nil {
-			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), deployui.EpochDate(m.GetUpdatedAt()))
+			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), runui.EpochDate(m.GetUpdatedAt()))
 			fmt.Fprintln(stdout, "Pass --reveal to print the value it reads. Edit that value where it is set.")
 			return nil
 		}
-		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), deployui.EpochDate(m.GetUpdatedAt()))
+		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), runui.EpochDate(m.GetUpdatedAt()))
 		fmt.Fprintln(stdout, "Pass --reveal to print the value.")
 		return nil
 	})
@@ -488,7 +488,7 @@ func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environme
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
 			c.GetKey(), folderOrRoot(c.GetFolder()), environment,
-			v.GetVersion(), size, deployui.EpochDate(v.GetUpdatedAt()), source)
+			v.GetVersion(), size, runui.EpochDate(v.GetUpdatedAt()), source)
 	}
 	_ = tw.Flush()
 
@@ -505,7 +505,7 @@ func renderVersions(stdout io.Writer, cell string, versions []*envvarsv1.Version
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "VERSION\tCREATED\tBYTES")
 	for _, v := range versions {
-		fmt.Fprintf(tw, "%d\t%s\t%d\n", v.GetVersion(), deployui.EpochDate(v.GetCreatedAt()), v.GetSize())
+		fmt.Fprintf(tw, "%d\t%s\t%d\n", v.GetVersion(), runui.EpochDate(v.GetCreatedAt()), v.GetSize())
 	}
 	_ = tw.Flush()
 }

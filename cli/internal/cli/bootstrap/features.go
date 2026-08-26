@@ -12,8 +12,8 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/style"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -30,7 +30,7 @@ func tint(stdout io.Writer, attrs ...color.Attribute) *color.Color {
 }
 
 func gated(stdout io.Writer, c *color.Color) *color.Color {
-	if deployui.IsTerminal(stdout) && !color.NoColor {
+	if runui.IsTerminal(stdout) && !color.NoColor {
 		c.EnableColor()
 	} else {
 		c.DisableColor()

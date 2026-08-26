@@ -20,11 +20,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/permissions"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
 var version = "dev"
@@ -48,19 +48,7 @@ func verboseEnabled() bool {
 	return ok
 }
 
-const (
-	logFormatHuman = "human"
-	logFormatJSON  = "json"
-)
-
 var logFormatFlag string
-
-func logFormat() string {
-	if logFormatFlag == logFormatJSON {
-		return logFormatJSON
-	}
-	return logFormatHuman
-}
 
 var rootCmd = &cobra.Command{
 	Use:           "ocel <command>",
@@ -80,7 +68,7 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
 	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else nearest ocel.config.ts)")
-	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", logFormatHuman, "Log output format: human or json")
+	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", string(runui.FormatHuman), "Log output format: human or json")
 
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(runCmd)
@@ -116,10 +104,8 @@ func newDeps() cmddeps.Deps {
 		RunPackageManager:   runPackageManagerCommand,
 		HostTrust:           provider.Trust{Ask: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr},
 		StdinIsTerminal:     isReaderTTY,
-		StdoutIsTerminal:    deployui.IsTerminal,
 		ConfigPath:          explicitConfigPath,
-		Verbose:             verboseEnabled,
-		Format:              sessionFormat,
+		Presentation:        presentation,
 		Interrupt:           installInterruptHandler,
 	}
 }
@@ -148,9 +134,6 @@ func runPackageManagerCommand(ctx context.Context, dir string, argv []string, ou
 	return cmd.Run()
 }
 
-func sessionFormat() deployui.Format {
-	if logFormat() == logFormatJSON {
-		return deployui.FormatJSON
-	}
-	return deployui.FormatHuman
+func presentation(w io.Writer) runui.Presentation {
+	return runui.Detect(runui.Format(logFormatFlag), verboseEnabled(), w)
 }

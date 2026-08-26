@@ -1,4 +1,4 @@
-package deployui
+package runui
 
 import (
 	"encoding/json"
@@ -26,19 +26,9 @@ var (
 	buildStageID      = naming.PhaseID(naming.UnitEnvironment, naming.PhaseBuilding)
 )
 
-type Format string
-
-const (
-	FormatHuman Format = "human"
-	FormatJSON  Format = "json"
-)
-
 type Renderer struct {
 	w       io.Writer
-	format  Format
-	live    bool
-	color   bool
-	verbose bool
+	present Presentation
 
 	mu        sync.Mutex
 	plan      *stagePlan
@@ -53,7 +43,7 @@ type Renderer struct {
 	tickDone chan struct{}
 }
 
-var liveWriters sync.Map // io.Writer -> *Renderer
+var liveWriters sync.Map
 
 func rendererFor(w io.Writer) (*Renderer, bool) {
 	v, ok := liveWriters.Load(w)
@@ -64,24 +54,15 @@ func rendererFor(w io.Writer) (*Renderer, bool) {
 	return r, ok
 }
 
-func NewRenderer(w io.Writer, format Format, verbose bool) *Renderer {
-	live := format == FormatHuman && !verbose && IsTerminal(w)
-	r := newRendererForTest(w, format, live, IsTerminal(w))
-	r.verbose = verbose
-	return r
-}
-
-func newRendererForTest(w io.Writer, format Format, live, colorEnabled bool) *Renderer {
+func NewRenderer(w io.Writer, present Presentation) *Renderer {
 	r := &Renderer{
-		w:      w,
-		format: format,
-		live:   live,
-		color:  colorEnabled,
-		plan:   newStagePlan(),
-		start:  time.Now(),
+		w:       w,
+		present: present,
+		plan:    newStagePlan(),
+		start:   time.Now(),
 	}
 	liveWriters.Store(w, r)
-	if r.live {
+	if r.present.Live() {
 		r.tickStop = make(chan struct{})
 		r.tickDone = make(chan struct{})
 		go r.tickLoop()
@@ -89,7 +70,14 @@ func newRendererForTest(w io.Writer, format Format, live, colorEnabled bool) *Re
 	return r
 }
 
-func (r *Renderer) Live() bool { return r.live }
+func (r *Renderer) Live() bool { return r.present.Live() }
+
+func (r *Renderer) width() int {
+	if n, ok := liveWidth(r.w); ok {
+		return n
+	}
+	return r.present.Width
+}
 
 func (r *Renderer) useClock(now func() time.Time) {
 	r.mu.Lock()
@@ -106,7 +94,7 @@ func (r *Renderer) RestartBuildStage() {
 func (r *Renderer) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.live && !r.waiting {
+	if r.present.Live() && !r.waiting {
 		r.eraseLiveLocked()
 		n, err := r.w.Write(p)
 		r.drawLiveLocked()
@@ -157,7 +145,7 @@ func (r *Renderer) Close() error {
 
 func (r *Renderer) Suspend() func() {
 	r.mu.Lock()
-	if !r.live || r.waiting {
+	if !r.present.Live() || r.waiting {
 		r.mu.Unlock()
 		return func() {}
 	}
@@ -175,7 +163,7 @@ func (r *Renderer) Suspend() func() {
 
 func (r *Renderer) Spin(msg string) func() {
 	r.mu.Lock()
-	if !r.live || r.waiting {
+	if !r.present.Live() || r.waiting {
 		r.mu.Unlock()
 		return func() {}
 	}
@@ -204,7 +192,7 @@ func (r *Renderer) Progress(stageID []byte, message string, current uint32, tota
 	if id == "" {
 		return
 	}
-	if r.format == FormatJSON {
+	if r.present.Format == FormatJSON {
 		fields := map[string]any{"message": message, "stageId": id}
 		if total != nil {
 			fields["current"] = current
@@ -213,7 +201,7 @@ func (r *Renderer) Progress(stageID []byte, message string, current uint32, tota
 		r.emitJSON("progress", fields)
 		return
 	}
-	if !r.live {
+	if !r.present.Live() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		fmt.Fprintln(r.w, message)
@@ -242,7 +230,7 @@ func (r *Renderer) progressStageLocked(id, message string, current uint32, total
 }
 
 func (r *Renderer) StagePlan(ev *progressv1.StagePlanEvent) {
-	if r.format == FormatJSON {
+	if r.present.Format == FormatJSON {
 		r.emitJSON("stagePlan", map[string]any{"count": len(ev.GetStages())})
 		return
 	}
@@ -252,16 +240,16 @@ func (r *Renderer) StagePlan(ev *progressv1.StagePlanEvent) {
 }
 
 func (r *Renderer) Log(message string) {
-	if r.format == FormatJSON {
+	if r.present.Format == FormatJSON {
 		r.emitJSON("log", map[string]any{"message": message})
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if !r.verbose {
+	if !r.present.Verbose {
 		return
 	}
-	if r.live {
+	if r.present.Live() {
 		r.eraseLiveLocked()
 		fmt.Fprintln(r.w, message)
 		r.drawLiveLocked()
@@ -271,14 +259,14 @@ func (r *Renderer) Log(message string) {
 }
 
 func (r *Renderer) Degraded(need, detail string) {
-	if r.format == FormatJSON {
+	if r.present.Format == FormatJSON {
 		r.emitJSON("degraded", map[string]any{"need": need, "detail": detail})
 		return
 	}
 	line := fmt.Sprintf("%s %s: %s", r.colorFor(color.FgYellow, color.Bold).Sprint(warnMark), need, detail)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.live {
+	if r.present.Live() {
 		r.eraseLiveLocked()
 		fmt.Fprintln(r.w, line)
 		r.drawLiveLocked()
@@ -291,7 +279,7 @@ func (r *Renderer) DNSOwed(headline string, records []*progressv1.DnsRecord, not
 	if len(records) == 0 {
 		return
 	}
-	if r.format == FormatJSON {
+	if r.present.Format == FormatJSON {
 		r.emitJSON("dnsOwed", map[string]any{
 			"headline": headline,
 			"records":  dnsJSON(records),
@@ -302,7 +290,7 @@ func (r *Renderer) DNSOwed(headline string, records []*progressv1.DnsRecord, not
 	block := r.dnsBlock(headline, records, notes)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.live {
+	if r.present.Live() {
 		r.eraseLiveLocked()
 		fmt.Fprint(r.w, block)
 		r.drawLiveLocked()
@@ -318,7 +306,7 @@ func (r *Renderer) dnsBlock(headline string, records []*progressv1.DnsRecord, no
 		r.colorFor(color.FgYellow, color.Bold).Sprint(warnMark),
 		r.colorFor(color.Bold).Sprint(dnsHeadline(headline, records)),
 	)
-	head, rows := dnsRows(records, termWidth(r.w))
+	head, rows := dnsRows(records, r.width())
 	if head == "" {
 		for _, line := range dnsStack(records) {
 			b.WriteString(line + "\n")
@@ -353,7 +341,7 @@ func dnsJSON(records []*progressv1.DnsRecord) []map[string]any {
 }
 
 func (r *Renderer) StageEnd(stageID []byte, failed bool, duration time.Duration) {
-	if r.format == FormatJSON {
+	if r.present.Format == FormatJSON {
 		return
 	}
 	r.mu.Lock()
@@ -416,7 +404,7 @@ func (r *Renderer) Waiting(reason, url string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.waiting = true
-	if r.format == FormatJSON {
+	if r.present.Format == FormatJSON {
 		r.emitJSONLocked("waiting", map[string]any{"reason": reason, "url": url})
 		return
 	}
@@ -442,7 +430,7 @@ func (r *Renderer) Deployed(headline string, appURLs []string, urlNote string, f
 	defer r.mu.Unlock()
 	r.finishAllLocked(r.okColor(), okMark, "")
 
-	if r.format == FormatJSON {
+	if r.present.Format == FormatJSON {
 		fields := map[string]any{
 			"headline":   headline,
 			"appUrls":    appURLs,
@@ -487,7 +475,7 @@ func (r *Renderer) Finish(headline, logPath string) {
 	defer r.mu.Unlock()
 	r.finishAllLocked(r.okColor(), okMark, "")
 
-	if r.format == FormatJSON {
+	if r.present.Format == FormatJSON {
 		r.emitJSONLocked("finished", map[string]any{
 			"headline":   headline,
 			"durationMs": time.Since(r.start).Milliseconds(),
@@ -505,7 +493,7 @@ func (r *Renderer) Fail(err error, logPath string) {
 	defer r.mu.Unlock()
 	hadRows := r.finishAllLocked(r.colorFor(color.FgRed, color.Bold), failMark, "failed")
 
-	if r.format == FormatJSON {
+	if r.present.Format == FormatJSON {
 		r.emitJSONLocked("failed", map[string]any{"error": err.Error(), "logPath": logPath})
 		return
 	}
@@ -523,7 +511,7 @@ func (r *Renderer) Cancel(command string, waiting bool, logPath string) {
 	defer r.mu.Unlock()
 	hadRows := r.finishAllLocked(r.colorFor(color.FgYellow, color.Bold), warnMark, "cancelled")
 
-	if r.format == FormatJSON {
+	if r.present.Format == FormatJSON {
 		r.emitJSONLocked("cancelled", map[string]any{"waiting": waiting, "command": command, "logPath": logPath})
 		return
 	}
@@ -605,10 +593,10 @@ func (r *Renderer) eraseLiveLocked() {
 }
 
 func (r *Renderer) drawLiveLocked() {
-	if !r.live || r.waiting {
+	if !r.present.Live() || r.waiting {
 		return
 	}
-	width := termWidth(r.w)
+	width := r.width()
 	maxRows := r.effectiveMaxRowsLocked()
 
 	shown := r.plan.displayRows()
@@ -673,7 +661,7 @@ func (r *Renderer) okColor() *color.Color { return r.colorFor(color.FgGreen) }
 
 func (r *Renderer) colorFor(attrs ...color.Attribute) *color.Color {
 	c := color.New(attrs...)
-	if r.color {
+	if r.present.Color {
 		c.EnableColor()
 	} else {
 		c.DisableColor()

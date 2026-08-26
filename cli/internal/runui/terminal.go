@@ -1,4 +1,4 @@
-package deployui
+package runui
 
 import (
 	"io"
@@ -24,15 +24,25 @@ func IsTerminal(w io.Writer) bool {
 }
 
 func termWidth(w io.Writer) int {
-	if f, ok := w.(*os.File); ok {
-		if width, _, err := term.GetSize(int(f.Fd())); err == nil && width > 0 {
-			return width
-		}
+	if n, ok := liveWidth(w); ok {
+		return n
 	}
 	if n, ok := positiveEnvInt("COLUMNS"); ok {
 		return n
 	}
 	return defaultWidth
+}
+
+func liveWidth(w io.Writer) (int, bool) {
+	f, ok := w.(*os.File)
+	if !ok {
+		return 0, false
+	}
+	width, _, err := term.GetSize(int(f.Fd()))
+	if err != nil || width <= 0 {
+		return 0, false
+	}
+	return width, true
 }
 
 func termHeight(w io.Writer) int {

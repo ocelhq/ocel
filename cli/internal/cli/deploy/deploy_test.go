@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 
@@ -709,7 +710,9 @@ export default {
 }
 
 func pretendStdoutIsTerminal(deps *cmddeps.Deps) {
-	deps.StdoutIsTerminal = func(io.Writer) bool { return true }
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{TTY: true})
+	}
 }
 
 func addAppToFixtureConfig(t *testing.T, root string) {

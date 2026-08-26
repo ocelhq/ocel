@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -52,7 +53,7 @@ func TestRenderOnANonTerminalStaysPlain(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	NewPrinter(&out).Render("Proposed changes to the production bootstrap", &contractv1.ChangePlan{
+	NewPrinter(&out, runui.Presentation{}).Render("Proposed changes to the production bootstrap", &contractv1.ChangePlan{
 		Groups: []*contractv1.ChangeGroup{
 			{Kind: "stack", Name: "ocel-production-core", Action: contractv1.Change_ACTION_CREATE},
 		},

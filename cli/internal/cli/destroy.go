@@ -12,12 +12,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -103,9 +102,6 @@ func init() {
 func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, dry bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	requested := changeplan.BypassRequest()
 	tty := isReaderTTY(stdin)
-	if !dry && requested == "" && !tty {
-		return fmt.Errorf("`ocel destroy production` needs an interactive terminal to confirm the project name; to destroy unattended, set %s to the project name", changeplan.BypassEnv)
-	}
 
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
@@ -123,8 +119,12 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, dr
 		fmt.Fprintf(stderr, "%s is set to %q, not this project (%s); confirming interactively instead\n", changeplan.BypassEnv, requested, cfg.Slug)
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel destroy production", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+	spec := deps.Spec(runui.PlanFirst, "ocel destroy production", cfg, stdout)
+	spec.Yes, spec.Dry, spec.Interactive = requested != "", dry, tty
+	spec.Unattended = fmt.Sprintf("set %s to the project name", changeplan.BypassEnv)
+
+	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -133,7 +133,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, dr
 			return err
 		}
 
-		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
+		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Enumerating what would be destroyed")
 		plan, err := client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
 			Slug: cfg.Slug,
 			Edge: edgewire.Selection(cfg),
@@ -147,7 +147,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, dr
 			return nil
 		}
 
-		printDestroyPlan(stdout, cfg.Slug, false, plan)
+		printDestroyPlan(stdout, ui.Presentation(), cfg.Slug, false, plan)
 		if dry {
 			fmt.Fprintln(stdout, "Run without --dry to destroy.")
 			return nil
@@ -176,17 +176,17 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, dr
 }
 
 func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout, stderr io.Writer, stdin io.Reader) error {
-	if !dry && !yes && !isReaderTTY(stdin) {
-		return errors.New("`ocel destroy preview` needs an interactive terminal to confirm the project name; re-run with --yes to tear the preview footprint down non-interactively")
-	}
-
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel destroy preview", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
+	spec := deps.Spec(runui.PlanFirst, "ocel destroy preview", cfg, stdout)
+	spec.Yes, spec.Dry, spec.Interactive = yes, dry, isReaderTTY(stdin)
+	spec.Unattended = "pass --yes"
+
+	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
 			return err
 		}
 
@@ -195,7 +195,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 			return err
 		}
 
-		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
+		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Enumerating what would be destroyed")
 		plan, err := client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
@@ -210,7 +210,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 			return nil
 		}
 
-		printDestroyPlan(stdout, cfg.Slug, true, plan)
+		printDestroyPlan(stdout, ui.Presentation(), cfg.Slug, true, plan)
 		if dry {
 			fmt.Fprintln(stdout, "Run without --dry to destroy.")
 			return nil
@@ -240,15 +240,15 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 	})
 }
 
-func printDestroyPlan(out io.Writer, slug string, preview bool, plan *contractv1.ChangePlan) {
+func printDestroyPlan(out io.Writer, present runui.Presentation, slug string, preview bool, plan *contractv1.ChangePlan) {
 	if preview {
-		changeplan.NewPrinter(out).Print(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
+		changeplan.NewPrinter(out, present).Print(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
 			"– all stored preview assets belonging to this project",
 			"– every preview variable value this project holds, including each preview's own overrides",
 			"The account-level preview bootstrap is left intact. This cannot be undone.")
 		return
 	}
-	changeplan.NewPrinter(out).Print(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
+	changeplan.NewPrinter(out, present).Print(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
 		"– all stored assets belonging to this project",
 		"– every production variable value this project holds, and their history",
 		"This cannot be undone.")

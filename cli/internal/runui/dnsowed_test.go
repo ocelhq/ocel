@@ -1,4 +1,4 @@
-package deployui
+package runui
 
 import (
 	"bytes"
@@ -94,7 +94,7 @@ func TestRendererDNSOwed(t *testing.T) {
 	t.Run("names what the records are for and prints every field", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := newRendererForTest(&out, FormatHuman, false, false)
+		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		r.DNSOwed("Prove you own prev.ocel.site", []*progressv1.DnsRecord{validation}, []string{"Leave it in place."})
@@ -117,7 +117,7 @@ func TestRendererDNSOwed(t *testing.T) {
 	t.Run("counts the records when there is more than one", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := newRendererForTest(&out, FormatHuman, false, false)
+		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		r.DNSOwed("Point *.prev.ocel.site at the edge", []*progressv1.DnsRecord{validation, wildcard}, nil)
@@ -130,7 +130,7 @@ func TestRendererDNSOwed(t *testing.T) {
 	t.Run("a proxied record says the value is a placeholder", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := newRendererForTest(&out, FormatHuman, false, false)
+		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		proxied := &progressv1.DnsRecord{Name: "shop.app.com", Type: "AAAA", Value: "100::", Proxied: true}
@@ -144,7 +144,7 @@ func TestRendererDNSOwed(t *testing.T) {
 	t.Run("nothing owed prints nothing", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := newRendererForTest(&out, FormatHuman, false, false)
+		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		r.DNSOwed("Prove you own prev.ocel.site", nil, []string{"Leave it in place."})
@@ -157,7 +157,7 @@ func TestRendererDNSOwed(t *testing.T) {
 	t.Run("json carries the records as fields, not prose", func(t *testing.T) {
 		t.Parallel()
 		var out bytes.Buffer
-		r := newRendererForTest(&out, FormatJSON, false, false)
+		r := NewRenderer(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = r.Close() })
 
 		r.DNSOwed("Prove you own prev.ocel.site", []*progressv1.DnsRecord{validation}, nil)

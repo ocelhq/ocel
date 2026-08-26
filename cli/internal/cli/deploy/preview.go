@@ -12,9 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
@@ -22,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -191,8 +190,8 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel preview up", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightPreviewUp(ctx, deps, runner, cfg, env.GetIdentity(), stdout, stdin); err != nil {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview up", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if err := preflightPreviewUp(ctx, deps, ui.Presentation(), runner, cfg, env.GetIdentity(), stdout, stdin); err != nil {
 			return err
 		}
 
@@ -341,8 +340,8 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		}
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel preview rm", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightPreview(ctx, deps, runner, cfg, stdout); err != nil {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview rm", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if err := preflightPreview(ctx, ui.Presentation(), runner, cfg, stdout); err != nil {
 			return err
 		}
 
@@ -395,8 +394,8 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 		return err
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel preview prune", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightPreview(ctx, deps, runner, cfg, stdout); err != nil {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview prune", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if err := preflightPreview(ctx, ui.Presentation(), runner, cfg, stdout); err != nil {
 			return err
 		}
 		req := &contractv1.RemoveStalePromotionsRequest{
@@ -492,8 +491,8 @@ func renderEnvironments(stdout io.Writer, envs []*contractv1.PreviewEnvironment)
 			e.GetIdentity(),
 			lifecycleTag(e.GetLifecycle()),
 			labelOrDash(e.GetLabel()),
-			deployui.EpochDate(e.GetCreatedAt()),
-			deployui.EpochDate(e.GetExpiresAt()),
+			runui.EpochDate(e.GetCreatedAt()),
+			runui.EpochDate(e.GetExpiresAt()),
 		)
 	}
 }

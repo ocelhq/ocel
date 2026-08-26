@@ -1,4 +1,4 @@
-package deployui
+package runui
 
 import (
 	"fmt"
@@ -18,23 +18,24 @@ func spinnerFrame(n int) string {
 }
 
 type Spinner struct {
-	out    io.Writer
-	msg    string
-	stop   chan struct{}
-	done   chan struct{}
-	stopFn func()
-	once   sync.Once
+	out     io.Writer
+	msg     string
+	colored bool
+	stop    chan struct{}
+	done    chan struct{}
+	stopFn  func()
+	once    sync.Once
 }
 
-func StartSpinner(out io.Writer, msg string) *Spinner {
+func StartSpinner(present Presentation, out io.Writer, msg string) *Spinner {
 	if r, ok := rendererFor(out); ok {
 		return &Spinner{out: out, msg: msg, stopFn: r.Spin(msg)}
 	}
-	return startSpinner(out, msg, IsTerminal(out))
+	return startSpinner(out, msg, present.TTY, present.Color)
 }
 
-func startSpinner(out io.Writer, msg string, animate bool) *Spinner {
-	s := &Spinner{out: out, msg: msg}
+func startSpinner(out io.Writer, msg string, animate, colored bool) *Spinner {
+	s := &Spinner{out: out, msg: msg, colored: colored}
 	if !animate {
 		return s
 	}
@@ -47,7 +48,9 @@ func startSpinner(out io.Writer, msg string, animate bool) *Spinner {
 func (s *Spinner) loop() {
 	defer close(s.done)
 	glyph := color.New(color.FgCyan)
-	if !IsTerminal(s.out) {
+	if s.colored {
+		glyph.EnableColor()
+	} else {
 		glyph.DisableColor()
 	}
 	t := time.NewTicker(frameRate)

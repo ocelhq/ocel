@@ -12,15 +12,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/cli/style"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -97,9 +96,11 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		return err
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel deploy", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		willConfirm := !opts.yes && deps.StdinIsTerminal(stdin)
-		knownSlugs, err := preflightDeploy(ctx, deps, runner, cfg, willConfirm, stdout, stdin)
+	interactive := deps.StdinIsTerminal(stdin)
+
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel deploy", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		willConfirm := !opts.yes && interactive
+		knownSlugs, err := preflightDeploy(ctx, deps, ui.Presentation(), runner, cfg, willConfirm, stdout, stdin)
 		if err != nil {
 			return err
 		}

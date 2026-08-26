@@ -14,13 +14,12 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/cli/style"
-	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -163,7 +162,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return err
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel bootstrap "+Name(tier), stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel bootstrap "+Name(tier), cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		client, err := runner.Client()
 		if err != nil {
 			return err
@@ -221,7 +220,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			req.AutoHeal = &opts.AutoHeal
 		}
 
-		spinner := deployui.StartSpinner(stdout, "Planning changes")
+		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Planning changes")
 		intended, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
 			Tier:   tier,
 			Intent: req,
@@ -237,7 +236,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		plan := intended.GetPlan()
 		rendered := len(plan.GetGroups()) > 0
 		if rendered {
-			changeplan.NewPrinter(stdout).Render(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan)
+			changeplan.NewPrinter(stdout, ui.Presentation()).Render(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan)
 			if changeplan.AllKeep(plan) {
 				fmt.Fprint(stdout, "\nNo infrastructure changes — applying refreshes bootstrap seals and records.\n")
 			}
