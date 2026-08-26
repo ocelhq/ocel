@@ -103,7 +103,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if owner := strings.TrimSpace(vm.ssh(t, "stat -c %U /etc/ocel/production")); owner != "root" {
 		t.Errorf("/etc/ocel/production is owned by %q, want root: the class tier is root's alone", owner)
 	}
-	if owner := strings.TrimSpace(vm.ssh(t, "stat -c %U /var/lib/ocel/production/records")); owner != deployLogin {
+	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U /var/lib/ocel/production/records")); owner != deployLogin {
 		t.Errorf("the record tier is owned by %q, want %s: it is the deploy login's alone", owner, deployLogin)
 	}
 	standsAsDecided(t, vm)
