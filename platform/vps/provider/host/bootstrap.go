@@ -106,6 +106,9 @@ func (b Bootstrapper) reading(ctx context.Context, req providerkit.BootstrapRequ
 }
 
 func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+	if req.Heal {
+		return b.heal(ctx, req, report)
+	}
 	shown, err := b.reading(ctx, req)
 	if err != nil {
 		return err
@@ -166,6 +169,56 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	}
 	stamp.State, stamp.Seal = StateComplete, minted.Seal
 	return b.host.Stamp(ctx, req.Class, stamp)
+}
+
+func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+	read, err := b.host.Read(ctx, req.Class)
+	if err != nil {
+		return err
+	}
+	work, err := healable(read)
+	if err != nil {
+		return err
+	}
+	return b.write(ctx, read, work, report)
+}
+
+func healable(read Reading) ([]Item, error) {
+	command := providerkit.BootstrapCommand(read.Class)
+	if !read.Present {
+		return nil, providerkit.Refuse(providerkit.CodeDenied,
+			"nothing has bootstrapped the %s class on this host, and heal reasserts what a bootstrap wrote rather than writing one.\nRun `%s`",
+			read.Class, command)
+	}
+	if read.Stamp.State != StateComplete {
+		return nil, providerkit.Refuse(providerkit.CodeDenied,
+			"%s records an apply that never finished, and heal finishes nothing it did not start.\nRun `%s` to plan the work that is left and finish it",
+			StampPath(read.Class), command)
+	}
+	var work []Item
+	var denied []string
+	for _, item := range Items(read.Class, read.Keys) {
+		switch {
+		case read.current(item):
+		case deployOwned(item):
+			work = append(work, item)
+		default:
+			denied = append(denied, item.ID())
+		}
+	}
+	if len(denied) > 0 {
+		return nil, providerkit.Refuse(providerkit.CodeDenied,
+			"heal writes what %s owns under %s and nothing else, and this one would write %s.\nRun `%s` as the login that bootstrapped this host",
+			deployUser, stateRoot, strings.Join(denied, ", "), command)
+	}
+	return work, nil
+}
+
+func deployOwned(item Item) bool {
+	if item.Kind != KindDir && item.Kind != KindFile {
+		return false
+	}
+	return item.Owner == stateOwner && (item.Name == stateRoot || strings.HasPrefix(item.Name, stateRoot+"/"))
 }
 
 func admitReplacements(read Reading, items []Item) error {
