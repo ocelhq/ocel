@@ -41,6 +41,7 @@ func Grants(class providerkit.Class) []Grant {
 			Detail: fmt.Sprintf("root's own file at %04o: %s executes it to compare-and-set records under its own tier, and cannot write the helper itself", helper.Mode, held.name),
 		})
 	}
+	grants = append(grants, sealing(items, class, held)...)
 	for _, item := range items {
 		if item.Owner != held.name || item.Kind == KindUser {
 			continue
@@ -51,6 +52,24 @@ func Grants(class providerkit.Class) []Grant {
 		})
 	}
 	return grants
+}
+
+func sealing(items []Item, class providerkit.Class, held login) []Grant {
+	fragment := written(items, sudoersSeal)
+	key := written(items, SealKeyPath(class))
+	if fragment.Kind != KindFile || key.Kind != KindSealKey {
+		return nil
+	}
+	return []Grant{{
+		Name: "runs " + sealHelper + " as root, through one line in " + fragment.Name,
+		Detail: "the line is\n\n      " + strings.TrimSpace(string(fragment.Content)) +
+			"\n\n    and it is the whole of what sudo will let " + held.name +
+			" do. The helper seals and opens a value at a coordinate it is given; it never prints the key, and no other command on this host runs under sudo for " + held.name,
+	}, {
+		Name: "no read of " + key.Name,
+		Detail: fmt.Sprintf("root's own at %04o, minted from this machine's own randomness and never off it: %s can ask the helper to seal and to open, and cannot read the %s key either does it with. A key is minted once per class and ocel rotates it for nobody — what it sealed, it alone opens, and `ocel destroy` takes it with the class",
+			key.Mode, held.name, SealAlgorithm),
+	}}
 }
 
 func written(items []Item, name string) Item {

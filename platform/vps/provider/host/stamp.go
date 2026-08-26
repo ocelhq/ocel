@@ -15,6 +15,7 @@ type Stamp struct {
 	Schema  int               `json:"schema"`
 	State   string            `json:"state"`
 	Writer  string            `json:"writer"`
+	Seal    Seal              `json:"seal"`
 	Digests map[string]string `json:"digests"`
 }
 

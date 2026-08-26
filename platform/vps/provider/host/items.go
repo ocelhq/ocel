@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	KindDir  = "fs:dir"
-	KindFile = "fs:file"
-	KindUser = "linux:user"
+	KindDir     = "fs:dir"
+	KindFile    = "fs:file"
+	KindUser    = "linux:user"
+	KindSealKey = "ocel:seal-key"
 )
 
 const (
@@ -23,9 +24,13 @@ const (
 	helperRoot = "/usr/local/lib/ocel"
 
 	recordsHelper = helperRoot + "/records"
+	sealHelper    = helperRoot + "/seal"
 
 	stampFile   = "stamp.json"
+	sealKeyFile = "seal.key"
+
 	sudoersRoot = "/etc/sudoers.d"
+	sudoersSeal = sudoersRoot + "/ocel-seal"
 )
 
 const rootOwner = "root"
@@ -35,6 +40,8 @@ const stateOwner = deployUser
 func ClassDir(class providerkit.Class) string { return classRoot + "/" + string(class) }
 
 func StampPath(class providerkit.Class) string { return ClassDir(class) + "/" + stampFile }
+
+func SealKeyPath(class providerkit.Class) string { return ClassDir(class) + "/" + sealKeyFile }
 
 func StateDir(class providerkit.Class) string { return stateRoot + "/" + string(class) }
 
@@ -46,6 +53,7 @@ type Item struct {
 	Mode    fs.FileMode
 	Owner   string
 	Content []byte
+	Class   providerkit.Class
 }
 
 func ClassItems(class providerkit.Class) []Item {
@@ -59,12 +67,15 @@ func StorageItems(class providerkit.Class, keys []byte) []Item {
 	return []Item{
 		dir(helperRoot, 0o755, rootOwner),
 		{Kind: KindFile, Name: recordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript},
+		{Kind: KindFile, Name: sealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript},
 		principal(),
+		{Kind: KindFile, Name: sudoersSeal, Mode: 0o440, Owner: rootOwner, Content: sealSudoers()},
 		dir(stateRoot, 0o750, stateOwner),
 		dir(sshDir, 0o700, stateOwner),
 		{Kind: KindFile, Name: authorizedKeys, Mode: 0o600, Owner: stateOwner, Content: keys},
 		dir(StateDir(class), 0o750, stateOwner),
 		dir(RecordsDir(class), 0o750, stateOwner),
+		sealKey(class),
 	}
 }
 
@@ -93,12 +104,16 @@ func (i Item) command() string {
 	switch i.Kind {
 	case KindUser:
 		return deployLogin().command()
+	case KindSealKey:
+		return i.mint()
 	case KindDir:
 		return fmt.Sprintf("install -d -m %04o -o %s -g %s %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
 	default:
 		return fmt.Sprintf("install -m %04o -o %s -g %s /dev/stdin %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
 	}
 }
+
+func sprintMode(m fs.FileMode) string { return fmt.Sprintf("%04o", m) }
 
 func digest(kind, name string, mode fs.FileMode, owner, content string) string {
 	sum := sha256.Sum256(fmt.Appendf(nil, "%s\n%s\n%04o\n%s\n%s\n", kind, name, mode, owner, content))

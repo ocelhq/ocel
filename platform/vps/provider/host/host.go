@@ -156,6 +156,7 @@ type Reading struct {
 	Present  bool
 	Keys     []byte
 	Stamp    Stamp
+	Seal     Seal
 	Observed map[string]string
 }
 
@@ -169,6 +170,9 @@ func (r Reading) standing(kind, path string) bool {
 func (r Reading) settled() bool {
 	items := Items(r.Class, r.Keys)
 	if !r.Present || r.Stamp.State != StateComplete || !r.Stamp.records(items) {
+		return false
+	}
+	if r.Seal.Fingerprint == "" || r.Seal.Fingerprint != r.Stamp.Seal.Fingerprint {
 		return false
 	}
 	for _, item := range items {
@@ -198,12 +202,12 @@ func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte) (
 	if err != nil {
 		return Reading{}, err
 	}
-	observed, err := readSurvey(rendered)
+	observed, held, err := readSurvey(rendered)
 	if err != nil {
 		return Reading{}, err
 	}
 
-	read := Reading{Class: class, Keys: keys, Observed: observed}
+	read := Reading{Class: class, Keys: keys, Seal: held, Observed: observed}
 	if _, stamped := observed[KindFile+" "+StampPath(class)]; !stamped {
 		return read, nil
 	}
@@ -240,11 +244,14 @@ func survey(items []Item, also ...string) string {
 	var accounts, script strings.Builder
 	script.WriteString("for p in")
 	for _, item := range items {
-		if item.Kind == KindUser {
+		switch item.Kind {
+		case KindUser:
 			accounts.WriteString(deployLogin().survey() + "\n")
-			continue
+		case KindSealKey:
+			accounts.WriteString(sealSurvey(item) + "\n")
+		default:
+			script.WriteString(" " + quoted(item.Name))
 		}
-		script.WriteString(" " + quoted(item.Name))
 	}
 	for _, path := range also {
 		script.WriteString(" " + quoted(path))
@@ -257,23 +264,30 @@ done`)
 	return accounts.String() + script.String()
 }
 
-func readSurvey(rendered string) (map[string]string, error) {
+func readSurvey(rendered string) (map[string]string, Seal, error) {
 	observed := make(map[string]string)
+	var held Seal
 	for _, line := range strings.Split(strings.Trim(rendered, "\n"), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		columns := strings.Split(strings.TrimRight(line, "\r"), "\t")
-		if len(columns) != 5 {
-			return nil, providerkit.Refuse(providerkit.CodeDenied,
+		sealed := columns[0] == KindSealKey
+		if (sealed && len(columns) != 6) || (!sealed && len(columns) != 5) {
+			return nil, Seal{}, providerkit.Refuse(providerkit.CodeDenied,
 				"the host answered a survey line ocel cannot read: %q", line)
 		}
 		parsed, err := mode(columns[2])
 		if err != nil {
-			return nil, providerkit.Refuse(providerkit.CodeDenied,
+			return nil, Seal{}, providerkit.Refuse(providerkit.CodeDenied,
 				"the host reported %q as the mode of %s, which is no mode", columns[2], columns[1])
 		}
-		observed[columns[0]+" "+columns[1]] = digest(columns[0], columns[1], parsed, columns[3], columns[4])
+		content := columns[4]
+		if sealed {
+			held = Seal{Fingerprint: columns[4], Algorithm: SealAlgorithm, CreatedAt: columns[5]}
+			content = ""
+		}
+		observed[columns[0]+" "+columns[1]] = digest(columns[0], columns[1], parsed, columns[3], content)
 	}
-	return observed, nil
+	return observed, held, nil
 }
