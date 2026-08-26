@@ -240,7 +240,7 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 			say(report, "kept "+removal.kind+" "+removal.path)
 			continue
 		}
-		if err := b.host.Remove(ctx, removal.kind, removal.path); err != nil {
+		if err := b.host.remove(ctx, removal); err != nil {
 			return err
 		}
 		say(report, "removed "+removal.kind+" "+removal.path)
@@ -258,10 +258,22 @@ type removal struct {
 	path   string
 	reason string
 	action providerkit.ChangeAction
+	shared bool
 }
 
 func taking(kind, path, reason string) removal {
 	return removal{kind: kind, path: path, reason: reason, action: providerkit.ActionDelete}
+}
+
+func sharing(path string) removal {
+	return removal{kind: KindDir, path: path, action: providerkit.ActionDelete, shared: true}
+}
+
+func (r removal) command() string {
+	if r.shared {
+		return "rmdir --ignore-fail-on-non-empty " + quoted(r.path)
+	}
+	return "rm -rf " + quoted(r.path)
 }
 
 func (b Bootstrapper) removals(ctx context.Context, class providerkit.Class) ([]removal, error) {
@@ -289,14 +301,15 @@ func removing(read, sibling Reading) []removal {
 	var above []removal
 	if last {
 		beneath = append(beneath,
-			taking(KindDir, stateRoot, ""),
+			taking(KindDir, sshDir, "the deploy login's own key store, which nothing but ocel ever wrote"),
+			sharing(stateRoot),
 			taking(KindUser, deployUser, "the login every deploy onto this host runs as"),
 			taking(KindFile, sudoersSeal, ""),
 			taking(KindFile, recordsHelper, ""),
 			taking(KindFile, SealHelper, ""),
-			taking(KindDir, helperRoot, ""),
+			sharing(helperRoot),
 		)
-		above = []removal{taking(KindDir, classRoot, "")}
+		above = []removal{sharing(classRoot)}
 	}
 	ordered := slices.Concat(beneath, stamp, above)
 
