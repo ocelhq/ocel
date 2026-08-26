@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -87,9 +87,25 @@ func (e *OperationFailedError) Error() string {
 	return e.Message
 }
 
+type OutdatedProviderError struct {
+	Package string
+}
+
+func (e *OutdatedProviderError) Error() string {
+	if pkg := strings.TrimSpace(e.Package); pkg != "" {
+		return fmt.Sprintf("%s is too old for this ocel CLI: it signalled readiness without the channel certificate the CLI now requires. Update it with `npm install %s@latest` and try again.", pkg, pkg)
+	}
+	return "the installed provider package is too old for this ocel CLI: it signalled readiness without the channel certificate the CLI now requires. Update the provider package and try again."
+}
+
+type readiness struct {
+	addr string
+	cert *x509.Certificate
+}
+
 type Runner struct {
 	cmd             *exec.Cmd
-	token           string
+	identity        *channel.Identity
 	providerConfig  *contractv1.ProviderConfig
 	providerPackage string
 	stdout          io.Writer
@@ -98,7 +114,7 @@ type Runner struct {
 	gracePeriod     time.Duration
 	reapTimeout     time.Duration
 
-	readyCh chan string
+	readyCh chan readiness
 	scanErr chan error
 	done    chan struct{}
 	waitErr error
@@ -121,7 +137,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 		return nil, errors.New("provider: BinaryPath is required")
 	}
 
-	token, err := newSessionToken()
+	identity, err := channel.NewIdentity()
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +148,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	}
 	env := make([]string, 0, len(base)+1)
 	env = append(env, base...)
-	env = append(env, channel.SessionTokenEnvVar+"="+token)
+	env = append(env, channel.ClientCertEnvVar+"="+identity.CertificatePEM())
 
 	cmd := exec.Command(cfg.BinaryPath, cfg.Args...)
 	cmd.Env = env
@@ -153,7 +169,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 
 	r := &Runner{
 		cmd:             cmd,
-		token:           token,
+		identity:        identity,
 		providerConfig:  cfg.ProviderConfig,
 		providerPackage: cfg.ProviderPackage,
 		stdout:          cfg.Stdout,
@@ -161,7 +177,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 		readyTimeout:    resolveReadyTimeout(cfg.ReadyTimeout),
 		gracePeriod:     resolveDuration(cfg.GracePeriod, DefaultGracePeriod),
 		reapTimeout:     resolveDuration(cfg.ReapTimeout, DefaultReapTimeout),
-		readyCh:         make(chan string, 1),
+		readyCh:         make(chan readiness, 1),
 		scanErr:         make(chan error, 1),
 		done:            make(chan struct{}),
 	}
@@ -215,14 +231,19 @@ func (r *Runner) Ready(ctx context.Context) error {
 	defer timer.Stop()
 
 	select {
-	case addr := <-r.readyCh:
-		return r.open(ctx, addr)
+	case ready := <-r.readyCh:
+		return r.open(ctx, ready)
 	case err := <-r.scanErr:
 		return err
 	case <-r.done:
 		select {
-		case addr := <-r.readyCh:
-			return r.open(ctx, addr)
+		case ready := <-r.readyCh:
+			return r.open(ctx, ready)
+		default:
+		}
+		select {
+		case err := <-r.scanErr:
+			return err
 		default:
 		}
 		r.stderrMu.Lock()
@@ -236,8 +257,8 @@ func (r *Runner) Ready(ctx context.Context) error {
 	}
 }
 
-func (r *Runner) open(ctx context.Context, addr string) error {
-	if err := r.dial(addr); err != nil {
+func (r *Runner) open(ctx context.Context, ready readiness) error {
+	if err := r.dial(ready); err != nil {
 		return err
 	}
 	return r.configure(ctx)
@@ -261,28 +282,38 @@ func (r *Runner) configure(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runner) dial(addr string) error {
-	network, address, err := channel.ParseAddr(addr)
+func (r *Runner) dial(ready readiness) error {
+	network, address, err := channel.ParseAddr(ready.addr)
 	if err != nil {
 		return fmt.Errorf("provider: parse readiness address: %w", err)
 	}
 
+	config := r.identity.ClientConfig(ready.cert)
 	httpClient := &http.Client{
 		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			DialTLSContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				var d net.Dialer
-				return d.DialContext(ctx, network, address)
+				raw, err := d.DialContext(ctx, network, address)
+				if err != nil {
+					return nil, err
+				}
+				conn := tls.Client(raw, config)
+				if err := conn.HandshakeContext(ctx); err != nil {
+					raw.Close()
+					return nil, err
+				}
+				return conn, nil
 			},
 		},
 	}
 
-	auth := connect.WithInterceptors(authInterceptor{token: r.token}, traceParentInterceptor{}, validate.NewInterceptor())
+	opts := connect.WithInterceptors(traceParentInterceptor{}, validate.NewInterceptor())
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.network, r.address = network, address
-	r.client = contractv1connect.NewProviderServiceClient(httpClient, "http://provider", auth)
-	r.vars = envvarsv1connect.NewEnvVarsServiceClient(httpClient, "http://provider", auth)
+	r.client = contractv1connect.NewProviderServiceClient(httpClient, "https://localhost", opts)
+	r.vars = envvarsv1connect.NewEnvVarsServiceClient(httpClient, "https://localhost", opts)
 	return nil
 }
 
@@ -463,9 +494,17 @@ func (r *Runner) drainStdout(stdout io.Reader) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !ready {
-			if addr, ok := channel.ParseReadinessLine(line); ok {
+			if addr, cert, ok := channel.ParseReadinessLine(line); ok {
 				ready = true
-				r.readyCh <- addr
+				r.readyCh <- readiness{addr: addr, cert: cert}
+				continue
+			}
+			if channel.LooksLikeReadinessLine(line) {
+				ready = true
+				select {
+				case r.scanErr <- &OutdatedProviderError{Package: r.providerPackage}:
+				default:
+				}
 				continue
 			}
 		}
@@ -503,37 +542,6 @@ func (r *Runner) record(line string) {
 	defer r.stderrMu.Unlock()
 	r.stderrBuf.WriteString(line)
 	r.stderrBuf.WriteByte('\n')
-}
-
-func newSessionToken() (string, error) {
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("provider: generate session token: %w", err)
-	}
-	return hex.EncodeToString(buf), nil
-}
-
-type authInterceptor struct {
-	token string
-}
-
-func (a authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		req.Header().Set("Authorization", channel.FormatAuthHeader(a.token))
-		return next(ctx, req)
-	}
-}
-
-func (a authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-		conn := next(ctx, spec)
-		conn.RequestHeader().Set("Authorization", channel.FormatAuthHeader(a.token))
-		return conn
-	}
-}
-
-func (a authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
 }
 
 type traceParentInterceptor struct{}

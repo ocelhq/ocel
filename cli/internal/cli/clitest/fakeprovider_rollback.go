@@ -10,10 +10,6 @@ import (
 )
 
 func (s *deployFakeProviderServer) Rollback(ctx context.Context, req *contractv1.RollbackRequest) (*contractv1.RollbackResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
-
 	if tag := req.GetTag(); tag != "" {
 		for _, entry := range fakePromotions {
 			if entry.GetPromotion().GetTag() == tag {

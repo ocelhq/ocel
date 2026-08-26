@@ -59,9 +59,6 @@ func saveFakeLinkStore(store fakeLinkStore) error {
 }
 
 func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *envvarsv1.SetLinkRequest) (*envvarsv1.SetLinkResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	link := req.GetLink()
 	if link.GetName() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(
@@ -115,9 +112,6 @@ func (s *deployFakeProviderServer) SetLink(ctx context.Context, req *envvarsv1.S
 }
 
 func (s *deployFakeProviderServer) RemoveLink(ctx context.Context, req *envvarsv1.RemoveLinkRequest) (*envvarsv1.RemoveLinkResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	store, err := loadFakeLinkStore()
 	if err != nil {
 		return nil, err
@@ -134,9 +128,6 @@ func (s *deployFakeProviderServer) RemoveLink(ctx context.Context, req *envvarsv
 }
 
 func (s *deployFakeProviderServer) ListLinks(ctx context.Context, req *envvarsv1.ListLinksRequest) (*envvarsv1.ListLinksResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	store, err := loadFakeLinkStore()
 	if err != nil {
 		return nil, err

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -114,6 +115,17 @@ func RunFakeProvider() int {
 	}
 	_ = os.Remove(sockPath)
 
+	clientCert, err := channel.ParseCertificatePEM(os.Getenv(channel.ClientCertEnvVar))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider: client certificate:", err)
+		return 1
+	}
+	identity, err := channel.NewIdentity()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider: identity:", err)
+		return 1
+	}
+
 	ln, err := net.Listen("unix", sockPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fake provider: listen:", err)
@@ -121,10 +133,7 @@ func RunFakeProvider() int {
 	}
 	defer ln.Close()
 
-	fake := &deployFakeProviderServer{
-		token: os.Getenv(channel.SessionTokenEnvVar),
-		mode:  os.Getenv(FakeProviderModeEnvVar),
-	}
+	fake := &deployFakeProviderServer{mode: os.Getenv(FakeProviderModeEnvVar)}
 
 	mux := http.NewServeMux()
 	path, handler := contractv1connect.NewProviderServiceHandler(fake)
@@ -133,7 +142,9 @@ func RunFakeProvider() int {
 	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(fake)
 	mux.Handle(path, handler)
 
-	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath)))
+	ln = tls.NewListener(ln, identity.ServerConfig(clientCert))
+
+	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath), identity.CertificateDER()))
 
 	srv := &http.Server{Handler: mux}
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -144,8 +155,7 @@ func RunFakeProvider() int {
 
 type deployFakeProviderServer struct {
 	contractv1connect.UnimplementedProviderServiceHandler
-	token string
-	mode  string
+	mode string
 
 	mu                sync.Mutex
 	domainStatusCalls int
@@ -167,10 +177,6 @@ func (s *deployFakeProviderServer) lastPreflight() (string, []string, environmen
 }
 
 func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := s.checkToken(ctx); err != nil {
-		return err
-	}
-
 	journalEdge(req.GetEdge().GetKind(), req.GetEdge().GetDns(), req.GetEdge().GetAllowDegraded())
 	if err := refuseEdge(); err != nil {
 		return err
@@ -358,9 +364,6 @@ func fakeLinks(m *contractv1.Manifest) []*linksv1.Link {
 }
 
 func (s *deployFakeProviderServer) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootstrapRequest) (*contractv1.PlanBootstrapResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	enabled := strings.Split(os.Getenv(FakeEnabledFeaturesEnvVar), ",")
 	feature := func(name, summary string, dependsOn ...string) *contractv1.Feature {
 		return &contractv1.Feature{
@@ -541,9 +544,6 @@ func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
 }
 
 func (s *deployFakeProviderServer) GetCredentialPermissions(ctx context.Context, req *contractv1.CredentialPermissionsRequest) (*contractv1.CredentialPermissionsResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	groups := []*contractv1.CredentialGroup{{
 		Heading:  "AWS credentials",
 		Document: fmt.Sprintf(`{"Version":"2012-10-17","Statement":[{"Sid":%q}]}`, req.GetTier().String()),
@@ -558,9 +558,6 @@ func (s *deployFakeProviderServer) GetCredentialPermissions(ctx context.Context,
 }
 
 func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := s.checkToken(ctx); err != nil {
-		return err
-	}
 	journalBootstrap(req)
 	return stream.Send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
@@ -568,9 +565,6 @@ func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv
 }
 
 func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*contractv1.ChangePlan, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	if err := refuseEdge(); err != nil {
 		return nil, err
@@ -635,9 +629,6 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 }
 
 func (s *deployFakeProviderServer) RemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := s.checkToken(ctx); err != nil {
-		return err
-	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	if err := refuseEdge(); err != nil {
 		return err
@@ -653,9 +644,6 @@ func (s *deployFakeProviderServer) RemoveBootstrap(ctx context.Context, req *con
 }
 
 func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	s.recordPreflight(req.GetSlug(), req.GetDomains(), req.GetRequiredTier())
 	journalPreflight(req)
 	resp := &contractv1.PreflightResponse{
@@ -741,9 +729,6 @@ func journalEdge(kind string, dns *contractv1.Dns, allowDegraded []string) {
 }
 
 func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	aws, err := decodeFakeProviderOptions(req.GetConfig())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -890,9 +875,6 @@ func parseGrammar(s string) uint32 {
 }
 
 func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := s.checkToken(ctx); err != nil {
-		return err
-	}
 	if err := stream.Send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "USE DOMAIN tier=" + req.GetTier().String() + " base=" + req.GetBaseDomain() + " dns=" + req.GetEdge().GetDns().GetKind()}},
 	}); err != nil {
@@ -923,9 +905,6 @@ const FakeServedPreviewsEnvVar = "OCEL_TEST_FAKE_SERVED_PREVIEWS"
 const FakeEmptyRemovalPlanEnvVar = "OCEL_TEST_FAKE_EMPTY_REMOVAL_PLAN"
 
 func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.ChangePlan, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	base := os.Getenv(FakeGlobalDomainEnvVar)
 	if base == "" {
 		return &contractv1.ChangePlan{}, nil
@@ -957,9 +936,6 @@ func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context
 }
 
 func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := s.checkToken(ctx); err != nil {
-		return err
-	}
 	if err := stream.Send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "RELEASE DOMAIN tier=" + req.GetTier().String() + " dns=" + req.GetEdge().GetDns().GetKind()}},
 	}); err != nil {
@@ -973,9 +949,6 @@ func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, re
 const FakeDomainTimeoutEnvVar = "OCEL_TEST_FAKE_DOMAIN_TIMEOUT"
 
 func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := s.checkToken(ctx); err != nil {
-		return err
-	}
 	say := func(message string) error {
 		return stream.Send(&progressv1.OperationEvent{
 			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: message}},
@@ -1031,9 +1004,6 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 }
 
 func (s *deployFakeProviderServer) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := s.checkToken(ctx); err != nil {
-		return err
-	}
 	say := func(message string) error {
 		return stream.Send(&progressv1.OperationEvent{
 			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: message}},
@@ -1068,9 +1038,6 @@ const (
 )
 
 func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *contractv1.HostnameRequest) (*contractv1.GetHostnameStatusResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	s.mu.Lock()
 	s.domainStatusCalls++
 	call := s.domainStatusCalls
@@ -1113,9 +1080,6 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *c
 }
 
 func (s *deployFakeProviderServer) GetPreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.GetPreviewWildcardResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	resp := &contractv1.GetPreviewWildcardResponse{Wildcard: fakeGlobalDomain()}
 	for _, p := range strings.Split(os.Getenv(FakeGlobalDomainProjectsEnvVar), ",") {
 		if p = strings.TrimSpace(p); p != "" {
@@ -1126,9 +1090,6 @@ func (s *deployFakeProviderServer) GetPreviewWildcard(ctx context.Context, req *
 }
 
 func (s *deployFakeProviderServer) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := s.checkToken(ctx); err != nil {
-		return err
-	}
 	if err := stream.Send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "DESTROY project=" + req.GetSlug() + " " + describeEnv(req.GetEnvironment())}},
 	}); err != nil {
@@ -1140,9 +1101,6 @@ func (s *deployFakeProviderServer) RemoveEnvironment(ctx context.Context, req *c
 }
 
 func (s *deployFakeProviderServer) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*contractv1.ChangePlan, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	slug := req.GetSlug()
 	if os.Getenv(FakeEmptyRemovalPlanEnvVar) != "" {
@@ -1226,9 +1184,6 @@ func fakeAppStackGroup(name, app string) *contractv1.ChangeGroup {
 }
 
 func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := s.checkToken(ctx); err != nil {
-		return err
-	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	if err := stream.Send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "DESTROY PROJECT project=" + req.GetSlug() + " dns=" + req.GetEdge().GetDns().GetKind() + " " + describeEnv(req.GetEnvironment())}},
@@ -1243,9 +1198,6 @@ func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *contr
 const FakeEnvironmentsEnvVar = "OCEL_TEST_FAKE_ENVIRONMENTS"
 
 func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *contractv1.ListEnvironmentsRequest) (*contractv1.ListEnvironmentsResponse, error) {
-	if err := s.checkToken(ctx); err != nil {
-		return nil, err
-	}
 	if scripted := os.Getenv(FakeEnvironmentsEnvVar); scripted != "" {
 		resp := &contractv1.ListEnvironmentsResponse{}
 		if scripted == "none" {
@@ -1277,18 +1229,6 @@ func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *co
 			},
 		},
 	}, nil
-}
-
-func (s *deployFakeProviderServer) checkToken(ctx context.Context) error {
-	info, _ := connect.CallInfoForHandlerContext(ctx)
-	var authHeader string
-	if info != nil {
-		authHeader = info.RequestHeader().Get("Authorization")
-	}
-	if token, ok := channel.ParseAuthHeader(authHeader); !ok || token != s.token {
-		return connect.NewError(connect.CodeUnauthenticated, errors.New("bad or missing session token"))
-	}
-	return nil
 }
 
 func describeEnv(env *environmentv1.Environment) string {
