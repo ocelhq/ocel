@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 type Target struct {
@@ -46,16 +48,14 @@ type Destination struct {
 	Address    string
 	Port       int
 	User       string
+	KeyAlias   string
 	KnownHosts []string
 }
 
 func (d Destination) Principal() string { return d.User + "@" + d.Written }
 
 func (d Destination) entry() string {
-	if d.Port == 22 {
-		return d.Address
-	}
-	return "[" + d.Address + "]:" + strconv.Itoa(d.Port)
+	return providerkit.KnownHostsEntry(d.Address, d.KeyAlias, d.Port)
 }
 
 func resolve(ctx context.Context, target Target) (Destination, error) {
@@ -75,6 +75,8 @@ func resolve(ctx context.Context, target Target) (Destination, error) {
 			dest.Address = value
 		case "user":
 			dest.User = value
+		case "hostkeyalias":
+			dest.KeyAlias = value
 		case "port":
 			if port, err := strconv.Atoi(value); err == nil {
 				dest.Port = port

@@ -21,9 +21,9 @@ func generated(t *testing.T, kind string) providerkit.HostKey {
 		t.Fatal(err)
 	}
 	fields := strings.Fields(string(published))
-	key := providerkit.HostKey{Type: fields[0], Key: fields[1]}
-	if !fingerprint(&key) {
-		t.Fatalf("could not fingerprint the %s key ssh-keygen just wrote", kind)
+	key, err := (providerkit.HostKey{Type: fields[0], Key: fields[1]}).Fingerprinted()
+	if err != nil {
+		t.Fatalf("could not fingerprint the %s key ssh-keygen just wrote: %v", kind, err)
 	}
 	return key
 }
