@@ -9,7 +9,6 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
@@ -39,23 +38,14 @@ func varsServedBy(t *testing.T, provider providerkit.Provider) envvarsv1connect.
 			return provider, nil
 		},
 	}
-	const token = "a-token"
-	server := httptest.NewServer(providerkit.NewMux(spec, token))
+	server := httptest.NewServer(providerkit.NewMux(spec))
 	t.Cleanup(server.Close)
 
-	auth := connect.WithInterceptors(connect.UnaryInterceptorFunc(
-		func(next connect.UnaryFunc) connect.UnaryFunc {
-			return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-				req.Header().Set("Authorization", channel.FormatAuthHeader(token))
-				return next(ctx, req)
-			}
-		}))
-
-	contract := contractv1connect.NewProviderServiceClient(server.Client(), server.URL, auth)
+	contract := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
 	if _, err := contract.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
-	return envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL, auth)
+	return envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL)
 }
 
 func cell(key string) *envvarsv1.Coordinate {
@@ -446,17 +436,10 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 			return fake.NewProvider(fake.Options{}), nil
 		},
 	}
-	const token = "a-token"
-	server := httptest.NewServer(providerkit.NewMux(spec, token))
+	server := httptest.NewServer(providerkit.NewMux(spec))
 	t.Cleanup(server.Close)
 
-	vars := envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL, connect.WithInterceptors(
-		connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-			return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-				req.Header().Set("Authorization", channel.FormatAuthHeader(token))
-				return next(ctx, req)
-			}
-		})))
+	vars := envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL)
 
 	ctx := context.Background()
 	calls := map[string]func() error{
