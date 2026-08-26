@@ -99,6 +99,9 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	if described.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls a half-applied host current, so it would be mistaken for a healthy one")
 	}
+	if !described.Unfinished {
+		t.Error("Describe() says nothing about the apply that never finished, so status has nothing to banner and reads the host as ordinarily stale")
+	}
 
 	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Heal: true}, nil); err == nil {
 		t.Error("heal finished an apply it did not start")
@@ -142,6 +145,9 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	}
 	if !finished.Stacks[0].DigestCurrent {
 		t.Error("Describe() still reads the host as drifted after the apply that finished it")
+	}
+	if finished.Unfinished {
+		t.Error("Describe() still banners the host as half-applied after the apply that finished it")
 	}
 }
 

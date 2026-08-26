@@ -21,14 +21,15 @@ type Gate struct {
 }
 
 type Standing struct {
-	Class    Class
-	Present  bool
-	Stacks   []BootstrapStack
-	Features []string
-	Schema   int
-	Writer   Writer
-	AutoHeal bool
-	Held     any
+	Class      Class
+	Present    bool
+	Stacks     []BootstrapStack
+	Features   []string
+	Schema     int
+	Writer     Writer
+	AutoHeal   bool
+	Unfinished bool
+	Held       any
 }
 
 func (g Gate) Standing(ctx context.Context, class Class) (Standing, error) {
@@ -36,7 +37,8 @@ func (g Gate) Standing(ctx context.Context, class Class) (Standing, error) {
 	if err != nil {
 		return Standing{}, err
 	}
-	standing := Standing{Class: class, Present: described.Present, Stacks: described.Stacks, Held: described.Held}
+	standing := Standing{Class: class, Present: described.Present, Stacks: described.Stacks,
+		Unfinished: described.Unfinished, Held: described.Held}
 	var carried []string
 	for _, stack := range described.Stacks {
 		if stack.Feature == "" {

@@ -62,6 +62,27 @@ func TestRenderBootstrapStatus(t *testing.T) {
 			t.Errorf("problem = %q, want it to point at the CLI", got)
 		}
 	})
+
+	t.Run("an apply that never finished is bannered instead of claimed about", func(t *testing.T) {
+		status := statusOf(environmentv1.Tier_TIER_PRODUCTION,
+			&contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, Schema: 1, DigestCurrent: true, WrittenBy: "1.4.0"})
+		status.Unfinished = true
+
+		var out bytes.Buffer
+		renderStatus(&out, status)
+
+		if !strings.Contains(out.String(), "never finished") {
+			t.Errorf("report = %q, want a half-applied bootstrap bannered as one", out.String())
+		}
+		if !strings.Contains(out.String(), "ocel bootstrap production") {
+			t.Errorf("report = %q, want the command that finishes it", out.String())
+		}
+		for _, claim := range []string{"STACK", "ok", "1.4.0"} {
+			if strings.Contains(out.String(), claim) {
+				t.Errorf("report = %q, want %q suppressed: a half-applied host makes no per-item claims", out.String(), claim)
+			}
+		}
+	})
 }
 
 func TestBootstrapCheck(t *testing.T) {
@@ -72,6 +93,9 @@ func TestBootstrapCheck(t *testing.T) {
 	behind := statusOf(environmentv1.Tier_TIER_PRODUCTION,
 		&contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, Schema: 1, DigestCurrent: true})
 	behind.RequiredSchema = 2
+	half := statusOf(environmentv1.Tier_TIER_PRODUCTION,
+		&contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, Schema: 1, DigestCurrent: true})
+	half.Unfinished = true
 
 	for _, tc := range []struct {
 		name     string
@@ -82,6 +106,7 @@ func TestBootstrapCheck(t *testing.T) {
 		{"an absent bootstrap passes", []*contractv1.BootstrapStatus{{Tier: environmentv1.Tier_TIER_PREVIEW, RequiredSchema: 1}}, false},
 		{"stale content fails", []*contractv1.BootstrapStatus{current, stale}, true},
 		{"an older schema fails", []*contractv1.BootstrapStatus{behind}, true},
+		{"an apply that never finished fails", []*contractv1.BootstrapStatus{half}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := check(tc.statuses)

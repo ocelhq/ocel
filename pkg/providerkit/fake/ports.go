@@ -24,6 +24,7 @@ type Bootstrapper struct {
 	requests []providerkit.BootstrapRequest
 	front    edge.Kind
 	standing []edge.Kind
+	halfway  bool
 }
 
 func NewBootstrapper() *Bootstrapper {
@@ -89,6 +90,12 @@ func (b *Bootstrapper) AtSchema(schema uint32) {
 	b.schema = schema
 }
 
+func (b *Bootstrapper) Halfway() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.halfway = true
+}
+
 func (b *Bootstrapper) RefuseApply(err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -105,7 +112,7 @@ func (b *Bootstrapper) Describe(_ context.Context, class providerkit.Class) (pro
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
-	described := providerkit.Bootstrap{Class: class, Present: present}
+	described := providerkit.Bootstrap{Class: class, Present: present, Unfinished: present && b.halfway}
 	if !present {
 		return described, nil
 	}

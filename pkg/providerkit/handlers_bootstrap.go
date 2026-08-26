@@ -214,6 +214,7 @@ func BootstrapStatusProto(standing Standing, writing Writer, tier environmentv1.
 		AutoHeal:       standing.AutoHeal,
 		Writer:         writing.String(),
 		Downgrade:      standing.Downgrade(writing),
+		Unfinished:     standing.Unfinished,
 	}
 	for _, stack := range standing.Stacks {
 		status.Stacks = append(status.Stacks, &contractv1.BootstrapStack{

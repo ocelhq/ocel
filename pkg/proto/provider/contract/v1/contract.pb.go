@@ -1810,6 +1810,7 @@ type BootstrapStatus struct {
 	Stacks         []*BootstrapStack      `protobuf:"bytes,6,rep,name=stacks,proto3" json:"stacks,omitempty"`
 	Writer         string                 `protobuf:"bytes,7,opt,name=writer,proto3" json:"writer,omitempty"`
 	Downgrade      bool                   `protobuf:"varint,8,opt,name=downgrade,proto3" json:"downgrade,omitempty"`
+	Unfinished     bool                   `protobuf:"varint,9,opt,name=unfinished,proto3" json:"unfinished,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1896,6 +1897,13 @@ func (x *BootstrapStatus) GetWriter() string {
 func (x *BootstrapStatus) GetDowngrade() bool {
 	if x != nil {
 		return x.Downgrade
+	}
+	return false
+}
+
+func (x *BootstrapStatus) GetUnfinished() bool {
+	if x != nil {
+		return x.Unfinished
 	}
 	return false
 }
@@ -4016,7 +4024,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0edigest_current\x18\x05 \x01(\bR\rdigestCurrent\x12\x1d\n" +
 	"\n" +
 	"written_by\x18\x06 \x01(\tR\twrittenBy\x12\x1a\n" +
-	"\brequired\x18\a \x01(\bR\brequired\"\xae\x02\n" +
+	"\brequired\x18\a \x01(\bR\brequired\"\xce\x02\n" +
 	"\x0fBootstrapStatus\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x18\n" +
 	"\apresent\x18\x02 \x01(\bR\apresent\x12\x16\n" +
@@ -4025,7 +4033,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\tauto_heal\x18\x05 \x01(\bR\bautoHeal\x12<\n" +
 	"\x06stacks\x18\x06 \x03(\v2$.provider.contract.v1.BootstrapStackR\x06stacks\x12\x16\n" +
 	"\x06writer\x18\a \x01(\tR\x06writer\x12\x1c\n" +
-	"\tdowngrade\x18\b \x01(\bR\tdowngrade\"\x9b\x01\n" +
+	"\tdowngrade\x18\b \x01(\bR\tdowngrade\x12\x1e\n" +
+	"\n" +
+	"unfinished\x18\t \x01(\bR\n" +
+	"unfinished\"\x9b\x01\n" +
 	"\x1cCredentialPermissionsRequest\x12B\n" +
 	"\x04tier\x18\x01 \x01(\x0e2$.provider.contract.v1.CredentialTierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x127\n" +
 	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"^\n" +

@@ -106,6 +106,10 @@ func renderStatus(out io.Writer, status *contractv1.BootstrapStatus) {
 		return
 	}
 	fmt.Fprintf(out, "%s: schema %d, this CLI speaks schema %d\n", name, status.GetSchema(), status.GetRequiredSchema())
+	if status.GetUnfinished() {
+		fmt.Fprintf(out, "  %s\n", statusProblem(status))
+		return
+	}
 
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "  STACK\tFEATURE\tPRESENT\tSCHEMA\tDIGEST\tWRITTEN BY\tAUTO-HEAL")
@@ -131,6 +135,8 @@ func statusProblem(status *contractv1.BootstrapStatus) string {
 	switch {
 	case !status.GetPresent():
 		return ""
+	case status.GetUnfinished():
+		return fmt.Sprintf("this bootstrap records an apply that never finished, so nothing here is a claim about what stands; run `ocel bootstrap %s` to plan the work that is left and finish it", Name(status.GetTier()))
 	case status.GetSchema() < status.GetRequiredSchema():
 		return fmt.Sprintf("this bootstrap is an older shape than this CLI speaks; run `ocel bootstrap %s` to upgrade it", Name(status.GetTier()))
 	case status.GetSchema() > status.GetRequiredSchema():
