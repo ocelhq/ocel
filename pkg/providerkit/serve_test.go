@@ -13,19 +13,33 @@ import (
 )
 
 func TestServeNeedsAConstructor(t *testing.T) {
-	t.Setenv(channel.SessionTokenEnvVar, "a-token")
+	identity, err := channel.NewIdentity()
+	if err != nil {
+		t.Fatalf("NewIdentity() error = %v", err)
+	}
+	t.Setenv(channel.ClientCertEnvVar, identity.CertificatePEM())
 
 	if err := Serve(Spec{Version: "test"}); err == nil {
 		t.Fatal("Serve() with no constructor returned nil, want a refusal to start")
 	}
 }
 
-func TestServeNeedsTheSessionToken(t *testing.T) {
-	t.Setenv(channel.SessionTokenEnvVar, "")
+func TestServeNeedsTheClientCertificate(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cert string
+	}{
+		{"nothing at all", ""},
+		{"something that is not a certificate", "not-a-pem-block"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(channel.ClientCertEnvVar, tc.cert)
 
-	err := Serve(Spec{Version: "test", New: func(context.Context, Options) (Provider, error) { return nil, nil }})
-	if err == nil || !strings.Contains(err.Error(), channel.SessionTokenEnvVar) {
-		t.Fatalf("Serve() error = %v, want it to name the environment variable the CLI must set", err)
+			err := Serve(Spec{Version: "test", New: func(context.Context, Options) (Provider, error) { return nil, nil }})
+			if err == nil || !strings.Contains(err.Error(), channel.ClientCertEnvVar) {
+				t.Fatalf("Serve() error = %v, want it to name the environment variable the CLI must set", err)
+			}
+		})
 	}
 }
 

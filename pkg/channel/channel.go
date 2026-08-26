@@ -3,6 +3,8 @@ package channel
 import (
 	"context"
 	"crypto/subtle"
+	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
@@ -36,21 +38,34 @@ func VerifyAuthHeader(value, token string) bool {
 
 const readinessSentinelPrefix = "OCEL_READY"
 
-func FormatReadinessLine(addr string) string {
-	return readinessSentinelPrefix + " " + addr
+func FormatReadinessLine(addr string, certDER []byte) string {
+	return readinessSentinelPrefix + " " + addr + " " + base64.StdEncoding.EncodeToString(certDER)
 }
 
-func ParseReadinessLine(line string) (addr string, ok bool) {
+func ParseReadinessLine(line string) (addr string, cert *x509.Certificate, ok bool) {
 	prefix := readinessSentinelPrefix + " "
 	line = strings.TrimRight(line, "\r\n")
 	if !strings.HasPrefix(line, prefix) {
-		return "", false
+		return "", nil, false
 	}
-	addr = line[len(prefix):]
-	if addr == "" {
-		return "", false
+	rest := line[len(prefix):]
+	split := strings.LastIndex(rest, " ")
+	if split <= 0 {
+		return "", nil, false
 	}
-	return addr, true
+	addr, encoded := rest[:split], rest[split+1:]
+	if addr == "" || encoded == "" {
+		return "", nil, false
+	}
+	der, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", nil, false
+	}
+	cert, err = x509.ParseCertificate(der)
+	if err != nil {
+		return "", nil, false
+	}
+	return addr, cert, true
 }
 
 func FormatUnixAddr(path string) string {

@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
+	"crypto/tls"
+	"crypto/x509"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -36,12 +36,10 @@ func runWire(t *testing.T, suite Suite) {
 		if suite.Spec.New == nil {
 			t.Skip("the suite carries no Spec, so there is no mux to serve")
 		}
-		token := newToken(t)
-		server := httptest.NewServer(providerkit.NewMux(suite.Spec, token))
+		server := httptest.NewServer(providerkit.NewMux(suite.Spec))
 		t.Cleanup(server.Close)
 
-		rejectsAnUnknownToken(t, client(server.Client(), server.URL, "not-the-token"))
-		holdsTheSessionRules(t, client(server.Client(), server.URL, token), suite.Options)
+		holdsTheSessionRules(t, client(server.Client(), server.URL), suite.Options)
 	})
 
 	t.Run("spawned", func(t *testing.T) {
@@ -50,18 +48,41 @@ func runWire(t *testing.T, suite Suite) {
 		}
 		provider := spawn(t, suite.Binary)
 
-		rejectsAnUnknownToken(t, client(provider.http, "http://provider", "not-the-token"))
-		holdsTheSessionRules(t, client(provider.http, "http://provider", provider.token), suite.Options)
+		provider.refusesAnUnpairedClient(t)
+		holdsTheSessionRules(t, client(provider.http, providerURL), suite.Options)
 
 		provider.stopsOnSIGTERM(t)
 	})
 }
 
-func rejectsAnUnknownToken(t *testing.T, provider contractv1connect.ProviderServiceClient) {
+const providerURL = "https://localhost"
+
+func (s *spawned) refusesAnUnpairedClient(t *testing.T) {
 	t.Helper()
-	_, err := provider.Configure(context.Background(), &contractv1.ConfigureRequest{})
-	if got := connect.CodeOf(err); got != connect.CodeUnauthenticated {
-		t.Errorf("Configure() with the wrong token: code = %v, want %v", got, connect.CodeUnauthenticated)
+
+	stranger, err := channel.NewIdentity()
+	if err != nil {
+		t.Fatalf("NewIdentity() error = %v", err)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		identity *channel.Identity
+		bare     bool
+	}{
+		{name: "a client the provider was never paired with", identity: stranger},
+		{name: "a client presenting no certificate at all", identity: stranger, bare: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := tc.identity.ClientConfig(s.serverCert)
+			if tc.bare {
+				config.Certificates = nil
+			}
+			unpaired := client(transportFor(s.network, s.address, config), providerURL)
+			if _, err := unpaired.Configure(context.Background(), &contractv1.ConfigureRequest{}); err == nil {
+				t.Error("Configure() over an unpaired connection succeeded, want the provider to refuse the handshake")
+			}
+		})
 	}
 }
 
@@ -107,23 +128,17 @@ func configureWith(t *testing.T, options providerkit.Options) *contractv1.Config
 	return &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{Options: fields}}
 }
 
-func client(httpClient connect.HTTPClient, url, token string) contractv1connect.ProviderServiceClient {
-	return contractv1connect.NewProviderServiceClient(httpClient, url, connect.WithInterceptors(bearer(token)))
-}
-
-func bearer(token string) connect.Interceptor {
-	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			req.Header().Set("Authorization", channel.FormatAuthHeader(token))
-			return next(ctx, req)
-		}
-	})
+func client(httpClient connect.HTTPClient, url string) contractv1connect.ProviderServiceClient {
+	return contractv1connect.NewProviderServiceClient(httpClient, url)
 }
 
 type spawned struct {
-	cmd   *exec.Cmd
-	token string
-	http  *http.Client
+	cmd  *exec.Cmd
+	http *http.Client
+
+	serverCert *x509.Certificate
+	network    string
+	address    string
 
 	exit   chan error
 	exited bool
@@ -133,9 +148,12 @@ type spawned struct {
 func spawn(t *testing.T, binary string) *spawned {
 	t.Helper()
 
-	token := newToken(t)
+	identity, err := channel.NewIdentity()
+	if err != nil {
+		t.Fatalf("NewIdentity() error = %v", err)
+	}
 	cmd := exec.Command(binary)
-	cmd.Env = append(os.Environ(), channel.SessionTokenEnvVar+"="+token)
+	cmd.Env = append(os.Environ(), channel.ClientCertEnvVar+"="+identity.CertificatePEM())
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -148,7 +166,7 @@ func spawn(t *testing.T, binary string) *spawned {
 		t.Fatalf("start %s: %v", binary, err)
 	}
 
-	provider := &spawned{cmd: cmd, token: token, exit: make(chan error, 1)}
+	provider := &spawned{cmd: cmd, exit: make(chan error, 1)}
 	go func() { provider.exit <- cmd.Wait() }()
 	t.Cleanup(func() {
 		if provider.exited {
@@ -158,24 +176,34 @@ func spawn(t *testing.T, binary string) *spawned {
 		provider.wait(readyTimeout)
 	})
 
-	addrs := make(chan string, 1)
+	type readiness struct {
+		addr string
+		cert *x509.Certificate
+	}
+	ready := make(chan readiness, 1)
 	go func() {
-		defer close(addrs)
+		defer close(ready)
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
-			if addr, ok := channel.ParseReadinessLine(scanner.Text()); ok {
-				addrs <- addr
+			if addr, cert, ok := channel.ParseReadinessLine(scanner.Text()); ok {
+				ready <- readiness{addr: addr, cert: cert}
 				return
 			}
 		}
 	}()
 
 	select {
-	case addr, ok := <-addrs:
+	case signalled, ok := <-ready:
 		if !ok {
 			t.Fatalf("%s exited before signalling readiness\n%s", binary, stderr.String())
 		}
-		provider.http = dial(t, addr)
+		network, address, err := channel.ParseAddr(signalled.addr)
+		if err != nil {
+			t.Fatalf("ParseAddr(%q) error = %v", signalled.addr, err)
+		}
+		provider.serverCert = signalled.cert
+		provider.network, provider.address = network, address
+		provider.http = transportFor(network, address, identity.ClientConfig(signalled.cert))
 	case <-time.After(readyTimeout):
 		t.Fatalf("%s did not signal readiness within %s", binary, readyTimeout)
 	}
@@ -213,17 +241,21 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-func dial(t *testing.T, addr string) *http.Client {
-	t.Helper()
-	network, address, err := channel.ParseAddr(addr)
-	if err != nil {
-		t.Fatalf("ParseAddr(%q) error = %v", addr, err)
-	}
+func transportFor(network, address string, config *tls.Config) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			DialTLSContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				var d net.Dialer
-				return d.DialContext(ctx, network, address)
+				raw, err := d.DialContext(ctx, network, address)
+				if err != nil {
+					return nil, err
+				}
+				conn := tls.Client(raw, config)
+				if err := conn.HandshakeContext(ctx); err != nil {
+					raw.Close()
+					return nil, err
+				}
+				return conn, nil
 			},
 		},
 	}
@@ -241,13 +273,4 @@ func (s *spawned) stopsOnSIGTERM(t *testing.T) {
 	if s.err != nil {
 		t.Errorf("the provider exited %v on SIGTERM, want a clean stop", s.err)
 	}
-}
-
-func newToken(t *testing.T) string {
-	t.Helper()
-	raw := make([]byte, 16)
-	if _, err := rand.Read(raw); err != nil {
-		t.Fatalf("mint a session token: %v", err)
-	}
-	return hex.EncodeToString(raw)
 }

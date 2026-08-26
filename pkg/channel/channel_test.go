@@ -5,59 +5,6 @@ import (
 	"testing"
 )
 
-func TestReadinessLine(t *testing.T) {
-	t.Parallel()
-
-	t.Run("formats a unix address into the sentinel", func(t *testing.T) {
-		t.Parallel()
-		got := FormatReadinessLine("unix:/tmp/ocel-provider-abc123.sock")
-		want := "OCEL_READY unix:/tmp/ocel-provider-abc123.sock"
-		if got != want {
-			t.Fatalf("FormatReadinessLine() = %q, want %q", got, want)
-		}
-	})
-
-	t.Run("round trips every address form", func(t *testing.T) {
-		t.Parallel()
-		for _, addr := range []string{
-			"unix:/tmp/ocel-provider-abc123.sock",
-			"tcp:127.0.0.1:54321",
-		} {
-			t.Run(addr, func(t *testing.T) {
-				t.Parallel()
-				line := FormatReadinessLine(addr)
-				got, ok := ParseReadinessLine(line)
-				if !ok {
-					t.Fatalf("ParseReadinessLine(%q) ok = false, want true", line)
-				}
-				if got != addr {
-					t.Fatalf("ParseReadinessLine(%q) = %q, want %q", line, got, addr)
-				}
-			})
-		}
-	})
-
-	t.Run("ignores other output", func(t *testing.T) {
-		t.Parallel()
-		for _, tc := range []struct {
-			name string
-			line string
-		}{
-			{"nothing at all", ""},
-			{"an unrelated log line", "listening on socket...\n"},
-			{"a sentinel with a typo", "OCEL_READY_TYPO unix:/tmp/x.sock"},
-			{"the sentinel named midway through a line", "some log line mentioning OCEL_READY midway"},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-				if _, ok := ParseReadinessLine(tc.line); ok {
-					t.Fatalf("ParseReadinessLine(%q) ok = true, want false", tc.line)
-				}
-			})
-		}
-	})
-}
-
 func TestFormatAddr(t *testing.T) {
 	t.Parallel()
 

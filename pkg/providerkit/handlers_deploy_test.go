@@ -512,15 +512,14 @@ func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysLink(t *
 
 func servedBy(t *testing.T, provider providerkit.Provider) contractv1connect.ProviderServiceClient {
 	t.Helper()
-	const token = "a-token"
 	spec := providerkit.Spec{
 		Version: "1.0.0",
 		New:     func(context.Context, providerkit.Options) (providerkit.Provider, error) { return provider, nil },
 	}
-	server := httptest.NewServer(providerkit.NewMux(spec, token))
+	server := httptest.NewServer(providerkit.NewMux(spec))
 	t.Cleanup(server.Close)
 
-	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL, connect.WithInterceptors(bearer(token)))
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
 	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
@@ -617,17 +616,15 @@ func operatorServed(t *testing.T) (contractv1connect.ProviderServiceClient, envv
 		Version: "1.0.0",
 		New:     func(context.Context, providerkit.Options) (providerkit.Provider, error) { return provider, nil },
 	}
-	const token = "a-token"
-	server := httptest.NewServer(providerkit.NewMux(spec, token))
+	server := httptest.NewServer(providerkit.NewMux(spec))
 	t.Cleanup(server.Close)
 
-	auth := connect.WithInterceptors(bearer(token))
-	deploys := contractv1connect.NewProviderServiceClient(server.Client(), server.URL, auth)
+	deploys := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
 	if _, err := deploys.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
 	standsBootstrapped(t, deploys)
-	return deploys, envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL, auth)
+	return deploys, envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL)
 }
 
 func TestDeployPublishesLinksWhereTheOperatorReadsThem(t *testing.T) {

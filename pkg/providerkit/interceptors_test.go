@@ -43,24 +43,3 @@ func TestExtractTraceParent(t *testing.T) {
 		}
 	})
 }
-
-func TestAuthInterceptorChecksTheSessionToken(t *testing.T) {
-	t.Parallel()
-
-	auth := &authenticator{token: "a-token"}
-
-	header := http.Header{}
-	header.Set("Authorization", channel.FormatAuthHeader("a-token"))
-	if err := auth.check(header); err != nil {
-		t.Fatalf("check() with the session token: error = %v", err)
-	}
-
-	header.Set("Authorization", channel.FormatAuthHeader("another-token"))
-	if err := auth.check(header); err == nil {
-		t.Fatal("check() accepted a token the CLI never issued")
-	}
-
-	if err := auth.check(http.Header{}); err == nil {
-		t.Fatal("check() accepted a request with no Authorization header")
-	}
-}

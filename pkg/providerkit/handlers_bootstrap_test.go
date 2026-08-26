@@ -11,7 +11,6 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/channel"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -37,36 +36,14 @@ func servedProvider(t *testing.T, version string, provider providerkit.Provider)
 			return provider, nil
 		},
 	}
-	const token = "a-token"
-	server := httptest.NewServer(providerkit.NewMux(spec, token))
+	server := httptest.NewServer(providerkit.NewMux(spec))
 	t.Cleanup(server.Close)
 
-	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL, connect.WithInterceptors(bearer(token)))
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
 	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
 	return client
-}
-
-type bearer string
-
-func (b bearer) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		req.Header().Set("Authorization", channel.FormatAuthHeader(string(b)))
-		return next(ctx, req)
-	}
-}
-
-func (b bearer) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-		conn := next(ctx, spec)
-		conn.RequestHeader().Set("Authorization", channel.FormatAuthHeader(string(b)))
-		return conn
-	}
-}
-
-func (bearer) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
 }
 
 func drain(stream *connect.ServerStreamForClient[progressv1.OperationEvent]) (*progressv1.ResultEvent, error) {
