@@ -64,6 +64,24 @@ func TestTheKnownHostsEntryBracketsOnlyUnusualPorts(t *testing.T) {
 	}
 }
 
+func TestTheForgetLineNamesTheEntryAndTheFileTheUserWouldEditThemselves(t *testing.T) {
+	t.Parallel()
+
+	dest := Destination{
+		Address:    "203.0.113.10",
+		Port:       2222,
+		KnownHosts: []string{"/home/ada/.ssh/known_hosts", "/etc/ssh/ssh_known_hosts"},
+	}
+	if want := "ssh-keygen -R '[203.0.113.10]:2222' -f /home/ada/.ssh/known_hosts"; dest.Forget() != want {
+		t.Errorf("Forget() = %q, want %q", dest.Forget(), want)
+	}
+
+	plain := Destination{Address: "203.0.113.10", Port: 22}
+	if want := "ssh-keygen -R 203.0.113.10 -f ~/.ssh/known_hosts"; plain.Forget() != want {
+		t.Errorf("Forget() with no known_hosts resolved = %q, want %q", plain.Forget(), want)
+	}
+}
+
 func TestAKeyAliasIsTheNameSshKeysOn(t *testing.T) {
 	t.Parallel()
 

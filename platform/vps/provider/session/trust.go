@@ -103,14 +103,21 @@ func classify(dest Destination, offered []providerkit.HostKey, held known) (prov
 }
 
 func remedy(trust providerkit.HostTrust) string {
-	store := "~/.ssh/known_hosts"
-	if len(trust.KnownHosts) > 0 {
-		store = trust.KnownHosts[0]
-	}
 	if trust.Reason == providerkit.HostKeyMismatch {
-		return fmt.Sprintf("ssh-keygen -R %s -f %s", quoted(trust.KnownHostsEntry()), store)
+		return forgetting(trust.KnownHostsEntry(), trust.KnownHosts)
 	}
-	return fmt.Sprintf("ssh-keyscan -t %s -p %d %s >> %s", trust.Got.Type, trust.Port, trust.Address, store)
+	return fmt.Sprintf("ssh-keyscan -t %s -p %d %s >> %s", trust.Got.Type, trust.Port, trust.Address, store(trust.KnownHosts))
+}
+
+func forgetting(entry string, files []string) string {
+	return fmt.Sprintf("ssh-keygen -R %s -f %s", quoted(entry), store(files))
+}
+
+func store(files []string) string {
+	if len(files) > 0 {
+		return files[0]
+	}
+	return "~/.ssh/known_hosts"
 }
 
 func quoted(entry string) string {

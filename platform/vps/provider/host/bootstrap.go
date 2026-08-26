@@ -241,7 +241,16 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 		}
 		say(report, "removed "+removal.kind+" "+removal.path)
 	}
+	forget, err := b.host.forgetting(ctx)
+	if err != nil {
+		return err
+	}
+	say(report, leavingKnownHosts(forget))
 	return nil
+}
+
+func leavingKnownHosts(forget string) string {
+	return "your known_hosts is as ocel found it; to drop this host's key from it yourself, run: " + forget
 }
 
 type removal struct {
