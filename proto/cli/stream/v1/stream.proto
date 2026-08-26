@@ -7,12 +7,8 @@ import "buf/validate/validate.proto";
 import "common/progress/v1/progress.proto";
 import "provider/contract/v1/contract.proto";
 
-// One event of a run as the CLI tells it. Providers own `OperationEvent`, which
-// arrives here under `operation`.
-//
-// Stable: the arm, `DiagnosticEvent.code`, and typed fields. Presentation, and free to
-// change: human text, level, and the order of concurrent events. Versioning rides the
-// proto package version.
+// One event of a run as the CLI tells it. Stable: the arm and its typed fields.
+// Presentation, free to change: human text, level, order of concurrent events.
 message RunEvent {
   oneof event {
     option (buf.validate.oneof).required = true;

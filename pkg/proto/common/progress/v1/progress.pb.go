@@ -379,8 +379,7 @@ func (*OperationEvent_DnsOwed) isOperationEvent_Event() {}
 
 // A node of the run's stage tree, app-major: a parentless stage is a unit, a child of a
 // unit is a phase, deeper is detail. Events attach at phase depth or deeper, never at a
-// unit. Unit and phase ids are derived from canonical names (`pkg/naming`), so both
-// sides derive them independently; redeclaring an id is idempotent, first write wins.
+// unit; ids are derived from canonical names, so either side derives them alone.
 type Stage struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Id       []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -547,8 +546,7 @@ func (x *SpanAttribute) GetValue() string {
 	return ""
 }
 
-// A span whose `span_id` equals a declared stage id closes that stage. This is the only
-// end-of-stage signal there is.
+// A span whose span_id equals a declared stage id closes it — the only end-of-stage signal.
 type SpanEvent struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	SpanId            []byte                 `protobuf:"bytes,1,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
@@ -641,8 +639,8 @@ func (x *SpanEvent) GetAttributes() []*SpanAttribute {
 	return nil
 }
 
-// A line of progress inside one declared stage. `current`/`total` are producer-declared
-// and the only counter; `total` may grow while a phase runs.
+// A line of progress inside one declared stage. current/total are producer-declared and
+// the only counter; total may grow while a phase runs.
 type ProgressEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
@@ -711,8 +709,8 @@ func (x *ProgressEvent) GetStageId() []byte {
 	return nil
 }
 
-// Detail text inside one declared stage. Run-scoped text is a `cli.stream.v1`
-// diagnostic instead.
+// Detail text inside one declared stage. Run-scoped text is a diagnostic on the CLI's
+// own stream instead.
 type LogEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
