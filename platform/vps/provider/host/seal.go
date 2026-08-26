@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/base64"
+	"fmt"
 	"io/fs"
 	"strings"
 
@@ -37,7 +38,7 @@ func sealSudoers() []byte {
 func (i Item) mint() string {
 	name := quoted(i.Name)
 	return "if [ -e " + name + " ]; then chown " + rootOwner + ":" + rootOwner + " " + name +
-		" && chmod " + sprintMode(i.Mode) + " " + name + "; else " +
+		fmt.Sprintf(" && chmod %04o ", i.Mode) + name + "; else " +
 		`command -v python3 >/dev/null 2>&1 || { echo 'this host carries no python3, and the seal helper reaches its libcrypto for the AES-256-GCM every value is sealed with' >&2; exit 1; }
 ` + quoted(SealHelper) + " " + quoted(string(i.Class)) + " init; fi"
 }
@@ -55,29 +56,29 @@ func (s *Sealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []b
 }
 
 func (s *Sealer) through(ctx context.Context, verb string, at providerkit.Coordinate, body []byte) ([]byte, error) {
-	command, err := sealCommand(verb, at)
+	argv, err := sealArgv(verb, at)
 	if err != nil {
 		return nil, err
 	}
 	fed := append([]byte(base64.StdEncoding.EncodeToString(body)), '\n')
-	rendered, err := s.host.run(ctx, verb+" a value at "+at.Name, command, fed)
+	rendered, err := s.host.granted(ctx, verb+" a value at "+at.Name, argv, fed)
 	if err != nil {
 		return nil, err
 	}
 	written, err := base64.StdEncoding.DecodeString(strings.TrimSpace(rendered))
 	if err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeDenied,
-			"the seal helper answered a %s with %q, which is no value ocel sealed", verb, rendered)
+			"the seal helper answered a %s with %d bytes, which is no value ocel sealed", verb, len(rendered))
 	}
 	return written, nil
 }
 
-func sealCommand(verb string, at providerkit.Coordinate) (string, error) {
+func sealArgv(verb string, at providerkit.Coordinate) ([]string, error) {
 	if at.Class == "" {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"%s names no class, and this host mints one seal key per class", at.Name)
 	}
-	command := quoted(SealHelper) + " " + quoted(string(at.Class)) + " " + verb
+	argv := []string{SealHelper, string(at.Class), verb}
 	for _, named := range [][2]string{
 		{"project", at.Project},
 		{"env", at.Env},
@@ -85,9 +86,13 @@ func sealCommand(verb string, at providerkit.Coordinate) (string, error) {
 		{"link", at.Link},
 		{"name", at.Name},
 	} {
-		command += " --" + named[0] + " " + quoted(named[1])
+		if named[1] == "" && named[0] != "link" {
+			return nil, providerkit.Refuse(providerkit.CodeInvalid,
+				"a value's coordinate names no %s, and the coordinate is what a sealed value is bound to", named[0])
+		}
+		argv = append(argv, "--"+named[0], named[1])
 	}
-	return command, nil
+	return argv, nil
 }
 
 func sealSurvey(item Item) string {

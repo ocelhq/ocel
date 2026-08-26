@@ -1,9 +1,8 @@
 package vps_test
 
 import (
+	"bytes"
 	"context"
-	"encoding/base64"
-	"os/exec"
 	"strings"
 	"testing"
 
@@ -14,14 +13,16 @@ import (
 
 const sealed = "postgres://example"
 
-func (vm machine) fed(login, stdin, command string) (string, error) {
-	cmd := exec.Command("ssh",
-		"-F", vm.config, "-i", vm.key,
-		"-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
-		login+"@"+vm.addr, command)
-	cmd.Stdin = strings.NewReader(stdin)
-	rendered, err := cmd.Output()
-	return string(rendered), err
+func (vm machine) deploying(t *testing.T) *vps.Provider {
+	t.Helper()
+	p := vps.NewProvider(vps.Options{SSH: vps.Target{
+		Host:         vm.addr,
+		User:         deployLogin,
+		IdentityFile: vm.key,
+		Config:       vm.config,
+	}})
+	t.Cleanup(func() { closing(t, p) })
+	return p
 }
 
 func bootstrapped(t *testing.T, vm machine, class providerkit.Class) *vps.Provider {
@@ -45,9 +46,8 @@ func bootstrapped(t *testing.T, vm machine, class providerkit.Class) *vps.Provid
 	return p
 }
 
-func sealArgs(class providerkit.Class, verb, name string) string {
-	return "sudo -n " + host.SealHelper + " " + string(class) + " " + verb +
-		" --project shop --env '*' --folder / --name " + name
+func sealedAt(class providerkit.Class, name string) providerkit.Coordinate {
+	return providerkit.Coordinate{Project: "shop", Class: class, Env: "*", Folder: "/", Name: name}
 }
 
 func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {
@@ -72,28 +72,27 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 	class := providerkit.ClassProduction
 	bootstrapped(t, vm, class)
 
-	fed := base64.StdEncoding.EncodeToString([]byte(sealed))
-	rendered, err := vm.fed(deployLogin, fed, sealArgs(class, "seal", "DATABASE_URL"))
+	ctx := context.Background()
+	sealer := vm.deploying(t).Sealer()
+	at := sealedAt(class, "DATABASE_URL")
+
+	written, err := sealer.Seal(ctx, at, []byte(sealed))
 	if err != nil {
 		t.Fatalf("%s sealed nothing through the helper it is whitelisted on: %v", deployLogin, err)
 	}
-	if strings.Contains(rendered, fed) {
-		t.Fatal("the helper answered a seal carrying the value it was handed")
+	if bytes.Contains(written, []byte(sealed)) {
+		t.Fatal("Seal() answered a value carrying the plaintext it was handed")
 	}
 
-	opened, err := vm.fed(deployLogin, rendered, sealArgs(class, "open", "DATABASE_URL"))
+	opened, err := sealer.Open(ctx, at, written)
 	if err != nil {
 		t.Fatalf("%s could not open what it sealed: %v", deployLogin, err)
 	}
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(opened))
-	if err != nil {
-		t.Fatalf("the helper answered %q, which is no value it sealed", opened)
-	}
-	if string(raw) != sealed {
-		t.Errorf("the round trip answered %q, want %q", raw, sealed)
+	if string(opened) != sealed {
+		t.Errorf("the round trip answered %q, want %q", opened, sealed)
 	}
 
-	if moved, err := vm.fed(deployLogin, rendered, sealArgs(class, "open", "API_KEY")); err == nil {
+	if moved, err := sealer.Open(ctx, sealedAt(class, "API_KEY"), written); err == nil {
 		t.Errorf("a value sealed at DATABASE_URL opened at API_KEY as %q, so the coordinate authenticates nothing", moved)
 	}
 }

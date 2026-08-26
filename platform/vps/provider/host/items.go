@@ -113,8 +113,6 @@ func (i Item) command() string {
 	}
 }
 
-func sprintMode(m fs.FileMode) string { return fmt.Sprintf("%04o", m) }
-
 func digest(kind, name string, mode fs.FileMode, owner, content string) string {
 	sum := sha256.Sum256(fmt.Appendf(nil, "%s\n%s\n%04o\n%s\n%s\n", kind, name, mode, owner, content))
 	return hex.EncodeToString(sum[:])
