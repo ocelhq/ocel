@@ -279,6 +279,7 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 
 	spinner := deployui.StartSpinner(stdout, "Checking your setup")
 	err := provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
+		*got = answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
 		got.pkg = runner.Package()
 		client, err := runner.Client()
 		if err != nil {
