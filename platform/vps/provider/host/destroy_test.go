@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -72,6 +73,29 @@ func TestRemoveTakesTheStampAfterEverythingBeneathIt(t *testing.T) {
 			t.Errorf("Remove() took %s at command %d and the class directory at %d, and the stamp is what an interrupted destroy leaves behind",
 				beneath, at, stamp)
 		}
+	}
+}
+
+func TestADestroyThatLandedIsNotReportedAsFailedBecauseTheConnectionWentAfterIt(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	stood.after = func(b *bench, command string) {
+		if !strings.HasSuffix(command, quoted(classRoot)) {
+			return
+		}
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		b.dead = errors.New("connection closed by remote host")
+	}
+
+	report := &said{}
+	if err := Bootstrap(stood.host()).Remove(context.Background(), class, report); err != nil {
+		t.Fatalf("Remove() = %v after every removal landed, and a host that is gone must not be reported as one that stayed", err)
+	}
+	if report.at("ssh-keygen -R") < 0 {
+		t.Errorf("Remove() never spells the line that drops this host from known_hosts:\n%s", strings.Join(report.lines, "\n"))
 	}
 }
 

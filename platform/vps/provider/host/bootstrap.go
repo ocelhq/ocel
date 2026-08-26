@@ -227,6 +227,10 @@ func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 
 func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
 	defer b.host.forgetTiers()
+	forget, err := b.host.forgetting(ctx)
+	if err != nil {
+		return err
+	}
 	removals, err := b.removals(ctx, class)
 	if err != nil {
 		return err
@@ -240,10 +244,6 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 			return err
 		}
 		say(report, "removed "+removal.kind+" "+removal.path)
-	}
-	forget, err := b.host.forgetting(ctx)
-	if err != nil {
-		return err
 	}
 	say(report, leavingKnownHosts(forget))
 	return nil
