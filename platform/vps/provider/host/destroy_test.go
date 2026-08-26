@@ -218,6 +218,21 @@ func gone(taken []string, name string) bool {
 	return false
 }
 
+func TestForgettingARecordOnAHostThatCarriesNoStoreIsAlreadyForgotten(t *testing.T) {
+	t.Parallel()
+
+	stood := machine(nil)
+	name := providerkit.RecordName{providerkit.RootConformance, string(providerkit.ClassProduction), t.Name()}
+	if err := providerkit.Forget(context.Background(), NewRecords(stood.host()), name); err != nil {
+		t.Fatalf("Forget() over a host a destroy has cleared = %v, want cleanup that does not need the store back", err)
+	}
+	for _, command := range stood.commands() {
+		if strings.HasPrefix(command, quoted(recordsHelper)+" ") {
+			t.Errorf("Forget() ran %q against a host that carries no helper at all", command)
+		}
+	}
+}
+
 func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	t.Parallel()
 

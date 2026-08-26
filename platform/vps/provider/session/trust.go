@@ -114,17 +114,31 @@ func forgetting(entry string, files []string) string {
 }
 
 func store(files []string) string {
-	if len(files) > 0 {
-		return files[0]
+	if len(files) == 0 {
+		return "~/.ssh/known_hosts"
 	}
-	return "~/.ssh/known_hosts"
+	return quoted(files[0])
 }
 
-func quoted(entry string) string {
-	if strings.HasPrefix(entry, "[") {
-		return "'" + entry + "'"
+func quoted(word string) string {
+	if plainly(word) {
+		return word
 	}
-	return entry
+	return "'" + strings.ReplaceAll(word, "'", `'\''`) + "'"
+}
+
+func plainly(word string) bool {
+	if word == "" {
+		return false
+	}
+	return strings.IndexFunc(word, func(r rune) bool {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			return false
+		default:
+			return !strings.ContainsRune("._-/", r)
+		}
+	}) < 0
 }
 
 func preferred(keys []providerkit.HostKey) []providerkit.HostKey {

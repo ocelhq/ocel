@@ -162,6 +162,21 @@ func TestOneKnownKeyAmongSeveralOfferedIsEnough(t *testing.T) {
 	}
 }
 
+func TestTheLineThatDropsAHostNamesTheOneFileItEdits(t *testing.T) {
+	t.Parallel()
+
+	spacey := "/home/ada/ssh keys/known_hosts"
+	if line := forgetting("[203.0.113.10]:2222", []string{spacey}); !strings.Contains(line, "'"+spacey+"'") {
+		t.Errorf("the line reads %q, and run as written it edits a file the user never named", line)
+	}
+	if line := forgetting("example.com", nil); !strings.HasSuffix(line, " -f ~/.ssh/known_hosts") {
+		t.Errorf("the line reads %q, and the store ssh itself defaults to is spelled so no shell expands it", line)
+	}
+	if line := forgetting("", []string{"/home/ada/.ssh/known_hosts"}); !strings.Contains(line, "-R '' -f ") {
+		t.Errorf("the line reads %q, and ssh-keygen reads -f as the argument of -R", line)
+	}
+}
+
 func TestAMarkedEntryIsLeftToOpenSSH(t *testing.T) {
 	t.Parallel()
 
