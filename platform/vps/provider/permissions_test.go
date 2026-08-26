@@ -102,12 +102,46 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 	}
 }
 
+func describedGroup(t *testing.T, class providerkit.Class) string {
+	t.Helper()
+	for _, item := range host.Items(class, nil) {
+		if item.Kind != "linux:user" {
+			continue
+		}
+		for _, line := range strings.Split(string(item.Content), "\n") {
+			if group, named := strings.CutPrefix(line, "group="); named {
+				return group
+			}
+		}
+		t.Fatalf("the deploy login is described as %q, which names no group either way", item.Content)
+	}
+	t.Fatal("nothing in the item set describes the deploy login")
+	return ""
+}
+
 func TestTheDeployDocumentSaysWhatTheDockerGroupIs(t *testing.T) {
 	t.Parallel()
 
-	document := strings.ToLower(rendered(t, providerkit.TierDeploy).Document)
-	if !strings.Contains(document, "docker") || !strings.Contains(document, "root") {
-		t.Errorf("the deploy document does not say that the docker group is root on the machine:\n%s", document)
+	class := providerkit.ClassProduction
+	group := describedGroup(t, class)
+
+	var claim host.Grant
+	for _, grant := range host.Grants(class) {
+		if grant.Name == "membership of the "+group+" group" {
+			claim = grant
+		}
+	}
+	if (group != "") != (claim.Name != "") {
+		t.Fatalf("apply writes the deploy login group=%q and the document claims a membership: %v", group, claim.Name != "")
+	}
+	if group == "" {
+		return
+	}
+	if !strings.Contains(claim.Detail, "become root") {
+		t.Errorf("the document describes membership of %s as:\n%s\nand never says the group is root on the machine under another name", group, claim.Detail)
+	}
+	if document := rendered(t, providerkit.TierDeploy).Document; !strings.Contains(document, claim.Detail) {
+		t.Errorf("the document does not carry the %s grant word for word:\n%s", group, document)
 	}
 }
 

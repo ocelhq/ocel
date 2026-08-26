@@ -184,6 +184,14 @@ func (h *Host) Read(ctx context.Context, class providerkit.Class) (Reading, erro
 	if err != nil {
 		return Reading{}, err
 	}
+	return h.read(ctx, class, keys)
+}
+
+func (h *Host) Survey(ctx context.Context, class providerkit.Class) (Reading, error) {
+	return h.read(ctx, class, nil)
+}
+
+func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte) (Reading, error) {
 	items := Items(class, keys)
 
 	rendered, err := h.run(ctx, "survey what "+string(class)+" holds", survey(items, StampPath(class)), nil)
@@ -233,7 +241,7 @@ func survey(items []Item, also ...string) string {
 	script.WriteString("for p in")
 	for _, item := range items {
 		if item.Kind == KindUser {
-			accounts.WriteString(accountSurvey(item.Name) + "\n")
+			accounts.WriteString(deployLogin().survey() + "\n")
 			continue
 		}
 		script.WriteString(" " + quoted(item.Name))

@@ -1,6 +1,7 @@
 package host
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -183,5 +184,36 @@ func TestTheAccountFactsCarryEveryFieldTheWriteSets(t *testing.T) {
 		if !strings.Contains(facts, want) {
 			t.Errorf("the account digest reads %q, which says nothing about %q, so drift there would never re-plan", facts, want)
 		}
+	}
+}
+
+func TestAKeyPathRootedAtHomeIsReadFromTheHomeThisRunHas(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".ssh", "ocel-deploy.pub"), []byte(aKey+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	keys, err := (Keys{Path: "~/.ssh/ocel-deploy.pub"}).named()
+	if err != nil {
+		t.Fatalf("a key named the way the option documents it = %v", err)
+	}
+	if string(keys) != aKey+"\n" {
+		t.Errorf("the deploy login would answer to %q, want the key under the home ~ names", keys)
+	}
+}
+
+func TestAKeyPathRelativeToNothingIsRefusedRatherThanGuessedAt(t *testing.T) {
+	t.Parallel()
+
+	_, err := (Keys{Path: "deploy.pub"}).named()
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("a relative key path = %v, want a refusal that says ocel is told no directory to resolve it against", err)
+	}
+	if !strings.Contains(refusal.Error(), "~/") {
+		t.Errorf("the refusal reads %q, and it never says what to spell instead", refusal.Error())
 	}
 }

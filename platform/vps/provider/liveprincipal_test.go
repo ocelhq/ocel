@@ -137,3 +137,50 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 		}
 	}
 }
+
+func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
+	vm := live(t)
+	named := filepath.Join(t.TempDir(), "deploy.pub")
+	keygen := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-f", strings.TrimSuffix(named, ".pub"), "-N", "", "-C", "destroy-needs-no-key")
+	if out, err := keygen.CombinedOutput(); err != nil {
+		t.Fatalf("ssh-keygen: %v\n%s", err, out)
+	}
+
+	ctx := context.Background()
+	class := providerkit.ClassProduction
+	stood := vps.NewProvider(vps.Options{
+		SSH:       vps.Target{Host: vm.addr, User: vm.user, IdentityFile: vm.key, Config: vm.config},
+		DeployKey: named,
+	})
+	bootstrapper, err := stood.Bootstrap("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply() = %v", err)
+	}
+	closing(t, stood)
+
+	if err := os.Remove(named); err != nil {
+		t.Fatal(err)
+	}
+
+	p := vps.NewProvider(vps.Options{
+		SSH:       vps.Target{Host: vm.addr, User: vm.user, IdentityFile: vm.key, Config: vm.config},
+		DeployKey: named,
+	})
+	defer closing(t, p)
+	forgetting, err := p.Bootstrap("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := forgetting.PlanRemoval(ctx, class); err != nil {
+		t.Fatalf("PlanRemoval() with the deploy key gone = %v, want a destroy that needs no key to say what it will take", err)
+	}
+	if err := forgetting.Remove(ctx, class, nil); err != nil {
+		t.Fatalf("Remove() with the deploy key gone = %v, want a host nobody can bootstrap to still be one ocel can leave", err)
+	}
+	if left := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); left != "" {
+		t.Errorf("%s still stands as %q after a keyless Remove()", deployLogin, left)
+	}
+}
