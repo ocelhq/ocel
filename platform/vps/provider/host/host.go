@@ -206,21 +206,21 @@ func (h *Host) Install(ctx context.Context, item Item) error {
 	return err
 }
 
-func (h *Host) Remove(ctx context.Context, kind, name string) error {
-	switch kind {
+func (h *Host) remove(ctx context.Context, taken removal) error {
+	switch taken.kind {
 	case KindUser:
-		_, err := h.run(ctx, "remove "+kind+" "+name, "userdel -f "+quoted(name), nil)
+		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, "userdel -f "+quoted(taken.path), nil)
 		return err
 	case KindDir, KindFile, KindSealKey:
-		if !strings.HasPrefix(name, "/") {
+		if !strings.HasPrefix(taken.path, "/") {
 			return providerkit.Refuse(providerkit.CodeInvalid,
-				"%q names no path on this host, and ocel takes nothing it cannot name in full", name)
+				"%q names no path on this host, and ocel takes nothing it cannot name in full", taken.path)
 		}
-		_, err := h.run(ctx, "remove "+name, "rm -rf "+quoted(name), nil)
+		_, err := h.run(ctx, "remove "+taken.path, taken.command(), nil)
 		return err
 	default:
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%s %s is not ocel's to take: what this host runs stays when ocel goes", kind, name)
+			"%s %s is not ocel's to take: what this host runs stays when ocel goes", taken.kind, taken.path)
 	}
 }
 

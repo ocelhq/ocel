@@ -129,12 +129,12 @@ func TestTheHostRemovesNothingItCannotNameAsAPathItWrote(t *testing.T) {
 
 	stood := machine(nil)
 	held := stood.host()
-	for name, taken := range map[string]struct{ kind, path string }{
-		"the engine every container on the host needs": {KindEngine, dockerEngine},
-		"the unit that starts it":                      {KindUnit, dockerUnit},
-		"a name rooted at nothing":                     {KindDir, "docker"},
+	for name, taken := range map[string]removal{
+		"the engine every container on the host needs": keptEngine(),
+		"the unit that starts it":                      taking(KindUnit, dockerUnit, ""),
+		"a name rooted at nothing":                     taking(KindDir, dockerEngine, ""),
 	} {
-		err := held.Remove(context.Background(), taken.kind, taken.path)
+		err := held.remove(context.Background(), taken)
 		var refusal providerkit.Refusal
 		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 			t.Errorf("Remove(%s) = %v, want a refusal: rm -rf is not the fallback for anything ocel was not asked about", name, err)
@@ -163,6 +163,59 @@ func TestADeployLoginSomethingStillHoldsDoesNotStrandTheDestroy(t *testing.T) {
 	if stood.took(quoted(ClassDir(class))) < 0 {
 		t.Errorf("Remove() stopped at the login and left %s standing:\n%s", ClassDir(class), strings.Join(stood.taking(), "\n"))
 	}
+}
+
+func TestARootOtherClassesShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+
+	if err := Bootstrap(stood.host()).Remove(context.Background(), class, nil); err != nil {
+		t.Fatalf("Remove() = %v", err)
+	}
+	taken := stood.taking()
+	for _, shared := range []string{stateRoot, helperRoot, classRoot} {
+		at := stood.took(quoted(shared))
+		if at < 0 {
+			t.Fatalf("Remove() left %s standing on a host that carries nothing else:\n%s", shared, strings.Join(taken, "\n"))
+		}
+		if !strings.HasPrefix(taken[at], "rmdir ") {
+			t.Errorf("Remove() takes %s with %q: a class bootstrapped during the destroy loses its seal key to a survey drawn before it existed",
+				shared, taken[at])
+		}
+	}
+}
+
+func TestTheLastDestroyLeavesNothingOcelEverWroteOnTheHost(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+
+	if err := Bootstrap(stood.host()).Remove(context.Background(), class, nil); err != nil {
+		t.Fatalf("Remove() = %v", err)
+	}
+	taken := stood.taking()
+	for _, item := range bootstrapped(t, class) {
+		if item.Kind == KindEngine || item.Kind == KindUnit || gone(taken, item.Name) {
+			continue
+		}
+		t.Errorf("%s stands after the last class on the host was destroyed:\n%s", item.ID(), strings.Join(taken, "\n"))
+	}
+}
+
+func gone(taken []string, name string) bool {
+	for _, command := range taken {
+		if strings.HasSuffix(command, quoted(name)) {
+			return true
+		}
+		if under, sweeping := strings.CutPrefix(command, "rm -rf "); sweeping &&
+			strings.HasPrefix(name, strings.Trim(under, "'")+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
