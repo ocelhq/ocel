@@ -2,10 +2,13 @@ package providerkit
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -17,10 +20,10 @@ func TestEventTracerDeclareStagesSendsAStagePlanEvent(t *testing.T) {
 	sender := newEventSender(context.Background(), stream.send)
 	tracer := newEventTracer(sender)
 
-	root := NewRootStage("Provisioning")
-	child := NewStage(root, "web")
-	DeclareStages(tracer, false, root)
-	DeclareStages(tracer, true, child)
+	unit := UnitStage(naming.UnitEnvironment, "Environment")
+	phase := PhaseStage(unit, progressv1.Phase_PHASE_PROVISIONING)
+	DeclareStages(tracer, unit)
+	DeclareStages(tracer, phase)
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
@@ -31,29 +34,73 @@ func TestEventTracerDeclareStagesSendsAStagePlanEvent(t *testing.T) {
 	}
 
 	first := events[0].GetStagePlan()
-	if first.GetFinal() {
-		t.Error("first StagePlanEvent.Final = true, want false")
-	}
-	if len(first.GetStages()) != 1 || first.GetStages()[0].GetTitle() != "Provisioning" {
+	if len(first.GetStages()) != 1 || first.GetStages()[0].GetTitle() != "Environment" {
 		t.Fatalf("first StagePlanEvent stages = %+v", first.GetStages())
 	}
 	if len(first.GetStages()[0].GetParentId()) != 0 {
-		t.Errorf("root stage ParentId = %x, want empty (no parent)", first.GetStages()[0].GetParentId())
+		t.Errorf("unit ParentId = %x, want empty (a unit is a root)", first.GetStages()[0].GetParentId())
+	}
+	if got := first.GetStages()[0].GetPhase(); got != progressv1.Phase_PHASE_UNSPECIFIED {
+		t.Errorf("unit Phase = %v, want PHASE_UNSPECIFIED", got)
 	}
 
 	second := events[1].GetStagePlan()
-	if !second.GetFinal() {
-		t.Error("second StagePlanEvent.Final = false, want true")
-	}
 	if string(second.GetStages()[0].GetParentId()) != string(first.GetStages()[0].GetId()) {
-		t.Error("child stage's ParentId does not match the declared parent stage's Id")
+		t.Error("phase stage's ParentId does not match the declared unit's Id")
+	}
+	if got := second.GetStages()[0].GetPhase(); got != progressv1.Phase_PHASE_PROVISIONING {
+		t.Errorf("phase stage Phase = %v, want PHASE_PROVISIONING", got)
+	}
+}
+
+func TestDeclaredUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventSender(context.Background(), stream.send)
+	tracer := newEventTracer(sender)
+
+	unit := UnitStage(naming.UnitEnvironment, "Environment")
+	DeclareStages(tracer,
+		unit,
+		PhaseStage(unit, progressv1.Phase_PHASE_BUILDING),
+		PhaseStage(unit, progressv1.Phase_PHASE_PROVISIONING),
+	)
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	stages := stream.recorded()[0].GetStagePlan().GetStages()
+	for i, want := range []string{"9f2ecbbdfa2db89d", "4b5ac07b8124802c", "ed0ca2aae3a67905"} {
+		if got := hex.EncodeToString(stages[i].GetId()); got != want {
+			t.Errorf("stage %d id = %s, want the naming digest %s", i, got, want)
+		}
+		if len(stages[i].GetId()) != naming.StageIDLen {
+			t.Errorf("stage %d id is %d bytes, want %d", i, len(stages[i].GetId()), naming.StageIDLen)
+		}
+	}
+}
+
+func TestDetailStagesMintTheirOwnIDUnderTheirPhase(t *testing.T) {
+	t.Parallel()
+
+	unit := UnitStage(naming.UnitPromotion, "Promotion")
+	phase := PhaseStage(unit, progressv1.Phase_PHASE_FINALIZING)
+	first := NewStage(phase, "detail")
+	second := NewStage(phase, "detail")
+
+	if first.ID == second.ID {
+		t.Error("two detail stages share an id, want each minted on its own")
+	}
+	if first.ParentID != phase.ID {
+		t.Error("a detail stage hangs off something other than its phase")
 	}
 }
 
 func TestDeclareStagesToleratesNoTracer(t *testing.T) {
 	t.Parallel()
 
-	DeclareStages(nil, true, NewRootStage("Provisioning"))
+	DeclareStages(nil, UnitStage(naming.UnitEnvironment, "Environment"))
 }
 
 func TestEventTracerSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
@@ -63,7 +110,7 @@ func TestEventTracerSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
 	sender := newEventSender(context.Background(), stream.send)
 	tracer := newEventTracer(sender)
 
-	root := NewRootStage("Provisioning")
+	root := UnitStage(naming.UnitEnvironment, "Environment")
 	child := NewStage(root, "web")
 	start := time.Unix(1000, 0)
 	end := time.Unix(1005, 0)
@@ -104,7 +151,7 @@ func TestEventTracerSpanRecordsAFailureAsAnErrorKindNeverRawText(t *testing.T) {
 	tracer := newEventTracer(sender)
 
 	secret := "postgres://user:hunter2@10.0.0.1:5432/db AKIAABCDEF1234567890"
-	stage := NewRootStage("Provisioning")
+	stage := UnitStage(naming.UnitEnvironment, "Environment")
 	tracer.Span(stage.ID, stage.ParentID, stage.Title, time.Now(), time.Now(), errors.New(secret))
 
 	if err := sender.close(); err != nil {
@@ -148,14 +195,14 @@ func TestClassifyError(t *testing.T) {
 func TestStageTitlesAreSanitized(t *testing.T) {
 	t.Parallel()
 
-	if got := NewRootStage("\x1b[2J").Title; got != "[2J" {
-		t.Errorf("NewRootStage() title = %q, want the control characters gone", got)
+	if got := UnitStage(naming.UnitEnvironment, "\x1b[2J").Title; got != "[2J" {
+		t.Errorf("UnitStage() title = %q, want the control characters gone", got)
 	}
-	if got := NewRootStage("   ").Title; got != "stage" {
-		t.Errorf("NewRootStage() title = %q, want a fallback title", got)
+	if got := UnitStage(naming.UnitEnvironment, "   ").Title; got != "stage" {
+		t.Errorf("UnitStage() title = %q, want a fallback title", got)
 	}
-	if got := NewRootStage(strings.Repeat("a", maxStageTitleLen*2)).Title; len(got) > maxStageTitleLen {
-		t.Errorf("NewRootStage() title is %d long, want it capped at %d", len(got), maxStageTitleLen)
+	if got := UnitStage(naming.UnitEnvironment, strings.Repeat("a", maxStageTitleLen*2)).Title; len(got) > maxStageTitleLen {
+		t.Errorf("UnitStage() title is %d long, want it capped at %d", len(got), maxStageTitleLen)
 	}
 }
 

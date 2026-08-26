@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -36,15 +37,17 @@ func newTestSession(t *testing.T, command string) (*Session, *bytes.Buffer, stri
 	return s, &out, s.LogPath()
 }
 
-func progress(phase progressv1.Phase, msg string) *progressv1.OperationEvent {
+var testStageID = naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning)
+
+func progress(msg string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-		Progress: &progressv1.ProgressEvent{Phase: phase, Message: msg},
+		Progress: &progressv1.ProgressEvent{StageId: testStageID, Message: msg},
 	}}
 }
 
-func progressN(phase progressv1.Phase, msg string, current, total uint32) *progressv1.OperationEvent {
+func progressN(msg string, current, total uint32) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-		Progress: &progressv1.ProgressEvent{Phase: phase, Message: msg, Current: &current, Total: &total},
+		Progress: &progressv1.ProgressEvent{StageId: testStageID, Message: msg, Current: &current, Total: &total},
 	}}
 }
 
@@ -63,7 +66,7 @@ func TestSession(t *testing.T) {
 		s, out, logPath := newTestSession(t, "ocel deploy")
 
 		s.Building()
-		s.Event(progress(progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts"))
+		s.Event(progress("Uploading function artifacts"))
 		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
 			Log: &progressv1.LogEvent{Message: "pulumi engine line"},
 		}})
@@ -87,7 +90,7 @@ func TestSession(t *testing.T) {
 			t.Fatalf("Close() = %v", err)
 		}
 		log := readLog(t, logPath)
-		for _, want := range []string{"[building]", "[uploading]", "[log] pulumi engine line"} {
+		for _, want := range []string{"[building]", "[progress] Uploading function artifacts", "[log] pulumi engine line"} {
 			if !strings.Contains(log, want) {
 				t.Errorf("log = %q, want it to contain %q", log, want)
 			}
@@ -114,7 +117,7 @@ func TestSession(t *testing.T) {
 	t.Run("determinate progress is logged with counts", func(t *testing.T) {
 		t.Parallel()
 		s, _, logPath := newTestSession(t, "ocel deploy")
-		s.Event(progressN(progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", 3, 5))
+		s.Event(progressN("Uploading function artifacts", 3, 5))
 		if err := s.Close(); err != nil {
 			t.Fatalf("Close() = %v", err)
 		}
@@ -175,7 +178,7 @@ func TestSession(t *testing.T) {
 	t.Run("cancel warns about partial state and hints at reconciling", func(t *testing.T) {
 		t.Parallel()
 		s, out, _ := newTestSession(t, "ocel deploy")
-		s.Event(progress(progressv1.Phase_PHASE_PROVISIONING, "Provisioning resources"))
+		s.Event(progress("Provisioning resources"))
 		s.Cancel()
 
 		got := out.String()
@@ -259,15 +262,27 @@ func TestSession(t *testing.T) {
 		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
 			StagePlan: &progressv1.StagePlanEvent{
 				Stages: []*progressv1.Stage{{Id: build, Title: "Building"}},
-				Final:  true,
 			},
 		}})
 
 		if title := s.r.plan.nodes[stageKey(build)].title; title != "Building" {
 			t.Errorf("stage title = %q, want %q", title, "Building")
 		}
-		if !s.r.plan.final {
-			t.Error("plan.final = false after a StagePlanEvent with Final: true")
+	})
+
+	t.Run("a declared stage with no title falls back to its phase label", func(t *testing.T) {
+		t.Parallel()
+		s, _, _ := newTestSession(t, "ocel deploy")
+
+		stage := []byte{2, 0, 0, 0, 0, 0, 0, 0}
+		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
+			StagePlan: &progressv1.StagePlanEvent{
+				Stages: []*progressv1.Stage{{Id: stage, Phase: progressv1.Phase_PHASE_PROVISIONING}},
+			},
+		}})
+
+		if title := s.r.plan.nodes[stageKey(stage)].title; title != "Provisioning" {
+			t.Errorf("stage title = %q, want the phase label the declaration carries", title)
 		}
 	})
 
@@ -628,12 +643,12 @@ func TestFormatAxis(t *testing.T) {
 		t.Cleanup(func() { _ = s.Close() })
 
 		s.Building()
-		s.Event(progress(progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts"))
+		s.Event(progress("Uploading function artifacts"))
 		s.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{}, nil, nil)
 
 		lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
-		if len(lines) != 3 {
-			t.Fatalf("got %d stdout lines, want 3 (building, progress, deployed): %q", len(lines), out.String())
+		if len(lines) != 4 {
+			t.Fatalf("got %d stdout lines, want 4 (build stage plan, build progress, progress, deployed): %q", len(lines), out.String())
 		}
 		for _, line := range lines {
 			var rec map[string]any
@@ -644,8 +659,8 @@ func TestFormatAxis(t *testing.T) {
 				t.Errorf("line %q has no %q field", line, "type")
 			}
 		}
-		if strings.Contains(lines[1], "\r") || strings.HasPrefix(lines[1], "Uploading") {
-			t.Errorf("progress line %q looks like the raw human line, not a JSON record", lines[1])
+		if strings.Contains(lines[2], "\r") || strings.HasPrefix(lines[2], "Uploading") {
+			t.Errorf("progress line %q looks like the raw human line, not a JSON record", lines[2])
 		}
 	})
 
@@ -657,7 +672,7 @@ func TestFormatAxis(t *testing.T) {
 		s := New(&out, run, FormatJSON, true)
 		t.Cleanup(func() { _ = s.Close() })
 
-		s.Event(progress(progressv1.Phase_PHASE_UPLOADING, "Building"))
+		s.Event(progress("Building"))
 
 		var rec map[string]any
 		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
@@ -684,7 +699,7 @@ func TestFormatAxis(t *testing.T) {
 		s := New(&out, run, FormatHuman, true)
 		t.Cleanup(func() { _ = s.Close() })
 
-		s.Event(progress(progressv1.Phase_PHASE_UPLOADING, "Building project"))
+		s.Event(progress("Building project"))
 
 		if !strings.Contains(out.String(), "Building project") {
 			t.Errorf("stdout = %q, want the human-readable line", out.String())
@@ -722,7 +737,6 @@ func TestSpanWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
 			s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
 				StagePlan: &progressv1.StagePlanEvent{
 					Stages: []*progressv1.Stage{{Id: stage, Title: "Provisioning"}},
-					Final:  true,
 				},
 			}})
 			s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
@@ -764,13 +778,13 @@ func TestBar(t *testing.T) {
 	}
 }
 
-func TestFallbackTitle(t *testing.T) {
+func TestSessionProgressIDsMatchTheProvidersOwnDerivation(t *testing.T) {
 	t.Parallel()
 
-	if got := fallbackTitle(progressv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack"); got != "Provisioning" {
-		t.Errorf("fallbackTitle(PROVISIONING, ...) = %q, want the phase label", got)
+	if got := stageKey(naming.UnitID(naming.UnitEnvironment)); got != "9f2ecbbdfa2db89d" {
+		t.Errorf("environment unit id = %s, want the digest the provider derives for the same canonical name", got)
 	}
-	if got := fallbackTitle(progressv1.Phase_PHASE_UNSPECIFIED, "Ensuring passphrase"); got != "Ensuring passphrase" {
-		t.Errorf("fallbackTitle(UNSPECIFIED, ...) = %q, want the message itself", got)
+	if got := stageKey(naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning)); got != "ed0ca2aae3a67905" {
+		t.Errorf("environment provisioning phase id = %s, want the digest the provider derives for the same pair", got)
 	}
 }

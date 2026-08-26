@@ -9,6 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -37,7 +38,7 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 }
 
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(sender *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventSender, report Reporter) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
@@ -163,7 +164,7 @@ func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, 
 }
 
 func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(_ *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err

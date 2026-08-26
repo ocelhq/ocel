@@ -49,7 +49,6 @@ type stagePlan struct {
 	nodes       map[string]*stageNode
 	roots       []string
 	orphans     map[string][]string
-	final       bool
 	activeOrder []string
 
 	droppedNodes   int
@@ -82,9 +81,6 @@ func (p *stagePlan) apply(ev *progressv1.StagePlanEvent) {
 	for _, s := range ev.GetStages() {
 		p.declare(s)
 	}
-	if ev.GetFinal() {
-		p.final = true
-	}
 }
 
 func (p *stagePlan) declare(s *progressv1.Stage) {
@@ -100,6 +96,9 @@ func (p *stagePlan) declare(s *progressv1.Stage) {
 		return
 	}
 	n.title = s.GetTitle()
+	if n.title == "" {
+		n.title = phaseLabel(s.GetPhase())
+	}
 	n.parentID = stageKey(s.GetParentId())
 	p.link(n)
 }
@@ -302,25 +301,4 @@ func (p *stagePlan) displayRows() []displayRow {
 		}
 	}
 	return out
-}
-
-func (p *stagePlan) siblingPosition(id string) (index, count int, ok bool) {
-	n, exists := p.nodes[id]
-	if !exists || !n.linked {
-		return 0, 0, false
-	}
-	list := p.roots
-	if n.linkedParent != "" {
-		parent, pok := p.nodes[n.linkedParent]
-		if !pok {
-			return 0, 0, false
-		}
-		list = parent.children
-	}
-	for i, sibling := range list {
-		if sibling == id {
-			return i + 1, len(list), true
-		}
-	}
-	return 0, 0, false
 }

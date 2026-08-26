@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
 
@@ -123,7 +124,7 @@ func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map
 }
 
 func (r *deployRun) warnShadowed(resources []Resource, published []string) {
-	report := r.report(r.stages.Provisioning, phaseOf(r.stages.Provisioning, r.stages))
+	report := r.report(r.stages.Environment, progressv1.Phase_PHASE_PROVISIONING)
 	for _, resource := range resources {
 		if resource.Linked || !slices.Contains(published, resource.Declared) {
 			continue

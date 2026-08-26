@@ -100,8 +100,8 @@ func (s *Session) Resume() {
 
 func (s *Session) Event(ev *progressv1.OperationEvent) {
 	if p := ev.GetProgress(); p != nil {
-		s.logf("[%s] %s", phaseTag(p.GetPhase()), progressLogLine(p.GetMessage(), p.GetCurrent(), p.Total))
-		s.r.Progress(p.GetStageId(), p.GetPhase(), p.GetMessage(), p.GetCurrent(), p.Total)
+		s.logf("[progress] %s", progressLogLine(p.GetMessage(), p.GetCurrent(), p.Total))
+		s.r.Progress(p.GetStageId(), p.GetMessage(), p.GetCurrent(), p.Total)
 		return
 	}
 	if l := ev.GetLog(); l != nil {
@@ -346,6 +346,8 @@ func attributeKey(k progressv1.AttributeKey) (attribute.Key, bool) {
 		return runtrace.AttrResourceType, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME:
 		return runtrace.AttrResourceName, true
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_CACHED:
+		return runtrace.AttrCached, true
 	default:
 		return "", false
 	}

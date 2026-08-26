@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/deployui"
@@ -56,9 +57,11 @@ func TestLogFormatFlagReachesTheSessionOutput(t *testing.T) {
 
 	s.Building()
 
-	var rec map[string]any
-	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
-		t.Fatalf("--log-format json did not reach the session: stdout = %q is not JSON: %v", out.String(), err)
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("--log-format json did not reach the session: stdout = %q is not JSON: %v", out.String(), err)
+		}
 	}
 }
 

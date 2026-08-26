@@ -157,6 +157,26 @@ type deployFakeProviderServer struct {
 	preflightTier     environmentv1.Tier
 }
 
+var (
+	fakeUnitID  = naming.UnitID(naming.UnitEnvironment)
+	fakePhaseID = naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning)
+)
+
+func declareFakeStages(stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return stream.Send(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
+		StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
+			{Id: fakeUnitID, Title: "Environment"},
+			{Id: fakePhaseID, ParentId: fakeUnitID, Phase: progressv1.Phase_PHASE_PROVISIONING},
+		}},
+	}})
+}
+
+func fakeProgress(message string) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
+		Progress: &progressv1.ProgressEvent{StageId: fakePhaseID, Message: message},
+	}}
+}
+
 func (s *deployFakeProviderServer) recordPreflight(slug string, domains []string, tier environmentv1.Tier) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -170,6 +190,9 @@ func (s *deployFakeProviderServer) lastPreflight() (string, []string, environmen
 }
 
 func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	if err := declareFakeStages(stream); err != nil {
+		return err
+	}
 	journalEdge(req.GetEdge().GetKind(), req.GetEdge().GetDns(), req.GetEdge().GetAllowDegraded())
 	if err := refuseEdge(); err != nil {
 		return err
@@ -193,38 +216,28 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 	}
 
 	slug, domains, class := s.lastPreflight()
-	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "PREFLIGHT slug=" + slug + " domains=" + strings.Join(domains, ",") + " tier=" + class.String()}},
-	}); err != nil {
+	if err := stream.Send(fakeProgress("PREFLIGHT slug=" + slug + " domains=" + strings.Join(domains, ",") + " tier=" + class.String())); err != nil {
 		return err
 	}
 
-	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "DEPLOY " + describeEnv(req.GetEnvironment())}},
-	}); err != nil {
+	if err := stream.Send(fakeProgress("DEPLOY " + describeEnv(req.GetEnvironment()))); err != nil {
 		return err
 	}
 
 	for _, a := range req.GetManifest().GetApps() {
-		if err := stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "APP " + describeApp(a)}},
-		}); err != nil {
+		if err := stream.Send(fakeProgress("APP " + describeApp(a))); err != nil {
 			return err
 		}
 	}
 
 	for _, f := range req.GetManifest().GetFunctions() {
-		if err := stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "FUNCTION " + describeFunction(f)}},
-		}); err != nil {
+		if err := stream.Send(fakeProgress("FUNCTION " + describeFunction(f))); err != nil {
 			return err
 		}
 	}
 
 	for _, message := range consumeFakeLinks(req.GetManifest()) {
-		if err := stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: message}},
-		}); err != nil {
+		if err := stream.Send(fakeProgress(message)); err != nil {
 			return err
 		}
 	}
@@ -235,24 +248,18 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 	}
 
 	for _, u := range req.GetManifest().GetUsages() {
-		if err := stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "USAGE " + describeUsage(u)}},
-		}); err != nil {
+		if err := stream.Send(fakeProgress("USAGE " + describeUsage(u))); err != nil {
 			return err
 		}
 	}
 
 	for _, a := range req.GetManifest().GetApps() {
-		if err := stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "DELIVER " + describeDelivery(req.GetManifest(), a.GetName())}},
-		}); err != nil {
+		if err := stream.Send(fakeProgress("DELIVER " + describeDelivery(req.GetManifest(), a.GetName()))); err != nil {
 			return err
 		}
 	}
 
-	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "provisioning..."}},
-	}); err != nil {
+	if err := stream.Send(fakeProgress("provisioning...")); err != nil {
 		return err
 	}
 
@@ -626,13 +633,14 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 }
 
 func (s *deployFakeProviderServer) RemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	if err := declareFakeStages(stream); err != nil {
+		return err
+	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
 	if err := refuseEdge(); err != nil {
 		return err
 	}
-	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "TEARDOWN tier=" + req.GetTier().String()}},
-	}); err != nil {
+	if err := stream.Send(fakeProgress("TEARDOWN tier=" + req.GetTier().String())); err != nil {
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
@@ -872,9 +880,10 @@ func parseGrammar(s string) uint32 {
 }
 
 func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "USE DOMAIN tier=" + req.GetTier().String() + " base=" + req.GetBaseDomain() + " dns=" + req.GetEdge().GetDns().GetKind()}},
-	}); err != nil {
+	if err := declareFakeStages(stream); err != nil {
+		return err
+	}
+	if err := stream.Send(fakeProgress("USE DOMAIN tier=" + req.GetTier().String() + " base=" + req.GetBaseDomain() + " dns=" + req.GetEdge().GetDns().GetKind())); err != nil {
 		return err
 	}
 	records, err := edge.RecordsFor(edge.DNSTarget{Kind: "cloudflare", ServesUnbound: true}, []string{"*." + req.GetBaseDomain()})
@@ -886,9 +895,7 @@ func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *
 		if req.GetEdge().GetDns() == nil {
 			message = rec.Instruction()
 		}
-		if err := stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: message}},
-		}); err != nil {
+		if err := stream.Send(fakeProgress(message)); err != nil {
 			return err
 		}
 	}
@@ -933,9 +940,10 @@ func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context
 }
 
 func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "RELEASE DOMAIN tier=" + req.GetTier().String() + " dns=" + req.GetEdge().GetDns().GetKind()}},
-	}); err != nil {
+	if err := declareFakeStages(stream); err != nil {
+		return err
+	}
+	if err := stream.Send(fakeProgress("RELEASE DOMAIN tier=" + req.GetTier().String() + " dns=" + req.GetEdge().GetDns().GetKind())); err != nil {
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
@@ -946,10 +954,11 @@ func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, re
 const FakeDomainTimeoutEnvVar = "OCEL_TEST_FAKE_DOMAIN_TIMEOUT"
 
 func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	if err := declareFakeStages(stream); err != nil {
+		return err
+	}
 	say := func(message string) error {
-		return stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: message}},
-		})
+		return stream.Send(fakeProgress(message))
 	}
 	if host := req.GetHost(); host != "" && !slices.Contains(req.GetConfigured(), host) {
 		return stream.Send(&progressv1.OperationEvent{
@@ -1001,10 +1010,11 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 }
 
 func (s *deployFakeProviderServer) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	if err := declareFakeStages(stream); err != nil {
+		return err
+	}
 	say := func(message string) error {
-		return stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: message}},
-		})
+		return stream.Send(fakeProgress(message))
 	}
 	if err := say(fmt.Sprintf("DOMAIN RM slug=%s host=%s configured=%s dns=%s edge=%s", req.GetSlug(), req.GetHost(), strings.Join(req.GetConfigured(), ","), req.GetEdge().GetDns().GetKind(), resolvedEdgeKind(req.GetEdge().GetKind()))); err != nil {
 		return err
@@ -1087,9 +1097,10 @@ func (s *deployFakeProviderServer) GetPreviewWildcard(ctx context.Context, req *
 }
 
 func (s *deployFakeProviderServer) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "DESTROY project=" + req.GetSlug() + " " + describeEnv(req.GetEnvironment())}},
-	}); err != nil {
+	if err := declareFakeStages(stream); err != nil {
+		return err
+	}
+	if err := stream.Send(fakeProgress("DESTROY project=" + req.GetSlug() + " " + describeEnv(req.GetEnvironment()))); err != nil {
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
@@ -1181,10 +1192,11 @@ func fakeAppStackGroup(name, app string) *contractv1.ChangeGroup {
 }
 
 func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	if err := declareFakeStages(stream); err != nil {
+		return err
+	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
-	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "DESTROY PROJECT project=" + req.GetSlug() + " dns=" + req.GetEdge().GetDns().GetKind() + " " + describeEnv(req.GetEnvironment())}},
-	}); err != nil {
+	if err := stream.Send(fakeProgress("DESTROY PROJECT project=" + req.GetSlug() + " dns=" + req.GetEdge().GetDns().GetKind() + " " + describeEnv(req.GetEnvironment()))); err != nil {
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{

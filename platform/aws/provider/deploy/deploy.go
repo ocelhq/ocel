@@ -9,7 +9,6 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
@@ -94,34 +93,13 @@ type Config struct {
 
 	StackState edge.StackState
 
-	Stages      Stages
-	AppStages   map[string]Stage
-	Tracer      Tracer
-	StageReport func(StageID) func(string)
+	Tracer Tracer
 
 	Transform transform.Evaluator
 }
 
 type RecordWaiter interface {
 	Await(ctx context.Context, records []edge.Record, say func(string)) error
-}
-
-type Stages struct {
-	Uploading    Stage
-	Provisioning Stage
-	Finalizing   Stage
-}
-
-func AppStages(provisioning Stage, manifest *contractv1.Manifest) (map[string]Stage, []Stage) {
-	apps := manifestApps(manifest)
-	byApp := make(map[string]Stage, len(apps))
-	declared := make([]Stage, 0, len(apps))
-	for _, app := range apps {
-		s := NewStage(provisioning, app.GetName())
-		byApp[app.GetName()] = s
-		declared = append(declared, s)
-	}
-	return byApp, declared
 }
 
 func collectPostgresLink(ctx context.Context, secrets SecretsReader, name string, fields map[string]any) (*linksv1.Link, error) {

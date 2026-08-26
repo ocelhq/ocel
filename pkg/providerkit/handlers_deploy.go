@@ -23,33 +23,20 @@ import (
 const stackVersion = "1"
 
 func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamResult(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED,
-		func(sender *eventSender, _ Reporter) (*progressv1.OperationEvent, error) {
-			run, err := h.openDeploy(ctx, req, sender)
-			if err != nil {
-				return nil, err
-			}
-			return run.execute(ctx)
-		})
+	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
+		run, err := h.openDeploy(ctx, req, sender)
+		if err != nil {
+			return nil, err
+		}
+		return run.execute(ctx)
+	})
 }
 
 type deployStages struct {
-	Uploading    Stage
-	Provisioning Stage
-	Infra        Stage
-	Apps         map[string]Stage
-	Promoting    Stage
-}
-
-func (s deployStages) declared(plan DeployPlan) []Stage {
-	stages := []Stage{s.Uploading, s.Provisioning}
-	if !plan.Infra.IsZero() {
-		stages = append(stages, s.Infra)
-	}
-	for _, entry := range plan.Apps {
-		stages = append(stages, s.Apps[entry.App])
-	}
-	return append(stages, s.Promoting)
+	Environment Stage
+	Infra       Stage
+	Apps        map[string]Stage
+	Promotion   Stage
 }
 
 type deployRun struct {
@@ -61,6 +48,9 @@ type deployRun struct {
 	manifest *contractv1.Manifest
 	plan     DeployPlan
 	stages   deployStages
+
+	declaredMu sync.Mutex
+	declared   map[StageID]bool
 
 	front    edge.Edge
 	stack    edge.EdgeStack
@@ -117,6 +107,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		scope:     values.Scope{Project: plan.Slug, Class: plan.Class},
 		artifacts: map[string]ArtifactRef{},
 		functions: map[string][]Function{},
+		declared:  map[StageID]bool{},
 
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
 	}
@@ -125,21 +116,18 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		return nil, err
 	}
 	run.stages = deployStages{
-		Uploading:    NewRootStage("Uploading"),
-		Provisioning: NewRootStage("Provisioning"),
-		Promoting:    NewRootStage("Promoting"),
-		Apps:         map[string]Stage{},
+		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle),
+		Infra:       UnitStage(plan.Infra.String(), infraUnitTitle),
+		Promotion:   UnitStage(naming.UnitPromotion, promotionUnitTitle),
+		Apps:        map[string]Stage{},
 	}
-	run.stages.Infra = NewStage(run.stages.Provisioning, plan.Infra.String())
 	for _, entry := range plan.Apps {
-		run.stages.Apps[entry.App] = NewStage(run.stages.Provisioning, entry.App)
+		run.stages.Apps[entry.App] = UnitStage(entry.Stack.String(), entry.App)
 	}
 	return run, nil
 }
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
-	r.tracer.DeclareStages(true, r.stages.declared(r.plan)...)
-
 	if err := r.admit(ctx); err != nil {
 		return nil, err
 	}
@@ -161,7 +149,9 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	if err := r.preflight(ctx); err != nil {
 		return nil, err
 	}
-	if err := r.timed(r.stages.Uploading, func(report Reporter) error { return r.upload(ctx, report) }); err != nil {
+	if err := r.timed(r.stages.Environment, progressv1.Phase_PHASE_UPLOADING, func(report Reporter) error {
+		return r.upload(ctx, report)
+	}); err != nil {
 		return nil, err
 	}
 	if err := r.provision(ctx); err != nil {
@@ -170,30 +160,37 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	return r.promote(ctx)
 }
 
-func (r *deployRun) report(stage Stage, phase progressv1.Phase) Reporter {
-	return &reporter{sender: r.sender, tracer: r.tracer, stage: stage, phase: phase}
+func (r *deployRun) declare(unit Stage, phase progressv1.Phase) Stage {
+	working := PhaseStage(unit, phase)
+	r.declaredMu.Lock()
+	var fresh []Stage
+	for _, stage := range []Stage{unit, working} {
+		if !r.declared[stage.ID] {
+			r.declared[stage.ID] = true
+			fresh = append(fresh, stage)
+		}
+	}
+	r.declaredMu.Unlock()
+	r.tracer.DeclareStages(fresh...)
+	return working
 }
 
-func (r *deployRun) timed(stage Stage, do func(Reporter) error) error {
+func (r *deployRun) report(unit Stage, phase progressv1.Phase) Reporter {
+	return &reporter{sender: r.sender, tracer: r.tracer, stage: r.declare(unit, phase)}
+}
+
+func (r *deployRun) timed(unit Stage, phase progressv1.Phase, do func(Reporter) error) error {
+	working := r.declare(unit, phase)
 	start := time.Now()
-	err := do(r.report(stage, phaseOf(stage, r.stages)))
-	r.tracer.Span(stage.ID, stage.ParentID, stage.Title, start, time.Now(), err)
+	err := do(&reporter{sender: r.sender, tracer: r.tracer, stage: working})
+	end := time.Now()
+	r.tracer.Span(working.ID, working.ParentID, working.Title, start, end, err)
+	r.tracer.Span(unit.ID, unit.ParentID, unit.Title, start, end, err)
 	return err
 }
 
-func phaseOf(stage Stage, stages deployStages) progressv1.Phase {
-	switch stage.ID {
-	case stages.Uploading.ID:
-		return progressv1.Phase_PHASE_UPLOADING
-	case stages.Promoting.ID:
-		return progressv1.Phase_PHASE_FINALIZING
-	default:
-		return progressv1.Phase_PHASE_PROVISIONING
-	}
-}
-
 func (r *deployRun) admit(ctx context.Context) error {
-	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, r.report(r.stages.Provisioning, progressv1.Phase_PHASE_PROVISIONING))
+	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, r.report(r.stages.Environment, progressv1.Phase_PHASE_PROVISIONING))
 	return err
 }
 
@@ -405,7 +402,7 @@ func (r *deployRun) preflight(ctx context.Context) error {
 		Resources: resources,
 		Grants:    grants,
 		Apps:      apps,
-		Report:    r.report(r.stages.Provisioning, progressv1.Phase_PHASE_PROVISIONING),
+		Report:    r.report(r.stages.Environment, progressv1.Phase_PHASE_PROVISIONING),
 	})
 }
 
@@ -459,7 +456,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return r.timed(r.stages.Infra, func(report Reporter) error {
+	return r.timed(r.stages.Infra, progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
 		if err := r.refuseToAdopt(ctx, r.plan.Infra); err != nil {
 			return err
 		}
@@ -493,7 +490,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 }
 
 func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
-	return r.timed(r.stages.Apps[entry.App], func(report Reporter) error {
+	return r.timed(r.stages.Apps[entry.App], progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
 		if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
 			return err
 		}
@@ -803,7 +800,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		Tag:         r.plan.Tag,
 		Flip:        &flip,
 	}
-	if err := r.timed(r.stages.Promoting, func(report Reporter) error {
+	if err := r.timed(r.stages.Promotion, progressv1.Phase_PHASE_FINALIZING, func(report Reporter) error {
 		report.Say("Promoting the deployment")
 		if err := r.stack.Promote(ctx, promotion, r.plan.Pointer); err != nil {
 			return err

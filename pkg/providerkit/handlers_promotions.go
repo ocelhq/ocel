@@ -35,7 +35,7 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 }
 
 func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(_ *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
 		pointer, err := envName(req.GetEnvironment())
 		if err != nil {
 			return err
@@ -150,7 +150,7 @@ func rollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion
 }
 
 func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(_ *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitPromotion, promotionUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
 		class, err := classOf(req.GetEnvironment().GetTier())
 		if err != nil {
 			return err

@@ -75,13 +75,12 @@ func (s *eventSender) close() error {
 func streamResult(
 	ctx context.Context,
 	stream *connect.ServerStream[progressv1.OperationEvent],
-	phase progressv1.Phase,
-	do func(*eventSender, Reporter) (*progressv1.OperationEvent, error),
+	do func(*eventSender) (*progressv1.OperationEvent, error),
 ) (err error) {
 	sender := newEventSender(ctx, stream.Send)
 	defer func() { err = errors.Join(err, sender.close()) }()
 
-	result, err := do(sender, newReporter(sender, Stage{}, phase))
+	result, err := do(sender)
 	if err != nil {
 		return sender.fail(RefusalError(err))
 	}
@@ -92,11 +91,15 @@ func streamResult(
 func streamed(
 	ctx context.Context,
 	stream *connect.ServerStream[progressv1.OperationEvent],
+	unit, title string,
 	phase progressv1.Phase,
 	do func(*eventSender, Reporter) error,
 ) error {
-	return streamResult(ctx, stream, phase, func(sender *eventSender, report Reporter) (*progressv1.OperationEvent, error) {
-		if err := do(sender, report); err != nil {
+	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
+		root := UnitStage(unit, title)
+		working := PhaseStage(root, phase)
+		newEventTracer(sender).DeclareStages(root, working)
+		if err := do(sender, newReporter(sender, working)); err != nil {
 			return nil, err
 		}
 		return okResult(), nil
@@ -107,40 +110,28 @@ type reporter struct {
 	sender *eventSender
 	tracer *eventTracer
 	stage  Stage
-	phase  progressv1.Phase
 }
 
-func newReporter(sender *eventSender, stage Stage, phase progressv1.Phase) Reporter {
-	return &reporter{sender: sender, tracer: newEventTracer(sender), stage: stage, phase: phase}
+func newReporter(sender *eventSender, stage Stage) Reporter {
+	return &reporter{sender: sender, tracer: newEventTracer(sender), stage: stage}
 }
 
 func (r *reporter) Say(message string) {
-	if r.stage.ID == (StageID{}) {
-		r.sender.send(progressEvent(sanitizeMessage(message)))
-		return
-	}
-	r.sender.send(stageProgressEvent(r.stage.ID, r.phase, sanitizeMessage(message)))
+	r.sender.send(stageProgressEvent(r.stage.ID, sanitizeMessage(message)))
 }
 
 func (r *reporter) Detail(message string) {
-	r.sender.send(logEvent(sanitizeMessage(message)))
+	r.sender.send(logEvent(r.stage.ID, sanitizeMessage(message)))
 }
 
 func (r *reporter) Span(name string, start, end time.Time, err error, attrs ...Attr) {
 	r.tracer.Span(newStageID(), r.stage.ID, sanitizeTitle(name), start, end, err, attrs...)
 }
 
-func progressEvent(message string) *progressv1.OperationEvent {
-	return &progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: message}},
-	}
-}
-
-func stageProgressEvent(id StageID, phase progressv1.Phase, message string) *progressv1.OperationEvent {
+func stageProgressEvent(id StageID, message string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{
 			Message: message,
-			Phase:   phase,
 			StageId: id[:],
 		}},
 	}
@@ -174,9 +165,9 @@ func dnsOwedEvent(headline string, records []edge.Record, notes ...string) *prog
 	}
 }
 
-func logEvent(message string) *progressv1.OperationEvent {
+func logEvent(id StageID, message string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Log{Log: &progressv1.LogEvent{Message: message}},
+		Event: &progressv1.OperationEvent_Log{Log: &progressv1.LogEvent{Message: message, StageId: id[:]}},
 	}
 }
 

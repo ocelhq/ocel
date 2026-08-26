@@ -10,6 +10,7 @@ import (
 
 	"github.com/fatih/color"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -20,9 +21,10 @@ const (
 	barWidth = 12
 )
 
-var buildStageID = []byte("build")
-
-const untaggedStageID = "untagged"
+var (
+	environmentUnitID = naming.UnitID(naming.UnitEnvironment)
+	buildStageID      = naming.PhaseID(naming.UnitEnvironment, naming.PhaseBuilding)
+)
 
 type Format string
 
@@ -197,12 +199,13 @@ func (r *Renderer) Spin(msg string) func() {
 	}
 }
 
-func (r *Renderer) Progress(stageID []byte, phase progressv1.Phase, message string, current uint32, total *uint32) {
+func (r *Renderer) Progress(stageID []byte, message string, current uint32, total *uint32) {
+	id := stageKey(stageID)
+	if id == "" {
+		return
+	}
 	if r.format == FormatJSON {
-		fields := map[string]any{"phase": phaseTag(phase), "message": message}
-		if id := stageKey(stageID); id != "" {
-			fields["stageId"] = id
-		}
+		fields := map[string]any{"message": message, "stageId": id}
 		if total != nil {
 			fields["current"] = current
 			fields["total"] = *total
@@ -220,24 +223,17 @@ func (r *Renderer) Progress(stageID []byte, phase progressv1.Phase, message stri
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.eraseLiveLocked()
-
-	id := stageKey(stageID)
-	if id == "" {
-		r.progressUntaggedLocked(phase, message, current, total)
-	} else {
-		r.progressStageLocked(id, phase, message, current, total)
-	}
-
+	r.progressStageLocked(id, message, current, total)
 	r.drawLiveLocked()
 }
 
-func (r *Renderer) progressStageLocked(id string, phase progressv1.Phase, message string, current uint32, total *uint32) {
+func (r *Renderer) progressStageLocked(id, message string, current uint32, total *uint32) {
 	if n, ok := r.plan.nodes[id]; ok && n.state == stageDone {
 		return
 	}
 	n, tracked := r.plan.progress(id, message, current, total)
 	if n.title == "" {
-		n.title = fallbackTitle(phase, message)
+		n.title = message
 	}
 	if !tracked {
 		return
@@ -245,20 +241,9 @@ func (r *Renderer) progressStageLocked(id string, phase progressv1.Phase, messag
 	r.plan.ensureActive(id)
 }
 
-func (r *Renderer) progressUntaggedLocked(phase progressv1.Phase, message string, current uint32, total *uint32) {
-	if n := r.plan.nodes[untaggedStageID]; n != nil && n.message != message && r.plan.isActive(untaggedStageID) {
-		r.commitRowLocked(displayRow{n: n}, r.okColor(), okMark, "")
-	}
-	n, tracked := r.plan.progress(untaggedStageID, message, current, total)
-	n.title = fallbackTitle(phase, message)
-	if tracked {
-		r.plan.ensureActive(untaggedStageID)
-	}
-}
-
 func (r *Renderer) StagePlan(ev *progressv1.StagePlanEvent) {
 	if r.format == FormatJSON {
-		r.emitJSON("stagePlan", map[string]any{"final": ev.GetFinal(), "count": len(ev.GetStages())})
+		r.emitJSON("stagePlan", map[string]any{"count": len(ev.GetStages())})
 		return
 	}
 	r.mu.Lock()
@@ -407,11 +392,11 @@ func (r *Renderer) StageEnd(stageID []byte, failed bool, duration time.Duration)
 }
 
 func (r *Renderer) Building() {
-	id := buildStageID
-	if r.format == FormatJSON {
-		id = nil
-	}
-	r.Progress(id, progressv1.Phase_PHASE_UNSPECIFIED, "Building project", 0, nil)
+	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
+		{Id: environmentUnitID, Title: "Environment"},
+		{Id: buildStageID, ParentId: environmentUnitID, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
+	}})
+	r.Progress(buildStageID, "Building project", 0, nil)
 }
 
 func (r *Renderer) BuildOK() {
@@ -674,11 +659,6 @@ func (r *Renderer) rowLineLocked(row displayRow) string {
 	glyph := r.colorFor(color.FgCyan).Sprint(spinnerFrame(n.frame))
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s%s %s", indent, glyph, n.title)
-	if r.plan.final {
-		if idx, count, ok := r.plan.siblingPosition(n.id); ok && count > 1 {
-			fmt.Fprintf(&b, " %s", r.colorFor(color.Faint).Sprintf("(%d/%d)", idx, count))
-		}
-	}
 	fmt.Fprintf(&b, "  %s", r.colorFor(color.Faint).Sprint(formatDuration(r.plan.now().Sub(n.started))))
 	switch {
 	case n.total != nil:
@@ -719,15 +699,10 @@ func (r *Renderer) emitJSONLocked(kind string, fields map[string]any) {
 	fmt.Fprintln(r.w, string(raw))
 }
 
-func fallbackTitle(phase progressv1.Phase, message string) string {
-	if phase == progressv1.Phase_PHASE_UNSPECIFIED {
-		return message
-	}
-	return phaseLabel(phase)
-}
-
 func phaseLabel(p progressv1.Phase) string {
 	switch p {
+	case progressv1.Phase_PHASE_BUILDING:
+		return "Building"
 	case progressv1.Phase_PHASE_UPLOADING:
 		return "Uploading"
 	case progressv1.Phase_PHASE_PROVISIONING:
@@ -739,13 +714,6 @@ func phaseLabel(p progressv1.Phase) string {
 	default:
 		return "Working"
 	}
-}
-
-func phaseTag(p progressv1.Phase) string {
-	if p == progressv1.Phase_PHASE_UNSPECIFIED {
-		return "progress"
-	}
-	return strings.ToLower(phaseLabel(p))
 }
 
 func bar(current, total uint32) string {

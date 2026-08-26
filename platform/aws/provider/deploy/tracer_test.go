@@ -2,12 +2,14 @@ package deploy
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -22,15 +24,13 @@ type spanCall struct {
 type fakeTracer struct {
 	mu       sync.Mutex
 	declared [][]Stage
-	final    []bool
 	spans    []spanCall
 }
 
-func (f *fakeTracer) DeclareStages(final bool, stages ...Stage) {
+func (f *fakeTracer) DeclareStages(stages ...Stage) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.declared = append(f.declared, stages)
-	f.final = append(f.final, final)
 }
 
 func (f *fakeTracer) Span(id, parentID StageID, name string, start, end time.Time, err error, attrs ...Attr) {
@@ -39,20 +39,38 @@ func (f *fakeTracer) Span(id, parentID StageID, name string, start, end time.Tim
 	f.spans = append(f.spans, spanCall{id, parentID, name, start, end, err, attrs})
 }
 
-func TestNewStageMintsDistinctIDsParentedCorrectly(t *testing.T) {
+func TestUnitAndPhaseIDsMatchTheSharedNamingDigests(t *testing.T) {
 	t.Parallel()
 
-	root := NewRootStage("Provisioning")
-	if root.ParentID != (StageID{}) {
-		t.Fatalf("root ParentID = %v, want zero value", root.ParentID)
+	unit := UnitStage(naming.UnitEnvironment, "Environment")
+	if unit.ParentID != (StageID{}) {
+		t.Fatalf("unit ParentID = %v, want zero value: a unit is a root", unit.ParentID)
 	}
-	child := NewStage(root, "web")
-	if child.ParentID != root.ID {
-		t.Fatalf("child.ParentID = %v, want %v", child.ParentID, root.ID)
+	if got := hex.EncodeToString(unit.ID[:]); got != "9f2ecbbdfa2db89d" {
+		t.Errorf("unit id = %s, want the naming digest 9f2ecbbdfa2db89d", got)
 	}
-	other := NewRootStage("Provisioning")
-	if root.ID == other.ID {
-		t.Fatal("two minted stages got the same id")
+	phase := PhaseStage(unit, progressv1.Phase_PHASE_PROVISIONING)
+	if phase.ParentID != unit.ID {
+		t.Fatalf("phase ParentID = %v, want %v", phase.ParentID, unit.ID)
+	}
+	if got := hex.EncodeToString(phase.ID[:]); got != "ed0ca2aae3a67905" {
+		t.Errorf("phase id = %s, want the naming digest ed0ca2aae3a67905", got)
+	}
+	if UnitStage(naming.UnitEnvironment, "Environment").ID != unit.ID {
+		t.Error("the same canonical name derived two different unit ids")
+	}
+}
+
+func TestDetailStagesMintDistinctIDsUnderTheirPhase(t *testing.T) {
+	t.Parallel()
+
+	phase := PhaseStage(UnitStage(naming.UnitEnvironment, "Environment"), progressv1.Phase_PHASE_PROVISIONING)
+	child := NewStage(phase, "web")
+	if child.ParentID != phase.ID {
+		t.Fatalf("child.ParentID = %v, want %v", child.ParentID, phase.ID)
+	}
+	if NewStage(phase, "web").ID == child.ID {
+		t.Fatal("two minted detail stages got the same id")
 	}
 }
 
@@ -60,7 +78,7 @@ func TestSpanForStageUsesTheStageIDAsTheSpanID(t *testing.T) {
 	t.Parallel()
 
 	ft := &fakeTracer{}
-	stage := NewStage(NewRootStage("Provisioning"), "web")
+	stage := NewStage(PhaseStage(UnitStage(naming.UnitEnvironment, "Environment"), progressv1.Phase_PHASE_PROVISIONING), "web")
 	start := time.Unix(100, 0)
 	end := time.Unix(101, 0)
 	spanForStage(ft, stage, start, end, nil, AttrApp("web"))
@@ -84,7 +102,7 @@ func TestSpanUnderMintsAFreshIDDistinctFromItsParent(t *testing.T) {
 	t.Parallel()
 
 	ft := &fakeTracer{}
-	parent := NewRootStage("Provisioning")
+	parent := UnitStage(naming.UnitEnvironment, "Environment")
 	spanUnder(ft, parent.ID, "pulumi resource operations", time.Unix(0, 0), time.Unix(1, 0), nil)
 
 	if len(ft.spans) != 1 {
@@ -101,8 +119,8 @@ func TestSpanUnderMintsAFreshIDDistinctFromItsParent(t *testing.T) {
 func TestNilTracerIsANoOp(t *testing.T) {
 	t.Parallel()
 
-	declareStages(nil, true, NewRootStage("Preparing"))
-	spanForStage(nil, NewRootStage("Preparing"), time.Now(), time.Now(), errors.New("boom"))
+	declareStages(nil, UnitStage(naming.UnitEnvironment, "Preparing"))
+	spanForStage(nil, UnitStage(naming.UnitEnvironment, "Preparing"), time.Now(), time.Now(), errors.New("boom"))
 	spanUnder(nil, StageID{}, "x", time.Now(), time.Now(), nil)
 }
 
@@ -151,7 +169,7 @@ func TestNewStageStripsControlCharactersAndCapsTheTitle(t *testing.T) {
 	t.Parallel()
 
 	dirty := "web\x1b[31m\x07" + strings.Repeat("x", maxStageTitleLen*2)
-	root := NewRootStage(dirty)
+	root := UnitStage(naming.UnitEnvironment, dirty)
 	if strings.ContainsAny(root.Title, "\x1b\x07") {
 		t.Fatalf("Title = %q, still contains control characters", root.Title)
 	}
@@ -164,8 +182,8 @@ func TestNewStageStripsControlCharactersAndCapsTheTitle(t *testing.T) {
 		t.Fatalf("Title = %q, still contains control characters", child.Title)
 	}
 
-	if got := NewRootStage("   ").Title; got != "stage" {
-		t.Errorf("NewRootStage(all-control/blank) Title = %q, want the fallback", got)
+	if got := UnitStage(naming.UnitEnvironment, "   ").Title; got != "stage" {
+		t.Errorf("UnitStage(all-control/blank) Title = %q, want the fallback", got)
 	}
 }
 

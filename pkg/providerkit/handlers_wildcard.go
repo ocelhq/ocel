@@ -10,6 +10,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -89,7 +90,7 @@ func (w *wildcards) save(ctx context.Context) error {
 }
 
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(sender *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventSender, report Reporter) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
 		if err != nil {
 			return err
@@ -388,7 +389,7 @@ func edgeGroupProto(group edge.PlanGroup) (*contractv1.ChangeGroup, error) {
 }
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, progressv1.Phase_PHASE_UNSPECIFIED, func(_ *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
 			return err

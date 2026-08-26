@@ -8,10 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-type StageID [8]byte
+type StageID [naming.StageIDLen]byte
 
 func newStageID() StageID {
 	var id StageID
@@ -24,10 +25,34 @@ func newStageID() StageID {
 	return id
 }
 
+func derivedStageID(raw []byte) StageID {
+	var id StageID
+	copy(id[:], raw)
+	return id
+}
+
 type Stage struct {
 	ID       StageID
 	ParentID StageID
+	Name     string
 	Title    string
+	Phase    progressv1.Phase
+}
+
+var phaseNames = map[progressv1.Phase]string{
+	progressv1.Phase_PHASE_BUILDING:     naming.PhaseBuilding,
+	progressv1.Phase_PHASE_UPLOADING:    naming.PhaseUploading,
+	progressv1.Phase_PHASE_PROVISIONING: naming.PhaseProvisioning,
+	progressv1.Phase_PHASE_FINALIZING:   naming.PhaseFinalizing,
+	progressv1.Phase_PHASE_DELETING:     naming.PhaseDeleting,
+}
+
+var phaseTitles = map[progressv1.Phase]string{
+	progressv1.Phase_PHASE_BUILDING:     "Building",
+	progressv1.Phase_PHASE_UPLOADING:    "Uploading",
+	progressv1.Phase_PHASE_PROVISIONING: "Provisioning",
+	progressv1.Phase_PHASE_FINALIZING:   "Finalizing",
+	progressv1.Phase_PHASE_DELETING:     "Deleting",
 }
 
 const maxStageTitleLen = 200
@@ -58,8 +83,19 @@ func sanitizeMessage(msg string) string {
 	return stripControlChars(msg, 0)
 }
 
-func NewRootStage(title string) Stage {
-	return Stage{ID: newStageID(), Title: sanitizeTitle(title)}
+func UnitStage(name, title string) Stage {
+	return Stage{ID: derivedStageID(naming.UnitID(name)), Name: name, Title: sanitizeTitle(title)}
+}
+
+func PhaseStage(unit Stage, phase progressv1.Phase) Stage {
+	name := phaseNames[phase]
+	return Stage{
+		ID:       derivedStageID(naming.PhaseID(unit.Name, name)),
+		ParentID: unit.ID,
+		Name:     name,
+		Title:    phaseTitles[phase],
+		Phase:    phase,
+	}
 }
 
 func NewStage(parent Stage, title string) Stage {
@@ -96,15 +132,15 @@ func AttrResourceName(name string) Attr {
 }
 
 type Tracer interface {
-	DeclareStages(final bool, stages ...Stage)
+	DeclareStages(stages ...Stage)
 	Span(id, parentID StageID, name string, start, end time.Time, err error, attrs ...Attr)
 }
 
-func declareStages(t Tracer, final bool, stages ...Stage) {
+func declareStages(t Tracer, stages ...Stage) {
 	if t == nil {
 		return
 	}
-	t.DeclareStages(final, stages...)
+	t.DeclareStages(stages...)
 }
 
 func spanForStage(t Tracer, stage Stage, start, end time.Time, err error, attrs ...Attr) {
@@ -121,8 +157,8 @@ func spanUnder(t Tracer, parent StageID, name string, start, end time.Time, err 
 	t.Span(newStageID(), parent, name, start, end, err, attrs...)
 }
 
-func DeclareStages(t Tracer, final bool, stages ...Stage) {
-	declareStages(t, final, stages...)
+func DeclareStages(t Tracer, stages ...Stage) {
+	declareStages(t, stages...)
 }
 
 const (
