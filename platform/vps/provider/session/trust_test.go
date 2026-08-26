@@ -97,6 +97,24 @@ func TestAHostNobodyHasSeenIsAnUnknownHostKey(t *testing.T) {
 	if anchor != (providerkit.HostKey{}) {
 		t.Errorf("classify() anchored on %+v while refusing", anchor)
 	}
+	if trust.Remedy != "ssh-keyscan -t "+key.Type+" -p 2222 203.0.113.10 >> /home/ada/.ssh/known_hosts" {
+		t.Errorf("Remedy = %q, want the keyscan pinned to the offered key type", trust.Remedy)
+	}
+}
+
+func TestAPlainPortNeedsNoBracketsInTheRemedy(t *testing.T) {
+	t.Parallel()
+
+	held, offering := generated(t, "ed25519"), generated(t, "ed25519")
+	plain := destination()
+	plain.Port = 22
+	_, trust := classify(plain, []providerkit.HostKey{offering}, known{keys: []providerkit.HostKey{held}})
+	if trust == nil {
+		t.Fatal("classify() trusted a host offering a key that is not the one held")
+	}
+	if trust.Remedy != "ssh-keygen -R 203.0.113.10 -f /home/ada/.ssh/known_hosts" {
+		t.Errorf("Remedy = %q, want the bare host form on port 22", trust.Remedy)
+	}
 }
 
 func TestADifferentKeyOfTheSameTypeIsAMismatch(t *testing.T) {
@@ -113,8 +131,8 @@ func TestADifferentKeyOfTheSameTypeIsAMismatch(t *testing.T) {
 	if trust.Got != offering || trust.Want != held {
 		t.Errorf("classify() reported got %+v want %+v, want the offered and the held key", trust.Got, trust.Want)
 	}
-	if !strings.Contains(trust.Remedy(), "ssh-keygen -R") {
-		t.Errorf("Remedy() = %q, want the ssh-keygen -R line", trust.Remedy())
+	if trust.Remedy != "ssh-keygen -R '[203.0.113.10]:2222' -f /home/ada/.ssh/known_hosts" {
+		t.Errorf("Remedy = %q, want the bracketed ssh-keygen -R line for this host", trust.Remedy)
 	}
 }
 
@@ -144,13 +162,13 @@ func TestOneKnownKeyAmongSeveralOfferedIsEnough(t *testing.T) {
 	}
 }
 
-func TestACertifiedHostIsLeftToOpenSSH(t *testing.T) {
+func TestAMarkedEntryIsLeftToOpenSSH(t *testing.T) {
 	t.Parallel()
 
 	key := generated(t, "ed25519")
-	anchor, trust := classify(destination(), []providerkit.HostKey{key}, known{markers: true})
+	anchor, trust := classify(destination(), []providerkit.HostKey{key}, known{delegated: true})
 	if trust != nil {
-		t.Fatalf("classify() refused %+v over a host whose known_hosts entry is a certificate authority", trust)
+		t.Fatalf("classify() refused %+v over a marked known_hosts entry; only ssh knows what @cert-authority and @revoked mean", trust)
 	}
 	if anchor != key {
 		t.Errorf("classify() anchored on %+v, want the key the host offered", anchor)

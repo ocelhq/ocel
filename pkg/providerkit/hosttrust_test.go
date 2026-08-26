@@ -19,6 +19,7 @@ func unknownHostKey() providerkit.HostTrust {
 		Port:       2222,
 		Got:        providerkit.HostKey{Type: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAIGot", Fingerprint: "SHA256:got"},
 		KnownHosts: []string{"/home/ada/.ssh/known_hosts"},
+		Remedy:     "ssh-keyscan -t ssh-ed25519 -p 2222 203.0.113.10 >> /home/ada/.ssh/known_hosts",
 	}
 }
 
@@ -26,6 +27,7 @@ func changedHostKey() providerkit.HostTrust {
 	trust := unknownHostKey()
 	trust.Reason = providerkit.HostKeyMismatch
 	trust.Want = providerkit.HostKey{Type: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAIWant", Fingerprint: "SHA256:want"}
+	trust.Remedy = "ssh-keygen -R '[203.0.113.10]:2222' -f /home/ada/.ssh/known_hosts"
 	return trust
 }
 
@@ -42,8 +44,8 @@ func TestAnUnknownHostKeyIsRecoverableAndNamesTheFingerprint(t *testing.T) {
 			t.Errorf("Message() = %q, want it to carry %q", message, want)
 		}
 	}
-	if remedy := trust.Remedy(); !strings.Contains(remedy, "ssh-keyscan -p 2222 203.0.113.10") {
-		t.Errorf("Remedy() = %q, want the keyscan that records the offered key", remedy)
+	if !strings.Contains(message, trust.Remedy) {
+		t.Errorf("Message() = %q, want it to spell out the remedy %q", message, trust.Remedy)
 	}
 }
 
@@ -55,23 +57,13 @@ func TestAChangedHostKeyIsTerminalAndCarriesTheKeygenRemedy(t *testing.T) {
 		t.Error("Terminal() = false, want a changed host key to end the run")
 	}
 	message := trust.Message()
-	for _, want := range []string{"SHA256:got", "SHA256:want", "ssh-keygen -R"} {
+	for _, want := range []string{"SHA256:got", "SHA256:want"} {
 		if !strings.Contains(message, want) {
 			t.Errorf("Message() = %q, want it to carry %q", message, want)
 		}
 	}
-	if remedy := trust.Remedy(); remedy != "ssh-keygen -R '[203.0.113.10]:2222' -f /home/ada/.ssh/known_hosts" {
-		t.Errorf("Remedy() = %q, want the bracketed non-default port form", remedy)
-	}
-}
-
-func TestThePlainPortNeedsNoBrackets(t *testing.T) {
-	t.Parallel()
-
-	trust := changedHostKey()
-	trust.Port = 22
-	if remedy := trust.Remedy(); remedy != "ssh-keygen -R 203.0.113.10 -f /home/ada/.ssh/known_hosts" {
-		t.Errorf("Remedy() = %q, want the bare host form on port 22", remedy)
+	if !strings.Contains(message, trust.Remedy) {
+		t.Errorf("Message() = %q, want it to spell out the remedy %q", message, trust.Remedy)
 	}
 }
 

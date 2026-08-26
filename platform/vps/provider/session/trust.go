@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -23,8 +24,8 @@ func offered(ctx context.Context, dest Destination) ([]providerkit.HostKey, erro
 }
 
 type known struct {
-	keys    []providerkit.HostKey
-	markers bool
+	keys      []providerkit.HostKey
+	delegated bool
 }
 
 func recorded(ctx context.Context, dest Destination) known {
@@ -35,7 +36,7 @@ func recorded(ctx context.Context, dest Destination) known {
 			continue
 		}
 		held.keys = append(held.keys, keysIn(rendered)...)
-		held.markers = held.markers || markedIn(rendered)
+		held.delegated = held.delegated || markedIn(rendered)
 	}
 	return held
 }
@@ -85,7 +86,7 @@ func classify(dest Destination, offered []providerkit.HostKey, held known) (prov
 			return key, nil
 		}
 	}
-	if held.markers {
+	if held.delegated {
 		return ordered[0], nil
 	}
 	trust := providerkit.HostTrust{
@@ -97,17 +98,37 @@ func classify(dest Destination, offered []providerkit.HostKey, held known) (prov
 	}
 	if len(held.keys) == 0 {
 		trust.Reason = providerkit.UnknownHostKey
+		trust.Remedy = remedy(trust)
 		return providerkit.HostKey{}, &trust
 	}
 	trust.Reason = providerkit.HostKeyMismatch
-	trust.Want = held.keys[0]
+	trust.Want = preferred(held.keys)[0]
 	for _, key := range ordered {
 		if paired := slices.IndexFunc(held.keys, func(k providerkit.HostKey) bool { return k.Type == key.Type }); paired >= 0 {
 			trust.Got, trust.Want = key, held.keys[paired]
 			break
 		}
 	}
+	trust.Remedy = remedy(trust)
 	return providerkit.HostKey{}, &trust
+}
+
+func remedy(trust providerkit.HostTrust) string {
+	store := "~/.ssh/known_hosts"
+	if len(trust.KnownHosts) > 0 {
+		store = trust.KnownHosts[0]
+	}
+	if trust.Reason == providerkit.HostKeyMismatch {
+		return fmt.Sprintf("ssh-keygen -R %s -f %s", quoted(trust.Address, trust.Port), store)
+	}
+	return fmt.Sprintf("ssh-keyscan -t %s -p %d %s >> %s", trust.Got.Type, trust.Port, trust.Address, store)
+}
+
+func quoted(address string, port int) string {
+	if port == 22 {
+		return address
+	}
+	return fmt.Sprintf("'[%s]:%d'", address, port)
 }
 
 func preferred(keys []providerkit.HostKey) []providerkit.HostKey {

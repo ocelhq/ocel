@@ -72,22 +72,28 @@ type Provider struct {
 	records   *fake.Records
 	artifacts *fake.Artifacts
 	sealer    *fake.Sealer
-	dial      sync.Once
+	dial      sync.Mutex
 	live      *session.Session
-	dialed    error
 }
 
 func (p *Provider) Session(ctx context.Context) (*session.Session, error) {
-	p.dial.Do(func() {
-		p.live, p.dialed = session.Open(ctx, session.Target{
-			Alias:        p.options.SSH.Alias,
-			Host:         p.options.SSH.Host,
-			Port:         p.options.SSH.Port,
-			User:         p.options.SSH.User,
-			IdentityFile: p.options.SSH.IdentityFile,
-		})
+	p.dial.Lock()
+	defer p.dial.Unlock()
+	if p.live != nil {
+		return p.live, nil
+	}
+	live, err := session.Open(ctx, session.Target{
+		Alias:        p.options.SSH.Alias,
+		Host:         p.options.SSH.Host,
+		Port:         p.options.SSH.Port,
+		User:         p.options.SSH.User,
+		IdentityFile: p.options.SSH.IdentityFile,
 	})
-	return p.live, p.dialed
+	if err != nil {
+		return nil, err
+	}
+	p.live = live
+	return p.live, nil
 }
 
 func New(_ context.Context, options providerkit.Options) (providerkit.Provider, error) {

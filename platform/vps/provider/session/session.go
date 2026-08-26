@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	reach   = 10 * time.Second
-	persist = "60s"
+	reach      = 10 * time.Second
+	masterIdle = "60s"
 )
 
 type Session struct {
@@ -30,12 +30,12 @@ func Open(ctx context.Context, target Target) (*Session, error) {
 	dest, err := resolve(ctx, target)
 	if err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeDenied,
-			"ssh cannot make sense of %q: %s", target.Destination(), problem(err))
+			"ssh cannot make sense of %q: %s", target.Destination(), terse(err))
 	}
 	keys, err := offered(ctx, dest)
 	if err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeDenied,
-			"%s port %d did not answer within %s: %s", dest.Address, dest.Port, reach, problem(err))
+			"%s port %d did not answer within %s: %s", dest.Address, dest.Port, reach, terse(err))
 	}
 	if len(keys) == 0 {
 		return nil, providerkit.Refuse(providerkit.CodeDenied,
@@ -54,8 +54,6 @@ func Open(ctx context.Context, target Target) (*Session, error) {
 	return session, nil
 }
 
-func (s *Session) Fingerprint() string { return s.anchor.Fingerprint }
-
 func (s *Session) HostKey() providerkit.HostKey { return s.anchor }
 
 func (s *Session) Destination() Destination { return s.dest }
@@ -65,13 +63,14 @@ func (s *Session) Run(ctx context.Context, command string) (string, error) {
 	if err == nil {
 		return rendered, nil
 	}
-	if untrusted(err) {
-		if _, trust := classify(s.dest, reoffered(ctx, s.dest), recorded(ctx, s.dest)); trust != nil {
+	if strings.Contains(err.Error(), "Host key verification failed") {
+		keys, _ := offered(ctx, s.dest)
+		if _, trust := classify(s.dest, keys, recorded(ctx, s.dest)); trust != nil {
 			return "", providerkit.RefuseHostTrust(*trust)
 		}
 	}
 	return "", providerkit.Refuse(providerkit.CodeDenied,
-		"%s over ssh: %s", s.dest.Principal(), problem(err))
+		"%s over ssh: %s", s.dest.Principal(), terse(err))
 }
 
 func (s *Session) Close() error {
@@ -91,7 +90,7 @@ func (s *Session) args() []string {
 		args = append(args,
 			"-o", "ControlMaster=auto",
 			"-o", "ControlPath="+filepath.Join(s.control, "%C"),
-			"-o", "ControlPersist="+persist,
+			"-o", "ControlPersist="+masterIdle,
 		)
 	}
 	return args
@@ -110,18 +109,6 @@ func multiplex() string {
 		return ""
 	}
 	return dir
-}
-
-func reoffered(ctx context.Context, dest Destination) []providerkit.HostKey {
-	keys, err := offered(ctx, dest)
-	if err != nil {
-		return nil
-	}
-	return keys
-}
-
-func untrusted(err error) bool {
-	return strings.Contains(err.Error(), "Host key verification failed")
 }
 
 func output(ctx context.Context, name string, args ...string) (string, error) {
@@ -148,15 +135,8 @@ func (f failure) Error() string {
 
 func (f failure) Unwrap() error { return f.err }
 
-func problem(err error) string {
-	if err == nil {
-		return ""
-	}
-	return firstLines(err.Error())
-}
-
-func firstLines(rendered string) string {
-	lines := strings.Split(strings.TrimSpace(rendered), "\n")
+func terse(err error) string {
+	lines := strings.Split(strings.TrimSpace(err.Error()), "\n")
 	if len(lines) > 4 {
 		lines = lines[:4]
 	}
