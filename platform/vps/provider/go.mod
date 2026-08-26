@@ -3,6 +3,7 @@ module github.com/ocelhq/ocel/platform/vps/provider
 go 1.27.0
 
 require (
+	github.com/creack/pty v1.1.24
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 )
