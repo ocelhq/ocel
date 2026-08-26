@@ -332,11 +332,26 @@ func survey(items []Item, also ...string) string {
 	}
 	stated, held := `"$(stat -c %a "$p")"`, `"$(stat -c %U "$p")"`
 	script.WriteString(`; do
-if [ -d "$p" ]; then ` + reports(quoted(KindDir), `"$p"`, stated, held, `''`) + `
+if [ -h "$p" ]; then ` + reports(quoted(kindLink), `"$p"`, `0`, `''`, `"$(readlink "$p")"`) + `
+elif [ -d "$p" ]; then ` + reports(quoted(KindDir), `"$p"`, stated, held, `''`) + `
 elif [ -f "$p" ]; then ` + reports(quoted(KindFile), `"$p"`, stated, held, `"$(sha256sum "$p" | cut -d' ' -f1)"`) + `
 fi
 done`)
 	return probes.String() + script.String()
+}
+
+const kindLink = "fs:link"
+
+func pointedAway(columns []string) error {
+	pointed := "somewhere this survey could not read"
+	if len(columns) > 4 && columns[4] != "" {
+		pointed = strings.Join(columns[4:], "\t")
+	}
+	return providerkit.Refuse(providerkit.CodeDenied,
+		"%s is a symbolic link to %s.\n"+
+			"Ocel writes the paths it names and follows nothing to get there, and every mode and owner this host reports for that path is the target's, not the link's.\n"+
+			"Put a real directory or file back at %s and try again",
+		columns[1], pointed, columns[1])
 }
 
 func reports(kind, name, mode, owner, sum string) string {
@@ -351,6 +366,9 @@ func readSurvey(rendered string) (map[string]string, Seal, error) {
 			continue
 		}
 		columns := strings.Split(strings.TrimRight(line, "\r"), "\t")
+		if columns[0] == kindLink {
+			return nil, Seal{}, pointedAway(columns)
+		}
 		sealed := columns[0] == KindSealKey
 		if (sealed && len(columns) != 6) || (!sealed && len(columns) != 5) {
 			return nil, Seal{}, providerkit.Refuse(providerkit.CodeDenied,

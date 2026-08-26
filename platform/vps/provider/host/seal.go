@@ -97,7 +97,8 @@ func sealArgv(verb string, at providerkit.Coordinate) ([]string, error) {
 
 func sealSurvey(item Item) string {
 	name := quoted(item.Name)
-	return "if [ -f " + name + " ]; then printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' " +
+	return "if [ -h " + name + " ]; then " + reports(quoted(kindLink), name, "0", `''`, `"$(readlink `+name+`)"`) + `
+elif [ -f ` + name + " ]; then printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' " +
 		quoted(KindSealKey) + " " + name +
 		` "$(stat -c %a ` + name + `)" "$(stat -c %U ` + name + `)"` +
 		` "$(sha256sum ` + name + ` | cut -d' ' -f1)"` +

@@ -231,6 +231,30 @@ func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing
 	}
 }
 
+func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *testing.T) {
+	vm := live(t)
+	class := providerkit.ClassProduction
+	p := bootstrapped(t, vm, class)
+	ctx := context.Background()
+	bootstrapper, err := p.Bootstrap("")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vm.sshAs(t, deployLogin, "rmdir "+recordsDir+" && ln -s /etc "+recordsDir)
+	defer vm.ssh(t, "sudo rm -f "+recordsDir+" && sudo install -d -m 750 -o "+deployLogin+" -g "+deployLogin+" "+recordsDir)
+
+	refusal := refused(t, bootstrapper.Apply(ctx,
+		providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Heal: true, Unattended: true}, nil),
+		providerkit.CodeDenied)
+	if !strings.Contains(refusal.Message, recordsDir) || !strings.Contains(refusal.Message, "/etc") {
+		t.Errorf("heal over a path the deploy login pointed elsewhere says %q, want both the path and where it points named", refusal.Message)
+	}
+	if held := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U /etc")); held != "root" {
+		t.Fatalf("/etc is owned by %q after a heal that followed a link into it, want root", held)
+	}
+}
+
 func TestLiveHealAsTheDeployLoginCarriesTheHostsOwnReason(t *testing.T) {
 	vm := live(t)
 	class := providerkit.ClassProduction

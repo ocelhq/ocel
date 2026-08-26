@@ -281,3 +281,33 @@ func TestAKeyPathRelativeToNothingIsRefusedRatherThanGuessedAt(t *testing.T) {
 		t.Errorf("the refusal reads %q, and it never says what to spell instead", refusal.Error())
 	}
 }
+
+func TestASymlinkWhereAnItemsPathShouldBeIsRefusedRatherThanFollowed(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	elsewhere := filepath.Join(root, "elsewhere")
+	if err := os.Mkdir(elsewhere, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pointed := filepath.Join(root, "state")
+	if err := os.Symlink(elsewhere, pointed); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, script := range map[string]string{
+		"a path the survey stats": survey([]Item{dir(pointed, 0o750, stateOwner)}),
+		"the seal key's own probe": sealSurvey(Item{
+			Kind: KindSealKey, Name: pointed, Mode: sealKeyMode, Owner: rootOwner, Class: providerkit.ClassProduction,
+		}),
+	} {
+		_, _, err := readSurvey(sh(t, root, script))
+		var refused providerkit.Refusal
+		if !errors.As(err, &refused) {
+			t.Fatalf("%s over a symlink = %v, want a refusal the CLI can render", name, err)
+		}
+		if !strings.Contains(refused.Message, pointed) || !strings.Contains(refused.Message, elsewhere) {
+			t.Errorf("%s says %q, want it to name both %s and what it points at", name, refused.Message, elsewhere)
+		}
+	}
+}
