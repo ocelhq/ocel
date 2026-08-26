@@ -27,8 +27,8 @@ func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	t.Cleanup(func() { _ = r.Close() })
 
 	app := appStage(1)
-	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{{Id: app, Title: "app-a"}}, Final: true})
-	r.Progress(app, progressv1.Phase_PHASE_UPLOADING, "uploading assets", 1, u32(10))
+	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{{Id: app, Title: "app-a"}}})
+	r.Progress(app, "uploading assets", 1, u32(10))
 
 	resume := r.Suspend()
 	if r.liveLines != 0 {
@@ -36,7 +36,7 @@ func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	}
 
 	out.Reset()
-	r.Progress(app, progressv1.Phase_PHASE_UPLOADING, "uploading assets", 2, u32(10))
+	r.Progress(app, "uploading assets", 2, u32(10))
 	if out.Len() != 0 {
 		t.Errorf("wrote %q while suspended, want the terminal left to the prompt", out.String())
 	}
@@ -58,10 +58,10 @@ func TestLiveRegion(t *testing.T) {
 		r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 			{Id: appA, Title: "app-a"},
 			{Id: appB, Title: "app-b"},
-		}, Final: true})
+		}})
 
-		r.Progress(appA, progressv1.Phase_PHASE_UPLOADING, "uploading assets", 1, u32(10))
-		r.Progress(appB, progressv1.Phase_PHASE_UPLOADING, "uploading assets", 9, u32(10))
+		r.Progress(appA, "uploading assets", 1, u32(10))
+		r.Progress(appB, "uploading assets", 9, u32(10))
 
 		got := out.String()
 		if !strings.Contains(got, "app-a") || !strings.Contains(got, "app-b") {
@@ -83,10 +83,10 @@ func TestLiveRegion(t *testing.T) {
 		r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 			{Id: appA, Title: "app-a"},
 			{Id: appB, Title: "app-b"},
-		}, Final: true})
+		}})
 
-		r.Progress(appA, progressv1.Phase_PHASE_UPLOADING, "uploading", 1, u32(2))
-		r.Progress(appB, progressv1.Phase_PHASE_UPLOADING, "uploading", 1, u32(2))
+		r.Progress(appA, "uploading", 1, u32(2))
+		r.Progress(appB, "uploading", 1, u32(2))
 		r.StageEnd(appA, false, time.Second) // app-a finishes
 
 		if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(appB) {
@@ -112,10 +112,10 @@ func TestLiveRegion(t *testing.T) {
 		r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 			{Id: fast, Title: "fast-app"},
 			{Id: slow, Title: "slow-app"},
-		}, Final: true})
+		}})
 
-		r.Progress(fast, progressv1.Phase_PHASE_UPLOADING, "uploading", 1, u32(1))
-		r.Progress(slow, progressv1.Phase_PHASE_UPLOADING, "still going", 1, u32(10))
+		r.Progress(fast, "uploading", 1, u32(1))
+		r.Progress(slow, "still going", 1, u32(10))
 		r.StageEnd(fast, false, time.Second)
 
 		if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(slow) {
@@ -150,22 +150,6 @@ func TestOrphanStageAttachesRecursively(t *testing.T) {
 	}
 }
 
-func TestStagePlanFinal(t *testing.T) {
-	t.Parallel()
-	plan := newStagePlan()
-	if plan.final {
-		t.Fatal("a fresh plan is already final")
-	}
-	plan.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{{Id: appStage(1), Title: "a"}}})
-	if plan.final {
-		t.Error("plan.final became true without an event saying so — a plan that can still grow must not claim to be done")
-	}
-	plan.apply(&progressv1.StagePlanEvent{Final: true})
-	if !plan.final {
-		t.Error("plan.final stayed false after an event with Final: true")
-	}
-}
-
 func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 	t.Parallel()
 
@@ -174,7 +158,7 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 	t.Cleanup(func() { _ = r.Close() })
 
 	r.Building()
-	r.Progress(nil, progressv1.Phase_PHASE_UPLOADING, "uploading", 1, u32(2))
+	r.Progress(nil, "uploading", 1, u32(2))
 	r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{}, "")
 
 	if got := out.String(); strings.Contains(got, "\x1b[") {
@@ -196,7 +180,7 @@ func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 		{Id: appA, Title: "app-a"},
 		{Id: appB, Title: "app-b"},
-	}, Final: true})
+	}})
 
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -204,13 +188,13 @@ func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := uint32(0); i < 50; i++ {
-			r.Progress(appA, progressv1.Phase_PHASE_UPLOADING, "uploading", i, u32(50))
+			r.Progress(appA, "uploading", i, u32(50))
 		}
 	}()
 	go func() {
 		defer wg.Done()
 		for i := uint32(0); i < 50; i++ {
-			r.Progress(appB, progressv1.Phase_PHASE_UPLOADING, "uploading", i, u32(50))
+			r.Progress(appB, "uploading", i, u32(50))
 		}
 	}()
 	go func() {
@@ -287,10 +271,10 @@ func TestStageEndCommitsRowsAsSpansArrive(t *testing.T) {
 	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 		{Id: appA, Title: "app-a"},
 		{Id: appB, Title: "app-b"},
-	}, Final: true})
+	}})
 
-	r.Progress(appA, progressv1.Phase_PHASE_PROVISIONING, "provisioning", 0, nil)
-	r.Progress(appB, progressv1.Phase_PHASE_PROVISIONING, "provisioning", 0, nil)
+	r.Progress(appA, "provisioning", 0, nil)
+	r.Progress(appB, "provisioning", 0, nil)
 
 	r.StageEnd(appA, false, 90*time.Second)
 	if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(appB) {
@@ -320,14 +304,14 @@ func TestFinishedBarWaitsForItsSpan(t *testing.T) {
 	uploading := appStage(1)
 	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 		{Id: uploading, Title: "Uploading"},
-	}, Final: true})
+	}})
 
-	r.Progress(uploading, progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", 1, u32(1))
+	r.Progress(uploading, "Uploading function artifacts", 1, u32(1))
 	if len(r.plan.activeOrder) != 1 {
 		t.Fatalf("activeOrder = %v, want the row still live at 1/1 — only the stage's span ends it", r.plan.activeOrder)
 	}
 
-	r.Progress(uploading, progressv1.Phase_PHASE_UPLOADING, "Uploading static assets", 0, nil)
+	r.Progress(uploading, "Uploading static assets", 0, nil)
 	if got := strings.Count(out.String(), okMark); got != 0 {
 		t.Fatalf("got %d committed lines before the span arrived, want 0", got)
 	}
@@ -348,10 +332,10 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 		{Id: provisioning, Title: "Provisioning"},
 		{Id: app, ParentId: provisioning, Title: "next-test"},
-	}, Final: true})
+	}})
 
-	r.Progress(provisioning, progressv1.Phase_PHASE_PROVISIONING, "Reconciling the edge stack", 0, nil)
-	r.Progress(app, progressv1.Phase_PHASE_PROVISIONING, "creating resources", 0, nil)
+	r.Progress(provisioning, "Reconciling the edge stack", 0, nil)
+	r.Progress(app, "creating resources", 0, nil)
 
 	rows := r.plan.displayRows()
 	if len(rows) != 2 || rows[0].n.title != "Provisioning" || rows[1].n.title != "next-test" || rows[1].depth != 1 {
@@ -393,7 +377,7 @@ func TestBuildOKLeavesNoStaleSpinnerRow(t *testing.T) {
 
 	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
 	last := lines[len(lines)-1]
-	if !strings.Contains(last, okMark+" Building project") {
+	if !strings.Contains(last, okMark+" Building") {
 		t.Errorf("last line = %q, want the committed Building line to be the final output — anything after it is a stale live row", last)
 	}
 	if !strings.Contains(last, "\033[") {
@@ -407,7 +391,7 @@ func TestLiveModeHoldsBackRawLogLines(t *testing.T) {
 	r := newRendererForTest(&out, FormatHuman, true, false)
 	t.Cleanup(func() { _ = r.Close() })
 
-	r.Progress(appStage(1), progressv1.Phase_PHASE_PROVISIONING, "provisioning", 0, nil)
+	r.Progress(appStage(1), "provisioning", 0, nil)
 	r.Log("pulumi engine line")
 
 	if strings.Contains(out.String(), "pulumi engine line") {
@@ -415,48 +399,45 @@ func TestLiveModeHoldsBackRawLogLines(t *testing.T) {
 	}
 }
 
-func TestUntaggedProgressCommitsEachMessageAsItsOwnLine(t *testing.T) {
+func TestProgressWithoutAStageIsDropped(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
 	r := newRendererForTest(&out, FormatHuman, true, false)
 	t.Cleanup(func() { _ = r.Close() })
 
-	r.Progress(nil, progressv1.Phase_PHASE_UNSPECIFIED, "Reclaimed 3 promotion(s): a, b, c", 0, nil)
-	r.Progress(nil, progressv1.Phase_PHASE_UNSPECIFIED, "Kept 2 promotion(s).", 0, nil)
+	r.Progress(nil, "Reclaimed 3 promotion(s): a, b, c", 0, nil)
 
-	if len(r.plan.nodes) != 1 {
-		t.Fatalf("got %d untagged nodes, want 1: untagged progress must share a single node, not one per message", len(r.plan.nodes))
+	if len(r.plan.nodes) != 0 {
+		t.Fatalf("got %d nodes, want none: there is no bucket for progress that belongs to no stage", len(r.plan.nodes))
 	}
-
-	got := out.String()
-	if !strings.Contains(got, "Reclaimed 3 promotion(s): a, b, c") {
-		t.Errorf("output = %q, want the first untagged message committed to scrollback before the second overwrote it", got)
-	}
-	if !strings.Contains(got, "Kept 2 promotion(s).") {
-		t.Errorf("output = %q, want the second untagged message live or committed", got)
-	}
-	if got := strings.Count(out.String(), okMark); got != 1 {
-		t.Errorf("got %d committed (checkmarked) lines, want 1: the first message committed when the second arrived, the second is still live", got)
+	if out.Len() != 0 {
+		t.Errorf("output = %q, want nothing drawn for a stageless progress event", out.String())
 	}
 }
 
-func TestRepeatedUntaggedMessageStaysOneLine(t *testing.T) {
+func TestTheBuildStageIsTheEnvironmentUnitsBuildingPhase(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
 	r := newRendererForTest(&out, FormatHuman, true, false)
 	t.Cleanup(func() { _ = r.Close() })
 
-	for i := uint32(1); i <= 4; i++ {
-		r.Progress(nil, progressv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", i, u32(4))
+	if got := stageKey(buildStageID); got != "4b5ac07b8124802c" {
+		t.Errorf("build stage id = %s, want the naming digest the provider derives for the same phase", got)
+	}
+	if got := stageKey(environmentUnitID); got != "9f2ecbbdfa2db89d" {
+		t.Errorf("environment unit id = %s, want the naming digest the provider derives for the same unit", got)
 	}
 
-	if got := strings.Count(out.String(), okMark); got != 0 {
-		t.Errorf("got %d committed lines, want 0: a repeat of the same untagged message updates the live row instead of committing a duplicate", got)
+	r.Building()
+	if got := out.String(); !strings.Contains(got, "Building project") {
+		t.Errorf("output = %q, want the build phase live", got)
 	}
-
-	r.Progress(nil, progressv1.Phase_PHASE_UPLOADING, "Uploading static assets", 0, nil)
-	if got := strings.Count(out.String(), okMark); got != 1 {
-		t.Errorf("got %d committed lines, want 1: only the change of message commits the outgoing row", got)
+	n, ok := r.plan.nodes[stageKey(buildStageID)]
+	if !ok {
+		t.Fatal("the build phase was never declared as a stage")
+	}
+	if n.parentID != stageKey(environmentUnitID) {
+		t.Errorf("build phase parent = %q, want the environment unit %q", n.parentID, stageKey(environmentUnitID))
 	}
 }
 
@@ -469,7 +450,7 @@ func TestFailedSpanNamesAStageThatNeverReportedProgress(t *testing.T) {
 	app := appStage(1)
 	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 		{Id: app, Title: "app-a"},
-	}, Final: true})
+	}})
 
 	r.StageEnd(app, true, time.Second)
 
@@ -488,10 +469,10 @@ func TestParentSpanLeavesAStillRunningChildLive(t *testing.T) {
 	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 		{Id: parent, Title: "Provisioning"},
 		{Id: child, ParentId: parent, Title: "next-test"},
-	}, Final: true})
+	}})
 
-	r.Progress(parent, progressv1.Phase_PHASE_PROVISIONING, "reconciling", 0, nil)
-	r.Progress(child, progressv1.Phase_PHASE_PROVISIONING, "creating resources", 0, nil)
+	r.Progress(parent, "reconciling", 0, nil)
+	r.Progress(child, "creating resources", 0, nil)
 
 	r.StageEnd(parent, false, 50*time.Second)
 	if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(child) {

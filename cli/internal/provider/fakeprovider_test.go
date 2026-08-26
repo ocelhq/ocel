@@ -18,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -148,9 +149,11 @@ func (s *fakeProviderServer) Configure(_ context.Context, _ *contractv1.Configur
 	return &contractv1.ConfigureResponse{}, nil
 }
 
+var fakeStageID = naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning)
+
 func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "step 1"}},
+		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{StageId: fakeStageID, Message: "step 1"}},
 	}); err != nil {
 		return err
 	}
@@ -179,7 +182,7 @@ func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.Boot
 	}
 
 	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "bootstrapping"}},
+		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{StageId: fakeStageID, Message: "bootstrapping"}},
 	}); err != nil {
 		return err
 	}

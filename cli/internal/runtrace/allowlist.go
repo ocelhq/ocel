@@ -16,6 +16,7 @@ const (
 	AttrDurationMS    = attribute.Key("ocel.duration_ms")
 	AttrResourceType  = attribute.Key("ocel.resource_type")
 	AttrResourceName  = attribute.Key("ocel.resource_name")
+	AttrCached        = attribute.Key("ocel.cached")
 )
 
 var allowedAttributes = map[attribute.Key]struct{}{
@@ -32,6 +33,7 @@ var allowedAttributes = map[attribute.Key]struct{}{
 	AttrDurationMS:    {},
 	AttrResourceType:  {},
 	AttrResourceName:  {},
+	AttrCached:        {},
 }
 
 func filterAttributes(attrs []attribute.KeyValue) []attribute.KeyValue {

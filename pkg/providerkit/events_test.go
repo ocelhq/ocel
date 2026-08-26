@@ -9,6 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -46,7 +47,7 @@ func TestEventSenderPropagatesSendError(t *testing.T) {
 
 	const total = 5
 	for range total {
-		sender.send(logEvent("line"))
+		sender.send(logEvent(testStage.ID, "line"))
 	}
 
 	if err := sender.close(); !errors.Is(err, wantErr) {
@@ -69,7 +70,7 @@ func TestEventSenderAppliesBackpressureWithoutDroppingEvents(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sender.send(logEvent("line"))
+			sender.send(logEvent(testStage.ID, "line"))
 		}()
 	}
 	wg.Wait()
@@ -94,7 +95,7 @@ func TestEventSenderSendRacingCloseNeverPanics(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sender.send(logEvent("racing close"))
+			sender.send(logEvent(testStage.ID, "racing close"))
 		}()
 	}
 
@@ -108,7 +109,7 @@ func TestEventSenderSendRacingCloseNeverPanics(t *testing.T) {
 	<-closeDone
 
 	for range concurrent {
-		sender.send(logEvent("after close"))
+		sender.send(logEvent(testStage.ID, "after close"))
 	}
 }
 
@@ -128,7 +129,7 @@ func TestEventSenderSendUnblocksOnContextCancellation(t *testing.T) {
 		fillers.Add(1)
 		go func() {
 			defer fillers.Done()
-			sender.send(logEvent("line"))
+			sender.send(logEvent(testStage.ID, "line"))
 		}()
 	}
 	fillers.Wait()
@@ -138,7 +139,7 @@ func TestEventSenderSendUnblocksOnContextCancellation(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		sender.send(logEvent("blocked"))
+		sender.send(logEvent(testStage.ID, "blocked"))
 	}()
 
 	select {
@@ -177,13 +178,15 @@ func TestEventSenderFailPassesARefusalBackToTheCaller(t *testing.T) {
 	}
 }
 
+var testStage = PhaseStage(UnitStage(naming.UnitEnvironment, "Environment"), progressv1.Phase_PHASE_PROVISIONING)
+
 func TestReporterTagsEverythingWithItsStage(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventSender(context.Background(), stream.send)
-	stage := NewRootStage("Provisioning")
-	report := newReporter(sender, stage, progressv1.Phase_PHASE_PROVISIONING)
+	stage := PhaseStage(UnitStage(naming.UnitEnvironment, "Environment"), progressv1.Phase_PHASE_PROVISIONING)
+	report := newReporter(sender, stage)
 
 	report.Say("provisioning the infra stack")
 	report.Detail("engine said something")
@@ -201,11 +204,11 @@ func TestReporterTagsEverythingWithItsStage(t *testing.T) {
 	if StageID(said.GetStageId()) != stage.ID {
 		t.Errorf("Say() StageId = %x, want %x", said.GetStageId(), stage.ID)
 	}
-	if said.GetPhase() != progressv1.Phase_PHASE_PROVISIONING {
-		t.Errorf("Say() Phase = %v, want the reporter's phase", said.GetPhase())
-	}
 	if events[1].GetLog().GetMessage() != "engine said something" {
 		t.Errorf("Detail() log = %q", events[1].GetLog().GetMessage())
+	}
+	if StageID(events[1].GetLog().GetStageId()) != stage.ID {
+		t.Errorf("Detail() StageId = %x, want %x", events[1].GetLog().GetStageId(), stage.ID)
 	}
 	if span := events[2].GetSpan(); StageID(span.GetParentSpanId()) != stage.ID {
 		t.Errorf("Span() ParentSpanId = %x, want the reporter's stage %x", span.GetParentSpanId(), stage.ID)
@@ -217,7 +220,7 @@ func TestReporterStripsControlCharacters(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventSender(context.Background(), stream.send)
-	report := newReporter(sender, NewRootStage("Provisioning"), progressv1.Phase_PHASE_PROVISIONING)
+	report := newReporter(sender, testStage)
 
 	report.Say("clearing the screen\x1b[2J now")
 
@@ -232,14 +235,13 @@ func TestReporterStripsControlCharacters(t *testing.T) {
 func TestEventConstructors(t *testing.T) {
 	t.Parallel()
 
-	stage := NewRootStage("Provisioning")
+	stage := testStage
 
-	if got := progressEvent("plain").GetProgress().GetMessage(); got != "plain" {
-		t.Errorf("progressEvent() message = %q", got)
-	}
-
-	if got := stageProgressEvent(stage.ID, progressv1.Phase_PHASE_DELETING, "deleting").GetProgress(); StageID(got.GetStageId()) != stage.ID {
+	if got := stageProgressEvent(stage.ID, "deleting").GetProgress(); StageID(got.GetStageId()) != stage.ID {
 		t.Errorf("stageProgressEvent() StageId = %x, want %x", got.GetStageId(), stage.ID)
+	}
+	if got := stageProgressEvent(stage.ID, "deleting").GetProgress().GetMessage(); got != "deleting" {
+		t.Errorf("stageProgressEvent() message = %q", got)
 	}
 
 	degraded := degradedEvent(edge.NeedEdgeMiddleware, "the edge cannot run code").GetDegraded()

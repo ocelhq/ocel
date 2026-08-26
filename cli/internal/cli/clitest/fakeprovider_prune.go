@@ -10,6 +10,9 @@ import (
 )
 
 func (s *deployFakeProviderServer) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	if err := declareFakeStages(stream); err != nil {
+		return err
+	}
 	var lines []string
 	if req.GetKeepN() == 0 {
 		lines = []string{"Nothing to prune."}
@@ -17,9 +20,7 @@ func (s *deployFakeProviderServer) RemoveStalePromotions(ctx context.Context, re
 		lines = []string{"Reclaimed 1 promotion(s): promo-1", "Kept 1 promotion(s)."}
 	}
 	for _, line := range lines {
-		if err := stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: line}},
-		}); err != nil {
+		if err := stream.Send(fakeProgress(line)); err != nil {
 			return err
 		}
 	}

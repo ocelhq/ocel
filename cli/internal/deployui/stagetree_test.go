@@ -32,7 +32,7 @@ func TestCyclicDeclarationsStayVisible(t *testing.T) {
 		{Id: selfy, ParentId: selfy, Title: "selfy"},
 		{Id: left, ParentId: right, Title: "left"},
 		{Id: right, ParentId: left, Title: "right"},
-	}, Final: true})
+	}})
 
 	activate(p, selfy, left, right)
 
@@ -101,7 +101,7 @@ func TestSubtreeOrderFollowsDeclaration(t *testing.T) {
 		{Id: first, ParentId: parent, Title: "first"},
 		{Id: second, ParentId: parent, Title: "second"},
 		{Id: third, ParentId: parent, Title: "third"},
-	}, Final: true})
+	}})
 
 	activate(p, parent, third, first, second)
 
@@ -116,10 +116,4 @@ func TestSubtreeOrderFollowsDeclaration(t *testing.T) {
 		}
 	}
 
-	for i, id := range [][]byte{first, second, third} {
-		idx, count, ok := p.siblingPosition(stageKey(id))
-		if !ok || count != 3 || idx != i+1 {
-			t.Errorf("siblingPosition(%q) = %d/%d (%v), want %d/3", want[i+1], idx, count, ok, i+1)
-		}
-	}
 }
