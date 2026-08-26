@@ -93,7 +93,7 @@ def open_(key, aad, sealed):
 
 
 def additional(at):
-    return "".join(part.replace("/", "%2F") + "/" for part in at).encode()
+    return "".join(part.replace("%", "%25").replace("/", "%2F") + "/" for part in at).encode()
 
 
 def coordinate(held, args):

@@ -88,11 +88,22 @@ func TestTheSealHelperMintsAKeyOnceAndMintsNothingOverIt(t *testing.T) {
 	}
 }
 
-var aCoordinate = []string{
-	"--project", "shop",
-	"--env", "*",
-	"--folder", "/",
-	"--name", "DATABASE_URL",
+var bound = providerkit.Coordinate{
+	Project: "shop",
+	Class:   sealClass,
+	Env:     "*",
+	Folder:  "/a%2Fb",
+	Name:    "DATABASE_URL",
+}
+
+var aCoordinate = sealFlags(bound)
+
+func sealFlags(at providerkit.Coordinate) []string {
+	argv, err := sealArgv("seal", at)
+	if err != nil {
+		panic(err)
+	}
+	return argv[3:]
 }
 
 func TestTheSealHelperRoundTripsAValueAndOpensItNowhereElse(t *testing.T) {
@@ -120,14 +131,14 @@ func TestTheSealHelperRoundTripsAValueAndOpensItNowhereElse(t *testing.T) {
 		t.Errorf("open answered %q, want %q", got, plaintext)
 	}
 
-	for name, moved := range map[string][]string{
-		"another project":     {"--project", "other", "--env", "*", "--folder", "/", "--name", "DATABASE_URL"},
-		"another environment": {"--project", "shop", "--env", "staging", "--folder", "/", "--name", "DATABASE_URL"},
-		"another folder":      {"--project", "shop", "--env", "*", "--folder", "/apps/web", "--name", "DATABASE_URL"},
-		"another key":         {"--project", "shop", "--env", "*", "--folder", "/", "--name", "API_KEY"},
-		"another link":        {"--project", "shop", "--env", "*", "--folder", "/", "--name", "DATABASE_URL", "--link", "db"},
+	for name, moved := range map[string]providerkit.Coordinate{
+		"another project":     {Project: "other", Class: bound.Class, Env: bound.Env, Folder: bound.Folder, Name: bound.Name},
+		"another environment": {Project: bound.Project, Class: bound.Class, Env: "staging", Folder: bound.Folder, Name: bound.Name},
+		"another folder":      {Project: bound.Project, Class: bound.Class, Env: bound.Env, Folder: "/a/b", Name: bound.Name},
+		"another key":         {Project: bound.Project, Class: bound.Class, Env: bound.Env, Folder: bound.Folder, Name: "API_KEY"},
+		"another link":        {Project: bound.Project, Class: bound.Class, Env: bound.Env, Folder: bound.Folder, Link: "db", Name: bound.Name},
 	} {
-		if _, code := sealHelperAt(t, root, sealed, append([]string{"open"}, moved...)...); code == 0 {
+		if _, code := sealHelperAt(t, root, sealed, append([]string{"open"}, sealFlags(moved)...)...); code == 0 {
 			t.Errorf("a value sealed here opened at %s, so the coordinate authenticates nothing", name)
 		}
 	}
@@ -185,8 +196,7 @@ func TestWhatTheSealHelperWritesIsAES256GCMOverTheKeyOnDisk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	opened, err := gcm.Open(nil, sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():],
-		[]byte("shop/"+sealClass+"/*/%2F//DATABASE_URL/"))
+	opened, err := gcm.Open(nil, sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():], bound.Binding())
 	if err != nil {
 		t.Fatalf("what the helper sealed does not open as %s over the key it minted: %v", SealAlgorithm, err)
 	}
@@ -417,37 +427,97 @@ func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
 		Link:    "db",
 		Name:    "DATABASE_URL",
 	}
-	command, err := sealCommand("open", at)
+	argv, err := sealArgv("open", at)
 	if err != nil {
-		t.Fatalf("sealCommand() = %v", err)
+		t.Fatalf("sealArgv() = %v", err)
 	}
-	if !strings.HasPrefix(command, quoted(SealHelper)+" ") {
-		t.Errorf("the provider runs %q, want the helper it installed and nothing beside", command)
+	if argv[0] != SealHelper {
+		t.Errorf("the provider runs %q, want the helper it installed and nothing beside", argv[0])
 	}
+	command := words(argv)
 	if strings.Contains(command, SealKeyPath(at.Class)) {
 		t.Errorf("the provider names the key on the command line: %q", command)
 	}
-	for _, want := range []string{
-		quoted(string(at.Class)), "open",
-		"--project " + quoted(at.Project),
-		"--env " + quoted(at.Env),
-		"--folder " + quoted(at.Folder),
-		"--link " + quoted(at.Link),
-		"--name " + quoted(at.Name),
+	if argv[1] != string(at.Class) || argv[2] != "open" {
+		t.Errorf("the provider runs %q, want the class it seals under and the verb it asks for", argv)
+	}
+	for flag, want := range map[string]string{
+		"--project": at.Project,
+		"--env":     at.Env,
+		"--folder":  at.Folder,
+		"--link":    at.Link,
+		"--name":    at.Name,
 	} {
-		if !strings.Contains(command, want) {
-			t.Errorf("the provider runs %q, which carries no %s, so the coordinate would authenticate less than it names", command, want)
+		if handed(argv, flag) != want {
+			t.Errorf("the provider runs %q, which hands %s %q, so the coordinate would authenticate less than it names",
+				argv, flag, handed(argv, flag))
 		}
+	}
+}
+
+func handed(argv []string, flag string) string {
+	for i, arg := range argv {
+		if arg == flag && i+1 < len(argv) {
+			return argv[i+1]
+		}
+	}
+	return ""
+}
+
+func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
+	t.Parallel()
+
+	argv, err := sealArgv("seal", providerkit.Coordinate{
+		Project: "shop", Class: providerkit.ClassProduction, Env: "*", Folder: "/", Name: "DATABASE_URL",
+	})
+	if err != nil {
+		t.Fatalf("sealArgv() = %v", err)
+	}
+
+	ran := "sudo -n " + words(argv)
+	if strings.Contains(ran, "sh -c") {
+		t.Fatalf("the deploy login runs %q, and the line in %s whitelists %s, not a shell", ran, sudoersSeal, SealHelper)
+	}
+	if want := "sudo -n " + quoted(SealHelper) + " "; !strings.HasPrefix(ran, want) {
+		t.Errorf("the deploy login runs %q, want it to begin %q: sudo matches the command it is handed, and nothing else runs", ran, want)
 	}
 }
 
 func TestAValueSealedToNoClassIsRefusedRatherThanSealedToWhateverStands(t *testing.T) {
 	t.Parallel()
 
-	_, err := sealCommand("seal", providerkit.Coordinate{Project: "shop", Name: "DATABASE_URL"})
+	_, err := sealArgv("seal", providerkit.Coordinate{Project: "shop", Name: "DATABASE_URL"})
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("sealing at a coordinate naming no class = %v, want a refusal: a key is minted per class", err)
+	}
+}
+
+func TestACoordinateMissingAnyPartButTheLinkIsRefused(t *testing.T) {
+	t.Parallel()
+
+	whole := providerkit.Coordinate{
+		Project: "shop", Class: providerkit.ClassProduction, Env: "*", Folder: "/", Link: "db", Name: "DATABASE_URL",
+	}
+	for name, blanked := range map[string]func(*providerkit.Coordinate){
+		"project": func(at *providerkit.Coordinate) { at.Project = "" },
+		"env":     func(at *providerkit.Coordinate) { at.Env = "" },
+		"folder":  func(at *providerkit.Coordinate) { at.Folder = "" },
+		"name":    func(at *providerkit.Coordinate) { at.Name = "" },
+	} {
+		at := whole
+		blanked(&at)
+		_, err := sealArgv("seal", at)
+		var refusal providerkit.Refusal
+		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			t.Errorf("sealing at a coordinate naming no %s = %v, want a refusal: the coordinate is what a value is bound to", name, err)
+		}
+	}
+
+	at := whole
+	at.Link = ""
+	if _, err := sealArgv("seal", at); err != nil {
+		t.Errorf("sealing a value that belongs to no link = %v, want the seal every plain value takes", err)
 	}
 }
 

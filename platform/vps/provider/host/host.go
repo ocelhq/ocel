@@ -20,6 +20,10 @@ type Host struct {
 	settled   bool
 	elevation string
 
+	rooting sync.Mutex
+	knows   bool
+	prefix  string
+
 	holding sync.Mutex
 	held    []byte
 
@@ -102,6 +106,23 @@ func (h *Host) elevate(ctx context.Context) (string, error) {
 	return h.elevation, nil
 }
 
+func (h *Host) rootOrSudo(ctx context.Context, live *session.Session) (string, error) {
+	h.rooting.Lock()
+	defer h.rooting.Unlock()
+	if h.knows {
+		return h.prefix, nil
+	}
+	rendered, err := live.Run(ctx, "id -u")
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(rendered) != "0" {
+		h.prefix = "sudo -n "
+	}
+	h.knows = true
+	return h.prefix, nil
+}
+
 func (h *Host) exec(ctx context.Context, command string, stdin []byte) (session.Result, error) {
 	live, err := h.dial(ctx)
 	if err != nil {
@@ -116,6 +137,34 @@ func (h *Host) exec(ctx context.Context, command string, stdin []byte) (session.
 		command = elevation + "sh -c " + quoted(command)
 	}
 	return live.Exec(ctx, command, stdin)
+}
+
+func (h *Host) granted(ctx context.Context, what string, argv []string, stdin []byte) (string, error) {
+	live, err := h.dial(ctx)
+	if err != nil {
+		return "", err
+	}
+	h.remember(live.Destination().Principal())
+	elevation, err := h.rootOrSudo(ctx, live)
+	if err != nil {
+		return "", err
+	}
+	result, err := live.Exec(ctx, elevation+words(argv), stdin)
+	if err != nil {
+		return "", err
+	}
+	if result.Code != 0 {
+		return "", h.refuse(what, result)
+	}
+	return result.Stdout, nil
+}
+
+func words(argv []string) string {
+	written := make([]string, 0, len(argv))
+	for _, arg := range argv {
+		written = append(written, quoted(arg))
+	}
+	return strings.Join(written, " ")
 }
 
 func (h *Host) run(ctx context.Context, what, command string, stdin []byte) (string, error) {
