@@ -32,7 +32,7 @@ func standsAsDecided(t *testing.T, vm machine) {
 	if groups := vm.ssh(t, "id -nG "+deployLogin); !strings.Contains(groups, "docker") {
 		t.Errorf("%s is in %q, and a deploy that cannot reach the docker socket deploys nothing", deployLogin, strings.TrimSpace(groups))
 	}
-	if mode := strings.TrimSpace(vm.ssh(t, "stat -c %a /var/lib/ocel")); mode != "750" {
+	if mode := strings.TrimSpace(vm.ssh(t, "sudo stat -c %a /var/lib/ocel")); mode != "750" {
 		t.Errorf("/var/lib/ocel stands at %q, want 750", mode)
 	}
 
@@ -132,7 +132,7 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 		if !strings.Contains(deployDoc.Document, item.Name) {
 			t.Errorf("the deploy document claims nothing about %s, which this bootstrap just handed over", item.Name)
 		}
-		if owner := strings.TrimSpace(vm.ssh(t, "stat -c %U "+item.Name)); owner != deployLogin {
+		if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U "+item.Name)); owner != deployLogin {
 			t.Errorf("the deploy document says %s is %s's; the machine says it is %s's", item.Name, deployLogin, owner)
 		}
 	}
