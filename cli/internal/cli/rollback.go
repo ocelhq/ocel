@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
+	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
@@ -60,7 +62,7 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 	defer run.Close()
 
 	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
-		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -84,10 +86,10 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 			tagSuffix = fmt.Sprintf(", tag %s", promoted.GetTag())
 		}
 		flipSuffix := ""
-		if note := flipNote(promoted.GetFlipBound()); note != "" {
+		if note := deployui.FlipNote(promoted.GetFlipBound()); note != "" {
 			flipSuffix = "; " + note
 		}
-		fmt.Fprintf(stdout, "Rolled back to promotion %s (created %s%s)%s\n", promoted.GetPromotionId(), epochDate(promoted.GetTs()), tagSuffix, flipSuffix)
+		fmt.Fprintf(stdout, "Rolled back to promotion %s (created %s%s)%s\n", promoted.GetPromotionId(), deployui.EpochDate(promoted.GetTs()), tagSuffix, flipSuffix)
 		return nil
 	})
 }

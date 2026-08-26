@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
+	"github.com/ocelhq/ocel/cli/internal/cli/style"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -81,7 +82,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 				huh.NewInput().
 					Title("Type the environment name (" + subject + ") to confirm").
 					Value(&typed),
-			)).WithTheme(theme).RunWithContext(ctx)
+			)).WithTheme(style.Theme).RunWithContext(ctx)
 			if err != nil && !errors.Is(err, huh.ErrUserAborted) {
 				return err
 			}

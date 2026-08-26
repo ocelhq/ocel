@@ -27,7 +27,7 @@ func TestRunRollback(t *testing.T) {
 			t.Errorf("stdout = %q, want it to report rolling back to promo-1", stdout.String())
 		}
 
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("--to rolls back to the named promotion", func(t *testing.T) {
@@ -47,7 +47,7 @@ func TestRunRollback(t *testing.T) {
 			t.Errorf("stdout = %q, want it to report rolling back to promo-2", stdout.String())
 		}
 
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("--tag rolls back to the tagged promotion and echoes the tag", func(t *testing.T) {
@@ -71,7 +71,7 @@ func TestRunRollback(t *testing.T) {
 			t.Errorf("stdout = %q, want it to echo the target's tag", out)
 		}
 
-		waitForNoStaleSocket(t, sockPath)
+		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
 	t.Run("--to and --tag are mutually exclusive", func(t *testing.T) {

@@ -11,14 +11,16 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/declcache"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
+	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
@@ -62,7 +64,7 @@ var envCmd = &cobra.Command{
 	Short: "Manage this project's variable values",
 	Long: "Manage the values behind the variables your code declares.\n\n" +
 		"Which variables a project requires is declared in code; this command manages what " +
-		"they are set to. Values live in your own cloud account and are reached through the " +
+		"they are set to. Values live in your own provider account and are reached through the " +
 		"provider, never by the CLI directly.",
 }
 
@@ -191,7 +193,7 @@ func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts en
 	}
 
 	return provider.Drive(ctx, cfg, stderr, stderr, func(runner *provider.Runner) error {
-		if err := preflightCredentials(ctx, deps, runner, cfg, tier, hint, stderr); err != nil {
+		if err := preflight.Credentials(ctx, deps, runner, cfg, tier, hint, stderr); err != nil {
 			return err
 		}
 		return drive(runner, cfg)
@@ -207,24 +209,6 @@ func envTier(opts envOptions) environmentv1.Tier {
 
 func envCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
-}
-
-func namedEnvironments(ctx context.Context, runner *provider.Runner, slug string) ([]string, error) {
-	client, err := runner.Client()
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{
-		Slug: slug,
-	})
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(resp.GetEnvironments()))
-	for _, environment := range resp.GetEnvironments() {
-		names = append(names, environment.GetIdentity())
-	}
-	return names, nil
 }
 
 func runEnvSet(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, opts envOptions, stdout, stderr io.Writer) error {
@@ -302,7 +286,7 @@ func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 		}
 		var environments []string
 		if opts.preview && overridden(resp.GetValues()) {
-			if environments, err = namedEnvironments(ctx, runner, cfg.Slug); err != nil {
+			if environments, err = envwire.NamedEnvironments(ctx, runner, cfg.Slug); err != nil {
 				return err
 			}
 		}
@@ -341,11 +325,11 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		}
 		m := resp.GetMetadata()
 		if target := m.GetTarget(); target != nil {
-			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), epochDate(m.GetUpdatedAt()))
+			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), deployui.EpochDate(m.GetUpdatedAt()))
 			fmt.Fprintln(stdout, "Pass --reveal to print the value it reads. Edit that value where it is set.")
 			return nil
 		}
-		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), epochDate(m.GetUpdatedAt()))
+		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), deployui.EpochDate(m.GetUpdatedAt()))
 		fmt.Fprintln(stdout, "Pass --reveal to print the value.")
 		return nil
 	})
@@ -504,7 +488,7 @@ func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environme
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
 			c.GetKey(), folderOrRoot(c.GetFolder()), environment,
-			v.GetVersion(), size, epochDate(v.GetUpdatedAt()), source)
+			v.GetVersion(), size, deployui.EpochDate(v.GetUpdatedAt()), source)
 	}
 	_ = tw.Flush()
 
@@ -521,7 +505,7 @@ func renderVersions(stdout io.Writer, cell string, versions []*envvarsv1.Version
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "VERSION\tCREATED\tBYTES")
 	for _, v := range versions {
-		fmt.Fprintf(tw, "%d\t%s\t%d\n", v.GetVersion(), epochDate(v.GetCreatedAt()), v.GetSize())
+		fmt.Fprintf(tw, "%d\t%s\t%d\n", v.GetVersion(), deployui.EpochDate(v.GetCreatedAt()), v.GetSize())
 	}
 	_ = tw.Flush()
 }

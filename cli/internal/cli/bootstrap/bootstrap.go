@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
+	"github.com/ocelhq/ocel/cli/internal/cli/style"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
@@ -24,8 +25,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
-
-var theme = huh.ThemeFunc(huh.ThemeDracula)
 
 type Options struct {
 	Yes              bool
@@ -322,7 +321,7 @@ func confirm(ctx context.Context, title string, stdin io.Reader) (bool, error) {
 			Affirmative("Yes").
 			Negative("No").
 			Value(&proceed),
-	)).WithTheme(theme).WithInput(stdin).RunWithContext(ctx)
+	)).WithTheme(style.Theme).WithInput(stdin).RunWithContext(ctx)
 	if errors.Is(err, huh.ErrUserAborted) {
 		return false, nil
 	}

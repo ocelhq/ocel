@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
@@ -123,7 +124,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, dr
 	}
 
 	return providerui.Run(ctx, deps, cfg, "ocel destroy production", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -185,7 +186,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 	}
 
 	return providerui.Run(ctx, deps, cfg, "ocel destroy preview", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
+		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
 			return err
 		}
 

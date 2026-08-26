@@ -15,9 +15,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/cli/deploy"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 )
 
@@ -59,7 +61,7 @@ func logFormat() string {
 var rootCmd = &cobra.Command{
 	Use:           "ocel <command>",
 	Short:         "Ocel CLI",
-	Long:          "Ocel CLI\n\nocel deploys apps to your own cloud",
+	Long:          "Ocel CLI\n\nocel deploys apps to your own infrastructure",
 	Version:       version,
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -81,8 +83,8 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(buildCmd)
-	rootCmd.AddCommand(deployCmd)
-	rootCmd.AddCommand(previewCmd)
+	rootCmd.AddCommand(deploy.NewCommand(s))
+	rootCmd.AddCommand(deploy.NewPreviewCommand(s))
 	rootCmd.AddCommand(rollbackCmd)
 	rootCmd.AddCommand(deploymentsCmd)
 	rootCmd.AddCommand(loginCmd)
@@ -103,7 +105,7 @@ func newDeps() cmddeps.Deps {
 		DeploymentID:        appbuilder.DeploymentID,
 		CollectDeclarations: deploycollector.Collect,
 		OpenBrowser:         browser.OpenURL,
-		ServeVarsUI:         serveVarsUI,
+		ServeVarsUI:         envwire.ServeVarsUI,
 		CurrentGitBranch:    gitBranch,
 		DiscoverPRNumber:    prNumberFromEnv,
 		RunPackageManager:   runPackageManagerCommand,

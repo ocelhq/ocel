@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/node"
 )
@@ -46,7 +48,7 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 		return err
 	}
 
-	gate := envgate.New(noValues{}, envgate.Scope{Apps: envApps(cfg)})
+	gate := envgate.New(noValues{}, envgate.Scope{Apps: envwire.Apps(cfg)})
 	if _, err := deps.CollectDeclarations(ctx, cfg, gate, stderr, stderr); err != nil {
 		return err
 	}
@@ -69,8 +71,11 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 }
 
 func generateClientAccessors(cfg *projectconfig.Config, keys []string) error {
-	for _, plan := range appPlans(cfg, nil) {
-		if err := clientenv.GenerateKeys(plan.dir, keys); err != nil {
+	if len(cfg.Apps) == 0 {
+		return clientenv.GenerateKeys(cfg.Dir, keys)
+	}
+	for _, a := range cfg.Apps {
+		if err := clientenv.GenerateKeys(filepath.Join(cfg.Dir, a.Path), keys); err != nil {
 			return err
 		}
 	}

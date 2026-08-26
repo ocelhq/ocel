@@ -33,7 +33,7 @@ export default {
 		deps := newDeps()
 		deps.BuildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ io.Writer) error {
 			built = cfg
-			writePrebuiltFunction(t, cfg.Dir, "api", "index")
+			clitest.WritePrebuiltFunction(t, cfg.Dir, "api", "index")
 			return nil
 		}
 

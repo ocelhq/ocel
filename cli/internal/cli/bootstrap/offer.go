@@ -10,6 +10,7 @@ import (
 
 	"charm.land/huh/v2"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/style"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -114,7 +115,7 @@ func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.Boot
 			Affirmative("Yes").
 			Negative("No").
 			Value(&proceed),
-	)).WithTheme(theme).RunWithContext(ctx)
+	)).WithTheme(style.Theme).RunWithContext(ctx)
 	if err != nil && !errors.Is(err, huh.ErrUserAborted) {
 		return err
 	}

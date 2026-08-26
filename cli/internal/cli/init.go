@@ -33,7 +33,7 @@ var initCmd = &cobra.Command{
 	Long: "Writes ocel.config.ts and adds ocel and the provider package to your dependencies.\n\n" +
 		"Runs entirely offline: it neither signs you in nor contacts the Ocel console.\n\n" +
 		"The slug is the project's deployment identity — every stack and resource\n" +
-		"ocel creates in your own cloud account is keyed on it, so changing it later\n" +
+		"ocel creates in your own provider account is keyed on it, so changing it later\n" +
 		"forks a new project. It defaults to this directory's name.\n\n" +
 		"Run `ocel console link` to associate this directory with an Ocel console project.",
 	Args: cobra.MaximumNArgs(1),
@@ -97,7 +97,7 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 	addDependencies(ctx, deps, projectDir, []string{sdkPackage, providerPkg}, stdout, stderr)
 
 	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Run `ocel deploy` to deploy to your own cloud, or `ocel dev` to develop against the Ocel console.")
+	fmt.Fprintln(stdout, "Run `ocel deploy` to deploy to your own infrastructure, or `ocel dev` to develop against the Ocel console.")
 
 	return nil
 }

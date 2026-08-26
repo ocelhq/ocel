@@ -50,7 +50,7 @@ var linkCmd = &cobra.Command{
 	Long: "Manage the links this project's apps resolve.\n\n" +
 		"A link is one resource an app reaches — its address, its credentials and the " +
 		"permissions that go with it — published under a name apps bind to. Records live in " +
-		"your own cloud account and are reached through the provider, never by the CLI directly.",
+		"your own provider account and are reached through the provider, never by the CLI directly.",
 }
 
 var linkSetCmd = &cobra.Command{

@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
+	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
@@ -114,7 +115,7 @@ func runStandalone(ctx context.Context, deps cmddeps.Deps, creds credentials.Cre
 
 	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
 	srv.UseAccount(projectCfg)
-	srv.UseValues(storeValues(projectCfg.EnvVars, file.Values), envScope(cfg, false, ""))
+	srv.UseValues(storeValues(projectCfg.EnvVars, file.Values), envwire.Scope(cfg, false, ""))
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()

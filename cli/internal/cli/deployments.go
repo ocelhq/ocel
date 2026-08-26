@@ -8,12 +8,12 @@ import (
 	"slices"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
@@ -76,7 +76,7 @@ func runPromotionsLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout,
 	}
 
 	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
-		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -103,7 +103,7 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keep
 	}
 
 	return providerui.Run(ctx, deps, cfg, "ocel deployments prune", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
-		if err := preflightTier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
 
@@ -143,7 +143,7 @@ func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistor
 		if entry.GetActive() {
 			status = activeStatus
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, epochDateTime(p.GetTs()), deployedIdentities(p.GetBuilds()), status)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, deployui.EpochDateTime(p.GetTs()), deployedIdentities(p.GetBuilds()), status)
 	}
 	_ = tw.Flush()
 }
@@ -163,11 +163,4 @@ func deployedIdentities(identityByApp map[string]string) string {
 		pairs = append(pairs, app+"="+identityByApp[app])
 	}
 	return strings.Join(pairs, " ")
-}
-
-func epochDateTime(sec int64) string {
-	if sec == 0 {
-		return "—"
-	}
-	return time.Unix(sec, 0).UTC().Format("2006-01-02 15:04:05 UTC")
 }
