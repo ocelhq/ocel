@@ -380,6 +380,41 @@ func TestAReplacedKeyIsDriftThoughEveryPathStillStandsAsItWasWritten(t *testing.
 	}
 }
 
+func TestAnApplyOverAReplacedKeyRefusesRatherThanRestampingIt(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	minted := Seal{Fingerprint: "9f86d081884c7d659a", Algorithm: SealAlgorithm, CreatedAt: "2026-08-26T09:00:00Z"}
+	stamped := Stamp{State: StateComplete, Seal: minted}
+
+	for name, read := range map[string]Reading{
+		"a first apply, where nothing was ever minted":  {Class: class},
+		"an apply over the key the stamp records":       {Class: class, Present: true, Seal: minted, Stamp: stamped},
+		"an apply over a host stamped before seal keys": {Class: class, Present: true, Seal: minted},
+	} {
+		if err := read.adopting(); err != nil {
+			t.Errorf("%s = %v, want the apply that stamps it", name, err)
+		}
+	}
+
+	for name, read := range map[string]Reading{
+		"a key replaced beneath the stamp": {
+			Class: class, Present: true, Stamp: stamped,
+			Seal: Seal{Fingerprint: "0000000000000000", Algorithm: SealAlgorithm},
+		},
+		"a key taken from beneath the stamp": {Class: class, Present: true, Stamp: stamped},
+	} {
+		err := read.adopting()
+		var refusal providerkit.Refusal
+		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			t.Fatalf("%s = %v, want a refusal: adopting it silently is every sealed value unopenable and nothing said", name, err)
+		}
+		if !strings.Contains(refusal.Message, minted.Fingerprint) {
+			t.Errorf("%s refuses with %q, which never names the key the stamp records", name, refusal.Message)
+		}
+	}
+}
+
 func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *testing.T) {
 	t.Parallel()
 
