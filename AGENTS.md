@@ -9,6 +9,8 @@
   not precedent: never match it, never extend it, delete it when touching nearby code.
 - The commits are the ADRs. Rationale belongs in the commit message and PR bodies. Nowhere else.
 - Do not generate changesets unless explicitly instructed.
+- The code is the source of truth for memory too: write nothing to agent memory.
+  Remembering is a user-initiated act — only an explicit "remember this" saves an entry.
 
 ## About Ocel
 
@@ -18,7 +20,7 @@ the CLI stands alone; the SDK and console do not.
 - **CLI** — deploys apps. Point it at a project and it builds, provisions and ships into
   your own provider account, with as little configuration as possible.
 - **SDK** — adds infrastructure resources. Cloud primitives are function calls in app code,
-  and the call *is* the provisioning step, so there is no separate wiring to keep in sync.
+  and the call _is_ the provisioning step, so there is no separate wiring to keep in sync.
   Proto-backed and language-neutral.
 - **Console** — provides the UI over both.
 
@@ -71,13 +73,50 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 
 ## Agent skills
 
-### Issue tracker
+### Issue tracker: GitHub
 
-Issues live as GitHub issues on `ocelhq/ocel`, driven by the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues and specs live as GitHub issues on this repo; drive them with `gh`. When a
+skill says "publish to the issue tracker" or "fetch the relevant ticket", that means
+a GitHub issue here.
+
+### Pull requests as a triage surface
+
+**PRs as a request surface: no.**
+
+When `yes`, PRs run through the same labels and states as issues. "External" means
+`authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE`.
+
+### Wayfinding operations
+
+Used by `/wayfinder`. The **map** is one issue labelled `wayfinder:map` (Notes /
+Decisions-so-far / Fog body) with tickets as GitHub **sub-issues**, labelled
+`wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Where sub-issues
+aren't enabled: task list in the map body + `Part of #<map>` atop the child.
+
+- **Blocking**: native issue dependencies — `POST .../issues/<child>/dependencies/blocked_by`
+  takes the blocker's **database id** (`--jq .id`), not the `#number` or `node_id`.
+  `issue_dependencies_summary.blocked_by` counts open blockers only — the live gate.
+  Fallback: a `Blocked by: #<n>` line atop the child. Unblocked = every blocker closed.
+- **Frontier**: open, unassigned children with no open blocker; first in map order wins.
+- **Claim**: assign `@me` — the session's first write.
+- **Resolve**: comment the answer, close, append a context pointer (gist + link) to
+  the map's Decisions-so-far.
 
 ### Triage labels
 
-The five canonical roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
+The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repo's issue tracker.
+
+| Label in mattpocock/skills | Label in our tracker | Meaning                                  |
+| -------------------------- | -------------------- | ---------------------------------------- |
+| `needs-triage`             | `needs-triage`       | Maintainer needs to evaluate this issue  |
+| `needs-info`               | `needs-info`         | Waiting on reporter for more information |
+| `ready-for-agent`          | `ready-for-agent`    | Fully specified, ready for an AFK agent  |
+| `ready-for-human`          | `ready-for-human`    | Requires human implementation            |
+| `wontfix`                  | `wontfix`            | Will not be actioned                     |
+
+When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
+
+Edit the right-hand column to match whatever vocabulary you actually use.
 
 ### Review rules
 
