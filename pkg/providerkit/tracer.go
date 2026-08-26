@@ -94,11 +94,11 @@ func UnitStage(name, title string) Stage {
 	return Stage{ID: derivedStageID(naming.UnitID(name)), Name: name, Title: sanitizeTitle(title)}
 }
 
-func PhaseStage(unit Stage, phase progressv1.Phase) Stage {
+func PhaseStage(unitName string, phase progressv1.Phase) Stage {
 	name := phaseNames[phase]
 	return Stage{
-		ID:       derivedStageID(naming.PhaseID(unit.Name, name)),
-		ParentID: unit.ID,
+		ID:       derivedStageID(naming.PhaseID(unitName, name)),
+		ParentID: derivedStageID(naming.UnitID(unitName)),
 		Name:     name,
 		Title:    phaseTitles[phase],
 		Phase:    phase,

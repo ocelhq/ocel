@@ -97,7 +97,7 @@ func streamed(
 ) error {
 	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
 		root := UnitStage(unit, title)
-		working := PhaseStage(root, phase)
+		working := PhaseStage(unit, phase)
 		newEventTracer(sender).DeclareStages(root, working)
 		if err := do(sender, newReporter(sender, working)); err != nil {
 			return nil, err
