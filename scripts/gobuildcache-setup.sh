@@ -213,36 +213,42 @@ pause "Bucket created? Press Enter to continue"
 write_env GOBUILDCACHE_AWS_REGION "$GOBUILDCACHE_AWS_REGION"
 write_env GOBUILDCACHE_S3_BUCKET "$GOBUILDCACHE_S3_BUCKET"
 
-# ── Stage 2: IAM user scoped to the bucket ────────────────────────────────
-stage "IAM credentials"
+# ── Stage 2: OIDC role scoped to the bucket ───────────────────────────────
+stage "Build-cache IAM role (OIDC)"
+say "CI assumes a role through GitHub's OIDC provider — no static keys."
 say "Directory buckets are authorized via s3express:CreateSession — that one"
-say "action on the bucket ARN is the whole policy."
+say "action on the bucket ARN is the whole permission policy."
 ask AWS_ACCOUNT_ID "AWS account id (aws sts get-caller-identity --query Account --output text):"
-say "Create the user, attach the policy, and mint an access key:"
+ask GITHUB_REPO "GitHub repo (owner/name):"
+say "Create the role (assumes the GitHub OIDC provider already exists in the account):"
 say ""
-say "    aws iam create-user --user-name gobuildcache"
-say "    aws iam put-user-policy --user-name gobuildcache --policy-name gobuildcache \\"
+say "    aws iam create-role --role-name gobuildcache \\"
+say "      --max-session-duration 7200 \\"
+say "      --assume-role-policy-document '{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Federated\":\"arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com\"},\"Action\":\"sts:AssumeRoleWithWebIdentity\",\"Condition\":{\"StringEquals\":{\"token.actions.githubusercontent.com:aud\":\"sts.amazonaws.com\"},\"StringLike\":{\"token.actions.githubusercontent.com:sub\":\"repo:${GITHUB_REPO}:*\"}}}]}'"
+say "    aws iam put-role-policy --role-name gobuildcache --policy-name gobuildcache \\"
 say "      --policy-document '{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3express:CreateSession\",\"Resource\":\"arn:aws:s3express:${GOBUILDCACHE_AWS_REGION}:${AWS_ACCOUNT_ID}:bucket/${GOBUILDCACHE_S3_BUCKET}\"}]}'"
-say "    aws iam create-access-key --user-name gobuildcache"
 say ""
-ask GOBUILDCACHE_AWS_ACCESS_KEY_ID "AccessKeyId:"
-ask_secret GOBUILDCACHE_AWS_SECRET_ACCESS_KEY "SecretAccessKey (hidden):"
+GOBUILDCACHE_AWS_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/gobuildcache"
+ask GOBUILDCACHE_AWS_ROLE_ARN "Role ARN [$GOBUILDCACHE_AWS_ROLE_ARN]:" || true
+[[ -z "$GOBUILDCACHE_AWS_ROLE_ARN" ]] && GOBUILDCACHE_AWS_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/gobuildcache"
 write_env AWS_ACCOUNT_ID "$AWS_ACCOUNT_ID"
-write_env GOBUILDCACHE_AWS_ACCESS_KEY_ID "$GOBUILDCACHE_AWS_ACCESS_KEY_ID"
-write_env GOBUILDCACHE_AWS_SECRET_ACCESS_KEY "$GOBUILDCACHE_AWS_SECRET_ACCESS_KEY"
+write_env GITHUB_REPO "$GITHUB_REPO"
+write_env GOBUILDCACHE_AWS_ROLE_ARN "$GOBUILDCACHE_AWS_ROLE_ARN"
 
 # ── Stage 3: GitHub Actions variables + secrets ───────────────────────────
 stage "GitHub Actions"
-say "CI reads two repo variables and two secrets; the workflows skip the cache"
-say "silently until all four exist."
+say "CI reads two repo variables and one secret; the workflows skip the cache"
+say "silently until all three exist."
 set_var GOBUILDCACHE_S3_BUCKET "$GOBUILDCACHE_S3_BUCKET"
 set_var GOBUILDCACHE_AWS_REGION "$GOBUILDCACHE_AWS_REGION"
-set_secret GOBUILDCACHE_AWS_ACCESS_KEY_ID "$GOBUILDCACHE_AWS_ACCESS_KEY_ID"
-set_secret GOBUILDCACHE_AWS_SECRET_ACCESS_KEY "$GOBUILDCACHE_AWS_SECRET_ACCESS_KEY"
+set_secret GOBUILDCACHE_AWS_ROLE_ARN "$GOBUILDCACHE_AWS_ROLE_ARN"
 pause
 
 # ── Stage 4: local activation via mise.local.toml ─────────────────────────
 stage "Local activation"
+say "Local builds authorize with your ambient AWS credentials (profile, SSO,"
+say "whatever the default chain finds) — they need s3express:CreateSession on"
+say "the bucket. No static keys are written anywhere."
 MISE_LOCAL="mise.local.toml"
 MISE_BLOCK=$(cat <<EOF
 [env]
@@ -250,8 +256,6 @@ GOCACHEPROG = "gobuildcache"
 GOBUILDCACHE_BACKEND_TYPE = "s3"
 GOBUILDCACHE_S3_BUCKET = "$GOBUILDCACHE_S3_BUCKET"
 GOBUILDCACHE_AWS_REGION = "$GOBUILDCACHE_AWS_REGION"
-GOBUILDCACHE_AWS_ACCESS_KEY_ID = "$GOBUILDCACHE_AWS_ACCESS_KEY_ID"
-GOBUILDCACHE_AWS_SECRET_ACCESS_KEY = "$GOBUILDCACHE_AWS_SECRET_ACCESS_KEY"
 GOBUILDCACHE_PRINT_STATS = "false"
 EOF
 )

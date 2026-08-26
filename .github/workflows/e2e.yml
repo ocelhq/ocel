@@ -16,6 +16,10 @@ on:
       - ".github/workflows/e2e.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
@@ -58,8 +62,7 @@ jobs:
         with:
           bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
           region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          access-key-id: ${{ secrets.GOBUILDCACHE_AWS_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.GOBUILDCACHE_AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
