@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/deploy"
+	"github.com/ocelhq/ocel/cli/internal/cli/doctor"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
@@ -94,6 +95,7 @@ func init() {
 
 	rootCmd.AddCommand(bootstrap.NewCommand(s))
 	rootCmd.AddCommand(newPermissionsCommand(s))
+	rootCmd.AddCommand(doctor.NewCommand(s))
 
 	installHelpStyle(rootCmd)
 }
