@@ -8,8 +8,8 @@ package streamv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	v1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	v11 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	v1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -455,9 +455,9 @@ var File_cli_stream_v1_stream_proto protoreflect.FileDescriptor
 
 const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\n" +
-	"\x1acli/stream/v1/stream.proto\x12\rcli.stream.v1\x1a\x1bbuf/validate/validate.proto\x1a!common/progress/v1/progress.proto\x1a#provider/contract/v1/contract.proto\"\x83\x03\n" +
-	"\bRunEvent\x126\n" +
-	"\x04plan\x18\x01 \x01(\v2 .provider.contract.v1.ChangePlanH\x00R\x04plan\x12B\n" +
+	"\x1acli/stream/v1/stream.proto\x12\rcli.stream.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19common/plan/v1/plan.proto\x1a!common/progress/v1/progress.proto\"\xfd\x02\n" +
+	"\bRunEvent\x120\n" +
+	"\x04plan\x18\x01 \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04plan\x12B\n" +
 	"\toperation\x18\x02 \x01(\v2\".common.progress.v1.OperationEventH\x00R\toperation\x127\n" +
 	"\awaiting\x18\x03 \x01(\v2\x1b.cli.stream.v1.WaitingEventH\x00R\awaiting\x127\n" +
 	"\aresumed\x18\x04 \x01(\v2\x1b.cli.stream.v1.ResumedEventH\x00R\aresumed\x127\n" +
@@ -508,11 +508,11 @@ var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*ResumedEvent)(nil),       // 3: cli.stream.v1.ResumedEvent
 	(*RunResultEvent)(nil),     // 4: cli.stream.v1.RunResultEvent
 	(*DiagnosticEvent)(nil),    // 5: cli.stream.v1.DiagnosticEvent
-	(*v1.ChangePlan)(nil),      // 6: provider.contract.v1.ChangePlan
+	(*v1.ChangePlan)(nil),      // 6: common.plan.v1.ChangePlan
 	(*v11.OperationEvent)(nil), // 7: common.progress.v1.OperationEvent
 }
 var file_cli_stream_v1_stream_proto_depIdxs = []int32{
-	6, // 0: cli.stream.v1.RunEvent.plan:type_name -> provider.contract.v1.ChangePlan
+	6, // 0: cli.stream.v1.RunEvent.plan:type_name -> common.plan.v1.ChangePlan
 	7, // 1: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
 	2, // 2: cli.stream.v1.RunEvent.waiting:type_name -> cli.stream.v1.WaitingEvent
 	3, // 3: cli.stream.v1.RunEvent.resumed:type_name -> cli.stream.v1.ResumedEvent

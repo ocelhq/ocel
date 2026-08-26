@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -32,7 +33,7 @@ func deployedProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fa
 	return client, provider
 }
 
-func kinds(plan *contractv1.ChangePlan) []string {
+func kinds(plan *planv1.ChangePlan) []string {
 	var out []string
 	for _, item := range plan.GetGroups() {
 		out = append(out, item.GetKind())
@@ -203,11 +204,11 @@ func TestPlanRemoveProjectNamesTheRecordsAndCertificatesItsHostnamesHold(t *test
 	for _, item := range plan.GetGroups() {
 		switch item.GetName() {
 		case "owed.acme.com CNAME shop.relay.fake.invalid":
-			if item.GetAction() != contractv1.Change_ACTION_KEEP {
+			if item.GetAction() != planv1.Change_ACTION_KEEP {
 				t.Errorf("the plan deletes %q, want a record ocel never wrote kept", item.GetName())
 			}
 		case "cert-for-app":
-			if item.GetAction() != contractv1.Change_ACTION_KEEP {
+			if item.GetAction() != planv1.Change_ACTION_KEEP {
 				t.Errorf("the plan deletes %q, want a pinned certificate kept", item.GetName())
 			}
 		}
@@ -270,11 +271,11 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	for _, item := range plan.GetGroups() {
 		switch item.GetName() {
 		case "ocels-cert":
-			if item.GetAction() != contractv1.Change_ACTION_DELETE {
+			if item.GetAction() != planv1.Change_ACTION_DELETE {
 				t.Errorf("the plan keeps %q, want a certificate ocel requested deleted", item.GetName())
 			}
 		case "pinned-cert":
-			if item.GetAction() != contractv1.Change_ACTION_KEEP {
+			if item.GetAction() != planv1.Change_ACTION_KEEP {
 				t.Errorf("the plan deletes %q, want a pinned certificate kept", item.GetName())
 			}
 		}

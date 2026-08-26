@@ -21,6 +21,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -167,7 +169,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		if err != nil {
 			return err
 		}
-		planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
+		planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
 			Tier:           tier,
 			WithDependents: true,
 			Edge:           edgewire.Selection(cfg),
@@ -220,20 +222,20 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			req.AutoHeal = &opts.AutoHeal
 		}
 
+		var plan *planv1.ChangePlan
+		req.Dry = true
 		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Planning changes")
-		intended, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
-			Tier:   tier,
-			Intent: req,
-			Edge:   edgewire.Selection(cfg),
-		})
+		err = provider.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap,
+			func(ev *progressv1.OperationEvent) {
+				if shown := ev.GetPlan(); shown != nil {
+					plan = shown
+				}
+			})
 		spinner.Stop()
+		req.Dry = false
 		if err != nil {
-			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				return fmt.Errorf("%s cannot say what a bootstrap would change; it predates planning. Upgrade the provider pinned in this project and try again", runner.Package())
-			}
 			return err
 		}
-		plan := intended.GetPlan()
 		rendered := len(plan.GetGroups()) > 0
 		if rendered {
 			changeplan.NewPrinter(stdout, ui.Presentation()).Render(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan)

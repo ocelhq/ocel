@@ -251,7 +251,7 @@ func TestLiveForgettingARecordNothingWroteIsAlreadyForgotten(t *testing.T) {
 	}
 }
 
-func onlyGroup(t *testing.T, plan providerkit.BootstrapPlan) providerkit.ChangeGroup {
+func onlyGroup(t *testing.T, plan providerkit.Plan) providerkit.ChangeGroup {
 	t.Helper()
 	if len(plan.Groups) != 1 {
 		t.Fatalf("the plan carries %d groups, want the one core group this provider stands up", len(plan.Groups))

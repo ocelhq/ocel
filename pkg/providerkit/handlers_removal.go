@@ -9,6 +9,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
@@ -80,7 +81,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	return removal, nil
 }
 
-func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*contractv1.ChangePlan, error) {
+func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*planv1.ChangePlan, error) {
 	removal, err := h.openRemoval(ctx, req)
 	if err != nil {
 		return nil, RefusalError(err)
@@ -92,24 +93,24 @@ func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.Projec
 	return plan, nil
 }
 
-func (r *projectRemoval) plan() (*contractv1.ChangePlan, error) {
-	plan := &contractv1.ChangePlan{EdgeKind: string(r.front.Kind()), Subject: r.slug}
+func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
+	plan := &planv1.ChangePlan{EdgeKind: string(r.front.Kind()), Subject: r.slug}
 	vendor := string(r.provider.Vendor())
 	for _, stack := range r.apps {
-		plan.Groups = append(plan.Groups, &contractv1.ChangeGroup{
+		plan.Groups = append(plan.Groups, &planv1.ChangeGroup{
 			Kind:    StackGroupKind,
 			Name:    vendor + "/" + stack.String(),
 			Feature: stack.App,
-			Action:  contractv1.Change_ACTION_DELETE,
+			Action:  planv1.Change_ACTION_DELETE,
 			Reason:  "everything this release of " + stack.App + " stood up",
 		})
 	}
 	for _, stack := range r.infra {
-		plan.Groups = append(plan.Groups, &contractv1.ChangeGroup{
+		plan.Groups = append(plan.Groups, &planv1.ChangeGroup{
 			Kind:    StackGroupKind,
 			Name:    vendor + "/" + stack.String(),
 			Feature: stack.Env,
-			Action:  contractv1.Change_ACTION_DELETE,
+			Action:  planv1.Change_ACTION_DELETE,
 			Reason:  "the resources every app in " + stack.Env + " links to",
 			Slow:    true,
 		})
@@ -128,36 +129,36 @@ func (r *projectRemoval) plan() (*contractv1.ChangePlan, error) {
 	}
 	plan.Groups = append(plan.Groups, r.recordGroups()...)
 	plan.Groups = append(plan.Groups,
-		&contractv1.ChangeGroup{
+		&planv1.ChangeGroup{
 			Kind:   "variable values",
 			Name:   r.slug,
-			Action: contractv1.Change_ACTION_DELETE,
+			Action: planv1.Change_ACTION_DELETE,
 			Reason: "the values this project's apps read, and the links published beside them",
 		},
-		&contractv1.ChangeGroup{
+		&planv1.ChangeGroup{
 			Kind:   "stored objects",
 			Name:   r.slug,
-			Action: contractv1.Change_ACTION_DELETE,
+			Action: planv1.Change_ACTION_DELETE,
 			Reason: "the artifacts, assets and cache entries every release of this project wrote",
 		})
 	return plan, nil
 }
 
-func (r *projectRemoval) recordGroups() []*contractv1.ChangeGroup {
-	var groups []*contractv1.ChangeGroup
+func (r *projectRemoval) recordGroups() []*planv1.ChangeGroup {
+	var groups []*planv1.ChangeGroup
 	for _, rec := range r.state.WrittenRecords() {
-		groups = append(groups, &contractv1.ChangeGroup{
+		groups = append(groups, &planv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: contractv1.Change_ACTION_DELETE,
+			Action: planv1.Change_ACTION_DELETE,
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
 	for _, rec := range r.state.OwedRecords() {
-		groups = append(groups, &contractv1.ChangeGroup{
+		groups = append(groups, &planv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
-			Action: contractv1.Change_ACTION_KEEP,
+			Action: planv1.Change_ACTION_KEEP,
 			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
 		})
 	}
@@ -167,19 +168,19 @@ func (r *projectRemoval) recordGroups() []*contractv1.ChangeGroup {
 	return groups
 }
 
-func certificateGroup(cert Certificate) *contractv1.ChangeGroup {
+func certificateGroup(cert Certificate) *planv1.ChangeGroup {
 	if !cert.Requested {
-		return &contractv1.ChangeGroup{
+		return &planv1.ChangeGroup{
 			Kind:   "certificate",
 			Name:   cert.ID,
-			Action: contractv1.Change_ACTION_KEEP,
+			Action: planv1.Change_ACTION_KEEP,
 			Reason: "you pinned it; ocel never requested it, so it is not ocel's to delete",
 		}
 	}
-	return &contractv1.ChangeGroup{
+	return &planv1.ChangeGroup{
 		Kind:   "certificate",
 		Name:   cert.ID,
-		Action: contractv1.Change_ACTION_DELETE,
+		Action: planv1.Change_ACTION_DELETE,
 		Reason: "ocel requested it for a hostname this project serves, and nothing is left to serve",
 	}
 }

@@ -606,6 +606,38 @@ func RunArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
 	})
 }
 
+func declared(serves []providerkit.LinkType) []providerkit.Resource {
+	resources := make([]providerkit.Resource, 0, len(serves))
+	for _, kind := range serves {
+		resources = append(resources, providerkit.Resource{Name: "c-" + string(kind), Type: kind})
+	}
+	return resources
+}
+
+func planRows(t *testing.T, plan providerkit.Plan, verb string) int {
+	t.Helper()
+
+	rows := 0
+	for _, group := range plan.Groups {
+		if group.Name == "" {
+			t.Errorf("%s() returned %+v, and no plan can render a nameless group", verb, group)
+		}
+		if !providerkit.ValidChangeAction(group.Action) {
+			t.Errorf("%s() returned group action %q, which is none the plan knows", verb, group.Action)
+		}
+		for _, change := range group.Changes {
+			if change.Name == "" {
+				t.Errorf("%s() returned %+v under %q, and no plan can render a nameless row", verb, change, group.Name)
+			}
+			if !providerkit.ValidChangeAction(change.Action) {
+				t.Errorf("%s() returned change action %q, which is none the plan knows", verb, change.Action)
+			}
+			rows++
+		}
+	}
+	return rows
+}
+
 func RunReleaser(t *testing.T, releaser providerkit.Releaser, serves []providerkit.LinkType) {
 	t.Helper()
 
@@ -624,11 +656,26 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, serves []providerk
 		}
 	})
 
-	t.Run("every link a plan asks for comes back carrying the properties its type promises", func(t *testing.T) {
-		var resources []providerkit.Resource
-		for _, kind := range serves {
-			resources = append(resources, providerkit.Resource{Name: "c-" + string(kind), Type: kind})
+	t.Run("Plan says what a provision would do before it does it", func(t *testing.T) {
+		resources := declared(serves)
+		if len(resources) == 0 {
+			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
+		planned, err := releaser.Plan(ctx, providerkit.StackPlan{
+			Ref:       ref,
+			Kind:      providerkit.StackInfra,
+			Resources: resources,
+		}, nil)
+		if err != nil {
+			t.Fatalf("Plan() of every primitive this provider serves = %v", err)
+		}
+		if rows := planRows(t, planned, "Plan"); rows == 0 {
+			t.Fatal("Plan() of a release standing up every primitive showed nothing, and the plan is the only thing a human consents to")
+		}
+	})
+
+	t.Run("every link a plan asks for comes back carrying the properties its type promises", func(t *testing.T) {
+		resources := declared(serves)
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a plan can ask for nothing")
 		}
@@ -648,6 +695,22 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, serves []providerk
 				t.Errorf("Provision() returned a link the kit refuses to record: %v", err)
 			}
 		}
+
+		removal, err := releaser.PlanDestroy(ctx, ref, nil)
+		if err != nil {
+			t.Fatalf("PlanDestroy() of the stack just provisioned = %v", err)
+		}
+		if rows := planRows(t, removal, "PlanDestroy"); rows == 0 {
+			t.Error("PlanDestroy() of a stack standing showed nothing going, and a teardown is consented to by what it shows")
+		}
+		for _, group := range removal.Groups {
+			for _, change := range group.Changes {
+				if change.Action != providerkit.ActionDelete && change.Action != providerkit.ActionDisableThenDelete {
+					t.Errorf("PlanDestroy() shows %s as %q, and a teardown takes everything down", change.Name, change.Action)
+				}
+			}
+		}
+
 		if err := releaser.Destroy(ctx, ref, nil); err != nil {
 			t.Fatalf("Destroy() of the stack just provisioned = %v", err)
 		}

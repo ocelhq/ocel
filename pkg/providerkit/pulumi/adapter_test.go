@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -40,6 +41,78 @@ func plan() providerkit.StackPlan {
 			Name:    naming.InfraStack("prod"),
 		},
 		Kind: providerkit.StackInfra,
+	}
+}
+
+func step(op apitype.OpType, kind, name string) apitype.StepEventMetadata {
+	return apitype.StepEventMetadata{
+		Op:   op,
+		Type: kind,
+		URN:  "urn:pulumi:prod::ocel-shop::" + kind + "::" + name,
+	}
+}
+
+func TestPreviewTurnsWhatTheEngineWouldDoIntoPlanRows(t *testing.T) {
+	t.Parallel()
+
+	engine := &recordingEngine{steps: []apitype.StepEventMetadata{
+		step(apitype.OpCreate, "aws:rds/cluster:Cluster", "orders"),
+		step(apitype.OpUpdate, "aws:s3/bucket:Bucket", "uploads"),
+		step(apitype.OpDelete, "aws:s3/bucket:Bucket", "exports"),
+		step(apitype.OpSame, "aws:iam/role:Role", "app"),
+		step(apitype.OpReplace, "aws:rds/instance:Instance", "reporting"),
+		step(apitype.OpSame, "pulumi:pulumi:Stack", "ocel-shop-prod"),
+	}}
+
+	produced, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}, Engine: engine}).
+		Preview(context.Background(), plan(), nil)
+	if err != nil {
+		t.Fatalf("Preview() = %v", err)
+	}
+	if engine.previewed != pulumi.OpProvision {
+		t.Errorf("the engine was asked to preview %q, want the provision it mirrors", engine.previewed)
+	}
+	if len(produced.Groups) != 1 {
+		t.Fatalf("Preview() returned %d groups, want the one stack it previews", len(produced.Groups))
+	}
+	rows := map[string]providerkit.ChangeAction{}
+	for _, change := range produced.Groups[0].Changes {
+		rows[change.Name] = change.Action
+	}
+	want := map[string]providerkit.ChangeAction{
+		"orders":    providerkit.ActionCreate,
+		"uploads":   providerkit.ActionUpdate,
+		"exports":   providerkit.ActionDelete,
+		"app":       providerkit.ActionKeep,
+		"reporting": providerkit.ActionReplace,
+	}
+	for name, action := range want {
+		if rows[name] != action {
+			t.Errorf("%s reads %q, want %q", name, rows[name], action)
+		}
+	}
+	if _, carried := rows["ocel-shop-prod"]; carried {
+		t.Error("the stack resource itself is a plan row, and nothing in the customer's account answers to it")
+	}
+}
+
+func TestPreviewDestroyShowsWhatTheTeardownWouldTakeDown(t *testing.T) {
+	t.Parallel()
+
+	engine := &recordingEngine{steps: []apitype.StepEventMetadata{
+		step(apitype.OpDelete, "aws:s3/bucket:Bucket", "uploads"),
+	}}
+
+	produced, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}, Engine: engine}).
+		PreviewDestroy(context.Background(), plan().Ref, nil)
+	if err != nil {
+		t.Fatalf("PreviewDestroy() = %v", err)
+	}
+	if engine.previewed != pulumi.OpDestroy {
+		t.Errorf("the engine was asked to preview %q, want the destroy it mirrors", engine.previewed)
+	}
+	if len(produced.Groups) != 1 || produced.Groups[0].Action != providerkit.ActionDelete {
+		t.Fatalf("PreviewDestroy() = %+v, want the stack shown as going", produced.Groups)
 	}
 }
 

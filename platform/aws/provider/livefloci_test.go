@@ -107,7 +107,7 @@ func (a account) paramStands(t *testing.T, name string) bool {
 	return err == nil
 }
 
-func groupNamed(t *testing.T, plan providerkit.BootstrapPlan, name string) providerkit.ChangeGroup {
+func groupNamed(t *testing.T, plan providerkit.Plan, name string) providerkit.ChangeGroup {
 	t.Helper()
 	for _, group := range plan.Groups {
 		if group.Name == name {
@@ -118,7 +118,7 @@ func groupNamed(t *testing.T, plan providerkit.BootstrapPlan, name string) provi
 	return providerkit.ChangeGroup{}
 }
 
-func groupNames(plan providerkit.BootstrapPlan) []string {
+func groupNames(plan providerkit.Plan) []string {
 	names := make([]string, 0, len(plan.Groups))
 	for _, group := range plan.Groups {
 		names = append(names, group.Name)

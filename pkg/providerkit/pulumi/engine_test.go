@@ -4,16 +4,24 @@ import (
 	"context"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 )
 
 type recordingEngine struct {
-	up      pulumi.Setup
-	down    pulumi.Setup
-	outputs auto.OutputMap
-	err     error
+	up        pulumi.Setup
+	down      pulumi.Setup
+	outputs   auto.OutputMap
+	steps     []apitype.StepEventMetadata
+	previewed pulumi.Op
+	err       error
+}
+
+func (e *recordingEngine) Preview(_ context.Context, _ pulumi.Setup, op pulumi.Op, _ providerkit.Reporter) ([]apitype.StepEventMetadata, error) {
+	e.previewed = op
+	return e.steps, e.err
 }
 
 func (e *recordingEngine) Up(_ context.Context, setup pulumi.Setup, _ providerkit.Reporter) (auto.OutputMap, error) {

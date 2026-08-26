@@ -12,6 +12,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -161,21 +162,21 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		t.Fatalf("RecordSchema() = %d, %v, want the bootstrap to have stamped %d", written, err, providerkit.RecordSchemaVersion)
 	}
 
-	planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
-		t.Fatalf("PlanBootstrap() error = %v", err)
+		t.Fatalf("DescribeBootstrap() error = %v", err)
 	}
 	if !planned.GetBootstrap().GetAutoHeal() {
-		t.Error("PlanBootstrap() reports auto_heal off after a bootstrap that turned it on")
+		t.Error("DescribeBootstrap() reports auto_heal off after a bootstrap that turned it on")
 	}
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureCache},
 	})
-	planned, err = client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
-		t.Fatalf("PlanBootstrap() error = %v", err)
+		t.Fatalf("DescribeBootstrap() error = %v", err)
 	}
 	if !planned.GetBootstrap().GetAutoHeal() {
 		t.Error("a bootstrap that named no auto_heal turned the standing one off")
@@ -279,7 +280,7 @@ func recordProject(t *testing.T, provider *fake.Provider, slug string, features 
 	}
 }
 
-func TestPlanBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
+func TestDescribeBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -291,18 +292,18 @@ func TestPlanBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 	})
 	recordProject(t, provider, "shop", fake.FeatureCache)
 
-	planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
+	planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
 		Tier:           environmentv1.Tier_TIER_PRODUCTION,
 		WithDependents: true,
 		Edge:           &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
 	})
 	if err != nil {
-		t.Fatalf("PlanBootstrap() error = %v", err)
+		t.Fatalf("DescribeBootstrap() error = %v", err)
 	}
 
 	features := planned.GetFeatures()
 	if len(features) != 2 {
-		t.Fatalf("PlanBootstrap() offered %d features, want the whole catalogue", len(features))
+		t.Fatalf("DescribeBootstrap() offered %d features, want the whole catalogue", len(features))
 	}
 	if features[0].GetName() != fake.FeatureCache || !features[0].GetEnabled() {
 		t.Errorf("%s = %+v, want it enabled", fake.FeatureCache, features[0])
@@ -319,7 +320,7 @@ func TestPlanBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 
 	status := planned.GetBootstrap()
 	if !status.GetPresent() || status.GetSchema() != providerkit.BootstrapSchema {
-		t.Errorf("PlanBootstrap() status = %+v, want it present at schema %d", status, providerkit.BootstrapSchema)
+		t.Errorf("DescribeBootstrap() status = %+v, want it present at schema %d", status, providerkit.BootstrapSchema)
 	}
 	if status.GetRequiredSchema() != providerkit.BootstrapSchema {
 		t.Errorf("required_schema = %d, want %d", status.GetRequiredSchema(), providerkit.BootstrapSchema)
@@ -337,130 +338,92 @@ func TestPlanBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 	}
 }
 
-func TestPlanBootstrapPlansTheApplyItsIntentNames(t *testing.T) {
+func streamedPlan(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.BootstrapRequest) *planv1.ChangePlan {
+	t.Helper()
+
+	stream, err := client.Bootstrap(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Bootstrap() error = %v", err)
+	}
+	defer stream.Close()
+	var plan *planv1.ChangePlan
+	for stream.Receive() {
+		if shown := stream.Msg().GetPlan(); shown != nil {
+			plan = shown
+		}
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("Bootstrap() stream = %v", err)
+	}
+	return plan
+}
+
+func TestBootstrapShowsThePlanItIsAboutToApply(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	client, _ := contractServed(t, "1.2.3")
-
-	bare, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	if err != nil {
-		t.Fatalf("PlanBootstrap() error = %v", err)
-	}
-	if bare.GetPlan() != nil {
-		t.Errorf("PlanBootstrap() drew a change plan for a request naming no intent: %v", bare.GetPlan())
-	}
-
-	planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
-		Tier: environmentv1.Tier_TIER_PRODUCTION,
-		Intent: &contractv1.BootstrapRequest{
-			Tier:     environmentv1.Tier_TIER_PRODUCTION,
-			Features: []string{fake.FeatureImages},
-		},
+	client, provider := contractServed(t, "1.2.3")
+	plan := streamedPlan(t, client, &contractv1.BootstrapRequest{
+		Tier:     environmentv1.Tier_TIER_PRODUCTION,
+		Features: []string{fake.FeatureImages},
 	})
-	if err != nil {
-		t.Fatalf("PlanBootstrap() with an intent error = %v", err)
+	if plan == nil {
+		t.Fatal("Bootstrap() streamed no plan, and the only thing consented to is the plan")
 	}
-	plan := planned.GetPlan()
 	if plan.GetSubject() != string(providerkit.ClassProduction) {
-		t.Errorf("plan subject = %q, want the class it was asked about", plan.GetSubject())
+		t.Errorf("plan subject = %q, want the class it applies to", plan.GetSubject())
 	}
 	if plan.GetEdgeKind() != string(fake.KindRelay) {
-		t.Errorf("plan was drawn against the %q edge, want the default the apply would bootstrap", plan.GetEdgeKind())
+		t.Errorf("plan was drawn against the %q edge, want the default the apply bootstraps", plan.GetEdgeKind())
 	}
 	if len(plan.GetGroups()) != 3 {
 		t.Fatalf("plan = %v, want the baseline and the closure of images", plan.GetGroups())
 	}
 	for _, group := range plan.GetGroups() {
-		if group.GetAction() != contractv1.Change_ACTION_CREATE {
+		if group.GetAction() != planv1.Change_ACTION_CREATE {
 			t.Errorf("%s is %s, want it created on an account holding nothing", group.GetName(), group.GetAction())
 		}
 		if len(group.GetChanges()) == 0 {
 			t.Errorf("%s carries no resource-level detail", group.GetName())
 		}
 	}
+	if len(provider.Bootstrapper().Applied()) != 1 {
+		t.Errorf("the bootstrapper was applied %d times, want the one this stream carried out",
+			len(provider.Bootstrapper().Applied()))
+	}
 }
 
-func TestPlanBootstrapRefusesAnIntentAimedElsewhere(t *testing.T) {
+func TestADryBootstrapDrawsThePlanAndStandsNothingUp(t *testing.T) {
 	t.Parallel()
 
-	client, _ := contractServed(t, "1.2.3")
-
-	_, err := client.PlanBootstrap(context.Background(), &contractv1.PlanBootstrapRequest{
-		Tier: environmentv1.Tier_TIER_PRODUCTION,
-		Intent: &contractv1.BootstrapRequest{
-			Tier:     environmentv1.Tier_TIER_PREVIEW,
-			Features: []string{fake.FeatureCache},
-		},
+	client, provider := contractServed(t, "1.2.3")
+	plan := streamedPlan(t, client, &contractv1.BootstrapRequest{
+		Tier:     environmentv1.Tier_TIER_PRODUCTION,
+		Features: []string{fake.FeatureImages},
+		Dry:      true,
 	})
-	if connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("PlanBootstrap() with an intent aimed at another tier = %v, want it refused rather than silently planned against production", err)
+	if plan == nil || len(plan.GetGroups()) == 0 {
+		t.Fatal("a dry bootstrap streamed no plan, and drawing the plan is all it is for")
+	}
+	if applied := provider.Bootstrapper().Applied(); len(applied) != 0 {
+		t.Errorf("a dry bootstrap applied %v, want it to change nothing", applied)
 	}
 }
 
-func TestPlanBootstrapRefusesAnIntentAimedAtAnotherEdge(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name    string
-		asked   *contractv1.EdgeSelection
-		aimed   *contractv1.EdgeSelection
-		refused bool
-	}{
-		{
-			name:    "the intent names an edge the question did not",
-			aimed:   &contractv1.EdgeSelection{Kind: string(fake.KindRelay)},
-			refused: true,
-		},
-		{
-			name:    "the question names an edge the intent did not",
-			asked:   &contractv1.EdgeSelection{Kind: string(fake.KindRelay)},
-			refused: true,
-		},
-		{
-			name:  "both name the same edge",
-			asked: &contractv1.EdgeSelection{Kind: string(fake.KindRelay)},
-			aimed: &contractv1.EdgeSelection{Kind: string(fake.KindRelay)},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			client, _ := contractServed(t, "1.2.3")
-			_, err := client.PlanBootstrap(context.Background(), &contractv1.PlanBootstrapRequest{
-				Tier: environmentv1.Tier_TIER_PRODUCTION,
-				Edge: tc.asked,
-				Intent: &contractv1.BootstrapRequest{
-					Tier:     environmentv1.Tier_TIER_PRODUCTION,
-					Features: []string{fake.FeatureCache},
-					Edge:     tc.aimed,
-				},
-			})
-			if tc.refused && connect.CodeOf(err) != connect.CodeInvalidArgument {
-				t.Fatalf("PlanBootstrap() = %v, want an intent aimed at another edge refused rather than planned against this one", err)
-			}
-			if !tc.refused && err != nil {
-				t.Fatalf("PlanBootstrap() error = %v, want a plan where question and intent name one edge", err)
-			}
-		})
-	}
-}
-
-func TestPlanBootstrapReportsADowngrade(t *testing.T) {
+func TestDescribeBootstrapReportsADowngrade(t *testing.T) {
 	t.Parallel()
 
 	client, provider := contractServed(t, "1.0.0")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	provider.Bootstrapper().WrittenBy("2.0.0")
 
-	planned, err := client.PlanBootstrap(context.Background(), &contractv1.PlanBootstrapRequest{
+	planned, err := client.DescribeBootstrap(context.Background(), &contractv1.DescribeBootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	if err != nil {
-		t.Fatalf("PlanBootstrap() error = %v", err)
+		t.Fatalf("DescribeBootstrap() error = %v", err)
 	}
 	if !planned.GetBootstrap().GetDowngrade() {
-		t.Error("PlanBootstrap() reports no downgrade where a newer build wrote the bootstrap")
+		t.Error("DescribeBootstrap() reports no downgrade where a newer build wrote the bootstrap")
 	}
 }
 
@@ -573,7 +536,7 @@ func TestPlanRemoveBootstrapNamesTheClassAndWhatGoes(t *testing.T) {
 		t.Fatalf("PlanRemoveBootstrap() planned %d items, want the feature stack, the core and the edge", len(plan.GetGroups()))
 	}
 	for _, item := range plan.GetGroups() {
-		if item.GetAction() != contractv1.Change_ACTION_DELETE {
+		if item.GetAction() != planv1.Change_ACTION_DELETE {
 			t.Errorf("item %s planned action %v, want it deleted", item.GetName(), item.GetAction())
 		}
 		if item.GetKind() == "" || item.GetName() == "" {
@@ -635,12 +598,12 @@ func TestRemoveBootstrapTakesTheBootstrapAndItsRecord(t *testing.T) {
 		t.Fatalf("RemoveBootstrap() result = %v, want it to succeed", result)
 	}
 
-	planned, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
-		t.Fatalf("PlanBootstrap() error = %v", err)
+		t.Fatalf("DescribeBootstrap() error = %v", err)
 	}
 	if planned.GetBootstrap().GetPresent() {
-		t.Error("PlanBootstrap() still reports a bootstrap after it was removed")
+		t.Error("DescribeBootstrap() still reports a bootstrap after it was removed")
 	}
 	if _, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(providerkit.ClassProduction)); !errors.Is(err, providerkit.ErrNoRecord) {
 		t.Errorf("the bootstrap record survived the removal: %v", err)
@@ -711,7 +674,7 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenMoreThanOneEdgeStands(t *testi
 		t.Errorf("PlanRemoveBootstrap() says this account is fronted by the %q edge, want no single edge named where two stand", plan.GetEdgeKind())
 	}
 	for _, kind := range []edge.Kind{fake.KindRelay, fake.KindDirect} {
-		if !slices.ContainsFunc(plan.GetGroups(), func(g *contractv1.ChangeGroup) bool {
+		if !slices.ContainsFunc(plan.GetGroups(), func(g *planv1.ChangeGroup) bool {
 			return g.GetName() == string(kind)+"/edge"
 		}) {
 			t.Errorf("plan groups = %+v, want a group named for the %q edge that stands", plan.GetGroups(), kind)
@@ -739,7 +702,6 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenNoEdgeStands(t *testing.T) {
 func TestBootstrapStandsUpTheEdgeTheProjectSelected(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	client, provider := contractServed(t, "1.2.3")
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
@@ -750,22 +712,16 @@ func TestBootstrapStandsUpTheEdgeTheProjectSelected(t *testing.T) {
 		t.Errorf("Bootstrap() stood up the %q edge, want the %q this project selected", fronting, fake.KindDirect)
 	}
 
-	plan, err := client.PlanBootstrap(ctx, &contractv1.PlanBootstrapRequest{
+	plan := streamedPlan(t, client, &contractv1.BootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
-		Intent: &contractv1.BootstrapRequest{
-			Tier: environmentv1.Tier_TIER_PRODUCTION,
-			Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
-		},
+		Dry:  true,
 	})
-	if err != nil {
-		t.Fatalf("PlanBootstrap() error = %v", err)
-	}
-	if plan.GetPlan().GetEdgeKind() != string(fake.KindDirect) {
-		t.Errorf("PlanBootstrap() planned against %q, want the %q this project selected", plan.GetPlan().GetEdgeKind(), fake.KindDirect)
+	if plan.GetEdgeKind() != string(fake.KindDirect) {
+		t.Errorf("the plan was drawn against %q, want the %q this project selected", plan.GetEdgeKind(), fake.KindDirect)
 	}
 	if fronting := provider.Bootstrapper().Fronting(); fronting != fake.KindDirect {
-		t.Errorf("PlanBootstrap() asked the provider for the %q edge, want the %q this project selected", fronting, fake.KindDirect)
+		t.Errorf("planning asked the provider for the %q edge, want the %q this project selected", fronting, fake.KindDirect)
 	}
 }
 

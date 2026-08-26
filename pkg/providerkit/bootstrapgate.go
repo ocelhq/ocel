@@ -172,23 +172,23 @@ func (i intent) request(class Class, req ApplyRequest, writer Writer) BootstrapR
 	}
 }
 
-func (g Gate) Plan(ctx context.Context, class Class, req ApplyRequest) (BootstrapPlan, error) {
+func (g Gate) Plan(ctx context.Context, class Class, req ApplyRequest) (Plan, error) {
 	standing, err := g.Standing(ctx, class)
 	if err != nil {
-		return BootstrapPlan{}, err
+		return Plan{}, err
 	}
 	return g.PlanFrom(ctx, standing, req)
 }
 
-func (g Gate) PlanFrom(ctx context.Context, standing Standing, req ApplyRequest) (BootstrapPlan, error) {
+func (g Gate) PlanFrom(ctx context.Context, standing Standing, req ApplyRequest) (Plan, error) {
 	intended, err := g.intended(standing, req)
 	if err != nil {
-		return BootstrapPlan{}, err
+		return Plan{}, err
 	}
 	class := standing.Class
 	plan, err := g.Bootstrapper.Plan(ctx, intended.request(class, req, g.Writer))
 	if err != nil {
-		return BootstrapPlan{}, err
+		return Plan{}, err
 	}
 	return plan, g.noteDependents(ctx, class, plan.Groups)
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -52,13 +53,33 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	if err != nil {
 		return err
 	}
-	_, gate, err := h.gate(req.GetEdge().GetKind())
+	provider, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return err
 	}
+	intent := applyRequestOf(req)
 
-	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(_ *eventSender, report Reporter) error {
-		return gate.Apply(ctx, class, applyRequestOf(req), report)
+	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
+		standing, err := gate.Standing(ctx, class)
+		if err != nil {
+			return nil, RefusalError(err)
+		}
+		plan, err := gate.PlanFrom(ctx, standing, intent)
+		if err != nil {
+			return nil, RefusalError(err)
+		}
+		sender.send(planEvent(ChangePlanProto(plan, string(class), string(edgeKind(provider, req.GetEdge().GetKind())))))
+		if req.GetDry() {
+			return okResult(), nil
+		}
+		err = inUnit(sender, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISIONING,
+			func(_ *eventSender, report Reporter) error {
+				return gate.Apply(ctx, class, intent, report)
+			})
+		if err != nil {
+			return nil, err
+		}
+		return okResult(), nil
 	})
 }
 
@@ -72,18 +93,12 @@ func applyRequestOf(req *contractv1.BootstrapRequest) ApplyRequest {
 	}
 }
 
-func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootstrapRequest) (*contractv1.PlanBootstrapResponse, error) {
+func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
 	class, err := classOf(req.GetTier())
 	if err != nil {
 		return nil, err
 	}
-	if err := sameClass(class, req); err != nil {
-		return nil, err
-	}
-	if err := sameEdge(req); err != nil {
-		return nil, err
-	}
-	provider, gate, err := h.gate(req.GetEdge().GetKind())
+	_, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +113,7 @@ func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootst
 		}
 	}
 
-	resp := &contractv1.PlanBootstrapResponse{
+	resp := &contractv1.DescribeBootstrapResponse{
 		Bootstrap: BootstrapStatusProto(standing, h.session.writer, req.GetTier(), standing.Features),
 	}
 	for _, f := range gate.Bootstrapper.Catalogue() {
@@ -111,63 +126,19 @@ func (h *handlers) PlanBootstrap(ctx context.Context, req *contractv1.PlanBootst
 			Dependents: ProjectsDependingOn(recorded, []string{f.Name}),
 		})
 	}
-	if req.GetIntent() == nil {
-		return resp, nil
-	}
-	plan, err := gate.PlanFrom(ctx, standing, applyRequestOf(req.GetIntent()))
-	if err != nil {
-		return nil, RefusalError(err)
-	}
-	resp.Plan = ChangePlanProto(plan, string(class), string(edgeKind(provider, req.GetEdge().GetKind())))
 	return resp, nil
 }
 
-func sameClass(class Class, req *contractv1.PlanBootstrapRequest) error {
-	if req.GetIntent() == nil {
-		return nil
-	}
-	intended, err := classOf(req.GetIntent().GetTier())
-	if err != nil {
-		return err
-	}
-	if intended == class {
-		return nil
-	}
-	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-		"this asks what would change in the %s bootstrap while carrying an intent aimed at the %s one; a plan answers for one bootstrap",
-		class, intended))
-}
-
-func sameEdge(req *contractv1.PlanBootstrapRequest) error {
-	if req.GetIntent() == nil {
-		return nil
-	}
-	asked, intended := req.GetEdge().GetKind(), req.GetIntent().GetEdge().GetKind()
-	if asked == intended {
-		return nil
-	}
-	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-		"this asks what would change behind the %s edge while carrying an intent aimed at the %s one; a plan answers for one edge",
-		namedEdge(asked), namedEdge(intended)))
-}
-
-func namedEdge(kind string) string {
-	if kind == "" {
-		return "default"
-	}
-	return kind
-}
-
-func ChangePlanProto(plan BootstrapPlan, subject, kind string) *contractv1.ChangePlan {
-	out := &contractv1.ChangePlan{Subject: subject, EdgeKind: kind}
+func ChangePlanProto(plan Plan, subject, kind string) *planv1.ChangePlan {
+	out := &planv1.ChangePlan{Subject: subject, EdgeKind: kind}
 	for _, group := range plan.Groups {
 		out.Groups = append(out.Groups, GroupProto(group))
 	}
 	return out
 }
 
-func GroupProto(group ChangeGroup) *contractv1.ChangeGroup {
-	rendered := &contractv1.ChangeGroup{
+func GroupProto(group ChangeGroup) *planv1.ChangeGroup {
+	rendered := &planv1.ChangeGroup{
 		Kind:    group.Kind,
 		Name:    group.Name,
 		Feature: group.Feature,
@@ -176,7 +147,7 @@ func GroupProto(group ChangeGroup) *contractv1.ChangeGroup {
 		Slow:    group.Slow,
 	}
 	for _, change := range group.Changes {
-		rendered.Changes = append(rendered.Changes, &contractv1.Change{
+		rendered.Changes = append(rendered.Changes, &planv1.Change{
 			Kind:   change.Kind,
 			Name:   change.Name,
 			Action: planAction(change.Action),
@@ -187,22 +158,22 @@ func GroupProto(group ChangeGroup) *contractv1.ChangeGroup {
 	return rendered
 }
 
-func planAction(action ChangeAction) contractv1.Change_Action {
+func planAction(action ChangeAction) planv1.Change_Action {
 	switch action {
 	case ActionCreate:
-		return contractv1.Change_ACTION_CREATE
+		return planv1.Change_ACTION_CREATE
 	case ActionUpdate:
-		return contractv1.Change_ACTION_UPDATE
+		return planv1.Change_ACTION_UPDATE
 	case ActionReplace:
-		return contractv1.Change_ACTION_REPLACE
+		return planv1.Change_ACTION_REPLACE
 	case ActionDelete:
-		return contractv1.Change_ACTION_DELETE
+		return planv1.Change_ACTION_DELETE
 	case ActionDisableThenDelete:
-		return contractv1.Change_ACTION_DISABLE_THEN_DELETE
+		return planv1.Change_ACTION_DISABLE_THEN_DELETE
 	case ActionKeep:
-		return contractv1.Change_ACTION_KEEP
+		return planv1.Change_ACTION_KEEP
 	default:
-		return contractv1.Change_ACTION_UNSPECIFIED
+		return planv1.Change_ACTION_UNSPECIFIED
 	}
 }
 
@@ -231,7 +202,7 @@ func BootstrapStatusProto(standing Standing, writing Writer, tier environmentv1.
 	return status
 }
 
-func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*contractv1.ChangePlan, error) {
+func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*planv1.ChangePlan, error) {
 	class, err := classOf(req.GetTier())
 	if err != nil {
 		return nil, err
@@ -250,7 +221,7 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	return ChangePlanProto(plan, string(class), soleStandingEdge(plan)), nil
 }
 
-func soleStandingEdge(plan BootstrapPlan) string {
+func soleStandingEdge(plan Plan) string {
 	var kinds []edge.Kind
 	for _, group := range plan.Groups {
 		if group.Kind != EdgeGroupKind {

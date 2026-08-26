@@ -99,6 +99,26 @@ type fanout struct {
 	impl    any
 }
 
+func (f *fanout) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
+	recorded, err := f.recorded(ctx, plan.Ref)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	return providerkit.SynthesizedPlan(plan, standing(recorded)), nil
+}
+
+func (f *fanout) PlanDestroy(ctx context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {
+	recorded, err := f.recorded(ctx, ref)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	return providerkit.SynthesizedRemoval(ref, standing(recorded)), nil
+}
+
+func standing(recorded providerkit.Stack) providerkit.StackResult {
+	return providerkit.StackResult{Links: recorded.Links, Functions: recorded.Functions}
+}
+
 func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
 	recorded, err := f.recorded(ctx, plan.Ref)
 	if err != nil {

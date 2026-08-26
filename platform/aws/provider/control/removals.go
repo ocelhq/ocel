@@ -10,37 +10,37 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.BootstrapPlan, error) {
+func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
 	read, err := bootstrap.Read(ctx, b.CFN, string(class))
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	stacks, err := bootstrap.PlanRemoval(ctx, b.CFN, read)
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	shared, err := bootstrap.PassphraseHeldBySibling(ctx, b.CFN, string(class))
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	params, err := bootstrap.PlanParameterRemoval(ctx,
 		bootstrap.ParamAPIs{SSM: b.SSM, IAM: b.IAM}, string(class), shared)
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	if len(params.Changes) > 0 {
 		stacks = append(stacks, params)
 	}
 
-	plan := providerkit.BootstrapPlan{Groups: providerkit.Vendored(groupVendor, stacks)}
+	plan := providerkit.Plan{Groups: providerkit.Vendored(groupVendor, stacks)}
 	fronts, err := b.standingEdges(ctx, class, read.Deployed)
 	if err != nil {
-		return providerkit.BootstrapPlan{}, err
+		return providerkit.Plan{}, err
 	}
 	for _, front := range fronts {
 		group, err := b.removedEdgeGroup(ctx, class, front)
 		if err != nil {
-			return providerkit.BootstrapPlan{}, err
+			return providerkit.Plan{}, err
 		}
 		if group != nil {
 			plan.Groups = append(plan.Groups, *group)

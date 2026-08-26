@@ -4,8 +4,8 @@ package cli.stream.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1";
 
 import "buf/validate/validate.proto";
+import "common/plan/v1/plan.proto";
 import "common/progress/v1/progress.proto";
-import "provider/contract/v1/contract.proto";
 
 // One event of a run as the CLI tells it. Stable: the arm and its typed fields.
 // Presentation, free to change: human text, level, order of concurrent events.
@@ -13,7 +13,7 @@ message RunEvent {
   oneof event {
     option (buf.validate.oneof).required = true;
 
-    provider.contract.v1.ChangePlan plan = 1;
+    common.plan.v1.ChangePlan plan = 1;
 
     // Everything the provider says, verbatim.
     common.progress.v1.OperationEvent operation = 2;

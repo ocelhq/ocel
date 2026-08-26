@@ -8,6 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
+	v12 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	v11 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	http "net/http"
@@ -42,9 +43,9 @@ const (
 	// ProviderServiceBootstrapProcedure is the fully-qualified name of the ProviderService's Bootstrap
 	// RPC.
 	ProviderServiceBootstrapProcedure = "/provider.contract.v1.ProviderService/Bootstrap"
-	// ProviderServicePlanBootstrapProcedure is the fully-qualified name of the ProviderService's
-	// PlanBootstrap RPC.
-	ProviderServicePlanBootstrapProcedure = "/provider.contract.v1.ProviderService/PlanBootstrap"
+	// ProviderServiceDescribeBootstrapProcedure is the fully-qualified name of the ProviderService's
+	// DescribeBootstrap RPC.
+	ProviderServiceDescribeBootstrapProcedure = "/provider.contract.v1.ProviderService/DescribeBootstrap"
 	// ProviderServiceGetCredentialPermissionsProcedure is the fully-qualified name of the
 	// ProviderService's GetCredentialPermissions RPC.
 	ProviderServiceGetCredentialPermissionsProcedure = "/provider.contract.v1.ProviderService/GetCredentialPermissions"
@@ -106,13 +107,13 @@ type ProviderServiceClient interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
 	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	PlanBootstrap(context.Context, *v1.PlanBootstrapRequest) (*v1.PlanBootstrapResponse, error)
+	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
 	GetCredentialPermissions(context.Context, *v1.CredentialPermissionsRequest) (*v1.CredentialPermissionsResponse, error)
 	RemoveBootstrap(context.Context, *v1.BootstrapScope) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	PlanRemoveBootstrap(context.Context, *v1.BootstrapScope) (*v1.ChangePlan, error)
+	PlanRemoveBootstrap(context.Context, *v1.BootstrapScope) (*v12.ChangePlan, error)
 	RemoveEnvironment(context.Context, *v1.RemoveEnvironmentRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	RemoveProject(context.Context, *v1.ProjectRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v1.ChangePlan, error)
+	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v12.ChangePlan, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
@@ -120,7 +121,7 @@ type ProviderServiceClient interface {
 	RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	UsePreviewWildcard(context.Context, *v1.UsePreviewWildcardRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	GetPreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.GetPreviewWildcardResponse, error)
-	PlanRemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.ChangePlan, error)
+	PlanRemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v12.ChangePlan, error)
 	RemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	AddHostname(context.Context, *v1.HostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	RemoveHostname(context.Context, *v1.HostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
@@ -156,10 +157,10 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("Bootstrap")),
 			connect.WithClientOptions(opts...),
 		),
-		planBootstrap: connect.NewClient[v1.PlanBootstrapRequest, v1.PlanBootstrapResponse](
+		describeBootstrap: connect.NewClient[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse](
 			httpClient,
-			baseURL+ProviderServicePlanBootstrapProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("PlanBootstrap")),
+			baseURL+ProviderServiceDescribeBootstrapProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("DescribeBootstrap")),
 			connect.WithClientOptions(opts...),
 		),
 		getCredentialPermissions: connect.NewClient[v1.CredentialPermissionsRequest, v1.CredentialPermissionsResponse](
@@ -174,7 +175,7 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("RemoveBootstrap")),
 			connect.WithClientOptions(opts...),
 		),
-		planRemoveBootstrap: connect.NewClient[v1.BootstrapScope, v1.ChangePlan](
+		planRemoveBootstrap: connect.NewClient[v1.BootstrapScope, v12.ChangePlan](
 			httpClient,
 			baseURL+ProviderServicePlanRemoveBootstrapProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("PlanRemoveBootstrap")),
@@ -192,7 +193,7 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("RemoveProject")),
 			connect.WithClientOptions(opts...),
 		),
-		planRemoveProject: connect.NewClient[v1.ProjectRequest, v1.ChangePlan](
+		planRemoveProject: connect.NewClient[v1.ProjectRequest, v12.ChangePlan](
 			httpClient,
 			baseURL+ProviderServicePlanRemoveProjectProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("PlanRemoveProject")),
@@ -240,7 +241,7 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("GetPreviewWildcard")),
 			connect.WithClientOptions(opts...),
 		),
-		planRemovePreviewWildcard: connect.NewClient[v1.PreviewWildcardRequest, v1.ChangePlan](
+		planRemovePreviewWildcard: connect.NewClient[v1.PreviewWildcardRequest, v12.ChangePlan](
 			httpClient,
 			baseURL+ProviderServicePlanRemovePreviewWildcardProcedure,
 			connect.WithSchema(providerServiceMethods.ByName("PlanRemovePreviewWildcard")),
@@ -278,13 +279,13 @@ type providerServiceClient struct {
 	configure                 *connect.Client[v1.ConfigureRequest, v1.ConfigureResponse]
 	deploy                    *connect.Client[v1.DeployRequest, v11.OperationEvent]
 	bootstrap                 *connect.Client[v1.BootstrapRequest, v11.OperationEvent]
-	planBootstrap             *connect.Client[v1.PlanBootstrapRequest, v1.PlanBootstrapResponse]
+	describeBootstrap         *connect.Client[v1.DescribeBootstrapRequest, v1.DescribeBootstrapResponse]
 	getCredentialPermissions  *connect.Client[v1.CredentialPermissionsRequest, v1.CredentialPermissionsResponse]
 	removeBootstrap           *connect.Client[v1.BootstrapScope, v11.OperationEvent]
-	planRemoveBootstrap       *connect.Client[v1.BootstrapScope, v1.ChangePlan]
+	planRemoveBootstrap       *connect.Client[v1.BootstrapScope, v12.ChangePlan]
 	removeEnvironment         *connect.Client[v1.RemoveEnvironmentRequest, v11.OperationEvent]
 	removeProject             *connect.Client[v1.ProjectRequest, v11.OperationEvent]
-	planRemoveProject         *connect.Client[v1.ProjectRequest, v1.ChangePlan]
+	planRemoveProject         *connect.Client[v1.ProjectRequest, v12.ChangePlan]
 	listEnvironments          *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
 	preflight                 *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
 	listPromotions            *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
@@ -292,7 +293,7 @@ type providerServiceClient struct {
 	removeStalePromotions     *connect.Client[v1.RemoveStalePromotionsRequest, v11.OperationEvent]
 	usePreviewWildcard        *connect.Client[v1.UsePreviewWildcardRequest, v11.OperationEvent]
 	getPreviewWildcard        *connect.Client[v1.PreviewWildcardRequest, v1.GetPreviewWildcardResponse]
-	planRemovePreviewWildcard *connect.Client[v1.PreviewWildcardRequest, v1.ChangePlan]
+	planRemovePreviewWildcard *connect.Client[v1.PreviewWildcardRequest, v12.ChangePlan]
 	removePreviewWildcard     *connect.Client[v1.PreviewWildcardRequest, v11.OperationEvent]
 	addHostname               *connect.Client[v1.HostnameRequest, v11.OperationEvent]
 	removeHostname            *connect.Client[v1.HostnameRequest, v11.OperationEvent]
@@ -318,9 +319,9 @@ func (c *providerServiceClient) Bootstrap(ctx context.Context, req *v1.Bootstrap
 	return c.bootstrap.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// PlanBootstrap calls provider.contract.v1.ProviderService.PlanBootstrap.
-func (c *providerServiceClient) PlanBootstrap(ctx context.Context, req *v1.PlanBootstrapRequest) (*v1.PlanBootstrapResponse, error) {
-	response, err := c.planBootstrap.CallUnary(ctx, connect.NewRequest(req))
+// DescribeBootstrap calls provider.contract.v1.ProviderService.DescribeBootstrap.
+func (c *providerServiceClient) DescribeBootstrap(ctx context.Context, req *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error) {
+	response, err := c.describeBootstrap.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -342,7 +343,7 @@ func (c *providerServiceClient) RemoveBootstrap(ctx context.Context, req *v1.Boo
 }
 
 // PlanRemoveBootstrap calls provider.contract.v1.ProviderService.PlanRemoveBootstrap.
-func (c *providerServiceClient) PlanRemoveBootstrap(ctx context.Context, req *v1.BootstrapScope) (*v1.ChangePlan, error) {
+func (c *providerServiceClient) PlanRemoveBootstrap(ctx context.Context, req *v1.BootstrapScope) (*v12.ChangePlan, error) {
 	response, err := c.planRemoveBootstrap.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -361,7 +362,7 @@ func (c *providerServiceClient) RemoveProject(ctx context.Context, req *v1.Proje
 }
 
 // PlanRemoveProject calls provider.contract.v1.ProviderService.PlanRemoveProject.
-func (c *providerServiceClient) PlanRemoveProject(ctx context.Context, req *v1.ProjectRequest) (*v1.ChangePlan, error) {
+func (c *providerServiceClient) PlanRemoveProject(ctx context.Context, req *v1.ProjectRequest) (*v12.ChangePlan, error) {
 	response, err := c.planRemoveProject.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -425,7 +426,7 @@ func (c *providerServiceClient) GetPreviewWildcard(ctx context.Context, req *v1.
 }
 
 // PlanRemovePreviewWildcard calls provider.contract.v1.ProviderService.PlanRemovePreviewWildcard.
-func (c *providerServiceClient) PlanRemovePreviewWildcard(ctx context.Context, req *v1.PreviewWildcardRequest) (*v1.ChangePlan, error) {
+func (c *providerServiceClient) PlanRemovePreviewWildcard(ctx context.Context, req *v1.PreviewWildcardRequest) (*v12.ChangePlan, error) {
 	response, err := c.planRemovePreviewWildcard.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
@@ -462,13 +463,13 @@ type ProviderServiceHandler interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v11.OperationEvent]) error
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v11.OperationEvent]) error
-	PlanBootstrap(context.Context, *v1.PlanBootstrapRequest) (*v1.PlanBootstrapResponse, error)
+	DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error)
 	GetCredentialPermissions(context.Context, *v1.CredentialPermissionsRequest) (*v1.CredentialPermissionsResponse, error)
 	RemoveBootstrap(context.Context, *v1.BootstrapScope, *connect.ServerStream[v11.OperationEvent]) error
-	PlanRemoveBootstrap(context.Context, *v1.BootstrapScope) (*v1.ChangePlan, error)
+	PlanRemoveBootstrap(context.Context, *v1.BootstrapScope) (*v12.ChangePlan, error)
 	RemoveEnvironment(context.Context, *v1.RemoveEnvironmentRequest, *connect.ServerStream[v11.OperationEvent]) error
 	RemoveProject(context.Context, *v1.ProjectRequest, *connect.ServerStream[v11.OperationEvent]) error
-	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v1.ChangePlan, error)
+	PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v12.ChangePlan, error)
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
@@ -476,7 +477,7 @@ type ProviderServiceHandler interface {
 	RemoveStalePromotions(context.Context, *v1.RemoveStalePromotionsRequest, *connect.ServerStream[v11.OperationEvent]) error
 	UsePreviewWildcard(context.Context, *v1.UsePreviewWildcardRequest, *connect.ServerStream[v11.OperationEvent]) error
 	GetPreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.GetPreviewWildcardResponse, error)
-	PlanRemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.ChangePlan, error)
+	PlanRemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v12.ChangePlan, error)
 	RemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest, *connect.ServerStream[v11.OperationEvent]) error
 	AddHostname(context.Context, *v1.HostnameRequest, *connect.ServerStream[v11.OperationEvent]) error
 	RemoveHostname(context.Context, *v1.HostnameRequest, *connect.ServerStream[v11.OperationEvent]) error
@@ -508,10 +509,10 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("Bootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServicePlanBootstrapHandler := connect.NewUnaryHandlerSimple(
-		ProviderServicePlanBootstrapProcedure,
-		svc.PlanBootstrap,
-		connect.WithSchema(providerServiceMethods.ByName("PlanBootstrap")),
+	providerServiceDescribeBootstrapHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceDescribeBootstrapProcedure,
+		svc.DescribeBootstrap,
+		connect.WithSchema(providerServiceMethods.ByName("DescribeBootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServiceGetCredentialPermissionsHandler := connect.NewUnaryHandlerSimple(
@@ -630,8 +631,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceDeployHandler.ServeHTTP(w, r)
 		case ProviderServiceBootstrapProcedure:
 			providerServiceBootstrapHandler.ServeHTTP(w, r)
-		case ProviderServicePlanBootstrapProcedure:
-			providerServicePlanBootstrapHandler.ServeHTTP(w, r)
+		case ProviderServiceDescribeBootstrapProcedure:
+			providerServiceDescribeBootstrapHandler.ServeHTTP(w, r)
 		case ProviderServiceGetCredentialPermissionsProcedure:
 			providerServiceGetCredentialPermissionsHandler.ServeHTTP(w, r)
 		case ProviderServiceRemoveBootstrapProcedure:
@@ -689,8 +690,8 @@ func (UnimplementedProviderServiceHandler) Bootstrap(context.Context, *v1.Bootst
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Bootstrap is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) PlanBootstrap(context.Context, *v1.PlanBootstrapRequest) (*v1.PlanBootstrapResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.PlanBootstrap is not implemented"))
+func (UnimplementedProviderServiceHandler) DescribeBootstrap(context.Context, *v1.DescribeBootstrapRequest) (*v1.DescribeBootstrapResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.DescribeBootstrap is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) GetCredentialPermissions(context.Context, *v1.CredentialPermissionsRequest) (*v1.CredentialPermissionsResponse, error) {
@@ -701,7 +702,7 @@ func (UnimplementedProviderServiceHandler) RemoveBootstrap(context.Context, *v1.
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RemoveBootstrap is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) PlanRemoveBootstrap(context.Context, *v1.BootstrapScope) (*v1.ChangePlan, error) {
+func (UnimplementedProviderServiceHandler) PlanRemoveBootstrap(context.Context, *v1.BootstrapScope) (*v12.ChangePlan, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.PlanRemoveBootstrap is not implemented"))
 }
 
@@ -713,7 +714,7 @@ func (UnimplementedProviderServiceHandler) RemoveProject(context.Context, *v1.Pr
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RemoveProject is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v1.ChangePlan, error) {
+func (UnimplementedProviderServiceHandler) PlanRemoveProject(context.Context, *v1.ProjectRequest) (*v12.ChangePlan, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.PlanRemoveProject is not implemented"))
 }
 
@@ -745,7 +746,7 @@ func (UnimplementedProviderServiceHandler) GetPreviewWildcard(context.Context, *
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetPreviewWildcard is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) PlanRemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v1.ChangePlan, error) {
+func (UnimplementedProviderServiceHandler) PlanRemovePreviewWildcard(context.Context, *v1.PreviewWildcardRequest) (*v12.ChangePlan, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.PlanRemovePreviewWildcard is not implemented"))
 }
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -17,6 +18,11 @@ type fakeEngine struct {
 }
 
 var _ kitpulumi.Engine = (*fakeEngine)(nil)
+
+func (f *fakeEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ providerkit.Reporter) ([]apitype.StepEventMetadata, error) {
+	f.record("preview-" + string(op) + " " + setup.Stack)
+	return nil, nil
+}
 
 func (f *fakeEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) (auto.OutputMap, error) {
 	f.record("up-stack " + setup.Stack)

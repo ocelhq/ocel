@@ -9,7 +9,11 @@ import (
 )
 
 type Releaser interface {
+	Plan(ctx context.Context, plan StackPlan, report Reporter) (Plan, error)
+
 	Provision(ctx context.Context, plan StackPlan, report Reporter) (StackResult, error)
+
+	PlanDestroy(ctx context.Context, ref StackRef, report Reporter) (Plan, error)
 
 	Destroy(ctx context.Context, ref StackRef, report Reporter) error
 }

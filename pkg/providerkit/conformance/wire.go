@@ -18,6 +18,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/ocelhq/ocel/pkg/channel"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -38,6 +40,20 @@ func runWire(t *testing.T, suite Suite) {
 		t.Cleanup(server.Close)
 
 		holdsTheSessionRules(t, client(server.Client(), server.URL), suite.Options)
+	})
+
+	t.Run("a run says what it would change and then what it is doing", func(t *testing.T) {
+		if suite.Spec.New == nil || suite.New == nil {
+			t.Skip("this provider stands nothing up without an account behind it, so no run reaches its stream here")
+		}
+		server := httptest.NewServer(providerkit.ConformanceMux(suite.Spec))
+		t.Cleanup(server.Close)
+
+		provider := client(server.Client(), server.URL)
+		if _, err := provider.Configure(context.Background(), configureWith(t, suite.Options)); err != nil {
+			t.Fatalf("Configure() error = %v, want the session configured", err)
+		}
+		saysWhatItWouldChange(t, provider)
 	})
 
 	t.Run("spawned", func(t *testing.T) {
@@ -115,6 +131,61 @@ func holdsTheSessionRules(t *testing.T, provider contractv1connect.ProviderServi
 	if got := connect.CodeOf(err); got == connect.CodeFailedPrecondition {
 		t.Errorf("an RPC after Configure: code = %v, want the session to be past its precondition", got)
 	}
+}
+
+func saysWhatItWouldChange(t *testing.T, provider contractv1connect.ProviderServiceClient) {
+	t.Helper()
+
+	scope := &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW}
+
+	drawn := bootstrapStream(t, provider, &contractv1.BootstrapRequest{Tier: scope.GetTier(), Dry: true})
+	if drawn.plan == nil {
+		t.Fatal("a dry bootstrap emitted no plan envelope, so nothing on the wire says what the run would change")
+	}
+	if drawn.worked {
+		t.Error("a dry bootstrap reported work in progress, and a dry run changes nothing")
+	}
+
+	applied := bootstrapStream(t, provider, scope)
+	if applied.plan == nil {
+		t.Error("a bootstrap emitted no plan envelope, and consent is attached to the plan the run showed")
+	}
+	if !applied.worked {
+		t.Error("a bootstrap emitted no progress, so the run is silent between its plan and its result")
+	}
+}
+
+type streamed struct {
+	plan   *planv1.ChangePlan
+	worked bool
+}
+
+func bootstrapStream(t *testing.T, provider contractv1connect.ProviderServiceClient, req *contractv1.BootstrapRequest) streamed {
+	t.Helper()
+
+	stream, err := provider.Bootstrap(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Bootstrap() error = %v", err)
+	}
+	defer stream.Close()
+
+	var seen streamed
+	for stream.Receive() {
+		event := stream.Msg()
+		if shown := event.GetPlan(); shown != nil {
+			seen.plan = shown
+		}
+		if event.GetProgress() != nil || event.GetLog() != nil {
+			seen.worked = true
+		}
+		if result := event.GetResult(); result != nil && !result.GetSuccess() {
+			t.Fatalf("Bootstrap() failed with %q", result.GetError())
+		}
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("Bootstrap() stream = %v", err)
+	}
+	return seen
 }
 
 func configureWith(t *testing.T, options providerkit.Options) *contractv1.ConfigureRequest {

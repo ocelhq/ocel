@@ -317,6 +317,22 @@ func (r *Releaser) PackApp(ctx context.Context, packing providerkit.AppPacking, 
 	return providerkit.AppPack{Overlay: bundle.overlay(), Carry: bundle}, nil
 }
 
+func (r *Releaser) Plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
+	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	return held.plan(ctx, plan, report)
+}
+
+func (r *Releaser) PlanDestroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (providerkit.Plan, error) {
+	held, err := r.at(ctx, ref, "")
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	return held.adapter.PreviewDestroy(ctx, ref, report)
+}
+
 func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
 	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
 	if err != nil {
@@ -327,34 +343,53 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 
 func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
 	r.realized.mark(naming.Sanitize(plan.Ref.Project), plan.Ref.Name)
-	if plan.Options == nil {
-		transformed, err := transformStackPlan(ctx, r.cfg.Transform, plan)
-		if err != nil {
+	prepared, work, err := r.prepare(ctx, plan)
+	if err != nil {
+		return providerkit.StackResult{}, err
+	}
+	if work != nil {
+		if err := r.publishBuild(ctx, prepared, work, report); err != nil {
 			return providerkit.StackResult{}, err
 		}
-		if plan.App == nil {
-			if err := r.refuseHandover(ctx, plan); err != nil {
-				return providerkit.StackResult{}, err
-			}
-			work := &infraWork{transformed: transformed}
-			if provisionsBucket(plan) {
-				if work.completer, err = placeUploadCompleter(ctx, r.cfg); err != nil {
-					return providerkit.StackResult{}, err
-				}
-			}
-			plan.Options = work
-		} else {
-			work, err := r.appWork(plan, transformed)
-			if err != nil {
-				return providerkit.StackResult{}, err
-			}
-			if err := r.publishBuild(ctx, plan, work, report); err != nil {
-				return providerkit.StackResult{}, err
-			}
-			plan.Options = work
-		}
 	}
-	return r.adapter.Run(ctx, plan, report)
+	return r.adapter.Run(ctx, prepared, report)
+}
+
+func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
+	prepared, _, err := r.prepare(ctx, plan)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	return r.adapter.Preview(ctx, prepared, report)
+}
+
+func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (providerkit.StackPlan, *appWork, error) {
+	if plan.Options != nil {
+		return plan, nil, nil
+	}
+	transformed, err := transformStackPlan(ctx, r.cfg.Transform, plan)
+	if err != nil {
+		return providerkit.StackPlan{}, nil, err
+	}
+	if plan.App == nil {
+		if err := r.refuseHandover(ctx, plan); err != nil {
+			return providerkit.StackPlan{}, nil, err
+		}
+		work := &infraWork{transformed: transformed}
+		if provisionsBucket(plan) {
+			if work.completer, err = placeUploadCompleter(ctx, r.cfg); err != nil {
+				return providerkit.StackPlan{}, nil, err
+			}
+		}
+		plan.Options = work
+		return plan, nil, nil
+	}
+	work, err := r.appWork(plan, transformed)
+	if err != nil {
+		return providerkit.StackPlan{}, nil, err
+	}
+	plan.Options = work
+	return plan, work, nil
 }
 
 func (r *release) publishBuild(ctx context.Context, plan providerkit.StackPlan, work *appWork, report providerkit.Reporter) error {
