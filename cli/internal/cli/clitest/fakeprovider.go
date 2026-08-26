@@ -472,7 +472,7 @@ func fakeEdgeGroup(req *contractv1.BootstrapRequest, class string) *planv1.Chang
 	}
 }
 
-func refuseBootstrapPlan() error {
+func refuseToDrawThePlan() error {
 	if os.Getenv(FakeBootstrapPlanEnvVar) != "edge-credentials" {
 		return nil
 	}
@@ -558,7 +558,7 @@ func (s *deployFakeProviderServer) GetCredentialPermissions(ctx context.Context,
 }
 
 func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := refuseBootstrapPlan(); err != nil {
+	if err := refuseToDrawThePlan(); err != nil {
 		return err
 	}
 	if plan := fakeChangePlan(req); plan != nil {
