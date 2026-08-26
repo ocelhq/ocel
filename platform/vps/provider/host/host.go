@@ -290,17 +290,14 @@ func (h *Host) Stamp(ctx context.Context, class providerkit.Class, stamp Stamp) 
 }
 
 func survey(items []Item, also ...string) string {
-	var accounts, script strings.Builder
+	var probes, script strings.Builder
 	script.WriteString("for p in")
 	for _, item := range items {
-		switch item.Kind {
-		case KindUser:
-			accounts.WriteString(deployLogin().survey() + "\n")
-		case KindSealKey:
-			accounts.WriteString(sealSurvey(item) + "\n")
-		default:
-			script.WriteString(" " + quoted(item.Name))
+		if probe := item.probe(); probe != "" {
+			probes.WriteString(probe + "\n")
+			continue
 		}
+		script.WriteString(" " + quoted(item.Name))
 	}
 	for _, path := range also {
 		script.WriteString(" " + quoted(path))
@@ -310,7 +307,7 @@ if [ -d "$p" ]; then printf '%s\t%s\t%s\t%s\t\n' ` + quoted(KindDir) + ` "$p" "$
 elif [ -f "$p" ]; then printf '%s\t%s\t%s\t%s\t%s\n' ` + quoted(KindFile) + ` "$p" "$(stat -c %a "$p")" "$(stat -c %U "$p")" "$(sha256sum "$p" | cut -d' ' -f1)"
 fi
 done`)
-	return accounts.String() + script.String()
+	return probes.String() + script.String()
 }
 
 func readSurvey(rendered string) (map[string]string, Seal, error) {
