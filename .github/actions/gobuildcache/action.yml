@@ -1,5 +1,10 @@
 name: gobuildcache
-description: Remote Go build cache (S3) via GOCACHEPROG. Skips itself until the bucket and credentials are configured.
+description: >-
+  Remote Go build cache (S3) via GOCACHEPROG, authorized through an OIDC role
+  session scoped to the cache bucket. Skips itself until the bucket, region,
+  and role are configured. Credentials stay in GOBUILDCACHE_* variables only —
+  the job's ambient AWS_* env is untouched, so other role assumptions in the
+  same job are unaffected.
 
 inputs:
   bucket:
@@ -8,24 +13,37 @@ inputs:
   region:
     description: AWS region of the bucket
     default: ""
-  access-key-id:
-    description: AWS access key scoped to the cache bucket
+  role-to-assume:
+    description: ARN of the build-cache role, trusted for this repo's OIDC subject
     default: ""
-  secret-access-key:
-    description: AWS secret key scoped to the cache bucket
-    default: ""
+  role-duration-seconds:
+    description: How long the session lives. Must outlive the calling job.
+    default: "7200"
 
 runs:
   using: composite
   steps:
+    - name: Assume the build-cache role
+      if: inputs.bucket != '' && inputs.region != '' && inputs.role-to-assume != ''
+      id: creds
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: ${{ inputs.region }}
+        role-session-name: gobuildcache-${{ github.run_id }}
+        role-duration-seconds: ${{ inputs.role-duration-seconds }}
+        output-credentials: true
+        output-env-credentials: false
+
     - name: Enable remote Go build cache
-      if: inputs.bucket != '' && inputs.region != '' && inputs.access-key-id != '' && inputs.secret-access-key != ''
+      if: steps.creds.outcome == 'success'
       shell: bash
       env:
         BUCKET: ${{ inputs.bucket }}
         REGION: ${{ inputs.region }}
-        ACCESS_KEY_ID: ${{ inputs.access-key-id }}
-        SECRET_ACCESS_KEY: ${{ inputs.secret-access-key }}
+        ACCESS_KEY_ID: ${{ steps.creds.outputs.aws-access-key-id }}
+        SECRET_ACCESS_KEY: ${{ steps.creds.outputs.aws-secret-access-key }}
+        SESSION_TOKEN: ${{ steps.creds.outputs.aws-session-token }}
       run: |
         set -euo pipefail
         version=1.7.0
@@ -40,6 +58,8 @@ runs:
           "https://github.com/richardartoul/gobuildcache/releases/download/v${version}/gobuildcache_${version}_linux_${arch}.tar.gz"
         echo "$sha  $dir/gobuildcache.tar.gz" | sha256sum -c -
         tar -xzf "$dir/gobuildcache.tar.gz" -C "$dir"
+        echo "::add-mask::$SECRET_ACCESS_KEY"
+        echo "::add-mask::$SESSION_TOKEN"
         {
           echo "GOCACHEPROG=$dir/gobuildcache"
           echo "GOBUILDCACHE_BACKEND_TYPE=s3"
@@ -47,4 +67,5 @@ runs:
           echo "GOBUILDCACHE_AWS_REGION=$REGION"
           echo "GOBUILDCACHE_AWS_ACCESS_KEY_ID=$ACCESS_KEY_ID"
           echo "GOBUILDCACHE_AWS_SECRET_ACCESS_KEY=$SECRET_ACCESS_KEY"
+          echo "GOBUILDCACHE_AWS_SESSION_TOKEN=$SESSION_TOKEN"
         } >> "$GITHUB_ENV"

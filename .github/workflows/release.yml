@@ -68,6 +68,9 @@ jobs:
     needs: check-release
     if: needs.check-release.outputs.has-changesets == 'false'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       matrix:
         include:
@@ -103,8 +106,7 @@ jobs:
         with:
           bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
           region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          access-key-id: ${{ secrets.GOBUILDCACHE_AWS_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.GOBUILDCACHE_AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
