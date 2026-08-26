@@ -644,9 +644,9 @@ func (x *SpanEvent) GetAttributes() []*SpanAttribute {
 type ProgressEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Current       *uint32                `protobuf:"varint,3,opt,name=current,proto3,oneof" json:"current,omitempty"`
-	Total         *uint32                `protobuf:"varint,4,opt,name=total,proto3,oneof" json:"total,omitempty"`
-	StageId       []byte                 `protobuf:"bytes,5,opt,name=stage_id,json=stageId,proto3" json:"stage_id,omitempty"`
+	Current       *uint32                `protobuf:"varint,2,opt,name=current,proto3,oneof" json:"current,omitempty"`
+	Total         *uint32                `protobuf:"varint,3,opt,name=total,proto3,oneof" json:"total,omitempty"`
+	StageId       []byte                 `protobuf:"bytes,4,opt,name=stage_id,json=stageId,proto3" json:"stage_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1167,9 +1167,9 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\tparent_id\x18\x02 \x01(\fB\n" +
 	"\xbaH\a\xd8\x01\x01z\x02h\bR\bparentId\x12\x14\n" +
 	"\x05title\x18\x03 \x01(\tR\x05title\x12/\n" +
-	"\x05phase\x18\x04 \x01(\x0e2\x19.common.progress.v1.PhaseR\x05phase\"P\n" +
+	"\x05phase\x18\x04 \x01(\x0e2\x19.common.progress.v1.PhaseR\x05phase\"C\n" +
 	"\x0eStagePlanEvent\x121\n" +
-	"\x06stages\x18\x01 \x03(\v2\x19.common.progress.v1.StageR\x06stagesJ\x04\b\x02\x10\x03R\x05final\"Y\n" +
+	"\x06stages\x18\x01 \x03(\v2\x19.common.progress.v1.StageR\x06stages\"Y\n" +
 	"\rSpanAttribute\x122\n" +
 	"\x03key\x18\x01 \x01(\x0e2 .common.progress.v1.AttributeKeyR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\"\xcc\x02\n" +
@@ -1183,15 +1183,15 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x06status\x18\x06 \x01(\x0e2\x1e.common.progress.v1.SpanStatusR\x06status\x12A\n" +
 	"\n" +
 	"attributes\x18\a \x03(\v2!.common.progress.v1.SpanAttributeR\n" +
-	"attributes\"\xaa\x01\n" +
+	"attributes\"\x9d\x01\n" +
 	"\rProgressEvent\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x1d\n" +
-	"\acurrent\x18\x03 \x01(\rH\x00R\acurrent\x88\x01\x01\x12\x19\n" +
-	"\x05total\x18\x04 \x01(\rH\x01R\x05total\x88\x01\x01\x12\"\n" +
-	"\bstage_id\x18\x05 \x01(\fB\a\xbaH\x04z\x02h\bR\astageIdB\n" +
+	"\acurrent\x18\x02 \x01(\rH\x00R\acurrent\x88\x01\x01\x12\x19\n" +
+	"\x05total\x18\x03 \x01(\rH\x01R\x05total\x88\x01\x01\x12\"\n" +
+	"\bstage_id\x18\x04 \x01(\fB\a\xbaH\x04z\x02h\bR\astageIdB\n" +
 	"\n" +
 	"\b_currentB\b\n" +
-	"\x06_totalJ\x04\b\x02\x10\x03R\x05phase\"H\n" +
+	"\x06_total\"H\n" +
 	"\bLogEvent\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\"\n" +
 	"\bstage_id\x18\x02 \x01(\fB\a\xbaH\x04z\x02h\bR\astageId\"c\n" +
