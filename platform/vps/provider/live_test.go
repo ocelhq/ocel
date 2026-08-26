@@ -65,11 +65,7 @@ func (vm machine) provider(t *testing.T) *vps.Provider {
 
 func closing(t *testing.T, p *vps.Provider) {
 	t.Helper()
-	open, err := p.Session(context.Background())
-	if err != nil {
-		return
-	}
-	if err := open.Close(); err != nil {
+	if err := p.Close(); err != nil {
 		t.Errorf("Close() = %v, want the ssh master gone with the VM", err)
 	}
 }
