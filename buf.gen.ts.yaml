@@ -2,6 +2,7 @@ version: v2
 inputs:
   - directory: proto
     exclude_paths:
+      - proto/cli/stream
       - proto/common/environment
       - proto/common/progress
       - proto/provider

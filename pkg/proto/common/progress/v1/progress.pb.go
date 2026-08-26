@@ -23,6 +23,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// The phase a stage stands for. Canonical phase names live in `pkg/naming`, and a
+// phase's id is the digest of the (unit, phase) canonical name pair, so both sides of
+// the stream derive the same id without exchanging it.
 type Phase int32
 
 const (
@@ -31,6 +34,7 @@ const (
 	Phase_PHASE_PROVISIONING Phase = 2
 	Phase_PHASE_FINALIZING   Phase = 3
 	Phase_PHASE_DELETING     Phase = 4
+	Phase_PHASE_BUILDING     Phase = 5
 )
 
 // Enum value maps for Phase.
@@ -41,6 +45,7 @@ var (
 		2: "PHASE_PROVISIONING",
 		3: "PHASE_FINALIZING",
 		4: "PHASE_DELETING",
+		5: "PHASE_BUILDING",
 	}
 	Phase_value = map[string]int32{
 		"PHASE_UNSPECIFIED":  0,
@@ -48,6 +53,7 @@ var (
 		"PHASE_PROVISIONING": 2,
 		"PHASE_FINALIZING":   3,
 		"PHASE_DELETING":     4,
+		"PHASE_BUILDING":     5,
 	}
 )
 
@@ -144,6 +150,7 @@ const (
 	AttributeKey_ATTRIBUTE_KEY_DURATION_MS    AttributeKey = 11
 	AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE  AttributeKey = 12
 	AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME  AttributeKey = 13
+	AttributeKey_ATTRIBUTE_KEY_CACHED         AttributeKey = 14
 )
 
 // Enum value maps for AttributeKey.
@@ -163,6 +170,7 @@ var (
 		11: "ATTRIBUTE_KEY_DURATION_MS",
 		12: "ATTRIBUTE_KEY_RESOURCE_TYPE",
 		13: "ATTRIBUTE_KEY_RESOURCE_NAME",
+		14: "ATTRIBUTE_KEY_CACHED",
 	}
 	AttributeKey_value = map[string]int32{
 		"ATTRIBUTE_KEY_UNSPECIFIED":    0,
@@ -179,6 +187,7 @@ var (
 		"ATTRIBUTE_KEY_DURATION_MS":    11,
 		"ATTRIBUTE_KEY_RESOURCE_TYPE":  12,
 		"ATTRIBUTE_KEY_RESOURCE_NAME":  13,
+		"ATTRIBUTE_KEY_CACHED":         14,
 	}
 )
 
@@ -371,11 +380,33 @@ func (*OperationEvent_Degraded) isOperationEvent_Event() {}
 
 func (*OperationEvent_DnsOwed) isOperationEvent_Event() {}
 
+// A node of the run's stage tree.
+//
+// The tree is app-major, and depth alone says what a node is: a parentless stage is a
+// unit, a child of a unit is a phase, anything deeper is detail inside that phase's
+// block. There is no role enum, because a declared role could disagree with the tree
+// and become a second source of truth. Events attach at phase depth or deeper, never
+// at a unit.
+//
+// Unit and phase ids are the first 8 bytes of a sha256 over the length-prefixed
+// canonical name of the unit, and over the length-prefixed (unit, phase) pair, so the
+// CLI and the provider derive identical ids for the same stage without either telling
+// the other. Detail nodes below phase depth have one producer and may mint their ids
+// at random. `title` is free presentation, split from identity: no consumer recomputes
+// an id from it.
+//
+// Declaration is additive, imminent and required: a unit is declared when the run
+// commits to it, a phase when its unit reaches it, and detail needs no declaration.
+// A stage is never redeclared, and the plan is never final — more stages may arrive at
+// any point until the run ends.
 type Stage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ParentId      []byte                 `protobuf:"bytes,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
-	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Empty on a unit, which is a root of the tree.
+	ParentId []byte `protobuf:"bytes,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
+	Title    string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	// Set on a phase-depth stage; PHASE_UNSPECIFIED on a unit and on detail.
+	Phase         Phase `protobuf:"varint,4,opt,name=phase,proto3,enum=common.progress.v1.Phase" json:"phase,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -431,10 +462,17 @@ func (x *Stage) GetTitle() string {
 	return ""
 }
 
+func (x *Stage) GetPhase() Phase {
+	if x != nil {
+		return x.Phase
+	}
+	return Phase_PHASE_UNSPECIFIED
+}
+
+// Stages this run has committed to. Always additive, never a complete picture.
 type StagePlanEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Stages        []*Stage               `protobuf:"bytes,1,rep,name=stages,proto3" json:"stages,omitempty"`
-	Final         bool                   `protobuf:"varint,2,opt,name=final,proto3" json:"final,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -474,13 +512,6 @@ func (x *StagePlanEvent) GetStages() []*Stage {
 		return x.Stages
 	}
 	return nil
-}
-
-func (x *StagePlanEvent) GetFinal() bool {
-	if x != nil {
-		return x.Final
-	}
-	return false
 }
 
 type SpanAttribute struct {
@@ -535,6 +566,9 @@ func (x *SpanAttribute) GetValue() string {
 	return ""
 }
 
+// The end of a stage, and the only one there is: a span whose `span_id` equals a
+// declared stage id closes that stage with its status and timing. There is no
+// first-class stage-end message.
 type SpanEvent struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	SpanId            []byte                 `protobuf:"bytes,1,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
@@ -627,13 +661,19 @@ func (x *SpanEvent) GetAttributes() []*SpanAttribute {
 	return nil
 }
 
+// A line of progress inside one declared stage.
+//
+// `current`/`total` are the protocol's only grouping counter: the producer declares
+// it, because only the producer knows what it is working through, and `total` may grow
+// while a phase runs. A consumer never counts stages itself to synthesise one.
 type ProgressEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Phase         Phase                  `protobuf:"varint,2,opt,name=phase,proto3,enum=common.progress.v1.Phase" json:"phase,omitempty"`
-	Current       *uint32                `protobuf:"varint,3,opt,name=current,proto3,oneof" json:"current,omitempty"`
-	Total         *uint32                `protobuf:"varint,4,opt,name=total,proto3,oneof" json:"total,omitempty"`
-	StageId       []byte                 `protobuf:"bytes,5,opt,name=stage_id,json=stageId,proto3" json:"stage_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Message string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Current *uint32                `protobuf:"varint,3,opt,name=current,proto3,oneof" json:"current,omitempty"`
+	Total   *uint32                `protobuf:"varint,4,opt,name=total,proto3,oneof" json:"total,omitempty"`
+	// The declared stage this line belongs to, at phase depth or deeper. Required:
+	// there is no bucket for progress that belongs to no stage.
+	StageId       []byte `protobuf:"bytes,5,opt,name=stage_id,json=stageId,proto3" json:"stage_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -675,13 +715,6 @@ func (x *ProgressEvent) GetMessage() string {
 	return ""
 }
 
-func (x *ProgressEvent) GetPhase() Phase {
-	if x != nil {
-		return x.Phase
-	}
-	return Phase_PHASE_UNSPECIFIED
-}
-
 func (x *ProgressEvent) GetCurrent() uint32 {
 	if x != nil && x.Current != nil {
 		return *x.Current
@@ -703,9 +736,12 @@ func (x *ProgressEvent) GetStageId() []byte {
 	return nil
 }
 
+// Detail text inside one declared stage. Text that belongs to the run rather than to
+// any stage is a diagnostic on the CLI's own stream, not a log event without a stage.
 type LogEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	StageId       []byte                 `protobuf:"bytes,2,opt,name=stage_id,json=stageId,proto3" json:"stage_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -745,6 +781,13 @@ func (x *LogEvent) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+func (x *LogEvent) GetStageId() []byte {
+	if x != nil {
+		return x.StageId
+	}
+	return nil
 }
 
 type DnsRecord struct {
@@ -1145,14 +1188,15 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x04span\x18\x05 \x01(\v2\x1d.common.progress.v1.SpanEventH\x00R\x04span\x12?\n" +
 	"\bdegraded\x18\x06 \x01(\v2!.common.progress.v1.DegradedEventH\x00R\bdegraded\x12=\n" +
 	"\bdns_owed\x18\a \x01(\v2 .common.progress.v1.DnsOwedEventH\x00R\adnsOwedB\x0e\n" +
-	"\x05event\x12\x05\xbaH\x02\b\x01\"J\n" +
-	"\x05Stage\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\fR\x02id\x12\x1b\n" +
-	"\tparent_id\x18\x02 \x01(\fR\bparentId\x12\x14\n" +
-	"\x05title\x18\x03 \x01(\tR\x05title\"Y\n" +
+	"\x05event\x12\x05\xbaH\x02\b\x01\"\x90\x01\n" +
+	"\x05Stage\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\fB\a\xbaH\x04z\x02h\bR\x02id\x12'\n" +
+	"\tparent_id\x18\x02 \x01(\fB\n" +
+	"\xbaH\a\xd8\x01\x01z\x02h\bR\bparentId\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12/\n" +
+	"\x05phase\x18\x04 \x01(\x0e2\x19.common.progress.v1.PhaseR\x05phase\"P\n" +
 	"\x0eStagePlanEvent\x121\n" +
-	"\x06stages\x18\x01 \x03(\v2\x19.common.progress.v1.StageR\x06stages\x12\x14\n" +
-	"\x05final\x18\x02 \x01(\bR\x05final\"Y\n" +
+	"\x06stages\x18\x01 \x03(\v2\x19.common.progress.v1.StageR\x06stagesJ\x04\b\x02\x10\x03R\x05final\"Y\n" +
 	"\rSpanAttribute\x122\n" +
 	"\x03key\x18\x01 \x01(\x0e2 .common.progress.v1.AttributeKeyR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\"\xcc\x02\n" +
@@ -1166,18 +1210,18 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x06status\x18\x06 \x01(\x0e2\x1e.common.progress.v1.SpanStatusR\x06status\x12A\n" +
 	"\n" +
 	"attributes\x18\a \x03(\v2!.common.progress.v1.SpanAttributeR\n" +
-	"attributes\"\xc5\x01\n" +
+	"attributes\"\xaa\x01\n" +
 	"\rProgressEvent\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\x12/\n" +
-	"\x05phase\x18\x02 \x01(\x0e2\x19.common.progress.v1.PhaseR\x05phase\x12\x1d\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12\x1d\n" +
 	"\acurrent\x18\x03 \x01(\rH\x00R\acurrent\x88\x01\x01\x12\x19\n" +
-	"\x05total\x18\x04 \x01(\rH\x01R\x05total\x88\x01\x01\x12\x19\n" +
-	"\bstage_id\x18\x05 \x01(\fR\astageIdB\n" +
+	"\x05total\x18\x04 \x01(\rH\x01R\x05total\x88\x01\x01\x12\"\n" +
+	"\bstage_id\x18\x05 \x01(\fB\a\xbaH\x04z\x02h\bR\astageIdB\n" +
 	"\n" +
 	"\b_currentB\b\n" +
-	"\x06_total\"$\n" +
+	"\x06_totalJ\x04\b\x02\x10\x03R\x05phase\"H\n" +
 	"\bLogEvent\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"c\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12\"\n" +
+	"\bstage_id\x18\x02 \x01(\fB\a\xbaH\x04z\x02h\bR\astageId\"c\n" +
 	"\tDnsRecord\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
@@ -1206,18 +1250,19 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\tFlipBound\x12\x1d\n" +
 	"\n" +
 	"typical_ms\x18\x01 \x01(\x03R\ttypicalMs\x12\x1c\n" +
-	"\tpublished\x18\x02 \x01(\bR\tpublished*u\n" +
+	"\tpublished\x18\x02 \x01(\bR\tpublished*\x89\x01\n" +
 	"\x05Phase\x12\x15\n" +
 	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fPHASE_UPLOADING\x10\x01\x12\x16\n" +
 	"\x12PHASE_PROVISIONING\x10\x02\x12\x14\n" +
 	"\x10PHASE_FINALIZING\x10\x03\x12\x12\n" +
-	"\x0ePHASE_DELETING\x10\x04*T\n" +
+	"\x0ePHASE_DELETING\x10\x04\x12\x12\n" +
+	"\x0ePHASE_BUILDING\x10\x05*T\n" +
 	"\n" +
 	"SpanStatus\x12\x1b\n" +
 	"\x17SPAN_STATUS_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eSPAN_STATUS_OK\x10\x01\x12\x15\n" +
-	"\x11SPAN_STATUS_ERROR\x10\x02*\xa3\x03\n" +
+	"\x11SPAN_STATUS_ERROR\x10\x02*\xbd\x03\n" +
 	"\fAttributeKey\x12\x1d\n" +
 	"\x19ATTRIBUTE_KEY_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15ATTRIBUTE_KEY_COMMAND\x10\x01\x12\x17\n" +
@@ -1233,7 +1278,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x12\x1d\n" +
 	"\x19ATTRIBUTE_KEY_DURATION_MS\x10\v\x12\x1f\n" +
 	"\x1bATTRIBUTE_KEY_RESOURCE_TYPE\x10\f\x12\x1f\n" +
-	"\x1bATTRIBUTE_KEY_RESOURCE_NAME\x10\rB@Z>github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progressv1b\x06proto3"
+	"\x1bATTRIBUTE_KEY_RESOURCE_NAME\x10\r\x12\x18\n" +
+	"\x14ATTRIBUTE_KEY_CACHED\x10\x0eB@Z>github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progressv1b\x06proto3"
 
 var (
 	file_common_progress_v1_progress_proto_rawDescOnce sync.Once
@@ -1276,11 +1322,11 @@ var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	7,  // 4: common.progress.v1.OperationEvent.span:type_name -> common.progress.v1.SpanEvent
 	12, // 5: common.progress.v1.OperationEvent.degraded:type_name -> common.progress.v1.DegradedEvent
 	11, // 6: common.progress.v1.OperationEvent.dns_owed:type_name -> common.progress.v1.DnsOwedEvent
-	4,  // 7: common.progress.v1.StagePlanEvent.stages:type_name -> common.progress.v1.Stage
-	2,  // 8: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
-	1,  // 9: common.progress.v1.SpanEvent.status:type_name -> common.progress.v1.SpanStatus
-	6,  // 10: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
-	0,  // 11: common.progress.v1.ProgressEvent.phase:type_name -> common.progress.v1.Phase
+	0,  // 7: common.progress.v1.Stage.phase:type_name -> common.progress.v1.Phase
+	4,  // 8: common.progress.v1.StagePlanEvent.stages:type_name -> common.progress.v1.Stage
+	2,  // 9: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
+	1,  // 10: common.progress.v1.SpanEvent.status:type_name -> common.progress.v1.SpanStatus
+	6,  // 11: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
 	10, // 12: common.progress.v1.DnsOwedEvent.records:type_name -> common.progress.v1.DnsRecord
 	16, // 13: common.progress.v1.ResultEvent.links:type_name -> common.links.v1.Link
 	14, // 14: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
