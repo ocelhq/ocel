@@ -235,10 +235,10 @@ func TestTheGroupTheAccountDescriptionNamesIsTheGroupBothBranchesAdd(t *testing.
 	}
 }
 
-func TestAPasswordFieldTheHostWillNotShowIsNotReadAsUnlocked(t *testing.T) {
+func TestAPasswordFieldTheHostWillNotShowSurveysTheLoginNotAtAll(t *testing.T) {
 	t.Parallel()
 
-	probed := func(password string) string {
+	probed := func(password string) (string, bool) {
 		t.Helper()
 		held := standing()
 		held.password = password
@@ -246,17 +246,18 @@ func TestAPasswordFieldTheHostWillNotShowIsNotReadAsUnlocked(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, stood := observed[principal().ID()]; !stood {
-			t.Fatal("the probe read no account where one stands")
-		}
-		return observed[principal().ID()]
+		digest, stood := observed[principal().ID()]
+		return digest, stood
 	}
 
-	unreadable := probed("")
-	if unreadable == principal().Digest() {
-		t.Error("a shadow field the host will not show reads as the locked one ocel wrote, and drift would never be seen")
+	if _, stood := probed(""); stood {
+		t.Error("a shadow field the host will not show surveys as a login, and every reading a login without root takes would call the principal drifted forever")
 	}
-	if unreadable == probed("$6$salt$hash") {
-		t.Error("a shadow field the host will not show reads as a password of its own, so a host with no shadow database re-plans the principal every run for a reason nobody can name")
+	unlocked, stood := probed("$6$salt$hash")
+	if !stood {
+		t.Fatal("the probe read no account where one stands with a password on it")
+	}
+	if unlocked == principal().Digest() {
+		t.Error("a login carrying a password reads as the locked one ocel wrote, and drift would never be seen")
 	}
 }
