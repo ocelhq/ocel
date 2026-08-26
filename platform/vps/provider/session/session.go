@@ -3,6 +3,8 @@ package session
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,20 +60,47 @@ func (s *Session) HostKey() providerkit.HostKey { return s.anchor }
 
 func (s *Session) Destination() Destination { return s.dest }
 
+type Result struct {
+	Stdout string
+	Stderr string
+	Code   int
+}
+
 func (s *Session) Run(ctx context.Context, command string) (string, error) {
-	rendered, err := output(ctx, "ssh", append(s.args(), s.dest.Written, command)...)
-	if err == nil {
-		return rendered, nil
+	result, err := s.Exec(ctx, command, nil)
+	if err != nil {
+		return "", err
 	}
-	if strings.Contains(err.Error(), "Host key verification failed") {
+	if result.Code != 0 {
+		return "", providerkit.Refuse(providerkit.CodeDenied,
+			"%s over ssh: %s", s.dest.Principal(), terse(result.problem(command)))
+	}
+	return result.Stdout, nil
+}
+
+func (s *Session) Exec(ctx context.Context, command string, stdin []byte) (Result, error) {
+	stdout, stderr, code, err := run(ctx, stdin, "ssh", append(s.args(), s.dest.Written, command)...)
+	if err == nil && code != transportFailure {
+		return Result{Stdout: stdout, Stderr: stderr, Code: code}, nil
+	}
+	if strings.Contains(stderr, "Host key verification failed") {
 		keys, _ := offered(ctx, s.dest)
 		if _, trust := classify(s.dest, keys, recorded(ctx, s.dest)); trust != nil {
-			return "", providerkit.RefuseHostTrust(*trust)
+			return Result{}, providerkit.RefuseHostTrust(*trust)
 		}
 	}
-	return "", providerkit.Refuse(providerkit.CodeDenied,
-		"%s over ssh: %s", s.dest.Principal(), terse(err))
+	return Result{}, providerkit.Refuse(providerkit.CodeDenied,
+		"%s over ssh: %s", s.dest.Principal(), terse(failure{err: err, stderr: stderr}))
 }
+
+func (r Result) problem(command string) error {
+	if r.Stderr != "" {
+		return errors.New(r.Stderr)
+	}
+	return fmt.Errorf("%s exited %d", command, r.Code)
+}
+
+const transportFailure = 255
 
 func (s *Session) Close() error {
 	if s.control == "" {
@@ -112,13 +141,30 @@ func multiplex() string {
 }
 
 func output(ctx context.Context, name string, args ...string) (string, error) {
+	stdout, stderr, code, err := run(ctx, nil, name, args...)
+	if err != nil || code != 0 {
+		return "", failure{err: err, stderr: stderr}
+	}
+	return stdout, nil
+}
+
+func run(ctx context.Context, stdin []byte, name string, args ...string) (string, string, int, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr, cmd.Stdin = &stdout, &stderr, nil
-	if err := cmd.Run(); err != nil {
-		return "", failure{err: err, stderr: strings.TrimSpace(stderr.String())}
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
 	}
-	return stdout.String(), nil
+	err := cmd.Run()
+	var exit *exec.ExitError
+	switch {
+	case err == nil:
+		return stdout.String(), strings.TrimSpace(stderr.String()), 0, nil
+	case errors.As(err, &exit):
+		return stdout.String(), strings.TrimSpace(stderr.String()), exit.ExitCode(), nil
+	default:
+		return "", strings.TrimSpace(stderr.String()), transportFailure, err
+	}
 }
 
 type failure struct {
@@ -127,10 +173,13 @@ type failure struct {
 }
 
 func (f failure) Error() string {
-	if f.stderr == "" {
+	if f.stderr != "" {
+		return f.stderr
+	}
+	if f.err != nil {
 		return f.err.Error()
 	}
-	return f.stderr
+	return "the command failed and said nothing"
 }
 
 func (f failure) Unwrap() error { return f.err }

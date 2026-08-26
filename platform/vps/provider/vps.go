@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -70,7 +71,8 @@ func spelledProblem(err error) string {
 
 type Provider struct {
 	options   Options
-	records   *fake.Records
+	host      *host.Host
+	records   *host.Records
 	artifacts *fake.Artifacts
 	sealer    *fake.Sealer
 	dial      sync.Mutex
@@ -124,12 +126,14 @@ func New(_ context.Context, options providerkit.Options) (providerkit.Provider, 
 }
 
 func NewProvider(options Options) *Provider {
-	return &Provider{
+	p := &Provider{
 		options:   options,
-		records:   fake.NewRecords(),
 		artifacts: fake.NewArtifacts(),
 		sealer:    fake.NewSealer(),
 	}
+	p.host = host.New(p.Session)
+	p.records = host.NewRecords(p.host)
+	return p
 }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
@@ -139,7 +143,7 @@ func (p *Provider) Target() Target { return p.options.SSH }
 func (p *Provider) Serves() []providerkit.LinkType { return nil }
 
 func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
-	return bootstrapper{}, nil
+	return host.Bootstrap(p.host), nil
 }
 
 func (p *Provider) Releases() providerkit.Releaser { return releaser{} }
