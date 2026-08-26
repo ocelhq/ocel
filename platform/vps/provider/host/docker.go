@@ -1,7 +1,5 @@
 package host
 
-import "fmt"
-
 const (
 	KindEngine = "docker:engine"
 	KindUnit   = "systemd:unit"
@@ -29,7 +27,7 @@ func engineItem() Item {
 		Owner:   rootOwner,
 		Content: []byte(engineFact),
 		Slow:    true,
-		Note:    "the install script at " + dockerSource + ", downloaded and run as root: deploys onto this host pull images and run them, and nothing here runs a container yet",
+		Note:    "the install script at " + dockerSource + ", downloaded and run as root: deploys onto this host pull images and run them, and a docker binary with no " + dockerUnit + " behind it is not an engine this ocel can start",
 	}
 }
 
@@ -48,7 +46,7 @@ func engineCommand() string {
 	return `set -e
 script=$(mktemp)
 trap 'rm -f "$script"' EXIT
-if command -v curl >/dev/null 2>&1; then curl -fsSL ` + dockerSource + ` -o "$script"
+if command -v curl >/dev/null 2>&1; then curl -fsSL --retry 5 --retry-delay 2 ` + dockerSource + ` -o "$script"
 elif command -v wget >/dev/null 2>&1; then wget -qO "$script" ` + dockerSource + `
 else echo 'neither curl nor wget stands on this host, so ocel cannot fetch ` + dockerSource + `' >&2; exit 1
 fi
@@ -60,8 +58,8 @@ func unitCommand() string {
 }
 
 func engineProbe() string {
-	return `if command -v ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then
-` + reports(KindEngine, dockerEngine, `"$(printf '%s' `+quoted(engineFact)+` | sha256sum | cut -d' ' -f1)"`) + `
+	return `if command -v ` + quoted(dockerEngine) + ` >/dev/null 2>&1 && systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then
+` + reports(quoted(KindEngine), quoted(dockerEngine), "0", quoted(rootOwner), quoted(contentSum([]byte(engineFact)))) + `
 fi`
 }
 
@@ -69,10 +67,6 @@ func unitProbe() string {
 	return `if systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then
 active=$(systemctl is-active ` + quoted(dockerUnit) + ` 2>/dev/null || true)
 enabled=$(systemctl is-enabled ` + quoted(dockerUnit) + ` 2>/dev/null || true)
-` + reports(KindUnit, dockerUnit, `"$(printf 'active=%s\nenabled=%s\n' "$active" "$enabled" | sha256sum | cut -d' ' -f1)"`) + `
+` + reports(quoted(KindUnit), quoted(dockerUnit), "0", quoted(rootOwner), `"$(printf 'active=%s\nenabled=%s\n' "$active" "$enabled" | sha256sum | cut -d' ' -f1)"`) + `
 fi`
-}
-
-func reports(kind, name, sum string) string {
-	return fmt.Sprintf(`printf '%%s\t%%s\t%%s\t%%s\t%%s\n' %s %s 0 %s %s`, quoted(kind), quoted(name), quoted(rootOwner), sum)
 }

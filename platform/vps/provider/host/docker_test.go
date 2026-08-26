@@ -2,7 +2,6 @@ package host
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -43,22 +42,12 @@ is-active) printf '%s\n' `+quoted(held.active)+` ;;
 is-enabled) printf '%s\n' `+quoted(held.enabled)+` ;;
 *) exit 1 ;;
 esac`)
-	for _, tool := range []string{"sha256sum", "cut"} {
-		found, err := exec.LookPath(tool)
-		if err != nil {
-			t.Skipf("this machine has no %s to answer a survey with: %v", tool, err)
-		}
-		if err := os.Symlink(found, filepath.Join(dir, tool)); err != nil {
-			t.Fatal(err)
-		}
-	}
 	return dir
 }
 
 func probed(t *testing.T, held engine) map[string]string {
 	t.Helper()
-	dir := daemon(t, held)
-	observed, _, err := readSurvey(sh(t, dir, "PATH="+quoted(dir)+"\n"+engineProbe()+"\n"+unitProbe()))
+	observed, _, err := readSurvey(sh(t, daemon(t, held), engineProbe()+"\n"+unitProbe()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +73,21 @@ func TestAHostThatRunsNoContainersIsProbedAsHavingNeither(t *testing.T) {
 		if _, stood := observed[item.ID()]; stood {
 			t.Errorf("the probe read %s on a host that has no docker at all", item.ID())
 		}
+	}
+}
+
+func TestADockerBinaryWithNoUnitBehindItIsNoEngineAndPlansTheInstall(t *testing.T) {
+	t.Parallel()
+
+	observed := probed(t, engine{installed: true})
+	for _, item := range EngineItems() {
+		if _, stood := observed[item.ID()]; stood {
+			t.Errorf("the probe read %s on a host whose docker binary carries no %s", item.ID(), dockerUnit)
+		}
+	}
+	changes := planned(Reading{Class: providerkit.ClassProduction, Observed: observed})
+	if engine := planFor(changes, engineItem().ID()); engine.Action != providerkit.ActionCreate {
+		t.Errorf("a host carrying a docker binary and no %s plans %q for the engine, want the install: keeping it leaves apply enabling a unit that does not exist, on every run, forever", dockerUnit, engine.Action)
 	}
 }
 
@@ -167,9 +171,11 @@ func TestTheDocumentSaysWhereTheDaemonTheGroupReachesCameFrom(t *testing.T) {
 	if claim.Name == "" {
 		t.Fatal("the deploy login is written into the docker group and the document claims no membership of it")
 	}
-	installs := written(Items(class, nil), dockerEngine).Kind == KindEngine
-	if installs != strings.Contains(claim.Detail, dockerSource) {
-		t.Errorf("apply installs the engine: %v, and the document says so: %v\n%s", installs, !installs, claim.Detail)
+	if written(Items(class, nil), KindEngine, dockerEngine).Name == "" {
+		t.Fatal("the document names the daemon bootstrap installs and bootstrap installs no engine at all")
+	}
+	if !strings.Contains(claim.Detail, dockerSource) {
+		t.Errorf("apply installs the engine and the membership claim never says where it came from:\n%s", claim.Detail)
 	}
 	if !strings.Contains(claim.Detail, "become root") {
 		t.Errorf("the membership claim stopped saying the group is root under another name:\n%s", claim.Detail)
@@ -200,13 +206,36 @@ func TestAHostWithNoEngineHasTheInstallPlannedLastAndNamed(t *testing.T) {
 	if engine.Action != providerkit.ActionCreate {
 		t.Fatalf("a host with no engine plans %q for it, want the install shown as a change to consent to", engine.Action)
 	}
-	if !strings.Contains(engine.Reason, "get.docker.com") {
+	if !strings.Contains(engine.Reason, dockerSource) {
 		t.Errorf("the engine is planned with the reason %q, and a user consenting to it is never told what runs on their host", engine.Reason)
 	}
 	if !engine.Slow {
 		t.Error("the engine install is planned as quick work, and a plan that lies about its cost is one nobody waits through")
 	}
 
+	quickest(t, changes)
+}
+
+func TestSlowWorkClosesThePlanWhateverOrderTheItemsStandIn(t *testing.T) {
+	t.Parallel()
+
+	ordered := slowLast([]providerkit.Change{
+		{Name: "first slow", Slow: true},
+		{Name: "a directory"},
+		{Name: "second slow", Slow: true},
+		{Name: "a file"},
+	})
+	quickest(t, ordered)
+	if ordered[0].Name != "a directory" || ordered[1].Name != "a file" {
+		t.Errorf("the quick changes are planned as %q and %q, and sorting the slow work last reordered work a user reads top to bottom", ordered[0].Name, ordered[1].Name)
+	}
+	if ordered[2].Name != "first slow" {
+		t.Errorf("the slow work is planned as %q first, and two slow changes swapped places under the sort", ordered[2].Name)
+	}
+}
+
+func quickest(t *testing.T, changes []providerkit.Change) {
+	t.Helper()
 	var slow bool
 	for _, change := range changes {
 		if change.Slow {

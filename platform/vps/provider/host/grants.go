@@ -17,7 +17,7 @@ func Grants(class providerkit.Class) []Grant {
 	held := deployLogin()
 
 	var grants []Grant
-	if keys := written(items, authorizedKeys); keys.Kind == KindFile {
+	if keys := written(items, KindFile, authorizedKeys); keys.Name != "" {
 		grants = append(grants, Grant{
 			Name:   "an ssh login as " + held.name,
 			Detail: "a " + held.shell + " shell and the keys in " + keys.Name + ", nothing else. The account holds no password at all: it is locked with `usermod -p '" + lockedPassword + "'`, which sshd still lets past on a key, and no password will ever authenticate it",
@@ -26,7 +26,7 @@ func Grants(class providerkit.Class) []Grant {
 	if held.group != "" {
 		grants = append(grants, Grant{
 			Name:   "membership of the " + held.group + " group",
-			Detail: "root on this machine under another name wherever a daemon listens on the " + held.group + " socket: anything in the group can start a container that mounts / and writes anywhere, so a deploy login that can talk to that socket is a login that can become root. Ocel takes it because a deploy is containers and there is no smaller grant that runs them, and " + daemonBehind(items),
+			Detail: "root on this machine under another name wherever a daemon listens on the " + held.group + " socket: anything in the group can start a container that mounts / and writes anywhere, so a deploy login that can talk to that socket is a login that can become root. Ocel takes it because a deploy is containers and there is no smaller grant that runs them, and the daemon behind that socket is the one bootstrap installs, from the script at " + dockerSource + " run as root, and left serving. A destroy takes the login and leaves the engine and every container on it standing",
 		})
 	}
 	if !under(items, sudoersRoot) {
@@ -35,7 +35,7 @@ func Grants(class providerkit.Class) []Grant {
 			Detail: "a bootstrap writes " + held.name + " nothing under " + sudoersRoot + ", and every root-owned path below stands as root's",
 		})
 	}
-	if helper := written(items, recordsHelper); helper.Kind == KindFile {
+	if helper := written(items, KindFile, recordsHelper); helper.Name != "" {
 		grants = append(grants, Grant{
 			Name:   "runs " + helper.Name,
 			Detail: fmt.Sprintf("root's own file at %04o: %s executes it to compare-and-set records under its own tier, and cannot write the helper itself", helper.Mode, held.name),
@@ -55,9 +55,9 @@ func Grants(class providerkit.Class) []Grant {
 }
 
 func sealing(items []Item, class providerkit.Class, held login) []Grant {
-	fragment := written(items, sudoersSeal)
-	key := written(items, SealKeyPath(class))
-	if fragment.Kind != KindFile || key.Kind != KindSealKey {
+	fragment := written(items, KindFile, sudoersSeal)
+	key := written(items, KindSealKey, SealKeyPath(class))
+	if fragment.Name == "" || key.Name == "" {
 		return nil
 	}
 	return []Grant{{
@@ -72,16 +72,9 @@ func sealing(items []Item, class providerkit.Class, held login) []Grant {
 	}}
 }
 
-func daemonBehind(items []Item) string {
-	if written(items, dockerEngine).Kind != KindEngine {
-		return "it creates the group where the host carries none, so a host that gains a daemon later hands the login that same root"
-	}
-	return "the daemon behind that socket is the one bootstrap installs, from the script at " + dockerSource + " run as root, and left serving. A destroy takes the login and leaves the engine and every container on it standing"
-}
-
-func written(items []Item, name string) Item {
+func written(items []Item, kind, name string) Item {
 	for _, item := range items {
-		if item.Name == name {
+		if item.Kind == kind && item.Name == name {
 			return item
 		}
 	}

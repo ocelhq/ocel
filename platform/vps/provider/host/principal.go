@@ -85,7 +85,7 @@ elif [ "$(printf '%s' "$line" | cut -d: -f2)" = ` + quoted(lockedPassword) + ` ]
 else password=unlocked
 fi
 sum=$(printf 'shell=%s\nhome=%s\ngroup=%s\npassword=%s\n' "$(printf '%s' "$entry" | cut -d: -f7)" "$(printf '%s' "$entry" | cut -d: -f6)" "$held" "$password" | sha256sum | cut -d' ' -f1)
-printf '%s\t%s\t%s\t%s\t%s\n' ` + quoted(KindUser) + ` ` + quoted(l.name) + ` 0 ` + quoted(l.name) + ` "$sum"
+` + reports(quoted(KindUser), quoted(l.name), "0", quoted(l.name), `"$sum"`) + `
 fi`
 }
 
