@@ -83,7 +83,7 @@ func written(items []Item, kind, name string) Item {
 
 func under(items []Item, root string) bool {
 	for _, item := range items {
-		if item.Name == root || strings.HasPrefix(item.Name, root+"/") {
+		if beneath(root, item.Name) {
 			return true
 		}
 	}
