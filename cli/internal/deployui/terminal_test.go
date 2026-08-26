@@ -179,8 +179,8 @@ func TestColoredLiveRowFitsTheTerminal(t *testing.T) {
 		app := appStage(1)
 		r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 			{Id: app, Title: "a-long-application-name"},
-		}, Final: true})
-		r.Progress(app, progressv1.Phase_PHASE_UPLOADING, "uploading a great many static assets", 1, nil)
+		}})
+		r.Progress(app, "uploading a great many static assets", 1, nil)
 		_ = r.Close()
 
 		for _, line := range strings.Split(out.String(), "\n") {
