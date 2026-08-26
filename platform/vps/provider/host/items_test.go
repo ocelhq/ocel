@@ -1,0 +1,187 @@
+package host
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
+)
+
+const aKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample bootstrap@laptop"
+
+func TestTheClassTierIsRootsAndTheStateTierIsTheDeployPrincipalsAlone(t *testing.T) {
+	t.Parallel()
+
+	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"))
+	owners := map[string]string{}
+	for _, item := range items {
+		owners[item.Name] = item.Owner
+	}
+	for name, want := range map[string]string{
+		classRoot:                               rootOwner,
+		ClassDir(providerkit.ClassProduction):   rootOwner,
+		helperRoot:                              rootOwner,
+		recordsHelper:                           rootOwner,
+		stateRoot:                               deployUser,
+		sshDir:                                  deployUser,
+		authorizedKeys:                          deployUser,
+		StateDir(providerkit.ClassProduction):   deployUser,
+		RecordsDir(providerkit.ClassProduction): deployUser,
+	} {
+		if owners[name] != want {
+			t.Errorf("%s is written to %q, want %q: a path with two owners is a path with none", name, owners[name], want)
+		}
+	}
+}
+
+func TestThePrincipalIsWrittenBeforeAnythingItOwns(t *testing.T) {
+	t.Parallel()
+
+	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"))
+	account := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindUser })
+	if account < 0 {
+		t.Fatal("nothing in the item set creates the deploy principal")
+	}
+	for i, item := range items {
+		if item.Owner == deployUser && i < account {
+			t.Errorf("%s is written before %s exists, and install names an owner the host does not hold", item.ID(), deployUser)
+		}
+	}
+}
+
+func TestTheDeployKeysAreTheOnesTheItemCarries(t *testing.T) {
+	t.Parallel()
+
+	keys := []byte(aKey + "\n")
+	var written Item
+	for _, item := range Items(providerkit.ClassProduction, keys) {
+		if item.Name == authorizedKeys {
+			written = item
+		}
+	}
+	if string(written.Content) != string(keys) {
+		t.Errorf("%s is written with %q, want the keys the deploy login answers to", authorizedKeys, written.Content)
+	}
+	if written.Mode != 0o600 {
+		t.Errorf("%s is written at %04o, want a mode sshd will read", authorizedKeys, written.Mode)
+	}
+}
+
+func TestKeysNamedByPathAreReadFromItAndTidied(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "id_ed25519.pub")
+	if err := os.WriteFile(path, []byte("# a comment\n\n  "+aKey+"  \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	keys, err := (Keys{Path: path}).named()
+	if err != nil {
+		t.Fatalf("named() = %v", err)
+	}
+	if string(keys) != aKey+"\n" {
+		t.Errorf("named() = %q, want the key alone so that what stands can be compared to what would be written", keys)
+	}
+}
+
+func TestKeysNamedByAPathThatHoldsNoneAreRefused(t *testing.T) {
+	t.Parallel()
+
+	empty := filepath.Join(t.TempDir(), "empty.pub")
+	if err := os.WriteFile(empty, []byte("# nothing but a comment\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, path := range map[string]string{
+		"a path nothing wrote": filepath.Join(t.TempDir(), "absent.pub"),
+		"a file with no key":   empty,
+	} {
+		if _, err := (Keys{Path: path}).named(); err == nil {
+			t.Errorf("named() of %s succeeded, and a deploy login with no key answers to nobody", name)
+		}
+	}
+}
+
+func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatStandsIsKept(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	keys := []byte(aKey + "\n")
+	fresh := planFor(planned(Reading{Class: class, Keys: keys, Observed: map[string]string{}}), principal().ID())
+	if fresh.Action != providerkit.ActionCreate {
+		t.Errorf("a host with no %s plans %q, want it created", deployUser, fresh.Action)
+	}
+
+	standing := Reading{Class: class, Keys: keys, Observed: digests(Items(class, keys))}
+	if kept := planFor(planned(standing), principal().ID()); kept.Action != providerkit.ActionKeep {
+		t.Errorf("a host whose principal stands as ocel writes it plans %q, want it kept", kept.Action)
+	}
+	for _, change := range planned(standing) {
+		if change.Action != providerkit.ActionKeep {
+			t.Errorf("%s plans %q over a host that stands as ocel wrote it", change.Name, change.Action)
+		}
+	}
+}
+
+func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := Items(class, []byte(aKey+"\n"))
+	moved := Reading{Class: class, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(stood)}
+	for _, change := range planned(moved) {
+		want := providerkit.ActionKeep
+		if change.Name == authorizedKeys {
+			want = providerkit.ActionUpdate
+		}
+		if change.Action != want {
+			t.Errorf("%s plans %q after the deploy key moved, want %q", change.Name, change.Action, want)
+		}
+	}
+}
+
+func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T) {
+	t.Parallel()
+
+	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	keys := []byte(aKey + "\n")
+	held := digests(Items(production, keys))
+
+	alone := removing(Reading{Class: production, Keys: keys, Observed: held}, Reading{Class: preview, Observed: map[string]string{}})
+	taken := slices.IndexFunc(alone, func(r removal) bool { return r.kind == KindUser && r.path == deployUser })
+	if taken < 0 {
+		t.Fatal("destroying the last class leaves the deploy principal behind, and a login nothing uses is a login nobody revokes")
+	}
+	if state := slices.IndexFunc(alone, func(r removal) bool { return r.path == stateRoot }); state > taken {
+		t.Error("the principal is removed before its home, and userdel over a home ocel still holds is a home nothing owns")
+	}
+
+	beside := digests(Items(preview, keys))
+	shared := removing(Reading{Class: production, Keys: keys, Observed: held}, Reading{Class: preview, Keys: keys, Observed: beside})
+	for _, r := range shared {
+		if r.kind == KindUser {
+			t.Error("destroying one class takes the deploy principal a standing sibling still deploys as")
+		}
+	}
+}
+
+func planFor(changes []providerkit.Change, id string) providerkit.Change {
+	for _, change := range changes {
+		if change.Kind+" "+change.Name == id {
+			return change
+		}
+	}
+	return providerkit.Change{}
+}
+
+func TestTheAccountFactsCarryEveryFieldTheWriteSets(t *testing.T) {
+	t.Parallel()
+
+	facts := string(principal().Content)
+	for _, want := range []string{deployShell, stateRoot, dockerGroup, "locked"} {
+		if !strings.Contains(facts, want) {
+			t.Errorf("the account digest reads %q, which says nothing about %q, so drift there would never re-plan", facts, want)
+		}
+	}
+}

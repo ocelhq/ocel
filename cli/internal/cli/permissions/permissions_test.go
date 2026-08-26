@@ -48,12 +48,17 @@ func TestPermissionsNeedsATier(t *testing.T) {
 func TestPermissionsTierArg(t *testing.T) {
 	t.Parallel()
 
-	got, err := tierArg([]string{"deploy"})
-	if err != nil {
-		t.Fatalf("tierArg err = %v", err)
-	}
-	if got != contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY {
-		t.Errorf("tierArg = %v, want the deploy tier", got)
+	for typed, want := range map[string]contractv1.CredentialTier{
+		"deploy":    contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY,
+		"bootstrap": contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP,
+	} {
+		got, err := tierArg([]string{typed})
+		if err != nil {
+			t.Fatalf("tierArg(%q) err = %v", typed, err)
+		}
+		if got != want {
+			t.Errorf("tierArg(%q) = %v, want %v", typed, got, want)
+		}
 	}
 	if _, err := tierArg([]string{"admin"}); err == nil || !strings.Contains(err.Error(), `"admin"`) {
 		t.Errorf("tierArg err = %v, want it to name what was typed", err)
@@ -76,6 +81,21 @@ func TestRunPermissions(t *testing.T) {
 		}
 		if strings.Contains(stdout.String(), "AWS credentials") {
 			t.Errorf("stdout = %q, want a lone group to print pipeable, without its heading", stdout.String())
+		}
+	})
+
+	t.Run("it writes the bootstrap document when the bootstrap tier is asked for", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+
+		var stdout, stderr bytes.Buffer
+		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP, &stdout, &stderr); err != nil {
+			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "CREDENTIAL_TIER_BOOTSTRAP") {
+			t.Errorf("stdout = %q, want the bootstrap tier's document", stdout.String())
 		}
 	})
 

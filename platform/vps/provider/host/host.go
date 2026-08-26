@@ -13,18 +13,24 @@ import (
 type Dial func(ctx context.Context) (*session.Session, error)
 
 type Host struct {
-	dial Dial
+	dial   Dial
+	deploy Keys
 
 	elevating sync.Mutex
 	settled   bool
 	elevation string
+
+	holding sync.Mutex
+	held    []byte
 
 	mu        sync.Mutex
 	principal string
 	tiers     map[providerkit.Class]bool
 }
 
-func New(dial Dial) *Host { return &Host{dial: dial, tiers: map[providerkit.Class]bool{}} }
+func New(dial Dial, deploy Keys) *Host {
+	return &Host{dial: dial, deploy: deploy, tiers: map[providerkit.Class]bool{}}
+}
 
 func (h *Host) holds(ctx context.Context, class providerkit.Class) (bool, error) {
 	h.mu.Lock()
@@ -132,18 +138,23 @@ func (h *Host) refuse(what string, result session.Result) error {
 }
 
 func (h *Host) Install(ctx context.Context, item Item) error {
-	_, err := h.run(ctx, "write "+item.ID(), item.command(), item.Content)
+	_, err := h.run(ctx, "write "+item.ID(), item.command(), item.stdin())
 	return err
 }
 
-func (h *Host) Remove(ctx context.Context, path string) error {
-	_, err := h.run(ctx, "remove "+path, "rm -rf "+quoted(path), nil)
+func (h *Host) Remove(ctx context.Context, kind, name string) error {
+	if kind == KindUser {
+		_, err := h.run(ctx, "remove "+kind+" "+name, "userdel "+quoted(name), nil)
+		return err
+	}
+	_, err := h.run(ctx, "remove "+name, "rm -rf "+quoted(name), nil)
 	return err
 }
 
 type Reading struct {
 	Class    providerkit.Class
 	Present  bool
+	Keys     []byte
 	Stamp    Stamp
 	Observed map[string]string
 }
@@ -156,7 +167,7 @@ func (r Reading) standing(kind, path string) bool {
 }
 
 func (r Reading) settled() bool {
-	items := Items(r.Class)
+	items := Items(r.Class, r.Keys)
 	if !r.Present || r.Stamp.State != StateComplete || !r.Stamp.records(items) {
 		return false
 	}
@@ -169,14 +180,13 @@ func (r Reading) settled() bool {
 }
 
 func (h *Host) Read(ctx context.Context, class providerkit.Class) (Reading, error) {
-	items := Items(class)
-	paths := make([]string, 0, len(items)+1)
-	for _, item := range items {
-		paths = append(paths, item.Name)
+	keys, err := h.keys(ctx)
+	if err != nil {
+		return Reading{}, err
 	}
-	paths = append(paths, StampPath(class))
+	items := Items(class, keys)
 
-	rendered, err := h.run(ctx, "survey what "+string(class)+" holds", survey(paths), nil)
+	rendered, err := h.run(ctx, "survey what "+string(class)+" holds", survey(items, StampPath(class)), nil)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -185,7 +195,7 @@ func (h *Host) Read(ctx context.Context, class providerkit.Class) (Reading, erro
 		return Reading{}, err
 	}
 
-	read := Reading{Class: class, Observed: observed}
+	read := Reading{Class: class, Keys: keys, Observed: observed}
 	if _, stamped := observed[KindFile+" "+StampPath(class)]; !stamped {
 		return read, nil
 	}
@@ -218,10 +228,17 @@ func (h *Host) Stamp(ctx context.Context, class providerkit.Class, stamp Stamp) 
 	return h.Install(ctx, item)
 }
 
-func survey(paths []string) string {
-	var script strings.Builder
+func survey(items []Item, also ...string) string {
+	var accounts, script strings.Builder
 	script.WriteString("for p in")
-	for _, path := range paths {
+	for _, item := range items {
+		if item.Kind == KindUser {
+			accounts.WriteString(accountSurvey(item.Name) + "\n")
+			continue
+		}
+		script.WriteString(" " + quoted(item.Name))
+	}
+	for _, path := range also {
 		script.WriteString(" " + quoted(path))
 	}
 	script.WriteString(`; do
@@ -229,7 +246,7 @@ if [ -d "$p" ]; then printf '%s\t%s\t%s\t%s\t\n' ` + quoted(KindDir) + ` "$p" "$
 elif [ -f "$p" ]; then printf '%s\t%s\t%s\t%s\t%s\n' ` + quoted(KindFile) + ` "$p" "$(stat -c %a "$p")" "$(stat -c %U "$p")" "$(sha256sum "$p" | cut -d' ' -f1)"
 fi
 done`)
-	return script.String()
+	return accounts.String() + script.String()
 }
 
 func readSurvey(rendered string) (map[string]string, error) {

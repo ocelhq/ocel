@@ -58,7 +58,7 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 }
 
 func planned(read Reading) []providerkit.Change {
-	items := Items(read.Class)
+	items := Items(read.Class, read.Keys)
 	changes := make([]providerkit.Change, 0, len(items))
 	for _, item := range items {
 		change := providerkit.Change{Kind: item.Kind, Name: item.Name, Action: providerkit.ActionCreate}
@@ -89,7 +89,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err != nil {
 		return err
 	}
-	items := Items(req.Class)
+	items := Items(req.Class, standing.Keys)
 	for _, item := range items {
 		if shown.current(item) && !standing.current(item) {
 			return providerkit.Refuse(providerkit.CodeInvalid,
@@ -110,7 +110,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err := b.host.Stamp(ctx, req.Class, stamp); err != nil {
 		return err
 	}
-	if err := b.write(ctx, standing, StorageItems(req.Class), report); err != nil {
+	if err := b.write(ctx, standing, StorageItems(req.Class, standing.Keys), report); err != nil {
 		return err
 	}
 	stamp.State = StateComplete
@@ -171,7 +171,7 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 		return err
 	}
 	for _, removal := range removals {
-		if err := b.host.Remove(ctx, removal.path); err != nil {
+		if err := b.host.Remove(ctx, removal.kind, removal.path); err != nil {
 			return err
 		}
 		say(report, "removed "+removal.kind+" "+removal.path)
@@ -190,24 +190,29 @@ func (b Bootstrapper) removals(ctx context.Context, class providerkit.Class) ([]
 	if err != nil {
 		return nil, err
 	}
-	beside := other(class)
-	sibling, err := b.host.Read(ctx, beside)
+	sibling, err := b.host.Read(ctx, other(class))
 	if err != nil {
 		return nil, err
 	}
+	return removing(read, sibling), nil
+}
+
+func removing(read, sibling Reading) []removal {
+	beside := sibling.Class
 	last := !sibling.standing(KindDir, ClassDir(beside)) && !sibling.standing(KindDir, StateDir(beside))
 
 	ordered := []removal{
-		{KindDir, StateDir(class), "every record ocel holds for this class on this host, and nothing writes them again"},
+		{KindDir, StateDir(read.Class), "every record ocel holds for this class on this host, and nothing writes them again"},
 	}
 	if last {
 		ordered = append(ordered,
 			removal{KindDir, stateRoot, ""},
+			removal{KindUser, deployUser, "the login every deploy onto this host runs as"},
 			removal{KindFile, recordsHelper, ""},
 			removal{KindDir, helperRoot, ""},
 		)
 	}
-	ordered = append(ordered, removal{KindDir, ClassDir(class),
+	ordered = append(ordered, removal{KindDir, ClassDir(read.Class),
 		"the stamp that says what this host carries, taken last so an interrupted destroy leaves a host that still says what it is"})
 	if last {
 		ordered = append(ordered, removal{KindDir, classRoot, ""})
@@ -219,7 +224,7 @@ func (b Bootstrapper) removals(ctx context.Context, class providerkit.Class) ([]
 			standing = append(standing, candidate)
 		}
 	}
-	return standing, nil
+	return standing
 }
 
 func other(class providerkit.Class) providerkit.Class {

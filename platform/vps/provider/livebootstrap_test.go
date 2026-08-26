@@ -14,14 +14,24 @@ import (
 
 func (vm machine) ssh(t *testing.T, command string) string {
 	t.Helper()
+	return vm.sshAs(t, vm.user, command)
+}
+
+func (vm machine) sshAs(t *testing.T, login, command string) string {
+	t.Helper()
+	rendered, err := vm.attempt(login, command)
+	if err != nil {
+		t.Fatalf("ssh %s@%s %q: %v", login, vm.addr, command, err)
+	}
+	return rendered
+}
+
+func (vm machine) attempt(login, command string) (string, error) {
 	rendered, err := exec.Command("ssh",
 		"-F", vm.config, "-i", vm.key,
 		"-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
-		vm.user+"@"+vm.addr, command).Output()
-	if err != nil {
-		t.Fatalf("ssh %q: %v", command, err)
-	}
-	return string(rendered)
+		login+"@"+vm.addr, command).Output()
+	return string(rendered), err
 }
 
 func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
@@ -61,8 +71,10 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		"/etc/ocel/production",
 		"/var/lib/ocel/production",
 		"/var/lib/ocel/production/records",
+		"/var/lib/ocel/.ssh/authorized_keys",
 		"/usr/local/lib/ocel",
 		"/usr/local/lib/ocel/records",
+		deployLogin,
 	} {
 		if planned := planFor(group, want); planned.Action != providerkit.ActionCreate {
 			t.Errorf("Plan() shows %s as %q, want it created", want, planned.Action)
@@ -83,7 +95,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if stamp.Writer != "live-suite" {
 		t.Errorf("the stamp reads writer %q, want the writer that applied it", stamp.Writer)
 	}
-	for _, item := range host.Items(class) {
+	for _, item := range host.Items(class, nil) {
 		if stamp.Digests[item.ID()] == "" {
 			t.Errorf("the stamp carries no digest for %s, and nothing can say whether it drifted", item.ID())
 		}
@@ -91,6 +103,10 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if owner := strings.TrimSpace(vm.ssh(t, "stat -c %U /etc/ocel/production")); owner != "root" {
 		t.Errorf("/etc/ocel/production is owned by %q, want root: the class tier is root's alone", owner)
 	}
+	if owner := strings.TrimSpace(vm.ssh(t, "stat -c %U /var/lib/ocel/production/records")); owner != deployLogin {
+		t.Errorf("the record tier is owned by %q, want %s: it is the deploy login's alone", owner, deployLogin)
+	}
+	standsAsDecided(t, vm)
 
 	standing, err := bootstrapper.Describe(ctx, class)
 	if err != nil {
@@ -139,6 +155,9 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		if left := strings.TrimSpace(vm.ssh(t, "test -e "+path+" && echo standing || echo gone")); left != "gone" {
 			t.Errorf("%s is %s after Remove(), and a destroy leaves no bytes behind", path, left)
 		}
+	}
+	if left := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); left != "" {
+		t.Errorf("%s still stands as %q after Remove(), and a login nothing deploys as is a login nobody revokes", deployLogin, left)
 	}
 	if err := bootstrapper.Remove(ctx, class, nil); err != nil {
 		t.Errorf("a second Remove() = %v, want an already-forgotten target to be a no-op", err)

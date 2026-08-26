@@ -16,6 +16,11 @@ export interface VpsSshTarget {
 export interface VpsProviderOptions {
   /** The machine to deploy onto: a `Host` alias from ssh_config, or the destination spelled out. */
   ssh: string | VpsSshTarget;
+  /**
+   * The public key the `ocel-deploy` login is to answer to, as a path. Omit it and
+   * bootstrap mirrors the keys the login it bootstraps with already answers to.
+   */
+  deployKey?: string;
 }
 
 /** Declares a VPS as the provider `ocel deploy` provisions into. */

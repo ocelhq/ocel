@@ -19,7 +19,8 @@ import (
 const Vendor providerkit.Vendor = "vps"
 
 type Options struct {
-	SSH Target `json:"ssh"`
+	SSH       Target `json:"ssh"`
+	DeployKey string `json:"deployKey"`
 }
 
 type Target struct {
@@ -131,7 +132,7 @@ func NewProvider(options Options) *Provider {
 		artifacts: fake.NewArtifacts(),
 		sealer:    fake.NewSealer(),
 	}
-	p.host = host.New(p.Session)
+	p.host = host.New(p.Session, host.Keys{Path: options.DeployKey})
 	p.records = host.NewRecords(p.host)
 	return p
 }
