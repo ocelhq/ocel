@@ -96,6 +96,8 @@ ssh_authorized_keys:
 ssh_pwauth: false
 packages:
   - openssh-server
+runcmd:
+  - [ usermod, -p, '*', $SSH_USER ]
 EOF
     incus start "$name"
     local addr
