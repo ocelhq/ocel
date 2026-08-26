@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -139,25 +140,47 @@ func saysWhatItWouldChange(t *testing.T, provider contractv1connect.ProviderServ
 	scope := &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW}
 
 	drawn := bootstrapStream(t, provider, &contractv1.BootstrapRequest{Tier: scope.GetTier(), Dry: true})
-	if drawn.plan == nil {
-		t.Fatal("a dry bootstrap emitted no plan envelope, so nothing on the wire says what the run would change")
-	}
-	if drawn.worked {
-		t.Error("a dry bootstrap reported work in progress, and a dry run changes nothing")
-	}
-
 	applied := bootstrapStream(t, provider, scope)
-	if applied.plan == nil {
-		t.Error("a bootstrap emitted no plan envelope, and consent is attached to the plan the run showed")
-	}
-	if !applied.worked {
-		t.Error("a bootstrap emitted no progress, so the run is silent between its plan and its result")
+	for _, fault := range faults(drawn, applied) {
+		t.Error(fault)
 	}
 }
 
+func faults(drawn, applied streamed) []string {
+	var found []string
+	if drawn.plan == nil {
+		found = append(found, "a dry bootstrap emitted no plan envelope, so nothing on the wire says what the run would change")
+	}
+	if drawn.worked() {
+		found = append(found, "a dry bootstrap reported work in progress, and a dry run changes nothing")
+	}
+	if applied.plan == nil {
+		found = append(found, "a bootstrap emitted no plan envelope, and consent is attached to the plan the run showed")
+	}
+	if !applied.progress {
+		found = append(found, "a bootstrap reported no progress, so the run is silent between its plan and its result")
+	}
+	return found
+}
+
 type streamed struct {
-	plan   *planv1.ChangePlan
-	worked bool
+	plan     *planv1.ChangePlan
+	progress bool
+	logged   bool
+}
+
+func (s streamed) worked() bool { return s.progress || s.logged }
+
+func (s *streamed) observe(event *progressv1.OperationEvent) {
+	if shown := event.GetPlan(); shown != nil {
+		s.plan = shown
+	}
+	if event.GetProgress() != nil {
+		s.progress = true
+	}
+	if event.GetLog() != nil {
+		s.logged = true
+	}
 }
 
 func bootstrapStream(t *testing.T, provider contractv1connect.ProviderServiceClient, req *contractv1.BootstrapRequest) streamed {
@@ -172,12 +195,7 @@ func bootstrapStream(t *testing.T, provider contractv1connect.ProviderServiceCli
 	var seen streamed
 	for stream.Receive() {
 		event := stream.Msg()
-		if shown := event.GetPlan(); shown != nil {
-			seen.plan = shown
-		}
-		if event.GetProgress() != nil || event.GetLog() != nil {
-			seen.worked = true
-		}
+		seen.observe(event)
 		if result := event.GetResult(); result != nil && !result.GetSuccess() {
 			t.Fatalf("Bootstrap() failed with %q", result.GetError())
 		}
