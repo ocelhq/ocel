@@ -205,3 +205,5 @@ examples/next-cache-lab/*
 !examples/next-cache-lab/package.json
 
 /bootstrap
+
+mise.local.toml

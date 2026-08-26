@@ -1,0 +1,50 @@
+name: gobuildcache
+description: Remote Go build cache (S3) via GOCACHEPROG. Skips itself until the bucket and credentials are configured.
+
+inputs:
+  bucket:
+    description: S3 bucket holding the cache
+    default: ""
+  region:
+    description: AWS region of the bucket
+    default: ""
+  access-key-id:
+    description: AWS access key scoped to the cache bucket
+    default: ""
+  secret-access-key:
+    description: AWS secret key scoped to the cache bucket
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Enable remote Go build cache
+      if: inputs.bucket != '' && inputs.region != '' && inputs.access-key-id != '' && inputs.secret-access-key != ''
+      shell: bash
+      env:
+        BUCKET: ${{ inputs.bucket }}
+        REGION: ${{ inputs.region }}
+        ACCESS_KEY_ID: ${{ inputs.access-key-id }}
+        SECRET_ACCESS_KEY: ${{ inputs.secret-access-key }}
+      run: |
+        set -euo pipefail
+        version=1.7.0
+        case "$(uname -m)" in
+          x86_64) arch=amd64 sha=03f28d6b0153d7d74fa750661dde175120c5c280f5eecc7b41502844a3148e50 ;;
+          aarch64|arm64) arch=arm64 sha=769d772963125dab9aaaef55acc403ce01984cc7780850a59ef365f1e2f47f51 ;;
+          *) echo "::warning::gobuildcache: unsupported arch $(uname -m), building without remote cache"; exit 0 ;;
+        esac
+        dir="$RUNNER_TEMP/gobuildcache"
+        mkdir -p "$dir"
+        curl -fsSL --retry 3 -o "$dir/gobuildcache.tar.gz" \
+          "https://github.com/richardartoul/gobuildcache/releases/download/v${version}/gobuildcache_${version}_linux_${arch}.tar.gz"
+        echo "$sha  $dir/gobuildcache.tar.gz" | sha256sum -c -
+        tar -xzf "$dir/gobuildcache.tar.gz" -C "$dir"
+        {
+          echo "GOCACHEPROG=$dir/gobuildcache"
+          echo "GOBUILDCACHE_BACKEND_TYPE=s3"
+          echo "GOBUILDCACHE_S3_BUCKET=$BUCKET"
+          echo "GOBUILDCACHE_AWS_REGION=$REGION"
+          echo "GOBUILDCACHE_AWS_ACCESS_KEY_ID=$ACCESS_KEY_ID"
+          echo "GOBUILDCACHE_AWS_SECRET_ACCESS_KEY=$SECRET_ACCESS_KEY"
+        } >> "$GITHUB_ENV"
