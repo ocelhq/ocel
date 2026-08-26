@@ -61,12 +61,21 @@ func planned(read Reading) []providerkit.Change {
 	items := Items(read.Class, read.Keys)
 	changes := make([]providerkit.Change, 0, len(items))
 	for _, item := range items {
-		change := providerkit.Change{Kind: item.Kind, Name: item.Name, Action: providerkit.ActionCreate}
+		change := providerkit.Change{
+			Kind:   item.Kind,
+			Name:   item.Name,
+			Action: providerkit.ActionCreate,
+			Reason: item.Note,
+			Slow:   item.Slow,
+		}
 		switch {
 		case read.current(item):
 			change.Action, change.Reason = providerkit.ActionKeep, reasonStanding
 		case read.standing(item.Kind, item.Name):
-			change.Action, change.Reason = providerkit.ActionUpdate, "not as this ocel writes it"
+			change.Action = providerkit.ActionUpdate
+			if change.Reason == "" {
+				change.Reason = "not as this ocel writes it"
+			}
 		}
 		changes = append(changes, change)
 	}
@@ -128,6 +137,9 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	}
 	held := Reading{Class: req.Class, Present: true, Seal: minted.Seal, Stamp: standing.Stamp}
 	if err := held.adopting(); err != nil {
+		return err
+	}
+	if err := b.write(ctx, standing, EngineItems(), report); err != nil {
 		return err
 	}
 	stamp.State, stamp.Seal = StateComplete, minted.Seal

@@ -26,7 +26,7 @@ func Grants(class providerkit.Class) []Grant {
 	if held.group != "" {
 		grants = append(grants, Grant{
 			Name:   "membership of the " + held.group + " group",
-			Detail: "root on this machine under another name wherever a daemon listens on the " + held.group + " socket: anything in the group can start a container that mounts / and writes anywhere, so a deploy login that can talk to that socket is a login that can become root. Ocel takes it because a deploy is containers and there is no smaller grant that runs them, and it creates the group where the host carries none, so a host that gains a daemon later hands the login that same root",
+			Detail: "root on this machine under another name wherever a daemon listens on the " + held.group + " socket: anything in the group can start a container that mounts / and writes anywhere, so a deploy login that can talk to that socket is a login that can become root. Ocel takes it because a deploy is containers and there is no smaller grant that runs them, and " + daemonBehind(items),
 		})
 	}
 	if !under(items, sudoersRoot) {
@@ -70,6 +70,13 @@ func sealing(items []Item, class providerkit.Class, held login) []Grant {
 		Detail: fmt.Sprintf("root's own at %04o, minted from this machine's own randomness and never off it: %s can ask the helper to seal and to open, and cannot read the %s key either does it with. A key is minted once per class and ocel rotates it for nobody — what it sealed, it alone opens, and `ocel destroy` takes it with the class",
 			key.Mode, held.name, SealAlgorithm),
 	}}
+}
+
+func daemonBehind(items []Item) string {
+	if written(items, dockerEngine).Kind != KindEngine {
+		return "it creates the group where the host carries none, so a host that gains a daemon later hands the login that same root"
+	}
+	return "the daemon behind that socket is the one bootstrap installs, from the script at " + dockerSource + " run as root, and left serving. A destroy takes the login and leaves the engine and every container on it standing"
 }
 
 func written(items []Item, name string) Item {

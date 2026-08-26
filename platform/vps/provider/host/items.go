@@ -54,6 +54,8 @@ type Item struct {
 	Owner   string
 	Content []byte
 	Class   providerkit.Class
+	Slow    bool
+	Note    string
 }
 
 func ClassItems(class providerkit.Class) []Item {
@@ -80,7 +82,7 @@ func StorageItems(class providerkit.Class, keys []byte) []Item {
 }
 
 func Items(class providerkit.Class, keys []byte) []Item {
-	return append(ClassItems(class), StorageItems(class, keys)...)
+	return append(append(ClassItems(class), StorageItems(class, keys)...), EngineItems()...)
 }
 
 func dir(name string, mode fs.FileMode, owner string) Item {
@@ -106,10 +108,29 @@ func (i Item) command() string {
 		return deployLogin().command()
 	case KindSealKey:
 		return i.mint()
+	case KindEngine:
+		return engineCommand()
+	case KindUnit:
+		return unitCommand()
 	case KindDir:
 		return fmt.Sprintf("install -d -m %04o -o %s -g %s %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
 	default:
 		return fmt.Sprintf("install -m %04o -o %s -g %s /dev/stdin %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
+	}
+}
+
+func (i Item) probe() string {
+	switch i.Kind {
+	case KindUser:
+		return deployLogin().survey()
+	case KindSealKey:
+		return sealSurvey(i)
+	case KindEngine:
+		return engineProbe()
+	case KindUnit:
+		return unitProbe()
+	default:
+		return ""
 	}
 }
 
