@@ -123,6 +123,27 @@ func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 	}
 }
 
+func TestTheHostRemovesNothingItCannotNameAsAPathItWrote(t *testing.T) {
+	t.Parallel()
+
+	stood := machine(nil)
+	held := stood.host()
+	for name, taken := range map[string]struct{ kind, path string }{
+		"the engine every container on the host needs": {KindEngine, dockerEngine},
+		"the unit that starts it":                      {KindUnit, dockerUnit},
+		"a name rooted at nothing":                     {KindDir, "docker"},
+	} {
+		err := held.Remove(context.Background(), taken.kind, taken.path)
+		var refusal providerkit.Refusal
+		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			t.Errorf("Remove(%s) = %v, want a refusal: rm -rf is not the fallback for anything ocel was not asked about", name, err)
+		}
+	}
+	if ran := stood.commands(); len(ran) != 0 {
+		t.Errorf("Remove() ran %q over a host, and what ocel never wrote it never takes", ran)
+	}
+}
+
 func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	t.Parallel()
 
