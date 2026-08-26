@@ -99,6 +99,30 @@ func TestADestroyThatLandedIsNotReportedAsFailedBecauseTheConnectionWentAfterIt(
 	}
 }
 
+func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
+	t.Parallel()
+
+	class, beside := providerkit.ClassProduction, providerkit.ClassPreview
+	truncated := func(class providerkit.Class) Item {
+		return Item{Kind: KindFile, Name: StampPath(class), Mode: 0o644, Owner: rootOwner, Content: []byte(`{"schema": 2, "sta`)}
+	}
+	stood := machine(map[providerkit.Class][]Item{
+		class:  append(Items(class, []byte(aKey+"\n")), truncated(class)),
+		beside: {truncated(beside)},
+	})
+
+	bootstrapper := Bootstrap(stood.host())
+	if _, err := bootstrapper.PlanRemoval(context.Background(), class); err != nil {
+		t.Fatalf("PlanRemoval() = %v over a host an apply left half-written, and no verb can clear it if destroy cannot read it", err)
+	}
+	if err := bootstrapper.Remove(context.Background(), class, nil); err != nil {
+		t.Fatalf("Remove() = %v over a host an apply left half-written", err)
+	}
+	if stood.took(quoted(ClassDir(class))) < 0 {
+		t.Errorf("Remove() left %s standing:\n%s", ClassDir(class), strings.Join(stood.taking(), "\n"))
+	}
+}
+
 func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	t.Parallel()
 
