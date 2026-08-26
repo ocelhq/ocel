@@ -30,7 +30,7 @@ func engineItem() Item {
 		Owner:   rootOwner,
 		Content: []byte(engineFact),
 		Slow:    true,
-		Note:    "the install script at " + dockerSource + ", downloaded and run as root: deploys onto this host pull images and run them, and a docker binary with no " + dockerUnit + " behind it is not an engine this ocel can start",
+		Note:    "runs the install script at " + dockerSource + " as root",
 	}
 }
 
@@ -41,7 +41,7 @@ func unitItem() Item {
 		Owner:   rootOwner,
 		Content: []byte(unitFacts),
 		Slow:    true,
-		Note:    "started now and at every boot, because an engine that is installed and not serving deploys nothing",
+		Note:    "started now and at every boot",
 	}
 }
 

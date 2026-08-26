@@ -60,23 +60,23 @@ type Item struct {
 
 func ClassItems(class providerkit.Class) []Item {
 	return []Item{
-		dir(classRoot, 0o755, rootOwner),
-		dir(ClassDir(class), 0o755, rootOwner),
+		dir(classRoot, 0o755, rootOwner, "ocel's config root"),
+		dir(ClassDir(class), 0o755, rootOwner, "config for this class"),
 	}
 }
 
 func StorageItems(class providerkit.Class, keys []byte) []Item {
 	return []Item{
-		dir(helperRoot, 0o755, rootOwner),
-		{Kind: KindFile, Name: recordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript},
-		{Kind: KindFile, Name: SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript},
+		dir(helperRoot, 0o755, rootOwner, "ocel's helper scripts"),
+		{Kind: KindFile, Name: recordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript, Note: "reads and writes deploy records"},
+		{Kind: KindFile, Name: SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript, Note: "seals and opens secret values"},
 		principal(),
-		{Kind: KindFile, Name: sudoersSeal, Mode: 0o440, Owner: rootOwner, Content: sealSudoers()},
-		dir(stateRoot, 0o750, stateOwner),
-		dir(sshDir, 0o700, stateOwner),
-		{Kind: KindFile, Name: authorizedKeys, Mode: 0o600, Owner: stateOwner, Content: keys},
-		dir(StateDir(class), 0o750, stateOwner),
-		dir(RecordsDir(class), 0o750, stateOwner),
+		{Kind: KindFile, Name: sudoersSeal, Mode: 0o440, Owner: rootOwner, Content: sealSudoers(), Note: "lets " + deployUser + " run the seal helper as root"},
+		dir(stateRoot, 0o750, stateOwner, "deploy state root"),
+		dir(sshDir, 0o700, stateOwner, "the deploy account's ssh login"),
+		{Kind: KindFile, Name: authorizedKeys, Mode: 0o600, Owner: stateOwner, Content: keys, Note: "the keys allowed to deploy"},
+		dir(StateDir(class), 0o750, stateOwner, "state for this class"),
+		dir(RecordsDir(class), 0o750, stateOwner, "records of what is deployed"),
 		sealKey(class),
 	}
 }
@@ -85,8 +85,8 @@ func Items(class providerkit.Class, keys []byte) []Item {
 	return append(append(ClassItems(class), StorageItems(class, keys)...), EngineItems()...)
 }
 
-func dir(name string, mode fs.FileMode, owner string) Item {
-	return Item{Kind: KindDir, Name: name, Mode: mode, Owner: owner}
+func dir(name string, mode fs.FileMode, owner string, note string) Item {
+	return Item{Kind: KindDir, Name: name, Mode: mode, Owner: owner, Note: note}
 }
 
 func (i Item) ID() string { return i.Kind + " " + i.Name }

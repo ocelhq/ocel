@@ -44,7 +44,7 @@ func (l login) described() []byte {
 
 func principal() Item {
 	held := deployLogin()
-	return Item{Kind: KindUser, Name: held.name, Owner: held.name, Content: held.described()}
+	return Item{Kind: KindUser, Name: held.name, Owner: held.name, Content: held.described(), Note: "the account deploys log in as"}
 }
 
 func (l login) joined(flag string) string {
