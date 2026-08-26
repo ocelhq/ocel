@@ -62,10 +62,11 @@ type deployRun struct {
 	plan     DeployPlan
 	stages   deployStages
 
-	front edge.Edge
-	stack edge.EdgeStack
-	store stackStore
-	state EdgeStackState
+	front    edge.Edge
+	stack    edge.EdgeStack
+	store    stackStore
+	state    EdgeStackState
+	wildcard Wildcard
 
 	values    values.Store
 	scope     values.Scope
@@ -203,6 +204,7 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		r.wildcard = wildcard
 		if len(hosts) > 0 || wildcard.BaseDomain != "" {
 			return nil
 		}
@@ -247,11 +249,23 @@ func (r *deployRun) rememberProject(ctx context.Context) error {
 }
 
 func (r *deployRun) reconcileEdge(ctx context.Context) error {
+	program, err := edgeProgramFor(ctx, r.provider, r.front, EdgeProgramRequest{
+		Class:             r.plan.Class,
+		Slug:              r.plan.Slug,
+		Env:               r.plan.Env,
+		PreviewBaseDomain: r.globalPreview(),
+		Apps:              r.appNames(),
+	})
+	if err != nil {
+		return err
+	}
 	spec := edge.StackSpec{
 		Version: stackVersion,
 		Class:   r.plan.Class,
 		Slug:    r.plan.Slug,
 		Domains: r.hostnames(),
+		Program: program.Spec,
+		Values:  program.Values,
 	}
 	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
 	if err != nil {
@@ -259,6 +273,23 @@ func (r *deployRun) reconcileEdge(ctx context.Context) error {
 	}
 	r.stack = stack
 	return r.checkpoint(ctx)
+}
+
+func (r *deployRun) globalPreview() string {
+	if r.plan.Class != ClassPreview || len(r.hostnames()) > 0 {
+		return ""
+	}
+	return r.wildcard.BaseDomain
+}
+
+func (r *deployRun) appNames() []string {
+	names := make([]string, 0, len(r.plan.Apps))
+	for _, entry := range r.plan.Apps {
+		if name := strings.ToLower(strings.TrimSpace(entry.App)); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func (r *deployRun) hostnames() []string {
@@ -273,6 +304,9 @@ func (r *deployRun) hostnames() []string {
 
 func (r *deployRun) checkpoint(ctx context.Context) error {
 	r.state.Edge = r.stack.State()
+	if r.plan.Class == ClassPreview {
+		r.state.Edge.GlobalPreview = r.globalPreview()
+	}
 	return r.store.write(ctx, r.state)
 }
 

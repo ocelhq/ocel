@@ -290,6 +290,7 @@ var (
 	_ providerkit.MembraneSource    = MembraneSource{}
 	_ providerkit.DeployPreflighter = DeployPreflighter{}
 	_ providerkit.Certifier         = (*Provider)(nil)
+	_ providerkit.EdgeProgrammer    = (*Provider)(nil)
 )
 
 const Membrane = "fake-membrane"

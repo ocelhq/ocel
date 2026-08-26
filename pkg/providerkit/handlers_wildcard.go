@@ -131,12 +131,21 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 	}
 
 	report.Say("Reconciling the shared preview entry on " + wildcard)
+	program, err := edgeProgramFor(ctx, w.provider, front, EdgeProgramRequest{
+		Class:             ClassPreview,
+		PreviewBaseDomain: base,
+	})
+	if err != nil {
+		return err
+	}
 	published, err := front.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{
 		BaseDomain:  base,
 		Certificate: w.held.Settled.Certificate.ID,
 		GrammarMin:  edge.PreviewGrammarMin,
 		GrammarMax:  edge.PreviewGrammarMax,
 		Warn:        report.Detail,
+		Program:     program.Spec,
+		Values:      program.Values,
 	})
 	if err != nil {
 		return err

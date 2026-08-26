@@ -30,6 +30,39 @@ type CodeEmbedder interface {
 	EmbedCode(ctx context.Context, function string, artifact ArtifactRef, report Reporter) error
 }
 
+type EdgeProgramRequest struct {
+	Class             Class
+	Kind              edge.Kind
+	Slug              string
+	Env               string
+	PreviewBaseDomain string
+	Apps              []string
+}
+
+type EdgeProgram struct {
+	Spec   *edge.ProgramSpec
+	Values map[string]string
+}
+
+type EdgeProgrammer interface {
+	EdgeProgram(ctx context.Context, req EdgeProgramRequest) (EdgeProgram, error)
+}
+
+func edgeProgramFor(ctx context.Context, provider Provider, front edge.Edge, req EdgeProgramRequest) (EdgeProgram, error) {
+	if !front.Facts().RunsCode {
+		return EdgeProgram{}, nil
+	}
+	programmer, programs := provider.(EdgeProgrammer)
+	if !programs {
+		return EdgeProgram{}, Refuse(CodeNotReady,
+			"the %s edge answers every request from an entry worker it runs, and this provider builds no program for that worker to run: "+
+				"raising the surface here would leave nothing behind it, so deploy through an edge this provider programs instead",
+			front.Kind())
+	}
+	req.Kind = front.Kind()
+	return programmer.EdgeProgram(ctx, req)
+}
+
 type DeployPreflight struct {
 	Plan      DeployPlan
 	Edge      edge.Kind
