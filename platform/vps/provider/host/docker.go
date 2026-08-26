@@ -1,5 +1,7 @@
 package host
 
+import "github.com/ocelhq/ocel/pkg/providerkit"
+
 const (
 	KindEngine = "docker:engine"
 	KindUnit   = "systemd:unit"
@@ -39,6 +41,15 @@ func unitItem() Item {
 		Content: []byte(unitFacts),
 		Slow:    true,
 		Note:    "started now and at every boot, because an engine that is installed and not serving deploys nothing",
+	}
+}
+
+func keptEngine() removal {
+	return removal{
+		kind:   KindEngine,
+		path:   dockerEngine,
+		action: providerkit.ActionKeep,
+		reason: "the engine and every container it runs stay: ocel installed it, and removing ocel is not removing the workloads this host serves",
 	}
 }
 

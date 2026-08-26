@@ -212,7 +212,7 @@ func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 		changes = append(changes, providerkit.Change{
 			Kind:   removal.kind,
 			Name:   removal.path,
-			Action: providerkit.ActionDelete,
+			Action: removal.action,
 			Reason: removal.reason,
 		})
 	}
@@ -232,6 +232,10 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 		return err
 	}
 	for _, removal := range removals {
+		if removal.action != providerkit.ActionDelete {
+			say(report, "kept "+removal.kind+" "+removal.path)
+			continue
+		}
 		if err := b.host.Remove(ctx, removal.kind, removal.path); err != nil {
 			return err
 		}
@@ -244,6 +248,11 @@ type removal struct {
 	kind   string
 	path   string
 	reason string
+	action providerkit.ChangeAction
+}
+
+func taking(kind, path, reason string) removal {
+	return removal{kind: kind, path: path, reason: reason, action: providerkit.ActionDelete}
 }
 
 func (b Bootstrapper) removals(ctx context.Context, class providerkit.Class) ([]removal, error) {
@@ -263,30 +272,36 @@ func removing(read, sibling Reading) []removal {
 	last := !sibling.standing(KindDir, ClassDir(beside)) && !sibling.standing(KindDir, StateDir(beside))
 
 	ordered := []removal{
-		{KindDir, StateDir(read.Class), "every record ocel holds for this class on this host, and nothing writes them again"},
-		{KindSealKey, SealKeyPath(read.Class), "the key every value this class holds was sealed to, and no other machine ever held it: what it sealed, nothing opens again"},
+		taking(KindDir, StateDir(read.Class), "every record ocel holds for this class on this host, and nothing writes them again"),
+		taking(KindSealKey, SealKeyPath(read.Class), "the key every value this class holds was sealed to, and no other machine ever held it: what it sealed, nothing opens again"),
 	}
 	if last {
 		ordered = append(ordered,
-			removal{KindDir, stateRoot, ""},
-			removal{KindUser, deployUser, "the login every deploy onto this host runs as"},
-			removal{KindFile, sudoersSeal, ""},
-			removal{KindFile, recordsHelper, ""},
-			removal{KindFile, SealHelper, ""},
-			removal{KindDir, helperRoot, ""},
+			taking(KindDir, stateRoot, ""),
+			taking(KindUser, deployUser, "the login every deploy onto this host runs as"),
+			taking(KindFile, sudoersSeal, ""),
+			taking(KindFile, recordsHelper, ""),
+			taking(KindFile, SealHelper, ""),
+			taking(KindDir, helperRoot, ""),
 		)
 	}
-	ordered = append(ordered, removal{KindDir, ClassDir(read.Class),
-		"the stamp that says what this host carries, taken last so an interrupted destroy leaves a host that still says what it is"})
+	ordered = append(ordered, taking(KindDir, ClassDir(read.Class),
+		"the stamp that says what this host carries, taken last so an interrupted destroy leaves a host that still says what it is"))
 	if last {
-		ordered = append(ordered, removal{KindDir, classRoot, ""})
+		ordered = append(ordered, taking(KindDir, classRoot, ""))
 	}
 
-	standing := make([]removal, 0, len(ordered))
+	standing := make([]removal, 0, len(ordered)+1)
 	for _, candidate := range ordered {
 		if read.standing(candidate.kind, candidate.path) || sibling.standing(candidate.kind, candidate.path) {
 			standing = append(standing, candidate)
 		}
+	}
+	if len(standing) == 0 {
+		return nil
+	}
+	if read.standing(KindEngine, dockerEngine) || sibling.standing(KindEngine, dockerEngine) {
+		return append([]removal{keptEngine()}, standing...)
 	}
 	return standing
 }

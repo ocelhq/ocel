@@ -182,22 +182,6 @@ func TestTheDocumentSaysWhereTheDaemonTheGroupReachesCameFrom(t *testing.T) {
 	}
 }
 
-func TestDestroyTakesNeitherTheEngineNorTheDaemonWithIt(t *testing.T) {
-	t.Parallel()
-
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
-	keys := []byte(aKey + "\n")
-	held := digests(Items(production, keys))
-	for _, taken := range removing(
-		Reading{Class: production, Keys: keys, Observed: held},
-		Reading{Class: preview, Observed: map[string]string{}},
-	) {
-		if taken.kind == KindEngine || taken.kind == KindUnit {
-			t.Errorf("destroy takes %s %s, and removing ocel from a host must never remove the workloads on it", taken.kind, taken.path)
-		}
-	}
-}
-
 func TestAHostWithNoEngineHasTheInstallPlannedLastAndNamed(t *testing.T) {
 	t.Parallel()
 
@@ -214,6 +198,45 @@ func TestAHostWithNoEngineHasTheInstallPlannedLastAndNamed(t *testing.T) {
 	}
 
 	quickest(t, changes)
+}
+
+func TestDestroyKeepsTheEngineWhicheverClassIsTheLastOne(t *testing.T) {
+	t.Parallel()
+
+	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	keys := []byte(aKey + "\n")
+	standing := Reading{Class: production, Keys: keys, Observed: digests(Items(production, keys))}
+
+	for name, sibling := range map[string]Reading{
+		"the last class on the host": {Class: preview, Observed: map[string]string{}},
+		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys))},
+	} {
+		taken := removing(standing, sibling)
+		kept := removalOf(taken, dockerEngine)
+		if kept.action != providerkit.ActionKeep {
+			t.Errorf("destroying %s plans %s as %q, want it kept: removing ocel never removes the workloads a host runs",
+				name, dockerEngine, kept.action)
+		}
+		if kept.reason == "" {
+			t.Errorf("destroying %s keeps %s and never says why it stays", name, dockerEngine)
+		}
+		for _, r := range taken {
+			if r.action == providerkit.ActionDelete && (r.path == dockerEngine || r.path == dockerUnit) {
+				t.Errorf("destroying %s takes %s, and a host loses the engine every container it runs needs", name, r.path)
+			}
+		}
+	}
+}
+
+func TestAHostCarryingNothingButTheEngineHasNothingToDestroy(t *testing.T) {
+	t.Parallel()
+
+	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	engine := digests(EngineItems())
+	taken := removing(Reading{Class: production, Observed: engine}, Reading{Class: preview, Observed: engine})
+	if len(taken) != 0 {
+		t.Errorf("a machine carrying nothing but docker plans %d removals, want a destroy with nothing to say", len(taken))
+	}
 }
 
 func TestSlowWorkClosesThePlanWhateverOrderTheItemsStandIn(t *testing.T) {
