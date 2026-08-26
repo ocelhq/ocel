@@ -289,6 +289,8 @@ message BootstrapStatus {
   string writer = 7;
 
   bool downgrade = 8;
+
+  bool unfinished = 9;
 }
 
 enum CredentialTier {

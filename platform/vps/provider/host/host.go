@@ -274,6 +274,8 @@ func (r Reading) standing(kind, path string) bool {
 	return held
 }
 
+func (r Reading) unfinished() bool { return r.Present && r.Stamp.State != StateComplete }
+
 func (r Reading) settled() bool {
 	items := Items(r.Class, r.Keys)
 	if !r.Present || r.Stamp.State != StateComplete || !r.Stamp.records(items) {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 type recorder struct {
@@ -266,6 +267,28 @@ func TestAdmitReportsAHealTheCredentialsCannotDo(t *testing.T) {
 	}
 	if !strings.Contains(report.told(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
 		t.Errorf("Admit() said %q, want the provider's own account of why the heal was denied", report.told())
+	}
+}
+
+func TestAnApplyThatNeverFinishedReachesTheCLIAsOneAndReadsAsDrifted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gate, provider := gated(t, "2.0.0")
+	class := providerkit.ClassProduction
+	bootstrapped(t, provider, class, fake.FeatureCache)
+	provider.Bootstrapper().Halfway()
+
+	standing, err := gate.Standing(ctx, class)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !standing.Unfinished {
+		t.Fatal("Standing() reads a half-applied bootstrap as one that finished, so nothing downstream can banner it")
+	}
+	status := providerkit.BootstrapStatusProto(standing, "2.0.0", environmentv1.Tier_TIER_PRODUCTION, standing.Features)
+	if !status.GetUnfinished() {
+		t.Error("the status the CLI is handed says nothing about the apply that never finished")
 	}
 }
 

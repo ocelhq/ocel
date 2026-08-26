@@ -21,6 +21,8 @@ type Bootstrap struct {
 	Present bool
 	Stacks  []BootstrapStack
 
+	Unfinished bool
+
 	Held any
 }
 

@@ -32,9 +32,10 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 		return providerkit.Bootstrap{}, err
 	}
 	return providerkit.Bootstrap{
-		Class:   read.Class,
-		Present: read.Present,
-		Held:    read,
+		Class:      read.Class,
+		Present:    read.Present,
+		Unfinished: read.unfinished(),
+		Held:       read,
 		Stacks: []providerkit.BootstrapStack{{
 			Name:          principal,
 			Present:       read.Present,
@@ -203,7 +204,7 @@ func healable(read Reading) ([]Item, error) {
 			"nothing has bootstrapped the %s class on this host, and heal reasserts what a bootstrap wrote rather than writing one.\nRun `%s`",
 			read.Class, command)
 	}
-	if read.Stamp.State != StateComplete {
+	if read.unfinished() {
 		return nil, providerkit.Refuse(providerkit.CodeDenied,
 			"%s records an apply that never finished, and heal finishes nothing it did not start.\nRun `%s` to plan the work that is left and finish it",
 			StampPath(read.Class), command)
