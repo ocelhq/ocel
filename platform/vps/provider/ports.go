@@ -9,34 +9,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-type bootstrapper struct{}
-
-func (bootstrapper) Catalogue() []providerkit.Feature { return nil }
-
-func (bootstrapper) Describe(_ context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
-	return providerkit.Bootstrap{Class: class}, nil
-}
-
-func (b bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.BootstrapPlan, error) {
-	described, err := b.Describe(ctx, req.Class)
-	if err != nil {
-		return providerkit.BootstrapPlan{}, err
-	}
-	return providerkit.BootstrapPlan{Groups: providerkit.DeriveGroups(described, b.Catalogue(), req)}, nil
-}
-
-func (bootstrapper) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Reporter) error {
-	return nil
-}
-
-func (bootstrapper) PlanRemoval(context.Context, providerkit.Class) (providerkit.BootstrapPlan, error) {
-	return providerkit.BootstrapPlan{}, nil
-}
-
-func (bootstrapper) Remove(context.Context, providerkit.Class, providerkit.Reporter) error {
-	return nil
-}
-
 type releaser struct{}
 
 func (releaser) Provision(context.Context, providerkit.StackPlan, providerkit.Reporter) (providerkit.StackResult, error) {
@@ -115,7 +87,6 @@ func (dns) Open(kind providerkit.DNSKind, _ string) (edge.DNSWriter, error) {
 }
 
 var (
-	_ providerkit.Bootstrapper = bootstrapper{}
 	_ providerkit.Releaser     = releaser{}
 	_ providerkit.Credentials  = credentials{}
 	_ providerkit.EdgeRegistry = edges{}

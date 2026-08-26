@@ -74,6 +74,22 @@ func TestLiveTheMachineAnswersEveryPortTheConformanceSuiteAsks(t *testing.T) {
 	p := live(t).provider(t)
 	defer closing(t, p)
 
+	bootstrapper, err := p.Bootstrap("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+			t.Fatalf("Apply(%s) = %v, want the record tier every port beneath it writes into", class, err)
+		}
+		defer func() {
+			if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+				t.Errorf("Remove(%s) = %v", class, err)
+			}
+		}()
+	}
+
 	conformance.RunPorts(t, p)
 }
 
