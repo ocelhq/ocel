@@ -209,7 +209,7 @@ func (h *Host) Install(ctx context.Context, item Item) error {
 func (h *Host) Remove(ctx context.Context, kind, name string) error {
 	switch kind {
 	case KindUser:
-		_, err := h.run(ctx, "remove "+kind+" "+name, "userdel "+quoted(name), nil)
+		_, err := h.run(ctx, "remove "+kind+" "+name, "userdel -f "+quoted(name), nil)
 		return err
 	case KindDir, KindFile, KindSealKey:
 		if !strings.HasPrefix(name, "/") {
