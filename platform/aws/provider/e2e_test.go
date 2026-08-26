@@ -106,6 +106,7 @@ func repoRoot(t *testing.T) string {
 func build(t *testing.T, module, out, pkg string) {
 	t.Helper()
 	made := exec.Command("go", "build", "-C", module, "-o", out, pkg)
+	made.Env = append(os.Environ(), "GOCACHEPROG=")
 	if rendered, err := made.CombinedOutput(); err != nil {
 		t.Fatalf("go build -C %s -o %s %s: %v\n%s\nthe CLI carries an embedded node bundle: `pnpm install --frozen-lockfile && pnpm --filter ocel build && go generate ./...` in cli/ builds it",
 			module, out, pkg, err, rendered)
