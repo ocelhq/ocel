@@ -87,22 +87,6 @@ func (a account) stackStatus(t *testing.T, name string) string {
 	return string(out.Stacks[0].StackStatus)
 }
 
-func (a account) stackOutput(t *testing.T, stack, key string) string {
-	t.Helper()
-	out, err := cloudformation.NewFromConfig(a.aws).DescribeStacks(context.Background(),
-		&cloudformation.DescribeStacksInput{StackName: aws.String(stack)})
-	if err != nil || len(out.Stacks) == 0 {
-		t.Fatalf("DescribeStacks(%s) = %v", stack, err)
-	}
-	for _, output := range out.Stacks[0].Outputs {
-		if aws.ToString(output.OutputKey) == key {
-			return aws.ToString(output.OutputValue)
-		}
-	}
-	t.Fatalf("stack %s carries no %s output", stack, key)
-	return ""
-}
-
 func (a account) bucketStands(t *testing.T, name string) bool {
 	t.Helper()
 	_, err := s3.NewFromConfig(a.aws).HeadBucket(context.Background(), &s3.HeadBucketInput{Bucket: aws.String(name)})
