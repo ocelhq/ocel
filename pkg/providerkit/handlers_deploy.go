@@ -134,18 +134,18 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		return nil, err
 	}
 	run.stages = deployStages{
-		Setup:     NewRootStage("environment"),
-		Promotion: NewRootStage("promotion"),
+		Setup:     NewUnitStage("environment"),
+		Promotion: NewUnitStage("promotion"),
 		Apps:      map[string]Stage{},
 		AppPhases: map[string]Stage{},
 	}
 	run.stages.Preparing = NewStage(run.stages.Setup, "preparing")
 	run.stages.Uploading = NewStage(run.stages.Setup, "uploading")
 	run.stages.PromotePhase = NewStage(run.stages.Promotion, "promoting")
-	run.stages.Infra = NewRootStage(plan.Infra.String())
+	run.stages.Infra = NewUnitStage(plan.Infra.String())
 	run.stages.InfraPhase = NewStage(run.stages.Infra, "provisioning")
 	for _, entry := range plan.Apps {
-		unit := NewRootStage(entry.App)
+		unit := NewUnitStage(entry.App)
 		run.stages.Apps[entry.App] = unit
 		run.stages.AppPhases[entry.App] = NewStage(unit, "provisioning")
 	}

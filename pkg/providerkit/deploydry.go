@@ -38,7 +38,9 @@ func (r *deployRun) dry(ctx context.Context) (*progressv1.OperationEvent, error)
 	r.sender.send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Plan{Plan: ChangePlanProto(BootstrapPlan{Groups: groups}, r.plan.Slug, string(r.front.Kind()))},
 	})
-	return r.result(edge.Promotion{}, edge.FlipBound{})
+	return &progressv1.OperationEvent{
+		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+	}, nil
 }
 
 func (r *deployRun) planInfra(ctx context.Context, planner Planner) (ChangeGroup, error) {
@@ -80,6 +82,9 @@ func (r *deployRun) planApp(ctx context.Context, planner Planner, entry AppEntry
 		}
 		pack, err := r.pack(ctx, entry, values, report)
 		if err != nil {
+			return err
+		}
+		if err := r.uploadApp(ctx, entry, pack, facts.Routing, report); err != nil {
 			return err
 		}
 		group, err = planner.Plan(ctx, StackPlan{

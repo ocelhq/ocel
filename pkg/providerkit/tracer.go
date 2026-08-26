@@ -3,6 +3,7 @@ package providerkit
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"strconv"
 	"strings"
@@ -60,6 +61,18 @@ func sanitizeMessage(msg string) string {
 
 func NewRootStage(title string) Stage {
 	return Stage{ID: newStageID(), Title: sanitizeTitle(title)}
+}
+
+func NewUnitStage(name string) Stage {
+	title := sanitizeTitle(name)
+	return Stage{ID: UnitStageID(title), Title: title}
+}
+
+func UnitStageID(name string) StageID {
+	sum := sha256.Sum256([]byte("ocel:unit:" + name))
+	var id StageID
+	copy(id[:], sum[:])
+	return id
 }
 
 func NewStage(parent Stage, title string) Stage {

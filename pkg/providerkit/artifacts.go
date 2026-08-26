@@ -164,6 +164,10 @@ func (r *deployRun) put(
 	coordinate.Name = name
 	ref := ArtifactRef{Class: r.plan.Class, Bucket: StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)}
 
+	if r.dryRun {
+		return ref, nil
+	}
+
 	held, err := r.provider.Artifacts().Has(ctx, ref)
 	if err != nil {
 		return ArtifactRef{}, fmt.Errorf("look for %s's artifact: %w", name, err)

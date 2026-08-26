@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/cli/providerui"
+	"github.com/ocelhq/ocel/cli/internal/cli/runui"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
@@ -34,6 +35,7 @@ type previewUpOptions struct {
 	name     string
 	prebuilt bool
 	noUI     bool
+	dry      bool
 }
 
 type previewRmOptions struct {
@@ -158,6 +160,7 @@ func previewUpFlags(cmd *cobra.Command, opts *previewUpOptions) {
 	cmd.Flags().StringVar(&opts.ref, "ref", "", "Deploy the preview for this git `ref` instead of the current branch")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	cmd.Flags().BoolVar(&opts.noUI, "no-ui", false, noUIFlagUsage)
+	cmd.Flags().BoolVar(&opts.dry, "dry", false, "Show what deploying this preview would change, and change nothing")
 }
 
 func previewUpRunE(deps cmddeps.Deps, upOpts *previewUpOptions) func(cmd *cobra.Command, args []string) error {
@@ -191,12 +194,12 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 
-	return providerui.Run(ctx, deps, cfg, "ocel preview up", stdout, func(ctx context.Context, runner *provider.Runner, ui *deployui.Session) error {
+	return runui.Run(ctx, deps, cfg, runui.Spec{Command: "ocel preview up", Dry: opts.dry}, stdout, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		if err := preflightPreviewUp(ctx, deps, runner, cfg, env.GetIdentity(), stdout, stdin); err != nil {
 			return err
 		}
 
-		ui.Building()
+		ui.Building(firstApp(cfg))
 		recovery := gateRecovery{
 			deps:    deps,
 			cfg:     cfg,
@@ -215,23 +218,28 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
+			ui.BuildOK(true)
 			return err
 		}
+		ui.BuildOK(false)
 		if manifest == nil {
 			ui.Finish("Nothing to deploy")
 			return nil
 		}
-		ui.BuildOK()
 
 		req := &contractv1.DeployRequest{
 			Manifest:    manifest,
 			Environment: env,
 			Edge:        edgewire.Selection(cfg),
+			Dry:         opts.dry,
 		}
 
 		var out deployOutcome
 		if err := provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.collect(ui)); err != nil {
 			return err
+		}
+		if opts.dry {
+			return nil
 		}
 
 		if err := recordDeployResult(cfg, manifest, env, "", out.promotionID, out.appURLs); err != nil {
@@ -240,7 +248,6 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		if err := publishServiceMap(cfg, manifest, env, "", out.promotionID, out.links); err != nil {
 			return err
 		}
-		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), out.appURLs, out.urlNote, out.flip, out.links, out.functions)
 		return nil
 	})
 }

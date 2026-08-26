@@ -1,0 +1,14 @@
+{"stagePlan":{"stages":[{"id":"109fd03fbb7894ae","title":"api"},{"id":"109fd03fbb7894ae-building","parentId":"109fd03fbb7894ae","title":"building"}]}}
+{"progress":{"message":"Building api","stageId":"109fd03fbb7894ae-building"}}
+{"log":{"message":"","stageId":"109fd03fbb7894ae-building"}}
+{"log":{"message":"","stageId":"109fd03fbb7894ae-building"}}
+{"log":{"message":"","stageId":"109fd03fbb7894ae-building"}}
+{"log":{"message":"","stageId":"109fd03fbb7894ae-building"}}
+{"spanEnd":{"failed":false,"stageId":"109fd03fbb7894ae-building"}}
+{"stagePlan":{"stages":[{"id":"708759c926464db1","title":"environment"},{"id":"2340ebe595951b0c","parentId":"708759c926464db1","title":"preparing"},{"id":"7e8e68fe7b200b3a","parentId":"708759c926464db1","title":"uploading"},{"id":"e6bbcab7c7512ae0","title":"proto630--infra"},{"id":"20d3a2946e913630","parentId":"e6bbcab7c7512ae0","title":"provisioning"},{"id":"109fd03fbb7894ae","title":"api"},{"id":"bd7f31ff81e3308e","parentId":"109fd03fbb7894ae","title":"provisioning"},{"id":"656123c63947c053","title":"promotion"},{"id":"a7bcf673fc760354","parentId":"656123c63947c053","title":"promoting"}]}}
+{"progress":{"message":"Planning the environment's infrastructure","stageId":"20d3a2946e913630"}}
+{"spanEnd":{"failed":false,"stageId":"20d3a2946e913630"}}
+{"progress":{"message":"Planning api","stageId":"bd7f31ff81e3308e"}}
+{"spanEnd":{"failed":false,"stageId":"bd7f31ff81e3308e"}}
+{"plan":{"edgeKind":"cloudflare","groups":[{"changes":[{"action":"ACTION_KEEP","kind":"stack","name":"proto630--infra","reason":"nothing to do"}],"kind":"stack","name":"proto630--infra"},{"changes":[{"action":"ACTION_CREATE","kind":"aws:iam/role:Role","name":"role-app"},{"action":"ACTION_CREATE","kind":"aws:iam/rolePolicy:RolePolicy","name":"role-app-policy-vars-read"},{"action":"ACTION_CREATE","kind":"aws:iam/rolePolicyAttachment:RolePolicyAttachment","name":"role-app-policy-logs"},{"action":"ACTION_CREATE","kind":"aws:lambda/function:Function","name":"proto630-proto630-api-index-r162e368e"},{"action":"ACTION_CREATE","kind":"aws:lambda/functionUrl:FunctionUrl","name":"fn-index-url"},{"action":"ACTION_CREATE","kind":"aws:lambda/layerVersion:LayerVersion","name":"layer-membrane"}],"kind":"stack","name":"api"},{"changes":[{"action":"ACTION_UPDATE","kind":"edge","name":"cloudflare/edge","reason":"the edge reconciles and promotes once every app is provisioned; resource-level detail unavailable"}],"kind":"edge","name":"cloudflare/edge"}],"subject":"proto630"}}
+{"result":{"headline":"Planned","success":true}}

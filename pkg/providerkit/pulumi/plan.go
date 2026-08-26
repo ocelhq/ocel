@@ -26,13 +26,7 @@ func (a *Adapter) Plan(ctx context.Context, plan providerkit.StackPlan, report p
 	if err != nil {
 		return providerkit.ChangeGroup{}, busy(err, setup)
 	}
-	group := providerkit.ChangeGroup{
-		Kind:    providerkit.StackGroupKind,
-		Name:    plan.Ref.Name.String(),
-		Changes: changes,
-	}
-	group.Action, group.Reason = providerkit.RollUp(group.Changes)
-	return group, nil
+	return enumerated(plan.Ref.Name.String(), changes), nil
 }
 
 func (a *Adapter) PlanDestroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (providerkit.ChangeGroup, error) {
@@ -44,13 +38,17 @@ func (a *Adapter) PlanDestroy(ctx context.Context, ref providerkit.StackRef, rep
 	if err != nil {
 		return providerkit.ChangeGroup{}, busy(err, setup)
 	}
-	group := providerkit.ChangeGroup{
-		Kind:    providerkit.StackGroupKind,
-		Name:    ref.Name.String(),
-		Changes: changes,
+	return enumerated(ref.Name.String(), changes), nil
+}
+
+func enumerated(name string, changes []providerkit.Change) providerkit.ChangeGroup {
+	group := providerkit.ChangeGroup{Kind: providerkit.StackGroupKind, Name: name, Changes: changes}
+	if len(changes) == 0 {
+		group.Action, group.Reason = providerkit.ActionKeep, "nothing to do"
+		return group
 	}
-	group.Action, group.Reason = providerkit.RollUp(group.Changes)
-	return group, nil
+	group.Action, group.Reason = providerkit.RollUp(changes)
+	return group
 }
 
 func (autoEngine) Preview(ctx context.Context, setup Setup, report providerkit.Reporter) ([]providerkit.Change, error) {
@@ -112,10 +110,15 @@ func collectChanges(stream <-chan events.EngineEvent, report providerkit.Reporte
 		defer close(c.done)
 		seen := map[string]bool{}
 		for ev := range stream {
-			if ev.ResourcePreEvent == nil {
+			var m apitype.StepEventMetadata
+			switch {
+			case ev.ResourcePreEvent != nil:
+				m = ev.ResourcePreEvent.Metadata
+			case ev.ResOutputsEvent != nil:
+				m = ev.ResOutputsEvent.Metadata
+			default:
 				continue
 			}
-			m := ev.ResourcePreEvent.Metadata
 			if seen[m.URN] {
 				continue
 			}

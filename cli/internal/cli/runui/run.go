@@ -2,6 +2,7 @@ package runui
 
 import (
 	"context"
+	"encoding/hex"
 	"io"
 	"os"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 type Spec struct {
@@ -26,6 +28,7 @@ type Spec struct {
 type Session struct {
 	r    *Renderer
 	unit string
+	dry  bool
 }
 
 func Run(
@@ -42,7 +45,7 @@ func Run(
 
 	renderer := New(stdout, Resolve(deps, stdout))
 	renderer.Start()
-	session := &Session{r: renderer}
+	session := &Session{r: renderer, dry: spec.Dry}
 
 	err := provider.Drive(ctx, cfg, session.BuildWriter(), session.BuildWriter(), deps.HostTrust, func(runner *provider.Runner) error {
 		return fn(ctx, runner, session)
@@ -51,7 +54,13 @@ func Run(
 		if ctx.Err() != nil {
 			return &exitsig.ExitError{Code: exitsig.InterruptCode}
 		}
-		renderer.Emit(Envelope{Result: &Result{Headline: "Deploy failed", Error: err.Error()}})
+		if !renderer.Concluded() {
+			headline := "Deploy failed"
+			if spec.Dry {
+				headline = "Plan failed"
+			}
+			renderer.Emit(Envelope{Result: &Result{Headline: headline, Error: err.Error()}})
+		}
 		return &exitsig.ExitError{Code: 1}
 	}
 	return nil
@@ -75,6 +84,9 @@ func Resolve(deps cmddeps.Deps, w io.Writer) Config {
 
 func (s *Session) Event(ev *progressv1.OperationEvent) {
 	for _, env := range Envelopes(ev) {
+		if env.Result != nil && env.Result.Success && s.dry {
+			env.Result.Headline = "Planned"
+		}
 		s.r.Emit(env)
 	}
 }
@@ -131,8 +143,12 @@ func (s *Session) Finish(headline string) {
 	s.r.Emit(Envelope{Result: &Result{Success: true, Headline: headline}})
 }
 
-func unitID(app string) string  { return "cli-unit-" + app }
-func buildID(app string) string { return "cli-build-" + app }
+func unitID(app string) string {
+	id := providerkit.UnitStageID(app)
+	return hex.EncodeToString(id[:])
+}
+
+func buildID(app string) string { return unitID(app) + "-building" }
 
 func isTerminal(w io.Writer) bool {
 	f, ok := w.(*os.File)

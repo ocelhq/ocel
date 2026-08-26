@@ -49,6 +49,7 @@ type Renderer struct {
 	start     time.Time
 	ticking   bool
 	stop      chan struct{}
+	concluded bool
 }
 
 func New(w io.Writer, cfg Config) *Renderer {
@@ -80,15 +81,25 @@ func (r *Renderer) Start() {
 	go r.tick(stop)
 }
 
-func (r *Renderer) Suspend() {
+func (r *Renderer) Concluded() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.concluded
+}
+
+func (r *Renderer) suspend() {
 	if !r.ticking {
 		return
 	}
 	close(r.stop)
 	r.ticking = false
 	r.erase()
+}
+
+func (r *Renderer) Suspend() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.suspend()
 }
 
 func (r *Renderer) Note(lines ...string) {
@@ -156,6 +167,11 @@ func (r *Renderer) Emit(env Envelope) {
 	case env.End != nil:
 		r.onEnd(env.End)
 	case env.Result != nil:
+		if r.concluded {
+			return
+		}
+		r.concluded = true
+		r.suspend()
 		r.erase()
 		r.result(env.Result)
 	}
@@ -190,7 +206,7 @@ func (r *Renderer) onEnd(e *StageEnd) {
 func (r *Renderer) flush(phase *node) {
 	unit := r.tree.unitOf(phase.id)
 	name := phase.title
-	if unit != nil && unit != phase && len(unit.children) > 1 {
+	if unit != nil && unit != phase {
 		name = unit.title + pathSep + phase.title
 	} else if unit != nil {
 		name = unit.title

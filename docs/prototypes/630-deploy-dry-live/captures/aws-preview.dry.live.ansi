@@ -1,0 +1,591 @@
+[K[36m⠋[0m Checking credentials[K[36m⠙[0m Checking credentials[K[36m⠹[0m Checking credentials[K[36m⠸[0m Checking credentials[K[36m⠼[0m Checking credentials[K[36m⠴[0m Checking credentials[K[36m⠦[0m Checking credentials[K[36m⠧[0m Checking credentials[K[36m⠇[0m Checking credentials[K[36m⠏[0m Checking credentials[K[36m⠋[0m Checking credentials[K[36m⠙[0m Checking credentials[K[36m⠹[0m Checking credentials[K[36m⠸[0m Checking credentials[K[36m⠼[0m Checking credentials[K[36m⠴[0m Checking credentials[K[36m⠦[0m Checking credentials[K[36m⠧[0m Checking credentials[K[36m⠇[0m Checking credentials[K[36m⠏[0m Checking credentials[K[36m⠋[0m Checking credentials[K[36m⠙[0m Checking credentials[K[36m⠹[0m Checking credentials[K[36m⠸[0m Checking credentials[K[36m⠼[0m Checking credentials[K[36m⠴[0m Checking credentials[K[36m⠦[0m Checking credentials[K[36m⠧[0m Checking credentials[K[36m⠇[0m Checking credentials[K[36m⠏[0m Checking credentials[K[36m⠋[0m Checking credentials[K[36m⠙[0m Checking credentials[K[36m⠹[0m Checking credentials[K[36m⠸[0m Checking credentials[K[36m⠼[0m Checking credentials[K[36m⠴[0m Checking credentials[K[36m⠦[0m Checking credentials[K[36m⠧[0m Checking credentials[K[36m⠇[0m Checking credentials[K[36m⠏[0m Checking credentials[K[36m⠋[0m Checking credentials[K[36m⠙[0m Checking credentials[K[36m⠹[0m Checking credentials[K[36m⠸[0m Checking credentials[K[36m⠼[0m Checking credentials[K[36m⠴[0m Checking credentials[K[36m⠦[0m Checking credentials[K[36m⠧[0m Checking credentials[K[36m⠇[0m Checking credentials[K[36m⠏[0m Checking credentials[K[36m⠋[0m Checking credentials[K[36m⠙[0m Checking credentials[K[36m⠹[0m Checking credentials[KRunning with:
+  AWS         account=363236815301  identity=ndaba@backframe.app  region=us-east-1
+[36m⠋[0m [1mapi[22m  [2m<1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m<1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m<1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m<1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m<1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m<1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m<1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J[36m⠋[0m [1mapi[22m  [2m1s[22m
+    [2mBuilding api[22m
+[2A[J
+[32;1m✓[0;22m [32;1mapi › building[0;22m  [2m1s[22m
+[36m⠋[0m [1mproto630--infra[22m  [2m<1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m<1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m<1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m<1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m<1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m<1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m<1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m1s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m2s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m3s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m4s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m5s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m6s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m7s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m8s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m9s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m9s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m9s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m9s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m9s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m9s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m9s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m9s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m9s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m9s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J[36m⠋[0m [1mproto630--infra[22m  [2m9s[22m
+    [2mPlanning the environment's infrastructure[22m
+[2A[J
+[32;1m✓[0;22m [32;1mproto630--infra › provisioning[0;22m  [2m9s[22m
+[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m<1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m1s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m2s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m3s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m4s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m5s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m6s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m7s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m8s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m9s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m10s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J[36m⠋[0m [1mapi[2m › [22mprovisioning[22m  [2m11s[22m
+    [2mPlanning api[22m
+[2A[J
+[32;1m✓[0;22m [32;1mapi › provisioning[0;22m  [2m12s[22m
+[1mproto630, fronted by the cloudflare edge[22m:
+
+  [2mstack[22m [1mapi[22m
+    [32m+[0m role-app                               [2maws:iam/role:Role[22m
+    [32m+[0m role-app-policy-vars-read              [2maws:iam/rolePolicy:RolePolicy[22m
+    [32m+[0m role-app-policy-logs                   [2maws:iam/rolePolicyAttachment:RolePolicyAttachment[22m
+    [32m+[0m proto630-proto630-api-index-r9cf742d9  [2maws:lambda/function:Function[22m
+    [32m+[0m fn-index-url                           [2maws:lambda/functionUrl:FunctionUrl[22m
+    [32m+[0m layer-membrane                         [2maws:lambda/layerVersion:LayerVersion[22m
+
+  [2medge[22m [1mcloudflare/edge[22m
+    [33m~[0m cloudflare/edge  [2medge[22m[2m  — the edge reconciles and promotes once every app is provisioned; resource-level detail unavailable[22m
+
+6 to create, 1 to update.[2m 1 unchanged.[22m
+
+[32;1m✓ Planned in 34s
+[0m

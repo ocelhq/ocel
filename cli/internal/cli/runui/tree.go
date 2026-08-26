@@ -143,6 +143,9 @@ func (t *tree) log(l *Log) *node {
 		return nil
 	}
 	line := collapseCarriage(l.Line)
+	if strings.TrimSpace(line) == "" && len(phase.body) == 0 {
+		return phase
+	}
 	phase.body = append(phase.body, line)
 	if strings.TrimSpace(line) != "" {
 		phase.live = line
