@@ -574,6 +574,8 @@ message HostTrustRefusal {
   repeated string known_hosts = 7;
 
   string remedy = 8;
+
+  string key_alias = 9;
 }
 
 message HostKey {
