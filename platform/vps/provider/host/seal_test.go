@@ -211,8 +211,8 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 	class := providerkit.ClassProduction
 	items := Items(class, []byte(aKey+"\n"))
 
-	key := written(items, SealKeyPath(class))
-	if key.Kind == "" {
+	key := written(items, KindSealKey, SealKeyPath(class))
+	if key.Name == "" {
 		t.Fatalf("nothing in the item set mints %s, so a bootstrapped host seals nothing", SealKeyPath(class))
 	}
 	if key.Mode != sealKeyMode || key.Owner != rootOwner {
@@ -223,8 +223,8 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 		t.Error("the seal key is written with content from this machine, and a key that leaves the host is no key sealed to it")
 	}
 
-	helper := written(items, SealHelper)
-	if helper.Kind != KindFile || helper.Owner != rootOwner || helper.Mode&0o022 != 0 {
+	helper := written(items, KindFile, SealHelper)
+	if helper.Name == "" || helper.Owner != rootOwner || helper.Mode&0o022 != 0 {
 		t.Errorf("%s is written %04o to %q, and a helper the caller can rewrite is a key the caller can read", SealHelper, helper.Mode, helper.Owner)
 	}
 	if at(items, SealHelper) > at(items, key.Name) {

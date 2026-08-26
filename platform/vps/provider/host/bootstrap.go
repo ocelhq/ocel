@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -79,6 +80,20 @@ func planned(read Reading) []providerkit.Change {
 		}
 		changes = append(changes, change)
 	}
+	return slowLast(changes)
+}
+
+func slowLast(changes []providerkit.Change) []providerkit.Change {
+	slices.SortStableFunc(changes, func(a, b providerkit.Change) int {
+		switch {
+		case a.Slow == b.Slow:
+			return 0
+		case a.Slow:
+			return 1
+		default:
+			return -1
+		}
+	})
 	return changes
 }
 

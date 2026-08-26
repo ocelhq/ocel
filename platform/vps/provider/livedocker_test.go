@@ -11,11 +11,12 @@ import (
 const (
 	engineName = "docker"
 	unitName   = "docker.service"
+	socketName = "docker.socket"
 )
 
 func purged(t *testing.T, vm machine) {
 	t.Helper()
-	vm.ssh(t, "sudo systemctl disable --now docker.socket "+unitName+" >/dev/null 2>&1 || true")
+	vm.ssh(t, "sudo systemctl disable --now "+socketName+" "+unitName+" >/dev/null 2>&1 || true")
 	vm.ssh(t, "sudo DEBIAN_FRONTEND=noninteractive apt-get purge -y "+
 		"docker-ce docker-ce-cli docker-ce-rootless-extras containerd.io docker-buildx-plugin docker-compose-plugin docker.io "+
 		">/dev/null 2>&1 || true")
@@ -113,7 +114,10 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	}
 
 	written := strings.TrimSpace(vm.ssh(t, "stat -c %Y \"$(command -v "+engineName+")\""))
-	vm.ssh(t, "sudo systemctl disable --now docker.socket "+unitName)
+	if held := strings.TrimSpace(vm.ssh(t, "systemctl is-enabled "+socketName+" 2>/dev/null || true")); held == "enabled" {
+		defer vm.ssh(t, "sudo systemctl enable --now "+socketName)
+	}
+	vm.ssh(t, "sudo systemctl disable --now "+socketName+" "+unitName)
 
 	idle, err := bootstrapper.Describe(ctx, class)
 	if err != nil {
@@ -145,5 +149,31 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	}
 	if now := strings.TrimSpace(vm.ssh(t, "stat -c %Y \"$(command -v "+engineName+")\"")); now != written {
 		t.Errorf("the engine binary was written again to start a daemon that was already installed, at %s where it stood at %s", now, written)
+	}
+
+	unitPath := strings.TrimSpace(vm.ssh(t, "systemctl show -p FragmentPath --value "+unitName))
+	if unitPath == "" {
+		t.Fatalf("%s has no fragment on a machine this bootstrap installed docker onto", unitName)
+	}
+	vm.ssh(t, "sudo mv "+unitPath+" "+unitPath+".away && sudo systemctl daemon-reload")
+	defer func() {
+		vm.ssh(t, "sudo mv "+unitPath+".away "+unitPath+" && sudo systemctl daemon-reload")
+		vm.ssh(t, "sudo systemctl enable --now "+unitName)
+	}()
+
+	shimmed, err := bootstrapper.Describe(ctx, class)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reinstalling, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: shimmed.Held})
+	if err != nil {
+		t.Fatalf("Plan() over a docker binary with no unit behind it = %v", err)
+	}
+	shimming := onlyGroup(t, reinstalling)
+	if engine := planFor(shimming, engineName); engine.Action != providerkit.ActionCreate {
+		t.Errorf("a binary with no %s plans %q for the engine, and an apply would enable a unit the machine does not carry, on every run, forever", unitName, engine.Action)
+	}
+	if unit := planFor(shimming, unitName); unit.Action != providerkit.ActionCreate {
+		t.Errorf("a binary with no %s plans %q for the unit, want the install that brings one", unitName, unit.Action)
 	}
 }

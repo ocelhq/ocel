@@ -302,12 +302,17 @@ func survey(items []Item, also ...string) string {
 	for _, path := range also {
 		script.WriteString(" " + quoted(path))
 	}
+	stated, held := `"$(stat -c %a "$p")"`, `"$(stat -c %U "$p")"`
 	script.WriteString(`; do
-if [ -d "$p" ]; then printf '%s\t%s\t%s\t%s\t\n' ` + quoted(KindDir) + ` "$p" "$(stat -c %a "$p")" "$(stat -c %U "$p")"
-elif [ -f "$p" ]; then printf '%s\t%s\t%s\t%s\t%s\n' ` + quoted(KindFile) + ` "$p" "$(stat -c %a "$p")" "$(stat -c %U "$p")" "$(sha256sum "$p" | cut -d' ' -f1)"
+if [ -d "$p" ]; then ` + reports(quoted(KindDir), `"$p"`, stated, held, `''`) + `
+elif [ -f "$p" ]; then ` + reports(quoted(KindFile), `"$p"`, stated, held, `"$(sha256sum "$p" | cut -d' ' -f1)"`) + `
 fi
 done`)
 	return probes.String() + script.String()
+}
+
+func reports(kind, name, mode, owner, sum string) string {
+	return strings.Join([]string{`printf '%s\t%s\t%s\t%s\t%s\n'`, kind, name, mode, owner, sum}, " ")
 }
 
 func readSurvey(rendered string) (map[string]string, Seal, error) {
