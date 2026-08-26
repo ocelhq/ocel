@@ -77,6 +77,7 @@ const (
 type check struct {
 	verdict verdict
 	text    string
+	detail  []string
 	fix     string
 }
 
@@ -319,7 +320,7 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 	spinner.Stop()
 
 	if err != nil && got.problem == "" {
-		got.problem = firstLine(err.Error())
+		got.problem = strings.TrimSpace(err.Error())
 	}
 	return got
 }
@@ -342,6 +343,10 @@ func (a *answers) keep(problems []*contractv1.CredentialProblem) {
 func credentialSections(cfg *projectconfig.Config, got *answers) []section {
 	if got.problem != "" {
 		s := section{name: "Provider", identity: got.pkg}
+		if head, rest, multiline := strings.Cut(got.problem, "\n"); multiline {
+			s.checks = append(s.checks, check{verdict: verdictFail, text: head, detail: strings.Split(rest, "\n")})
+			return []section{s}
+		}
 		head, hint, ok := splitHint(got.problem)
 		if !ok {
 			head, hint = got.problem, got.fix
@@ -458,6 +463,12 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 		return s
 	}
 
+	if status.GetUnfinished() {
+		s.fail("an apply never finished, so nothing recorded is a claim about what stands",
+			"run `ocel bootstrap "+name+"` to plan the work that is left and finish it")
+		return s
+	}
+
 	schemas := fmt.Sprintf("bootstrap schema %d, this CLI speaks schema %d", status.GetSchema(), status.GetRequiredSchema())
 	switch {
 	case status.GetSchema() > status.GetRequiredSchema():
@@ -469,17 +480,28 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 	}
 
 	plan := bootstrap.PlanFor(status)
-	if plan.Empty() {
+	stale := staleStacks(status)
+	if len(plan.Missing) == 0 && len(stale) == 0 {
 		s.pass(fmt.Sprintf("bootstrapped — schema %d, current", status.GetSchema()))
 		return s
 	}
 	if len(plan.Missing) > 0 {
 		s.warn(listText(plan.Missing, "missing"), "run `"+plan.Command(tier)+"`")
 	}
-	if len(plan.Stale) > 0 {
-		s.warn(listText(plan.Stale, "stale"), "run `ocel bootstrap "+name+"` to refresh "+them(len(plan.Stale)))
+	if len(stale) > 0 {
+		s.warn(listText(stale, "stale"), "run `ocel bootstrap "+name+"` to refresh "+them(len(stale)))
 	}
 	return s
+}
+
+func staleStacks(status *contractv1.BootstrapStatus) []string {
+	var out []string
+	for _, stack := range status.GetStacks() {
+		if stack.GetPresent() && !stack.GetDigestCurrent() {
+			out = append(out, stack.GetName())
+		}
+	}
+	return out
 }
 
 func absentText(tier environmentv1.Tier) string {
@@ -616,6 +638,9 @@ func (s section) render(out io.Writer, p paint) {
 			continue
 		}
 		fmt.Fprintf(out, "  %s %s\n", p.glyph(c.verdict), c.text)
+		for _, line := range c.detail {
+			fmt.Fprintf(out, "    %s\n", line)
+		}
 		if c.fix != "" {
 			fmt.Fprintf(out, "    %s %s\n", p.dim.Sprint("→"), p.hint(c.fix))
 		}

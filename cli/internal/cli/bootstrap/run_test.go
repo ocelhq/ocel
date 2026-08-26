@@ -597,57 +597,6 @@ func TestBootstrapCarriesAutoHeal(t *testing.T) {
 	}
 }
 
-func TestRunBootstrapStatus(t *testing.T) {
-	t.Run("it reports both classes", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-
-		var stdout, stderr bytes.Buffer
-		if err := RunStatus(context.Background(), deps, root, StatusOptions{}, &stdout, &stderr); err != nil {
-			t.Fatalf("runBootstrapStatus err = %v; stderr=%s", err, stderr.String())
-		}
-		out := stdout.String()
-		for _, want := range []string{"production: schema 1", "ocel-bootstrap-isr", "ocel-bootstrap-image-optimization", "preview: not bootstrapped"} {
-			if !strings.Contains(out, want) {
-				t.Errorf("stdout missing %q; got:\n%s", want, out)
-			}
-		}
-	})
-
-	t.Run("--check fails on stale content", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		t.Setenv(clitest.FakeBootstrapEnvVar, "stale")
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-
-		var stdout, stderr bytes.Buffer
-		err := RunStatus(context.Background(), deps, root, StatusOptions{Check: true}, &stdout, &stderr)
-		if err == nil {
-			t.Fatalf("--check passed a bootstrap carrying stale content; stdout=%s", stdout.String())
-		}
-		if !strings.Contains(err.Error(), "ocel-bootstrap-isr") {
-			t.Errorf("err = %v, want it to name the stale stack", err)
-		}
-	})
-
-	t.Run("--check passes a bootstrap this build wrote", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-
-		var stdout, stderr bytes.Buffer
-		if err := RunStatus(context.Background(), deps, root, StatusOptions{Check: true}, &stdout, &stderr); err != nil {
-			t.Fatalf("--check = %v, want it to pass; stdout=%s", err, stdout.String())
-		}
-	})
-}
-
 func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 	t.Run("a cloudflare project told to apply nothing is told what its edge pulls in", func(t *testing.T) {
 		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\" },\n")

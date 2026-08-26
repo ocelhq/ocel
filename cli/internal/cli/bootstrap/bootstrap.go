@@ -43,8 +43,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		Short: "Set up the shared infrastructure deploys run on",
 		Long:  "Set up the shared infrastructure deploys run on.",
 		Example: "  $ ocel bootstrap production\n" +
-			"  $ ocel bootstrap preview --features all\n" +
-			"  $ ocel bootstrap status",
+			"  $ ocel bootstrap preview --features all",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
 			return &exitsig.ExitError{Code: 1}
@@ -55,7 +54,6 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		newProvisionCommand(deps, environmentv1.Tier_TIER_PRODUCTION, []string{"prod"}),
 		newProvisionCommand(deps, environmentv1.Tier_TIER_PREVIEW, nil),
 		newDestroyCommand(deps),
-		newStatusCommand(deps),
 	)
 
 	return cmd

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -21,27 +20,6 @@ func describeJournal(t *testing.T) string {
 }
 
 func TestOnlyWhatRendersDependentsPaysForThem(t *testing.T) {
-	t.Run("status reads the bootstrap and nothing that grows with the account", func(t *testing.T) {
-		root, _ := clitest.SetUpDeployFixture(t)
-		t.Setenv(clitest.FakeBootstrapEnvVar, "current")
-		journal := describeJournal(t)
-		deps := clitest.NewDeps()
-		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
-
-		var stdout, stderr bytes.Buffer
-		if err := RunStatus(context.Background(), deps, root, StatusOptions{}, &stdout, &stderr); err != nil {
-			t.Fatalf("runBootstrapStatus err = %v; stderr=%s", err, stderr.String())
-		}
-		got := clitest.ReadJournal(t, journal)
-		if len(got) != 2 {
-			t.Fatalf("the provider was asked %d times, want once per class: %v", len(got), got)
-		}
-		if slices.ContainsFunc(got, func(line string) bool { return strings.Contains(line, "withDependents=true") }) {
-			t.Errorf("status asked %v; it renders no dependent, and reading them costs one query per project in the account", got)
-		}
-	})
-
 	t.Run("bootstrap reads the catalogue, then plans the apply it is about to send", func(t *testing.T) {
 		root, _, deps := clitest.SetUpEdgeFixture(t, "")
 		journal := describeJournal(t)

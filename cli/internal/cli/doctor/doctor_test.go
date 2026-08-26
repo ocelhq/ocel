@@ -266,6 +266,83 @@ func TestRunDoctorWarnsAboutAStaleBootstrap(t *testing.T) {
 	}
 }
 
+func TestRunDoctorFailsAnUnfinishedBootstrap(t *testing.T) {
+	root := healthyProject(t)
+	t.Setenv(clitest.FakeBootstrapEnvVar, "unfinished")
+	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	var stdout, stderr bytes.Buffer
+	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	if code := exitCode(t, err); code != 1 {
+		t.Fatalf("exit code = %d, want an unfinished apply to fail; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	out := rendered(t, stdout.String())
+	for _, want := range []string{
+		"  ✗ an apply never finished, so nothing recorded is a claim about what stands",
+		"    → run `ocel bootstrap production` to plan the work that is left and finish it",
+		"1 problem.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout missing %q; got:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunDoctorWarnsAboutAStaleStackNoFeatureRequires(t *testing.T) {
+	root := healthyProject(t)
+	t.Setenv(clitest.FakeBootstrapEnvVar, "stale-optional")
+	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	var stdout, stderr bytes.Buffer
+	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	if code := exitCode(t, err); code != 0 {
+		t.Fatalf("exit code = %d, want warnings alone to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	out := rendered(t, stdout.String())
+	for _, want := range []string{
+		"  ⚠ ocel-bootstrap-image-optimization is stale",
+		"    → run `ocel bootstrap production` to refresh it",
+		"1 warning.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout missing %q; got:\n%s", want, out)
+		}
+	}
+}
+
+func TestDoctorReadsTheBootstrapAndNothingThatGrowsWithTheAccount(t *testing.T) {
+	root := healthyProject(t)
+	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+	journal := filepath.Join(t.TempDir(), "describe.journal")
+	t.Setenv(clitest.FakeDescribeJournalEnvVar, journal)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), deps, root, &stdout, &stderr); err != nil {
+		t.Fatalf("Run err = %v; stderr=%s", err, stderr.String())
+	}
+	got := clitest.ReadJournal(t, journal)
+	if len(got) != 2 {
+		t.Fatalf("the provider was asked %d times, want once per class: %v", len(got), got)
+	}
+	for _, line := range got {
+		if strings.Contains(line, "withDependents=true") {
+			t.Errorf("doctor asked %v; it renders no dependent, and reading them costs one query per project in the account", got)
+		}
+	}
+}
+
 func TestRunDoctorLeavesAnUnwantedTierAlone(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `

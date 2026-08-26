@@ -15,14 +15,14 @@ func TestE2EFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *testing.T)
 	run := e2e(t)
 	run.forgets(t)
 
-	rendered, err := run.onATerminal(t, []string{"bootstrap", "status"}, trustQuestion, "y")
+	rendered, err := run.onATerminal(t, []string{"doctor"}, trustQuestion, "y")
 	if err != nil {
-		t.Fatalf("`ocel bootstrap status` after the fingerprint was accepted = %v\n%s", err, rendered)
+		t.Fatalf("`ocel doctor` after the fingerprint was accepted = %v\n%s", err, rendered)
 	}
 	if !strings.Contains(rendered, "SHA256:") {
 		t.Errorf("first contact never showed a fingerprint to decide on:\n%s", rendered)
 	}
-	if !strings.Contains(rendered, "production: not bootstrapped") {
+	if !strings.Contains(rendered, "not set up — run `ocel bootstrap production`") {
 		t.Errorf("the accepted key did not re-drive the command it refused:\n%s", rendered)
 	}
 
@@ -43,9 +43,9 @@ func TestE2EAChangedHostKeyIsRefusedOutrightAndNothingIsAsked(t *testing.T) {
 	decoy := run.decoys(t)
 	write(t, run.store, decoy)
 
-	rendered, err := run.onATerminal(t, []string{"bootstrap", "status"}, "", "")
+	rendered, err := run.onATerminal(t, []string{"doctor"}, "", "")
 	if err == nil {
-		t.Fatalf("`ocel bootstrap status` against a changed host key succeeded, and a possible man in the middle passed unremarked:\n%s", rendered)
+		t.Fatalf("`ocel doctor` against a changed host key succeeded, and a possible man in the middle passed unremarked:\n%s", rendered)
 	}
 	for _, want := range []string{"changed", "got", "want", "ssh-keygen -R"} {
 		if !strings.Contains(rendered, want) {

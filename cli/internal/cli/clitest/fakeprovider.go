@@ -523,6 +523,10 @@ func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
 	switch shape {
 	case "stale":
 		status.Stacks[1].DigestCurrent = false
+	case "stale-optional":
+		status.Stacks[2].Present = true
+	case "unfinished":
+		status.Unfinished = true
 	case "missing":
 		status.Stacks[2].Required = true
 	case "ahead":

@@ -311,9 +311,9 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	run.vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
 
 	class := providerkit.ClassProduction
-	fresh := run.must(t, "bootstrap", "status")
-	if !strings.Contains(fresh, "production: not bootstrapped") {
-		t.Fatalf("`ocel bootstrap status` on a machine nothing has written to said:\n%s", fresh)
+	fresh := run.must(t, "doctor")
+	if !strings.Contains(fresh, "not set up — run `ocel bootstrap production`") {
+		t.Fatalf("`ocel doctor` on a machine nothing has written to said:\n%s", fresh)
 	}
 
 	applied := run.must(t, "bootstrap", "production", "--yes")
@@ -325,9 +325,9 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		t.Errorf("the stamp the CLI left reads state %q, want %q", stamped.State, host.StateComplete)
 	}
 
-	standing := run.must(t, "bootstrap", "status")
-	if strings.Contains(standing, "production: not bootstrapped") {
-		t.Fatalf("`ocel bootstrap status` after an apply still calls production unbootstrapped:\n%s", standing)
+	standing := run.must(t, "doctor")
+	if !strings.Contains(standing, "bootstrapped — schema") {
+		t.Fatalf("`ocel doctor` after an apply still calls production unbootstrapped:\n%s", standing)
 	}
 
 	replanned := run.must(t, "bootstrap", "production", "--dry")
@@ -368,9 +368,9 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		}
 	}
 
-	gone := run.must(t, "bootstrap", "status")
-	if !strings.Contains(gone, "production: not bootstrapped") {
-		t.Errorf("`ocel bootstrap status` after a destroy still claims a bootstrap:\n%s", gone)
+	gone := run.must(t, "doctor")
+	if !strings.Contains(gone, "not set up — run `ocel bootstrap production`") {
+		t.Errorf("`ocel doctor` after a destroy still claims a bootstrap:\n%s", gone)
 	}
 	for _, taken := range []string{host.ClassDir(class), host.StateDir(class), filepath.Dir(host.SealHelper)} {
 		if run.vm.stands(t, taken) {
