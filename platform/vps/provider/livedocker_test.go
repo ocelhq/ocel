@@ -12,6 +12,7 @@ const (
 	engineName = "docker"
 	unitName   = "docker.service"
 	socketName = "docker.socket"
+	initScript = "/etc/init.d/" + engineName
 )
 
 func purged(t *testing.T, vm machine) {
@@ -155,11 +156,25 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if unitPath == "" {
 		t.Fatalf("%s has no fragment on a machine this bootstrap installed docker onto", unitName)
 	}
-	vm.ssh(t, "sudo mv "+unitPath+" "+unitPath+".away && sudo systemctl daemon-reload")
+	carrying := []string{unitPath}
+	if held := strings.TrimSpace(vm.ssh(t, "test -f "+initScript+" && echo held || true")); held == "held" {
+		carrying = append(carrying, initScript)
+	}
+	vm.ssh(t, "sudo systemctl stop "+socketName+" "+unitName+" >/dev/null 2>&1 || true")
+	for _, path := range carrying {
+		vm.ssh(t, "sudo mv "+path+" "+path+".away")
+	}
+	vm.ssh(t, "sudo systemctl daemon-reload")
 	defer func() {
-		vm.ssh(t, "sudo mv "+unitPath+".away "+unitPath+" && sudo systemctl daemon-reload")
+		for _, path := range carrying {
+			vm.ssh(t, "sudo mv "+path+".away "+path)
+		}
+		vm.ssh(t, "sudo systemctl daemon-reload")
 		vm.ssh(t, "sudo systemctl enable --now "+unitName)
 	}()
+	if _, err := vm.attempt(vm.user, "systemctl cat "+unitName); err == nil {
+		t.Fatalf("%s still stands with %s moved aside, so a docker binary with no unit behind it cannot be proven on this machine", unitName, strings.Join(carrying, " and "))
+	}
 
 	shimmed, err := bootstrapper.Describe(ctx, class)
 	if err != nil {
