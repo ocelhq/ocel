@@ -120,6 +120,20 @@ func TestReleaserRefusesAPrimitiveNothingServes(t *testing.T) {
 	}
 }
 
+func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
+	t.Parallel()
+
+	_, err := resources.Releaser(fake.NewRecords(), &buckets{}).Plan(context.Background(), providerkit.StackPlan{
+		Ref:       infraRef(),
+		Kind:      providerkit.StackInfra,
+		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.LinkPostgres}},
+	}, nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Plan() of a primitive nothing serves = %v, want the refusal the provision would give", err)
+	}
+}
+
 func TestReleaserRefusesALinkMissingAPropertyItsTypePromises(t *testing.T) {
 	t.Parallel()
 
