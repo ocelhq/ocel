@@ -25,6 +25,11 @@ func runPorts(t *testing.T, suite Suite) {
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider", err)
 	}
+	RunPorts(t, provider)
+}
+
+func RunPorts(t *testing.T, provider providerkit.Provider) {
+	t.Helper()
 
 	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, provider.Records()) })
 	t.Run("Sealer", func(t *testing.T) { RunSealer(t, provider.Sealer()) })

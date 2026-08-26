@@ -1,0 +1,91 @@
+name: VPS Live
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: vps-live-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: vps live conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether this change reaches the VPS provider
+        id: reach
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          run=false
+          while IFS= read -r file; do
+            case "$file" in
+              platform/vps/* | pkg/providerkit/* | platform/edge/contract/* | scripts/incus.sh | .github/workflows/vps-live.yml)
+                run=true
+                break
+                ;;
+            esac
+          done <<< "$changed"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Go
+        if: steps.reach.outputs.run == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: platform/vps/provider/go.mod
+          cache-dependency-path: platform/vps/provider/go.sum
+
+      - name: Virtualisation the qemu driver hard-requires
+        if: steps.reach.outputs.run == 'true'
+        run: |
+          sudo modprobe vhost_vsock || true
+          ls -l /dev/kvm /dev/vsock
+
+      - name: Install incus
+        if: steps.reach.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y incus qemu-system-x86 ovmf
+          sudo incus admin init --auto
+          sudo usermod -aG incus-admin "$(id -un)"
+
+      - name: Run the live conformance suite
+        if: steps.reach.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          sg incus-admin -c "scripts/incus.sh run ocel-live-${GITHUB_RUN_ID} -- go test -C platform/vps/provider -race -count=1 -run '^TestLive' -json ./..." | tee live.json
+
+      - name: Assert the live suite ran
+        if: steps.reach.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          top() { jq -rR --arg action "$1" 'fromjson? | objects | select(.Action == $action and .Test != null and (.Test | startswith("TestLive")) and (.Test | contains("/") | not)) | .Test' live.json | sort -u; }
+          skipped=$(top skip)
+          if [ -n "$skipped" ]; then
+            echo "::error::the live suite skipped, so nothing was proven against a machine:"
+            echo "$skipped"
+            exit 1
+          fi
+          passed=$(top pass)
+          if [ -z "$passed" ]; then
+            echo "::error::no TestLive test ran at all"
+            exit 1
+          fi
+          echo "ran against the VM:"
+          echo "$passed"
