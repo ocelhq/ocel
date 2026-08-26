@@ -27,13 +27,19 @@ func Run(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, comm
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
-	err = provider.Drive(ctx, cfg, provW, provW, func(runner *provider.Runner) error {
+	err = provider.Drive(ctx, cfg, provW, provW, trustFor(deps, ui), func(runner *provider.Runner) error {
 		return fn(ctx, runner, ui)
 	})
 	if err != nil {
 		return fail(ctx, ui, err)
 	}
 	return nil
+}
+
+func trustFor(deps cmddeps.Deps, ui *deployui.Session) provider.Trust {
+	trust := deps.HostTrust
+	trust.Suspend = ui.Suspend
+	return trust
 }
 
 func fail(ctx context.Context, ui *deployui.Session, err error) error {

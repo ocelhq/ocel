@@ -365,7 +365,7 @@ func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, st
 		return err
 	}
 
-	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
+	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
 		client, err := runner.Client()
 		if err != nil {
 			return err

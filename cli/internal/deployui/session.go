@@ -63,6 +63,8 @@ func (s *Session) BuildWriter() io.Writer {
 	return s.r
 }
 
+func (s *Session) Suspend() func() { return s.r.Suspend() }
+
 func (s *Session) Diagnostic(message string) {
 	s.logf("[diagnostic] %s", message)
 	if s.r.format == FormatJSON {

@@ -28,6 +28,8 @@ func isTerminal(v any) bool {
 	return isatty.IsTerminal(f.Fd())
 }
 
+func (p Prompter) Interactive() bool { return p.tty }
+
 type Option struct {
 	Name     string
 	Summary  string

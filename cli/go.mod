@@ -4,7 +4,6 @@ go 1.27.0
 
 require (
 	charm.land/huh/v2 v2.0.3
-	charm.land/lipgloss/v2 v2.0.1
 	connectrpc.com/connect v1.20.0
 	connectrpc.com/validate v0.6.0
 	github.com/creack/pty v1.1.24
@@ -12,10 +11,11 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/mattn/go-isatty v0.0.22
-	github.com/ocelhq/ocel/pkg/channel v0.0.0-00010101000000-000000000000
-	github.com/ocelhq/ocel/pkg/naming v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/pkg/channel v0.0.0
+	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/pkg/providerkit v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/spf13/cobra v1.10.2
 	github.com/zalando/go-keyring v0.2.8
@@ -34,6 +34,7 @@ require (
 	cel.dev/expr v0.25.2 // indirect
 	charm.land/bubbles/v2 v2.0.0 // indirect
 	charm.land/bubbletea/v2 v2.0.2 // indirect
+	charm.land/lipgloss/v2 v2.0.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/air-verse/air v1.65.3 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
@@ -104,5 +105,7 @@ replace github.com/ocelhq/ocel/pkg/channel => ../pkg/channel
 replace github.com/ocelhq/ocel/pkg/proto => ../pkg/proto
 
 replace github.com/ocelhq/ocel/pkg/naming => ../pkg/naming
+
+replace github.com/ocelhq/ocel/pkg/providerkit => ../pkg/providerkit
 
 replace github.com/ocelhq/ocel/platform/edge/contract => ../platform/edge/contract

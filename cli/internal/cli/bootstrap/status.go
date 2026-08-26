@@ -58,7 +58,7 @@ func RunStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts StatusOp
 	}
 
 	var statuses []*contractv1.BootstrapStatus
-	err = provider.Drive(ctx, cfg, stderr, stderr, func(runner *provider.Runner) error {
+	err = provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
 		client, err := runner.Client()
 		if err != nil {
 			return err

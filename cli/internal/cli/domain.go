@@ -218,7 +218,7 @@ func runDomainLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts domain
 		return err
 	}
 
-	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
+	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
 		resp, err := listGlobalPreviewDomain(ctx, deps, runner, cfg, stdout)
 		if err != nil {
 			return err
@@ -454,7 +454,7 @@ func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts do
 	}
 	configured := preflight.Hostnames(cfg, "production")
 
-	return provider.Drive(ctx, cfg, stdout, stderr, func(runner *provider.Runner) error {
+	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
 		if err := preflight.Tier(ctx, deps, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
