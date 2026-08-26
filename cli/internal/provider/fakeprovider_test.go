@@ -93,11 +93,6 @@ func runFakeProvider() int {
 	}
 	defer bound.Close()
 
-	if mode == "legacy-ready" {
-		fmt.Println("OCEL_READY " + channel.FormatUnixAddr(sockPath))
-		select {}
-	}
-
 	mux := http.NewServeMux()
 	path, handler := contractv1connect.NewProviderServiceHandler(&fakeProviderServer{mode: mode})
 	mux.Handle(path, handler)
