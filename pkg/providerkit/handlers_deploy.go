@@ -248,25 +248,60 @@ func (r *deployRun) rememberProject(ctx context.Context) error {
 	return nil
 }
 
+type hostingWorld int
+
+const (
+	hostingProduction hostingWorld = iota
+	hostingGlobalPreview
+	hostingProjectPreview
+)
+
+func (r *deployRun) world() hostingWorld {
+	if r.plan.Class != ClassPreview {
+		return hostingProduction
+	}
+	if r.wildcard.BaseDomain != "" && len(r.hostnames()) == 0 {
+		return hostingGlobalPreview
+	}
+	return hostingProjectPreview
+}
+
 func (r *deployRun) reconcileEdge(ctx context.Context) error {
+	spec := edge.StackSpec{
+		Version:     stackVersion,
+		Class:       r.plan.Class,
+		Slug:        r.plan.Slug,
+		PruneRoutes: true,
+	}
+	var base string
+	switch r.world() {
+	case hostingProduction:
+		spec.Domains = r.hostnames()
+	case hostingGlobalPreview:
+		spec.PruneOnly = true
+	default:
+		if len(r.plan.Apps) == 0 {
+			spec.PruneOnly = true
+			break
+		}
+		resolved, err := r.previewBase()
+		if err != nil {
+			return err
+		}
+		base = resolved
+		spec.Domains = []string{edge.PreviewWildcard(resolved)}
+	}
 	program, err := edgeProgramFor(ctx, r.provider, r.front, EdgeProgramRequest{
 		Class:             r.plan.Class,
 		Slug:              r.plan.Slug,
 		Env:               r.plan.Env,
-		PreviewBaseDomain: r.globalPreview(),
+		PreviewBaseDomain: base,
 		Apps:              r.appNames(),
 	})
 	if err != nil {
 		return err
 	}
-	spec := edge.StackSpec{
-		Version: stackVersion,
-		Class:   r.plan.Class,
-		Slug:    r.plan.Slug,
-		Domains: r.hostnames(),
-		Program: program.Spec,
-		Values:  program.Values,
-	}
+	spec.Program, spec.Values = program.Spec, program.Values
 	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
 	if err != nil {
 		return err
@@ -275,8 +310,28 @@ func (r *deployRun) reconcileEdge(ctx context.Context) error {
 	return r.checkpoint(ctx)
 }
 
+func (r *deployRun) previewBase() (string, error) {
+	var base string
+	for _, host := range r.hostnames() {
+		resolved, wildcard := strings.CutPrefix(host, "*.")
+		if !wildcard {
+			return "", Refuse(CodeInvalid,
+				"this project declares the preview domain %q, which is not a `*.` wildcard: every preview is served on its own subdomain of it, so declare %q instead",
+				host, edge.PreviewWildcard(host))
+		}
+		if base != "" && resolved != base {
+			return "", Refuse(CodeInvalid,
+				"this project declares more than one preview domain (%q and %q): a preview domain is claimed by the whole project, "+
+					"which serves every app from one wildcard, so declare a single project-level domains.preview",
+				edge.PreviewWildcard(base), host)
+		}
+		base = resolved
+	}
+	return base, nil
+}
+
 func (r *deployRun) globalPreview() string {
-	if r.plan.Class != ClassPreview || len(r.hostnames()) > 0 {
+	if r.world() != hostingGlobalPreview {
 		return ""
 	}
 	return r.wildcard.BaseDomain
