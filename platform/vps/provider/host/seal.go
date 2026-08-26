@@ -1,8 +1,11 @@
 package host
 
 import (
+	"context"
 	_ "embed"
+	"encoding/base64"
 	"io/fs"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -28,14 +31,63 @@ func sealKey(class providerkit.Class) Item {
 }
 
 func sealSudoers() []byte {
-	return []byte(deployUser + " ALL=(root) NOPASSWD: " + sealHelper + "\n")
+	return []byte(deployUser + " ALL=(root) NOPASSWD: " + SealHelper + "\n")
 }
 
 func (i Item) mint() string {
 	name := quoted(i.Name)
 	return "if [ -e " + name + " ]; then chown " + rootOwner + ":" + rootOwner + " " + name +
-		" && chmod " + sprintMode(i.Mode) + " " + name +
-		"; else " + quoted(sealHelper) + " " + quoted(string(i.Class)) + " init; fi"
+		" && chmod " + sprintMode(i.Mode) + " " + name + "; else " +
+		`command -v python3 >/dev/null 2>&1 || { echo 'this host carries no python3, and the seal helper reaches its libcrypto for the AES-256-GCM every value is sealed with' >&2; exit 1; }
+` + quoted(SealHelper) + " " + quoted(string(i.Class)) + " init; fi"
+}
+
+type Sealer struct{ host *Host }
+
+func NewSealer(h *Host) *Sealer { return &Sealer{host: h} }
+
+func (s *Sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
+	return s.through(ctx, "seal", at, plaintext)
+}
+
+func (s *Sealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+	return s.through(ctx, "open", at, sealed)
+}
+
+func (s *Sealer) through(ctx context.Context, verb string, at providerkit.Coordinate, body []byte) ([]byte, error) {
+	command, err := sealCommand(verb, at)
+	if err != nil {
+		return nil, err
+	}
+	fed := append([]byte(base64.StdEncoding.EncodeToString(body)), '\n')
+	rendered, err := s.host.run(ctx, verb+" a value at "+at.Name, command, fed)
+	if err != nil {
+		return nil, err
+	}
+	written, err := base64.StdEncoding.DecodeString(strings.TrimSpace(rendered))
+	if err != nil {
+		return nil, providerkit.Refuse(providerkit.CodeDenied,
+			"the seal helper answered a %s with %q, which is no value ocel sealed", verb, rendered)
+	}
+	return written, nil
+}
+
+func sealCommand(verb string, at providerkit.Coordinate) (string, error) {
+	if at.Class == "" {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"%s names no class, and this host mints one seal key per class", at.Name)
+	}
+	command := quoted(SealHelper) + " " + quoted(string(at.Class)) + " " + verb
+	for _, named := range [][2]string{
+		{"project", at.Project},
+		{"env", at.Env},
+		{"folder", at.Folder},
+		{"link", at.Link},
+		{"name", at.Name},
+	} {
+		command += " --" + named[0] + " " + quoted(named[1])
+	}
+	return command, nil
 }
 
 func sealSurvey(item Item) string {
@@ -47,3 +99,5 @@ func sealSurvey(item Item) string {
 		` "$(date -u -d @"$(stat -c %Y ` + name + `)" +%Y-%m-%dT%H:%M:%SZ)"
 fi`
 }
+
+var _ providerkit.Sealer = (*Sealer)(nil)

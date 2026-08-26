@@ -75,7 +75,7 @@ type Provider struct {
 	host      *host.Host
 	records   *host.Records
 	artifacts *fake.Artifacts
-	sealer    *fake.Sealer
+	sealer    *host.Sealer
 	dial      sync.Mutex
 	live      *session.Session
 }
@@ -130,10 +130,10 @@ func NewProvider(options Options) *Provider {
 	p := &Provider{
 		options:   options,
 		artifacts: fake.NewArtifacts(),
-		sealer:    fake.NewSealer(),
 	}
 	p.host = host.New(p.Session, host.Keys{Path: options.DeployKey})
 	p.records = host.NewRecords(p.host)
+	p.sealer = host.NewSealer(p.host)
 	return p
 }
 

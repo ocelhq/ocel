@@ -213,11 +213,11 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 		t.Error("the seal key is written with content from this machine, and a key that leaves the host is no key sealed to it")
 	}
 
-	helper := written(items, sealHelper)
+	helper := written(items, SealHelper)
 	if helper.Kind != KindFile || helper.Owner != rootOwner || helper.Mode&0o022 != 0 {
-		t.Errorf("%s is written %04o to %q, and a helper the caller can rewrite is a key the caller can read", sealHelper, helper.Mode, helper.Owner)
+		t.Errorf("%s is written %04o to %q, and a helper the caller can rewrite is a key the caller can read", SealHelper, helper.Mode, helper.Owner)
 	}
-	if at(items, sealHelper) > at(items, key.Name) {
+	if at(items, SealHelper) > at(items, key.Name) {
 		t.Error("the seal key is minted before the helper that mints it exists")
 	}
 }
@@ -242,7 +242,7 @@ func TestTheDeployLoginIsWhitelistedOnTheHelperAndOnNothingBeside(t *testing.T) 
 		t.Errorf("%s is written %04o to %q, want 0440 to %s or sudo refuses to read it", fragment.Name, fragment.Mode, fragment.Owner, rootOwner)
 	}
 	written := strings.TrimSpace(string(fragment.Content))
-	if want := deployUser + " ALL=(root) NOPASSWD: " + sealHelper; written != want {
+	if want := deployUser + " ALL=(root) NOPASSWD: " + SealHelper; written != want {
 		t.Errorf("the fragment reads %q, want %q: one helper, and no path beside it", written, want)
 	}
 	if at(items, principal().Name) > at(items, fragment.Name) {
@@ -270,6 +270,82 @@ func TestTheSurveyReadsTheKeysFingerprintWithoutReadingTheKey(t *testing.T) {
 	if got := observed[sealKey(class).ID()]; got != sealKey(class).Digest() {
 		t.Errorf("a key standing as ocel minted it surveys as %q, want %q: the bytes of a key are never what says it is current", got, sealKey(class).Digest())
 	}
+}
+
+func TestTheSurveyTheHostRunsAnswersForAKeyThatStandsAndSaysNothingForOneThatDoesNot(t *testing.T) {
+	t.Parallel()
+
+	root := sealDir(t)
+	key := filepath.Join(root, sealClass, "seal.key")
+	item := Item{Kind: KindSealKey, Name: key, Mode: sealKeyMode, Owner: owning(t), Class: providerkit.ClassProduction}
+
+	if rendered := sh(t, t.TempDir(), sealSurvey(item)); strings.TrimSpace(rendered) != "" {
+		t.Fatalf("the survey answered %q where no key stands", rendered)
+	}
+
+	if _, code := sealHelperAt(t, root, "", "init"); code != 0 {
+		t.Fatalf("init exited %d", code)
+	}
+	observed, held, err := readSurvey(sh(t, t.TempDir(), sealSurvey(item)))
+	if err != nil {
+		t.Fatalf("readSurvey() over what the survey script answers = %v", err)
+	}
+	if len(held.Fingerprint) != 64 {
+		t.Errorf("the survey read %q as the key's fingerprint, want a SHA256", held.Fingerprint)
+	}
+	if held.Algorithm != SealAlgorithm {
+		t.Errorf("the survey read the algorithm %q, want %q", held.Algorithm, SealAlgorithm)
+	}
+	if !strings.HasSuffix(held.CreatedAt, "Z") {
+		t.Errorf("the survey read %q as when the key came into being, want a UTC instant", held.CreatedAt)
+	}
+	if got := observed[item.ID()]; got != item.Digest() {
+		t.Errorf("a key standing as ocel minted it surveys as %q, want %q", got, item.Digest())
+	}
+}
+
+func TestWritingAKeyThatStandsReassertsItsPostureAndMintsNothing(t *testing.T) {
+	t.Parallel()
+
+	root := sealDir(t)
+	key := filepath.Join(root, sealClass, "seal.key")
+	if _, code := sealHelperAt(t, root, "", "init"); code != 0 {
+		t.Fatalf("init exited %d", code)
+	}
+	minted, err := os.ReadFile(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stubbed := t.TempDir()
+	for _, name := range []string{"chown", "chmod"} {
+		body := "#!/bin/sh\nprintf '%s\\n' \"$(basename \"$0\") $*\" >>" + quoted(filepath.Join(stubbed, "log")) + "\n"
+		if err := os.WriteFile(filepath.Join(stubbed, name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	item := Item{Kind: KindSealKey, Name: key, Mode: sealKeyMode, Owner: rootOwner, Class: providerkit.ClassProduction}
+	sh(t, stubbed, item.command())
+
+	log := ran(t, stubbed)
+	for _, want := range []string{"chown root:root " + key, "chmod 0400 " + key} {
+		if !strings.Contains(log, want) {
+			t.Errorf("writing a key that stands ran\n%s\nwant it to run %q", log, want)
+		}
+	}
+	again, err := os.ReadFile(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(again) != string(minted) {
+		t.Error("writing a key that stands minted a new one, and every value sealed to the old one went with it")
+	}
+}
+
+func owning(t *testing.T) string {
+	t.Helper()
+	return strings.TrimSpace(sh(t, t.TempDir(), "id -un"))
 }
 
 func TestAReplacedKeyIsDriftThoughEveryPathStillStandsAsItWasWritten(t *testing.T) {
@@ -312,7 +388,7 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 	if index(alone, key.path) > index(alone, ClassDir(production)) {
 		t.Error("the class directory is removed before the key it carries is named, so the confirmation names bytes that are already gone")
 	}
-	for _, singleton := range []string{sealHelper, sudoersSeal} {
+	for _, singleton := range []string{SealHelper, sudoersSeal} {
 		if removalOf(alone, singleton).path == "" {
 			t.Errorf("destroying the last class leaves %s behind", singleton)
 		}
@@ -320,13 +396,58 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 
 	beside := digests(Items(preview, keys))
 	shared := removing(Reading{Class: production, Keys: keys, Observed: held}, Reading{Class: preview, Keys: keys, Observed: beside})
-	for _, singleton := range []string{sealHelper, sudoersSeal} {
+	for _, singleton := range []string{SealHelper, sudoersSeal} {
 		if removalOf(shared, singleton).path != "" {
 			t.Errorf("destroying one class takes %s, which a standing sibling still seals through", singleton)
 		}
 	}
 	if removalOf(shared, SealKeyPath(production)).path == "" {
 		t.Error("destroying one class leaves its own key behind, and a class is what a key is scoped to")
+	}
+}
+
+func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
+	t.Parallel()
+
+	at := providerkit.Coordinate{
+		Project: "shop",
+		Class:   providerkit.ClassProduction,
+		Env:     "*",
+		Folder:  "/apps/web",
+		Link:    "db",
+		Name:    "DATABASE_URL",
+	}
+	command, err := sealCommand("open", at)
+	if err != nil {
+		t.Fatalf("sealCommand() = %v", err)
+	}
+	if !strings.HasPrefix(command, quoted(SealHelper)+" ") {
+		t.Errorf("the provider runs %q, want the helper it installed and nothing beside", command)
+	}
+	if strings.Contains(command, SealKeyPath(at.Class)) {
+		t.Errorf("the provider names the key on the command line: %q", command)
+	}
+	for _, want := range []string{
+		quoted(string(at.Class)), "open",
+		"--project " + quoted(at.Project),
+		"--env " + quoted(at.Env),
+		"--folder " + quoted(at.Folder),
+		"--link " + quoted(at.Link),
+		"--name " + quoted(at.Name),
+	} {
+		if !strings.Contains(command, want) {
+			t.Errorf("the provider runs %q, which carries no %s, so the coordinate would authenticate less than it names", command, want)
+		}
+	}
+}
+
+func TestAValueSealedToNoClassIsRefusedRatherThanSealedToWhateverStands(t *testing.T) {
+	t.Parallel()
+
+	_, err := sealCommand("seal", providerkit.Coordinate{Project: "shop", Name: "DATABASE_URL"})
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("sealing at a coordinate naming no class = %v, want a refusal: a key is minted per class", err)
 	}
 }
 
