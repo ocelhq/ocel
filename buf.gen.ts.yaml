@@ -4,7 +4,6 @@ inputs:
     exclude_paths:
       - proto/common/environment
       - proto/common/progress
-      - proto/devloop
       - proto/provider
 plugins:
   - local: protoc-gen-es

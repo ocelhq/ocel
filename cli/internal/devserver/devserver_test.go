@@ -1,6 +1,7 @@
 package devserver
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,8 +18,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
-	"github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1/watchv1connect"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -387,7 +386,7 @@ func TestSync(t *testing.T) {
 	})
 }
 
-func TestSubscribe(t *testing.T) {
+func TestEnvStream(t *testing.T) {
 	t.Parallel()
 
 	t.Run("receives env pushed after connecting", func(t *testing.T) {
@@ -396,25 +395,15 @@ func TestSubscribe(t *testing.T) {
 		s.PushEnv(map[string]string{"INITIAL": "1"})
 		url := serve(t, s)
 
-		client := watchv1connect.NewDevServiceClient(http.DefaultClient, url)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		stream, err := client.Subscribe(ctx, &watchv1.SubscribeRequest{})
-		if err != nil {
-			t.Fatalf("Subscribe: %v", err)
-		}
-		defer stream.Close()
+		stream := openEnvStream(t, url)
 
-		if !stream.Receive() {
-			t.Fatalf("stream.Receive() (initial) = false, err = %v", stream.Err())
+		if got := readEnvEvent(t, stream)["INITIAL"]; got != "1" {
+			t.Fatalf("initial env INITIAL = %q, want %q", got, "1")
 		}
 
 		s.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"})
 
-		if !stream.Receive() {
-			t.Fatalf("stream.Receive() (update) = false, err = %v", stream.Err())
-		}
-		got := stream.Msg().Env
+		got := readEnvEvent(t, stream)
 		if got["OCEL_RESOURCE_POSTGRES_main"] != "conn" {
 			t.Fatalf("pushed env = %+v, want OCEL_RESOURCE_POSTGRES_main=conn", got)
 		}
@@ -426,20 +415,51 @@ func TestSubscribe(t *testing.T) {
 		s.PushEnv(map[string]string{"FOO": "bar"})
 		url := serve(t, s)
 
-		client := watchv1connect.NewDevServiceClient(http.DefaultClient, url)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		stream, err := client.Subscribe(ctx, &watchv1.SubscribeRequest{})
-		if err != nil {
-			t.Fatalf("Subscribe: %v", err)
-		}
-		defer stream.Close()
-
-		if !stream.Receive() {
-			t.Fatalf("stream.Receive() = false, err = %v", stream.Err())
-		}
-		if got := stream.Msg().Env["FOO"]; got != "bar" {
+		if got := readEnvEvent(t, openEnvStream(t, url))["FOO"]; got != "bar" {
 			t.Fatalf("pushed env FOO = %q, want %q", got, "bar")
 		}
 	})
+}
+
+func openEnvStream(t *testing.T, url string) *bufio.Reader {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/env", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /env: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /env = %s, want 200", resp.Status)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+	}
+	return bufio.NewReader(resp.Body)
+}
+
+func readEnvEvent(t *testing.T, reader *bufio.Reader) map[string]string {
+	t.Helper()
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read event: %v", err)
+		}
+		payload, ok := strings.CutPrefix(strings.TrimRight(line, "\r\n"), "data: ")
+		if !ok {
+			continue
+		}
+		var env map[string]string
+		if err := json.Unmarshal([]byte(payload), &env); err != nil {
+			t.Fatalf("decode event %q: %v", payload, err)
+		}
+		return env
+	}
 }

@@ -2,6 +2,7 @@ package devserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,8 +26,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	watchv1 "github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1"
-	"github.com/ocelhq/ocel/pkg/proto/devloop/watch/v1/watchv1connect"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -166,30 +165,51 @@ func (s *Server) Mux() *http.ServeMux {
 	interceptors := connect.WithInterceptors(validate.NewInterceptor())
 	resourcePath, resourceHandler := resourcesv1connect.NewResourceServiceHandler(s, interceptors)
 	mux.Handle(resourcePath, resourceHandler)
-	devPath, devHandler := watchv1connect.NewDevServiceHandler(s, interceptors)
-	mux.Handle(devPath, devHandler)
 	blobPath, blobHandler := blobv1connect.NewBucketServiceHandler(s.blob, interceptors)
 	mux.Handle(blobPath, blobHandler)
 	mux.HandleFunc("/sync", s.handleSync)
+	mux.HandleFunc("/env", s.handleEnv)
 	return mux
 }
 
 func (s *Server) PushEnv(env map[string]string) {
-	s.fanout.push(&watchv1.EnvUpdate{Env: env})
+	s.fanout.push(env)
 }
 
-func (s *Server) Subscribe(ctx context.Context, _ *watchv1.SubscribeRequest, stream *connect.ServerStream[watchv1.EnvUpdate]) error {
+func (s *Server) handleEnv(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
 	ch := s.fanout.subscribe()
 	defer s.fanout.unsubscribe(ch)
 
+	ctx := r.Context()
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		case update := <-ch:
-			if err := stream.Send(update); err != nil {
-				return err
+			return
+		case env := <-ch:
+			payload, err := json.Marshal(env)
+			if err != nil {
+				return
 			}
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+				return
+			}
+			flusher.Flush()
 		}
 	}
 }
