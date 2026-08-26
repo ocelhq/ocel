@@ -6,6 +6,7 @@ require (
 	charm.land/huh/v2 v2.0.3
 	connectrpc.com/connect v1.20.0
 	connectrpc.com/validate v0.6.0
+	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/creack/pty v1.1.24
 	github.com/evanw/esbuild v0.28.1
 	github.com/fatih/color v1.18.0
@@ -47,7 +48,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.2 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260205113103-524a6607adb8 // indirect
-	github.com/charmbracelet/x/ansi v0.11.6 // indirect
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-isatty"
 	"golang.org/x/term"
 )
@@ -63,9 +64,5 @@ func truncateToWidth(s string, width int) string {
 	if limit < 1 {
 		limit = 1
 	}
-	runes := []rune(s)
-	if len(runes) <= limit {
-		return s
-	}
-	return string(runes[:limit])
+	return ansi.Truncate(s, limit, "")
 }
