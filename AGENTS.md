@@ -124,4 +124,5 @@ Edit the right-hand column to match whatever vocabulary you actually use.
 
 ### Review rules
 
-The rules every change is reviewed against. See `.greptile/rules.md`.
+`.greptile/rules.md` is the set of gates every change must pass. A rule finding is
+fixed or escalated to the human — those are the only two dispositions.

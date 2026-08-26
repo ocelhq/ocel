@@ -6,6 +6,20 @@ Every change is reviewed against these rules. Flat set, no precedence — except
 Each rule states the target behaviour, then the signals that fail it. Cite the rule name
 in a finding.
 
+## Disposition
+
+These rules are decisions already made, not review opinions. A finding that cites a
+rule has exactly two dispositions:
+
+- **Fix** — change the code until the rule passes, then re-review.
+- **Escalate** — stop and hand the finding to the human, quoting the rule and why
+  the code cannot satisfy it.
+
+Waiving, downgrading, or arguing a rule finding inside a diff is outside the
+implementer's authority. Disagreement with a rule is a PR against this file, decided
+by a human — never a judgment call made mid-change. A change is complete only when
+review returns zero open rule findings or the human has ruled on every escalation.
+
 ---
 
 ## Blast radius
