@@ -20,9 +20,6 @@ message OperationEvent {
   }
 }
 
-// The phase a stage stands for. Canonical phase names live in `pkg/naming`, and a
-// phase's id is the digest of the (unit, phase) canonical name pair, so both sides of
-// the stream derive the same id without exchanging it.
 enum Phase {
   PHASE_UNSPECIFIED = 0;
   PHASE_UPLOADING = 1;
@@ -32,33 +29,13 @@ enum Phase {
   PHASE_BUILDING = 5;
 }
 
-// A node of the run's stage tree.
-//
-// The tree is app-major, and depth alone says what a node is: a parentless stage is a
-// unit, a child of a unit is a phase, anything deeper is detail inside that phase's
-// block. There is no role enum, because a declared role could disagree with the tree
-// and become a second source of truth. Events attach at phase depth or deeper, never
-// at a unit.
-//
-// Unit and phase ids are the first 8 bytes of a sha256 over the length-prefixed
-// canonical name of the unit, and over the length-prefixed (unit, phase) pair, so the
-// CLI and the provider derive identical ids for the same stage without either telling
-// the other. Detail nodes below phase depth have one producer and may mint their ids
-// at random. `title` is free presentation, split from identity: no consumer recomputes
-// an id from it.
-//
-// Declaration is additive, imminent and required: a unit is declared when the run
-// commits to it, a phase when its unit reaches it, and detail needs no declaration.
-// The plan is never final — more stages may arrive at any point until the run ends.
-//
-// Because ids are derived and not exchanged, two producers may name the same stage:
-// the CLI declares a unit it knows about and the provider independently declares the
-// same derived id. Redeclaring an id is idempotent, and a consumer takes first-write
-// wins — later declarations of an id it already holds change nothing, title included.
+// A node of the run's stage tree, app-major: a parentless stage is a unit, a child of a
+// unit is a phase, deeper is detail. Events attach at phase depth or deeper, never at a
+// unit. Unit and phase ids are derived from canonical names (`pkg/naming`), so both
+// sides derive them independently; redeclaring an id is idempotent, first write wins.
 message Stage {
   bytes id = 1 [(buf.validate.field).bytes.len = 8];
 
-  // Empty on a unit, which is a root of the tree.
   bytes parent_id = 2 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
   string title = 3;
@@ -104,9 +81,8 @@ message SpanAttribute {
   string value = 2;
 }
 
-// The end of a stage, and the only one there is: a span whose `span_id` equals a
-// declared stage id closes that stage with its status and timing. There is no
-// first-class stage-end message.
+// A span whose `span_id` equals a declared stage id closes that stage. This is the only
+// end-of-stage signal there is.
 message SpanEvent {
   bytes span_id = 1 [(buf.validate.field).bytes.len = 8];
   bytes parent_span_id = 2 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
@@ -121,11 +97,8 @@ message SpanEvent {
   repeated SpanAttribute attributes = 7;
 }
 
-// A line of progress inside one declared stage.
-//
-// `current`/`total` are the protocol's only grouping counter: the producer declares
-// it, because only the producer knows what it is working through, and `total` may grow
-// while a phase runs. A consumer never counts stages itself to synthesise one.
+// A line of progress inside one declared stage. `current`/`total` are producer-declared
+// and the only counter; `total` may grow while a phase runs.
 message ProgressEvent {
   reserved 2;
   reserved "phase";
@@ -135,13 +108,11 @@ message ProgressEvent {
   optional uint32 current = 3;
   optional uint32 total = 4;
 
-  // The declared stage this line belongs to, at phase depth or deeper. Required:
-  // there is no bucket for progress that belongs to no stage.
   bytes stage_id = 5 [(buf.validate.field).bytes.len = 8];
 }
 
-// Detail text inside one declared stage. Text that belongs to the run rather than to
-// any stage is a diagnostic on the CLI's own stream, not a log event without a stage.
+// Detail text inside one declared stage. Run-scoped text is a `cli.stream.v1`
+// diagnostic instead.
 message LogEvent {
   string message = 1;
 

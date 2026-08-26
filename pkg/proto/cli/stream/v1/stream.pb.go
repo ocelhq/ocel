@@ -76,26 +76,12 @@ func (DiagnosticLevel) EnumDescriptor() ([]byte, []int) {
 	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{0}
 }
 
-// One event of a run as the CLI tells it.
+// One event of a run as the CLI tells it. Providers own `OperationEvent`, which
+// arrives here under `operation`.
 //
-// The CLI owns this stream; a provider owns `common.progress.v1.OperationEvent`. The
-// envelope wraps that contract rather than replacing it: everything a provider says
-// arrives under `operation`, and the arms beside it are the things only the CLI knows
-// — the plan it computed, the pauses it opened, the run's own outcome, and text that
-// belongs to the run rather than to any stage.
-//
-// Stability, CDK-style: the event type and its typed fields are the contract. A
-// consumer may switch on the arm, on `DiagnosticEvent.code`, and on the typed fields
-// beside it, and those keep their meaning. Human text, severity and the relative
-// order of concurrent events are presentation and may change in any release without
-// being a break. Versioning rides the proto package version; there is no second
-// scheme.
-//
-// The stage tree these events hang from is app-major, and its law is written on
-// `common.progress.v1.Stage`: a parentless stage is a unit, a child of a unit is a
-// phase, anything deeper is detail inside that phase's block, and events attach at
-// phase depth or deeper, never at a unit. Unit and phase ids are derived from
-// canonical names, so the CLI and the provider mint identical ids independently.
+// Stable: the arm, `DiagnosticEvent.code`, and typed fields. Presentation, and free to
+// change: human text, level, and the order of concurrent events. Versioning rides the
+// proto package version.
 type RunEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Event:
@@ -207,7 +193,6 @@ type isRunEvent_Event interface {
 }
 
 type RunEvent_Plan struct {
-	// What the run intends to change, computed before it commits to anything.
 	Plan *v1.ChangePlan `protobuf:"bytes,1,opt,name=plan,proto3,oneof"`
 }
 
@@ -217,22 +202,19 @@ type RunEvent_Operation struct {
 }
 
 type RunEvent_Waiting struct {
-	// The run has paused for a human and is not provisioning while it waits.
 	Waiting *WaitingEvent `protobuf:"bytes,3,opt,name=waiting,proto3,oneof"`
 }
 
 type RunEvent_Resumed struct {
-	// The pause is over and the run is moving again.
 	Resumed *ResumedEvent `protobuf:"bytes,4,opt,name=resumed,proto3,oneof"`
 }
 
 type RunEvent_Result struct {
-	// The run's own outcome, once.
 	Result *RunResultEvent `protobuf:"bytes,5,opt,name=result,proto3,oneof"`
 }
 
 type RunEvent_Diagnostic struct {
-	// Text that belongs to the run rather than to any stage.
+	// Text belonging to the run rather than to any stage.
 	Diagnostic *DiagnosticEvent `protobuf:"bytes,6,opt,name=diagnostic,proto3,oneof"`
 }
 
@@ -248,8 +230,7 @@ func (*RunEvent_Result) isRunEvent_Event() {}
 
 func (*RunEvent_Diagnostic) isRunEvent_Event() {}
 
-// A pause the run opened for a human, outside the stage tree: committed content, not a
-// live line. `url` is where the human answers.
+// A pause the run opened for a human. `url` is where they answer.
 type WaitingEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Reason        string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
@@ -414,11 +395,6 @@ func (x *RunResultEvent) GetLogPath() string {
 	return ""
 }
 
-// Run-scoped text. This is what used to be an untagged progress line with no stage to
-// belong to.
-//
-// `code` is the stable half and the one a consumer switches on; `message` and `level`
-// are presentation and may change without being a break.
 type DiagnosticEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
