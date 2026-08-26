@@ -14,6 +14,7 @@ import (
 const (
 	KindDir  = "fs:dir"
 	KindFile = "fs:file"
+	KindUser = "linux:user"
 )
 
 const (
@@ -28,10 +29,7 @@ const (
 
 const rootOwner = "root"
 
-// TODO(#596): /var/lib/ocel is the deploy principal's tier, and ocel-deploy is that
-// ticket's to create. Until it exists root owns the state tier; the owner change
-// re-plans these items through the digest.
-const stateOwner = rootOwner
+const stateOwner = deployUser
 
 func ClassDir(class providerkit.Class) string { return classRoot + "/" + string(class) }
 
@@ -56,18 +54,21 @@ func ClassItems(class providerkit.Class) []Item {
 	}
 }
 
-func StorageItems(class providerkit.Class) []Item {
+func StorageItems(class providerkit.Class, keys []byte) []Item {
 	return []Item{
 		dir(helperRoot, 0o755, rootOwner),
 		{Kind: KindFile, Name: recordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript},
+		principal(),
 		dir(stateRoot, 0o750, stateOwner),
+		dir(sshDir, 0o700, stateOwner),
+		{Kind: KindFile, Name: authorizedKeys, Mode: 0o600, Owner: stateOwner, Content: keys},
 		dir(StateDir(class), 0o750, stateOwner),
 		dir(RecordsDir(class), 0o750, stateOwner),
 	}
 }
 
-func Items(class providerkit.Class) []Item {
-	return append(ClassItems(class), StorageItems(class)...)
+func Items(class providerkit.Class, keys []byte) []Item {
+	return append(ClassItems(class), StorageItems(class, keys)...)
 }
 
 func dir(name string, mode fs.FileMode, owner string) Item {
@@ -76,15 +77,26 @@ func dir(name string, mode fs.FileMode, owner string) Item {
 
 func (i Item) ID() string { return i.Kind + " " + i.Name }
 
+func (i Item) stdin() []byte {
+	if i.Kind == KindFile {
+		return i.Content
+	}
+	return nil
+}
+
 func (i Item) Digest() string {
 	return digest(i.Kind, i.Name, i.Mode, i.Owner, contentSum(i.Content))
 }
 
 func (i Item) command() string {
-	if i.Kind == KindDir {
+	switch i.Kind {
+	case KindUser:
+		return accountCommand(i.Name)
+	case KindDir:
 		return fmt.Sprintf("install -d -m %04o -o %s -g %s %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
+	default:
+		return fmt.Sprintf("install -m %04o -o %s -g %s /dev/stdin %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
 	}
-	return fmt.Sprintf("install -m %04o -o %s -g %s /dev/stdin %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
 }
 
 func digest(kind, name string, mode fs.FileMode, owner, content string) string {

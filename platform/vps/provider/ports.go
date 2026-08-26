@@ -3,6 +3,7 @@ package vps
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -62,8 +63,23 @@ func named(details []providerkit.Detail) []providerkit.Detail {
 	return out
 }
 
-func (credentials) Permissions(providerkit.CredentialTier) (edge.CredentialDocument, error) {
-	return edge.CredentialDocument{Heading: "VPS credentials"}, nil
+func (c credentials) Permissions(tier providerkit.CredentialTier) (edge.CredentialDocument, error) {
+	switch tier {
+	case providerkit.TierBootstrap:
+		return edge.CredentialDocument{Document: bootstrapDocument(c.login())}, nil
+	case providerkit.TierDeploy:
+		return edge.CredentialDocument{Document: deployDocument()}, nil
+	default:
+		return edge.CredentialDocument{}, providerkit.Refuse(providerkit.CodeInvalid,
+			"a host carries the bootstrap credentials or the deploy credentials; this request named neither")
+	}
+}
+
+func (c credentials) login() string {
+	if user := strings.TrimSpace(c.provider.options.SSH.User); user != "" {
+		return user
+	}
+	return anyLogin
 }
 
 type edges struct{}
