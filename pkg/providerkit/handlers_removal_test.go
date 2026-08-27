@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -303,5 +304,56 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	}
 	if held := writer.(*fake.DNSWriter).Records(); len(held) != 0 {
 		t.Errorf("the zone still holds %v, want the validation record released with the certificate", held)
+	}
+}
+
+func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
+	ctx := context.Background()
+	client, provider := deployedProject(t)
+
+	consented, err := client.PlanRemoveProject(ctx, projectRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+
+	admin := naming.AppStack(providerkit.ProductionEnv, "admin", naming.NewRelease(adminDeploymentID, "1"))
+	if err := providerkit.WriteStack(ctx, provider.Records(), providerkit.ClassProduction, "shop", admin, providerkit.Stack{App: "admin"}); err != nil {
+		t.Fatalf("WriteStack() error = %v", err)
+	}
+
+	req := projectRequest()
+	req.Consented = consented
+	stream, err := client.RemoveProject(ctx, req)
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	if _, err := drain(stream); err == nil {
+		t.Fatal("RemoveProject() = nil, want a removal that outgrew its consented plan refused")
+	} else if !strings.Contains(err.Error(), "admin") {
+		t.Errorf("the refusal reads %q, want it to name what stood up under the plan", err)
+	}
+}
+
+func TestARemovalRunsTheConsentedProjectPlanItWasHanded(t *testing.T) {
+	ctx := context.Background()
+	client, _ := deployedProject(t)
+
+	consented, err := client.PlanRemoveProject(ctx, projectRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+
+	req := projectRequest()
+	req.Consented = consented
+	stream, err := client.RemoveProject(ctx, req)
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, want the plan the human saw to run", result.GetError())
 	}
 }

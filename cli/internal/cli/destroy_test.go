@@ -190,6 +190,31 @@ func TestRunDestroy(t *testing.T) {
 		}
 	})
 
+	t.Run("the destroy carries the plan the human consented to", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := newDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(runui.BypassEnv, "test-app")
+
+		var stdout, stderr bytes.Buffer
+		if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		out := stdout.String()
+		if strings.Contains(out, "consented=none") {
+			t.Fatalf("the destroy reached the provider with no plan behind it; got:\n%s", out)
+		}
+		for _, want := range []string{"cloudfront/edge", "aws/test-app--infra", "aws/test-app--web--b1"} {
+			if !strings.Contains(out, "consented=") || !strings.Contains(consentedLine(out), want) {
+				t.Errorf("the destroy carried %q, want the plan it showed to name %q", consentedLine(out), want)
+			}
+		}
+	})
+
 	t.Run("--dry prints the plan, destroys nothing, and needs no terminal", func(t *testing.T) {
 		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
@@ -335,4 +360,13 @@ func TestDestroyClassCommands(t *testing.T) {
 			t.Errorf("destroy %s --yes usage = %q, want the one line every command shows", cmd.Name(), yes.Usage)
 		}
 	}
+}
+
+func consentedLine(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "consented=") {
+			return line
+		}
+	}
+	return ""
 }

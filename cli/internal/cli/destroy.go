@@ -147,7 +147,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 			return nil
 		}
 
-		showDestroyPlan(ui, cfg.Slug, false, plan)
+		consented := showDestroyPlan(ui, cfg.Slug, false, plan)
 		if dry {
 			ui.Diagnostic("Run without --dry to destroy.")
 			return nil
@@ -158,8 +158,9 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 		}
 
 		req := &contractv1.ProjectRequest{
-			Slug: cfg.Slug,
-			Edge: edgewire.Selection(cfg),
+			Slug:      cfg.Slug,
+			Edge:      edgewire.Selection(cfg),
+			Consented: consented,
 		}
 		if err := provider.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
 			return err
@@ -204,7 +205,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 			return nil
 		}
 
-		showDestroyPlan(ui, cfg.Slug, true, plan)
+		consented := showDestroyPlan(ui, cfg.Slug, true, plan)
 		if dry {
 			ui.Diagnostic("Run without --dry to destroy.")
 			return nil
@@ -219,6 +220,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 			Slug:        cfg.Slug,
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
 			Edge:        edgewire.Selection(cfg),
+			Consented:   consented,
 		}
 		if err := provider.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
 			return err
@@ -228,15 +230,14 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 	})
 }
 
-func showDestroyPlan(ui *runui.Session, slug string, preview bool, plan *planv1.ChangePlan) {
+func showDestroyPlan(ui *runui.Session, slug string, preview bool, plan *planv1.ChangePlan) *planv1.ChangePlan {
 	if preview {
-		ui.Plan(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
+		return ui.Plan(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
 			"– all stored preview assets belonging to this project",
 			"– every preview variable value this project holds, including each preview's own overrides",
 			"The account-level preview bootstrap is left intact. This cannot be undone.")
-		return
 	}
-	ui.Plan(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
+	return ui.Plan(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
 		"– all stored assets belonging to this project",
 		"– every production variable value this project holds, and their history",
 		"This cannot be undone.")

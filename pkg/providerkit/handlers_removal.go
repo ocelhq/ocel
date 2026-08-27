@@ -191,8 +191,22 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 		if err != nil {
 			return err
 		}
+		if err := removal.holdToPlan(req.GetConsented()); err != nil {
+			return err
+		}
 		return removal.run(ctx, report)
 	})
+}
+
+func (r *projectRemoval) holdToPlan(consented *planv1.ChangePlan) error {
+	if len(consented.GetGroups()) == 0 {
+		return nil
+	}
+	standing, err := r.plan()
+	if err != nil {
+		return err
+	}
+	return RefuseGrowth(PlanOf(consented), PlanOf(standing))
 }
 
 func (r *projectRemoval) run(ctx context.Context, report Reporter) error {
