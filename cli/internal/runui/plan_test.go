@@ -85,6 +85,29 @@ Proposed changes to the production bootstrap:
 	}
 }
 
+func TestTheConfirmationNamesWhatThePlanActuallyDoes(t *testing.T) {
+	t.Parallel()
+
+	creates := &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
+		{Kind: "stack", Name: "ocel-preview-core", Action: planv1.Change_ACTION_CREATE},
+		{Kind: "stack", Name: "ocel-preview-isr", Action: planv1.Change_ACTION_KEEP},
+	}}
+	if got := ConfirmVerb(creates); got != "Create these" {
+		t.Errorf("ConfirmVerb() = %q, want a plan that only creates to read as one", got)
+	}
+	if got := ConfirmVerb(mixedPlan()); got != "Apply these changes" {
+		t.Errorf("ConfirmVerb() = %q, want a mixed plan to read as one", got)
+	}
+	if !Mutates(mixedPlan()) {
+		t.Error("Mutates() = false for a plan holding creates, an update and a delete")
+	}
+	if Mutates(&planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
+		{Kind: "stack", Name: "ocel-preview-core", Action: planv1.Change_ACTION_KEEP},
+	}}) {
+		t.Error("Mutates() = true for a plan of nothing but keeps")
+	}
+}
+
 func TestAnActionThisCLIDoesNotKnowReadsAsASentence(t *testing.T) {
 	t.Parallel()
 
