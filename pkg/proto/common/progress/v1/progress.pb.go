@@ -216,6 +216,61 @@ func (AttributeKey) EnumDescriptor() ([]byte, []int) {
 	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{2}
 }
 
+// What became of one app in a multi-app apply. Promotion is the failure gate: unless
+// every app SUCCEEDED, none is promoted, so a run can carry successes and still fail.
+type AppOutcome int32
+
+const (
+	AppOutcome_APP_OUTCOME_UNSPECIFIED AppOutcome = 0
+	AppOutcome_APP_OUTCOME_SUCCEEDED   AppOutcome = 1
+	AppOutcome_APP_OUTCOME_FAILED      AppOutcome = 2
+	// Shared infrastructure failed before the apps were reached.
+	AppOutcome_APP_OUTCOME_NOT_RUN AppOutcome = 3
+)
+
+// Enum value maps for AppOutcome.
+var (
+	AppOutcome_name = map[int32]string{
+		0: "APP_OUTCOME_UNSPECIFIED",
+		1: "APP_OUTCOME_SUCCEEDED",
+		2: "APP_OUTCOME_FAILED",
+		3: "APP_OUTCOME_NOT_RUN",
+	}
+	AppOutcome_value = map[string]int32{
+		"APP_OUTCOME_UNSPECIFIED": 0,
+		"APP_OUTCOME_SUCCEEDED":   1,
+		"APP_OUTCOME_FAILED":      2,
+		"APP_OUTCOME_NOT_RUN":     3,
+	}
+)
+
+func (x AppOutcome) Enum() *AppOutcome {
+	p := new(AppOutcome)
+	*p = x
+	return p
+}
+
+func (x AppOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AppOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_progress_v1_progress_proto_enumTypes[3].Descriptor()
+}
+
+func (AppOutcome) Type() protoreflect.EnumType {
+	return &file_common_progress_v1_progress_proto_enumTypes[3]
+}
+
+func (x AppOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AppOutcome.Descriptor instead.
+func (AppOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{3}
+}
+
 type OperationEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Event:
@@ -960,23 +1015,86 @@ func (x *DegradedEvent) GetDetail() string {
 	return ""
 }
 
+type AppResult struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	App     string                 `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
+	Outcome AppOutcome             `protobuf:"varint,2,opt,name=outcome,proto3,enum=common.progress.v1.AppOutcome" json:"outcome,omitempty"`
+	// Set only on APP_OUTCOME_FAILED.
+	Error         string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AppResult) Reset() {
+	*x = AppResult{}
+	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppResult) ProtoMessage() {}
+
+func (x *AppResult) ProtoReflect() protoreflect.Message {
+	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppResult.ProtoReflect.Descriptor instead.
+func (*AppResult) Descriptor() ([]byte, []int) {
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *AppResult) GetApp() string {
+	if x != nil {
+		return x.App
+	}
+	return ""
+}
+
+func (x *AppResult) GetOutcome() AppOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return AppOutcome_APP_OUTCOME_UNSPECIFIED
+}
+
+func (x *AppResult) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 type ResultEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	Links         []*v11.Link            `protobuf:"bytes,3,rep,name=links,proto3" json:"links,omitempty"`
-	Functions     []*FunctionOutput      `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
-	AppUrls       []string               `protobuf:"bytes,5,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
-	PromotionId   string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
-	FlipBound     *FlipBound             `protobuf:"bytes,7,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
-	UrlNote       string                 `protobuf:"bytes,8,opt,name=url_note,json=urlNote,proto3" json:"url_note,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Success     bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error       string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	Links       []*v11.Link            `protobuf:"bytes,3,rep,name=links,proto3" json:"links,omitempty"`
+	Functions   []*FunctionOutput      `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
+	AppUrls     []string               `protobuf:"bytes,5,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
+	PromotionId string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	FlipBound   *FlipBound             `protobuf:"bytes,7,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
+	UrlNote     string                 `protobuf:"bytes,8,opt,name=url_note,json=urlNote,proto3" json:"url_note,omitempty"`
+	// One entry per app the apply covered, in manifest order whatever order they finished in.
+	Apps          []*AppResult `protobuf:"bytes,9,rep,name=apps,proto3" json:"apps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ResultEvent) Reset() {
 	*x = ResultEvent{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -988,7 +1106,7 @@ func (x *ResultEvent) String() string {
 func (*ResultEvent) ProtoMessage() {}
 
 func (x *ResultEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1001,7 +1119,7 @@ func (x *ResultEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultEvent.ProtoReflect.Descriptor instead.
 func (*ResultEvent) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{10}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ResultEvent) GetSuccess() bool {
@@ -1060,6 +1178,13 @@ func (x *ResultEvent) GetUrlNote() string {
 	return ""
 }
 
+func (x *ResultEvent) GetApps() []*AppResult {
+	if x != nil {
+		return x.Apps
+	}
+	return nil
+}
+
 type FunctionOutput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	LogicalName   string                 `protobuf:"bytes,2,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
@@ -1070,7 +1195,7 @@ type FunctionOutput struct {
 
 func (x *FunctionOutput) Reset() {
 	*x = FunctionOutput{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[11]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1082,7 +1207,7 @@ func (x *FunctionOutput) String() string {
 func (*FunctionOutput) ProtoMessage() {}
 
 func (x *FunctionOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[11]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1095,7 +1220,7 @@ func (x *FunctionOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FunctionOutput.ProtoReflect.Descriptor instead.
 func (*FunctionOutput) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{11}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *FunctionOutput) GetLogicalName() string {
@@ -1122,7 +1247,7 @@ type FlipBound struct {
 
 func (x *FlipBound) Reset() {
 	*x = FlipBound{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[12]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1134,7 +1259,7 @@ func (x *FlipBound) String() string {
 func (*FlipBound) ProtoMessage() {}
 
 func (x *FlipBound) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[12]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1147,7 +1272,7 @@ func (x *FlipBound) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlipBound.ProtoReflect.Descriptor instead.
 func (*FlipBound) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{12}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *FlipBound) GetTypicalMs() int64 {
@@ -1224,7 +1349,11 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x05notes\x18\x03 \x03(\tR\x05notes\";\n" +
 	"\rDegradedEvent\x12\x12\n" +
 	"\x04need\x18\x01 \x01(\tR\x04need\x12\x16\n" +
-	"\x06detail\x18\x02 \x01(\tR\x06detail\"\xc3\x02\n" +
+	"\x06detail\x18\x02 \x01(\tR\x06detail\"m\n" +
+	"\tAppResult\x12\x10\n" +
+	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
+	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xf6\x02\n" +
 	"\vResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12+\n" +
@@ -1234,7 +1363,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\fpromotion_id\x18\x06 \x01(\tR\vpromotionId\x12<\n" +
 	"\n" +
 	"flip_bound\x18\a \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x12\x19\n" +
-	"\burl_note\x18\b \x01(\tR\aurlNote\"E\n" +
+	"\burl_note\x18\b \x01(\tR\aurlNote\x121\n" +
+	"\x04apps\x18\t \x03(\v2\x1d.common.progress.v1.AppResultR\x04apps\"E\n" +
 	"\x0eFunctionOutput\x12!\n" +
 	"\flogical_name\x18\x02 \x01(\tR\vlogicalName\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\"H\n" +
@@ -1270,7 +1400,13 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x19ATTRIBUTE_KEY_DURATION_MS\x10\v\x12\x1f\n" +
 	"\x1bATTRIBUTE_KEY_RESOURCE_TYPE\x10\f\x12\x1f\n" +
 	"\x1bATTRIBUTE_KEY_RESOURCE_NAME\x10\r\x12\x18\n" +
-	"\x14ATTRIBUTE_KEY_CACHED\x10\x0eB@Z>github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progressv1b\x06proto3"
+	"\x14ATTRIBUTE_KEY_CACHED\x10\x0e*u\n" +
+	"\n" +
+	"AppOutcome\x12\x1b\n" +
+	"\x17APP_OUTCOME_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15APP_OUTCOME_SUCCEEDED\x10\x01\x12\x16\n" +
+	"\x12APP_OUTCOME_FAILED\x10\x02\x12\x17\n" +
+	"\x13APP_OUTCOME_NOT_RUN\x10\x03B@Z>github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progressv1b\x06proto3"
 
 var (
 	file_common_progress_v1_progress_proto_rawDescOnce sync.Once
@@ -1284,51 +1420,55 @@ func file_common_progress_v1_progress_proto_rawDescGZIP() []byte {
 	return file_common_progress_v1_progress_proto_rawDescData
 }
 
-var file_common_progress_v1_progress_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_common_progress_v1_progress_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_common_progress_v1_progress_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_common_progress_v1_progress_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_common_progress_v1_progress_proto_goTypes = []any{
 	(Phase)(0),             // 0: common.progress.v1.Phase
 	(SpanStatus)(0),        // 1: common.progress.v1.SpanStatus
 	(AttributeKey)(0),      // 2: common.progress.v1.AttributeKey
-	(*OperationEvent)(nil), // 3: common.progress.v1.OperationEvent
-	(*Stage)(nil),          // 4: common.progress.v1.Stage
-	(*StagePlanEvent)(nil), // 5: common.progress.v1.StagePlanEvent
-	(*SpanAttribute)(nil),  // 6: common.progress.v1.SpanAttribute
-	(*SpanEvent)(nil),      // 7: common.progress.v1.SpanEvent
-	(*ProgressEvent)(nil),  // 8: common.progress.v1.ProgressEvent
-	(*LogEvent)(nil),       // 9: common.progress.v1.LogEvent
-	(*DnsRecord)(nil),      // 10: common.progress.v1.DnsRecord
-	(*DnsOwedEvent)(nil),   // 11: common.progress.v1.DnsOwedEvent
-	(*DegradedEvent)(nil),  // 12: common.progress.v1.DegradedEvent
-	(*ResultEvent)(nil),    // 13: common.progress.v1.ResultEvent
-	(*FunctionOutput)(nil), // 14: common.progress.v1.FunctionOutput
-	(*FlipBound)(nil),      // 15: common.progress.v1.FlipBound
-	(*v1.ChangePlan)(nil),  // 16: common.plan.v1.ChangePlan
-	(*v11.Link)(nil),       // 17: common.links.v1.Link
+	(AppOutcome)(0),        // 3: common.progress.v1.AppOutcome
+	(*OperationEvent)(nil), // 4: common.progress.v1.OperationEvent
+	(*Stage)(nil),          // 5: common.progress.v1.Stage
+	(*StagePlanEvent)(nil), // 6: common.progress.v1.StagePlanEvent
+	(*SpanAttribute)(nil),  // 7: common.progress.v1.SpanAttribute
+	(*SpanEvent)(nil),      // 8: common.progress.v1.SpanEvent
+	(*ProgressEvent)(nil),  // 9: common.progress.v1.ProgressEvent
+	(*LogEvent)(nil),       // 10: common.progress.v1.LogEvent
+	(*DnsRecord)(nil),      // 11: common.progress.v1.DnsRecord
+	(*DnsOwedEvent)(nil),   // 12: common.progress.v1.DnsOwedEvent
+	(*DegradedEvent)(nil),  // 13: common.progress.v1.DegradedEvent
+	(*AppResult)(nil),      // 14: common.progress.v1.AppResult
+	(*ResultEvent)(nil),    // 15: common.progress.v1.ResultEvent
+	(*FunctionOutput)(nil), // 16: common.progress.v1.FunctionOutput
+	(*FlipBound)(nil),      // 17: common.progress.v1.FlipBound
+	(*v1.ChangePlan)(nil),  // 18: common.plan.v1.ChangePlan
+	(*v11.Link)(nil),       // 19: common.links.v1.Link
 }
 var file_common_progress_v1_progress_proto_depIdxs = []int32{
-	8,  // 0: common.progress.v1.OperationEvent.progress:type_name -> common.progress.v1.ProgressEvent
-	9,  // 1: common.progress.v1.OperationEvent.log:type_name -> common.progress.v1.LogEvent
-	13, // 2: common.progress.v1.OperationEvent.result:type_name -> common.progress.v1.ResultEvent
-	5,  // 3: common.progress.v1.OperationEvent.stage_plan:type_name -> common.progress.v1.StagePlanEvent
-	7,  // 4: common.progress.v1.OperationEvent.span:type_name -> common.progress.v1.SpanEvent
-	12, // 5: common.progress.v1.OperationEvent.degraded:type_name -> common.progress.v1.DegradedEvent
-	11, // 6: common.progress.v1.OperationEvent.dns_owed:type_name -> common.progress.v1.DnsOwedEvent
-	16, // 7: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
+	9,  // 0: common.progress.v1.OperationEvent.progress:type_name -> common.progress.v1.ProgressEvent
+	10, // 1: common.progress.v1.OperationEvent.log:type_name -> common.progress.v1.LogEvent
+	15, // 2: common.progress.v1.OperationEvent.result:type_name -> common.progress.v1.ResultEvent
+	6,  // 3: common.progress.v1.OperationEvent.stage_plan:type_name -> common.progress.v1.StagePlanEvent
+	8,  // 4: common.progress.v1.OperationEvent.span:type_name -> common.progress.v1.SpanEvent
+	13, // 5: common.progress.v1.OperationEvent.degraded:type_name -> common.progress.v1.DegradedEvent
+	12, // 6: common.progress.v1.OperationEvent.dns_owed:type_name -> common.progress.v1.DnsOwedEvent
+	18, // 7: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
 	0,  // 8: common.progress.v1.Stage.phase:type_name -> common.progress.v1.Phase
-	4,  // 9: common.progress.v1.StagePlanEvent.stages:type_name -> common.progress.v1.Stage
+	5,  // 9: common.progress.v1.StagePlanEvent.stages:type_name -> common.progress.v1.Stage
 	2,  // 10: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
 	1,  // 11: common.progress.v1.SpanEvent.status:type_name -> common.progress.v1.SpanStatus
-	6,  // 12: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
-	10, // 13: common.progress.v1.DnsOwedEvent.records:type_name -> common.progress.v1.DnsRecord
-	17, // 14: common.progress.v1.ResultEvent.links:type_name -> common.links.v1.Link
-	14, // 15: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
-	15, // 16: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	7,  // 12: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
+	11, // 13: common.progress.v1.DnsOwedEvent.records:type_name -> common.progress.v1.DnsRecord
+	3,  // 14: common.progress.v1.AppResult.outcome:type_name -> common.progress.v1.AppOutcome
+	19, // 15: common.progress.v1.ResultEvent.links:type_name -> common.links.v1.Link
+	16, // 16: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
+	17, // 17: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
+	14, // 18: common.progress.v1.ResultEvent.apps:type_name -> common.progress.v1.AppResult
+	19, // [19:19] is the sub-list for method output_type
+	19, // [19:19] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_common_progress_v1_progress_proto_init() }
@@ -1352,8 +1492,8 @@ func file_common_progress_v1_progress_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_progress_v1_progress_proto_rawDesc), len(file_common_progress_v1_progress_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   13,
+			NumEnums:      4,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

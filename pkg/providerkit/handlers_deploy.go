@@ -86,6 +86,8 @@ type deployRun struct {
 	allowDegraded []string
 	withheld      string
 
+	outcomes []*progressv1.AppResult
+
 	mu        sync.Mutex
 	artifacts map[string]ArtifactRef
 	membrane  ArtifactRef
@@ -163,8 +165,22 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		return nil, err
 	}
 	run.stages = newDeployStages(plan)
+	run.outcomes = pendingOutcomes(plan.Apps)
 	run.tracked.declare(run.stages.Roster...)
+	sender.detailing(run.reportApps)
 	return run, nil
+}
+
+func pendingOutcomes(apps []AppEntry) []*progressv1.AppResult {
+	outcomes := make([]*progressv1.AppResult, len(apps))
+	for slot, entry := range apps {
+		outcomes[slot] = &progressv1.AppResult{App: entry.App, Outcome: progressv1.AppOutcome_APP_OUTCOME_NOT_RUN}
+	}
+	return outcomes
+}
+
+func (r *deployRun) reportApps(result *progressv1.ResultEvent) {
+	result.Apps = r.outcomes
 }
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
@@ -482,12 +498,25 @@ func (r *deployRun) provisionApps(ctx context.Context) error {
 		})
 	}
 	_ = apps.Wait()
-	for _, err := range failures {
-		if err != nil {
-			return err
+	var first error
+	for slot, err := range failures {
+		r.outcomes[slot] = appOutcome(r.plan.Apps[slot].App, err)
+		if err != nil && first == nil {
+			first = err
 		}
 	}
-	return nil
+	return first
+}
+
+func appOutcome(app string, err error) *progressv1.AppResult {
+	if err != nil {
+		return &progressv1.AppResult{
+			App:     app,
+			Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED,
+			Error:   err.Error(),
+		}
+	}
+	return &progressv1.AppResult{App: app, Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED}
 }
 
 func (r *deployRun) provisionInfra(ctx context.Context) error {
@@ -869,6 +898,7 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 		PromotionId: promotion.PromotionID,
 		FlipBound:   flipBoundProto(&flip),
 	}
+	r.reportApps(result)
 	for _, link := range r.links {
 		message, err := LinkMessage(link)
 		if err != nil {
