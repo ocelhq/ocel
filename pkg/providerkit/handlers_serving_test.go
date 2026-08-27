@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -137,5 +138,129 @@ func TestADeployThatIsNotDryPlacesTheMembrane(t *testing.T) {
 	}
 	if placed := placedMembranes(t, provider.Artifacts()); placed != 1 {
 		t.Errorf("an applying deploy placed %d membranes, want the one its functions boot through", placed)
+	}
+}
+
+type recordingReleaser struct {
+	providerkit.Releaser
+
+	mu    sync.Mutex
+	drawn []providerkit.StackPlan
+}
+
+func (r *recordingReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
+	r.mu.Lock()
+	r.drawn = append(r.drawn, plan)
+	r.mu.Unlock()
+	return r.Releaser.Plan(ctx, plan, report)
+}
+
+func (r *recordingReleaser) drawnApps() []providerkit.StackPlan {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return appStacks(r.drawn)
+}
+
+func appStacks(plans []providerkit.StackPlan) []providerkit.StackPlan {
+	var apps []providerkit.StackPlan
+	for _, plan := range plans {
+		if plan.App != nil {
+			apps = append(apps, plan)
+		}
+	}
+	return apps
+}
+
+type drawing struct {
+	carrying
+
+	releases *recordingReleaser
+}
+
+func (d drawing) Releases() providerkit.Releaser { return d.releases }
+
+func drawingProvider() drawing {
+	base := fake.NewProvider(fake.Options{})
+	return drawing{carrying{base}, &recordingReleaser{Releaser: base.Releases()}}
+}
+
+func TestADryDeployDrawsTheStackTheApplyWouldProvision(t *testing.T) {
+	builtProject(t)
+	provider := drawingProvider()
+	client := servedBy(t, provider)
+
+	req := deployRequest()
+	req.Dry = true
+	if result, _ := deploy(t, client, req); result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy(dry) = %q, want it to succeed", result.GetError())
+	}
+
+	drawn := provider.releases.drawnApps()
+	if len(drawn) != 1 {
+		t.Fatalf("a dry deploy drew %d app stacks, want the one the manifest declares", len(drawn))
+	}
+	if drawn[0].App.Membrane == (providerkit.ArtifactRef{}) {
+		t.Fatal("the drawn app stack carries no membrane, so the plan is drawn of a stack the apply would never provision")
+	}
+
+	if result, _ := deploy(t, client, deployRequest()); result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	applied := appStacks(provider.releases.Releaser.(*fake.Releaser).Plans())
+	if len(applied) != 1 {
+		t.Fatalf("the apply provisioned %d app stacks, want the one the manifest declares", len(applied))
+	}
+	if drawn[0].App.Membrane != applied[0].App.Membrane {
+		t.Errorf("the plan was drawn of a stack booting through %+v but the apply provisions %+v, want one stack",
+			drawn[0].App.Membrane, applied[0].App.Membrane)
+	}
+}
+
+func membraneRow(t *testing.T, plan providerkit.Plan) providerkit.ChangeGroup {
+	t.Helper()
+	for _, group := range plan.Groups {
+		if group.Kind == providerkit.UploadKind && group.Name == "membrane" {
+			return group
+		}
+	}
+	t.Fatalf("the plan shows %v with no membrane row, want the upload the apply would make", plan.Groups)
+	return providerkit.ChangeGroup{}
+}
+
+func TestADryDeployPlansTheMembraneUploadItDoesNotMake(t *testing.T) {
+	builtProject(t)
+	provider := carrying{fake.NewProvider(fake.Options{})}
+	client := servedBy(t, provider)
+
+	req := deployRequest()
+	req.Dry = true
+	result, events := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy(dry) = %q, want it to succeed", result.GetError())
+	}
+	drawn, err := providerkit.PlanOf(lastPlan(events))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action := membraneRow(t, drawn).Action; action != providerkit.ActionCreate {
+		t.Errorf("the membrane row reads %q against an empty store, want %q", action, providerkit.ActionCreate)
+	}
+	if placed := placedMembranes(t, provider.Artifacts()); placed != 0 {
+		t.Errorf("planning the membrane placed %d of them, want a row derived by reading alone", placed)
+	}
+
+	if _, err := providerkit.PlaceMembrane(context.Background(), provider, providerkit.ClassProduction, provider.Artifacts(), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	result, events = deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy(dry) = %q, want it to succeed", result.GetError())
+	}
+	if drawn, err = providerkit.PlanOf(lastPlan(events)); err != nil {
+		t.Fatal(err)
+	}
+	if action := membraneRow(t, drawn).Action; action != providerkit.ActionKeep {
+		t.Errorf("the membrane row reads %q once the membrane stands, want %q", action, providerkit.ActionKeep)
 	}
 }

@@ -132,11 +132,34 @@ func (r *deployRun) upload(ctx context.Context, report Reporter) error {
 	if !carries {
 		return nil
 	}
+	if r.dry {
+		return r.drawMembrane(ctx, source, report)
+	}
 	ref, err := PlaceMembrane(ctx, source, r.plan.Class, r.provider.Artifacts(), report)
 	if err != nil {
 		return err
 	}
 	r.membrane = ref
+	return nil
+}
+
+func (r *deployRun) drawMembrane(ctx context.Context, source MembraneSource, report Reporter) error {
+	report.Say("Reading the membrane the app's functions boot through")
+	ref, _, err := MembraneRef(ctx, source, r.plan.Class)
+	if err != nil {
+		return err
+	}
+	held, err := r.provider.Artifacts().Has(ctx, ref)
+	if err != nil {
+		return fmt.Errorf("look for the membrane: %w", err)
+	}
+	r.membrane = ref
+	r.draft.membrane = ChangeGroup{
+		Kind:   UploadKind,
+		Name:   membraneGroupName,
+		Action: standsOrCreates(held),
+		Reason: reasonMembrane,
+	}
 	return nil
 }
 
