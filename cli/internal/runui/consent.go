@@ -17,6 +17,7 @@ type gate struct {
 	unattended  string
 	in          io.Reader
 	out         io.Writer
+	say         func(string)
 }
 
 func (g gate) refuse() error {
@@ -93,6 +94,6 @@ func (g gate) decide(granted bool, err error) (bool, error) {
 	if err != nil || granted {
 		return granted, err
 	}
-	fmt.Fprintln(g.out, "Aborted.")
+	g.say("Aborted.")
 	return false, nil
 }

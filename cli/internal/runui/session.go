@@ -148,6 +148,8 @@ func (w *lineWriter) flush() {
 
 func (s *Session) Suspend() func() { return s.stream.Suspend() }
 
+func (s *Session) Spin(message string) *Spinner { return s.stream.Spin(message) }
+
 func (s *Session) Diagnostic(message string) {
 	s.diagnose(message, streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_INFO)
 }

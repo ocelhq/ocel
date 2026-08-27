@@ -84,6 +84,40 @@ func spanEvent(stageID []byte, failed bool, d time.Duration) *streamv1.RunEvent 
 	}})
 }
 
+func diagnosticEvent(message string) *streamv1.RunEvent {
+	return &streamv1.RunEvent{Event: &streamv1.RunEvent_Diagnostic{
+		Diagnostic: &streamv1.DiagnosticEvent{Message: message, Level: streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_INFO},
+	}}
+}
+
+func TestAnInRunNoticeIsCommittedAboveALiveFrameThatStillErasesExactly(t *testing.T) {
+	t.Parallel()
+	s, out := liveStreamOfHeight(t, 40)
+
+	unit, phase := appStage(1), appStage(2)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "web"},
+		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
+	))
+	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+
+	const notice = "Serving previews on the global preview domain *.previews.ocel.dev"
+	s.Emit(diagnosticEvent(notice))
+
+	if !strings.Contains(out.String(), notice) {
+		t.Errorf("stdout = %q, want the notice committed as stream content", out.String())
+	}
+	rows := liveRegion(t, s, out)
+	if len(rows) != 2 {
+		t.Fatalf("live region = %q, want the unit and its output line still standing after a notice landed", rows)
+	}
+	for _, row := range rows {
+		if strings.Contains(row, notice) {
+			t.Errorf("live row = %q, want the notice committed to the scrollback, not drawn into the window", row)
+		}
+	}
+}
+
 func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	t.Parallel()
 	s, out := liveStream(t)

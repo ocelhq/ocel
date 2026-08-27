@@ -124,7 +124,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 	spec.Unattended = fmt.Sprintf("pass --yes, or set %s to the project name", runui.BypassEnv)
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflight.Tier(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
 		}
 
@@ -181,7 +181,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 	spec.Unattended = "pass --yes"
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
+		if err := preflight.Tier(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview"); err != nil {
 			return err
 		}
 

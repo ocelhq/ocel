@@ -520,6 +520,23 @@ func TestTheApplyCarriesThePlanTheRunShowed(t *testing.T) {
 	}
 }
 
+func TestADeclinedGuardSaysSoOnTheStreamAndNotBehindIt(t *testing.T) {
+	var out bytes.Buffer
+	spec := specFor(t, &out)
+	spec.Consent = runui.Convergent
+	spec.Interactive = true
+	spec.Present = runui.Resolve(runui.Origin{LogFormat: "json"})
+	spec.Stdin = strings.NewReader("n\n")
+
+	var body guardedBody
+	if err := runui.Run(context.Background(), spec, body.run); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+	if !strings.Contains(out.String(), `"message":"Aborted."`) {
+		t.Errorf("stream = %q, want the refusal carried as a diagnostic envelope, not written past the stream", out.String())
+	}
+}
+
 func shownPlan(t *testing.T, stream string) *planv1.ChangePlan {
 	t.Helper()
 	for _, line := range strings.Split(strings.TrimRight(stream, "\n"), "\n") {

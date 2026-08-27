@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -706,7 +707,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		err := requirePreviewDomain(bare, nil, nil, "pr-1", &out)
+		err := requirePreviewDomain(bare, nil, nil, "pr-1", runui.Plain(runui.Presentation{}, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want a refusal")
 		}
@@ -721,7 +722,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if err := requirePreviewDomain(bare, global, nil, "pr-1", &out); err != nil {
+		if err := requirePreviewDomain(bare, global, nil, "pr-1", runui.Plain(runui.Presentation{}, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
 		for _, want := range []string{"global preview domain *.previews.ocel.dev", "declares no domains.preview"} {
@@ -736,7 +737,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 
 		cfg := &projectconfig.Config{Slug: "acme", Apps: []projectconfig.App{{Name: "admin"}, {Name: "web"}}}
 		var out bytes.Buffer
-		err := requirePreviewDomain(cfg, global, nil, strings.Repeat("b", 60), &out)
+		err := requirePreviewDomain(cfg, global, nil, strings.Repeat("b", 60), runui.Plain(runui.Presentation{}, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want a refusal")
 		}
@@ -753,7 +754,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		cfg := &projectconfig.Config{Slug: "acme"}
 		pointer := strings.Repeat("b", 63)
 		var out bytes.Buffer
-		err := requirePreviewDomain(cfg, global, nil, pointer, &out)
+		err := requirePreviewDomain(cfg, global, nil, pointer, runui.Plain(runui.Presentation{}, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want a refusal")
 		}
@@ -773,7 +774,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		}
 		broken := &contractv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
 		var out bytes.Buffer
-		if err := requirePreviewDomain(cfg, broken, nil, "pr-1", &out); err != nil {
+		if err := requirePreviewDomain(cfg, broken, nil, "pr-1", runui.Plain(runui.Presentation{}, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
 		if !strings.Contains(out.String(), "*.preview.acme.com") {
@@ -790,7 +791,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 			Domains: map[string][]string{"preview": {"*.preview.acme.com"}},
 		}
 		var out bytes.Buffer
-		if err := requirePreviewDomain(cfg, nil, nil, strings.Repeat("b", 55), &out); err != nil {
+		if err := requirePreviewDomain(cfg, nil, nil, strings.Repeat("b", 55), runui.Plain(runui.Presentation{}, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
 	})
@@ -799,7 +800,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if err := requirePreviewDomain(declared, nil, nil, "pr-1", &out); err != nil {
+		if err := requirePreviewDomain(declared, nil, nil, "pr-1", runui.Plain(runui.Presentation{}, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
 		if out.String() != "" {
@@ -811,7 +812,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		if err := requirePreviewDomain(declared, global, nil, "pr-1", &out); err != nil {
+		if err := requirePreviewDomain(declared, global, nil, "pr-1", runui.Plain(runui.Presentation{}, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
 		for _, want := range []string{"*.preview.acme.com", "*.previews.ocel.dev", "ignored"} {
@@ -826,7 +827,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 
 		elsewhere := &contractv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", EdgeScope: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
 		var out bytes.Buffer
-		err := requirePreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "cf-other"}, "pr-1", &out)
+		err := requirePreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "cf-other"}, "pr-1", runui.Plain(runui.Presentation{}, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want an account refusal")
 		}
@@ -842,7 +843,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 
 		uninstalled := &contractv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
 		var out bytes.Buffer
-		err := requirePreviewDomain(bare, uninstalled, nil, "pr-1", &out)
+		err := requirePreviewDomain(bare, uninstalled, nil, "pr-1", runui.Plain(runui.Presentation{}, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want a route refusal")
 		}
@@ -861,7 +862,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 			{BaseDomain: "previews.ocel.dev", GrammarMin: 0, GrammarMax: 0, RouteInstalled: true},
 		} {
 			var out bytes.Buffer
-			err := requirePreviewDomain(bare, g, nil, "pr-1", &out)
+			err := requirePreviewDomain(bare, g, nil, "pr-1", runui.Plain(runui.Presentation{}, &out))
 			if err == nil {
 				t.Fatalf("requirePreviewDomain with grammar %d–%d = nil, want a refusal", g.GetGrammarMin(), g.GetGrammarMax())
 			}

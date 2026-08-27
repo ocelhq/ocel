@@ -19,12 +19,12 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func preflightPreview(ctx context.Context, present runui.Presentation, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer) error {
-	return preflight.Tier(ctx, present, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", out)
+func preflightPreview(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config) error {
+	return preflight.Tier(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
 }
 
 func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) ([]string, error) {
-	resp, err := preflight.Run(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Hostnames(cfg, "preview"), preflight.Frameworks(cfg), "ocel bootstrap preview", out)
+	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Hostnames(cfg, "preview"), preflight.Frameworks(cfg), "ocel bootstrap preview")
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider
 	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
 		return nil, err
 	}
-	if err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, out); err != nil {
+	if err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, ui); err != nil {
 		return nil, err
 	}
 	return resp.GetKnownSlugs(), nil
@@ -42,7 +42,7 @@ func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider
 
 func preflightDeploy(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) ([]string, error) {
 	domains := preflight.Hostnames(cfg, "production")
-	resp, err := preflight.Run(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(ui, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production", out)
+	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(ui, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func settleBootstrap(ctx context.Context, ui *runui.Session, runner *provider.Ru
 	if ui.Dry() {
 		return bootstrap.PlanFor(status).Insist(tier)
 	}
-	return bootstrap.Offer(ctx, runner, status, tier, edgewire.Selection(cfg), ui.Interactive(), out, in)
+	return bootstrap.Offer(ctx, runner, status, tier, edgewire.Selection(cfg), ui, ui.Interactive(), out, in)
 }
 
 func slugToScopeBy(ui *runui.Session, domains []string, cfg *projectconfig.Config) string {
@@ -69,12 +69,12 @@ func slugToScopeBy(ui *runui.Session, domains []string, cfg *projectconfig.Confi
 	return ""
 }
 
-func guardNewProject(ctx context.Context, ui *runui.Session, cfg *projectconfig.Config, knownSlugs []string, out io.Writer) (bool, error) {
+func guardNewProject(ctx context.Context, ui *runui.Session, cfg *projectconfig.Config, knownSlugs []string) (bool, error) {
 	if len(knownSlugs) == 0 {
 		return true, nil
 	}
-	fmt.Fprintf(out, "No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s\n",
-		cfg.Slug, strings.Join(knownSlugs, ", "))
+	ui.Warning(fmt.Sprintf("No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s",
+		cfg.Slug, strings.Join(knownSlugs, ", ")))
 	return ui.Guard(ctx, "Continue?")
 }
 
