@@ -14,75 +14,40 @@ const (
 
 var tiers = []unitTier{tierFailed, tierRunning}
 
-type windowUnit struct {
-	tier   unitTier
-	output bool
-}
-
-type windowRow struct {
-	unit   int
-	output bool
-}
-
 type tierCount struct {
 	tier  unitTier
 	count int
 }
 
 type windowFrame struct {
-	rows   []windowRow
+	rows   []int
 	hidden []tierCount
 	more   int
 }
 
-func planWindow(us []windowUnit, height int) windowFrame {
+func planWindow(us []unitTier, height int) windowFrame {
 	order := priorityOrder(us)
-	rich := fill(us, order, height, true)
-	if bare := fill(us, order, height, false); runningRows(us, bare) > runningRows(us, rich) {
-		return bare
-	}
-	return rich
-}
-
-func fill(us []windowUnit, order []int, height int, withOutput bool) windowFrame {
-	rows := make([]windowRow, 0, len(order))
-	lines := 0
+	rows := make([]int, 0, len(order))
 	for taken, i := range order {
-		row := windowRow{unit: i, output: withOutput && us[i].output && us[i].tier == tierRunning}
-		cost := 1
-		if row.output {
-			cost++
-		}
 		budget := height
 		if taken < len(order)-1 {
 			budget--
 		}
-		if lines+cost > budget {
+		if len(rows)+1 > budget {
 			break
 		}
-		rows = append(rows, row)
-		lines += cost
+		rows = append(rows, i)
 	}
 	hidden := order[len(rows):]
 	return windowFrame{rows: rows, hidden: countTiers(us, hidden), more: len(hidden)}
 }
 
-func runningRows(us []windowUnit, f windowFrame) int {
-	n := 0
-	for _, row := range f.rows {
-		if us[row.unit].tier == tierRunning {
-			n++
-		}
-	}
-	return n
-}
-
-func countTiers(us []windowUnit, hidden []int) []tierCount {
+func countTiers(us []unitTier, hidden []int) []tierCount {
 	var out []tierCount
 	for _, tier := range tiers {
 		count := 0
 		for _, i := range hidden {
-			if us[i].tier == tier {
+			if us[i] == tier {
 				count++
 			}
 		}
@@ -111,11 +76,11 @@ func tierWord(t unitTier) string {
 	return "running"
 }
 
-func priorityOrder(us []windowUnit) []int {
+func priorityOrder(us []unitTier) []int {
 	order := make([]int, 0, len(us))
 	for _, tier := range tiers {
 		for i, u := range us {
-			if u.tier == tier {
+			if u == tier {
 				order = append(order, i)
 			}
 		}

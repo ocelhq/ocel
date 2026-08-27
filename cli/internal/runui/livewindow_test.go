@@ -3,6 +3,7 @@ package runui
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -53,7 +54,7 @@ func TestOnlyTheProjectionWithoutAWindowCommitsPhaseStartLines(t *testing.T) {
 	}
 }
 
-func TestAUnitGetsOneRowAndItsBuildShowsUnderIt(t *testing.T) {
+func TestAUnitIsOneRowCarryingWhatItIsDoingNow(t *testing.T) {
 	t.Parallel()
 	s, out := liveStreamOfHeight(t, 40)
 
@@ -65,14 +66,44 @@ func TestAUnitGetsOneRowAndItsBuildShowsUnderIt(t *testing.T) {
 	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
 
 	rows := liveRegion(t, s, out)
-	if len(rows) != 2 {
-		t.Fatalf("live region = %q, want one row for the unit and one tail line under it", rows)
+	if len(rows) != 1 {
+		t.Fatalf("live region = %q, want the unit on one row", rows)
 	}
-	if !strings.Contains(rows[0], "web") || strings.Contains(rows[0], "Building") {
-		t.Errorf("unit row = %q, want the unit alone — its one phase adds nothing to the name", rows[0])
+	if !strings.Contains(rows[0], "web") || strings.Contains(rows[0], "web "+strings.TrimSpace(pathSep)) {
+		t.Errorf("unit row = %q, want the unit alone in the name — its one phase adds nothing to it", rows[0])
 	}
-	if !strings.Contains(rows[1], "6/9") {
-		t.Errorf("tail line = %q, want what the build is saying now, with the counts the producer declared", rows[1])
+	if !strings.Contains(rows[0], "6/9") {
+		t.Errorf("unit row = %q, want the counts the producer declared on the same row", rows[0])
+	}
+	if !elapsedTail.MatchString(rows[0]) {
+		t.Errorf("unit row = %q, want the elapsed time last on the row", rows[0])
+	}
+}
+
+var elapsedTail = regexp.MustCompile(`  (<1s|\d+s|\d+m\d\ds)$`)
+
+func TestADetailIsCutSoTheElapsedTimeAlwaysFits(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: 60, Height: 40})
+	t.Cleanup(func() { _ = s.Close() })
+
+	unit, phase := appStage(1), appStage(2)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "web"},
+		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
+	))
+	s.Emit(progressEvent(phase, strings.Repeat("compiling every module in the project ", 4), 0, nil))
+
+	rows := liveRegion(t, s, &out)
+	if len(rows) != 1 {
+		t.Fatalf("live region = %q, want the unit on one row", rows)
+	}
+	if got := len([]rune(rows[0])); got >= 60 {
+		t.Errorf("unit row is %d columns wide, want it inside the terminal so it never wraps", got)
+	}
+	if !elapsedTail.MatchString(rows[0]) {
+		t.Errorf("unit row = %q, want the detail cut back and the elapsed time kept", rows[0])
 	}
 }
 
@@ -88,11 +119,11 @@ func TestTheRendererNeverInventsCountsAProducerDidNotDeclare(t *testing.T) {
 	s.Emit(progressEvent(phase, "compiling", 0, nil))
 
 	rows := liveRegion(t, s, out)
-	if len(rows) != 2 {
-		t.Fatalf("live region = %q, want the unit row and its tail line", rows)
+	if len(rows) != 1 {
+		t.Fatalf("live region = %q, want the unit row alone", rows)
 	}
-	if strings.Contains(rows[1], "/") {
-		t.Errorf("tail line = %q, want no counts when the producer declared no total", rows[1])
+	if strings.Contains(rows[0], "/") {
+		t.Errorf("unit row = %q, want no counts when the producer declared no total", rows[0])
 	}
 }
 
@@ -102,8 +133,8 @@ func TestATwentyFirstUnitStaysOnScreenWhenTheTerminalIsTallEnough(t *testing.T) 
 	spineOf(t, s, 21)
 
 	rows := liveRegion(t, s, out)
-	if len(rows) != 42 {
-		t.Fatalf("live region has %d lines, want a row and an output line for all 21 units — no fixed cap", len(rows))
+	if len(rows) != 21 {
+		t.Fatalf("live region has %d lines, want a row for all 21 units — no fixed cap", len(rows))
 	}
 	if !strings.Contains(strings.Join(rows, "\n"), "app-21") {
 		t.Errorf("live region = %q, want the twenty-first unit on screen", rows)
@@ -144,8 +175,8 @@ func TestAUnitDeclaredButNotYetStartedIsAbsentFromTheWindow(t *testing.T) {
 	s.Emit(stagePlanEvent(&progressv1.Stage{Id: appStage(60), Title: "api"}))
 
 	rows := liveRegion(t, s, out)
-	if len(rows) != 2 {
-		t.Fatalf("live region = %q, want the running unit and its tail alone", rows)
+	if len(rows) != 1 {
+		t.Fatalf("live region = %q, want the running unit alone", rows)
 	}
 	if strings.Contains(strings.Join(rows, "\n"), "api") {
 		t.Errorf("live region = %q, want a unit that has not started kept out of the window", rows)
@@ -169,12 +200,12 @@ func TestTheOutputLineFollowsDeclarationOrderNotActivationOrder(t *testing.T) {
 	}
 
 	rows := liveRegion(t, s, out)
-	if len(rows) != 2 || !strings.Contains(rows[0], "web › Building") {
+	if len(rows) != 1 || !strings.Contains(rows[0], "web › Building") {
 		t.Fatalf("live region = %q, want the first phase in declaration order named on the unit row", rows)
 	}
 }
 
-func TestARunningBuildKeepsItsOutputLineWhileTheRestOfTheSpineWaits(t *testing.T) {
+func TestARunningBuildKeepsItsDetailWhileTheRestOfTheSpineWaits(t *testing.T) {
 	t.Parallel()
 	s, out := liveStreamOfHeight(t, 20)
 	spineOf(t, s, 2)
@@ -183,13 +214,13 @@ func TestARunningBuildKeepsItsOutputLineWhileTheRestOfTheSpineWaits(t *testing.T
 	}
 
 	rows := liveRegion(t, s, out)
-	if len(rows) != 4 {
-		t.Fatalf("live region = %q, want a row and a tail for each running unit and nothing for the units that never started", rows)
+	if len(rows) != 2 {
+		t.Fatalf("live region = %q, want a row for each running unit and nothing for the units that never started", rows)
 	}
-	if !strings.Contains(rows[0], "app-01") || !strings.Contains(rows[1], "6/9") {
-		t.Fatalf("live region = %q, want the running build keeping its tail line", rows)
+	if !strings.Contains(rows[0], "app-01") || !strings.Contains(rows[0], "6/9") {
+		t.Fatalf("live region = %q, want the running build keeping its detail", rows)
 	}
-	if !strings.Contains(rows[2], "app-02") || !strings.Contains(rows[3], "6/9") {
+	if !strings.Contains(rows[1], "app-02") || !strings.Contains(rows[1], "6/9") {
 		t.Errorf("live region = %q, want every running unit at the same height", rows)
 	}
 }
@@ -206,7 +237,7 @@ func TestAFinishedUnitLeavesTheWindow(t *testing.T) {
 	if got := strings.Join(rows, "\n"); strings.Contains(got, "app-01") {
 		t.Fatalf("live region = %q, want the finished unit gone — its record is the block it flushed", rows)
 	}
-	if len(rows) != 2 || !strings.Contains(rows[0], "app-02") {
+	if len(rows) != 1 || !strings.Contains(rows[0], "app-02") {
 		t.Errorf("live region = %q, want the still-running unit alone in the window", rows)
 	}
 
@@ -243,7 +274,7 @@ func TestAFailedUnitStaysPinnedWhileItsSiblingsRun(t *testing.T) {
 		t.Fatalf("live region = %q, want the failed unit pinned as a single row at the top", rows)
 	}
 	if strings.Contains(rows[1], "app-01") {
-		t.Errorf("live region = %q, want the failed unit pinned without an output line", rows)
+		t.Errorf("live region = %q, want the failed unit pinned on a row of its own", rows)
 	}
 
 	out.Reset()

@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/fatih/color"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -20,7 +21,10 @@ const (
 	warnMark  = "⚠"
 	startMark = "→"
 	pathSep   = " › "
-	barWidth  = 12
+	detailSep = " — "
+	rowGutter = "  "
+	barWidth  = 8
+	minDetail = 8
 
 	scrollGuard = 3
 )
@@ -292,19 +296,14 @@ func (r *Renderer) drawLiveLocked() {
 	}
 
 	live := r.plan.units()
-	shape := make([]windowUnit, len(live))
-	tails := make([]string, len(live))
+	shape := make([]unitTier, len(live))
 	for i, u := range live {
-		tails[i] = r.tailLineLocked(u)
-		shape[i] = windowUnit{tier: u.tier, output: tails[i] != ""}
+		shape[i] = u.tier
 	}
 	frame := planWindow(shape, r.windowHeightLocked())
 
-	for _, row := range frame.rows {
-		emit(r.unitLineLocked(live[row.unit]))
-		if row.output {
-			emit(tails[row.unit])
-		}
+	for _, i := range frame.rows {
+		emit(r.unitLineLocked(live[i], width))
 	}
 	if frame.more > 0 {
 		emit(r.colorFor(color.Faint).Sprint(blockIndent + overflowLine(frame)))
@@ -335,23 +334,31 @@ func namesPhase(u liveUnit) bool {
 	return u.phase != nil && len(u.root.children) > 1
 }
 
-func (r *Renderer) unitLineLocked(u liveUnit) string {
+func (r *Renderer) unitLineLocked(u liveUnit, width int) string {
 	if u.tier == tierFailed {
 		return r.colorFor(color.FgRed, color.Bold).Sprintf("%s %s failed", failMark, u.root.title)
 	}
-	name := r.colorFor(color.Bold).Sprint(u.root.title)
+	glyph := spinnerFrame(u.frame())
+	name := u.root.title
 	if namesPhase(u) {
-		name += r.colorFor(color.Faint).Sprint(pathSep + u.phase.title)
+		name += pathSep + u.phase.title
 	}
-	return fmt.Sprintf("%s %s  %s",
-		r.colorFor(color.FgCyan).Sprint(spinnerFrame(u.frame())),
-		name,
-		r.colorFor(color.Faint).Sprint(formatDuration(r.plan.now().Sub(u.started()))))
+	elapsed := formatDuration(r.plan.now().Sub(u.started()))
+
+	line := r.colorFor(color.FgCyan).Sprint(glyph) + " " + r.colorFor(color.Bold).Sprint(u.root.title)
+	if namesPhase(u) {
+		line += r.colorFor(color.Faint).Sprint(pathSep + u.phase.title)
+	}
+	spent := ansi.StringWidth(glyph) + 1 + ansi.StringWidth(name) + len(rowGutter) + ansi.StringWidth(elapsed)
+	if detail := r.detailLocked(u, width-1-spent-ansi.StringWidth(detailSep)); detail != "" {
+		line += r.colorFor(color.Faint).Sprint(detailSep + detail)
+	}
+	return line + rowGutter + r.colorFor(color.Faint).Sprint(elapsed)
 }
 
-func (r *Renderer) tailLineLocked(u liveUnit) string {
+func (r *Renderer) detailLocked(u liveUnit, room int) string {
 	n := u.tail
-	if n == nil {
+	if n == nil || room < minDetail {
 		return ""
 	}
 	var parts []string
@@ -367,7 +374,7 @@ func (r *Renderer) tailLineLocked(u liveUnit) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	return blockIndent + r.colorFor(color.Faint).Sprint(strings.Join(parts, "  "))
+	return fitToWidth(strings.Join(parts, "  "), room)
 }
 
 func (r *Renderer) colorFor(attrs ...color.Attribute) *color.Color {
