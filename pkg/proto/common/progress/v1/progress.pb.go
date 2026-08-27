@@ -224,7 +224,7 @@ const (
 	AppOutcome_APP_OUTCOME_UNSPECIFIED AppOutcome = 0
 	AppOutcome_APP_OUTCOME_SUCCEEDED   AppOutcome = 1
 	AppOutcome_APP_OUTCOME_FAILED      AppOutcome = 2
-	// Shared infrastructure failed before the apps were reached.
+	// The run failed before this app was reached, so nothing of it was attempted.
 	AppOutcome_APP_OUTCOME_NOT_RUN AppOutcome = 3
 )
 
