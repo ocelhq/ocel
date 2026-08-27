@@ -36,18 +36,18 @@ func liveStreamOfHeight(t *testing.T, height int) (*Stream, *bytes.Buffer) {
 
 func liveRegion(t *testing.T, s *Stream, out *bytes.Buffer) []string {
 	t.Helper()
-	s.Pause()
+	s.r.Pause()
 	out.Reset()
-	s.Resume()
+	s.r.Resume()
 
 	drawn := out.String()
 	out.Reset()
-	s.Pause()
+	s.r.Pause()
 	if want := fmt.Sprintf("\033[%dA\033[J", strings.Count(drawn, "\n")); drawn != "" && out.String() != want {
 		t.Fatalf("erase = %q, want %q — the renderer must take back exactly the lines it drew", out.String(), want)
 	}
 	out.Reset()
-	s.Resume()
+	s.r.Resume()
 
 	if drawn == "" {
 		return nil
