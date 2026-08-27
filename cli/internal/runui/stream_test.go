@@ -81,6 +81,42 @@ func TestPlanRowsReachTheStreamInOneOrderWhateverOrderTheyArriveIn(t *testing.T)
 	}
 }
 
+func TestPlanGroupsReachTheStreamInSpineOrderWhateverOrderTheyArriveIn(t *testing.T) {
+	t.Parallel()
+
+	spine := []*planv1.ChangeGroup{
+		{Kind: "stack", Name: "ocel-production-core"},
+		{Kind: "parameters", Name: "aws/parameters"},
+		{Kind: "app", Name: "web"},
+		{Kind: "app", Name: "api"},
+		{Kind: "edge", Name: "cloudflare/edge"},
+	}
+	arrived := []*planv1.ChangeGroup{spine[4], spine[2], spine[3], spine[0], spine[1]}
+
+	want := "stack/ocel-production-core parameters/aws/parameters app/web app/api edge/cloudflare/edge"
+	if names := groupNames(recorded(t, planOf(arrived))[0]); names != want {
+		t.Errorf("group order = %q, want %q — shared infra, then apps in the order the plan names them, then edge", names, want)
+	}
+	if names := groupNames(recorded(t, planOf(spine))[0]); names != want {
+		t.Errorf("group order = %q for a plan that arrived in spine order already, want %q", names, want)
+	}
+}
+
+func planOf(groups []*planv1.ChangeGroup) *streamv1.RunEvent {
+	return &streamv1.RunEvent{Event: &streamv1.RunEvent_Plan{Plan: &planv1.ChangePlan{
+		Subject: "production",
+		Groups:  groups,
+	}}}
+}
+
+func groupNames(ev *streamv1.RunEvent) string {
+	var names []string
+	for _, g := range ev.GetPlan().GetGroups() {
+		names = append(names, g.GetKind()+"/"+g.GetName())
+	}
+	return strings.Join(names, " ")
+}
+
 func plan(changes []*planv1.Change) *streamv1.RunEvent {
 	return &streamv1.RunEvent{Event: &streamv1.RunEvent_Plan{Plan: &planv1.ChangePlan{
 		Subject: "production",
