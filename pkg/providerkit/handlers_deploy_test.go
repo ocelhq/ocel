@@ -835,9 +835,43 @@ func TestDeployWithholdsTheURLUntilTheHostnameIsSettled(t *testing.T) {
 	if !result.GetSuccess() {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
 	}
-	if len(result.GetAppUrls()) == 0 || result.GetUrlNote() != "" {
-		t.Errorf("the deploy after the hostname settled returned urls %v and the note %q, want the address printed",
+	if !slices.Equal(result.GetAppUrls(), []string{"https://shop.example"}) || result.GetUrlNote() != "" {
+		t.Errorf("the deploy after the hostname settled returned urls %v and the note %q, want the hostname it serves printed",
 			result.GetAppUrls(), result.GetUrlNote())
+	}
+}
+
+func TestDeployAnnouncesThePreviewHostnameOfTheProjectsOwnWildcard(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	previewBootstrapped(t, client)
+
+	result, _ := deploy(t, client, previewRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	want := "https://" + edge.PreviewHost("shop", "pr-7", "", "preview.example")
+	if !slices.Equal(result.GetAppUrls(), []string{want}) {
+		t.Errorf("the preview deploy announced %v, want %s", result.GetAppUrls(), want)
+	}
+}
+
+func TestDeployAnnouncesThePreviewHostnameOfTheGlobalWildcard(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	previewBootstrapped(t, client)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
+	}
+
+	result, _ := deploy(t, client, previewDeployRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	want := "https://" + edge.PreviewHost("shop", "pr-7", "", "preview.acme.com")
+	if !slices.Equal(result.GetAppUrls(), []string{want}) {
+		t.Errorf("the preview deploy announced %v, want %s: the project declares no domains.preview, so the global wildcard serves it",
+			result.GetAppUrls(), want)
 	}
 }
 
