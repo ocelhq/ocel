@@ -64,11 +64,23 @@ func UploadRows(ctx context.Context, store ArtifactStore, uploads []Upload) ([]C
 	return rows, nil
 }
 
+const uploadConcurrency = 64
+
+var uploadSlots = make(chan struct{}, uploadConcurrency)
+
+func takeUploadSlot() func() {
+	uploadSlots <- struct{}{}
+	return func() { <-uploadSlots }
+}
+
 func ShipUploads(ctx context.Context, store ArtifactStore, uploads []Upload, report Reporter) error {
 	group, ctx := errgroup.WithContext(ctx)
 	group.SetLimit(uploadConcurrency)
 	for _, upload := range uploads {
-		group.Go(func() error { return ship(ctx, store, upload, report) })
+		group.Go(func() error {
+			defer takeUploadSlot()()
+			return ship(ctx, store, upload, report)
+		})
 	}
 	return group.Wait()
 }
@@ -145,8 +157,6 @@ func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, 
 	return pack, nil
 }
 
-const uploadConcurrency = 64
-
 func (r *deployRun) stageApp(entry AppEntry, pack AppPack, routing *RoutingPlan) ([]Upload, error) {
 	root := ArtifactRoot()
 	var shipping []*contractv1.ManifestFunction
@@ -160,6 +170,7 @@ func (r *deployRun) stageApp(entry AppEntry, pack AppPack, routing *RoutingPlan)
 	group.SetLimit(uploadConcurrency)
 	for slot, fn := range shipping {
 		group.Go(func() error {
+			defer takeUploadSlot()()
 			upload, err := r.stageArtifact(root, entry, fn, overlayFor(pack.Overlay, fn, routing))
 			staged[slot] = upload
 			return err
