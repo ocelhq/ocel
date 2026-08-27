@@ -222,6 +222,8 @@ message DeployRequest {
   string tag = 3 [(buf.validate.field).string = {pattern: "^[A-Za-z0-9._-]*$", max_len: 64}];
 
   EdgeSelection edge = 4;
+
+  bool dry = 5;
 }
 
 message BootstrapRequest {
