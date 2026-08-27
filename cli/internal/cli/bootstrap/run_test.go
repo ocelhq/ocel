@@ -95,16 +95,14 @@ func TestRunBootstrapDestroy(t *testing.T) {
 			"    – /ocel/origin/secret  AWS::SSM::Parameter",
 			"– cloudflare/edge  [cloudflare-edge]",
 			"    – ocel-deployments-store  Cloudflare::Worker",
-			"Left in place:",
-			"  /ocel/pulumi/passphrase  — the production bootstrap still stands",
-			"5 to delete.",
+			"5 to delete, 1 unchanged.",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want --dry to print %q", out, want)
 			}
 		}
-		if strings.Index(out, "/ocel/pulumi/passphrase") < strings.Index(out, "Left in place:") {
-			t.Errorf("stdout = %q, want the kept parameter under what is left in place", out)
+		if strings.Contains(out, "/ocel/pulumi/passphrase") {
+			t.Errorf("stdout = %q, want the kept parameter counted, not listed", out)
 		}
 		if !strings.Contains(out, "Run without --dry to destroy.") {
 			t.Errorf("stdout = %q, want --dry to say how to remove it", out)
@@ -232,15 +230,14 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 			"+ aws/ocel-production-image-optimization  [image-optimization]",
 			"– aws/ocel-production-isr  [isr]  — web, api were deployed against it (this one is slow)",
 			"    – OcelRevalidationTable  AWS::DynamoDB::Table",
-			"  aws/ocel-production-secrets  [secrets]  — already current",
-			"1 to create, 1 to update, 1 to replace, 1 to delete.",
+			"1 to create, 1 to update, 1 to replace, 1 to delete, 1 unchanged.",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
 			}
 		}
-		if strings.Contains(out, "    aws/ocel-production-secrets") {
-			t.Errorf("a kept group listed what it keeps; got:\n%s", out)
+		if strings.Contains(out, "aws/ocel-production-secrets") {
+			t.Errorf("a group that keeps everything took a row; got:\n%s", out)
 		}
 		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
 			t.Errorf("provider saw %v, want the apply the plan described", got)
@@ -258,11 +255,11 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		}
 		out := stdout.String()
 		for _, want := range []string{
-			"Proposed changes to the production bootstrap (cloudflare edge):",
+			"Proposed changes to the production bootstrap, fronted by the cloudflare edge:",
 			"+ cloudflare/edge  [cloudflare-edge]",
 			"    + ocel-edge-cache         Cloudflare::R2Bucket",
 			"    + ocel-deployments-store  Cloudflare::Worker",
-			"3 to create, 1 to update, 1 to replace, 1 to delete.",
+			"3 to create, 1 to update, 1 to replace, 1 to delete, 1 unchanged.",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)

@@ -3,119 +3,17 @@ package cli
 import (
 	"bytes"
 	"context"
-	"io"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/runui"
-	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
-
-func TestPrintDestroyPlan(t *testing.T) {
-	t.Parallel()
-
-	t.Run("it lists every target", func(t *testing.T) {
-		t.Parallel()
-
-		var out bytes.Buffer
-		printDestroyPlan(&out, runui.Presentation{}, "proj_shop", false, &planv1.ChangePlan{
-			EdgeKind: "cloudfront",
-			Subject:  "proj_shop",
-			Groups: []*planv1.ChangeGroup{
-				{
-					Kind:    "stack",
-					Name:    "aws/shop--infra",
-					Feature: "infra",
-					Action:  planv1.Change_ACTION_DELETE,
-					Reason:  "databases and buckets, INCLUDING ALL DATA",
-				},
-				{Kind: "stack", Name: "aws/shop--web--b1", Feature: "web", Action: planv1.Change_ACTION_DELETE},
-				{
-					Kind:   "edge",
-					Name:   "cloudfront/edge",
-					Action: planv1.Change_ACTION_DELETE,
-					Changes: []*planv1.Change{
-						{
-							Kind:   "AWS::CloudFront::Distribution",
-							Name:   "E1SHOP",
-							Action: planv1.Change_ACTION_DISABLE_THEN_DELETE,
-							Slow:   true,
-						},
-						{Kind: "AWS::CloudFront::KeyValueStore", Name: "shop.example.com", Action: planv1.Change_ACTION_DELETE},
-					},
-				},
-				{Kind: "certificate", Name: "shop.example.com", Action: planv1.Change_ACTION_KEEP, Reason: "you pinned this certificate"},
-			},
-		})
-		got := out.String()
-		for _, want := range []string{
-			`production project "proj_shop"`,
-			"fronted by the cloudfront edge",
-			"– aws/shop--infra  [infra]  — databases and buckets, INCLUDING ALL DATA",
-			"– aws/shop--web--b1  [web]",
-			"– cloudfront/edge",
-			"    – disable, then delete E1SHOP  AWS::CloudFront::Distribution (this one is slow)",
-			"    – shop.example.com             AWS::CloudFront::KeyValueStore",
-			"every production variable value",
-			"This cannot be undone.",
-			"Left in place:",
-			"  certificate shop.example.com  — you pinned this certificate",
-			"4 to delete.",
-		} {
-			if !strings.Contains(got, want) {
-				t.Errorf("printDestroyPlan output missing %q; got:\n%s", want, got)
-			}
-		}
-		if strings.Index(got, "  certificate") < strings.Index(got, "This cannot be undone.") {
-			t.Errorf("printDestroyPlan listed a kept item among the doomed ones; got:\n%s", got)
-		}
-	})
-
-	t.Run("with no edge bought the quota-paced deletions read as slow", func(t *testing.T) {
-		t.Parallel()
-
-		var out bytes.Buffer
-		printDestroyPlan(&out, runui.Presentation{}, "proj_shop", false, &planv1.ChangePlan{
-			EdgeKind: "api-gateway",
-			Groups: []*planv1.ChangeGroup{{
-				Kind:   "edge",
-				Name:   "api-gateway/edge",
-				Action: planv1.Change_ACTION_DELETE,
-				Changes: []*planv1.Change{
-					{Kind: "AWS::ApiGateway::RestApi", Name: "shop", Action: planv1.Change_ACTION_DELETE, Slow: true},
-					{Kind: "AWS::ApiGateway::DomainName", Name: "shop.example.com", Action: planv1.Change_ACTION_DELETE},
-				},
-			}},
-		})
-		got := out.String()
-		if !strings.Contains(got, "– shop              AWS::ApiGateway::RestApi (this one is slow)") {
-			t.Errorf("printDestroyPlan output missing the slow REST API row; got:\n%s", got)
-		}
-		if !strings.Contains(got, "– shop.example.com  AWS::ApiGateway::DomainName\n") {
-			t.Errorf("printDestroyPlan marked an unpaced row slow; got:\n%s", got)
-		}
-	})
-
-	t.Run("an action this CLI does not know reads as a sentence", func(t *testing.T) {
-		t.Parallel()
-
-		got := changeplan.NewPrinter(io.Discard, runui.Presentation{}).GroupLine(&planv1.ChangeGroup{
-			Kind:   "certificate",
-			Name:   "shop.example.com",
-			Action: planv1.Change_Action(97),
-		})
-		if !strings.Contains(got, "an action this CLI does not know") || !strings.HasSuffix(got, "certificate shop.example.com") {
-			t.Errorf("changeplan.GroupLine() = %q, want the unknown action named before the resource", got)
-		}
-	})
-}
 
 func TestRunDestroyPreviewProject(t *testing.T) {
 	t.Run("--yes skips the terminal check and the typed name", func(t *testing.T) {
@@ -142,16 +40,15 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 			"    – test-app  AWS::CloudFront::Distribution",
 			"every preview variable value",
 			"The account-level preview bootstrap is left intact. This cannot be undone.",
-			"Left in place:",
-			"  cloudfront/edge  — bootstrap-scoped: every project's previews are served on *.preview.acme.com",
+			"4 to delete, 1 unchanged.",
 			"DESTROY PROJECT project=test-app dns= tier=TIER_PREVIEW",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		if strings.Index(out, "Left in place:") < strings.Index(out, "This cannot be undone.") {
-			t.Errorf("stdout listed a kept item among the doomed ones:\n%s", out)
+		if strings.Contains(out, "bootstrap-scoped") {
+			t.Errorf("stdout spent a row on something staying put:\n%s", out)
 		}
 		if strings.Contains(out, "Type the project name") {
 			t.Errorf("stdout = %q, want --yes to skip the typed-name confirmation", out)
@@ -260,7 +157,7 @@ func TestRunDestroy(t *testing.T) {
 		}
 	})
 
-	t.Run("it renders the plan the provider sent, kept items included", func(t *testing.T) {
+	t.Run("it renders the plan the provider sent, keeps collapsed into the tally", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
@@ -279,14 +176,17 @@ func TestRunDestroy(t *testing.T) {
 			"fronted by the cloudfront edge",
 			"– cloudfront/edge",
 			"    – disable, then delete E1test-app  AWS::CloudFront::Distribution (this one is slow)",
-			"  certificate test-app.example.com  — you pinned this certificate; Ocel never deletes one it did not request",
 			"– aws/test-app--infra  [infra]",
 			"– aws/test-app--web--b1  [web]",
+			"4 to delete, 1 unchanged.",
 			"DESTROY PROJECT project=test-app",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
 			}
+		}
+		if strings.Contains(out, "you pinned this certificate") {
+			t.Errorf("stdout spent a row on a certificate nothing touches; got:\n%s", out)
 		}
 	})
 

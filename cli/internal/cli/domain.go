@@ -13,7 +13,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
@@ -260,7 +259,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 			return nil
 		}
 
-		changeplan.NewPrinter(stdout, ui.Presentation()).Print(fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
+		ui.Plan(fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
 			"This cannot be undone.")
 
 		granted, err := ui.ConsentByName(ctx, "domain", base)

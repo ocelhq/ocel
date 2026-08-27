@@ -84,7 +84,7 @@ func (s *Session) ConsentByName(ctx context.Context, label, name string) (bool, 
 }
 
 func (s *Session) settled() bool {
-	return len(s.shown.GetGroups()) > 0 && !mutates(s.shown)
+	return len(s.shown.GetGroups()) > 0 && !Mutates(s.shown)
 }
 
 func (g gate) decide(granted bool, err error) (bool, error) {
