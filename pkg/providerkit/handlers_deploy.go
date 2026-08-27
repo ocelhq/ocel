@@ -489,7 +489,7 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 			if err != nil {
 				return err
 			}
-			staged, err := r.stageApp(ctx, entry, pack, facts.Routing)
+			staged, err := r.stageApp(entry, pack, facts.Routing)
 			if err != nil {
 				return err
 			}

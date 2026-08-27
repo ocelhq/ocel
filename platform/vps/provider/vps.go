@@ -156,7 +156,9 @@ func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
 	return host.Bootstrap(p.host), nil
 }
 
-func (p *Provider) Releases() providerkit.Releaser { return resources.Releaser(p.records, p.artifacts, p) }
+func (p *Provider) Releases() providerkit.Releaser {
+	return resources.Releaser(p.records, p.artifacts, p)
+}
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return p.artifacts }
 

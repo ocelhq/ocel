@@ -147,7 +147,7 @@ func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, 
 
 const uploadConcurrency = 64
 
-func (r *deployRun) stageApp(ctx context.Context, entry AppEntry, pack AppPack, routing *RoutingPlan) ([]Upload, error) {
+func (r *deployRun) stageApp(entry AppEntry, pack AppPack, routing *RoutingPlan) ([]Upload, error) {
 	root := ArtifactRoot()
 	var shipping []*contractv1.ManifestFunction
 	for _, fn := range r.manifest.GetFunctions() {
@@ -156,7 +156,7 @@ func (r *deployRun) stageApp(ctx context.Context, entry AppEntry, pack AppPack, 
 		}
 	}
 	staged := make([]Upload, len(shipping))
-	group, ctx := errgroup.WithContext(ctx)
+	var group errgroup.Group
 	group.SetLimit(uploadConcurrency)
 	for slot, fn := range shipping {
 		group.Go(func() error {
