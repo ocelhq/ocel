@@ -26,8 +26,15 @@ import (
 type mockedEngine struct {
 	outputs   auto.OutputMap
 	mocks     sdk.MockResourceMonitor
+	mu        sync.Mutex
 	ran       []string
 	previewed []providerkit.Change
+}
+
+func (e *mockedEngine) stacks() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.ran)
 }
 
 var _ kitpulumi.Engine = (*mockedEngine)(nil)
@@ -40,7 +47,9 @@ func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerki
 	if err := sdk.RunErr(setup.Program, sdk.WithMocks("shop", setup.Stack, monitor)); err != nil {
 		return nil, err
 	}
+	e.mu.Lock()
 	e.ran = append(e.ran, setup.Stack)
+	e.mu.Unlock()
 	return e.outputs, nil
 }
 
