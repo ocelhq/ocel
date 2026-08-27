@@ -474,16 +474,27 @@ describe("summarizeOutcomes", () => {
 });
 
 describe("planProblems", () => {
-  it("passes a plan that says how to apply it and wrote no result", () => {
-    expect(planProblems(`+ e2en-x--infra\n\n${PLAN_APPLY_HINT}\n`, { resultWritten: false })).toEqual([]);
+  const untouched = { resultWritten: false, listed: "No previews.\n", ref: "smoke-abc123" };
+
+  it("passes a plan that says how to apply it, wrote no result and stood no preview up", () => {
+    expect(planProblems(`+ e2en-x--infra\n\n${PLAN_APPLY_HINT}\n`, untouched)).toEqual([]);
   });
 
   it("fails a run that printed no plan", () => {
-    expect(planProblems("deploying...\n", { resultWritten: false })).toHaveLength(1);
+    expect(planProblems("deploying...\n", untouched)).toHaveLength(1);
   });
 
   it("fails a run that recorded a deploy it never made", () => {
-    expect(planProblems(PLAN_APPLY_HINT, { resultWritten: true })).toHaveLength(1);
+    expect(planProblems(PLAN_APPLY_HINT, { ...untouched, resultWritten: true })).toHaveLength(1);
+  });
+
+  it("fails a run the account read back as having a preview", () => {
+    const listed = "smoke-abc123\tephemeral\t-\tcreated 2026-01-01\texpires 2026-01-08\n";
+    expect(planProblems(PLAN_APPLY_HINT, { ...untouched, listed })).toHaveLength(1);
+  });
+
+  it("fails when the account was never read back at all", () => {
+    expect(planProblems(PLAN_APPLY_HINT, { ...untouched, listed: "" })).toHaveLength(1);
   });
 });
 

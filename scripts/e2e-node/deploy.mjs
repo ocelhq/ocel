@@ -85,8 +85,13 @@ function planFirst(adapterDir, ref) {
   const logPath = join(appDir, BUILD_LOG_FILE);
   const before = existsSync(logPath) ? readFileSync(logPath, "utf8").length : 0;
   runOcel(adapterDir, ["preview", "up", "--ref", ref, "--prebuilt", "--dry"]);
-  const problems = planProblems(readFileSync(logPath, "utf8").slice(before), {
+  const planned = readFileSync(logPath, "utf8").slice(before);
+  const listedFrom = readFileSync(logPath, "utf8").length;
+  runOcel(adapterDir, ["preview", "ls"]);
+  const problems = planProblems(planned, {
     resultWritten: existsSync(join(appDir, DEPLOY_RESULT_FILE)),
+    listed: readFileSync(logPath, "utf8").slice(listedFrom),
+    ref,
   });
   if (problems.length > 0) {
     throw new Error(`--dry did not stay a plan:\n  ${problems.join("\n  ")}`);
