@@ -34,11 +34,20 @@ const adminArtifactPath = "apps/admin/functions/server.func"
 
 const builtEntrypoint = "index.mjs"
 
+func appArtifactPath(app string) string {
+	return "apps/" + app + "/functions/server.func"
+}
+
 func builtProject(t *testing.T) {
 	t.Helper()
+	builtApps(t, "web", "admin")
+}
+
+func builtApps(t *testing.T, apps ...string) {
+	t.Helper()
 	root := t.TempDir()
-	for _, artifact := range []string{artifactPath, adminArtifactPath} {
-		built := filepath.Join(root, ".ocel/output", filepath.FromSlash(artifact))
+	for _, app := range apps {
+		built := filepath.Join(root, ".ocel/output", filepath.FromSlash(appArtifactPath(app)))
 		if err := os.MkdirAll(built, 0o755); err != nil {
 			t.Fatal(err)
 		}
