@@ -3,9 +3,11 @@ package bootstrap
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -511,6 +513,62 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 			t.Errorf("a refused removal reached the provider: %v", clitest.ReadJournal(t, journal))
 		}
 	})
+
+	t.Run("what the removal takes rides the stream, so a json run consents to something it was shown", func(t *testing.T) {
+		root, _, deps := clitest.SetUpEdgeFixture(t, "")
+		deps.Presentation = func(io.Writer) runui.Presentation {
+			return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+		}
+		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
+		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "silent")
+
+		var stdout, stderr bytes.Buffer
+		opts := Options{Yes: true, Features: "none", FeaturesDeclared: true, Remove: "isr"}
+		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		want := "Removing isr from the production bootstrap tears down what it stood up."
+		said := streamDiagnostics(t, stdout.String())
+		if !slices.Contains(said, want) {
+			t.Errorf("the stream said %v, want it to carry %q — the consent that follows covers it", said, want)
+		}
+		if strings.Contains(withoutEnvelopes(stdout.String()), want) {
+			t.Errorf("the disclosure also went out beside the stream; got:\n%s", stdout.String())
+		}
+	})
+}
+
+func streamDiagnostics(t *testing.T, out string) []string {
+	t.Helper()
+	var said []string
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		var ev struct {
+			Diagnostic struct {
+				Message string `json:"message"`
+			} `json:"diagnostic"`
+		}
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			continue
+		}
+		if ev.Diagnostic.Message != "" {
+			said = append(said, ev.Diagnostic.Message)
+		}
+	}
+	return said
+}
+
+func withoutEnvelopes(out string) string {
+	var loose []string
+	for _, line := range strings.Split(out, "\n") {
+		if !json.Valid([]byte(line)) {
+			loose = append(loose, line)
+		}
+	}
+	return strings.Join(loose, "\n")
 }
 
 func TestBootstrapDryPreviewsEverything(t *testing.T) {
