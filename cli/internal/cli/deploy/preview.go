@@ -226,7 +226,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 				}, envwire.Scope(cfg, true, env.GetIdentity()))
 			},
 			ui:      ui,
-			enabled: canOpenVarsUI(deps, stdin),
+			enabled: !opts.dry && canOpenVarsUI(deps, stdin),
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {

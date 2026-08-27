@@ -3,6 +3,7 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -11,8 +12,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
+	"github.com/ocelhq/ocel/cli/internal/varsui"
 )
 
 func dryDeps(t *testing.T) cmddeps.Deps {
@@ -137,6 +142,55 @@ func TestADryRunRefusesOnAnUnbootstrappedAccount(t *testing.T) {
 			}
 			if strings.Contains(stdout.String(), "Run without --dry to apply.") {
 				t.Errorf("stdout = %q, want no plan drawn against an account that has none", stdout.String())
+			}
+		})
+	}
+}
+
+func TestADryRunNeverOpensTheVarsUI(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		preview bool
+		run     func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error
+	}{
+		{
+			name: "deploy",
+			run: func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
+				return runDeploy(context.Background(), deps, root, deployOptions{dry: true}, stdout, stderr, strings.NewReader(""))
+			},
+		},
+		{
+			name:    "preview up",
+			preview: true,
+			run: func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
+				return runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging", dry: true}, stdout, stderr, strings.NewReader(""))
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+			t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`)
+			if tc.preview {
+				t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+			}
+			deps := clitest.NewDeps()
+			terminalStdin(&deps)
+			served := 0
+			deps.ServeVarsUI = func(context.Context, *projectconfig.Config, *provider.Runner, bool, *envgate.Gate) (*varsui.Session, error) {
+				served++
+				return nil, errors.New("a dry run must never serve the variables UI")
+			}
+
+			var stdout, stderr bytes.Buffer
+			err := tc.run(deps, root, &stdout, &stderr)
+			if err == nil {
+				t.Fatalf("run err = nil, want the gate to refuse; stdout=%s", stdout.String())
+			}
+			if served != 0 {
+				t.Errorf("a dry run served the variables UI %d times, want none: a value written through it changes the account", served)
+			}
+			if !strings.Contains(stdout.String(), "STRIPE_API_KEY") {
+				t.Errorf("stdout = %q, want the refusal to name the variable the plan has no value for", stdout.String())
 			}
 		})
 	}
