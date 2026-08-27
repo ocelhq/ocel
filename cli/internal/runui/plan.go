@@ -156,7 +156,7 @@ func (c planCounts) tally() string {
 	return strings.Join(parts, ", ") + "."
 }
 
-func (c planCounts) count(action planv1.Change_Action) {
+func (c *planCounts) count(action planv1.Change_Action) {
 	switch action {
 	case planv1.Change_ACTION_CREATE,
 		planv1.Change_ACTION_UPDATE,
