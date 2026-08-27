@@ -144,7 +144,7 @@ func (c planCounts) tally() string {
 		planv1.Change_ACTION_DELETE,
 	} {
 		if n := c.acted[action]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%d to %s", n, tallyVerb(action)))
+			parts = append(parts, fmt.Sprintf("%d to %s", n, faceOf(action).verb))
 		}
 	}
 	if c.kept > 0 {
@@ -157,35 +157,15 @@ func (c planCounts) tally() string {
 }
 
 func (c *planCounts) count(action planv1.Change_Action) {
-	switch action {
-	case planv1.Change_ACTION_CREATE,
-		planv1.Change_ACTION_UPDATE,
-		planv1.Change_ACTION_REPLACE,
-		planv1.Change_ACTION_DELETE:
-		c.acted[action]++
-	case planv1.Change_ACTION_DISABLE_THEN_DELETE:
-		c.acted[planv1.Change_ACTION_DELETE]++
-	case planv1.Change_ACTION_KEEP, planv1.Change_ACTION_UNSPECIFIED:
-	}
-}
-
-func tallyVerb(action planv1.Change_Action) string {
-	switch action {
-	case planv1.Change_ACTION_CREATE:
-		return "create"
-	case planv1.Change_ACTION_UPDATE:
-		return "update"
-	case planv1.Change_ACTION_REPLACE:
-		return "replace"
-	default:
-		return "delete"
+	if tallied := faceOf(action).tallyAs; tallied != planv1.Change_ACTION_UNSPECIFIED {
+		c.acted[tallied]++
 	}
 }
 
 func (p *projector) groupLine(group *planv1.ChangeGroup) string {
 	var b strings.Builder
 	b.WriteString(p.paint(group.GetAction()) + " ")
-	if words := actionWords(group.GetAction()); words != "" {
+	if words := faceOf(group.GetAction()).words; words != "" {
 		b.WriteString(words + " ")
 	}
 	named := namedKind(group.GetKind())
@@ -218,7 +198,7 @@ func (p *projector) changeLines(changes []*planv1.Change) []string {
 }
 
 func changeLabel(change *planv1.Change) string {
-	if words := actionWords(change.GetAction()); words != "" {
+	if words := faceOf(change.GetAction()).words; words != "" {
 		return words + " " + change.GetName()
 	}
 	return change.GetName()
@@ -289,7 +269,7 @@ var sigilAttrs = map[string][]color.Attribute{
 }
 
 func (p *projector) paint(action planv1.Change_Action) string {
-	glyph := sigil(action)
+	glyph := faceOf(action).sigil
 	attrs, ok := sigilAttrs[glyph]
 	if !ok {
 		return glyph
@@ -309,36 +289,27 @@ func (p *projector) style(attrs ...color.Attribute) *color.Color {
 	return c
 }
 
-func sigil(action planv1.Change_Action) string {
-	switch action {
-	case planv1.Change_ACTION_CREATE:
-		return "+"
-	case planv1.Change_ACTION_UPDATE:
-		return "~"
-	case planv1.Change_ACTION_REPLACE:
-		return "±"
-	case planv1.Change_ACTION_DELETE, planv1.Change_ACTION_DISABLE_THEN_DELETE:
-		return "–"
-	case planv1.Change_ACTION_KEEP:
-		return " "
-	default:
-		return "?"
-	}
+type actionFace struct {
+	sigil   string
+	verb    string
+	words   string
+	tallyAs planv1.Change_Action
 }
 
-func actionWords(action planv1.Change_Action) string {
-	switch action {
-	case planv1.Change_ACTION_DISABLE_THEN_DELETE:
-		return "disable, then delete"
-	case planv1.Change_ACTION_CREATE,
-		planv1.Change_ACTION_UPDATE,
-		planv1.Change_ACTION_REPLACE,
-		planv1.Change_ACTION_DELETE,
-		planv1.Change_ACTION_KEEP:
-		return ""
-	default:
-		return fmt.Sprintf("act on (%s, an action this CLI does not know)", action)
+var actionFaces = map[planv1.Change_Action]actionFace{
+	planv1.Change_ACTION_CREATE:              {sigil: "+", verb: "create", tallyAs: planv1.Change_ACTION_CREATE},
+	planv1.Change_ACTION_UPDATE:              {sigil: "~", verb: "update", tallyAs: planv1.Change_ACTION_UPDATE},
+	planv1.Change_ACTION_REPLACE:             {sigil: "±", verb: "replace", tallyAs: planv1.Change_ACTION_REPLACE},
+	planv1.Change_ACTION_DELETE:              {sigil: "–", verb: "delete", tallyAs: planv1.Change_ACTION_DELETE},
+	planv1.Change_ACTION_DISABLE_THEN_DELETE: {sigil: "–", verb: "delete", words: "disable, then delete", tallyAs: planv1.Change_ACTION_DELETE},
+	planv1.Change_ACTION_KEEP:                {sigil: " "},
+}
+
+func faceOf(action planv1.Change_Action) actionFace {
+	if face, known := actionFaces[action]; known {
+		return face
 	}
+	return actionFace{sigil: "?", words: fmt.Sprintf("act on (%s, an action this CLI does not know)", action)}
 }
 
 func Mutates(plan *planv1.ChangePlan) bool {
