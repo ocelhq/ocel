@@ -3,29 +3,27 @@ set -euo pipefail
 
 IMAGE="${OCEL_ACT_IMAGE:-ghcr.io/catthehacker/ubuntu:act-latest}"
 DOCKER_SOCK="${OCEL_ACT_DOCKER_SOCK:-/var/run/docker.sock}"
-ALL_WORKFLOWS=(build go e2e aws-live)
+COMPOSE_PROJECT=ocel-act
+E2E_PORTS=(5432 5433 3000 9000 9001 8000)
+ALL_WORKFLOWS=(build go e2e aws-live vps-live)
 
 usage() {
     cat <<'EOF'
 usage: scripts/act.sh [workflow ...]
 
-Replays the PR gates locally through nektos/act before anything is pushed.
-Workflows run as workflow_dispatch, so every step runs regardless of what
-changed — a superset of the PR run. The remote Go build cache is wired in
-from your local credentials, so a green run both proves the change and
-leaves the cache warm for CI.
+Runs the PR gates locally before anything is pushed. build, go, e2e and
+aws-live replay through nektos/act as workflow_dispatch, so every step runs
+regardless of what changed — a superset of the PR run. vps-live runs its
+workflow's commands natively (incus wants systemd and KVM an act container
+cannot host; the CI runner executes it un-containered too). The remote Go
+build cache is wired in from your local credentials, so a green run both
+proves the change and leaves the cache warm for CI.
 
-  workflows: build go e2e aws-live    (default: all four)
+  workflows: build go e2e aws-live vps-live    (default: all five)
 
-vps-live is not replayable — incus wants systemd and KVM the act container
-cannot host. Exercise it natively, the way the workflow does:
-
-    scripts/incus.sh run <name> -- go test -C platform/vps/provider \
-      -race -count=1 -run '^TestLive' ./...
-
-e2e and aws-live drive the host docker daemon on its fixed ports
-(5432/5433/3000/9000, and floci's mapped ports) — stop the dev compose
-stack before running them.
+e2e and aws-live drive the host docker daemon. e2e needs the dev compose
+stack's ports free — stop it first (docker compose stop); e2e's own stack
+runs under the ocel-act compose project and is torn down afterwards.
 EOF
     exit 2
 }
@@ -43,18 +41,7 @@ act_bin() {
     fi
 }
 
-cache_args() {
-    if [ -z "${GOBUILDCACHE_S3_BUCKET:-}" ] && command -v mise >/dev/null 2>&1; then
-        eval "$(mise env -s bash 2>/dev/null || true)"
-    fi
-    if [ -z "${GOBUILDCACHE_S3_BUCKET:-}" ] || [ -z "${GOBUILDCACHE_AWS_REGION:-}" ]; then
-        echo "act.sh: no GOBUILDCACHE_S3_BUCKET/GOBUILDCACHE_AWS_REGION in the environment" >&2
-        echo "act.sh: verifying only — the build cache will not be warmed (scripts/gobuildcache-setup.sh configures it)" >&2
-        return 0
-    fi
-    local bin
-    bin=$(command -v gobuildcache 2>/dev/null || mise which gobuildcache 2>/dev/null) ||
-        die "gobuildcache is configured but the binary is missing (mise install)"
+cache_env() {
     local creds access_key secret_key session_token
     if creds=$(aws configure export-credentials --format env 2>/dev/null); then
         access_key=$(sed -n 's/^export AWS_ACCESS_KEY_ID=//p' <<<"$creds")
@@ -72,7 +59,6 @@ cache_args() {
     [ -n "$access_key" ] && [ -n "$secret_key" ] ||
         die "no AWS credentials for the build cache — log in, or unset GOBUILDCACHE_S3_BUCKET to run uncached"
     printf '%s\n' \
-        --container-options "-v $bin:/opt/gobuildcache:ro" \
         --env GOCACHEPROG=/opt/gobuildcache \
         --env GOBUILDCACHE_BACKEND_TYPE=s3 \
         --env "GOBUILDCACHE_S3_BUCKET=$GOBUILDCACHE_S3_BUCKET" \
@@ -83,6 +69,42 @@ cache_args() {
     if [ -n "$session_token" ]; then
         printf '%s\n' --env "GOBUILDCACHE_AWS_SESSION_TOKEN=$session_token"
     fi
+}
+
+incus_run() {
+    if incus info >/dev/null 2>&1; then
+        bash -c "$1"
+    else
+        sg incus-admin -c "$1"
+    fi
+}
+
+run_vps_live() {
+    eval "$(mise env -s bash 2>/dev/null || true)"
+    [ -e /dev/kvm ] || die "vps-live needs /dev/kvm"
+    incus_run "incus list" >/dev/null || die "vps-live needs a working incus (incus admin init --auto)"
+    local out status=0
+    out=$(mktemp -d)
+    pnpm install --frozen-lockfile &&
+        pnpm --filter ocel build &&
+        go generate -C cli ./... &&
+        incus_run "scripts/incus.sh run ocel-act-live-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./..." | tee "$out/live.json" &&
+        scripts/assert-ran.sh "$out/live.json" TestLive &&
+        incus_run "scripts/incus.sh run ocel-act-e2e-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestE2E' -json ./..." | tee "$out/e2e.json" &&
+        scripts/assert-ran.sh "$out/e2e.json" TestE2E || status=$?
+    rm -rf "$out"
+    return $status
+}
+
+e2e_ports_free() {
+    local port busy=()
+    for port in "${E2E_PORTS[@]}"; do
+        if ss -ltn "sport = :$port" 2>/dev/null | grep -q LISTEN; then
+            busy+=("$port")
+        fi
+    done
+    [ ${#busy[@]} -eq 0 ] ||
+        die "e2e needs ports ${busy[*]} — stop whatever holds them (the dev stack: docker compose stop)"
 }
 
 case "${1:-}" in -h | --help) usage ;; esac
@@ -102,22 +124,62 @@ ACT=$(act_bin)
 
 cd "$(dirname "$0")/.."
 
-mapfile -t extra < <(cache_args)
+if [ -z "${GOBUILDCACHE_S3_BUCKET:-}" ] && command -v mise >/dev/null 2>&1; then
+    eval "$(mise env -s bash 2>/dev/null || true)"
+fi
+
+CACHE_BIN=""
+CACHE_ENV=()
+if [ -n "${GOBUILDCACHE_S3_BUCKET:-}" ] && [ -n "${GOBUILDCACHE_AWS_REGION:-}" ]; then
+    CACHE_BIN=$(command -v gobuildcache 2>/dev/null || mise which gobuildcache 2>/dev/null) ||
+        die "gobuildcache is configured but the binary is missing (mise install)"
+    cache_env_lines=$(cache_env)
+    mapfile -t CACHE_ENV <<<"$cache_env_lines"
+else
+    echo "act.sh: no GOBUILDCACHE_S3_BUCKET/GOBUILDCACHE_AWS_REGION in the environment" >&2
+    echo "act.sh: verifying only — the build cache will not be warmed (scripts/gobuildcache-setup.sh configures it)" >&2
+fi
 
 failed=()
 for wf in "${selected[@]}"; do
     echo "act.sh: ▸ $wf"
+    if [ "$wf" = vps-live ]; then
+        run_vps_live || failed+=("$wf")
+        continue
+    fi
+    container_opts="--init"
+    wf_args=()
+    case "$wf" in
+    go | e2e)
+        if [ -n "$CACHE_BIN" ]; then
+            container_opts="--init -v $CACHE_BIN:/opt/gobuildcache:ro"
+            wf_args+=("${CACHE_ENV[@]}")
+        fi
+        ;;
+    esac
+    if [ "$wf" = e2e ]; then
+        e2e_ports_free
+        wf_args+=(--env "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT")
+    fi
     if ! "$ACT" workflow_dispatch \
         -W ".github/workflows/$wf.yml" \
         -P "ubuntu-latest=$IMAGE" \
         --container-daemon-socket "$DOCKER_SOCK" \
         --network host \
-        "${extra[@]}"; then
+        --container-options "$container_opts" \
+        "${wf_args[@]}"; then
         failed+=("$wf")
+    fi
+    if [ "$wf" = e2e ]; then
+        docker compose -p "$COMPOSE_PROJECT" down -v --remove-orphans >/dev/null 2>&1 || true
     fi
 done
 
 if [ ${#failed[@]} -gt 0 ]; then
     die "failed: ${failed[*]}"
 fi
-echo "act.sh: ✓ ${selected[*]} — green, cache warm"
+if [ -n "$CACHE_BIN" ]; then
+    echo "act.sh: ✓ ${selected[*]} — green, cache warm"
+else
+    echo "act.sh: ✓ ${selected[*]} — green (uncached)"
+fi
