@@ -73,11 +73,12 @@ type deployRun struct {
 	plan     DeployPlan
 	stages   deployStages
 
-	front    edge.Edge
-	stack    edge.EdgeStack
-	store    stackStore
-	state    EdgeStackState
-	wildcard Wildcard
+	front     edge.Edge
+	stack     edge.EdgeStack
+	store     stackStore
+	state     EdgeStackState
+	wildcard  Wildcard
+	previewOn string
 
 	values    values.Store
 	scope     values.Scope
@@ -236,7 +237,16 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 			return err
 		}
 		r.wildcard = wildcard
-		if len(hosts) > 0 || wildcard.BaseDomain != "" {
+		if len(hosts) > 0 {
+			base, err := r.previewBase()
+			if err != nil {
+				return err
+			}
+			r.previewOn = base
+			return nil
+		}
+		if wildcard.BaseDomain != "" {
+			r.previewOn = wildcard.BaseDomain
 			return nil
 		}
 		return Refuse(CodeNotReady,
@@ -329,12 +339,8 @@ func (r *deployRun) reconcileEdge(ctx context.Context) error {
 			spec.PruneOnly = true
 			break
 		}
-		resolved, err := r.previewBase()
-		if err != nil {
-			return err
-		}
-		base = resolved
-		spec.Domains = []string{edge.PreviewWildcard(resolved)}
+		base = r.previewOn
+		spec.Domains = []string{edge.PreviewWildcard(base)}
 	}
 	program, err := edgeProgramFor(ctx, r.provider, r.front, EdgeProgramRequest{
 		Class:             r.plan.Class,
@@ -398,6 +404,16 @@ func (r *deployRun) hostnames() []string {
 		if domains.GetTier() == tier {
 			return domains.GetHostnames()
 		}
+	}
+	return nil
+}
+
+func (r *deployRun) servedHostnames() []string {
+	if r.plan.Class != ClassPreview {
+		return r.hostnames()
+	}
+	if host := edge.PreviewHost(r.plan.Slug, r.plan.Pointer, "", r.previewOn); host != "" {
+		return []string{host}
 	}
 	return nil
 }
@@ -949,8 +965,8 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 			})
 		}
 	}
-	if front := r.stack.State().Front; front != "" {
-		result.AppUrls = []string{"https://" + front}
+	for _, host := range r.servedHostnames() {
+		result.AppUrls = append(result.AppUrls, "https://"+host)
 	}
 	if r.withheld != "" {
 		result.AppUrls, result.UrlNote = nil, r.withheld
