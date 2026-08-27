@@ -84,6 +84,7 @@ type deployRun struct {
 	published *publishedLinks
 
 	dry           bool
+	draft         draft
 	allowDegraded []string
 	withheld      string
 
@@ -161,6 +162,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	}
 	run.stages = newDeployStages(plan)
 	run.outcomes = pendingOutcomes(plan.Apps)
+	run.draft.apps = make([]Plan, len(plan.Apps))
 	run.tracked.declare(run.stages.Roster...)
 	sender.detailing(run.reportApps)
 	return run, nil
@@ -213,8 +215,10 @@ func (r *deployRun) settle(ctx context.Context, report Reporter) error {
 	if err := r.admitLinks(ctx, report); err != nil {
 		return err
 	}
-	if err := r.rememberProject(ctx); err != nil {
-		return err
+	if !r.dry {
+		if err := r.rememberProject(ctx); err != nil {
+			return err
+		}
 	}
 	if err := r.checkNeeds(ctx); err != nil {
 		return err
@@ -223,7 +227,7 @@ func (r *deployRun) settle(ctx context.Context, report Reporter) error {
 }
 
 func (r *deployRun) admit(ctx context.Context, report Reporter) error {
-	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, report)
+	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, !r.dry, report)
 	return err
 }
 
@@ -299,6 +303,11 @@ func (r *deployRun) world() hostingWorld {
 func (r *deployRun) raiseEdge(ctx context.Context) error {
 	return r.tracked.unit(r.stages.Edge, func(u *unitRun) error {
 		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
+			if r.dry {
+				report.Say(fmt.Sprintf("Reading the %s edge", r.front.Kind()))
+				r.draft.edge = r.drawEdge()
+				return nil
+			}
 			report.Say(fmt.Sprintf("Reconciling the %s edge", r.front.Kind()))
 			return r.reconcileEdge(ctx)
 		})
@@ -493,7 +502,7 @@ func (r *deployRun) provisionApps(ctx context.Context) error {
 	apps.SetLimit(appConcurrency)
 	for slot, entry := range r.plan.Apps {
 		apps.Go(func() error {
-			failures[slot] = r.provisionApp(ctx, entry)
+			failures[slot] = r.provisionApp(ctx, slot, entry)
 			return nil
 		})
 	}
@@ -532,15 +541,26 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 			if err := r.refuseToAdopt(ctx, r.plan.Infra); err != nil {
 				return err
 			}
-			report.Say("Provisioning the environment's infrastructure")
-			result, err := r.provider.Releases().Provision(ctx, StackPlan{
+			stack := StackPlan{
 				Ref:       r.ref(r.plan.Infra),
 				Kind:      StackInfra,
 				Edge:      r.front,
 				Tags:      r.plan.infraTags(),
 				Resources: resources,
 				Links:     r.reader(),
-			}, report)
+			}
+			if r.dry {
+				report.Say("Planning the environment's infrastructure")
+				drawn, err := r.provider.Releases().Plan(ctx, stack, report)
+				if err != nil {
+					return err
+				}
+				r.draft.infra = drawn
+				r.draft.parameters, err = r.drawValues(ctx)
+				return err
+			}
+			report.Say("Provisioning the environment's infrastructure")
+			result, err := r.provider.Releases().Provision(ctx, stack, report)
 			if err != nil {
 				return err
 			}
@@ -562,13 +582,17 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 	})
 }
 
-func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
+func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) error {
 	return r.tracked.unit(r.stages.Apps[entry.App], func(u *unitRun) error {
 		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
 			if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
 				return err
 			}
-			report.Say("Provisioning " + entry.App)
+			if r.dry {
+				report.Say("Planning " + entry.App)
+			} else {
+				report.Say("Provisioning " + entry.App)
+			}
 			grants, err := r.grants(ctx, entry)
 			if err != nil {
 				return err
@@ -614,6 +638,14 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 					Packed:          pack.Carry,
 					CrossesMembrane: crossesMembrane(r.crossesMembrane, grants),
 				},
+			}
+			if r.dry {
+				drawn, err := r.provider.Releases().Plan(ctx, plan, report)
+				if err != nil {
+					return err
+				}
+				r.draft.apps[slot] = drawn
+				return nil
 			}
 			result, err := r.provider.Releases().Provision(ctx, plan, report)
 			if err != nil {
@@ -871,6 +903,11 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, functions []Funct
 }
 
 func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, error) {
+	if r.dry {
+		r.draft.promotion = r.drawPromotion()
+		r.sender.send(planEvent(r.drawn()))
+		return okResult(), nil
+	}
 	flip := r.front.FlipBound()
 	promotion := edge.Promotion{
 		PromotionID: r.plan.PromotionID,

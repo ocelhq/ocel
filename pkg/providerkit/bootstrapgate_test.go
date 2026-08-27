@@ -123,7 +123,7 @@ func TestAdmitRefusesABootstrapThatIsNotThere(t *testing.T) {
 
 	gate, _ := gated(t, "2.0.0")
 
-	_, err := gate.Admit(context.Background(), providerkit.ClassPreview, nil, &recorder{})
+	_, err := gate.Admit(context.Background(), providerkit.ClassPreview, nil, true, &recorder{})
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
 		t.Fatalf("Admit() = %v, want a %s refusal", err, providerkit.CodeNotReady)
@@ -140,7 +140,7 @@ func TestAdmitRefusesASchemaThisBuildCannotRead(t *testing.T) {
 	bootstrapped(t, provider, providerkit.ClassProduction)
 	provider.Bootstrapper().AtSchema(providerkit.BootstrapSchema + 1)
 
-	_, err := gate.Admit(context.Background(), providerkit.ClassProduction, nil, &recorder{})
+	_, err := gate.Admit(context.Background(), providerkit.ClassProduction, nil, true, &recorder{})
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
 		t.Fatalf("Admit() = %v, want a %s refusal", err, providerkit.CodeNotReady)
@@ -156,7 +156,7 @@ func TestAdmitRefusesAMissingFeatureAndOffersTheOneCommandThatAddsIt(t *testing.
 	gate, provider := gated(t, "2.0.0")
 	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
 
-	_, err := gate.Admit(context.Background(), providerkit.ClassProduction, []string{fake.FeatureImages}, &recorder{})
+	_, err := gate.Admit(context.Background(), providerkit.ClassProduction, []string{fake.FeatureImages}, true, &recorder{})
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
 		t.Fatalf("Admit() = %v, want a %s refusal", err, providerkit.CodeNotReady)
@@ -184,7 +184,7 @@ func TestAdmitHealsAStaleBootstrapUnattended(t *testing.T) {
 	bootstrapper.Behind(fake.FeatureCache)
 
 	report := &recorder{}
-	standing, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, report)
+	standing, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, true, report)
 	if err != nil {
 		t.Fatalf("Admit() error = %v", err)
 	}
@@ -212,7 +212,7 @@ func TestAdmitLeavesAStaleBootstrapAloneWhenNobodyAskedForHealing(t *testing.T) 
 	bootstrapper.Behind(fake.FeatureCache)
 
 	report := &recorder{}
-	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, report); err != nil {
+	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, true, report); err != nil {
 		t.Fatalf("Admit() error = %v", err)
 	}
 	if got := len(bootstrapper.Applied()); got != 1 {
@@ -236,7 +236,7 @@ func TestAdmitWillNotHealFromADevelopmentBuild(t *testing.T) {
 	bootstrapper.Behind(fake.FeatureCache)
 
 	report := &recorder{}
-	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, report); err != nil {
+	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, true, report); err != nil {
 		t.Fatalf("Admit() error = %v", err)
 	}
 	if got := len(bootstrapper.Applied()); got != 1 {
@@ -262,7 +262,7 @@ func TestAdmitReportsAHealTheCredentialsCannotDo(t *testing.T) {
 		"ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password"))
 
 	report := &recorder{}
-	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, report); err != nil {
+	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, true, report); err != nil {
 		t.Fatalf("Admit() error = %v, want a refused heal to leave the run standing", err)
 	}
 	if !strings.Contains(report.told(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
@@ -302,7 +302,7 @@ func TestADeniedHealWithNothingToSayStillReadsAsASentence(t *testing.T) {
 	bootstrapper.RefuseApply(providerkit.Refuse(providerkit.CodeDenied, ""))
 
 	report := &recorder{}
-	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, report); err != nil {
+	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, true, report); err != nil {
 		t.Fatalf("Admit() error = %v, want a refused heal to leave the run standing", err)
 	}
 	if line := refusedLine(t, report); strings.Contains(line, ": ") {
@@ -433,7 +433,7 @@ func TestAPreviewBootstrapIsRemediatedWithItsOwnCommand(t *testing.T) {
 	gate, provider := gated(t, "2.0.0")
 	bootstrapped(t, provider, providerkit.ClassPreview)
 
-	_, err := gate.Admit(context.Background(), providerkit.ClassPreview, []string{fake.FeatureImages}, &recorder{})
+	_, err := gate.Admit(context.Background(), providerkit.ClassPreview, []string{fake.FeatureImages}, true, &recorder{})
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("Admit() = %v, want a refusal", err)

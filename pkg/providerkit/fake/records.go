@@ -100,6 +100,16 @@ func (r *Records) List(_ context.Context, under providerkit.RecordName) ([]provi
 	return found, nil
 }
 
+func (r *Records) Snapshot() map[string]providerkit.Revision {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	held := make(map[string]providerkit.Revision, len(r.rows))
+	for key, row := range r.rows {
+		held[key] = row.Revision
+	}
+	return held
+}
+
 func copyRecord(row providerkit.Record) providerkit.Record {
 	return providerkit.Record{
 		Name:     slices.Clone(row.Name),

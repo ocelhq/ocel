@@ -331,7 +331,7 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (g Gate) Admit(ctx context.Context, class Class, required []string, report Reporter) (Standing, error) {
+func (g Gate) Admit(ctx context.Context, class Class, required []string, heal bool, report Reporter) (Standing, error) {
 	standing, err := g.Standing(ctx, class)
 	if err != nil {
 		return Standing{}, err
@@ -343,7 +343,7 @@ func (g Gate) Admit(ctx context.Context, class Class, required []string, report 
 	if err := standing.lacking(required, command); err != nil {
 		return standing, err
 	}
-	if g.heal(ctx, standing, required, report) {
+	if heal && g.heal(ctx, standing, required, report) {
 		if standing, err = g.Standing(ctx, class); err != nil {
 			return Standing{}, err
 		}
