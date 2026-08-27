@@ -170,22 +170,7 @@ func (r *Renderer) endLocked(span *progressv1.SpanEvent) {
 	n.state = stageDone
 	n.doneFailed = span.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
 	n.doneDur = spanDuration(span)
-	if n.doneFailed {
-		for _, row := range r.plan.subtreeRows(id) {
-			if row.n.id != id {
-				r.plan.removeActive(row.n.id)
-			}
-		}
-		r.plan.ensureActive(id)
-		return
-	}
-	if r.plan.hasActiveAncestor(id) {
-		return
-	}
-	for _, row := range r.plan.subtreeRows(id) {
-		r.plan.removeActive(row.n.id)
-	}
-	r.plan.removeActive(id)
+	r.plan.foldSubtree(id)
 }
 
 func (r *Renderer) Restart(stageID []byte) {
@@ -204,7 +189,7 @@ func (r *Renderer) tickLoop() {
 			return
 		case <-t.C:
 			r.mu.Lock()
-			if !r.waiting && (len(r.plan.activeOrder) > 0 || r.spinning) {
+			if !r.waiting && (r.plan.animating() || r.spinning) {
 				for _, id := range r.plan.activeOrder {
 					if n := r.plan.nodes[id]; n != nil {
 						n.frame++

@@ -126,7 +126,7 @@ func TestLiveRegion(t *testing.T) {
 
 	t.Run("one app finishing does not stop the other's line from updating", func(t *testing.T) {
 		t.Parallel()
-		s, _ := liveStream(t)
+		s, out := liveStream(t)
 
 		appA, appB := appStage(1), appStage(2)
 		s.Emit(stagePlanEvent(
@@ -137,14 +137,15 @@ func TestLiveRegion(t *testing.T) {
 		s.Emit(progressEvent(appB, "uploading", 1, u32(2)))
 		s.Emit(spanEvent(appA, false, time.Second))
 
-		active := s.r.plan.activeOrder
-		if len(active) != 1 || active[0] != stageKey(appB) {
-			t.Fatalf("activeOrder = %v, want only app-b still live", active)
+		rows := liveRegion(s, out)
+		if len(rows) != 2 || !strings.Contains(rows[0], "app-b") || !strings.Contains(rows[1], okMark+" app-a") {
+			t.Fatalf("live region = %q, want app-b still spinning above the finished app-a", rows)
 		}
 
 		s.Emit(spanEvent(appB, false, time.Second))
-		if active := s.r.plan.activeOrder; len(active) != 0 {
-			t.Errorf("activeOrder = %v, want both apps finished", active)
+		rows = liveRegion(s, out)
+		if len(rows) != 2 || !strings.Contains(rows[0], okMark+" app-a") || !strings.Contains(rows[1], okMark+" app-b") {
+			t.Errorf("live region = %q, want both apps finished and still counted in spine order", rows)
 		}
 	})
 }
@@ -306,8 +307,8 @@ func TestAPhaseRowStaysLiveUntilItsSpanArrives(t *testing.T) {
 	}
 
 	s.Emit(spanEvent(uploading, false, 12*time.Second))
-	if active := s.r.plan.activeOrder; len(active) != 0 {
-		t.Errorf("activeOrder = %v, want the phase row retired by its own span", active)
+	if rows := liveRegion(s, out); len(rows) != 1 || !strings.Contains(rows[0], okMark+" web") {
+		t.Errorf("live region = %q, want the phase's spinning row settled by its own span into the unit's done row", rows)
 	}
 }
 
@@ -338,8 +339,11 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	}
 
 	s.Emit(spanEvent(provisioning, false, 50*time.Second))
-	if active := r.plan.activeOrder; len(active) != 0 {
-		t.Fatalf("activeOrder = %v, want the whole subtree retired with the parent", active)
+	if active := r.plan.activeOrder; len(active) != 1 || active[0] != stageKey(provisioning) {
+		t.Fatalf("activeOrder = %v, want the subtree folded into the unit's own done row", active)
+	}
+	if rows := liveRegion(s, out); len(rows) != 1 || !strings.Contains(rows[0], okMark+" Provisioning") {
+		t.Fatalf("live region = %q, want the finished unit ranked last as a single row", rows)
 	}
 }
 

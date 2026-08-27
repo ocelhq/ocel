@@ -120,6 +120,28 @@ func TestAUnitDeclaredButNotYetStartedWaitsBelowTheRunningOnes(t *testing.T) {
 	}
 }
 
+func TestTheOutputLineFollowsDeclarationOrderNotActivationOrder(t *testing.T) {
+	t.Parallel()
+	s, out := liveStreamOfHeight(t, 40)
+
+	unit := appStage(1)
+	first, second, third := appStage(2), appStage(3), appStage(4)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "web"},
+		&progressv1.Stage{Id: first, ParentId: unit, Title: "Building"},
+		&progressv1.Stage{Id: second, ParentId: unit, Title: "Uploading"},
+		&progressv1.Stage{Id: third, ParentId: unit, Title: "Provisioning"},
+	))
+	for _, id := range [][]byte{third, first, second} {
+		s.Emit(progressEvent(id, "working", 0, nil))
+	}
+
+	rows := liveRegion(s, out)
+	if len(rows) != 2 || !strings.Contains(rows[1], "web › Building") {
+		t.Fatalf("live region = %q, want the first child in declaration order on the output line", rows)
+	}
+}
+
 func TestARunningBuildKeepsItsOutputLineWhileTheRestOfTheSpineWaits(t *testing.T) {
 	t.Parallel()
 	s, out := liveStreamOfHeight(t, 20)
@@ -137,6 +159,43 @@ func TestARunningBuildKeepsItsOutputLineWhileTheRestOfTheSpineWaits(t *testing.T
 	}
 	if got := rows[len(rows)-1]; !strings.Contains(got, "+2 more: 2 waiting") {
 		t.Errorf("overflow line = %q, want the waiting units that did not fit counted below the fold", got)
+	}
+}
+
+func TestAFinishedUnitRanksLastAsASingleRow(t *testing.T) {
+	t.Parallel()
+	s, out := liveStreamOfHeight(t, 40)
+	spineOf(t, s, 2)
+
+	s.Emit(spanEvent(appStage(3), false, time.Second))
+	s.Emit(spanEvent(appStage(2), false, time.Second))
+
+	rows := liveRegion(s, out)
+	if got := rows[len(rows)-1]; !strings.Contains(got, okMark) || !strings.Contains(got, "app-01") {
+		t.Fatalf("live region = %q, want the finished unit ranked under the running one, not gone", rows)
+	}
+	if got := strings.Count(strings.Join(rows, "\n"), "app-01"); got != 1 {
+		t.Errorf("live region = %q, want the finished unit as one row — its story is already in scrollback", rows)
+	}
+
+	out.Reset()
+	s.Emit(progressEvent(appStage(5), "compiling", 8, u32(9)))
+	if got := strings.Count(out.String(), "app-01"); got != 1 {
+		t.Errorf("frame = %q, want the finished unit's row redrawn once and its committed block left in scrollback", out.String())
+	}
+}
+
+func TestTheOverflowLineCountsFinishedUnits(t *testing.T) {
+	t.Parallel()
+	s, out := liveStreamOfHeight(t, 9)
+	spineOf(t, s, 8)
+
+	s.Emit(spanEvent(appStage(3), false, time.Second))
+	s.Emit(spanEvent(appStage(2), false, time.Second))
+
+	rows := liveRegion(s, out)
+	if got := rows[len(rows)-1]; !strings.Contains(got, "+3 more: 2 running · 1 done") {
+		t.Errorf("overflow line = %q, want the finished unit counted below the fold", got)
 	}
 }
 
