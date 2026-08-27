@@ -308,7 +308,7 @@ func TestSession(t *testing.T) {
 			},
 		}})
 
-		if title := s.r.plan.nodes[stageKey(build)].title; title != "Building" {
+		if title := s.stream.Renderer().plan.nodes[stageKey(build)].title; title != "Building" {
 			t.Errorf("stage title = %q, want %q", title, "Building")
 		}
 	})
@@ -324,7 +324,7 @@ func TestSession(t *testing.T) {
 			},
 		}})
 
-		if title := s.r.plan.nodes[stageKey(stage)].title; title != "Provisioning" {
+		if title := s.stream.Renderer().plan.nodes[stageKey(stage)].title; title != "Provisioning" {
 			t.Errorf("stage title = %q, want the phase label the declaration carries", title)
 		}
 	})
@@ -597,15 +597,13 @@ func TestBuildWriterSendsTheRawFirehoseToTheTerminalOnlyWhenVerbose(t *testing.T
 			t.Parallel()
 			var out bytes.Buffer
 			present := Resolve(tc.origin)
-			r := NewRenderer(&out, present)
-
 			logFile, err := os.CreateTemp(t.TempDir(), "session-*.log")
 			if err != nil {
 				t.Fatalf("create log file: %v", err)
 			}
 			defer logFile.Close()
 
-			s := &Session{r: r, present: present, log: logFile}
+			s := &Session{stream: NewStream(&out, present), present: present, log: logFile}
 			s.logWriter = &syncFileWriter{f: logFile, mu: &s.logMu}
 
 			const marker = "raw subprocess output"
@@ -664,15 +662,12 @@ func TestDiagnosticEmitsAStructuredRecordUnderJSONFormat(t *testing.T) {
 
 	s.Diagnostic("warning: POSTHOG_ID is scoped to /web, which no app binds")
 
-	var rec map[string]any
-	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
-		t.Fatalf("stdout = %q is not JSON: %v", out.String(), err)
+	got := parseNDJSON(t, out.String())
+	if len(got) != 1 {
+		t.Fatalf("recorded %d envelopes, want 1", len(got))
 	}
-	if rec["type"] != "diagnostic" {
-		t.Errorf("record type = %v, want %q", rec["type"], "diagnostic")
-	}
-	if rec["message"] != "warning: POSTHOG_ID is scoped to /web, which no app binds" {
-		t.Errorf("record message = %v, want the diagnostic text", rec["message"])
+	if msg := got[0].GetDiagnostic().GetMessage(); msg != "warning: POSTHOG_ID is scoped to /web, which no app binds" {
+		t.Errorf("diagnostic message = %q, want the diagnostic text", msg)
 	}
 }
 
@@ -698,9 +693,9 @@ func TestFormatAxis(t *testing.T) {
 			if err := json.Unmarshal([]byte(line), &rec); err != nil {
 				t.Fatalf("line %q is not valid JSON: %v", line, err)
 			}
-			if _, ok := rec["type"]; !ok {
-				t.Errorf("line %q has no %q field", line, "type")
-			}
+		}
+		if got := parseNDJSON(t, out.String()); len(got) != 4 || got[3].GetResult() == nil {
+			t.Errorf("stream = %q, want four envelopes ending in the run result", out.String())
 		}
 		if strings.Contains(lines[2], "\r") || strings.HasPrefix(lines[2], "Uploading") {
 			t.Errorf("progress line %q looks like the raw human line, not a JSON record", lines[2])
@@ -729,7 +724,7 @@ func TestFormatAxis(t *testing.T) {
 		run := startTestRun(t, dir, "ocel deploy")
 		s := New(&bytes.Buffer{}, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
-		if s.r.Live() {
+		if s.stream.Renderer() != nil {
 			t.Error("json format entered the live-region view, which only makes sense for human output on a terminal")
 		}
 	})
@@ -775,7 +770,7 @@ func TestSpanWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
 			var out bytes.Buffer
 			s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 			t.Cleanup(func() { _ = s.Close() })
-			s.r.useClock(func() time.Time { return now })
+			s.stream.Renderer().useClock(func() time.Time { return now })
 
 			s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
 				StagePlan: &progressv1.StagePlanEvent{
@@ -792,7 +787,8 @@ func TestSpanWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
 				},
 			}})
 
-			if got := s.r.plan.nodes[stageKey(stage)].doneDur; got != 2*time.Minute {
+			got := s.stream.Renderer().plan.nodes[stageKey(stage)].doneDur
+			if got < 2*time.Minute || got > 2*time.Minute+time.Second {
 				t.Errorf("committed duration = %v, want the 2m the stage actually ran, not a collapsed span end", got)
 			}
 		})

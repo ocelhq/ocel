@@ -323,12 +323,19 @@ func (x *ResumedEvent) GetReason() string {
 	return ""
 }
 
+// How the run ended, and everything a projection needs to say so — no projection
+// holds outcome content the stream lacks.
 type RunResultEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	DurationMs    int64                  `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	LogPath       string                 `protobuf:"bytes,4,opt,name=log_path,json=logPath,proto3" json:"log_path,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Success    bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error      string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	DurationMs int64                  `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	LogPath    string                 `protobuf:"bytes,4,opt,name=log_path,json=logPath,proto3" json:"log_path,omitempty"`
+	Headline   string                 `protobuf:"bytes,5,opt,name=headline,proto3" json:"headline,omitempty"`
+	AppUrls    []string               `protobuf:"bytes,6,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
+	// Why the run has no address of its own, when it has none.
+	UrlNote       string         `protobuf:"bytes,7,opt,name=url_note,json=urlNote,proto3" json:"url_note,omitempty"`
+	FlipBound     *v11.FlipBound `protobuf:"bytes,8,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -389,6 +396,34 @@ func (x *RunResultEvent) GetLogPath() string {
 		return x.LogPath
 	}
 	return ""
+}
+
+func (x *RunResultEvent) GetHeadline() string {
+	if x != nil {
+		return x.Headline
+	}
+	return ""
+}
+
+func (x *RunResultEvent) GetAppUrls() []string {
+	if x != nil {
+		return x.AppUrls
+	}
+	return nil
+}
+
+func (x *RunResultEvent) GetUrlNote() string {
+	if x != nil {
+		return x.UrlNote
+	}
+	return ""
+}
+
+func (x *RunResultEvent) GetFlipBound() *v11.FlipBound {
+	if x != nil {
+		return x.FlipBound
+	}
+	return nil
 }
 
 type DiagnosticEvent struct {
@@ -470,13 +505,18 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"|\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x8c\x02\n" +
 	"\x0eRunResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12\x1f\n" +
 	"\vduration_ms\x18\x03 \x01(\x03R\n" +
 	"durationMs\x12\x19\n" +
-	"\blog_path\x18\x04 \x01(\tR\alogPath\"u\n" +
+	"\blog_path\x18\x04 \x01(\tR\alogPath\x12\x1a\n" +
+	"\bheadline\x18\x05 \x01(\tR\bheadline\x12\x19\n" +
+	"\bapp_urls\x18\x06 \x03(\tR\aappUrls\x12\x19\n" +
+	"\burl_note\x18\a \x01(\tR\aurlNote\x12<\n" +
+	"\n" +
+	"flip_bound\x18\b \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\"u\n" +
 	"\x0fDiagnosticEvent\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
@@ -510,6 +550,7 @@ var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*DiagnosticEvent)(nil),    // 5: cli.stream.v1.DiagnosticEvent
 	(*v1.ChangePlan)(nil),      // 6: common.plan.v1.ChangePlan
 	(*v11.OperationEvent)(nil), // 7: common.progress.v1.OperationEvent
+	(*v11.FlipBound)(nil),      // 8: common.progress.v1.FlipBound
 }
 var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	6, // 0: cli.stream.v1.RunEvent.plan:type_name -> common.plan.v1.ChangePlan
@@ -518,12 +559,13 @@ var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	3, // 3: cli.stream.v1.RunEvent.resumed:type_name -> cli.stream.v1.ResumedEvent
 	4, // 4: cli.stream.v1.RunEvent.result:type_name -> cli.stream.v1.RunResultEvent
 	5, // 5: cli.stream.v1.RunEvent.diagnostic:type_name -> cli.stream.v1.DiagnosticEvent
-	0, // 6: cli.stream.v1.DiagnosticEvent.level:type_name -> cli.stream.v1.DiagnosticLevel
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	8, // 6: cli.stream.v1.RunResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
+	0, // 7: cli.stream.v1.DiagnosticEvent.level:type_name -> cli.stream.v1.DiagnosticLevel
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_cli_stream_v1_stream_proto_init() }

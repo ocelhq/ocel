@@ -1,0 +1,16 @@
+stages:
+  Environment
+    Building
+  web
+    Provisioning
+  api
+    Provisioning
+plan:
+  infrastructure/shared ACTION_UPDATE function/api
+  infrastructure/shared ACTION_DELETE bucket/logs
+  infrastructure/shared ACTION_CREATE bucket/assets
+waits:
+  waiting 1 variable is not ready — nothing has been built.
+  resumed the page was answered
+results:
+  success=false headline="" error="updating function api: InsufficientCapacity" duration_ms=21000

@@ -8,6 +8,11 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
+type Flip struct {
+	Note  string
+	Bound *progressv1.FlipBound
+}
+
 func FlipFor(bound *progressv1.FlipBound) Flip {
 	return Flip{Note: FlipNote(bound), Bound: bound}
 }

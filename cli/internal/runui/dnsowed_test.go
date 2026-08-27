@@ -2,7 +2,6 @@ package runui
 
 import (
 	"bytes"
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -88,18 +87,25 @@ func TestDNSStack(t *testing.T) {
 	}
 }
 
-func TestRendererDNSOwed(t *testing.T) {
+func dnsOutput(t *testing.T, present Presentation, headline string, records []*progressv1.DnsRecord, notes []string) string {
+	t.Helper()
+	var out bytes.Buffer
+	s := NewStream(&out, present)
+	t.Cleanup(func() { _ = s.Close() })
+	s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_DnsOwed{
+		DnsOwed: &progressv1.DnsOwedEvent{Headline: headline, Records: records, Notes: notes},
+	}}))
+	return out.String()
+}
+
+func TestDNSOwedProjection(t *testing.T) {
 	t.Parallel()
+
+	human := Presentation{Format: FormatHuman, Width: defaultWidth}
 
 	t.Run("names what the records are for and prints every field", func(t *testing.T) {
 		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
-
-		r.DNSOwed("Prove you own prev.ocel.site", []*progressv1.DnsRecord{validation}, []string{"Leave it in place."})
-
-		got := out.String()
+		got := dnsOutput(t, human, "Prove you own prev.ocel.site", []*progressv1.DnsRecord{validation}, []string{"Leave it in place."})
 		for _, want := range []string{
 			"Prove you own prev.ocel.site",
 			"add this record",
@@ -116,69 +122,44 @@ func TestRendererDNSOwed(t *testing.T) {
 
 	t.Run("counts the records when there is more than one", func(t *testing.T) {
 		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
-
-		r.DNSOwed("Point *.prev.ocel.site at the edge", []*progressv1.DnsRecord{validation, wildcard}, nil)
-
-		if got := out.String(); !strings.Contains(got, "add these 2 records") {
+		got := dnsOutput(t, human, "Point *.prev.ocel.site at the edge", []*progressv1.DnsRecord{validation, wildcard}, nil)
+		if !strings.Contains(got, "add these 2 records") {
 			t.Errorf("output = %q, want the count named", got)
 		}
 	})
 
 	t.Run("a proxied record says the value is a placeholder", func(t *testing.T) {
 		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
-
 		proxied := &progressv1.DnsRecord{Name: "shop.app.com", Type: "AAAA", Value: "100::", Proxied: true}
-		r.DNSOwed("Point shop.app.com at the edge", []*progressv1.DnsRecord{proxied}, nil)
-
-		if got := out.String(); !strings.Contains(got, "orange cloud") {
+		got := dnsOutput(t, human, "Point shop.app.com at the edge", []*progressv1.DnsRecord{proxied}, nil)
+		if !strings.Contains(got, "orange cloud") {
 			t.Errorf("output = %q, want the proxy toggle spelled out", got)
 		}
 	})
 
 	t.Run("nothing owed prints nothing", func(t *testing.T) {
 		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
-
-		r.DNSOwed("Prove you own prev.ocel.site", nil, []string{"Leave it in place."})
-
-		if got := out.String(); got != "" {
+		if got := dnsOutput(t, human, "Prove you own prev.ocel.site", nil, []string{"Leave it in place."}); got != "" {
 			t.Errorf("output = %q, want nothing printed with no record to add", got)
 		}
 	})
 
 	t.Run("json carries the records as fields, not prose", func(t *testing.T) {
 		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
-
-		r.DNSOwed("Prove you own prev.ocel.site", []*progressv1.DnsRecord{validation}, nil)
-
-		var event struct {
-			Kind     string `json:"type"`
-			Headline string `json:"headline"`
-			Records  []struct {
-				Name  string `json:"name"`
-				Type  string `json:"type"`
-				Value string `json:"value"`
-			} `json:"records"`
+		raw := dnsOutput(t, Presentation{Format: FormatJSON, Width: defaultWidth}, "Prove you own prev.ocel.site", []*progressv1.DnsRecord{validation}, nil)
+		got := parseNDJSON(t, raw)
+		if len(got) != 1 {
+			t.Fatalf("recorded %d envelopes, want 1", len(got))
 		}
-		if err := json.Unmarshal(out.Bytes(), &event); err != nil {
-			t.Fatalf("unmarshal %q: %v", out.String(), err)
+		records := got[0].GetOperation().GetDnsOwed().GetRecords()
+		if len(records) != 1 {
+			t.Fatalf("envelope = %v, want one owed record", got[0])
 		}
-		if event.Kind != "dnsOwed" || len(event.Records) != 1 {
-			t.Fatalf("event = %+v, want one owed record", event)
+		if records[0].GetName() != validation.GetName() || records[0].GetValue() != validation.GetValue() {
+			t.Errorf("record = %+v, want the fields carried through", records[0])
 		}
-		if event.Records[0].Name != validation.GetName() || event.Records[0].Value != validation.GetValue() {
-			t.Errorf("record = %+v, want the fields carried through", event.Records[0])
+		if strings.Contains(raw, "add this record") {
+			t.Errorf("json = %q, want the machine surface free of rendered English", raw)
 		}
 	})
 }

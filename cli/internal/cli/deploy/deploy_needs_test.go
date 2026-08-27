@@ -3,14 +3,17 @@ package deploy
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 const needsRefusal = "app web needs edge-middleware and the \"cloudfront\" edge does not serve it: middleware runs in the origin's Node server the way `next start` runs it, so every request pays the round trip to the origin before it is routed. " +
@@ -26,31 +29,21 @@ func useJSONLogFormat(t *testing.T, deps *cmddeps.Deps) {
 	}
 }
 
-func jsonRecords(t *testing.T, out string) []map[string]any {
+func envelopes(t *testing.T, out string) []*streamv1.RunEvent {
 	t.Helper()
-	var records []map[string]any
+	var events []*streamv1.RunEvent
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "{") {
 			continue
 		}
-		var rec map[string]any
-		if err := json.Unmarshal([]byte(line), &rec); err != nil {
-			continue
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
 		}
-		records = append(records, rec)
+		events = append(events, ev)
 	}
-	return records
-}
-
-func recordsOfType(records []map[string]any, kind string) []map[string]any {
-	var out []map[string]any
-	for _, rec := range records {
-		if rec["type"] == kind {
-			out = append(out, rec)
-		}
-	}
-	return out
+	return events
 }
 
 func TestDeployRendersTheNeedsRefusalInHumanMode(t *testing.T) {
@@ -82,11 +75,18 @@ func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
 		t.Fatalf("runDeploy err = nil, want the unsupported need to fail the deploy; stdout=%s", stdout.String())
 	}
 
-	failed := recordsOfType(jsonRecords(t, stdout.String()), "failed")
-	if len(failed) != 1 {
-		t.Fatalf("got %d failed records, want 1: %s", len(failed), stdout.String())
+	var message string
+	for _, ev := range envelopes(t, stdout.String()) {
+		if res := ev.GetResult(); res != nil {
+			if res.GetSuccess() {
+				t.Fatalf("run result reports success, want the unsupported need to fail the run: %s", stdout.String())
+			}
+			message = res.GetError()
+		}
 	}
-	message, _ := failed[0]["error"].(string)
+	if message == "" {
+		t.Fatalf("no failing run result on the stream: %s", stdout.String())
+	}
 	for _, want := range []string{"edge-middleware", "next start", "/dashboard", `"edge-middleware" to ` + "`allowDegraded`"} {
 		if !strings.Contains(message, want) {
 			t.Errorf("failed record error = %q, want it to carry %q", message, want)
@@ -121,16 +121,20 @@ func TestDeployRendersADegradedNeedAsATypedJSONRecord(t *testing.T) {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	degraded := recordsOfType(jsonRecords(t, stdout.String()), "degraded")
+	var degraded []*progressv1.DegradedEvent
+	for _, ev := range envelopes(t, stdout.String()) {
+		if d := ev.GetOperation().GetDegraded(); d != nil {
+			degraded = append(degraded, d)
+		}
+	}
 	if len(degraded) != 2 {
-		t.Fatalf("got %d degraded records, want one per waived need: %s", len(degraded), stdout.String())
+		t.Fatalf("got %d degraded envelopes, want one per waived need: %s", len(degraded), stdout.String())
 	}
-	if degraded[0]["need"] != "edge-middleware" || degraded[1]["need"] != "ppr-resume" {
-		t.Errorf("degraded records = %v, want edge-middleware then ppr-resume", degraded)
+	if degraded[0].GetNeed() != "edge-middleware" || degraded[1].GetNeed() != "ppr-resume" {
+		t.Errorf("degraded envelopes = %v, want edge-middleware then ppr-resume", degraded)
 	}
-	detail, ok := degraded[0]["detail"].(string)
-	if !ok || !strings.Contains(detail, "next start") {
-		t.Errorf("degraded detail = %v, want the degrade spelled out", degraded[0]["detail"])
+	if !strings.Contains(degraded[0].GetDetail(), "next start") {
+		t.Errorf("degraded detail = %q, want the degrade spelled out", degraded[0].GetDetail())
 	}
 }
 
@@ -158,8 +162,10 @@ func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if got := recordsOfType(jsonRecords(t, stdout.String()), "degraded"); len(got) != 0 {
-			t.Errorf("got %d degraded records, want none: %v", len(got), got)
+		for _, ev := range envelopes(t, stdout.String()) {
+			if d := ev.GetOperation().GetDegraded(); d != nil {
+				t.Errorf("degraded envelope %v on the stream, want none for an app that declares no needs", d)
+			}
 		}
 	})
 }

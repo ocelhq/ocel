@@ -1,0 +1,118 @@
+package runui
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	"google.golang.org/protobuf/encoding/protojson"
+
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+)
+
+func recorded(t *testing.T, events ...*streamv1.RunEvent) []*streamv1.RunEvent {
+	t.Helper()
+	var out bytes.Buffer
+	s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
+	for _, ev := range events {
+		s.Emit(ev)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+	return parseNDJSON(t, out.String())
+}
+
+func parseNDJSON(t *testing.T, raw string) []*streamv1.RunEvent {
+	t.Helper()
+	var out []*streamv1.RunEvent
+	for _, line := range strings.Split(strings.TrimRight(raw, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
+		}
+		out = append(out, ev)
+	}
+	return out
+}
+
+func TestCarriageReturnRewritesCollapseOnIngest(t *testing.T) {
+	t.Parallel()
+
+	got := recorded(t, operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
+		Progress: &progressv1.ProgressEvent{
+			StageId: appStage(1),
+			Message: "downloading 10%\rdownloading 60%\rdownloading 100%",
+		},
+	}}))
+
+	if len(got) != 1 {
+		t.Fatalf("recorded %d envelopes, want 1", len(got))
+	}
+	if want := "downloading 100%"; got[0].GetOperation().GetProgress().GetMessage() != want {
+		t.Errorf("recorded message = %q, want %q — rewrites collapse before anything projects them",
+			got[0].GetOperation().GetProgress().GetMessage(), want)
+	}
+}
+
+func TestPlanRowsReachTheStreamInOneOrderWhateverOrderTheyArriveIn(t *testing.T) {
+	t.Parallel()
+
+	rows := []*planv1.Change{
+		{Kind: "bucket", Name: "assets", Action: planv1.Change_ACTION_CREATE},
+		{Kind: "function", Name: "api", Action: planv1.Change_ACTION_UPDATE},
+		{Kind: "bucket", Name: "logs", Action: planv1.Change_ACTION_DELETE},
+	}
+	shuffled := []*planv1.Change{rows[2], rows[0], rows[1]}
+
+	first := recorded(t, plan(rows))
+	second := recorded(t, plan(shuffled))
+
+	if a, b := planNames(first[0]), planNames(second[0]); a != b {
+		t.Errorf("row order = %q for one arrival order and %q for another, want one order for one plan", a, b)
+	}
+	if want := "bucket/assets bucket/logs function/api"; planNames(first[0]) != want {
+		t.Errorf("row order = %q, want %q", planNames(first[0]), want)
+	}
+}
+
+func plan(changes []*planv1.Change) *streamv1.RunEvent {
+	return &streamv1.RunEvent{Event: &streamv1.RunEvent_Plan{Plan: &planv1.ChangePlan{
+		Subject: "production",
+		Groups:  []*planv1.ChangeGroup{{Kind: "app", Name: "web", Changes: changes}},
+	}}}
+}
+
+func planNames(ev *streamv1.RunEvent) string {
+	var names []string
+	for _, g := range ev.GetPlan().GetGroups() {
+		for _, c := range g.GetChanges() {
+			names = append(names, c.GetKind()+"/"+c.GetName())
+		}
+	}
+	return strings.Join(names, " ")
+}
+
+func TestNDJSONIsOneEnvelopePerLineAndNeverBuffers(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
+		Stages: []*progressv1.Stage{{Id: appStage(1), Title: "web"}},
+	}}}))
+
+	if lines := strings.Count(out.String(), "\n"); lines != 1 {
+		t.Errorf("after one envelope the stream holds %d lines, want 1 — the machine surface is the off-TTY liveness surface", lines)
+	}
+	if strings.Contains(out.String(), "\n ") || strings.Contains(strings.TrimRight(out.String(), "\n"), "\n") {
+		t.Errorf("stream = %q, want exactly one line per envelope", out.String())
+	}
+}

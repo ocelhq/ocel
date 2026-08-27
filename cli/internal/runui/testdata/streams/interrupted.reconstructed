@@ -1,0 +1,7 @@
+stages:
+  Environment
+    Building
+plan:
+waits:
+results:
+  success=false headline="Cancelled" error="" duration_ms=4000
