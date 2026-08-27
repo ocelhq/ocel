@@ -20,7 +20,7 @@ import (
 
 const warmPayload = `{"ocel":{"warm":1}}`
 
-const warmConcurrency = appConcurrency
+const warmConcurrency = 4
 
 const warmPassDeadline = 3 * time.Minute
 
