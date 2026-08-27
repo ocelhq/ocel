@@ -2,6 +2,17 @@ name: VPS Live
 
 on:
   pull_request:
+    paths:
+      - "platform/vps/**"
+      - "pkg/providerkit/**"
+      - "platform/edge/contract/**"
+      - "cli/internal/provider/**"
+      - "cli/internal/prompt/**"
+      - "cli/internal/cli/bootstrap/**"
+      - "pnpm-lock.yaml"
+      - "scripts/incus.sh"
+      - "scripts/assert-ran.sh"
+      - ".github/workflows/vps-live.yml"
   workflow_dispatch:
 
 concurrency:
@@ -20,34 +31,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Decide whether this change reaches the VPS provider
-        id: reach
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
-          run=false
-          while IFS= read -r file; do
-            case "$file" in
-              platform/vps/* | pkg/providerkit/* | platform/edge/contract/* | \
-              cli/internal/provider/* | cli/internal/prompt/* | cli/internal/cli/bootstrap/* | \
-              pnpm-lock.yaml | scripts/incus.sh | scripts/assert-ran.sh | .github/workflows/vps-live.yml)
-                run=true
-                break
-                ;;
-            esac
-          done <<< "$changed"
-          echo "run=$run" >> "$GITHUB_OUTPUT"
 
       - name: Setup Go
-        if: steps.reach.outputs.run == 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: platform/vps/provider/go.mod
@@ -56,7 +41,6 @@ jobs:
             cli/go.sum
 
       - name: Setup gobuildcache
-        if: steps.reach.outputs.run == 'true'
         uses: ./.github/actions/gobuildcache
         with:
           bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
@@ -64,20 +48,17 @@ jobs:
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
       - name: Setup pnpm
-        if: steps.reach.outputs.run == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 11.10.0
 
       - name: Setup Node
-        if: steps.reach.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
       - name: The node bundle the CLI binary is built around
-        if: steps.reach.outputs.run == 'true'
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
@@ -85,13 +66,11 @@ jobs:
           go generate -C cli ./...
 
       - name: Virtualisation the qemu driver hard-requires
-        if: steps.reach.outputs.run == 'true'
         run: |
           sudo modprobe vhost_vsock || true
           ls -l /dev/kvm /dev/vsock
 
       - name: Install incus
-        if: steps.reach.outputs.run == 'true'
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -100,7 +79,6 @@ jobs:
           sudo usermod -aG incus-admin "$(id -un)"
 
       - name: Let the incus bridge past Docker's FORWARD drop
-        if: steps.reach.outputs.run == 'true'
         run: |
           set -euo pipefail
           for cmd in iptables ip6tables; do
@@ -110,27 +88,23 @@ jobs:
           done
 
       - name: Run the live conformance suite
-        if: steps.reach.outputs.run == 'true'
         run: |
           set -euo pipefail
           sg incus-admin -c "scripts/incus.sh run ocel-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./..." | tee live.json
 
       - name: Assert the live suite ran
-        if: steps.reach.outputs.run == 'true'
         run: scripts/assert-ran.sh live.json TestLive
 
       - name: Run the CLI e2e on a machine of its own
-        if: steps.reach.outputs.run == 'true'
         run: |
           set -euo pipefail
           sg incus-admin -c "scripts/incus.sh run ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestE2E' -json ./..." | tee e2e.json
 
       - name: Assert the e2e ran
-        if: steps.reach.outputs.run == 'true'
         run: scripts/assert-ran.sh e2e.json TestE2E
 
       - name: No VM left behind
-        if: always() && steps.reach.outputs.run == 'true'
+        if: always()
         run: |
           for name in "ocel-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; do
             sg incus-admin -c "scripts/incus.sh destroy $name" || echo "could not destroy $name"
