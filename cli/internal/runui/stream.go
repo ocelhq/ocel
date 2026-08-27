@@ -165,17 +165,6 @@ func sortGroups(plan *planv1.ChangePlan) {
 	})
 }
 
-func spineRank(kind string) int {
-	switch kind {
-	case sharedStackKind, parameterKind:
-		return 0
-	case edgeKind:
-		return 2
-	default:
-		return 1
-	}
-}
-
 func sortChanges(group *planv1.ChangeGroup) {
 	sort.SliceStable(group.Changes, func(i, j int) bool {
 		return changeKey(group.Changes[i]) < changeKey(group.Changes[j])

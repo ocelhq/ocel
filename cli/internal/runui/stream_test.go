@@ -85,17 +85,25 @@ func TestPlanGroupsReachTheStreamInSpineOrderWhateverOrderTheyArriveIn(t *testin
 	t.Parallel()
 
 	spine := []*planv1.ChangeGroup{
-		{Kind: "stack", Name: "ocel-production-core"},
+		{Kind: "stack", Name: "aws/ocel-production-core"},
 		{Kind: "parameters", Name: "aws/parameters"},
-		{Kind: "app", Name: "web"},
-		{Kind: "app", Name: "api"},
-		{Kind: "edge", Name: "cloudflare/edge"},
+		{Kind: "stack", Name: "aws/shop--web--b1"},
+		{Kind: "stack", Name: "aws/shop--api--b1"},
+		{Kind: "edge", Name: "cloudfront/edge"},
+		{Kind: "certificate", Name: "ocels-cert"},
+		{Kind: "DNS record", Name: "shop.example"},
+		{Kind: "variable values", Name: "shop"},
+		{Kind: "stored objects", Name: "shop"},
 	}
-	arrived := []*planv1.ChangeGroup{spine[4], spine[2], spine[3], spine[0], spine[1]}
+	arrived := []*planv1.ChangeGroup{
+		spine[5], spine[4], spine[0], spine[6], spine[1], spine[2], spine[7], spine[3], spine[8],
+	}
 
-	want := "stack/ocel-production-core parameters/aws/parameters app/web app/api edge/cloudflare/edge"
+	want := "stack/aws/ocel-production-core parameters/aws/parameters stack/aws/shop--web--b1 " +
+		"stack/aws/shop--api--b1 edge/cloudfront/edge certificate/ocels-cert DNS record/shop.example " +
+		"variable values/shop stored objects/shop"
 	if names := groupNames(recorded(t, planOf(arrived))[0]); names != want {
-		t.Errorf("group order = %q, want %q — shared infra, then apps in the order the plan names them, then edge", names, want)
+		t.Errorf("group order = %q, want %q — infra and apps in the order the plan names them, then edge, then what sits outside the spine", names, want)
 	}
 	if names := groupNames(recorded(t, planOf(spine))[0]); names != want {
 		t.Errorf("group order = %q for a plan that arrived in spine order already, want %q", names, want)
