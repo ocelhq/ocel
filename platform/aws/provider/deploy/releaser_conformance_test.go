@@ -1,8 +1,12 @@
 package deploy
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -137,14 +141,104 @@ func releaserPlacingInto(engine kitpulumi.Engine, uploader *fakeUploader) *Relea
 		StateTable:     "ocel-state",
 		StateTableARN:  "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state",
 		AppBoundaryARN: "arn:aws:iam::111122223333:policy/ocel-app-boundary",
-		ArtifactBucket: "ocel-artifacts",
+		ArtifactBucket: conformanceArtifactBucket,
 		Uploader:       uploader,
 	}
 	return newReleaser(fixed(cfg), &Realized{}, engine)
 }
 
+const conformanceArtifactBucket = "ocel-artifacts"
+
+type shippedArtifacts struct {
+	mu      sync.Mutex
+	objects map[string][]byte
+}
+
+func newShippedArtifacts() *shippedArtifacts {
+	return &shippedArtifacts{objects: map[string][]byte{}}
+}
+
+func (s *shippedArtifacts) NewResource(args sdk.MockResourceArgs) (string, resource.PropertyMap, error) {
+	if args.TypeToken == bucketObjectType {
+		blob, err := args.Inputs["source"].AssetValue().Bytes()
+		if err != nil {
+			return "", nil, err
+		}
+		s.write(args.Inputs["bucket"].StringValue()+"/"+args.Inputs["key"].StringValue(), blob)
+	}
+	return standInCloud{}.NewResource(args)
+}
+
+func (s *shippedArtifacts) Call(args sdk.MockCallArgs) (resource.PropertyMap, error) {
+	return standInCloud{}.Call(args)
+}
+
+func (s *shippedArtifacts) write(at string, blob []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.objects[at] = blob
+}
+
+func (s *shippedArtifacts) at(ref providerkit.ArtifactRef) (string, error) {
+	if ref.Bucket != providerkit.StoreFunctions {
+		return "", fmt.Errorf("this run keeps no %q store", ref.Bucket)
+	}
+	return conformanceArtifactBucket + "/" + ref.Key, nil
+}
+
+func (s *shippedArtifacts) Put(_ context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
+	at, err := s.at(ref)
+	if err != nil {
+		return err
+	}
+	blob, err := io.ReadAll(body)
+	if err != nil {
+		return err
+	}
+	s.write(at, blob)
+	return nil
+}
+
+func (s *shippedArtifacts) Has(_ context.Context, ref providerkit.ArtifactRef) (bool, error) {
+	at, err := s.at(ref)
+	if err != nil {
+		return false, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, held := s.objects[at]
+	return held, nil
+}
+
+func (s *shippedArtifacts) Open(_ context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
+	at, err := s.at(ref)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	blob, held := s.objects[at]
+	if !held {
+		return nil, fmt.Errorf("no artifact at %s", at)
+	}
+	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
+}
+
+func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ providerkit.Class, prefix string, _ providerkit.Reporter) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for at := range s.objects {
+		if strings.HasPrefix(at, conformanceArtifactBucket+"/"+prefix) {
+			delete(s.objects, at)
+		}
+	}
+	return nil
+}
+
 func TestReleaserRunsTheKitsPortTier(t *testing.T) {
-	conformance.RunReleaser(t, conformingReleaser(&mockedEngine{outputs: provisionedOutputs()}), Serves())
+	store := newShippedArtifacts()
+	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: store}
+	conformance.RunReleaser(t, conformingReleaser(engine), store, Serves())
 }
 
 func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryLink(t *testing.T) {

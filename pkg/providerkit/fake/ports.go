@@ -243,13 +243,15 @@ func (b *Bootstrapper) Remove(_ context.Context, class providerkit.Class, report
 type Releaser struct {
 	Grants []providerkit.Grant
 
+	artifacts providerkit.ArtifactStore
+
 	mu     sync.Mutex
 	stacks map[string]providerkit.StackResult
 	plans  []providerkit.StackPlan
 }
 
-func NewReleaser() *Releaser {
-	return &Releaser{stacks: map[string]providerkit.StackResult{}}
+func NewReleaser(artifacts providerkit.ArtifactStore) *Releaser {
+	return &Releaser{artifacts: artifacts, stacks: map[string]providerkit.StackResult{}}
 }
 
 func (r *Releaser) Plans() []providerkit.StackPlan {
@@ -258,15 +260,18 @@ func (r *Releaser) Plans() []providerkit.StackPlan {
 	return slices.Clone(r.plans)
 }
 
-func (r *Releaser) Plan(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
-	return providerkit.SynthesizedPlan(plan, r.State(plan.Ref).Result), nil
+func (r *Releaser) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
+	return providerkit.SynthesizedPlan(ctx, r.artifacts, plan, r.State(plan.Ref).Result)
 }
 
 func (r *Releaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {
 	return providerkit.SynthesizedRemoval(ref, r.State(ref).Result), nil
 }
 
-func (r *Releaser) Provision(_ context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+	if err := providerkit.ShipUploads(ctx, r.artifacts, plan.Uploads, report); err != nil {
+		return providerkit.StackResult{}, err
+	}
 	result := providerkit.StackResult{}
 	for _, resource := range plan.Resources {
 		if resource.Linked {

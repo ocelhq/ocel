@@ -504,7 +504,7 @@ func functionVPCConfig(logicalName string, v functionVPC) (lambda.FunctionVpcCon
 	}, nil
 }
 
-func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn, layerARN pulumi.StringInput, urlAuth string) (functionRef, error) {
+func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn, layerARN pulumi.StringInput, urlAuth string, opts ...pulumi.ResourceOption) (functionRef, error) {
 	var none functionRef
 
 	env := pulumi.StringMap{}
@@ -542,7 +542,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		Tags: resourceTags(coord.Kind, route, args.Tags),
 
 		Layers: pulumi.StringArray{layerARN},
-	})
+	}, opts...)
 	if err != nil {
 		return none, err
 	}

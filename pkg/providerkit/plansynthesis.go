@@ -1,6 +1,9 @@
 package providerkit
 
-import "slices"
+import (
+	"context"
+	"slices"
+)
 
 const (
 	functionKind = "function"
@@ -8,8 +11,13 @@ const (
 	reasonUndeclared = "this release no longer declares it"
 )
 
-func SynthesizedPlan(plan StackPlan, standing StackResult) Plan {
-	changes := make([]Change, 0, len(plan.Resources)+len(standing.Links))
+func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, standing StackResult) (Plan, error) {
+	uploads, err := UploadRows(ctx, store, plan.Uploads)
+	if err != nil {
+		return Plan{}, err
+	}
+	changes := make([]Change, 0, len(plan.Resources)+len(standing.Links)+len(uploads))
+	changes = append(changes, uploads...)
 	for _, resource := range plan.Resources {
 		changes = append(changes, Change{
 			Kind:   string(resource.Type),
@@ -37,7 +45,7 @@ func SynthesizedPlan(plan StackPlan, standing StackResult) Plan {
 		}
 		changes = append(changes, Change{Kind: functionKind, Name: function.Name, Action: ActionDelete, Reason: reasonUndeclared})
 	}
-	return stackPlan(plan.Ref, changes)
+	return stackPlan(plan.Ref, changes), nil
 }
 
 func SynthesizedRemoval(ref StackRef, standing StackResult) Plan {

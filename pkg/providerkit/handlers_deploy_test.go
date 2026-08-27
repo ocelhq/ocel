@@ -348,8 +348,8 @@ func (r refusingReleaser) Releases() providerkit.Releaser { return r.releaser }
 
 type halfLinkReleaser struct{}
 
-func (halfLinkReleaser) Plan(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
-	return providerkit.SynthesizedPlan(plan, providerkit.StackResult{}), nil
+func (halfLinkReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
+	return providerkit.SynthesizedPlan(ctx, fake.NewArtifacts(), plan, providerkit.StackResult{})
 }
 
 func (halfLinkReleaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {

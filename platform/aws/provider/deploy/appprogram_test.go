@@ -58,7 +58,8 @@ func TestAnAppStackStandsUpFromThePlanAlone(t *testing.T) {
 
 	rec := &inputRecorder{}
 	stack := plan.Ref.Name
-	if err := pulumi.RunErr(work.run, pulumi.WithMocks("shop", stack.String(), rec)); err != nil {
+	program := func(pctx *pulumi.Context) error { return work.run(pctx, nil) }
+	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", stack.String(), rec)); err != nil {
 		t.Fatalf("run the app program: %v", err)
 	}
 

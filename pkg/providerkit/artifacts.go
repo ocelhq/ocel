@@ -43,6 +43,58 @@ const (
 	StoreCache     = "cache"
 )
 
+type Upload struct {
+	Name   string
+	Ref    ArtifactRef
+	Path   string
+	Digest string
+}
+
+const UploadKind = "artifact"
+
+func UploadRows(ctx context.Context, store ArtifactStore, uploads []Upload) ([]Change, error) {
+	rows := make([]Change, 0, len(uploads))
+	for _, upload := range uploads {
+		held, err := store.Has(ctx, upload.Ref)
+		if err != nil {
+			return nil, fmt.Errorf("look for %s's artifact: %w", upload.Name, err)
+		}
+		rows = append(rows, Change{Kind: UploadKind, Name: upload.Name, Action: standsOrCreates(held)})
+	}
+	return rows, nil
+}
+
+func ShipUploads(ctx context.Context, store ArtifactStore, uploads []Upload, report Reporter) error {
+	group, ctx := errgroup.WithContext(ctx)
+	group.SetLimit(uploadConcurrency)
+	for _, upload := range uploads {
+		group.Go(func() error { return ship(ctx, store, upload, report) })
+	}
+	return group.Wait()
+}
+
+func ship(ctx context.Context, store ArtifactStore, upload Upload, report Reporter) error {
+	held, err := store.Has(ctx, upload.Ref)
+	if err != nil {
+		return fmt.Errorf("look for %s's artifact: %w", upload.Name, err)
+	}
+	if held {
+		return nil
+	}
+	body, err := os.Open(upload.Path)
+	if err != nil {
+		return fmt.Errorf("read %s's artifact: %w", upload.Name, err)
+	}
+	defer body.Close()
+	if report != nil {
+		report.Say("Uploading " + upload.Name)
+	}
+	if err := store.Put(ctx, upload.Ref, body); err != nil {
+		return fmt.Errorf("upload %s's artifact: %w", upload.Name, err)
+	}
+	return nil
+}
+
 type ArtifactPacker interface {
 	PackApp(ctx context.Context, packing AppPacking, report Reporter) (AppPack, error)
 }
@@ -95,7 +147,7 @@ func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, 
 
 const uploadConcurrency = 64
 
-func (r *deployRun) uploadApp(ctx context.Context, entry AppEntry, pack AppPack, routing *RoutingPlan, report Reporter) error {
+func (r *deployRun) stageApp(ctx context.Context, entry AppEntry, pack AppPack, routing *RoutingPlan) ([]Upload, error) {
 	root := ArtifactRoot()
 	var shipping []*contractv1.ManifestFunction
 	for _, fn := range r.manifest.GetFunctions() {
@@ -103,23 +155,32 @@ func (r *deployRun) uploadApp(ctx context.Context, entry AppEntry, pack AppPack,
 			shipping = append(shipping, fn)
 		}
 	}
-	refs := make([]ArtifactRef, len(shipping))
+	staged := make([]Upload, len(shipping))
 	group, ctx := errgroup.WithContext(ctx)
 	group.SetLimit(uploadConcurrency)
 	for slot, fn := range shipping {
 		group.Go(func() error {
-			ref, err := r.put(ctx, root, entry, fn, overlayFor(pack.Overlay, fn, routing), report)
-			refs[slot] = ref
+			upload, err := r.stageArtifact(root, entry, fn, overlayFor(pack.Overlay, fn, routing))
+			staged[slot] = upload
 			return err
 		})
 	}
 	if err := group.Wait(); err != nil {
-		return err
+		discardStaged(staged)
+		return nil, err
 	}
 	for slot, fn := range shipping {
-		r.artifacts[fn.GetLogicalName()] = refs[slot]
+		r.artifacts[fn.GetLogicalName()] = staged[slot].Ref
 	}
-	return nil
+	return staged, nil
+}
+
+func discardStaged(staged []Upload) {
+	for _, upload := range staged {
+		if upload.Path != "" {
+			os.Remove(upload.Path)
+		}
+	}
 }
 
 func overlayFor(base map[string][]byte, fn *contractv1.ManifestFunction, routing *RoutingPlan) map[string][]byte {
@@ -139,51 +200,39 @@ func routeOf(fn *contractv1.ManifestFunction) string {
 	return fn.GetLogicalName()
 }
 
-func (r *deployRun) put(
-	ctx context.Context,
+func (r *deployRun) stageArtifact(
 	root string,
 	entry AppEntry,
 	fn *contractv1.ManifestFunction,
 	overlay map[string][]byte,
-	report Reporter,
-) (ArtifactRef, error) {
+) (Upload, error) {
 	name := fn.GetLogicalName()
 	if fn.GetArtifactPath() == "" {
-		return ArtifactRef{}, Refuse(CodeInvalid, "function %s names no build artifact, so there is nothing to ship", name)
+		return Upload{}, Refuse(CodeInvalid, "function %s names no build artifact, so there is nothing to ship", name)
 	}
 	dir := filepath.Join(root, filepath.FromSlash(fn.GetArtifactPath()))
 	rels, err := artifactFiles(dir)
 	if err != nil {
-		return ArtifactRef{}, fmt.Errorf("read %s's artifact: %w", name, err)
+		return Upload{}, fmt.Errorf("read %s's artifact: %w", name, err)
 	}
 	sum, err := digestArtifact(dir, rels, overlay)
 	if err != nil {
-		return ArtifactRef{}, fmt.Errorf("read %s's artifact: %w", name, err)
+		return Upload{}, fmt.Errorf("read %s's artifact: %w", name, err)
 	}
 	coordinate := r.plan.coordinate(entry.App, entry.Build.Release())
 	coordinate.Name = name
-	ref := ArtifactRef{Class: r.plan.Class, Bucket: StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)}
 
-	held, err := r.provider.Artifacts().Has(ctx, ref)
+	path, err := packArtifact(dir, rels, overlay)
 	if err != nil {
-		return ArtifactRef{}, fmt.Errorf("look for %s's artifact: %w", name, err)
-	}
-	if held {
-		report.Detail(name + " is unchanged since it was last uploaded")
-		return ref, nil
+		return Upload{}, fmt.Errorf("pack %s's artifact: %w", name, err)
 	}
 
-	body, err := packArtifact(dir, rels, overlay)
-	if err != nil {
-		return ArtifactRef{}, fmt.Errorf("pack %s's artifact: %w", name, err)
-	}
-	defer discard(body)
-
-	report.Say("Uploading " + name)
-	if err := r.provider.Artifacts().Put(ctx, ref, body); err != nil {
-		return ArtifactRef{}, fmt.Errorf("upload %s's artifact: %w", name, err)
-	}
-	return ref, nil
+	return Upload{
+		Name:   name,
+		Ref:    ArtifactRef{Class: r.plan.Class, Bucket: StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)},
+		Path:   path,
+		Digest: sum,
+	}, nil
 }
 
 func artifactFiles(dir string) ([]string, error) {
@@ -264,20 +313,20 @@ func digestArtifact(dir string, rels []string, overlay map[string][]byte) (strin
 	return hex.EncodeToString(sum.Sum(nil))[:artifactDigestLen], nil
 }
 
-func packArtifact(dir string, rels []string, overlay map[string][]byte) (*os.File, error) {
+func packArtifact(dir string, rels []string, overlay map[string][]byte) (string, error) {
 	packed, err := os.CreateTemp("", "ocel-artifact-*.zip")
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if err := writeArchive(packed, dir, rels, overlay); err != nil {
 		discard(packed)
-		return nil, err
+		return "", err
 	}
-	if _, err := packed.Seek(0, io.SeekStart); err != nil {
-		discard(packed)
-		return nil, err
+	if err := packed.Close(); err != nil {
+		os.Remove(packed.Name())
+		return "", err
 	}
-	return packed, nil
+	return packed.Name(), nil
 }
 
 func discard(packed *os.File) {

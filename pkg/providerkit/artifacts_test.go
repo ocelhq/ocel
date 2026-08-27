@@ -96,11 +96,16 @@ func TestAnArtifactDigestNamesOneTreeAndOneOverlay(t *testing.T) {
 
 func packed(t *testing.T, dir string, overlay map[string][]byte) *zip.Reader {
 	t.Helper()
-	file, err := packArtifact(dir, walked(t, dir), overlay)
+	path, err := packArtifact(dir, walked(t, dir), overlay)
 	if err != nil {
 		t.Fatalf("packArtifact: %v", err)
 	}
-	t.Cleanup(func() { discard(file) })
+	t.Cleanup(func() { os.Remove(path) })
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { file.Close() })
 	size, err := file.Seek(0, io.SeekEnd)
 	if err != nil {
 		t.Fatal(err)

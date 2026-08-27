@@ -80,7 +80,7 @@ func TestReleaserFansEachResourceOutToItsPrimitive(t *testing.T) {
 	t.Parallel()
 
 	records := fake.NewRecords()
-	releaser := resources.Releaser(records, neon{&buckets{}})
+	releaser := resources.Releaser(records, fake.NewArtifacts(), neon{&buckets{}})
 
 	result, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  infraRef(),
@@ -104,7 +104,7 @@ func TestReleaserFansEachResourceOutToItsPrimitive(t *testing.T) {
 func TestReleaserRefusesAPrimitiveNothingServes(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Releaser(fake.NewRecords(), &buckets{})
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), &buckets{})
 
 	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:       infraRef(),
@@ -123,7 +123,7 @@ func TestReleaserRefusesAPrimitiveNothingServes(t *testing.T) {
 func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 	t.Parallel()
 
-	_, err := resources.Releaser(fake.NewRecords(), &buckets{}).Plan(context.Background(), providerkit.StackPlan{
+	_, err := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), &buckets{}).Plan(context.Background(), providerkit.StackPlan{
 		Ref:       infraRef(),
 		Kind:      providerkit.StackInfra,
 		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.LinkPostgres}},
@@ -137,7 +137,7 @@ func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 func TestReleaserRefusesALinkMissingAPropertyItsTypePromises(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Releaser(fake.NewRecords(), halfLink{})
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), halfLink{})
 
 	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:       infraRef(),
@@ -158,7 +158,7 @@ func TestReleaserRemovesAResourceThePlanNoLongerDeclares(t *testing.T) {
 	ctx := context.Background()
 	records := fake.NewRecords()
 	own := &buckets{}
-	releaser := resources.Releaser(records, own)
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
 	ref := infraRef()
 
 	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
@@ -188,7 +188,7 @@ func TestDestroyOfAStackNothingRecordedIsANoOp(t *testing.T) {
 	t.Parallel()
 
 	own := &buckets{}
-	releaser := resources.Releaser(fake.NewRecords(), own)
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
 
 	if err := releaser.Destroy(context.Background(), infraRef(), nil); err != nil {
 		t.Fatalf("Destroy() of a stack nothing recorded = %v, want nil", err)
@@ -212,7 +212,7 @@ func TestDestroyTakesDownEveryLinkTheStackRecorded(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := resources.Releaser(records, own).Destroy(ctx, ref, nil); err != nil {
+	if err := resources.Releaser(records, fake.NewArtifacts(), own).Destroy(ctx, ref, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.removed) != 1 {
@@ -233,7 +233,7 @@ func rowsOf(plan providerkit.Plan) map[string]providerkit.ChangeAction {
 func TestPlanOverAStackNothingRecordedCreatesEveryResourceItDeclares(t *testing.T) {
 	t.Parallel()
 
-	plan, err := resources.Releaser(fake.NewRecords(), neon{&buckets{}}).Plan(context.Background(), providerkit.StackPlan{
+	plan, err := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), neon{&buckets{}}).Plan(context.Background(), providerkit.StackPlan{
 		Ref:  infraRef(),
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
@@ -274,7 +274,7 @@ func TestPlanKeepsWhatStandsAndDeletesWhatThePlanDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plan, err := resources.Releaser(records, &buckets{}).Plan(ctx, providerkit.StackPlan{
+	plan, err := resources.Releaser(records, fake.NewArtifacts(), &buckets{}).Plan(ctx, providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
@@ -316,7 +316,7 @@ func TestPlanDestroyTakesDownEveryLinkTheStackRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	releaser := resources.Releaser(records, &buckets{})
+	releaser := resources.Releaser(records, fake.NewArtifacts(), &buckets{})
 	plan, err := releaser.PlanDestroy(ctx, ref, nil)
 	if err != nil {
 		t.Fatalf("PlanDestroy() = %v", err)
@@ -351,7 +351,7 @@ func TestAWarmerBehindTheFanOutIsStillFoundOnTheRoot(t *testing.T) {
 	t.Parallel()
 
 	base := fake.NewProvider(fake.Options{})
-	provider := embedded{Provider: base, fanout: resources.Releaser(base.Records(), neon{&buckets{}})}
+	provider := embedded{Provider: base, fanout: resources.Releaser(base.Records(), fake.NewArtifacts(), neon{&buckets{}})}
 
 	if _, warms := providerkit.Provider(provider).(providerkit.Warmer); !warms {
 		t.Fatal("the provider's Warmer is not found on the root, so wrapping the release port hid a capability")
@@ -412,7 +412,7 @@ func TestTheFanOutTakesDownTheFunctionItsPlanShowsGoing(t *testing.T) {
 	recordFunctions(t, records, ref, "api", "legacy")
 
 	own := &withFunctions{buckets: &buckets{}}
-	releaser := resources.Releaser(records, own)
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
 	plan := providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackApp,
@@ -444,7 +444,7 @@ func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing
 	recordFunctions(t, records, ref, "api")
 
 	own := &withFunctions{buckets: &buckets{}}
-	releaser := resources.Releaser(records, own)
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
 	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra}
 
 	shown, err := releaser.Plan(ctx, plan, nil)

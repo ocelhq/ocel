@@ -53,8 +53,8 @@ func Serves(impl any) []providerkit.LinkType {
 	return served
 }
 
-func Releaser(records providerkit.RecordStore, impl any) providerkit.Releaser {
-	return &fanout{records: records, impl: impl}
+func Releaser(records providerkit.RecordStore, artifacts providerkit.ArtifactStore, impl any) providerkit.Releaser {
+	return &fanout{records: records, artifacts: artifacts, impl: impl}
 }
 
 type primitive struct {
@@ -95,8 +95,9 @@ var primitives = []primitive{
 }
 
 type fanout struct {
-	records providerkit.RecordStore
-	impl    any
+	records   providerkit.RecordStore
+	artifacts providerkit.ArtifactStore
+	impl      any
 }
 
 func (f *fanout) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
@@ -107,7 +108,7 @@ func (f *fanout) Plan(ctx context.Context, plan providerkit.StackPlan, _ provide
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	return providerkit.SynthesizedPlan(plan, standing(recorded)), nil
+	return providerkit.SynthesizedPlan(ctx, f.artifacts, plan, standing(recorded))
 }
 
 func (f *fanout) PlanDestroy(ctx context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {
@@ -131,6 +132,9 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 		return providerkit.StackResult{}, err
 	}
 	if err := f.removeOrphans(ctx, plan, recorded, report); err != nil {
+		return providerkit.StackResult{}, err
+	}
+	if err := providerkit.ShipUploads(ctx, f.artifacts, plan.Uploads, report); err != nil {
 		return providerkit.StackResult{}, err
 	}
 

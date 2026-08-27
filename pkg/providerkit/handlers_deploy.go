@@ -489,15 +489,18 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 			if err != nil {
 				return err
 			}
-			if err := r.uploadApp(ctx, entry, pack, facts.Routing, report); err != nil {
+			staged, err := r.stageApp(ctx, entry, pack, facts.Routing)
+			if err != nil {
 				return err
 			}
+			defer discardStaged(staged)
 			plan := StackPlan{
-				Ref:   r.ref(entry.Stack),
-				Kind:  StackApp,
-				Edge:  r.front,
-				Tags:  r.plan.tags(entry),
-				Links: r.reader(),
+				Ref:     r.ref(entry.Stack),
+				Kind:    StackApp,
+				Edge:    r.front,
+				Tags:    r.plan.tags(entry),
+				Uploads: staged,
+				Links:   r.reader(),
 				App: &AppPlan{
 					App:             entry.App,
 					Framework:       entry.Manifest.GetFramework(),
