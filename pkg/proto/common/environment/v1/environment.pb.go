@@ -125,6 +125,7 @@ type Environment struct {
 	Tier          Tier                   `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Lifecycle     Lifecycle              `protobuf:"varint,2,opt,name=lifecycle,proto3,enum=common.environment.v1.Lifecycle" json:"lifecycle,omitempty"`
 	Identity      string                 `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
+	Label         string                 `protobuf:"bytes,4,opt,name=label,proto3" json:"label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -180,15 +181,23 @@ func (x *Environment) GetIdentity() string {
 	return ""
 }
 
+func (x *Environment) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
 var File_common_environment_v1_environment_proto protoreflect.FileDescriptor
 
 const file_common_environment_v1_environment_proto_rawDesc = "" +
 	"\n" +
-	"'common/environment/v1/environment.proto\x12\x15common.environment.v1\x1a\x1bbuf/validate/validate.proto\"\xae\x01\n" +
+	"'common/environment/v1/environment.proto\x12\x15common.environment.v1\x1a\x1bbuf/validate/validate.proto\"\xc4\x01\n" +
 	"\vEnvironment\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x12H\n" +
 	"\tlifecycle\x18\x02 \x01(\x0e2 .common.environment.v1.LifecycleB\b\xbaH\x05\x82\x01\x02\x10\x01R\tlifecycle\x12\x1a\n" +
-	"\bidentity\x18\x03 \x01(\tR\bidentity*C\n" +
+	"\bidentity\x18\x03 \x01(\tR\bidentity\x12\x14\n" +
+	"\x05label\x18\x04 \x01(\tR\x05label*C\n" +
 	"\x04Tier\x12\x14\n" +
 	"\x10TIER_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fTIER_PREVIEW\x10\x01\x12\x13\n" +

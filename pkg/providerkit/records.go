@@ -23,14 +23,15 @@ var (
 )
 
 const (
-	RootSchema      = ports.RootSchema
-	RootProjects    = ports.RootProjects
-	RootStacks      = ports.RootStacks
-	RootBootstrap   = ports.RootBootstrap
-	RootEdgeStacks  = ports.RootEdgeStacks
-	RootWildcard    = ports.RootWildcard
-	RootLedger      = ports.RootLedger
-	RootValues      = ports.RootValues
-	RootValueRefs   = ports.RootValueRefs
-	RootConformance = ports.RootConformance
+	RootSchema       = ports.RootSchema
+	RootProjects     = ports.RootProjects
+	RootStacks       = ports.RootStacks
+	RootEnvironments = ports.RootEnvironments
+	RootBootstrap    = ports.RootBootstrap
+	RootEdgeStacks   = ports.RootEdgeStacks
+	RootWildcard     = ports.RootWildcard
+	RootLedger       = ports.RootLedger
+	RootValues       = ports.RootValues
+	RootValueRefs    = ports.RootValueRefs
+	RootConformance  = ports.RootConformance
 )

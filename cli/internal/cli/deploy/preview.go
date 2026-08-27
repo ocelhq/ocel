@@ -468,6 +468,7 @@ func resolveUpEnvironment(deps cmddeps.Deps, cwd string, opts previewUpOptions) 
 		Tier:      environmentv1.Tier_TIER_PREVIEW,
 		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 		Identity:  id.Key,
+		Label:     id.Label,
 	}, nil
 }
 
@@ -495,6 +496,7 @@ func resolveRmEnvironment(deps cmddeps.Deps, cwd string, opts previewRmOptions) 
 		Tier:      environmentv1.Tier_TIER_PREVIEW,
 		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 		Identity:  id.Key,
+		Label:     id.Label,
 	}, nil
 }
 

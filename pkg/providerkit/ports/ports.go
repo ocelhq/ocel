@@ -26,16 +26,17 @@ var ErrStale = errors.New("the record moved since it was read")
 var ErrNoRecord = errors.New("no such record")
 
 const (
-	RootSchema      = "schema"
-	RootProjects    = "projects"
-	RootStacks      = "stacks"
-	RootBootstrap   = "bootstrap"
-	RootEdgeStacks  = "edgestacks"
-	RootWildcard    = "wildcard"
-	RootLedger      = "ledger"
-	RootValues      = "values"
-	RootValueRefs   = "valuerefs"
-	RootConformance = "conformance"
+	RootSchema       = "schema"
+	RootProjects     = "projects"
+	RootStacks       = "stacks"
+	RootEnvironments = "environments"
+	RootBootstrap    = "bootstrap"
+	RootEdgeStacks   = "edgestacks"
+	RootWildcard     = "wildcard"
+	RootLedger       = "ledger"
+	RootValues       = "values"
+	RootValueRefs    = "valuerefs"
+	RootConformance  = "conformance"
 )
 
 type RecordName []string

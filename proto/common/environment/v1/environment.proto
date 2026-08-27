@@ -23,4 +23,6 @@ message Environment {
   Lifecycle lifecycle = 2 [(buf.validate.field).enum.defined_only = true];
 
   string identity = 3;
+
+  string label = 4;
 }
