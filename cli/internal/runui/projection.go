@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/fatih/color"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -27,6 +28,7 @@ var overrides = map[protoreflect.FullName]armFunc{
 	"common.progress.v1.SpanEvent":      (*projector).span,
 	"common.progress.v1.DnsOwedEvent":   (*projector).dnsOwed,
 	"common.progress.v1.DegradedEvent":  (*projector).degraded,
+	"common.progress.v1.ResultEvent":    (*projector).outcome,
 	"cli.stream.v1.RunResultEvent":      (*projector).result,
 	"cli.stream.v1.DiagnosticEvent":     (*projector).diagnostic,
 	"cli.stream.v1.WaitingEvent":        (*projector).waiting,
@@ -499,6 +501,8 @@ func (p *projector) resumed(m protoreflect.Message) []string {
 	return []string{okMark + " Resumed — " + ev.GetReason(), ""}
 }
 
+func (p *projector) outcome(protoreflect.Message) []string { return nil }
+
 func (p *projector) result(m protoreflect.Message) []string {
 	ev := m.Interface().(*streamv1.RunResultEvent)
 	d := time.Duration(ev.GetDurationMs()) * time.Millisecond
@@ -506,30 +510,30 @@ func (p *projector) result(m protoreflect.Message) []string {
 		out := p.strand(warnMark, "interrupted")
 		out = append(out, "", fmt.Sprintf("%s %s in %s", warnMark, headlineOr(ev, "Interrupted"), formatDuration(d)))
 		out = append(out, detailLines(ev.GetDetail())...)
-		return append(out, logPointer("Log", ev.GetLogPath())...)
+		return append(out, p.logPointer("Log", ev.GetLogPath())...)
 	}
 	if ev.GetSuccess() {
 		out := p.strand(warnMark, "unfinished")
-		out = append(out, "", fmt.Sprintf("%s %s in %s", okMark, headlineOr(ev, "Done"), formatDuration(d)))
+		out = append(out, "", p.style(color.FgGreen, color.Bold).Sprintf("%s %s in %s", okMark, headlineOr(ev, "Done"), formatDuration(d)))
 		switch {
 		case len(ev.GetAppUrls()) > 0:
 			out = append(out, "")
 			for _, u := range ev.GetAppUrls() {
-				out = append(out, blockIndent+u)
+				out = append(out, blockIndent+p.style(color.FgCyan).Sprint(u))
 			}
 		case ev.GetUrlNote() != "":
 			out = append(out, "", blockIndent+ev.GetUrlNote())
 		}
 		if note := FlipNote(ev.GetFlipBound()); note != "" {
-			out = append(out, "", blockIndent+note)
+			out = append(out, "", blockIndent+p.faint(note))
 		}
-		return append(out, logPointer("Details", ev.GetLogPath())...)
+		return append(out, p.logPointer("Details", ev.GetLogPath())...)
 	}
 
 	out := p.strand(failMark, "failed")
 	out = append(out, "", failMark+" "+headlineOr(ev, "Failed"))
 	out = append(out, detailLines(ev.GetDetail())...)
-	return append(out, logPointer("Full log", ev.GetLogPath())...)
+	return append(out, p.logPointer("Full log", ev.GetLogPath())...)
 }
 
 func headlineOr(ev *streamv1.RunResultEvent, fallback string) string {
@@ -550,9 +554,9 @@ func detailLines(detail string) []string {
 	return out
 }
 
-func logPointer(label, logPath string) []string {
+func (p *projector) logPointer(label, logPath string) []string {
 	if logPath == "" {
 		return nil
 	}
-	return []string{"", fmt.Sprintf("%s%s: %s", blockIndent, label, relLog(logPath))}
+	return []string{"", p.faint(fmt.Sprintf("%s%s: %s", blockIndent, label, relLog(logPath)))}
 }
