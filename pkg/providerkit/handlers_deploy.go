@@ -187,9 +187,6 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 		}); err != nil {
 			return err
 		}
-		if r.dry {
-			return nil
-		}
 		return env.phase(progressv1.Phase_PHASE_UPLOADING, func(report Reporter) error {
 			return r.upload(ctx, report)
 		})

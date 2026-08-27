@@ -118,20 +118,27 @@ func routingFor(q ServingQuery) (*RoutingPlan, error) {
 	return &RoutingPlan{Entry: desc.Entry, Manifest: raw}, nil
 }
 
-func PlaceMembrane(ctx context.Context, source MembraneSource, class Class, store ArtifactStore, report Reporter) (ArtifactRef, error) {
+func MembraneRef(ctx context.Context, source MembraneSource, class Class) (ArtifactRef, []byte, error) {
 	if source == nil {
-		return ArtifactRef{}, nil
+		return ArtifactRef{}, nil, nil
 	}
 	body, err := source.Membrane(ctx)
 	if err != nil {
-		return ArtifactRef{}, fmt.Errorf("read the membrane the app's functions boot through: %w", err)
+		return ArtifactRef{}, nil, fmt.Errorf("read the membrane the app's functions boot through: %w", err)
 	}
 	if len(body) == 0 {
-		return ArtifactRef{}, Refuse(CodeNotReady,
+		return ArtifactRef{}, nil, Refuse(CodeNotReady,
 			"this provider carries no membrane for an app's functions to boot through")
 	}
 	sum := sha256.Sum256(body)
-	ref := ArtifactRef{Class: class, Bucket: StoreFunctions, Key: MembraneKey(hex.EncodeToString(sum[:]))}
+	return ArtifactRef{Class: class, Bucket: StoreFunctions, Key: MembraneKey(hex.EncodeToString(sum[:]))}, body, nil
+}
+
+func PlaceMembrane(ctx context.Context, source MembraneSource, class Class, store ArtifactStore, report Reporter) (ArtifactRef, error) {
+	ref, body, err := MembraneRef(ctx, source, class)
+	if err != nil || len(body) == 0 {
+		return ref, err
+	}
 	held, err := store.Has(ctx, ref)
 	if err != nil {
 		return ArtifactRef{}, fmt.Errorf("look for the membrane: %w", err)
