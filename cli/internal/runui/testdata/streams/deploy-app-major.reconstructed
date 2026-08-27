@@ -3,9 +3,11 @@ stages:
   Shared infrastructure
   web
   api
+  Edge
   Promotion
     Building
     Building
+    Provisioning
     Provisioning
     Provisioning
     Provisioning

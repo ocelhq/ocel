@@ -36,7 +36,8 @@ type Session struct {
 	start      time.Time
 	buildStart time.Time
 
-	build *lineWriter
+	build   *lineWriter
+	process *lineWriter
 
 	logMu     sync.Mutex
 	log       *os.File
@@ -53,6 +54,7 @@ func New(stdout io.Writer, run *runtrace.Run, present Presentation) *Session {
 		start:   time.Now(),
 	}
 	s.build = &lineWriter{emit: s.buildLine}
+	s.process = &lineWriter{emit: s.Diagnostic}
 	p := filepath.Join(run.Dir(), run.TraceID()+".log")
 	if f, err := os.Create(p); err == nil {
 		s.log = f
@@ -68,18 +70,15 @@ func (s *Session) LogPath() string { return s.logPath }
 
 func (s *Session) BuildWriter() io.Writer { return s.build }
 
-func (s *Session) ProcessWriter() io.Writer {
-	if s.logWriter != nil {
-		return s.logWriter
-	}
-	return io.Discard
-}
+func (s *Session) ProcessWriter() io.Writer { return s.process }
 
 func (s *Session) buildLine(line string) {
 	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
 		Log: &progressv1.LogEvent{StageId: buildStageID, Message: line},
 	}})
 }
+
+const maxHeldLine = 64 << 10
 
 type lineWriter struct {
 	emit func(string)
@@ -89,27 +88,43 @@ type lineWriter struct {
 }
 
 func (w *lineWriter) Write(p []byte) (int, error) {
+	for _, line := range w.take(p) {
+		w.emit(line)
+	}
+	return len(p), nil
+}
+
+func (w *lineWriter) take(p []byte) []string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.held = append(w.held, p...)
+	var ready []string
 	for {
 		i := bytes.IndexByte(w.held, '\n')
 		if i < 0 {
-			return len(p), nil
+			break
 		}
-		w.emit(string(w.held[:i]))
+		ready = append(ready, string(w.held[:i]))
 		w.held = w.held[i+1:]
 	}
+	if i := bytes.LastIndexByte(w.held, '\r'); i >= 0 {
+		w.held = w.held[i:]
+	}
+	if len(w.held) > maxHeldLine {
+		ready = append(ready, string(w.held))
+		w.held = nil
+	}
+	return ready
 }
 
 func (w *lineWriter) flush() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	if len(w.held) == 0 {
-		return
-	}
-	w.emit(string(w.held))
+	line := string(w.held)
 	w.held = nil
+	w.mu.Unlock()
+	if collapseRewrites(line) != "" {
+		w.emit(line)
+	}
 }
 
 func (s *Session) Suspend() func() { return s.stream.Suspend() }
@@ -270,6 +285,7 @@ func (s *Session) Cancel() {
 
 func (s *Session) result(ev *streamv1.RunResultEvent) {
 	s.build.flush()
+	s.process.flush()
 	ev.DurationMs = time.Since(s.start).Milliseconds()
 	ev.LogPath = s.logPath
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: ev}})
@@ -277,6 +293,7 @@ func (s *Session) result(ev *streamv1.RunResultEvent) {
 
 func (s *Session) Close() error {
 	s.build.flush()
+	s.process.flush()
 	_ = s.stream.Close()
 	if s.log != nil {
 		return s.log.Close()

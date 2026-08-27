@@ -36,6 +36,7 @@ type deployStages struct {
 	Environment Stage
 	Infra       Stage
 	Apps        map[string]Stage
+	Edge        Stage
 	Promotion   Stage
 	Roster      []Stage
 }
@@ -44,6 +45,7 @@ func newDeployStages(plan DeployPlan) deployStages {
 	s := deployStages{
 		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle),
 		Infra:       UnitStage(plan.Infra.String(), infraUnitTitle),
+		Edge:        UnitStage(naming.UnitEdge, edgeUnitTitle),
 		Promotion:   UnitStage(naming.UnitPromotion, promotionUnitTitle),
 		Apps:        make(map[string]Stage, len(plan.Apps)),
 	}
@@ -56,7 +58,7 @@ func newDeployStages(plan DeployPlan) deployStages {
 		s.Apps[entry.App] = app
 		s.Roster = append(s.Roster, app)
 	}
-	s.Roster = append(s.Roster, s.Promotion)
+	s.Roster = append(s.Roster, s.Edge, s.Promotion)
 	return s
 }
 
@@ -150,6 +152,9 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	}); err != nil {
 		return nil, err
 	}
+	if err := r.raiseEdge(ctx); err != nil {
+		return nil, err
+	}
 	if err := r.provision(ctx); err != nil {
 		return nil, err
 	}
@@ -167,9 +172,6 @@ func (r *deployRun) settle(ctx context.Context, report Reporter) error {
 		return err
 	}
 	if err := r.rememberProject(ctx); err != nil {
-		return err
-	}
-	if err := r.reconcileEdge(ctx); err != nil {
 		return err
 	}
 	if err := r.checkNeeds(ctx); err != nil {
@@ -250,6 +252,15 @@ func (r *deployRun) world() hostingWorld {
 		return hostingGlobalPreview
 	}
 	return hostingProjectPreview
+}
+
+func (r *deployRun) raiseEdge(ctx context.Context) error {
+	return r.tracked.unit(r.stages.Edge, func(u *unitRun) error {
+		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
+			report.Say(fmt.Sprintf("Reconciling the %s edge", r.front.Kind()))
+			return r.reconcileEdge(ctx)
+		})
+	})
 }
 
 func (r *deployRun) reconcileEdge(ctx context.Context) error {

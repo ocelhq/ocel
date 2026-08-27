@@ -13,7 +13,10 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-const blockIndent = "  "
+const (
+	blockIndent    = "  "
+	maxOrphanLines = 4096
+)
 
 type armFunc func(*projector, protoreflect.Message) []string
 
@@ -40,6 +43,10 @@ type projector struct {
 	tree    *stagePlan
 	blocks  map[string]*block
 	open    []string
+
+	orphans    map[string][]string
+	pending    []string
+	orphanLine int
 }
 
 func newProjector(present Presentation) *projector {
@@ -47,6 +54,7 @@ func newProjector(present Presentation) *projector {
 		present: present,
 		tree:    newStagePlan(),
 		blocks:  make(map[string]*block),
+		orphans: make(map[string][]string),
 	}
 }
 
@@ -238,6 +246,7 @@ func (p *projector) stagePlan(m protoreflect.Message) []string {
 		p.open = append(p.open, id)
 		out = append(out, startMark+" "+b.path)
 	}
+	p.adopt()
 	return out
 }
 
@@ -277,14 +286,54 @@ func (p *projector) phaseOf(id string) *block {
 }
 
 func (p *projector) buffer(stageID []byte, text string) []string {
-	b := p.phaseOf(stageKey(stageID))
-	if b == nil {
+	id := stageKey(stageID)
+	lines := indented(text)
+	if b := p.phaseOf(id); b != nil {
+		b.lines = append(b.lines, lines...)
 		return nil
 	}
-	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
-		b.lines = append(b.lines, strings.TrimRight(blockIndent+line, " \t"))
+	if id != "" {
+		p.hold(id, lines)
 	}
 	return nil
+}
+
+func indented(text string) []string {
+	split := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	out := make([]string, 0, len(split))
+	for _, line := range split {
+		out = append(out, blockIndent+line)
+	}
+	return out
+}
+
+func (p *projector) hold(id string, lines []string) {
+	if p.orphanLine >= maxOrphanLines {
+		return
+	}
+	if len(lines) > maxOrphanLines-p.orphanLine {
+		lines = lines[:maxOrphanLines-p.orphanLine]
+	}
+	if _, held := p.orphans[id]; !held {
+		p.pending = append(p.pending, id)
+	}
+	p.orphans[id] = append(p.orphans[id], lines...)
+	p.orphanLine += len(lines)
+}
+
+func (p *projector) adopt() {
+	var pending []string
+	for _, id := range p.pending {
+		b := p.phaseOf(id)
+		if b == nil {
+			pending = append(pending, id)
+			continue
+		}
+		b.lines = append(b.lines, p.orphans[id]...)
+		p.orphanLine -= len(p.orphans[id])
+		delete(p.orphans, id)
+	}
+	p.pending = pending
 }
 
 func (p *projector) progress(m protoreflect.Message) []string {
