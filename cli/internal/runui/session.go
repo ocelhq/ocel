@@ -148,10 +148,7 @@ func (s *Session) diagnose(message string, level streamv1.DiagnosticLevel) {
 }
 
 func (s *Session) Plan(headline string, plan *planv1.ChangePlan, notes ...string) *planv1.ChangePlan {
-	drawn, ok := proto.Clone(plan).(*planv1.ChangePlan)
-	if !ok {
-		return plan
-	}
+	drawn := proto.Clone(plan).(*planv1.ChangePlan)
 	drawn.Headline, drawn.Notes = headline, notes
 	s.logf("[plan] %s", headline)
 	s.shown = s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Plan{Plan: drawn}}).GetPlan()
