@@ -69,6 +69,18 @@ func (s *Stream) Emit(ev *streamv1.RunEvent) *streamv1.RunEvent {
 	return ev
 }
 
+func (s *Stream) Pause() {
+	if s.r != nil {
+		s.r.Pause()
+	}
+}
+
+func (s *Stream) Resume() {
+	if s.r != nil {
+		s.r.Resume()
+	}
+}
+
 func (s *Stream) Close() error {
 	if s.r != nil {
 		return s.r.Close()
