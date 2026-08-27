@@ -188,7 +188,7 @@ func (p *projector) groupLine(group *planv1.ChangeGroup) string {
 	if words := actionWords(group.GetAction()); words != "" {
 		b.WriteString(words + " ")
 	}
-	named := bootstrapKinds[group.GetKind()]
+	named := namedKind(group.GetKind())
 	if kind := group.GetKind(); kind != "" && !named {
 		b.WriteString(kind + " ")
 	}
@@ -224,7 +224,29 @@ func changeLabel(change *planv1.Change) string {
 	return change.GetName()
 }
 
-var bootstrapKinds = map[string]bool{sharedStackKind: true, edgeKind: true, parameterKind: true}
+const (
+	rankSpineHead = iota
+	rankSpineEdge
+	rankOffSpine
+)
+
+var spineKinds = map[string]int{
+	sharedStackKind: rankSpineHead,
+	parameterKind:   rankSpineHead,
+	edgeKind:        rankSpineEdge,
+}
+
+func spineRank(kind string) int {
+	if rank, named := spineKinds[kind]; named {
+		return rank
+	}
+	return rankOffSpine
+}
+
+func namedKind(kind string) bool {
+	_, named := spineKinds[kind]
+	return named
+}
 
 func groupTag(group *planv1.ChangeGroup) string {
 	if feature := group.GetFeature(); feature != "" {
