@@ -1,0 +1,17 @@
+stages:
+  Environment
+  Shared infrastructure
+  web
+  api
+  Promotion
+    Building
+    Building
+    Provisioning
+    Provisioning
+    Provisioning
+      aws:ecs/Service acme-prod-web
+    Finalizing
+plan:
+waits:
+results:
+  success=true interrupted=false headline="Deployed" detail="" duration_ms=54000

@@ -1,0 +1,25 @@
+{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"AgAAAAAAAAA=","title":"Shared infrastructure"},{"id":"AwAAAAAAAAA=","title":"web"},{"id":"BAAAAAAAAAA=","title":"api"},{"id":"BQAAAAAAAAA=","title":"Promotion"}]}}}
+{"operation":{"stagePlan":{"stages":[{"id":"BgAAAAAAAAA=","parentId":"AwAAAAAAAAA=","phase":"PHASE_BUILDING"},{"id":"BwAAAAAAAAA=","parentId":"BAAAAAAAAAA=","phase":"PHASE_BUILDING"}]}}}
+{"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"Packages: +812"}}}
+{"operation":{"log":{"stageId":"BwAAAAAAAAA=","message":"go: downloading github.com/ocelhq/ocel/sdk v0.4.1"}}}
+{"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"▲ Next.js 15.4.2\n ✓ Compiled successfully"}}}
+{"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"Generating static pages","current":28,"total":28}}}
+{"operation":{"log":{"stageId":"BwAAAAAAAAA=","message":"go build ./..."}}}
+{"operation":{"span":{"spanId":"BwAAAAAAAAA=","parentSpanId":"BAAAAAAAAAA=","name":"building","startTimeUnixNano":"1000000000","endTimeUnixNano":"9000000000","status":"SPAN_STATUS_OK"}}}
+{"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"Route (app)                     Size     First Load JS"}}}
+{"operation":{"span":{"spanId":"BgAAAAAAAAA=","parentSpanId":"AwAAAAAAAAA=","name":"building","startTimeUnixNano":"1000000000","endTimeUnixNano":"25000000000","status":"SPAN_STATUS_OK"}}}
+{"operation":{"stagePlan":{"stages":[{"id":"CAAAAAAAAAA=","parentId":"AgAAAAAAAAA=","phase":"PHASE_PROVISIONING"}]}}}
+{"operation":{"progress":{"stageId":"CAAAAAAAAAA=","message":"creating bucket assets"}}}
+{"operation":{"span":{"spanId":"CAAAAAAAAAA=","parentSpanId":"AgAAAAAAAAA=","name":"provisioning","startTimeUnixNano":"25000000000","endTimeUnixNano":"31000000000","status":"SPAN_STATUS_OK"}}}
+{"operation":{"stagePlan":{"stages":[{"id":"CQAAAAAAAAA=","parentId":"AwAAAAAAAAA=","phase":"PHASE_PROVISIONING"},{"id":"CgAAAAAAAAA=","parentId":"BAAAAAAAAAA=","phase":"PHASE_PROVISIONING"}]}}}
+{"operation":{"stagePlan":{"stages":[{"id":"CwAAAAAAAAA=","parentId":"CQAAAAAAAAA=","title":"aws:ecs/Service acme-prod-web"}]}}}
+{"operation":{"progress":{"stageId":"CgAAAAAAAAA=","message":"updating function api"}}}
+{"operation":{"progress":{"stageId":"CwAAAAAAAAA=","message":"waiting for steady state"}}}
+{"operation":{"log":{"stageId":"CgAAAAAAAAA=","message":"api: 2 of 2 tasks healthy"}}}
+{"operation":{"span":{"spanId":"CgAAAAAAAAA=","parentSpanId":"BAAAAAAAAAA=","name":"provisioning","startTimeUnixNano":"31000000000","endTimeUnixNano":"39000000000","status":"SPAN_STATUS_OK"}}}
+{"operation":{"progress":{"stageId":"CwAAAAAAAAA=","message":"2 of 2 tasks healthy"}}}
+{"operation":{"span":{"spanId":"CQAAAAAAAAA=","parentSpanId":"AwAAAAAAAAA=","name":"provisioning","startTimeUnixNano":"31000000000","endTimeUnixNano":"52000000000","status":"SPAN_STATUS_OK"}}}
+{"operation":{"stagePlan":{"stages":[{"id":"DAAAAAAAAAA=","parentId":"BQAAAAAAAAA=","phase":"PHASE_FINALIZING"}]}}}
+{"operation":{"progress":{"stageId":"DAAAAAAAAAA=","message":"promoting r7 to production"}}}
+{"operation":{"span":{"spanId":"DAAAAAAAAAA=","parentSpanId":"BQAAAAAAAAA=","name":"finalizing","startTimeUnixNano":"52000000000","endTimeUnixNano":"54000000000","status":"SPAN_STATUS_OK"}}}
+{"result":{"success":true,"headline":"Deployed","appUrls":["https://acme.example.com"],"durationMs":"54000"}}

@@ -78,18 +78,6 @@ func (r *Renderer) useClock(now func() time.Time) {
 	r.plan.useClock(now)
 }
 
-func (r *Renderer) Write(p []byte) (int, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.present.Live() && !r.waiting {
-		r.eraseLiveLocked()
-		n, err := r.w.Write(p)
-		r.drawLiveLocked()
-		return n, err
-	}
-	return r.w.Write(p)
-}
-
 func (r *Renderer) Commit(lines []string) {
 	if len(lines) == 0 {
 		return

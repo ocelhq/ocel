@@ -1,0 +1,9 @@
+{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"AgAAAAAAAAA=","title":"web"},{"id":"AwAAAAAAAAA=","title":"api"}]}}}
+{"operation":{"stagePlan":{"stages":[{"id":"BAAAAAAAAAA=","parentId":"AgAAAAAAAAA=","phase":"PHASE_BUILDING"},{"id":"BQAAAAAAAAA=","parentId":"AwAAAAAAAAA=","phase":"PHASE_BUILDING"}]}}}
+{"operation":{"log":{"stageId":"BAAAAAAAAAA=","message":"Packages: +812"}}}
+{"operation":{"log":{"stageId":"BQAAAAAAAAA=","message":"go: downloading github.com/ocelhq/ocel/sdk v0.4.1"}}}
+{"operation":{"span":{"spanId":"BQAAAAAAAAA=","parentSpanId":"AwAAAAAAAAA=","name":"building","startTimeUnixNano":"1000000000","endTimeUnixNano":"5000000000","status":"SPAN_STATUS_OK"}}}
+{"operation":{"stagePlan":{"stages":[{"id":"BgAAAAAAAAA=","parentId":"AwAAAAAAAAA=","phase":"PHASE_UPLOADING"}]}}}
+{"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"pushing api:8f3c1a","current":3,"total":9}}}
+{"operation":{"log":{"stageId":"BAAAAAAAAAA=","message":"▲ Next.js 15.4.2"}}}
+{"result":{"interrupted":true,"headline":"Cancelled","detail":"Resources may be partially created.\nRe-run `ocel deploy` to reconcile.","durationMs":"12000"}}

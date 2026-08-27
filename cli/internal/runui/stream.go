@@ -36,13 +36,6 @@ func NewStream(w io.Writer, present Presentation) *Stream {
 	return s
 }
 
-func (s *Stream) BuildWriter() io.Writer {
-	if s.r == nil {
-		return io.Discard
-	}
-	return s.r
-}
-
 func (s *Stream) Suspend() func() {
 	if s.r == nil {
 		return func() {}

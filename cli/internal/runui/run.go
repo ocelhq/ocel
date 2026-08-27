@@ -52,7 +52,7 @@ func Run(ctx context.Context, spec Spec, body Body) error {
 	ui.gate = g
 	defer ui.Close()
 
-	provW := ui.BuildWriter()
+	provW := ui.ProcessWriter()
 	err = provider.Drive(ctx, spec.Config, provW, provW, trustFor(spec.Trust, ui), func(runner *provider.Runner) error {
 		return body(ctx, runner, ui)
 	})

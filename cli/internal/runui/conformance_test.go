@@ -223,7 +223,7 @@ func reconstruct(events []*streamv1.RunEvent) reconstruction {
 				if _, seen := titles[id]; seen {
 					continue
 				}
-				titles[id] = st.GetTitle()
+				titles[id] = phaseTitle(st)
 				parents[id] = hex.EncodeToString(st.GetParentId())
 				order = append(order, id)
 			}
@@ -313,4 +313,173 @@ func phaseTitle(st *progressv1.Stage) string {
 		return st.GetTitle()
 	}
 	return phaseLabel(st.GetPhase())
+}
+
+type phaseBlock struct {
+	id     string
+	path   string
+	lines  []string
+	closed bool
+	mark   string
+}
+
+func blocksOnTheStream(events []*streamv1.RunEvent) (blocks map[string]*phaseBlock, declared, flushed []string) {
+	blocks = map[string]*phaseBlock{}
+	units := map[string]string{}
+	holder := map[string]string{}
+	claim := func(stageID []byte, text string) {
+		b := blocks[holder[hex.EncodeToString(stageID)]]
+		if b == nil || b.closed {
+			return
+		}
+		for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+			b.lines = append(b.lines, strings.TrimRight(blockIndent+line, " \t"))
+		}
+	}
+	close := func(id, mark string) {
+		b := blocks[id]
+		if b == nil || b.closed {
+			return
+		}
+		b.closed, b.mark = true, mark
+		flushed = append(flushed, id)
+	}
+
+	for _, raw := range events {
+		ev := normalize(raw)
+		op := ev.GetOperation()
+		switch {
+		case op.GetStagePlan() != nil:
+			for _, st := range op.GetStagePlan().GetStages() {
+				id, parent := hex.EncodeToString(st.GetId()), hex.EncodeToString(st.GetParentId())
+				switch {
+				case parent == "":
+					units[id] = st.GetTitle()
+				case units[parent] != "":
+					blocks[id] = &phaseBlock{id: id, path: units[parent] + " › " + phaseTitle(st)}
+					holder[id] = id
+					declared = append(declared, id)
+				default:
+					holder[id] = holder[parent]
+				}
+			}
+		case op.GetProgress() != nil:
+			p := op.GetProgress()
+			if line := progressLogLine(p.GetMessage(), p.GetCurrent(), p.Total); line != "" {
+				claim(p.GetStageId(), line)
+			}
+		case op.GetLog() != nil:
+			claim(op.GetLog().GetStageId(), op.GetLog().GetMessage())
+		case op.GetSpan() != nil:
+			mark := okMark
+			if op.GetSpan().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR {
+				mark = failMark
+			}
+			close(hex.EncodeToString(op.GetSpan().GetSpanId()), mark)
+		case ev.GetResult() != nil:
+			mark := warnMark
+			if !ev.GetResult().GetSuccess() && !ev.GetResult().GetInterrupted() {
+				mark = failMark
+			}
+			for _, id := range declared {
+				close(id, mark)
+			}
+		}
+	}
+	return blocks, declared, flushed
+}
+
+func closeLine(b *phaseBlock) string {
+	switch b.mark {
+	case okMark:
+		return okMark + " " + b.path + "  "
+	case failMark:
+		return failMark + " " + b.path + " "
+	default:
+		return warnMark + " " + b.path + " "
+	}
+}
+
+func TestCommittedOutputIsWholeBlocksInPhaseCompletionOrder(t *testing.T) {
+	t.Parallel()
+	for _, name := range fixtureNames(t) {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, events := fixtureStream(t, name)
+			blocks, _, flushed := blocksOnTheStream(events)
+			if len(flushed) == 0 {
+				t.Fatalf("fixture %s flushes no block — it cannot hold this projection to account", name)
+			}
+
+			for _, projection := range []struct{ name, text string }{
+				{"plain", projectPlain(t, events)},
+				{"live", scrollback(projectLive(t, events))},
+			} {
+				lines := strings.Split(strings.TrimSuffix(projection.text, "\n"), "\n")
+				at := 0
+				for _, id := range flushed {
+					b := blocks[id]
+					want := closeLine(b)
+					found := -1
+					for i := at; i < len(lines); i++ {
+						if strings.HasPrefix(lines[i], want) {
+							found = i
+							break
+						}
+					}
+					if found < 0 {
+						t.Fatalf("%s output has no %q at or after line %d, so the blocks do not land in phase-completion order:\n%s",
+							projection.name, want, at, projection.text)
+					}
+					body := lines[max(found-len(b.lines), 0):found]
+					if strings.Join(body, "\n") != strings.Join(b.lines, "\n") {
+						t.Errorf("%s block %q is not the whole of what the stream gave it, contiguous.\n--- got ---\n%s\n--- want ---\n%s",
+							projection.name, b.path, strings.Join(body, "\n"), strings.Join(b.lines, "\n"))
+					}
+					at = found + 1
+				}
+			}
+		})
+	}
+}
+
+func TestAnInterruptedRunFlushesEveryInFlightBlockWithAnInterruptedMarker(t *testing.T) {
+	t.Parallel()
+	for _, name := range fixtureNames(t) {
+		_, events := fixtureStream(t, name)
+		interrupted := false
+		for _, ev := range events {
+			interrupted = interrupted || ev.GetResult().GetInterrupted()
+		}
+		if !interrupted {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			blocks, _, flushed := blocksOnTheStream(events)
+
+			var inFlight []*phaseBlock
+			for _, id := range flushed {
+				if b := blocks[id]; b.mark == warnMark {
+					inFlight = append(inFlight, b)
+				}
+			}
+			if len(inFlight) == 0 {
+				t.Fatalf("fixture %s is interrupted with no block in flight — it cannot hold this projection to account", name)
+			}
+
+			for _, projection := range []struct{ name, text string }{
+				{"plain", projectPlain(t, events)},
+				{"live", scrollback(projectLive(t, events))},
+			} {
+				for _, b := range inFlight {
+					want := strings.Join(append(append([]string{}, b.lines...), warnMark+" "+b.path+" interrupted"), "\n")
+					if !strings.Contains(projection.text, want+"\n") {
+						t.Errorf("%s output does not flush the in-flight block %q with an interrupted marker.\n--- want ---\n%s\n--- got ---\n%s",
+							projection.name, b.path, want, projection.text)
+					}
+				}
+			}
+		})
+	}
 }

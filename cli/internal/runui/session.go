@@ -1,6 +1,7 @@
 package runui
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -35,6 +36,8 @@ type Session struct {
 	start      time.Time
 	buildStart time.Time
 
+	build *lineWriter
+
 	logMu     sync.Mutex
 	log       *os.File
 	logPath   string
@@ -49,6 +52,7 @@ func New(stdout io.Writer, run *runtrace.Run, present Presentation) *Session {
 		present: present,
 		start:   time.Now(),
 	}
+	s.build = &lineWriter{emit: s.buildLine}
 	p := filepath.Join(run.Dir(), run.TraceID()+".log")
 	if f, err := os.Create(p); err == nil {
 		s.log = f
@@ -62,17 +66,50 @@ func (s *Session) Presentation() Presentation { return s.present }
 
 func (s *Session) LogPath() string { return s.logPath }
 
-func (s *Session) BuildWriter() io.Writer {
-	if !s.present.Verbose {
-		if s.logWriter != nil {
-			return s.logWriter
-		}
-		return io.Discard
-	}
+func (s *Session) BuildWriter() io.Writer { return s.build }
+
+func (s *Session) ProcessWriter() io.Writer {
 	if s.logWriter != nil {
-		return io.MultiWriter(s.stream.BuildWriter(), s.logWriter)
+		return s.logWriter
 	}
-	return s.stream.BuildWriter()
+	return io.Discard
+}
+
+func (s *Session) buildLine(line string) {
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+		Log: &progressv1.LogEvent{StageId: buildStageID, Message: line},
+	}})
+}
+
+type lineWriter struct {
+	emit func(string)
+
+	mu   sync.Mutex
+	held []byte
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.held = append(w.held, p...)
+	for {
+		i := bytes.IndexByte(w.held, '\n')
+		if i < 0 {
+			return len(p), nil
+		}
+		w.emit(string(w.held[:i]))
+		w.held = w.held[i+1:]
+	}
+}
+
+func (w *lineWriter) flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.held) == 0 {
+		return
+	}
+	w.emit(string(w.held))
+	w.held = nil
 }
 
 func (s *Session) Suspend() func() { return s.stream.Suspend() }
@@ -110,6 +147,7 @@ func (s *Session) BuildOK() {
 	if s.buildStart.IsZero() {
 		return
 	}
+	s.build.flush()
 	end := time.Now()
 	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
 		Span: &progressv1.SpanEvent{
@@ -231,12 +269,14 @@ func (s *Session) Cancel() {
 }
 
 func (s *Session) result(ev *streamv1.RunResultEvent) {
+	s.build.flush()
 	ev.DurationMs = time.Since(s.start).Milliseconds()
 	ev.LogPath = s.logPath
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: ev}})
 }
 
 func (s *Session) Close() error {
+	s.build.flush()
 	_ = s.stream.Close()
 	if s.log != nil {
 		return s.log.Close()
