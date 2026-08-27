@@ -177,6 +177,10 @@ message ResultEvent {
 
   // One entry per app the apply covered, in manifest order whatever order they finished in.
   repeated AppResult apps = 9;
+
+  // The request was refused: the stream's own error is the verdict, and this envelope
+  // carries only what the run learned before the refusal.
+  bool refused = 10;
 }
 
 message FunctionOutput {

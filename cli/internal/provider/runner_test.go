@@ -8,10 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -302,6 +305,39 @@ func TestDeploy(t *testing.T) {
 		}
 		if err.Error() != "simulated deploy failure" {
 			t.Errorf("OperationFailedError.Error() = %q, want the provider's message verbatim", err.Error())
+		}
+	})
+
+	t.Run("a refusal keeps its code while its per-app outcomes reach the caller", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, _ := spawnFake(t, ctx, "refuse-deploy", Config{})
+
+		if err := r.Ready(ctx); err != nil {
+			t.Fatalf("Ready() error = %v, want nil", err)
+		}
+
+		var reported []string
+		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) {
+			for _, app := range ev.GetResult().GetApps() {
+				reported = append(reported, app.GetApp()+"="+app.GetOutcome().String())
+			}
+		})
+
+		var operationErr *OperationFailedError
+		if errors.As(err, &operationErr) {
+			t.Fatalf("Deploy() error = %v (%T), want the refusal rather than a run failure", err, err)
+		}
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("Deploy() error = %v, want it refused with CodeInvalidArgument", err)
+		}
+		if !strings.Contains(err.Error(), "simulated deploy refusal") {
+			t.Errorf("Deploy() error = %q, want the provider's refusal message", err.Error())
+		}
+		want := []string{"web=APP_OUTCOME_SUCCEEDED", "admin=APP_OUTCOME_FAILED"}
+		if !slices.Equal(reported, want) {
+			t.Errorf("the caller saw %v, want %v: a refusal must not lose the outcomes of the apps that ran", reported, want)
 		}
 	})
 

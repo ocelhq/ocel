@@ -60,7 +60,7 @@ message RunResultEvent {
 
   bool interrupted = 9;
 
-  // Per-app outcomes as the provider reported them, in manifest order.
+  // common.progress.v1.ResultEvent.apps as the provider reported it.
   repeated common.progress.v1.AppResult apps = 10;
 }
 

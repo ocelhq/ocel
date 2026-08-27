@@ -3,6 +3,7 @@ package providerkit
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -170,10 +171,13 @@ func TestEventSenderFailPassesARefusalBackToTheCaller(t *testing.T) {
 		t.Fatalf("close() error = %v", err)
 	}
 	events := stream.recorded()
-	if len(events) != 1 {
-		t.Fatalf("got %d events, want only the failure result", len(events))
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want a result envelope for the refusal and one for the failure", len(events))
 	}
-	if result := events[0].GetResult(); result.GetSuccess() || result.GetError() != "the engine gave up" {
+	if result := events[0].GetResult(); !result.GetRefused() || !strings.Contains(result.GetError(), "no") {
+		t.Fatalf("result = %+v, want the refusal's envelope marked refused so it is not read as the verdict", result)
+	}
+	if result := events[1].GetResult(); result.GetSuccess() || result.GetRefused() || result.GetError() != "the engine gave up" {
 		t.Fatalf("result = %+v, want the failure carried as an unsuccessful result", result)
 	}
 }
@@ -259,14 +263,13 @@ func TestEventConstructors(t *testing.T) {
 	}
 }
 
-func TestFailStreamPassesARefusalThroughUnsent(t *testing.T) {
+func TestRefusedRequestNamesAnInvalidArgument(t *testing.T) {
 	t.Parallel()
 
-	refusal := connect.NewError(connect.CodeInvalidArgument, errors.New("no"))
-	if !refusedRequest(refusal) {
-		t.Fatal("refusedRequest() = false for an InvalidArgument error")
+	if !refusedRequest(connect.NewError(connect.CodeInvalidArgument, errors.New("no"))) {
+		t.Error("refusedRequest() = false for an InvalidArgument error")
 	}
-	if err := failStream(nil, refusal); !errors.Is(err, refusal) {
-		t.Fatalf("failStream(refusal) = %v, want the refusal back without touching the stream", err)
+	if refusedRequest(errors.New("no")) {
+		t.Error("refusedRequest() = true for a plain error, which ends the run rather than refusing the request")
 	}
 }

@@ -63,14 +63,16 @@ func (s *eventSender) send(ev *progressv1.OperationEvent) {
 }
 
 func (s *eventSender) fail(err error) error {
-	if refusedRequest(err) {
-		return err
-	}
 	event := failureResult(err)
 	if s.detail != nil {
 		s.detail(event.GetResult())
 	}
+	refused := refusedRequest(err)
+	event.GetResult().Refused = refused
 	s.send(event)
+	if refused {
+		return err
+	}
 	return nil
 }
 
@@ -198,13 +200,6 @@ func logEvent(id StageID, message string) *progressv1.OperationEvent {
 
 func refusedRequest(err error) bool {
 	return connect.CodeOf(err) == connect.CodeInvalidArgument
-}
-
-func failStream(stream *connect.ServerStream[progressv1.OperationEvent], err error) error {
-	if refusedRequest(err) {
-		return err
-	}
-	return stream.Send(failureResult(err))
 }
 
 func failureResult(err error) *progressv1.OperationEvent {
