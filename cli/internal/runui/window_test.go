@@ -145,3 +145,32 @@ func TestTheWindowKeepsSpineOrderWithinATier(t *testing.T) {
 		t.Errorf("row order = %v, want the running units in spine order ahead of the done one", got)
 	}
 }
+
+func TestPendingUnitsFallBelowTheFoldBeforeRunningUnitsLoseTheirOutput(t *testing.T) {
+	t.Parallel()
+	spine := []windowUnit{running(true), running(true)}
+	for len(spine) < 16 {
+		spine = append(spine, pendingUnit())
+	}
+
+	f := planWindow(spine, 17)
+	if len(f.rows) < 2 || !f.rows[0].output || !f.rows[1].output {
+		t.Fatalf("output lines = %v, want both running units keeping theirs — the running tier needs 4 of 17 lines", outputFlags(f))
+	}
+	if got := overflowLine(f); got != "+2 more: 2 waiting" {
+		t.Errorf("overflow line = %q, want the pending units that do not fit counted below the fold", got)
+	}
+}
+
+func TestALoneRunningUnitKeepsItsOutputHoweverManyUnitsWait(t *testing.T) {
+	t.Parallel()
+	spine := []windowUnit{running(true)}
+	for len(spine) < 31 {
+		spine = append(spine, pendingUnit())
+	}
+
+	f := planWindow(spine, 24)
+	if len(f.rows) == 0 || !f.rows[0].output {
+		t.Fatalf("output lines = %v, want the single running unit to keep its output line", outputFlags(f))
+	}
+}
