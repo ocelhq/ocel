@@ -2,7 +2,6 @@ package runui
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
@@ -29,6 +28,7 @@ type Spec struct {
 	Trust       provider.Trust
 	Interactive bool
 	Stdout      io.Writer
+	Stdin       io.Reader
 }
 
 type Body func(context.Context, *provider.Runner, *Session) error
@@ -37,7 +37,8 @@ func Run(ctx context.Context, spec Spec, body Body) error {
 	if _, err := spec.Config.RequireProvider(); err != nil {
 		return err
 	}
-	if err := spec.gate(); err != nil {
+	g := spec.gate()
+	if err := g.refuse(); err != nil {
 		return err
 	}
 
@@ -48,6 +49,7 @@ func Run(ctx context.Context, spec Spec, body Body) error {
 	defer run.Close()
 
 	ui := New(spec.Stdout, run, spec.Present)
+	ui.gate = g
 	defer ui.Close()
 
 	provW := ui.BuildWriter()
@@ -60,13 +62,17 @@ func Run(ctx context.Context, spec Spec, body Body) error {
 	return nil
 }
 
-// TODO(#654): plan-first also owes a rendered plan and a consent prompt, and an
-// all-KEEP plan skips consent — all three need the kit's plan contract first.
-func (s Spec) gate() error {
-	if s.Consent != PlanFirst || s.Dry || s.Yes || s.Interactive {
-		return nil
+func (s Spec) gate() gate {
+	return gate{
+		command:     s.Command,
+		class:       s.Consent,
+		yes:         s.Yes,
+		dry:         s.Dry,
+		interactive: s.Interactive,
+		unattended:  s.Unattended,
+		in:          s.Stdin,
+		out:         s.Stdout,
 	}
-	return fmt.Errorf("`%s` needs a terminal to confirm what it will remove; to run it unattended, %s", s.Command, s.Unattended)
 }
 
 func trustFor(trust provider.Trust, ui *Session) provider.Trust {

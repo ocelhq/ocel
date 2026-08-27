@@ -29,6 +29,7 @@ type Session struct {
 	run     *runtrace.Run
 	command string
 	present Presentation
+	gate    gate
 	waiting bool
 
 	start      time.Time

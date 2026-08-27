@@ -2,17 +2,13 @@ package deploy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
-	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/cli/style"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -75,7 +71,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&opts.yes, "yes", "y", false, "Skip the confirmation prompt")
+	cmddeps.Yes(cmd, &opts.yes)
 	cmd.Flags().StringVar(&opts.tag, "tag", "", "Mark this deploy with an immutable `label` to roll back to by name (ocel rollback --tag)")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	cmd.Flags().BoolVar(&opts.noUI, "no-ui", false, noUIFlagUsage)
@@ -96,24 +92,15 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		return err
 	}
 
-	interactive := deps.StdinIsTerminal(stdin)
-
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel deploy", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		willConfirm := !opts.yes && interactive
-		knownSlugs, err := preflightDeploy(ctx, deps, ui.Presentation(), runner, cfg, willConfirm, stdout, stdin)
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel deploy", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		knownSlugs, err := preflightDeploy(ctx, ui, runner, cfg, stdout, stdin)
 		if err != nil {
 			return err
 		}
 
-		if willConfirm {
-			proceed, err := confirmDeploy(ctx, cfg.Slug, runner.Package(), knownSlugs, stdout, stdin)
-			if err != nil {
-				return err
-			}
-			if !proceed {
-				fmt.Fprintln(stdout, "Aborted.")
-				return nil
-			}
+		proceed, err := guardNewProject(ctx, ui, cfg, knownSlugs, stdout)
+		if err != nil || !proceed {
+			return err
 		}
 
 		ui.Building()
@@ -166,31 +153,4 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		ui.Deployed("Deployed", out.appURLs, out.urlNote, out.flip, out.links, out.functions)
 		return nil
 	})
-}
-
-func confirmDeploy(ctx context.Context, slug, providerPackage string, knownSlugs []string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	if len(knownSlugs) == 0 {
-		return confirm(ctx, fmt.Sprintf("Deploy %s with %s?", slug, providerPackage), stdin)
-	}
-	fmt.Fprintf(stdout, "No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s\n",
-		slug, strings.Join(knownSlugs, ", "))
-	return confirm(ctx, "Continue?", stdin)
-}
-
-func confirm(ctx context.Context, title string, stdin io.Reader) (bool, error) {
-	var proceed bool
-	err := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().
-			Title(title).
-			Affirmative("Yes").
-			Negative("No").
-			Value(&proceed),
-	)).WithTheme(style.Theme).WithInput(stdin).RunWithContext(ctx)
-	if errors.Is(err, huh.ErrUserAborted) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return proceed, nil
 }

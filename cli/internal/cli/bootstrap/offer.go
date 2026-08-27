@@ -2,15 +2,12 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"slices"
 	"strings"
 
-	"charm.land/huh/v2"
-
-	"github.com/ocelhq/ocel/cli/internal/cli/style"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -98,7 +95,7 @@ func (p Plan) Advise(tier environmentv1.Tier, out io.Writer) error {
 	return nil
 }
 
-func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer) error {
+func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer, in io.Reader) error {
 	plan := PlanFor(status)
 	if plan.Empty() {
 		return nil
@@ -108,18 +105,11 @@ func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.Boot
 	}
 
 	fmt.Fprintf(out, "The %s bootstrap is not what this project needs: %s.\n", Name(tier), plan.summary())
-	var proceed bool
-	err := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().
-			Title(fmt.Sprintf("Run `%s` now?", plan.Command(tier))).
-			Affirmative("Yes").
-			Negative("No").
-			Value(&proceed),
-	)).WithTheme(style.Theme).RunWithContext(ctx)
-	if err != nil && !errors.Is(err, huh.ErrUserAborted) {
+	proceed, err := prompt.New(out, in).Confirm(ctx, fmt.Sprintf("Run `%s` now?", plan.Command(tier)))
+	if err != nil {
 		return err
 	}
-	if errors.Is(err, huh.ErrUserAborted) || !proceed {
+	if !proceed {
 		return plan.Advise(tier, out)
 	}
 	return provider.Stream(ctx, runner, "Bootstrap", plan.Request(tier, front), contractv1connect.ProviderServiceClient.Bootstrap,

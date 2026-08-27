@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
-	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -24,37 +23,52 @@ func preflightPreview(ctx context.Context, present runui.Presentation, runner *p
 	return preflight.Tier(ctx, present, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", out)
 }
 
-func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, present runui.Presentation, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, stdin io.Reader) error {
-	resp, err := preflight.Run(ctx, present, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Hostnames(cfg, "preview"), preflight.Frameworks(cfg), "ocel bootstrap preview", out)
-	if err != nil {
-		return err
-	}
-	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
-		return err
-	}
-	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, edgewire.Selection(cfg), deps.StdinIsTerminal(stdin), out); err != nil {
-		return err
-	}
-	return requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, out)
-}
-
-func preflightDeploy(ctx context.Context, deps cmddeps.Deps, present runui.Presentation, runner *provider.Runner, cfg *projectconfig.Config, interactive bool, out io.Writer, stdin io.Reader) ([]string, error) {
-	domains := preflight.Hostnames(cfg, "production")
-	var slug string
-	if interactive || len(domains) > 0 {
-		slug = cfg.Slug
-	}
-	resp, err := preflight.Run(ctx, present, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slug, domains, preflight.Frameworks(cfg), "ocel bootstrap production", out)
+func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) ([]string, error) {
+	resp, err := preflight.Run(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Hostnames(cfg, "preview"), preflight.Frameworks(cfg), "ocel bootstrap preview", out)
 	if err != nil {
 		return nil, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return nil, err
 	}
-	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, edgewire.Selection(cfg), interactive, out); err != nil {
+	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, edgewire.Selection(cfg), ui.Interactive(), out, in); err != nil {
+		return nil, err
+	}
+	if err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, out); err != nil {
 		return nil, err
 	}
 	return resp.GetKnownSlugs(), nil
+}
+
+func preflightDeploy(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) ([]string, error) {
+	domains := preflight.Hostnames(cfg, "production")
+	resp, err := preflight.Run(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(ui, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production", out)
+	if err != nil {
+		return nil, err
+	}
+	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
+		return nil, err
+	}
+	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, edgewire.Selection(cfg), ui.Interactive(), out, in); err != nil {
+		return nil, err
+	}
+	return resp.GetKnownSlugs(), nil
+}
+
+func slugToScopeBy(ui *runui.Session, domains []string, cfg *projectconfig.Config) string {
+	if ui.Interactive() || len(domains) > 0 {
+		return cfg.Slug
+	}
+	return ""
+}
+
+func guardNewProject(ctx context.Context, ui *runui.Session, cfg *projectconfig.Config, knownSlugs []string, out io.Writer) (bool, error) {
+	if len(knownSlugs) == 0 {
+		return true, nil
+	}
+	fmt.Fprintf(out, "No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s\n",
+		cfg.Slug, strings.Join(knownSlugs, ", "))
+	return ui.Guard(ctx, "Continue?")
 }
 
 func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string) error {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 
+	"github.com/spf13/cobra"
+
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -34,13 +36,22 @@ type Deps struct {
 	Interrupt           func(ctx context.Context, stderr io.Writer) (context.Context, context.CancelFunc)
 }
 
-func (d Deps) Spec(consent runui.Consent, command string, cfg *projectconfig.Config, stdout io.Writer) runui.Spec {
+const YesUsage = "Consent in advance to any confirmation this command would ask for"
+
+func Yes(cmd *cobra.Command, into *bool) {
+	cmd.Flags().BoolVarP(into, "yes", "y", false, YesUsage)
+}
+
+func (d Deps) Spec(consent runui.Consent, command string, cfg *projectconfig.Config, yes bool, stdout io.Writer, stdin io.Reader) runui.Spec {
 	return runui.Spec{
-		Command: command,
-		Consent: consent,
-		Config:  cfg,
-		Present: d.Presentation(stdout),
-		Trust:   d.HostTrust,
-		Stdout:  stdout,
+		Command:     command,
+		Consent:     consent,
+		Yes:         yes,
+		Config:      cfg,
+		Present:     d.Presentation(stdout),
+		Trust:       d.HostTrust,
+		Interactive: d.StdinIsTerminal(stdin),
+		Stdout:      stdout,
+		Stdin:       stdin,
 	}
 }

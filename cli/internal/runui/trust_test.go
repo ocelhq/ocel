@@ -12,7 +12,7 @@ import (
 
 type terminalAsker struct{}
 
-func (terminalAsker) Interactive() bool { return true }
+func (terminalAsker) Attended() bool { return true }
 
 func (terminalAsker) Confirm(context.Context, string) (bool, error) { return true, nil }
 

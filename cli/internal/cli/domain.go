@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -147,7 +146,7 @@ func init() {
 	for _, c := range []*cobra.Command{domainUseCmd, domainLsCmd, domainReleaseCmd} {
 		c.Flags().BoolVar(&domainOpts.preview, "preview", false, "Act on the preview class (required)")
 	}
-	domainReleaseCmd.Flags().BoolVarP(&domainOpts.yes, "yes", "y", false, "Skip the typed confirmation, for CI")
+	cmddeps.Yes(domainReleaseCmd, &domainOpts.yes)
 	domainStatusCmd.Flags().BoolVar(&domainOpts.wait, "wait", false, "Keep polling until every declared hostname is served, or give up")
 
 	domainCmd.AddCommand(domainStatusCmd)
@@ -189,7 +188,7 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain use", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain use", cfg, false, stdout, nil), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview", stdout); err != nil {
 			return err
 		}
@@ -235,8 +234,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 		return err
 	}
 
-	spec := deps.Spec(runui.PlanFirst, "ocel domain release", cfg, stdout)
-	spec.Yes, spec.Interactive = opts.yes, isReaderTTY(stdin)
+	spec := deps.Spec(runui.PlanFirst, "ocel domain release", cfg, opts.yes, stdout, stdin)
 	spec.Unattended = "pass --yes"
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
@@ -265,15 +263,9 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 		changeplan.NewPrinter(stdout, ui.Presentation()).Print(fmt.Sprintf("This will release %s and stop serving every project's previews on it", wildcardOf(base)), plan,
 			"This cannot be undone.")
 
-		if !opts.yes {
-			confirmed, err := prompt.New(stdout, stdin).Phrase(ctx, "domain", base)
-			if err != nil {
-				return err
-			}
-			if !confirmed {
-				fmt.Fprintln(stdout, "Aborted.")
-				return nil
-			}
+		granted, err := ui.ConsentByName(ctx, "domain", base)
+		if err != nil || !granted {
+			return err
 		}
 
 		req := &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: edgewire.Selection(cfg)}
@@ -294,7 +286,7 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 	if len(configured) == 0 {
 		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
 	}
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain add", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain add", cfg, false, stdout, nil), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}
@@ -325,7 +317,7 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdou
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain rm", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain rm", cfg, false, stdout, nil), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}

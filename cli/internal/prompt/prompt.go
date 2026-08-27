@@ -11,13 +11,13 @@ import (
 )
 
 type Prompter struct {
-	out io.Writer
-	in  io.Reader
-	tty bool
+	out      io.Writer
+	in       io.Reader
+	attended bool
 }
 
 func New(out io.Writer, in io.Reader) Prompter {
-	return Prompter{out: out, in: in, tty: isTerminal(in) && isTerminal(out)}
+	return Prompter{out: out, in: in, attended: Interactive(in) && isTerminal(out)}
 }
 
 func isTerminal(v any) bool {
@@ -28,7 +28,9 @@ func isTerminal(v any) bool {
 	return isatty.IsTerminal(f.Fd())
 }
 
-func (p Prompter) Interactive() bool { return p.tty }
+func Interactive(in io.Reader) bool { return isTerminal(in) }
+
+func (p Prompter) Attended() bool { return p.attended }
 
 type Option struct {
 	Name     string
@@ -37,7 +39,7 @@ type Option struct {
 }
 
 func (p Prompter) Confirm(ctx context.Context, question string) (bool, error) {
-	if !p.tty {
+	if !p.attended {
 		return p.confirmLine(ctx, question)
 	}
 	var answer bool
@@ -49,7 +51,7 @@ func (p Prompter) Confirm(ctx context.Context, question string) (bool, error) {
 }
 
 func (p Prompter) Phrase(ctx context.Context, label, phrase string) (bool, error) {
-	if !p.tty {
+	if !p.attended {
 		return p.phraseLine(ctx, label, phrase)
 	}
 	var typed string
@@ -66,7 +68,7 @@ func (p Prompter) Phrase(ctx context.Context, label, phrase string) (bool, error
 }
 
 func (p Prompter) MultiSelect(ctx context.Context, title string, options []Option) ([]string, bool, error) {
-	if !p.tty {
+	if !p.attended {
 		return p.selectLine(ctx, title, options)
 	}
 	chosen := selectedNames(options)

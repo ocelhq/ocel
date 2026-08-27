@@ -20,87 +20,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func TestConfirmDeploy(t *testing.T) {
-	t.Parallel()
-
-	answers := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{"yes proceeds", "y\n", true},
-		{"no aborts", "n\n", false},
-	}
-	for _, tc := range answers {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			var stdout bytes.Buffer
-			got, err := confirmDeploy(context.Background(), "my-app", "@ocel/provider-aws", nil, &stdout, strings.NewReader(tc.input))
-			if err != nil {
-				t.Fatalf("confirmDeploy(context.Background(), ) error = %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("confirmDeploy(context.Background(), %q) = %v, want %v", tc.input, got, tc.want)
-			}
-		})
-	}
-
-	t.Run("an unrecognized slug warns instead of refusing", func(t *testing.T) {
-		t.Parallel()
-
-		var stdout bytes.Buffer
-		got, err := confirmDeploy(context.Background(), "my-app", "@ocel/provider-aws", []string{"my-application", "billing"}, &stdout, strings.NewReader("y\n"))
-		if err != nil {
-			t.Fatalf("confirmDeploy(context.Background(), ) error = %v", err)
-		}
-		if !got {
-			t.Error("confirmDeploy(context.Background(), ) = false, want the y answer to still proceed — the guard is a warning, not a refusal")
-		}
-
-		out := stdout.String()
-		for _, want := range []string{
-			`No existing deployment for slug "my-app".`,
-			"This will create a NEW project.",
-			"This backend already has: my-application, billing",
-		} {
-			if !strings.Contains(out, want) {
-				t.Errorf("stdout missing %q:\n%s", want, out)
-			}
-		}
-		if strings.Contains(out, "Deploy my-app with") {
-			t.Errorf("stdout = %q, want the routine update prompt replaced, not appended to", out)
-		}
-	})
-
-	t.Run("the unrecognized-slug prompt defaults to no", func(t *testing.T) {
-		t.Parallel()
-
-		var stdout bytes.Buffer
-		got, err := confirmDeploy(context.Background(), "my-app", "@ocel/provider-aws", []string{"my-application"}, &stdout, strings.NewReader("n\n"))
-		if err != nil {
-			t.Fatalf("confirmDeploy(context.Background(), ) error = %v", err)
-		}
-		if got {
-			t.Error("confirmDeploy(context.Background(), ) = true, want the drift prompt declined")
-		}
-	})
-
-	t.Run("an empty backend is not nagged", func(t *testing.T) {
-		t.Parallel()
-
-		for _, known := range [][]string{nil, {}} {
-			var stdout bytes.Buffer
-			if _, err := confirmDeploy(context.Background(), "my-app", "@ocel/provider-aws", known, &stdout, strings.NewReader("y\n")); err != nil {
-				t.Fatalf("confirmDeploy(context.Background(), ) error = %v", err)
-			}
-			if strings.Contains(stdout.String(), "NEW project") {
-				t.Errorf("stdout = %q, want no drift warning when the backend reports nothing", stdout.String())
-			}
-		}
-	})
-}
-
 func TestToDeclarations(t *testing.T) {
 	t.Parallel()
 
@@ -405,7 +324,7 @@ export default {
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("--yes leaves the slug out", func(t *testing.T) {
+	t.Run("--yes asks the provider exactly what the same run without it would", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
@@ -417,8 +336,16 @@ export default {
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "PREFLIGHT slug= ") {
-			t.Errorf("stdout = %q, want --yes to ask for no slug-scoped answers", stdout.String())
+
+		out := stdout.String()
+		if !strings.Contains(out, "PREFLIGHT slug=test-app") {
+			t.Errorf("stdout = %q, want --yes to leave the slug-scoped question on the wire untouched", out)
+		}
+		if !strings.Contains(out, "This will create a NEW project.") {
+			t.Errorf("stdout = %q, want the drift warning still told to whoever passed --yes", out)
+		}
+		if strings.Contains(out, "[y/N]") {
+			t.Errorf("stdout = %q, want --yes to grant the guard rather than raise it", out)
 		}
 
 		clitest.WaitForNoStaleSocket(t, sockPath)

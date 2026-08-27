@@ -103,7 +103,7 @@ func newDeps() cmddeps.Deps {
 		DiscoverPRNumber:    prNumberFromEnv,
 		RunPackageManager:   runPackageManagerCommand,
 		HostTrust:           provider.Trust{Ask: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr},
-		StdinIsTerminal:     isReaderTTY,
+		StdinIsTerminal:     prompt.Interactive,
 		ConfigPath:          explicitConfigPath,
 		Presentation:        presentation,
 		Interrupt:           installInterruptHandler,

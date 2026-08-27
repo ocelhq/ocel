@@ -2,15 +2,11 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 
-	"charm.land/huh/v2"
-
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/cli/style"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
@@ -30,24 +26,23 @@ func RunDestroy(ctx context.Context, deps cmddeps.Deps, cwd string, tier environ
 
 func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
 	name := Name(tier)
-	requested := changeplan.BypassRequest()
-	bypass := requested == name
-	tty := deps.StdinIsTerminal(stdin)
-	switch {
-	case opts.Dry:
-	case bypass:
-		fmt.Fprintf(stderr, "%s=%s: removing the %s bootstrap without confirmation\n", changeplan.BypassEnv, name, name)
-	case requested == "" || opts.Yes:
-	case !tty:
-		return fmt.Errorf("%s is set to %q, but this is the %s bootstrap; it must name the bootstrap being removed", changeplan.BypassEnv, requested, name)
-	default:
-		fmt.Fprintf(stderr, "%s is set to %q, not this bootstrap (%s); confirming interactively instead\n", changeplan.BypassEnv, requested, name)
+	bypass, err := runui.Bypass{
+		Noun:          "bootstrap",
+		Subject:       name,
+		Action:        fmt.Sprintf("removing the %s bootstrap", name),
+		Verb:          "removed",
+		Yes:           opts.Yes,
+		Dry:           opts.Dry,
+		GrantsWhenDry: true,
+		TTY:           deps.StdinIsTerminal(stdin),
+	}.Granted(stderr)
+	if err != nil {
+		return err
 	}
-	skipConfirmation := opts.Yes || bypass
 
-	spec := deps.Spec(runui.PlanFirst, destroyCommand(tier), cfg, stdout)
-	spec.Yes, spec.Dry, spec.Interactive = skipConfirmation, opts.Dry, tty
-	spec.Unattended = fmt.Sprintf("pass --yes, or set %s to %q", changeplan.BypassEnv, name)
+	spec := deps.Spec(runui.PlanFirst, destroyCommand(tier), cfg, opts.Yes || bypass, stdout, stdin)
+	spec.Dry = opts.Dry
+	spec.Unattended = fmt.Sprintf("pass --yes, or set %s to %q", runui.BypassEnv, name)
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		client, err := runner.Client()
@@ -74,21 +69,9 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 			fmt.Fprintln(stdout, "Run without --dry to destroy.")
 			return nil
 		}
-		if !skipConfirmation {
-			subject := plan.GetSubject()
-			var typed string
-			err := huh.NewForm(huh.NewGroup(
-				huh.NewInput().
-					Title("Type the environment name (" + subject + ") to confirm").
-					Value(&typed),
-			)).WithTheme(style.Theme).RunWithContext(ctx)
-			if err != nil && !errors.Is(err, huh.ErrUserAborted) {
-				return err
-			}
-			if errors.Is(err, huh.ErrUserAborted) || subject == "" || typed != subject {
-				fmt.Fprintln(stdout, "Aborted.")
-				return nil
-			}
+		granted, err := ui.ConsentByName(ctx, "environment name", plan.GetSubject())
+		if err != nil || !granted {
+			return err
 		}
 
 		req := &contractv1.BootstrapScope{

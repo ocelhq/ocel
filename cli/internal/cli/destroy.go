@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -32,8 +31,8 @@ var destroyCmd = &cobra.Command{
 		"takes the whole preview footprint and leaves the account-level preview bootstrap intact.\n\n" +
 		"Either is irreversible and requires typing the project name to confirm; --dry prints " +
 		"what would go and stops.\n\n" +
-		"An automated caller that must tear its own project down unattended can set " +
-		changeplan.BypassEnv + " to the project name — and only that name — to skip both gates. " +
+		"An automated caller that must tear its own project down unattended passes --yes, or sets " +
+		runui.BypassEnv + " to the project name — and only that name. " +
 		"Any other value is not a bypass.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
@@ -61,12 +60,13 @@ var destroyProductionCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runDestroyProduction(ctx, newDeps(), cwd, destroyProductionDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDestroyProduction(ctx, newDeps(), cwd, destroyProductionYes, destroyProductionDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
 var (
-	destroyYes           bool
+	destroyPreviewYes    bool
+	destroyProductionYes bool
 	destroyProductionDry bool
 	destroyPreviewDry    bool
 )
@@ -89,40 +89,40 @@ func init() {
 			ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
 
-			return runDestroyPreviewProject(ctx, newDeps(), cwd, destroyYes, destroyPreviewDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDestroyPreviewProject(ctx, newDeps(), cwd, destroyPreviewYes, destroyPreviewDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
-	previewCmd.Flags().BoolVarP(&destroyYes, "yes", "y", false, "Destroy the whole preview footprint with no confirmation and no terminal, for CI. Skips both the typed-name confirmation and the interactive-terminal requirement")
+	cmddeps.Yes(previewCmd, &destroyPreviewYes)
 	previewCmd.Flags().BoolVar(&destroyPreviewDry, "dry", false, "Print what would be destroyed and stop, destroying nothing")
+	cmddeps.Yes(destroyProductionCmd, &destroyProductionYes)
 	destroyProductionCmd.Flags().BoolVar(&destroyProductionDry, "dry", false, "Print what would be destroyed and stop, destroying nothing")
 
 	destroyCmd.AddCommand(destroyProductionCmd, previewCmd)
 	rootCmd.AddCommand(destroyCmd)
 }
 
-func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, dry bool, stdout, stderr io.Writer, stdin io.Reader) error {
-	requested := changeplan.BypassRequest()
-	tty := isReaderTTY(stdin)
-
+func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
-	bypass := !dry && requested == cfg.Slug
-	switch {
-	case dry:
-	case bypass:
-		fmt.Fprintf(stderr, "%s=%s: destroying production without confirmation\n", changeplan.BypassEnv, cfg.Slug)
-	case requested != "" && !tty:
-		return fmt.Errorf("%s is set to %q, but this project is %q; it must name the project being destroyed", changeplan.BypassEnv, requested, cfg.Slug)
-	case requested != "":
-		fmt.Fprintf(stderr, "%s is set to %q, not this project (%s); confirming interactively instead\n", changeplan.BypassEnv, requested, cfg.Slug)
+	bypass, err := runui.Bypass{
+		Noun:    "project",
+		Subject: cfg.Slug,
+		Action:  "destroying production",
+		Verb:    "destroyed",
+		Yes:     yes,
+		Dry:     dry,
+		TTY:     deps.StdinIsTerminal(stdin),
+	}.Granted(stderr)
+	if err != nil {
+		return err
 	}
 
-	spec := deps.Spec(runui.PlanFirst, "ocel destroy production", cfg, stdout)
-	spec.Yes, spec.Dry, spec.Interactive = requested != "", dry, tty
-	spec.Unattended = fmt.Sprintf("set %s to the project name", changeplan.BypassEnv)
+	spec := deps.Spec(runui.PlanFirst, "ocel destroy production", cfg, yes || bypass, stdout, stdin)
+	spec.Dry = dry
+	spec.Unattended = fmt.Sprintf("pass --yes, or set %s to the project name", runui.BypassEnv)
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
@@ -153,15 +153,9 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, dr
 			fmt.Fprintln(stdout, "Run without --dry to destroy.")
 			return nil
 		}
-		if !bypass {
-			confirmed, err := prompt.New(stdout, stdin).Phrase(ctx, "project name", plan.GetSubject())
-			if err != nil {
-				return err
-			}
-			if !confirmed {
-				fmt.Fprintln(stdout, "Aborted.")
-				return nil
-			}
+		granted, err := ui.ConsentByName(ctx, "project name", plan.GetSubject())
+		if err != nil || !granted {
+			return err
 		}
 
 		req := &contractv1.ProjectRequest{
@@ -182,8 +176,8 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 		return err
 	}
 
-	spec := deps.Spec(runui.PlanFirst, "ocel destroy preview", cfg, stdout)
-	spec.Yes, spec.Dry, spec.Interactive = yes, dry, isReaderTTY(stdin)
+	spec := deps.Spec(runui.PlanFirst, "ocel destroy preview", cfg, yes, stdout, stdin)
+	spec.Dry = dry
 	spec.Unattended = "pass --yes"
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
@@ -217,15 +211,9 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 			return nil
 		}
 
-		if !yes {
-			confirmed, err := prompt.New(stdout, stdin).Phrase(ctx, "project name", plan.GetSubject())
-			if err != nil {
-				return err
-			}
-			if !confirmed {
-				fmt.Fprintln(stdout, "Aborted.")
-				return nil
-			}
+		granted, err := ui.ConsentByName(ctx, "project name", plan.GetSubject())
+		if err != nil || !granted {
+			return err
 		}
 
 		req := &contractv1.ProjectRequest{

@@ -8,13 +8,11 @@ import (
 	"os"
 	"strings"
 
-	"charm.land/huh/v2"
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/cli/style"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -95,7 +93,7 @@ func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []s
 		},
 	}
 
-	cmd.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "Skip confirmation")
+	cmddeps.Yes(cmd, &opts.Yes)
 	cmd.Flags().BoolVar(&opts.Dry, "dry", false, "Print the changes and stop, applying nothing")
 	cmd.Flags().StringVar(&opts.Features, "features", "", "Comma-separated `set` of features to add or refresh; whatever else stands is left alone (also: all, none)")
 	cmd.Flags().StringVar(&opts.Remove, "remove", "", "Comma-separated `set` of features to tear down; nothing goes unless it is named here")
@@ -137,7 +135,7 @@ func newDestroyCommand(deps cmddeps.Deps) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "Skip confirmation")
+	cmddeps.Yes(cmd, &opts.Yes)
 	cmd.Flags().BoolVar(&opts.Dry, "dry", false, "Print what would be removed and stop, removing nothing")
 
 	return cmd
@@ -164,7 +162,11 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel bootstrap "+Name(tier), cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	spec := deps.Spec(runui.PlanFirst, "ocel bootstrap "+Name(tier), cfg, opts.Yes, stdout, stdin)
+	spec.Dry = opts.Dry
+	spec.Unattended = "pass --yes"
+
+	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		client, err := runner.Client()
 		if err != nil {
 			return err
@@ -196,9 +198,9 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			return nil
 		}
 
-		interactive := !opts.Yes && deps.StdinIsTerminal(stdin)
-		picked := interactive && !opts.FeaturesDeclared
-		requested, selected, err := chooseFeatures(ctx, opts, catalogue, standing, going, string(cfg.EdgeKind()), tier, interactive, stdout)
+		asking := ui.Asking()
+		picked := asking && !opts.FeaturesDeclared
+		requested, selected, err := chooseFeatures(ctx, opts, catalogue, standing, going, string(cfg.EdgeKind()), tier, asking, stdout)
 		if err != nil {
 			return err
 		}
@@ -212,13 +214,12 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 
 		request := func(dry bool) *contractv1.BootstrapRequest {
 			req := &contractv1.BootstrapRequest{
-				Tier:               tier,
-				Features:           requested,
-				Remove:             going,
-				Force:              opts.Force,
-				AcceptReplacements: opts.Yes,
-				Edge:               edgewire.Selection(cfg),
-				Dry:                dry,
+				Tier:     tier,
+				Features: requested,
+				Remove:   going,
+				Force:    opts.Force,
+				Edge:     edgewire.Selection(cfg),
+				Dry:      dry,
 			}
 			if opts.AutoHealDeclared {
 				req.AutoHeal = &opts.AutoHeal
@@ -268,36 +269,25 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			return nil
 		}
 
-		if interactive && status.GetDowngrade() {
-			proceed, err := confirm(ctx, "Write the older content anyway?", stdin)
-			if err != nil {
+		if status.GetDowngrade() {
+			proceed, err := ui.Guard(ctx, "Write the older content anyway?")
+			if err != nil || !proceed {
 				return err
-			}
-			if !proceed {
-				fmt.Fprintln(stdout, "Aborted.")
-				return nil
 			}
 		}
 
-		req := request(false)
-		if interactive {
-			title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package())
-			if rendered && !changeplan.AllKeep(plan) {
-				title = fmt.Sprintf("%s with %s?", changeplan.ConfirmVerb(plan), runner.Package())
-			}
-			proceed, err := confirm(ctx, title, stdin)
-			if err != nil {
-				return err
-			}
-			if !proceed {
-				fmt.Fprintln(stdout, "Aborted.")
-				return nil
-			}
-			if rendered {
-				req.AcceptReplacements = true
-			}
-			req.Force = req.Force || len(going) > 0
+		title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package())
+		if rendered && !changeplan.AllKeep(plan) {
+			title = fmt.Sprintf("%s with %s?", changeplan.ConfirmVerb(plan), runner.Package())
 		}
+		granted, err := ui.Consent(ctx, title)
+		if err != nil || !granted {
+			return err
+		}
+
+		req := request(false)
+		req.AcceptReplacements = rendered
+		req.Force = req.Force || len(going) > 0
 
 		if err := provider.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
 			return err
@@ -313,24 +303,6 @@ func resolveProject(ctx context.Context, deps cmddeps.Deps, cwd string) (*projec
 		return nil, err
 	}
 	return cfg, nil
-}
-
-func confirm(ctx context.Context, title string, stdin io.Reader) (bool, error) {
-	var proceed bool
-	err := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().
-			Title(title).
-			Affirmative("Yes").
-			Negative("No").
-			Value(&proceed),
-	)).WithTheme(style.Theme).WithInput(stdin).RunWithContext(ctx)
-	if errors.Is(err, huh.ErrUserAborted) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return proceed, nil
 }
 
 func downgradeWarning(tier environmentv1.Tier, status *contractv1.BootstrapStatus) string {

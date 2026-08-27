@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/creack/pty"
+
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -18,13 +20,13 @@ import (
 )
 
 type scriptedAsker struct {
-	interactive bool
-	answer      bool
-	err         error
-	asked       []string
+	attended bool
+	answer   bool
+	err      error
+	asked    []string
 }
 
-func (a *scriptedAsker) Interactive() bool { return a.interactive }
+func (a *scriptedAsker) Attended() bool { return a.attended }
 
 func (a *scriptedAsker) Confirm(_ context.Context, question string) (bool, error) {
 	a.asked = append(a.asked, question)
@@ -98,7 +100,7 @@ func TestUnknownHostKeyOnATTYRecordsTheKeyAndRedrivesOnce(t *testing.T) {
 
 	ctx := context.Background()
 	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
-	asker := &scriptedAsker{interactive: true, answer: true}
+	asker := &scriptedAsker{attended: true, answer: true}
 	var out bytes.Buffer
 
 	if err := driveTrusting(ctx, trustAsking(asker, &out), fake.drive); err != nil {
@@ -132,7 +134,7 @@ func TestUnknownHostKeyKeepsTheRestOfKnownHostsIntact(t *testing.T) {
 		t.Fatalf("seed known_hosts: %v", err)
 	}
 
-	trust := trustAsking(&scriptedAsker{interactive: true, answer: true}, io.Discard)
+	trust := trustAsking(&scriptedAsker{attended: true, answer: true}, io.Discard)
 	if err := driveTrusting(ctx, trust, fake.drive); err != nil {
 		t.Fatalf("driveTrusting() error = %v", err)
 	}
@@ -148,7 +150,7 @@ func TestUnknownHostKeyRefusedAtThePromptRecordsNothing(t *testing.T) {
 
 	ctx := context.Background()
 	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
-	asker := &scriptedAsker{interactive: true, answer: false}
+	asker := &scriptedAsker{attended: true, answer: false}
 
 	err := driveTrusting(ctx, trustAsking(asker, io.Discard), fake.drive)
 	if err == nil {
@@ -170,7 +172,7 @@ func TestUnknownHostKeyWithoutATTYNeverAsksAndCarriesTheRemedy(t *testing.T) {
 
 	ctx := context.Background()
 	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
-	asker := &scriptedAsker{interactive: false, answer: true}
+	asker := &scriptedAsker{attended: false, answer: true}
 
 	err := driveTrusting(ctx, trustAsking(asker, io.Discard), fake.drive)
 	if err == nil {
@@ -216,6 +218,42 @@ func TestATrustBuiltOverAPipeNeverPromptsIntoABuffer(t *testing.T) {
 	}
 }
 
+func TestATrustWhoseQuestionLandsWhereNobodyCanReadItNeverAsks(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
+
+	ptmx, tty, err := pty.Open()
+	if err != nil {
+		t.Skipf("no pty available: %v", err)
+	}
+	t.Cleanup(func() {
+		ptmx.Close()
+		tty.Close()
+	})
+
+	if _, err := ptmx.WriteString("n\n"); err != nil {
+		t.Fatalf("write to the pty: %v", err)
+	}
+
+	var log bytes.Buffer
+	trust := Trust{Ask: prompt.New(&log, tty), Out: &log}
+
+	if err := driveTrusting(ctx, trust, fake.drive); err == nil {
+		t.Fatal("driveTrusting() error = nil, want a refusal when the question would go to a redirected stream")
+	}
+	if log.Len() != 0 {
+		t.Errorf("wrote %q, want no key offered where the human reading the terminal cannot see it", log.String())
+	}
+	if got := fake.recorded(t); got != "" {
+		t.Errorf("known_hosts = %q, want nothing recorded", got)
+	}
+	if got := fake.drivenTimes(t); got != 1 {
+		t.Errorf("provider driven %d times, want 1", got)
+	}
+}
+
 func TestATrustWithNoConfirmerNeverAsks(t *testing.T) {
 	t.Parallel()
 
@@ -236,7 +274,7 @@ func TestTheLiveViewIsSuspendedForTheLengthOfThePrompt(t *testing.T) {
 	ctx := context.Background()
 	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
 	suspended, resumed := 0, 0
-	trust := trustAsking(&scriptedAsker{interactive: true, answer: false}, io.Discard)
+	trust := trustAsking(&scriptedAsker{attended: true, answer: false}, io.Discard)
 	trust.Suspend = func() func() {
 		suspended++
 		return func() { resumed++ }
@@ -255,7 +293,7 @@ func TestAPromptThatFailsStillCarriesTheRefusal(t *testing.T) {
 
 	ctx := context.Background()
 	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
-	asker := &scriptedAsker{interactive: true, err: prompt.ErrStdinBusy}
+	asker := &scriptedAsker{attended: true, err: prompt.ErrStdinBusy}
 
 	err := driveTrusting(ctx, trustAsking(asker, io.Discard), fake.drive)
 	if !errors.Is(err, prompt.ErrStdinBusy) {
@@ -275,7 +313,7 @@ func TestHostKeyMismatchNeverAsksAndNeverRedrives(t *testing.T) {
 
 			ctx := context.Background()
 			fake := fakeHostTrustDrive(t, ctx, "host-key-mismatch")
-			asker := &scriptedAsker{interactive: interactive, answer: true}
+			asker := &scriptedAsker{attended: interactive, answer: true}
 
 			err := driveTrusting(ctx, trustAsking(asker, io.Discard), fake.drive)
 			if err == nil {
@@ -301,7 +339,7 @@ func TestDriveThatNeverRefusesIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	asker := &scriptedAsker{interactive: true, answer: true}
+	asker := &scriptedAsker{attended: true, answer: true}
 	trust := trustAsking(asker, io.Discard)
 
 	drives := 0
@@ -327,7 +365,7 @@ func TestARedriveThatRefusesAgainNeverAsksTwice(t *testing.T) {
 
 	ctx := context.Background()
 	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
-	asker := &scriptedAsker{interactive: true, answer: true}
+	asker := &scriptedAsker{attended: true, answer: true}
 
 	drives := 0
 	refusal := providerkit.RefuseHostTrust(providerkit.HostTrust{
@@ -357,7 +395,7 @@ func TestAKeyThatDoesNotHashToItsFingerprintIsNeverOffered(t *testing.T) {
 
 	ctx := context.Background()
 	store := filepath.Join(t.TempDir(), "known_hosts")
-	asker := &scriptedAsker{interactive: true, answer: true}
+	asker := &scriptedAsker{attended: true, answer: true}
 	refusal := providerkit.RefuseHostTrust(providerkit.HostTrust{
 		Reason:     providerkit.UnknownHostKey,
 		Address:    fakeHostAddress,
@@ -396,7 +434,7 @@ func TestAProviderThatSpeaksInControlCharactersIsNeverOffered(t *testing.T) {
 			store := filepath.Join(t.TempDir(), "known_hosts")
 			tc.trust.Reason = providerkit.UnknownHostKey
 			tc.trust.KnownHosts = []string{store}
-			asker := &scriptedAsker{interactive: true, answer: true}
+			asker := &scriptedAsker{attended: true, answer: true}
 			var out bytes.Buffer
 
 			refusal := providerkit.RefuseHostTrust(tc.trust)
