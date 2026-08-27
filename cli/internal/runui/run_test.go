@@ -411,9 +411,11 @@ func TestCtrlCFlushesTheBlockTheRunWasInsideOf(t *testing.T) {
 	if code, ok := exitsig.ExitCode(err); !ok || code != exitsig.InterruptCode {
 		t.Fatalf("Run() = %v (exit code %d), want the interrupt exit code %d", err, code, exitsig.InterruptCode)
 	}
-	want := "  Packages: +812\n  ▲ Next.js 15.4.2\n⚠ Environment › Building interrupted\n"
-	if !strings.Contains(out.String(), want) {
-		t.Errorf("stdout = %q, want the in-flight block flushed whole under an interrupted marker:\n%s", out.String(), want)
+	if want := "⚠ Environment › Building interrupted\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("stdout = %q, want the in-flight block flushed under an interrupted marker:\n%s", out.String(), want)
+	}
+	if strings.Contains(out.String(), "Packages: +812") {
+		t.Errorf("stdout = %q, want the builder's raw output left to the run log — a cancelled run is not a failed one", out.String())
 	}
 }
 

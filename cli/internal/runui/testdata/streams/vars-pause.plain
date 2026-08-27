@@ -1,6 +1,5 @@
 → Environment › Building
   Building project
-  Reading ocel.aws.config.ts
 ⚠ Environment › Building paused
 
 1 variable is not ready — nothing has been built.
@@ -18,8 +17,6 @@
 
 → Environment › Building
   Building project
-  ▲ Next.js 15.4.2
-   ✓ Compiled successfully
 ✓ Environment › Building  4s
 
 ✓ Deployed in 12s

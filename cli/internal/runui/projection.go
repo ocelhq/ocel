@@ -34,10 +34,15 @@ var overrides = map[protoreflect.FullName]armFunc{
 	"common.plan.v1.ChangePlan":         (*projector).plan,
 }
 
+type blockLine struct {
+	text string
+	raw  bool
+}
+
 type block struct {
 	id    string
 	path  string
-	lines []string
+	lines []blockLine
 }
 
 type projector struct {
@@ -46,7 +51,7 @@ type projector struct {
 	blocks  map[string]*block
 	open    []string
 
-	orphans    map[string][]string
+	orphans    map[string][]blockLine
 	pending    []string
 	orphanLine int
 }
@@ -56,7 +61,7 @@ func newProjector(present Presentation) *projector {
 		present: present,
 		tree:    newStagePlan(),
 		blocks:  make(map[string]*block),
-		orphans: make(map[string][]string),
+		orphans: make(map[string][]blockLine),
 	}
 }
 
@@ -287,9 +292,9 @@ func (p *projector) phaseOf(id string) *block {
 	return nil
 }
 
-func (p *projector) buffer(stageID []byte, text string) []string {
+func (p *projector) buffer(stageID []byte, text string, raw bool) []string {
 	id := stageKey(stageID)
-	lines := indented(text)
+	lines := indented(text, raw)
 	if len(lines) == 0 {
 		return nil
 	}
@@ -303,7 +308,7 @@ func (p *projector) buffer(stageID []byte, text string) []string {
 	return nil
 }
 
-func indented(text string) []string {
+func indented(text string, raw bool) []blockLine {
 	split := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 	for len(split) > 0 && strings.TrimSpace(split[0]) == "" {
 		split = split[1:]
@@ -311,14 +316,14 @@ func indented(text string) []string {
 	for len(split) > 0 && strings.TrimSpace(split[len(split)-1]) == "" {
 		split = split[:len(split)-1]
 	}
-	out := make([]string, 0, len(split))
+	out := make([]blockLine, 0, len(split))
 	for _, line := range split {
-		out = append(out, blockIndent+line)
+		out = append(out, blockLine{text: blockIndent + line, raw: raw})
 	}
 	return out
 }
 
-func (p *projector) hold(id string, lines []string) {
+func (p *projector) hold(id string, lines []blockLine) {
 	if p.orphanLine >= maxOrphanLines {
 		return
 	}
@@ -353,12 +358,12 @@ func (p *projector) progress(m protoreflect.Message) []string {
 	if line == "" {
 		return nil
 	}
-	return p.buffer(ev.GetStageId(), line)
+	return p.buffer(ev.GetStageId(), line, false)
 }
 
 func (p *projector) log(m protoreflect.Message) []string {
 	ev := m.Interface().(*progressv1.LogEvent)
-	return p.buffer(ev.GetStageId(), ev.GetMessage())
+	return p.buffer(ev.GetStageId(), ev.GetMessage(), true)
 }
 
 func (p *projector) span(m protoreflect.Message) []string {
@@ -380,7 +385,7 @@ func spanDuration(ev *progressv1.SpanEvent) time.Duration {
 	return time.Duration(end - start)
 }
 
-func (p *projector) take(b *block) []string {
+func (p *projector) take(b *block, keepRaw bool) []string {
 	delete(p.blocks, b.id)
 	for i, id := range p.open {
 		if id == b.id {
@@ -388,11 +393,18 @@ func (p *projector) take(b *block) []string {
 			break
 		}
 	}
-	return append([]string{}, b.lines...)
+	out := make([]string, 0, len(b.lines))
+	for _, line := range b.lines {
+		if line.raw && !keepRaw {
+			continue
+		}
+		out = append(out, line.text)
+	}
+	return out
 }
 
 func (p *projector) settle(b *block, d time.Duration, failed bool) []string {
-	out := p.take(b)
+	out := p.take(b, p.present.Verbose || failed)
 	if failed {
 		return append(out, fmt.Sprintf("%s %s failed  %s", failMark, b.path, formatDuration(d)))
 	}
@@ -407,7 +419,7 @@ func (p *projector) strand(mark, note string) []string {
 			p.open = p.open[1:]
 			continue
 		}
-		out = append(out, append(p.take(b), fmt.Sprintf("%s %s %s", mark, b.path, note))...)
+		out = append(out, append(p.take(b, p.present.Verbose || mark == failMark), fmt.Sprintf("%s %s %s", mark, b.path, note))...)
 	}
 	return out
 }

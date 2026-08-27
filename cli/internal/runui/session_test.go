@@ -39,6 +39,16 @@ func newTestSession(t *testing.T, command string) (*Session, *bytes.Buffer, stri
 	return s, &out, s.LogPath()
 }
 
+func newVerboseTestSession(t *testing.T, command string) (*Session, *bytes.Buffer, string) {
+	t.Helper()
+	dir := t.TempDir()
+	run := startTestRun(t, dir, command)
+	var out bytes.Buffer
+	s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
+	return s, &out, s.LogPath()
+}
+
 var testStageID = naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning)
 
 func declareProvisioning() *progressv1.OperationEvent {
@@ -131,7 +141,7 @@ func TestSession(t *testing.T) {
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
 		var out bytes.Buffer
-		s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
+		s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
 		logPath := s.LogPath()
 
 		s.Event(declareProvisioning())
@@ -613,7 +623,7 @@ func TestProviderProcessOutputRidesTheDiagnosticArmAndNeverEntersABlock(t *testi
 
 			const marker = "raw subprocess output"
 			s.Event(declareProvisioning())
-			s.Event(logLine("a line the phase owns"))
+			s.Event(progress("a line the phase owns"))
 			if _, err := s.ProcessWriter().Write([]byte(marker + "\n")); err != nil {
 				t.Fatalf("Write() = %v", err)
 			}
@@ -682,7 +692,7 @@ func TestALineThatNeverEndsIsCutRatherThanHeldForever(t *testing.T) {
 
 func TestABuildRepaintingOneLineCommitsOnlyTheDraftItLeft(t *testing.T) {
 	t.Parallel()
-	s, out, _ := newTestSession(t, "ocel deploy")
+	s, out, _ := newVerboseTestSession(t, "ocel deploy")
 
 	s.Building()
 	for i := 1; i <= 500; i++ {
@@ -922,9 +932,36 @@ func TestBar(t *testing.T) {
 	}
 }
 
-func TestASuccessfulBuildCommitsItsWholeOutputInsideTheFlushedBlock(t *testing.T) {
+func TestASuccessfulBuildKeepsItsRawOutputToTheRunLogUnlessVerboseWasAskedFor(t *testing.T) {
 	t.Parallel()
 	s, out, logPath := newTestSession(t, "ocel deploy")
+
+	s.Building()
+	if _, err := s.BuildWriter().Write([]byte("Packages: +812\n▲ Next.js 15.4.2\n")); err != nil {
+		t.Fatalf("Write() = %v", err)
+	}
+	s.BuildOK()
+
+	got := out.String()
+	for _, unwanted := range []string{"Packages: +812", "▲ Next.js 15.4.2"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("stdout = %q, want %q left out of the default projection", got, unwanted)
+		}
+	}
+	if !strings.Contains(got, okMark+" Environment › Building") {
+		t.Errorf("stdout = %q, want the phase still committed with its own line", got)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+	if log := readLog(t, logPath); !strings.Contains(log, "Packages: +812") {
+		t.Errorf("log = %q, want the build output recorded in the run log", log)
+	}
+}
+
+func TestASuccessfulBuildCommitsItsWholeOutputInsideTheFlushedBlockWhenVerbose(t *testing.T) {
+	t.Parallel()
+	s, out, logPath := newVerboseTestSession(t, "ocel deploy")
 
 	s.Building()
 	if _, err := s.BuildWriter().Write([]byte("Packages: +812\n▲ Next.js 15.4.2\n")); err != nil {
@@ -958,6 +995,43 @@ func TestASuccessfulBuildCommitsItsWholeOutputInsideTheFlushedBlock(t *testing.T
 	if log := readLog(t, logPath); !strings.Contains(log, "Packages: +812") {
 		t.Errorf("log = %q, want the build output recorded in the run log too", log)
 	}
+}
+
+func TestAFailedPhaseShowsItsRawOutputWhateverTheVerbosity(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the phase's own span carries the failure", func(t *testing.T) {
+		t.Parallel()
+		s, out, _ := newTestSession(t, "ocel deploy")
+
+		s.Event(declareProvisioning())
+		s.Event(logLine("error: creating bucket assets: AccessDenied"))
+		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
+			Span: &progressv1.SpanEvent{
+				SpanId:            testStageID,
+				StartTimeUnixNano: 1,
+				EndTimeUnixNano:   int64(time.Second) + 1,
+				Status:            progressv1.SpanStatus_SPAN_STATUS_ERROR,
+			},
+		}})
+
+		if got := out.String(); !strings.Contains(got, blockIndent+"error: creating bucket assets: AccessDenied\n") {
+			t.Errorf("stdout = %q, want the failed phase's raw output shown without being asked twice", got)
+		}
+	})
+
+	t.Run("the run ends before the phase's span arrives", func(t *testing.T) {
+		t.Parallel()
+		s, out, _ := newTestSession(t, "ocel deploy")
+
+		s.Event(declareProvisioning())
+		s.Event(logLine("error: creating bucket assets: AccessDenied"))
+		s.Fail(errors.New("provision production: AccessDenied"))
+
+		if got := out.String(); !strings.Contains(got, blockIndent+"error: creating bucket assets: AccessDenied\n") {
+			t.Errorf("stdout = %q, want the block stranded by the failure to show what it held", got)
+		}
+	})
 }
 
 func TestABuildLineThatCollapsesToNothingIsNeverEmitted(t *testing.T) {
@@ -1001,7 +1075,7 @@ func TestAnOrphanLogWaitsForItsStageAndFoldsIntoThatStagesBlock(t *testing.T) {
 
 	t.Run("addressed to a phase declared later", func(t *testing.T) {
 		t.Parallel()
-		s, out, _ := newTestSession(t, "ocel deploy")
+		s, out, _ := newVerboseTestSession(t, "ocel deploy")
 
 		s.Event(logLine("the vertex spoke first"))
 		if got := out.String(); strings.Contains(got, "the vertex spoke first") {
@@ -1025,7 +1099,7 @@ func TestAnOrphanLogWaitsForItsStageAndFoldsIntoThatStagesBlock(t *testing.T) {
 
 	t.Run("addressed to a detail node declared later under a phase", func(t *testing.T) {
 		t.Parallel()
-		s, out, _ := newTestSession(t, "ocel deploy")
+		s, out, _ := newVerboseTestSession(t, "ocel deploy")
 
 		vertex := []byte{9, 9, 9, 9, 9, 9, 9, 9}
 		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
@@ -1072,7 +1146,7 @@ func TestAnOrphanWhoseStageIsNeverDeclaredNeverCommits(t *testing.T) {
 
 func TestABlockCommitsItsLinesVerbatimRightHandWhitespaceIncluded(t *testing.T) {
 	t.Parallel()
-	s, out, _ := newTestSession(t, "ocel deploy")
+	s, out, _ := newVerboseTestSession(t, "ocel deploy")
 
 	const padded = "Route (app)                     Size     First Load JS   "
 	s.Event(declareProvisioning())
@@ -1161,7 +1235,7 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 
 	t.Run("the transcript reads build, waiting card, build again", func(t *testing.T) {
 		t.Parallel()
-		s, out, _ := newTestSession(t, "ocel deploy")
+		s, out, _ := newVerboseTestSession(t, "ocel deploy")
 
 		s.Building()
 		fmt.Fprintln(s.BuildWriter(), "Reading ocel.aws.config.ts")

@@ -1,10 +1,7 @@
 → web › Building
 → api › Building
-  go: downloading github.com/ocelhq/ocel/sdk v0.4.1
 ✓ api › Building  4s
 → api › Uploading
-  Packages: +812
-  ▲ Next.js 15.4.2
 ⚠ web › Building interrupted
   pushing api:8f3c1a (3/9)
 ⚠ api › Uploading interrupted
