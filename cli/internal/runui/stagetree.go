@@ -19,7 +19,6 @@ const (
 	maxStageNodes     = 4096
 	maxOrphanParents  = 4096
 	maxOrphanChildren = 256
-	maxActiveRows     = 20
 	maxTreeDepth      = 64
 )
 
@@ -53,7 +52,6 @@ type stagePlan struct {
 
 	droppedNodes   int
 	droppedOrphans int
-	droppedActive  int
 
 	now func() time.Time
 }
@@ -216,10 +214,6 @@ func (p *stagePlan) ensureActive(id string) {
 			return
 		}
 	}
-	if len(p.activeOrder) >= maxActiveRows {
-		p.droppedActive++
-		return
-	}
 	p.activeOrder = append(p.activeOrder, id)
 }
 
@@ -289,16 +283,95 @@ func (p *stagePlan) subtreeRows(id string) []displayRow {
 	return p.emitSubtree(nil, p.activeSet(), id, 0)
 }
 
-func (p *stagePlan) displayRows() []displayRow {
-	if len(p.activeOrder) == 0 {
-		return nil
+type liveUnit struct {
+	root   *stageNode
+	tier   unitTier
+	output *stageNode
+}
+
+func (u liveUnit) started() time.Time {
+	if !u.root.started.IsZero() || u.output == nil {
+		return u.root.started
 	}
+	return u.output.started
+}
+
+func (u liveUnit) frame() int {
+	if u.output != nil {
+		return u.output.frame
+	}
+	return u.root.frame
+}
+
+func (p *stagePlan) units() []liveUnit {
 	active := p.activeSet()
-	var out []displayRow
-	for _, id := range p.activeOrder {
-		if !p.hasActiveAncestor(id) {
-			out = p.emitSubtree(out, active, id, 0)
+	var out []liveUnit
+	for _, id := range p.roots {
+		if u, ok := p.unitFor(id, active); ok {
+			out = append(out, u)
 		}
 	}
 	return out
+}
+
+func (p *stagePlan) unitFor(id string, active map[string]bool) (liveUnit, bool) {
+	root, ok := p.nodes[id]
+	if !ok {
+		return liveUnit{}, false
+	}
+	u := liveUnit{root: root, tier: tierPending}
+	live := 0
+	for _, n := range p.collectLive(nil, active, id, 0) {
+		live++
+		switch {
+		case n.state == stageDone && n.doneFailed:
+			u.tier = tierFailed
+		case n.state == stageActive:
+			if u.tier != tierFailed {
+				u.tier = tierRunning
+			}
+			if u.output == nil && n.id != id {
+				u.output = n
+			}
+		case n.state == stageDone && u.tier == tierPending:
+			u.tier = tierDone
+		}
+	}
+	if u.tier == tierFailed {
+		u.output = nil
+	}
+	if live > 0 {
+		return u, true
+	}
+	return u, !p.everRan(id, 0)
+}
+
+func (p *stagePlan) collectLive(out []*stageNode, active map[string]bool, id string, depth int) []*stageNode {
+	n, ok := p.nodes[id]
+	if !ok || depth > maxTreeDepth {
+		return out
+	}
+	if active[id] {
+		out = append(out, n)
+	}
+	for _, childID := range n.children {
+		out = p.collectLive(out, active, childID, depth+1)
+	}
+	return out
+}
+
+func (p *stagePlan) everRan(id string, depth int) bool {
+	n, ok := p.nodes[id]
+	if !ok || depth > maxTreeDepth {
+		return false
+	}
+	if n.state != stagePending {
+		return true
+	}
+	for _, childID := range n.children {
+		if p.everRan(childID, depth+1) {
+			return true
+		}
+	}
+	return false
 }

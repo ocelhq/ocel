@@ -26,6 +26,24 @@ func liveStream(t *testing.T) (*Stream, *bytes.Buffer) {
 	return s, &out
 }
 
+func liveStreamOfHeight(t *testing.T, height int) (*Stream, *bytes.Buffer) {
+	t.Helper()
+	var out bytes.Buffer
+	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: height})
+	t.Cleanup(func() { _ = s.Close() })
+	return s, &out
+}
+
+func liveRegion(s *Stream, out *bytes.Buffer) []string {
+	written := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	s.r.mu.Lock()
+	defer s.r.mu.Unlock()
+	if s.r.liveLines > len(written) {
+		return written
+	}
+	return written[len(written)-s.r.liveLines:]
+}
+
 func stagePlanEvent(stages ...*progressv1.Stage) *streamv1.RunEvent {
 	return operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
 		StagePlan: &progressv1.StagePlanEvent{Stages: stages},
@@ -306,17 +324,17 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	s.Emit(progressEvent(provisioning, "Reconciling the edge stack", 0, nil))
 	s.Emit(progressEvent(app, "creating resources", 0, nil))
 
-	rows := r.plan.displayRows()
-	if len(rows) != 2 || rows[0].n.title != "Provisioning" || rows[1].n.title != "next-test" || rows[1].depth != 1 {
-		t.Fatalf("displayRows = %+v, want next-test indented under Provisioning", rows)
+	rows := liveRegion(s, out)
+	if len(rows) != 2 || !strings.Contains(rows[0], "Provisioning") || !strings.Contains(rows[1], "Provisioning › next-test") {
+		t.Fatalf("live region = %q, want next-test as the unit's output line", rows)
 	}
 
 	s.Emit(spanEvent(app, false, 44*time.Second))
 	if !r.plan.isActive(stageKey(app)) {
 		t.Fatal("want the finished child held in the live region under its still-running parent")
 	}
-	if !strings.Contains(out.String(), "  "+okMark+" next-test") {
-		t.Fatalf("output = %q, want the held child drawn with its result mark, indented under the parent", out.String())
+	if rows := liveRegion(s, out); len(rows) != 1 || !strings.Contains(rows[0], "Provisioning") {
+		t.Fatalf("live region = %q, want the unit down to its own row once the child finished", rows)
 	}
 
 	s.Emit(spanEvent(provisioning, false, 50*time.Second))

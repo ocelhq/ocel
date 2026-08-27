@@ -36,13 +36,13 @@ func TestCyclicDeclarationsStayVisible(t *testing.T) {
 
 	activate(p, selfy, left, right)
 
-	rows := p.displayRows()
-	if len(rows) != 3 {
-		t.Fatalf("displayRows() = %v, want one row per cyclic stage", rowTitles(rows))
+	live := p.units()
+	if len(live) != 3 {
+		t.Fatalf("units() = %v, want one unit per re-rooted cyclic stage", unitTitles(live))
 	}
-	for _, row := range rows {
-		if row.depth != 0 {
-			t.Errorf("row %q depth = %d, want a re-rooted stage at depth 0", row.n.title, row.depth)
+	for _, u := range live {
+		if u.output != nil {
+			t.Errorf("unit %q carries an output line from %q, want a re-rooted stage to own its own row", u.root.title, u.output.title)
 		}
 	}
 
@@ -90,6 +90,14 @@ func TestRestartRevivesACommittedStage(t *testing.T) {
 	}
 }
 
+func unitTitles(live []liveUnit) []string {
+	titles := make([]string, 0, len(live))
+	for _, u := range live {
+		titles = append(titles, u.root.title)
+	}
+	return titles
+}
+
 func TestSubtreeOrderFollowsDeclaration(t *testing.T) {
 	t.Parallel()
 
@@ -105,15 +113,11 @@ func TestSubtreeOrderFollowsDeclaration(t *testing.T) {
 
 	activate(p, parent, third, first, second)
 
-	got := rowTitles(p.displayRows())
-	want := []string{"parent", "first", "second", "third"}
-	if len(got) != len(want) {
-		t.Fatalf("displayRows() = %v, want %v", got, want)
+	live := p.units()
+	if len(live) != 1 || live[0].root.title != "parent" {
+		t.Fatalf("units() = %v, want the one unit the stages hang off", unitTitles(live))
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("displayRows() = %v, want %v", got, want)
-		}
+	if live[0].output == nil || live[0].output.title != "first" {
+		t.Fatalf("output line = %+v, want the first child in declaration order, not the first activated", live[0].output)
 	}
-
 }

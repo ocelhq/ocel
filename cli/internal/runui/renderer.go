@@ -18,7 +18,10 @@ const (
 	failMark  = "✗"
 	warnMark  = "⚠"
 	startMark = "→"
+	pendMark  = "·"
 	barWidth  = 12
+
+	liveChrome = 3
 )
 
 type Renderer struct {
@@ -70,6 +73,16 @@ func (r *Renderer) width() int {
 		return n
 	}
 	return r.present.Width
+}
+
+func (r *Renderer) height() int {
+	if n, ok := liveHeight(r.w); ok {
+		return n
+	}
+	if r.present.Height > 0 {
+		return r.present.Height
+	}
+	return defaultHeight
 }
 
 func (r *Renderer) useClock(now func() time.Time) {
@@ -157,6 +170,15 @@ func (r *Renderer) endLocked(span *progressv1.SpanEvent) {
 	n.state = stageDone
 	n.doneFailed = span.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
 	n.doneDur = spanDuration(span)
+	if n.doneFailed {
+		for _, row := range r.plan.subtreeRows(id) {
+			if row.n.id != id {
+				r.plan.removeActive(row.n.id)
+			}
+		}
+		r.plan.ensureActive(id)
+		return
+	}
 	if r.plan.hasActiveAncestor(id) {
 		return
 	}
@@ -283,40 +305,44 @@ func (r *Renderer) drawLiveLocked() {
 		return
 	}
 	width := r.width()
-	maxRows := r.effectiveMaxRowsLocked()
-
-	shown := r.plan.displayRows()
-	overflow := r.plan.droppedActive
-	if len(shown) > maxRows {
-		overflow += len(shown) - maxRows
-		shown = shown[:maxRows]
-	}
-
 	lines := 0
-	for _, row := range shown {
-		fmt.Fprintln(r.w, truncateToWidth(r.rowLineLocked(row), width))
+	emit := func(s string) {
+		fmt.Fprintln(r.w, truncateToWidth(s, width))
 		lines++
 	}
-	if overflow > 0 {
-		fmt.Fprintln(r.w, truncateToWidth(r.colorFor(color.Faint).Sprintf("  … and %d more", overflow), width))
-		lines++
+
+	live := r.plan.units()
+	shape := make([]windowUnit, len(live))
+	for i, u := range live {
+		shape[i] = windowUnit{tier: u.tier, output: u.output != nil}
+	}
+	frame := planWindow(shape, r.windowHeightLocked())
+
+	for _, row := range frame.rows {
+		u := live[row.unit]
+		emit(r.unitLineLocked(u))
+		if row.output {
+			emit(r.outputLineLocked(u))
+		}
+	}
+	if frame.more > 0 {
+		emit(r.colorFor(color.Faint).Sprint(blockIndent + overflowLine(frame)))
 	}
 	if r.spinning {
-		fmt.Fprintln(r.w, truncateToWidth(r.spinRowLocked(), width))
-		lines++
+		emit(r.spinRowLocked())
 	}
 	r.liveLines = lines
 }
 
-func (r *Renderer) effectiveMaxRowsLocked() int {
-	limit := maxActiveRows
-	if budget := termHeight(r.w) - 3; budget < limit {
-		if budget < 1 {
-			budget = 1
-		}
-		limit = budget
+func (r *Renderer) windowHeightLocked() int {
+	budget := r.height() - liveChrome
+	if r.spinning {
+		budget--
 	}
-	return limit
+	if budget < 1 {
+		return 1
+	}
+	return budget
 }
 
 func (r *Renderer) spinRowLocked() string {
@@ -324,22 +350,29 @@ func (r *Renderer) spinRowLocked() string {
 	return fmt.Sprintf("%s %s", glyph, r.spinMsg)
 }
 
-func (r *Renderer) rowLineLocked(row displayRow) string {
-	n := row.n
-	indent := strings.Repeat("  ", row.depth)
-	if n.state == stageDone {
-		if n.doneFailed {
-			return indent + r.colorFor(color.FgRed, color.Bold).Sprintf("%s %s failed", failMark, n.title)
-		}
-		return fmt.Sprintf("%s%s  %s",
-			indent,
-			r.colorFor(color.FgGreen).Sprintf("%s %s", okMark, n.title),
-			r.colorFor(color.Faint).Sprint(formatDuration(n.doneDur)))
+func (r *Renderer) unitLineLocked(u liveUnit) string {
+	title := u.root.title
+	switch u.tier {
+	case tierFailed:
+		return r.colorFor(color.FgRed, color.Bold).Sprintf("%s %s failed", failMark, title)
+	case tierDone:
+		return fmt.Sprintf("%s  %s",
+			r.colorFor(color.FgGreen).Sprintf("%s %s", okMark, title),
+			r.colorFor(color.Faint).Sprint(formatDuration(u.root.doneDur)))
+	case tierPending:
+		return r.colorFor(color.Faint).Sprintf("%s %s", pendMark, title)
+	default:
+		return fmt.Sprintf("%s %s  %s",
+			r.colorFor(color.FgCyan).Sprint(spinnerFrame(u.frame())),
+			title,
+			r.colorFor(color.Faint).Sprint(formatDuration(r.plan.now().Sub(u.started()))))
 	}
-	glyph := r.colorFor(color.FgCyan).Sprint(spinnerFrame(n.frame))
+}
+
+func (r *Renderer) outputLineLocked(u liveUnit) string {
+	n := u.output
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s%s %s", indent, glyph, n.title)
-	fmt.Fprintf(&b, "  %s", r.colorFor(color.Faint).Sprint(formatDuration(r.plan.now().Sub(n.started))))
+	fmt.Fprintf(&b, "%s%s", blockIndent, r.colorFor(color.Faint).Sprintf("%s › %s", u.root.title, n.title))
 	switch {
 	case n.total != nil:
 		fmt.Fprintf(&b, "  %s %d/%d", bar(n.current, *n.total), n.current, *n.total)
