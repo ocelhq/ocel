@@ -25,6 +25,23 @@ import (
 var (
 	environmentUnitID = naming.UnitID(naming.UnitEnvironment)
 	buildStageID      = naming.PhaseID(naming.UnitEnvironment, naming.PhaseBuilding)
+
+	environmentRoster = []*progressv1.Stage{
+		{Id: environmentUnitID, Title: "Environment"},
+		{Id: buildStageID, ParentId: environmentUnitID, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
+		{
+			Id:       naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning),
+			ParentId: environmentUnitID,
+			Title:    "Provisioning",
+			Phase:    progressv1.Phase_PHASE_PROVISIONING,
+		},
+		{
+			Id:       naming.PhaseID(naming.UnitEnvironment, naming.PhaseUploading),
+			ParentId: environmentUnitID,
+			Title:    "Uploading",
+			Phase:    progressv1.Phase_PHASE_UPLOADING,
+		},
+	}
 )
 
 type Session struct {
@@ -180,10 +197,7 @@ func (s *Session) Building() {
 	s.logf("[building] Building project")
 	s.buildStart = time.Now()
 	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
-		StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-			{Id: environmentUnitID, Title: "Environment"},
-			{Id: buildStageID, ParentId: environmentUnitID, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
-		}},
+		StagePlan: &progressv1.StagePlanEvent{Stages: environmentRoster},
 	}})
 	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
 		Progress: &progressv1.ProgressEvent{StageId: buildStageID, Message: "Building project"},

@@ -411,7 +411,7 @@ func TestCtrlCFlushesTheBlockTheRunWasInsideOf(t *testing.T) {
 	if code, ok := exitsig.ExitCode(err); !ok || code != exitsig.InterruptCode {
 		t.Fatalf("Run() = %v (exit code %d), want the interrupt exit code %d", err, code, exitsig.InterruptCode)
 	}
-	if want := "⚠ Environment interrupted\n"; !strings.Contains(out.String(), want) {
+	if want := "⚠ Environment › Building interrupted\n"; !strings.Contains(out.String(), want) {
 		t.Errorf("stdout = %q, want the in-flight block flushed under an interrupted marker:\n%s", out.String(), want)
 	}
 	if strings.Contains(out.String(), "Packages: +812") {

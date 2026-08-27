@@ -998,6 +998,49 @@ func TestBar(t *testing.T) {
 	}
 }
 
+func TestEveryEnvironmentBlockNamesThePhaseThatFilledIt(t *testing.T) {
+	t.Parallel()
+	s, out, _ := newTestSession(t, "ocel deploy")
+
+	uploadStageID := naming.PhaseID(naming.UnitEnvironment, naming.PhaseUploading)
+	closing := func(id []byte) *progressv1.OperationEvent {
+		return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
+			Span: &progressv1.SpanEvent{
+				SpanId:            id,
+				StartTimeUnixNano: 1,
+				EndTimeUnixNano:   int64(time.Second) + 1,
+				Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
+			},
+		}}
+	}
+
+	s.Building()
+	s.BuildOK()
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
+		StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
+			{Id: naming.UnitID(naming.UnitEnvironment), Title: "Environment"},
+			{Id: testStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Title: "Provisioning", Phase: progressv1.Phase_PHASE_PROVISIONING},
+			{Id: uploadStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Title: "Uploading", Phase: progressv1.Phase_PHASE_UPLOADING},
+		}},
+	}})
+	s.Event(progress("provisioning the account"))
+	s.Event(closing(testStageID))
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
+		Progress: &progressv1.ProgressEvent{StageId: uploadStageID, Message: "uploading the bundle"},
+	}})
+	s.Event(closing(uploadStageID))
+
+	got := out.String()
+	for _, want := range []string{"Environment › Building", "Environment › Provisioning", "Environment › Uploading"} {
+		if !strings.Contains(got, okMark+" "+want+"  ") {
+			t.Errorf("transcript = %q, want the block headed %q — the unit reads the same way in every block it closes", got, want)
+		}
+	}
+	if strings.Contains(got, okMark+" Environment  ") {
+		t.Errorf("transcript = %q, want no block headed by the unit alone: the Environment unit runs more than one phase", got)
+	}
+}
+
 func TestASuccessfulBuildKeepsItsRawOutputToTheRunLogUnlessVerboseWasAskedFor(t *testing.T) {
 	t.Parallel()
 	s, out, logPath := newTestSession(t, "ocel deploy")
@@ -1014,7 +1057,7 @@ func TestASuccessfulBuildKeepsItsRawOutputToTheRunLogUnlessVerboseWasAskedFor(t 
 			t.Errorf("stdout = %q, want %q left out of the default projection", got, unwanted)
 		}
 	}
-	if !strings.Contains(got, okMark+" Environment  ") {
+	if !strings.Contains(got, okMark+" Environment › Building  ") {
 		t.Errorf("stdout = %q, want the phase still committed with its own line", got)
 	}
 	if err := s.Close(); err != nil {
@@ -1050,7 +1093,7 @@ func TestASuccessfulBuildCommitsItsWholeOutputInsideTheFlushedBlockWhenVerbose(t
 	}
 	header := strings.Index(got, startMark+" Environment › Building")
 	first := strings.Index(got, "  Packages: +812")
-	closed := strings.Index(got, okMark+" Environment  ")
+	closed := strings.Index(got, okMark+" Environment › Building  ")
 	if header < 0 || closed < header || first < closed {
 		t.Errorf("stdout = %q, want the whole build output under the completed-phase line, which follows the phase-start line", got)
 	}
@@ -1313,11 +1356,11 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 		got := out.String()
 		var at int
 		for _, want := range []string{
-			warnMark + " Environment paused\n",
+			warnMark + " Environment › Building paused\n",
 			blockIndent + "Reading ocel.aws.config.ts\n",
 			"http://127.0.0.1:5555/#t=abc",
 			startMark + " Environment › Building\n",
-			okMark + " Environment  ",
+			okMark + " Environment › Building  ",
 			blockIndent + "Compiled successfully\n",
 		} {
 			i := strings.Index(got[at:], want)
