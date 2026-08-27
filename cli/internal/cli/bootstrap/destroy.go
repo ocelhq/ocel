@@ -49,7 +49,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 			return err
 		}
 
-		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Enumerating what would be removed")
+		spinner := ui.Spin("Enumerating what would be removed")
 		plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
 			Tier: tier,
 			Edge: edgewire.Selection(cfg),

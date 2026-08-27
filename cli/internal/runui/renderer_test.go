@@ -118,6 +118,53 @@ func TestAnInRunNoticeIsCommittedAboveALiveFrameThatStillErasesExactly(t *testin
 	}
 }
 
+func TestASpinnerRaisedThroughTheRunUIBecomesARowOfTheLiveFrame(t *testing.T) {
+	t.Parallel()
+	s, out := liveStreamOfHeight(t, 40)
+
+	unit, phase := appStage(1), appStage(2)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "web"},
+		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
+	))
+	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+
+	spinner := s.Spin("Checking credentials")
+	rows := liveRegion(t, s, out)
+	if len(rows) != 3 || !strings.Contains(rows[2], "Checking credentials") {
+		t.Fatalf("live region = %q, want the spinner drawn as the frame's own last row", rows)
+	}
+
+	spinner.Stop()
+	if rows := liveRegion(t, s, out); len(rows) != 2 {
+		t.Errorf("live region = %q, want the spinner row gone once it stops", rows)
+	}
+}
+
+func TestNoRawSpinnerCanTouchATerminalALiveFrameOwns(t *testing.T) {
+	t.Parallel()
+	s, out := liveStreamOfHeight(t, 40)
+
+	unit, phase := appStage(1), appStage(2)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "web"},
+		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
+	))
+	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+
+	var elsewhere bytes.Buffer
+	spinner := StartSpinner(Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: 40}, &elsewhere, "Checking credentials")
+	time.Sleep(3 * frameRate)
+	spinner.Stop()
+
+	if elsewhere.Len() != 0 {
+		t.Errorf("the fallback spinner wrote %q, want it inert while a live frame owns the terminal", elsewhere.String())
+	}
+	if rows := liveRegion(t, s, out); len(rows) != 2 {
+		t.Errorf("live region = %q, want the frame untouched by a spinner raised behind its back", rows)
+	}
+}
+
 func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	t.Parallel()
 	s, out := liveStream(t)

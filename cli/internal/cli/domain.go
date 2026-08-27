@@ -245,7 +245,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 			return err
 		}
 
-		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Enumerating what releasing the domain would remove")
+		spinner := ui.Spin("Enumerating what releasing the domain would remove")
 		plan, err := client.PlanRemovePreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{
 			Tier: environmentv1.Tier_TIER_PREVIEW,
 		})
