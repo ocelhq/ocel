@@ -247,12 +247,12 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			}
 			consented = ui.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan, notes...)
 		} else if len(going) > 0 {
-			fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(going, ", "), Name(tier))
+			ui.Warning(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it stood up.", strings.Join(going, ", "), Name(tier)))
 			if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
-				fmt.Fprintf(stdout, "These projects were deployed against it and break when it goes: %s\n", strings.Join(dependents, ", "))
+				ui.Warning(fmt.Sprintf("These projects were deployed against it and break when it goes: %s", strings.Join(dependents, ", ")))
 			}
 		} else {
-			fmt.Fprintln(stdout, "No infrastructure changes — applying refreshes bootstrap seals and records.")
+			ui.Diagnostic("No infrastructure changes — applying refreshes bootstrap seals and records.")
 		}
 		if !picked {
 			kind := plan.GetEdgeKind()
