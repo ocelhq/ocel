@@ -189,7 +189,7 @@ func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	}
 
 	resume()
-	if !strings.Contains(out.String(), "Uploading") {
+	if !strings.Contains(out.String(), "app-a") {
 		t.Errorf("after resuming, out = %q, want the live region drawn again", out.String())
 	}
 }
@@ -230,14 +230,13 @@ func TestLiveRegion(t *testing.T) {
 		s.Emit(spanEvent(appA, false, time.Second))
 
 		rows := liveRegion(t, s, out)
-		if len(rows) != 2 || !strings.Contains(rows[0], "app-b") || !strings.Contains(rows[1], okMark+" app-a") {
-			t.Fatalf("live region = %q, want app-b still spinning above the finished app-a", rows)
+		if len(rows) != 2 || !strings.Contains(rows[0], "app-b") {
+			t.Fatalf("live region = %q, want app-b still spinning with the finished app-a gone from the window", rows)
 		}
 
 		s.Emit(spanEvent(appB, false, time.Second))
-		rows = liveRegion(t, s, out)
-		if len(rows) != 2 || !strings.Contains(rows[0], okMark+" app-a") || !strings.Contains(rows[1], okMark+" app-b") {
-			t.Errorf("live region = %q, want both apps finished and still counted in spine order", rows)
+		if rows := liveRegion(t, s, out); len(rows) != 0 {
+			t.Errorf("live region = %q, want nothing left in flight to show", rows)
 		}
 	})
 }
@@ -399,8 +398,11 @@ func TestAPhaseRowStaysLiveUntilItsSpanArrives(t *testing.T) {
 	}
 
 	s.Emit(spanEvent(uploading, false, 12*time.Second))
-	if rows := liveRegion(t, s, out); len(rows) != 1 || !strings.Contains(rows[0], okMark+" web") {
-		t.Errorf("live region = %q, want the phase's spinning row settled by its own span into the unit's done row", rows)
+	if got := out.String(); !strings.Contains(got, okMark+" web  12s") {
+		t.Errorf("scrollback = %q, want the finished phase committed as the unit's block", got)
+	}
+	if rows := liveRegion(t, s, out); len(rows) != 0 {
+		t.Errorf("live region = %q, want the phase's spinning row taken back by its own span", rows)
 	}
 }
 
@@ -418,24 +420,24 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	s.Emit(progressEvent(app, "creating resources", 0, nil))
 
 	rows := liveRegion(t, s, out)
-	if len(rows) != 2 || !strings.Contains(rows[0], "Provisioning") || !strings.Contains(rows[1], "Provisioning › next-test") {
-		t.Fatalf("live region = %q, want next-test as the unit's output line", rows)
+	if len(rows) != 2 || !strings.Contains(rows[0], "Provisioning") || !strings.Contains(rows[1], "next-test") {
+		t.Fatalf("live region = %q, want next-test on the unit's tail line", rows)
 	}
 
 	s.Emit(spanEvent(app, false, 44*time.Second))
 	if !r.plan.isActive(stageKey(app)) {
 		t.Fatal("want the finished child held in the live region under its still-running parent")
 	}
-	if rows := liveRegion(t, s, out); len(rows) != 1 || !strings.Contains(rows[0], "Provisioning") {
-		t.Fatalf("live region = %q, want the unit down to its own row once the child finished", rows)
+	if rows := liveRegion(t, s, out); len(rows) != 2 || !strings.Contains(rows[0], "Provisioning") {
+		t.Fatalf("live region = %q, want the unit still running on its own row once the child finished", rows)
 	}
 
 	s.Emit(spanEvent(provisioning, false, 50*time.Second))
 	if active := r.plan.activeOrder; len(active) != 1 || active[0] != stageKey(provisioning) {
 		t.Fatalf("activeOrder = %v, want the subtree folded into the unit's own done row", active)
 	}
-	if rows := liveRegion(t, s, out); len(rows) != 1 || !strings.Contains(rows[0], okMark+" Provisioning") {
-		t.Fatalf("live region = %q, want the finished unit ranked last as a single row", rows)
+	if rows := liveRegion(t, s, out); len(rows) != 0 {
+		t.Fatalf("live region = %q, want the finished unit gone from the window", rows)
 	}
 }
 

@@ -10,11 +10,9 @@ type unitTier int
 const (
 	tierFailed unitTier = iota
 	tierRunning
-	tierPending
-	tierDone
 )
 
-var tiers = []unitTier{tierFailed, tierRunning, tierPending, tierDone}
+var tiers = []unitTier{tierFailed, tierRunning}
 
 type windowUnit struct {
 	tier   unitTier
@@ -107,16 +105,10 @@ func overflowLine(f windowFrame) string {
 }
 
 func tierWord(t unitTier) string {
-	switch t {
-	case tierFailed:
+	if t == tierFailed {
 		return "failed"
-	case tierRunning:
-		return "running"
-	case tierPending:
-		return "waiting"
-	default:
-		return "done"
 	}
+	return "running"
 }
 
 func priorityOrder(us []windowUnit) []int {

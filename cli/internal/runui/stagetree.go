@@ -272,21 +272,22 @@ func (p *stagePlan) walkFrom(id string, depth int, visit func(*stageNode) bool) 
 }
 
 type liveUnit struct {
-	root   *stageNode
-	tier   unitTier
-	output *stageNode
+	root  *stageNode
+	tier  unitTier
+	phase *stageNode
+	tail  *stageNode
 }
 
 func (u liveUnit) started() time.Time {
-	if !u.root.started.IsZero() || u.output == nil {
-		return u.root.started
+	if u.phase != nil && !u.phase.started.IsZero() {
+		return u.phase.started
 	}
-	return u.output.started
+	return u.root.started
 }
 
 func (u liveUnit) frame() int {
-	if u.output != nil {
-		return u.output.frame
+	if u.phase != nil {
+		return u.phase.frame
 	}
 	return u.root.frame
 }
@@ -307,33 +308,43 @@ func (p *stagePlan) unitIfShown(id string, active map[string]bool) (liveUnit, bo
 	if !ok {
 		return liveUnit{}, false
 	}
-	u := liveUnit{root: root, tier: tierPending}
-	live, ran := 0, false
+	u := liveUnit{root: root, tier: tierRunning}
+	shown := false
 	p.walk(id, func(n *stageNode) bool {
-		if n.state != stagePending {
-			ran = true
-		}
 		if !active[n.id] {
 			return true
 		}
-		live++
 		switch {
 		case n.state == stageDone && n.doneFailed:
 			u.tier = tierFailed
+			shown = true
 		case n.state == stageActive:
-			if u.tier != tierFailed {
-				u.tier = tierRunning
+			shown = true
+			if u.phase == nil && n.linkedParent == id {
+				u.phase = n
 			}
-			if u.output == nil && n.id != id {
-				u.output = n
-			}
-		case n.state == stageDone && u.tier == tierPending:
-			u.tier = tierDone
 		}
 		return true
 	})
-	if u.tier == tierFailed {
-		u.output = nil
+	if !shown || u.tier == tierFailed {
+		u.phase = nil
+		return u, shown
 	}
-	return u, live > 0 || !ran
+	u.tail = p.tailOf(u, active)
+	return u, true
+}
+
+func (p *stagePlan) tailOf(u liveUnit, active map[string]bool) *stageNode {
+	from := u.root
+	if u.phase != nil {
+		from = u.phase
+	}
+	tail := from
+	p.walk(from.id, func(n *stageNode) bool {
+		if active[n.id] && n.state == stageActive {
+			tail = n
+		}
+		return true
+	})
+	return tail
 }

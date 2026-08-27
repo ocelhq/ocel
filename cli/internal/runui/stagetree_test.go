@@ -33,8 +33,8 @@ func TestCyclicDeclarationsStayVisible(t *testing.T) {
 		t.Fatalf("units() = %v, want one unit per re-rooted cyclic stage", unitTitles(live))
 	}
 	for _, u := range live {
-		if u.output != nil {
-			t.Errorf("unit %q carries an output line from %q, want a re-rooted stage to own its own row", u.root.title, u.output.title)
+		if u.phase != nil {
+			t.Errorf("unit %q shows the phase %q, want a re-rooted stage to own its own row", u.root.title, u.phase.title)
 		}
 	}
 

@@ -322,6 +322,8 @@ type blockText struct {
 
 type phaseBlock struct {
 	id     string
+	unit   string
+	title  string
 	path   string
 	held   []blockText
 	lines  []string
@@ -332,6 +334,7 @@ type phaseBlock struct {
 func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 	open := map[string]*phaseBlock{}
 	units := map[string]string{}
+	phases := map[string]map[string]bool{}
 	holder := map[string]string{}
 	claim := func(stageID []byte, text string, raw bool) {
 		b := open[holder[hex.EncodeToString(stageID)]]
@@ -348,6 +351,10 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 			return
 		}
 		b.closed, b.mark = true, mark
+		b.path = units[b.unit]
+		if len(phases[b.unit]) > 1 {
+			b.path += " › " + b.title
+		}
 		for _, line := range b.held {
 			if line.raw && mark != failMark {
 				continue
@@ -375,7 +382,11 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 				case parent == "":
 					units[id] = st.GetTitle()
 				case units[parent] != "":
-					open[id] = &phaseBlock{id: id, path: units[parent] + " › " + phaseTitle(st)}
+					open[id] = &phaseBlock{id: id, unit: parent, title: phaseTitle(st)}
+					if phases[parent] == nil {
+						phases[parent] = map[string]bool{}
+					}
+					phases[parent][id] = true
 					holder[id] = id
 					order = append(order, id)
 				default:

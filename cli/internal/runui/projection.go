@@ -41,7 +41,6 @@ type blockLine struct {
 
 type block struct {
 	id    string
-	path  string
 	lines []blockLine
 }
 
@@ -248,10 +247,9 @@ func (p *projector) stagePlan(m protoreflect.Message) []string {
 		if _, exists := p.blocks[id]; exists {
 			continue
 		}
-		b := &block{id: id, path: p.pathOf(id)}
-		p.blocks[id] = b
+		p.blocks[id] = &block{id: id}
 		p.open = append(p.open, id)
-		out = append(out, startMark+" "+b.path)
+		out = append(out, startMark+" "+p.pathOf(id))
 	}
 	p.adopt()
 	return out
@@ -275,7 +273,22 @@ func (p *projector) pathOf(id string) string {
 	if !ok {
 		return n.title
 	}
-	return parent.title + " › " + n.title
+	return parent.title + pathSep + n.title
+}
+
+func (p *projector) headline(id string) string {
+	n, ok := p.tree.nodes[id]
+	if !ok {
+		return id
+	}
+	parent, ok := p.tree.nodes[n.linkedParent]
+	if !ok {
+		return n.title
+	}
+	if len(parent.children) < 2 {
+		return parent.title
+	}
+	return parent.title + pathSep + n.title
 }
 
 func (p *projector) phaseOf(id string) *block {
@@ -406,9 +419,9 @@ func (p *projector) take(b *block, keepRaw bool) []string {
 func (p *projector) settle(b *block, d time.Duration, failed bool) []string {
 	out := p.take(b, p.present.Verbose || failed)
 	if failed {
-		return append(out, fmt.Sprintf("%s %s failed  %s", failMark, b.path, formatDuration(d)))
+		return append(out, fmt.Sprintf("%s %s failed  %s", failMark, p.headline(b.id), formatDuration(d)))
 	}
-	return append(out, fmt.Sprintf("%s %s  %s", okMark, b.path, formatDuration(d)))
+	return append(out, fmt.Sprintf("%s %s  %s", okMark, p.headline(b.id), formatDuration(d)))
 }
 
 func (p *projector) strand(mark, note string) []string {
@@ -419,7 +432,7 @@ func (p *projector) strand(mark, note string) []string {
 			p.open = p.open[1:]
 			continue
 		}
-		out = append(out, append(p.take(b, p.present.Verbose || mark == failMark), fmt.Sprintf("%s %s %s", mark, b.path, note))...)
+		out = append(out, append(p.take(b, p.present.Verbose || mark == failMark), fmt.Sprintf("%s %s %s", mark, p.headline(b.id), note))...)
 	}
 	return out
 }

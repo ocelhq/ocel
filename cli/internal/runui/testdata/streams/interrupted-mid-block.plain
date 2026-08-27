@@ -1,8 +1,8 @@
 → web › Building
 → api › Building
-✓ api › Building  4s
+✓ api  4s
 → api › Uploading
-⚠ web › Building interrupted
+⚠ web interrupted
   pushing api:8f3c1a (3/9)
 ⚠ api › Uploading interrupted
 

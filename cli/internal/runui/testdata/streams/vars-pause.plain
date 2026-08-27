@@ -1,6 +1,6 @@
 → Environment › Building
   Building project
-⚠ Environment › Building paused
+⚠ Environment paused
 
 1 variable is not ready — nothing has been built.
 
@@ -17,7 +17,7 @@
 
 → Environment › Building
   Building project
-✓ Environment › Building  4s
+✓ Environment  4s
 
 ✓ Deployed in 12s
 

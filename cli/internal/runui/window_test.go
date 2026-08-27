@@ -7,8 +7,6 @@ import (
 
 func running(output bool) windowUnit { return windowUnit{tier: tierRunning, output: output} }
 func failedUnit() windowUnit         { return windowUnit{tier: tierFailed} }
-func pendingUnit() windowUnit        { return windowUnit{tier: tierPending} }
-func doneUnit() windowUnit           { return windowUnit{tier: tierDone} }
 
 func rowUnits(f windowFrame) []int {
 	out := make([]int, 0, len(f.rows))
@@ -18,11 +16,11 @@ func rowUnits(f windowFrame) []int {
 	return out
 }
 
-func TestTheWindowRanksFailedOverRunningOverPendingOverDone(t *testing.T) {
+func TestTheWindowRanksFailedAheadOfRunning(t *testing.T) {
 	t.Parallel()
-	f := planWindow([]windowUnit{doneUnit(), pendingUnit(), running(false), failedUnit()}, 10)
-	if got := rowUnits(f); !slices.Equal(got, []int{3, 2, 1, 0}) {
-		t.Errorf("row order = %v, want failed, running, pending, done", got)
+	f := planWindow([]windowUnit{running(false), running(true), failedUnit()}, 10)
+	if got := rowUnits(f); !slices.Equal(got, []int{2, 0, 1}) {
+		t.Errorf("row order = %v, want the failed unit ahead of the running ones", got)
 	}
 	if f.more != 0 {
 		t.Errorf("more = %d, want every unit visible in a 10-line window", f.more)
@@ -109,9 +107,9 @@ func TestFailedUnitsStayPinnedAheadOfEveryRunningUnit(t *testing.T) {
 
 func TestTheOverflowLineCountsFailedFirst(t *testing.T) {
 	t.Parallel()
-	f := planWindow([]windowUnit{running(false), pendingUnit(), pendingUnit(), pendingUnit(), pendingUnit(), doneUnit(), doneUnit()}, 2)
-	if got := overflowLine(f); got != "+6 more: 4 waiting · 2 done" {
-		t.Errorf("overflow line = %q", got)
+	f := planWindow([]windowUnit{running(false), running(false), failedUnit()}, 2)
+	if got := overflowLine(f); got != "+2 more: 2 running" {
+		t.Errorf("overflow line = %q, want the failed unit on screen and the running ones counted below it", got)
 	}
 
 	crowded := make([]windowUnit, 12)
@@ -129,37 +127,21 @@ func TestTheOverflowLineCountsFailedFirst(t *testing.T) {
 
 func TestTheWindowKeepsSpineOrderWithinATier(t *testing.T) {
 	t.Parallel()
-	f := planWindow([]windowUnit{running(false), doneUnit(), running(false), running(false)}, 10)
-	if got := rowUnits(f); !slices.Equal(got, []int{0, 2, 3, 1}) {
-		t.Errorf("row order = %v, want the running units in spine order ahead of the done one", got)
+	f := planWindow([]windowUnit{running(false), failedUnit(), running(false), failedUnit()}, 10)
+	if got := rowUnits(f); !slices.Equal(got, []int{1, 3, 0, 2}) {
+		t.Errorf("row order = %v, want each tier held in spine order", got)
 	}
 }
 
-func TestPendingUnitsFallBelowTheFoldBeforeRunningUnitsLoseTheirOutput(t *testing.T) {
-	t.Parallel()
-	spine := []windowUnit{running(true), running(true)}
-	for len(spine) < 16 {
-		spine = append(spine, pendingUnit())
-	}
-
-	f := planWindow(spine, 17)
-	if len(f.rows) < 2 || !f.rows[0].output || !f.rows[1].output {
-		t.Fatalf("output lines = %v, want both running units keeping theirs — the running tier needs 4 of 17 lines", outputFlags(f))
-	}
-	if got := overflowLine(f); got != "+2 more: 2 waiting" {
-		t.Errorf("overflow line = %q, want the pending units that do not fit counted below the fold", got)
-	}
-}
-
-func TestALoneRunningUnitKeepsItsOutputHoweverManyUnitsWait(t *testing.T) {
+func TestALoneRunningUnitKeepsItsOutputHoweverManyUnitsFailedBeforeIt(t *testing.T) {
 	t.Parallel()
 	spine := []windowUnit{running(true)}
-	for len(spine) < 31 {
-		spine = append(spine, pendingUnit())
+	for len(spine) < 6 {
+		spine = append(spine, failedUnit())
 	}
 
 	f := planWindow(spine, 24)
-	if len(f.rows) == 0 || !f.rows[0].output {
+	if len(f.rows) == 0 || !f.rows[len(f.rows)-1].output {
 		t.Fatalf("output lines = %v, want the single running unit to keep its output line", outputFlags(f))
 	}
 }
