@@ -28,17 +28,10 @@ type Spinner struct {
 }
 
 func StartSpinner(present Presentation, out io.Writer, msg string) *Spinner {
-	if r, ok := rendererFor(out); ok {
-		return &Spinner{out: out, msg: msg, stopFn: r.Spin(msg)}
+	if !present.TTY || TerminalIsOwned() {
+		return &Spinner{}
 	}
-	return startSpinner(out, msg, present.TTY, present.Color)
-}
-
-func startSpinner(out io.Writer, msg string, animate, colored bool) *Spinner {
-	s := &Spinner{out: out, msg: msg, colored: colored}
-	if !animate {
-		return s
-	}
+	s := &Spinner{out: out, msg: msg, colored: present.Color}
 	s.stop = make(chan struct{})
 	s.done = make(chan struct{})
 	go s.loop()

@@ -227,7 +227,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		}
 
 		var plan *planv1.ChangePlan
-		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Planning changes")
+		spinner := ui.Spin("Planning changes")
 		err = provider.Stream(ctx, runner, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap,
 			func(ev *progressv1.OperationEvent) {
 				if shown := ev.GetPlan(); shown != nil {

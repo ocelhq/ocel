@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fatih/color"
@@ -41,16 +42,9 @@ type Renderer struct {
 	closeOnce sync.Once
 }
 
-var liveWriters sync.Map
+var liveOwners atomic.Int64
 
-func rendererFor(w io.Writer) (*Renderer, bool) {
-	v, ok := liveWriters.Load(w)
-	if !ok {
-		return nil, false
-	}
-	r, ok := v.(*Renderer)
-	return r, ok
-}
+func TerminalIsOwned() bool { return liveOwners.Load() > 0 }
 
 func NewRenderer(w io.Writer, present Presentation) *Renderer {
 	r := &Renderer{
@@ -58,8 +52,8 @@ func NewRenderer(w io.Writer, present Presentation) *Renderer {
 		present: present,
 		plan:    newStagePlan(),
 	}
-	liveWriters.Store(w, r)
 	if r.present.Live() {
+		liveOwners.Add(1)
 		r.tickStop = make(chan struct{})
 		r.tickDone = make(chan struct{})
 		go r.tickLoop()
@@ -213,7 +207,9 @@ func (r *Renderer) Close() error {
 		r.mu.Lock()
 		r.eraseLiveLocked()
 		r.mu.Unlock()
-		liveWriters.Delete(r.w)
+		if r.present.Live() {
+			liveOwners.Add(-1)
+		}
 	})
 	return nil
 }

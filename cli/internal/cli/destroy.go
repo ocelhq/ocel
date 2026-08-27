@@ -133,7 +133,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 			return err
 		}
 
-		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Enumerating what would be destroyed")
+		spinner := ui.Spin("Enumerating what would be destroyed")
 		plan, err := client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
 			Slug: cfg.Slug,
 			Edge: edgewire.Selection(cfg),
@@ -190,7 +190,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 			return err
 		}
 
-		spinner := runui.StartSpinner(ui.Presentation(), stdout, "Enumerating what would be destroyed")
+		spinner := ui.Spin("Enumerating what would be destroyed")
 		plan, err := client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
 			Slug:        cfg.Slug,
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
