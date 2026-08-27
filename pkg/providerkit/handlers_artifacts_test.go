@@ -167,10 +167,6 @@ type countingProvider struct {
 	puts map[string]int
 }
 
-func (p *countingProvider) Artifacts() providerkit.ArtifactStore {
-	return countedArtifacts{ArtifactStore: p.Provider.Artifacts(), on: p}
-}
-
 func (p *countingProvider) uploads() map[string]int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -192,6 +188,7 @@ func (c countedArtifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, 
 func TestAnUnchangedBuildIsNotUploadedTwice(t *testing.T) {
 	builtProject(t)
 	provider := &countingProvider{Provider: fake.NewProvider(fake.Options{}), puts: map[string]int{}}
+	provider.Ships(countedArtifacts{ArtifactStore: provider.Provider.Artifacts(), on: provider})
 	client := servedBy(t, provider)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PREVIEW,
@@ -219,8 +216,6 @@ type barrierProvider struct {
 	*fake.Provider
 	store *barrierArtifacts
 }
-
-func (p *barrierProvider) Artifacts() providerkit.ArtifactStore { return p.store }
 
 type barrierArtifacts struct {
 	providerkit.ArtifactStore
@@ -291,6 +286,7 @@ func TestAnAppsFunctionsAreUploadedTogether(t *testing.T) {
 		Provider: base,
 		store:    &barrierArtifacts{ArtifactStore: base.Artifacts(), want: functions, ready: make(chan struct{})},
 	}
+	provider.Ships(provider.store)
 	client := servedBy(t, provider)
 
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {

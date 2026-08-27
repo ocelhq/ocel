@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -35,7 +37,7 @@ func RunPorts(t *testing.T, provider providerkit.Provider) {
 	t.Run("Sealer", func(t *testing.T) { RunSealer(t, provider.Sealer()) })
 	t.Run("Bootstrapper", func(t *testing.T) { RunBootstrapper(t, bootstrapperOf(t, provider)) })
 	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, provider.Artifacts()) })
-	t.Run("Releaser", func(t *testing.T) { RunReleaser(t, provider.Releases(), provider.Serves()) })
+	t.Run("Releaser", func(t *testing.T) { RunReleaser(t, provider.Releases(), provider.Artifacts(), provider.Serves()) })
 	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, provider.Credentials()) })
 	t.Run("EdgeRegistry", func(t *testing.T) { RunEdgeRegistry(t, provider.Edges()) })
 	t.Run("DNSRegistry", func(t *testing.T) { RunDNSRegistry(t, provider.DNS()) })
@@ -638,7 +640,23 @@ func planRows(t *testing.T, plan providerkit.Plan, verb string) int {
 	return rows
 }
 
-func RunReleaser(t *testing.T, releaser providerkit.Releaser, serves []providerkit.LinkType) {
+const conformanceArtifactDigest = "b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c"
+
+func uploadKey(t *testing.T) string {
+	return "conformance/" + naming.Sanitize(t.Name()) + "/" + conformanceArtifactDigest + ".zip"
+}
+
+func writtenArtifact(t *testing.T) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "artifact.zip")
+	if err := os.WriteFile(path, []byte("conformance\n"), 0o644); err != nil {
+		t.Fatalf("write the artifact a release would ship: %v", err)
+	}
+	return path
+}
+
+func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts providerkit.ArtifactStore, serves []providerkit.LinkType) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -671,6 +689,65 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, serves []providerk
 		}
 		if rows := planRows(t, planned, "Plan"); rows == 0 {
 			t.Fatal("Plan() of a release standing up every primitive showed nothing, and the plan is the only thing a human consents to")
+		}
+	})
+
+	t.Run("an artifact the release must ship is a row the plan shows and an object the apply writes", func(t *testing.T) {
+		resources := declared(serves)
+		if len(resources) == 0 {
+			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
+		}
+		bare := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra, Resources: resources}
+		without, err := releaser.Plan(ctx, bare, nil)
+		if err != nil {
+			t.Fatalf("Plan() of a release shipping no artifact = %v", err)
+		}
+
+		path := writtenArtifact(t)
+		shipping := bare
+		shipping.Uploads = []providerkit.Upload{{
+			Name:   "conformance",
+			Ref:    providerkit.ArtifactRef{Class: ref.Class, Bucket: providerkit.StoreFunctions, Key: uploadKey(t)},
+			Path:   path,
+			Digest: conformanceArtifactDigest,
+		}}
+		with, err := releaser.Plan(ctx, shipping, nil)
+		if err != nil {
+			t.Fatalf("Plan() of a release shipping one artifact = %v", err)
+		}
+
+		if planRows(t, with, "Plan") <= planRows(t, without, "Plan") {
+			t.Error("shipping an artifact added no plan row, and an upload is a mutation of the customer's account like any other: " +
+				"the plan and the apply must ship it down one path")
+		}
+
+		if _, err := releaser.Provision(ctx, shipping, nil); err != nil {
+			t.Fatalf("Provision() of the release whose plan showed the artifact = %v", err)
+		}
+		shipped := shipping.Uploads[0].Ref
+		held, err := artifacts.Has(ctx, shipped)
+		if err != nil {
+			t.Fatalf("Has() of the artifact the release shipped = %v", err)
+		}
+		if !held {
+			t.Fatal("the plan showed an artifact row and Provision() left nothing in the store, " +
+				"so the plan promised a write the apply never made")
+		}
+		body, err := artifacts.Open(ctx, shipped)
+		if err != nil {
+			t.Fatalf("Open() of the artifact the release shipped = %v", err)
+		}
+		defer body.Close()
+		got, err := io.ReadAll(body)
+		if err != nil {
+			t.Fatalf("read the artifact the release shipped = %v", err)
+		}
+		want, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read the artifact a release would ship: %v", err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("the store holds %q under the shipped key, want %q", got, want)
 		}
 	})
 

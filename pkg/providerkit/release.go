@@ -41,6 +41,8 @@ type StackPlan struct {
 
 	Resources []Resource
 
+	Uploads []Upload
+
 	Links LinkReader
 
 	App *AppPlan

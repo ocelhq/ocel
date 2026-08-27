@@ -141,11 +141,15 @@ type infraWork struct {
 }
 
 func (r *release) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
+	shipped, err := r.shipArtifacts(pctx, plan.Uploads)
+	if err != nil {
+		return err
+	}
 	switch work := plan.Options.(type) {
 	case *stackWork:
 		return work.program(pctx)
 	case *appWork:
-		return work.run(pctx)
+		return work.run(pctx, shipped)
 	case *infraWork:
 		return r.infra(pctx, plan, work)
 	}

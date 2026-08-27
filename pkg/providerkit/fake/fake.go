@@ -32,7 +32,7 @@ type Provider struct {
 
 	options   Options
 	records   *Records
-	artifacts *Artifacts
+	artifacts providerkit.ArtifactStore
 	sealer    *Sealer
 	bootstrap *Bootstrapper
 	releases  *Releaser
@@ -51,17 +51,24 @@ func New(_ context.Context, options providerkit.Options) (providerkit.Provider, 
 
 func NewProvider(options Options) *Provider {
 	records := NewRecords()
+	artifacts := NewArtifacts()
 	return &Provider{
 		options:   options,
 		records:   records,
-		artifacts: NewArtifacts(),
+		artifacts: artifacts,
 		sealer:    NewSealer(),
 		bootstrap: NewBootstrapper(),
-		releases:  NewReleaser(),
+		releases:  NewReleaser(artifacts),
 		creds:     NewCredentials(options.Region),
 		edges:     NewEdges(records),
 		dns:       NewDNS(),
 	}
+}
+
+func (p *Provider) Ships(store providerkit.ArtifactStore) *Provider {
+	p.artifacts = store
+	p.releases.artifacts = store
+	return p
 }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }

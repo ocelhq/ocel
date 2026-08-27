@@ -26,7 +26,7 @@ type appWork struct {
 	cache       *isrConfig
 }
 
-func (w *appWork) run(pctx *sdk.Context) error {
+func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error {
 	role, err := newFunctionRole(pctx, w.roleCoord, w.role)
 	if err != nil {
 		return err
@@ -34,6 +34,7 @@ func (w *appWork) run(pctx *sdk.Context) error {
 	stack := w.functions
 	stack.RoleArn = role.Arn
 	stack.RoleName = role.Name
+	stack.Shipped = shipped
 	return stack.register(pctx)
 }
 

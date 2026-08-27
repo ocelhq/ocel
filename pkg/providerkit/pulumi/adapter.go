@@ -253,23 +253,37 @@ func (a *Adapter) preview(ctx context.Context, plan providerkit.StackPlan, op Op
 
 const stackResourceType = "pulumi:pulumi:Stack"
 
-func planRows(steps []apitype.StepEventMetadata) []providerkit.Change {
-	changes := make([]providerkit.Change, 0, len(steps))
-	for _, step := range steps {
-		if step.Type == stackResourceType {
+func planRows(mutations, standing []apitype.StepEventMetadata) []providerkit.Change {
+	rows := make(map[string]providerkit.Change, len(mutations)+len(standing))
+	for _, step := range mutations {
+		action, mutates := plannedAction(step.Op)
+		if !mutates || step.Type == stackResourceType {
 			continue
 		}
-		action, rendered := plannedAction(step.Op)
-		if !rendered {
+		rows[step.URN] = row(step, action)
+	}
+	for _, step := range standing {
+		if step.Op != apitype.OpSame || step.Type == stackResourceType {
 			continue
 		}
-		changes = append(changes, providerkit.Change{
-			Kind:   capIdentifier(step.Type),
-			Name:   resourceNameFromURN(step.URN),
-			Action: action,
-		})
+		if _, mutating := rows[step.URN]; mutating {
+			continue
+		}
+		rows[step.URN] = row(step, providerkit.ActionKeep)
+	}
+	changes := make([]providerkit.Change, 0, len(rows))
+	for _, urn := range slices.Sorted(maps.Keys(rows)) {
+		changes = append(changes, rows[urn])
 	}
 	return changes
+}
+
+func row(step apitype.StepEventMetadata, action providerkit.ChangeAction) providerkit.Change {
+	return providerkit.Change{
+		Kind:   capIdentifier(step.Type),
+		Name:   resourceNameFromURN(step.URN),
+		Action: action,
+	}
 }
 
 func plannedAction(op apitype.OpType) (providerkit.ChangeAction, bool) {
@@ -282,8 +296,6 @@ func plannedAction(op apitype.OpType) (providerkit.ChangeAction, bool) {
 		return providerkit.ActionReplace, true
 	case apitype.OpDelete, apitype.OpDeleteReplaced:
 		return providerkit.ActionDelete, true
-	case apitype.OpSame:
-		return providerkit.ActionKeep, true
 	default:
 		return "", false
 	}
@@ -350,7 +362,7 @@ func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, report provid
 	}
 
 	engineEvents := make(chan events.EngineEvent, 256)
-	steps := drainSteps(engineEvents)
+	rows := drainRows(engineEvents)
 	if report != nil {
 		report.Say("Working out what would change")
 	}
@@ -363,34 +375,37 @@ func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, report provid
 	if err != nil {
 		return nil, fmt.Errorf("plan stack %s: %w", setup.Stack, err)
 	}
-	drained, err := awaitSteps(steps, engineDrainGrace)
+	drained, err := awaitRows(rows, engineDrainGrace)
 	if err != nil {
 		return nil, fmt.Errorf("plan stack %s: %w", setup.Stack, err)
 	}
-	return planRows(drained), nil
+	return drained, nil
 }
 
-func drainSteps(engineEvents <-chan events.EngineEvent) <-chan []apitype.StepEventMetadata {
-	drained := make(chan []apitype.StepEventMetadata, 1)
+func drainRows(engineEvents <-chan events.EngineEvent) <-chan []providerkit.Change {
+	drained := make(chan []providerkit.Change, 1)
 	go func() {
-		var steps []apitype.StepEventMetadata
+		var mutations, standing []apitype.StepEventMetadata
 		for ev := range engineEvents {
-			if ev.ResourcePreEvent != nil {
-				steps = append(steps, ev.ResourcePreEvent.Metadata)
+			switch {
+			case ev.ResourcePreEvent != nil:
+				mutations = append(mutations, ev.ResourcePreEvent.Metadata)
+			case ev.ResOutputsEvent != nil:
+				standing = append(standing, ev.ResOutputsEvent.Metadata)
 			}
 		}
-		drained <- steps
+		drained <- planRows(mutations, standing)
 	}()
 	return drained
 }
 
-func awaitSteps(drained <-chan []apitype.StepEventMetadata, grace time.Duration) ([]apitype.StepEventMetadata, error) {
+func awaitRows(drained <-chan []providerkit.Change, grace time.Duration) ([]providerkit.Change, error) {
 	select {
-	case steps := <-drained:
-		return steps, nil
+	case rows := <-drained:
+		return rows, nil
 	case <-time.After(grace):
 		return nil, fmt.Errorf(
-			"the engine's steps did not drain within %s, and the steps that did arrive would read as a plan doing less than the run would do", grace)
+			"the engine's plan rows did not drain within %s, and the rows that did arrive would read as a plan doing less than the run would do", grace)
 	}
 }
 

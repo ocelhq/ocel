@@ -45,6 +45,7 @@ type appStackFunctions struct {
 	RoleArn   pulumi.StringInput
 	RoleName  pulumi.StringInput
 	Layer     payloads.Placement
+	Shipped   map[string]pulumi.Resource
 }
 
 func (a appStackFunctions) register(ctx *pulumi.Context) error {
@@ -122,9 +123,18 @@ func (a appStackFunctions) declare(
 ) (functionRef, error) {
 	logical := fn.Logical
 	ref, err := registerFunction(ctx, logical, functionCoordinate(a.Project, a.Stack, logical),
-		fn.RouteID, a.Args(fn), a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn, layerARN, urlAuth)
+		fn.RouteID, a.Args(fn), a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn, layerARN, urlAuth,
+		a.shippedTo(logical)...)
 	if err != nil {
 		return ref, fmt.Errorf("declare %s: %w", logical, err)
 	}
 	return ref, nil
+}
+
+func (a appStackFunctions) shippedTo(logical string) []pulumi.ResourceOption {
+	object, shipped := a.Shipped[logical]
+	if !shipped {
+		return nil
+	}
+	return []pulumi.ResourceOption{pulumi.DependsOn([]pulumi.Resource{object})}
 }
