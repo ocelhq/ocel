@@ -17,6 +17,7 @@ export async function buildNext(input: AppInput, options: BuildOptions): Promise
   if (!cmd) throw new Error(`ocel: could not resolve a build command for app "${input.name}"`);
 
   await nextRunner.run(cmd.command, cmd.args, input.cwd, {
+    NODE_ENV: "production",
     ...input.env,
     OCEL_APP_NAME: input.name,
     OCEL_OUTPUT_DIR: appOutDir(options.outDir, input.name),

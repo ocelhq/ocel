@@ -99,6 +99,26 @@ describe("buildNext", () => {
     expect(env?.OCEL_ALLOW_DEGRADED).toBe("");
   });
 
+  it("builds under NODE_ENV=production regardless of the host shell's value", async () => {
+    const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
+    let env: Record<string, string> | undefined;
+    nextRunner.run = async (_command, _args, _cwd, e) => void (env = e);
+
+    await buildNext({ name: "web", cwd: dir }, { outDir: "/out" });
+
+    expect(env?.NODE_ENV).toBe("production");
+  });
+
+  it("lets the app's declared env override NODE_ENV", async () => {
+    const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
+    let env: Record<string, string> | undefined;
+    nextRunner.run = async (_command, _args, _cwd, e) => void (env = e);
+
+    await buildNext({ name: "web", cwd: dir, env: { NODE_ENV: "test" } }, { outDir: "/out" });
+
+    expect(env?.NODE_ENV).toBe("test");
+  });
+
   it("binds an app that declares no folder to the project root", async () => {
     const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
     let env: Record<string, string> | undefined;
