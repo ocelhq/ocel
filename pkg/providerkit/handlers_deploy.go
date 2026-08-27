@@ -96,17 +96,10 @@ type deployRun struct {
 	functions map[string][]Function
 }
 
-const appConcurrency = 4
-
 func (r *deployRun) recordArtifact(logical string, ref ArtifactRef) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.artifacts[logical] = ref
-}
-
-func (r *deployRun) artifactFor(logical string) ArtifactRef {
-	ref, _ := r.artifact(logical)
-	return ref
 }
 
 func (r *deployRun) artifact(logical string) (ArtifactRef, bool) {
@@ -487,6 +480,8 @@ func (r *deployRun) provision(ctx context.Context) error {
 	return r.provisionApps(ctx)
 }
 
+const appConcurrency = 4
+
 func (r *deployRun) provisionApps(ctx context.Context) error {
 	failures := make([]error, len(r.plan.Apps))
 	var apps errgroup.Group
@@ -776,12 +771,13 @@ func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 		if fn.GetApp() != entry.App {
 			continue
 		}
+		artifact, _ := r.artifact(fn.GetLogicalName())
 		specs = append(specs, FunctionSpec{
 			Name:     fn.GetLogicalName(),
 			Route:    fn.GetRouteId(),
 			Handler:  fn.GetHandler(),
 			Runtime:  fn.GetRuntime(),
-			Artifact: r.artifactFor(fn.GetLogicalName()),
+			Artifact: artifact,
 			URL:      true,
 		})
 	}
