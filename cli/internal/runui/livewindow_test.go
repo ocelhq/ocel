@@ -120,6 +120,26 @@ func TestAUnitDeclaredButNotYetStartedWaitsBelowTheRunningOnes(t *testing.T) {
 	}
 }
 
+func TestARunningBuildKeepsItsOutputLineWhileTheRestOfTheSpineWaits(t *testing.T) {
+	t.Parallel()
+	s, out := liveStreamOfHeight(t, 20)
+	spineOf(t, s, 2)
+	for i := 1; i <= 14; i++ {
+		s.Emit(stagePlanEvent(&progressv1.Stage{Id: appStage(byte(20 + i)), Title: fmt.Sprintf("waiting-%02d", i)}))
+	}
+
+	rows := liveRegion(s, out)
+	if !strings.Contains(rows[1], "app-01 › Building") || !strings.Contains(rows[1], "6/9") {
+		t.Fatalf("live region = %q, want the running build's output line — waiting units cannot cost the running tier its second line", rows)
+	}
+	if !strings.Contains(rows[3], "app-02 › Building") {
+		t.Errorf("live region = %q, want every running unit at the same height", rows)
+	}
+	if got := rows[len(rows)-1]; !strings.Contains(got, "+2 more: 2 waiting") {
+		t.Errorf("overflow line = %q, want the waiting units that did not fit counted below the fold", got)
+	}
+}
+
 func TestAFailedUnitStaysPinnedWhileItsSiblingsRun(t *testing.T) {
 	t.Parallel()
 	s, out := liveStreamOfHeight(t, 40)

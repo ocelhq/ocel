@@ -39,28 +39,44 @@ type windowFrame struct {
 
 func planWindow(us []windowUnit, height int) windowFrame {
 	order := priorityOrder(us)
-	if frame, ok := fit(us, order, height, true); ok {
-		return frame
+	rich := fill(us, order, height, true)
+	if bare := fill(us, order, height, false); runningRows(us, bare) > runningRows(us, rich) {
+		return bare
 	}
-	if frame, ok := fit(us, order, height, false); ok {
-		return frame
-	}
-	return collapse(us, order, height)
+	return rich
 }
 
-func collapse(us []windowUnit, order []int, height int) windowFrame {
-	capacity := height - 1
-	if capacity < 0 {
-		capacity = 0
+func fill(us []windowUnit, order []int, height int, withOutput bool) windowFrame {
+	rows := make([]windowRow, 0, len(order))
+	lines := 0
+	for taken, i := range order {
+		row := windowRow{unit: i, output: withOutput && us[i].output && us[i].tier == tierRunning}
+		cost := 1
+		if row.output {
+			cost++
+		}
+		budget := height
+		if taken < len(order)-1 {
+			budget--
+		}
+		if lines+cost > budget {
+			break
+		}
+		rows = append(rows, row)
+		lines += cost
 	}
-	if capacity > len(order) {
-		capacity = len(order)
+	hidden := order[len(rows):]
+	return windowFrame{rows: rows, hidden: countTiers(us, hidden), more: len(hidden)}
+}
+
+func runningRows(us []windowUnit, f windowFrame) int {
+	n := 0
+	for _, row := range f.rows {
+		if us[row.unit].tier == tierRunning {
+			n++
+		}
 	}
-	rows := make([]windowRow, 0, capacity)
-	for _, i := range order[:capacity] {
-		rows = append(rows, windowRow{unit: i})
-	}
-	return windowFrame{rows: rows, hidden: countTiers(us, order[capacity:]), more: len(order) - capacity}
+	return n
 }
 
 func countTiers(us []windowUnit, hidden []int) []tierCount {
@@ -101,20 +117,6 @@ func tierWord(t unitTier) string {
 	default:
 		return "done"
 	}
-}
-
-func fit(us []windowUnit, order []int, height int, output bool) (windowFrame, bool) {
-	rows := make([]windowRow, 0, len(order))
-	lines := 0
-	for _, i := range order {
-		row := windowRow{unit: i, output: output && us[i].output && us[i].tier == tierRunning}
-		rows = append(rows, row)
-		lines++
-		if row.output {
-			lines++
-		}
-	}
-	return windowFrame{rows: rows}, lines <= height
 }
 
 func priorityOrder(us []windowUnit) []int {
