@@ -76,7 +76,7 @@ func projectPlain(t *testing.T, events []*streamv1.RunEvent) string {
 func projectLive(t *testing.T, events []*streamv1.RunEvent) string {
 	t.Helper()
 	var out bytes.Buffer
-	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
+	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 	for _, ev := range events {
 		s.Emit(ev)
 	}

@@ -1,8 +1,9 @@
 package runui
 
-import "testing"
-
-func units(spec ...windowUnit) []windowUnit { return spec }
+import (
+	"slices"
+	"testing"
+)
 
 func running(output bool) windowUnit { return windowUnit{tier: tierRunning, output: output} }
 func failedUnit() windowUnit         { return windowUnit{tier: tierFailed} }
@@ -17,22 +18,10 @@ func rowUnits(f windowFrame) []int {
 	return out
 }
 
-func equalInts(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 func TestTheWindowRanksFailedOverRunningOverPendingOverDone(t *testing.T) {
 	t.Parallel()
-	f := planWindow(units(doneUnit(), pendingUnit(), running(false), failedUnit()), 10)
-	if got := rowUnits(f); !equalInts(got, []int{3, 2, 1, 0}) {
+	f := planWindow([]windowUnit{doneUnit(), pendingUnit(), running(false), failedUnit()}, 10)
+	if got := rowUnits(f); !slices.Equal(got, []int{3, 2, 1, 0}) {
 		t.Errorf("row order = %v, want failed, running, pending, done", got)
 	}
 	if f.more != 0 {
@@ -50,7 +39,7 @@ func outputFlags(f windowFrame) []bool {
 
 func TestRunningUnitsDropTheirOutputLineBeforeAnyUnitCollapses(t *testing.T) {
 	t.Parallel()
-	f := planWindow(units(running(true), running(true), running(true)), 5)
+	f := planWindow([]windowUnit{running(true), running(true), running(true)}, 5)
 	if len(f.rows) != 3 || f.more != 0 {
 		t.Fatalf("rows = %v, more = %d, want all three running units still on screen", rowUnits(f), f.more)
 	}
@@ -63,7 +52,7 @@ func TestRunningUnitsDropTheirOutputLineBeforeAnyUnitCollapses(t *testing.T) {
 
 func TestRunningUnitsDegradeUniformlyNeverMixedHeights(t *testing.T) {
 	t.Parallel()
-	f := planWindow(units(running(true), running(false), running(true)), 4)
+	f := planWindow([]windowUnit{running(true), running(false), running(true)}, 4)
 	if len(f.rows) != 3 {
 		t.Fatalf("rows = %v, want all three running units still on screen", rowUnits(f))
 	}
@@ -99,7 +88,7 @@ func TestATwentyFirstUnitDegradesIntoTheOverflowLineAndComesBackWhenSpaceFrees(t
 func TestOnlyRunningUnitsCarryAnOutputLine(t *testing.T) {
 	t.Parallel()
 	terminal := windowUnit{tier: tierFailed, output: true}
-	f := planWindow(units(terminal, running(true)), 20)
+	f := planWindow([]windowUnit{terminal, running(true)}, 20)
 	if got := outputFlags(f); len(got) != 2 || got[0] {
 		t.Errorf("output lines = %v, want the failed unit pinned as a single row", got)
 	}
@@ -110,7 +99,7 @@ func TestFailedUnitsStayPinnedAheadOfEveryRunningUnit(t *testing.T) {
 	spine := []windowUnit{running(true), running(true), failedUnit(), running(true), failedUnit()}
 
 	f := planWindow(spine, 3)
-	if got := rowUnits(f); !equalInts(got, []int{2, 4}) {
+	if got := rowUnits(f); !slices.Equal(got, []int{2, 4}) {
 		t.Errorf("rows = %v, want both failed units pinned in spine order and the running tier collapsed", got)
 	}
 	if got := overflowLine(f); got != "+3 more: 3 running" {
@@ -120,7 +109,7 @@ func TestFailedUnitsStayPinnedAheadOfEveryRunningUnit(t *testing.T) {
 
 func TestTheOverflowLineCountsFailedFirst(t *testing.T) {
 	t.Parallel()
-	f := planWindow(units(running(false), pendingUnit(), pendingUnit(), pendingUnit(), pendingUnit(), doneUnit(), doneUnit()), 2)
+	f := planWindow([]windowUnit{running(false), pendingUnit(), pendingUnit(), pendingUnit(), pendingUnit(), doneUnit(), doneUnit()}, 2)
 	if got := overflowLine(f); got != "+6 more: 4 waiting · 2 done" {
 		t.Errorf("overflow line = %q", got)
 	}
@@ -140,8 +129,8 @@ func TestTheOverflowLineCountsFailedFirst(t *testing.T) {
 
 func TestTheWindowKeepsSpineOrderWithinATier(t *testing.T) {
 	t.Parallel()
-	f := planWindow(units(running(false), doneUnit(), running(false), running(false)), 10)
-	if got := rowUnits(f); !equalInts(got, []int{0, 2, 3, 1}) {
+	f := planWindow([]windowUnit{running(false), doneUnit(), running(false), running(false)}, 10)
+	if got := rowUnits(f); !slices.Equal(got, []int{0, 2, 3, 1}) {
 		t.Errorf("row order = %v, want the running units in spine order ahead of the done one", got)
 	}
 }
