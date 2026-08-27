@@ -10,6 +10,7 @@ import (
 	"time"
 
 	connect "connectrpc.com/connect"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -85,11 +86,38 @@ type deployRun struct {
 	allowDegraded []string
 	withheld      string
 
+	mu        sync.Mutex
 	artifacts map[string]ArtifactRef
 	membrane  ArtifactRef
 	needs     NeedRecords
 	links     []Link
 	functions map[string][]Function
+}
+
+const appConcurrency = 4
+
+func (r *deployRun) recordArtifact(logical string, ref ArtifactRef) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.artifacts[logical] = ref
+}
+
+func (r *deployRun) artifactFor(logical string) ArtifactRef {
+	ref, _ := r.artifact(logical)
+	return ref
+}
+
+func (r *deployRun) artifact(logical string) (ArtifactRef, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ref, held := r.artifacts[logical]
+	return ref, held
+}
+
+func (r *deployRun) recordFunctions(app string, functions []Function) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.functions[app] = functions
 }
 
 func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest, sender *eventSender) (*deployRun, error) {
@@ -440,8 +468,22 @@ func (r *deployRun) provision(ctx context.Context) error {
 	if err := r.provisionInfra(ctx); err != nil {
 		return err
 	}
-	for _, entry := range r.plan.Apps {
-		if err := r.provisionApp(ctx, entry); err != nil {
+	return r.provisionApps(ctx)
+}
+
+func (r *deployRun) provisionApps(ctx context.Context) error {
+	failures := make([]error, len(r.plan.Apps))
+	var apps errgroup.Group
+	apps.SetLimit(appConcurrency)
+	for slot, entry := range r.plan.Apps {
+		apps.Go(func() error {
+			failures[slot] = r.provisionApp(ctx, entry)
+			return nil
+		})
+	}
+	_ = apps.Wait()
+	for _, err := range failures {
+		if err != nil {
 			return err
 		}
 	}
@@ -548,7 +590,7 @@ func (r *deployRun) provisionApp(ctx context.Context, entry AppEntry) error {
 			if err != nil {
 				return err
 			}
-			r.functions[entry.App] = result.Functions
+			r.recordFunctions(entry.App, result.Functions)
 			if err := r.warm(ctx, result.Functions, report); err != nil {
 				return err
 			}
@@ -710,7 +752,7 @@ func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 			Route:    fn.GetRouteId(),
 			Handler:  fn.GetHandler(),
 			Runtime:  fn.GetRuntime(),
-			Artifact: r.artifacts[fn.GetLogicalName()],
+			Artifact: r.artifactFor(fn.GetLogicalName()),
 			URL:      true,
 		})
 	}
@@ -743,7 +785,7 @@ func (r *deployRun) embed(ctx context.Context, entry AppEntry, functions []Funct
 		return nil
 	}
 	for _, fn := range functions {
-		ref, held := r.artifacts[fn.Name]
+		ref, held := r.artifact(fn.Name)
 		if !held {
 			continue
 		}

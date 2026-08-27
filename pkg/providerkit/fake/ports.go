@@ -245,13 +245,20 @@ type Releaser struct {
 
 	artifacts providerkit.ArtifactStore
 
-	mu     sync.Mutex
-	stacks map[string]providerkit.StackResult
-	plans  []providerkit.StackPlan
+	mu      sync.Mutex
+	stacks  map[string]providerkit.StackResult
+	plans   []providerkit.StackPlan
+	entered func(providerkit.StackPlan) error
 }
 
 func NewReleaser(artifacts providerkit.ArtifactStore) *Releaser {
 	return &Releaser{artifacts: artifacts, stacks: map[string]providerkit.StackResult{}}
+}
+
+func (r *Releaser) Entering(hook func(providerkit.StackPlan) error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.entered = hook
 }
 
 func (r *Releaser) Plans() []providerkit.StackPlan {
@@ -269,6 +276,14 @@ func (r *Releaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ pr
 }
 
 func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+	r.mu.Lock()
+	entered := r.entered
+	r.mu.Unlock()
+	if entered != nil {
+		if err := entered(plan); err != nil {
+			return providerkit.StackResult{}, err
+		}
+	}
 	if err := providerkit.ShipUploads(ctx, r.artifacts, plan.Uploads, report); err != nil {
 		return providerkit.StackResult{}, err
 	}

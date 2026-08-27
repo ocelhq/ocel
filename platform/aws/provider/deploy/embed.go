@@ -27,7 +27,7 @@ const embedCacheCeiling = 32 << 20
 
 const embedUnzippedCeiling = 200 << 20
 
-const embedConcurrency = appConcurrency
+const embedConcurrency = 4
 
 const embedPassDeadline = 3 * time.Minute
 

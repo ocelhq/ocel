@@ -170,7 +170,7 @@ func (r *deployRun) stageApp(entry AppEntry, pack AppPack, routing *RoutingPlan)
 		return nil, err
 	}
 	for slot, fn := range shipping {
-		r.artifacts[fn.GetLogicalName()] = staged[slot].Ref
+		r.recordArtifact(fn.GetLogicalName(), staged[slot].Ref)
 	}
 	return staged, nil
 }
