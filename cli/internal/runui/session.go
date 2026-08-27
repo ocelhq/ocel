@@ -35,6 +35,7 @@ type Session struct {
 	gate    gate
 	waiting bool
 	shown   *planv1.ChangePlan
+	apps    []*progressv1.AppResult
 
 	start        time.Time
 	buildStart   time.Time
@@ -220,6 +221,9 @@ func (s *Session) Event(ev *progressv1.OperationEvent) {
 	if span := out.GetSpan(); span != nil {
 		s.ingestSpan(span)
 	}
+	if apps := out.GetResult().GetApps(); len(apps) > 0 {
+		s.apps = apps
+	}
 }
 
 func (s *Session) logOperation(ev *progressv1.OperationEvent) {
@@ -303,6 +307,7 @@ func (s *Session) result(ev *streamv1.RunResultEvent) {
 	s.process.flush()
 	ev.DurationMs = time.Since(s.start).Milliseconds()
 	ev.LogPath = s.logPath
+	ev.Apps = s.apps
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: ev}})
 }
 
