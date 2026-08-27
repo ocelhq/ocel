@@ -55,6 +55,11 @@ type Releaser struct {
 
 	served *servedApps
 
+	pending    *pendingSets
+	pluginOnce sync.Once
+	plugin     kitpulumi.Plugin
+	pluginErr  error
+
 	mu     sync.Mutex
 	opened map[Scope]*release
 }
@@ -75,8 +80,14 @@ func newReleaser(resolve Resolver, realized *Realized, engine kitpulumi.Engine) 
 		realized: realized,
 		engine:   engine,
 		served:   newServedApps(),
+		pending:  newPendingSets(),
 		opened:   map[Scope]*release{},
 	}
+}
+
+func (r *Releaser) assetSetPlugin() (kitpulumi.Plugin, error) {
+	r.pluginOnce.Do(func() { r.plugin, r.pluginErr = assetSetPlugin(r.pending) })
+	return r.plugin, r.pluginErr
 }
 
 func (r *Releaser) at(ctx context.Context, ref providerkit.StackRef, kind edge.Kind) (*release, error) {
@@ -87,6 +98,10 @@ func (r *Releaser) at(ctx context.Context, ref providerkit.StackRef, kind edge.K
 		return held, nil
 	}
 	cfg, err := r.resolve.Release(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	plugin, err := r.assetSetPlugin()
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +116,7 @@ func (r *Releaser) at(ctx context.Context, ref providerkit.StackRef, kind edge.K
 		Program: held,
 		Refresh: refreshPolicy(r.realized),
 		Engine:  r.engine,
+		Plugins: []kitpulumi.Plugin{plugin},
 	})
 	r.opened[scope] = held
 	return held, nil
@@ -351,10 +367,9 @@ func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, rep
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
-	if work != nil {
-		if err := r.publishBuild(ctx, prepared, work, report); err != nil {
-			return providerkit.StackResult{}, err
-		}
+	if work != nil && len(work.sets) > 0 {
+		r.pending.hold(work.stack, work.sets, report)
+		defer r.pending.drop(work.stack, work.sets)
 	}
 	return r.adapter.Run(ctx, prepared, report)
 }
@@ -394,17 +409,6 @@ func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (prov
 	}
 	plan.Options = work
 	return plan, work, nil
-}
-
-func (r *release) publishBuild(ctx context.Context, plan providerkit.StackPlan, work *appWork, report providerkit.Reporter) error {
-	app, coord := plan.App.App, appCoordinate(plan)
-	if err := publishStaticAssets(ctx, r.cfg, app, plan.App.Framework, coord, report); err != nil {
-		return err
-	}
-	if err := publishPrerenderAssets(ctx, r.cfg, app, work.cache, report); err != nil {
-		return err
-	}
-	return publishEdgeBundle(ctx, r.cfg, app, coord, work.bundle, report)
 }
 
 func (r *Releaser) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {

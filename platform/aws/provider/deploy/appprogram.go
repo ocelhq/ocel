@@ -24,9 +24,15 @@ type appWork struct {
 	logical     []string
 	bundle      appBundle
 	cache       *isrConfig
+	sets        []assetSet
+	stack       string
 }
 
 func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error {
+	pushed, err := declareAssetSets(pctx, w.stack, w.sets)
+	if err != nil {
+		return err
+	}
 	role, err := newFunctionRole(pctx, w.roleCoord, w.role)
 	if err != nil {
 		return err
@@ -35,6 +41,7 @@ func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error 
 	stack.RoleArn = role.Arn
 	stack.RoleName = role.Name
 	stack.Shipped = shipped
+	stack.Pushed = pushed
 	return stack.register(pctx)
 }
 
@@ -123,11 +130,18 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 
 	r.served.plan(r, app.App, logical, bytecode)
 
+	sets, err := r.assetSets(plan, app.App, app.Framework, bundle, cache)
+	if err != nil {
+		return nil, err
+	}
+
 	return &appWork{
 		transformed: transformed,
 		logical:     logical,
 		bundle:      bundle,
 		cache:       cache,
+		sets:        sets,
+		stack:       stack.String(),
 		roleCoord:   roleCoordinate(project, stack),
 		role:        role,
 		functions: appStackFunctions{

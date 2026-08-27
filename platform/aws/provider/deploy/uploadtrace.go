@@ -186,6 +186,12 @@ func (s *uploadBatchStats) snapshot() uploadBatchSnapshot {
 	}
 }
 
+func say(report providerkit.Reporter, line string) {
+	if report != nil {
+		report.Say(line)
+	}
+}
+
 func emitUploadBatch(report providerkit.Reporter, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
 	if report == nil || stats == nil {
 		return
