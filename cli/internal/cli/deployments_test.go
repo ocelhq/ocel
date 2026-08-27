@@ -107,7 +107,7 @@ func TestRunDeploymentsPrune(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runPromotionsPrune(context.Background(), deps, root, 10, &stdout, &stderr); err != nil {
+		if err := runPromotionsPrune(context.Background(), deps, root, 10, false, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPromotionsPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -131,7 +131,7 @@ func TestRunDeploymentsPrune(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		err := runPromotionsPrune(context.Background(), deps, root, 10, &stdout, &stderr)
+		err := runPromotionsPrune(context.Background(), deps, root, 10, false, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPromotionsPrune err = nil, want a class-mismatch failure")
 		}

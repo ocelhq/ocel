@@ -12,7 +12,7 @@ import (
 )
 
 type Confirmer interface {
-	Interactive() bool
+	Attended() bool
 	Confirm(ctx context.Context, question string) (bool, error)
 }
 
@@ -22,7 +22,7 @@ type Trust struct {
 	Suspend func() func()
 }
 
-func (t Trust) interactive() bool { return t.Ask != nil && t.Out != nil && t.Ask.Interactive() }
+func (t Trust) attended() bool { return t.Ask != nil && t.Out != nil && t.Ask.Attended() }
 
 func (t Trust) suspend() func() {
 	if t.Suspend == nil {
@@ -35,7 +35,7 @@ func driveTrusting(ctx context.Context, trust Trust, drive func() error) error {
 	err := drive()
 
 	refusal, ok := providerkit.HostTrustOf(err)
-	if !ok || refusal.Terminal() || refusal.Reason != providerkit.UnknownHostKey || !trust.interactive() {
+	if !ok || refusal.Terminal() || refusal.Reason != providerkit.UnknownHostKey || !trust.attended() {
 		return err
 	}
 

@@ -674,7 +674,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 			},
 		},
 	}
-	if req.GetSlug() != "" && req.GetRequiredTier() == environmentv1.Tier_TIER_PRODUCTION {
+	if req.GetSlug() != "" && resp.InfrastructurePresent {
 		for _, s := range strings.Split(os.Getenv(FakeKnownSlugsEnvVar), ",") {
 			if s = strings.TrimSpace(s); s != "" {
 				resp.KnownSlugs = append(resp.KnownSlugs, s)

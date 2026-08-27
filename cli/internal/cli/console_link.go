@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console/binding"
 	"github.com/ocelhq/ocel/cli/internal/console/project"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 )
 
 type consoleLinkOptions struct {
@@ -132,7 +133,7 @@ func ensureConsoleBinding(ctx context.Context, deps cmddeps.Deps, projectDir, ap
 		return existing, nil
 	}
 
-	if !isReaderTTY(stdin) {
+	if !prompt.Interactive(stdin) {
 		return nil, fmt.Errorf("%s isn't linked to a console project — run `ocel console link <project>` (or `ocel console link --create`) first", projectDir)
 	}
 
@@ -178,7 +179,7 @@ func selectOrCreateProject(
 		return nil, fmt.Errorf("no project with slug %q in %s; available: %s (or pass --create)", projectRef, org.Name, joinProjectSlugs(projects))
 	}
 
-	if !isReaderTTY(stdin) {
+	if !prompt.Interactive(stdin) {
 		if len(projects) == 0 {
 			return nil, errors.New("no project selected — pass --create to make one")
 		}
@@ -303,7 +304,7 @@ func pickOrganization(ctx context.Context, client *auth.Client, accessToken stri
 		return &orgs[0], nil
 	}
 
-	if !isReaderTTY(stdin) {
+	if !prompt.Interactive(stdin) {
 		return nil, fmt.Errorf("multiple organizations found; pass --org <slug>. available: %s", joinOrgSlugs(orgs))
 	}
 

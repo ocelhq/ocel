@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -317,6 +318,33 @@ export default {
 		}
 	})
 
+	t.Run("a slug this preview environment has never seen is guarded like production's", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
+		deps.StdinIsTerminal = func(io.Reader) bool { return true }
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
+
+		var stdout, stderr bytes.Buffer
+		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
+			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		out := stdout.String()
+		for _, want := range []string{"This will create a NEW project.", "This backend already has: my-application, billing", "Aborted."} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout missing %q:\n%s", want, out)
+			}
+		}
+		if strings.Contains(out, "DEPLOY tier=TIER_PREVIEW") {
+			t.Errorf("stdout = %q, want the declined guard to stop the preview before it deploys", out)
+		}
+	})
+
 	t.Run("no provider configured errors before any spawn", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -582,7 +610,7 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 			return runPreviewRm(context.Background(), deps, root, previewRmOptions{}, stdout, stderr, strings.NewReader(""))
 		}},
 		{"prune", func(t *testing.T, deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
-			return runPreviewPrune(context.Background(), deps, root, previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}, stdout, stderr)
+			return runPreviewPrune(context.Background(), deps, root, previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}, stdout, stderr, strings.NewReader(""))
 		}},
 	}
 	for _, tc := range teardowns {
@@ -660,32 +688,6 @@ func readPreflightJournal(t *testing.T, path string) []preflightRecord {
 		records = append(records, rec)
 	}
 	return records
-}
-
-func TestConfirmDestroyPreview(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{"yes proceeds", "y\n", true},
-		{"declined defaults to abort", "n\n", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			got, err := confirmDestroyPreview(context.Background(), "staging", strings.NewReader(tc.input))
-			if err != nil {
-				t.Fatalf("confirmDestroyPreview(context.Background(), ) error = %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("confirmDestroyPreview(context.Background(), %q) = %v, want %v", tc.input, got, tc.want)
-			}
-		})
-	}
 }
 
 func TestRequirePreviewDomain(t *testing.T) {

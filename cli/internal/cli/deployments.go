@@ -45,7 +45,10 @@ var deploymentsLsCmd = &cobra.Command{
 
 const defaultPruneKeepN = 10
 
-var pruneKeepN int
+var (
+	pruneKeepN int
+	pruneYes   bool
+)
 
 var deploymentsPruneCmd = &cobra.Command{
 	Use:   "prune",
@@ -58,13 +61,14 @@ var deploymentsPruneCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runPromotionsPrune(ctx, newDeps(), cwd, pruneKeepN, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runPromotionsPrune(ctx, newDeps(), cwd, pruneKeepN, pruneYes, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
 func init() {
 	deploymentsCmd.AddCommand(deploymentsLsCmd)
 	deploymentsPruneCmd.Flags().IntVar(&pruneKeepN, "keep", defaultPruneKeepN, "Number of most recent promotions to keep, always additionally pinning the active one")
+	cmddeps.Yes(deploymentsPruneCmd, &pruneYes)
 	deploymentsCmd.AddCommand(deploymentsPruneCmd)
 }
 
@@ -95,13 +99,13 @@ func runPromotionsLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout,
 	})
 }
 
-func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keepN int, stdout, stderr io.Writer) error {
+func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keepN int, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel deployments prune", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel deployments prune", cfg, yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		if err := preflight.Tier(ctx, ui.Presentation(), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
 			return err
 		}

@@ -3,7 +3,6 @@ package changeplan
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -12,8 +11,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 )
-
-const BypassEnv = "OCEL_DESTROY_BYPASS_CONFIRMATION"
 
 const (
 	stackKind     = "stack"
@@ -24,10 +21,6 @@ const (
 	typeGutter    = "   "
 	slowNote      = " (this one is slow)"
 )
-
-func BypassRequest() string {
-	return strings.TrimSpace(os.Getenv(BypassEnv))
-}
 
 type Printer struct {
 	out   io.Writer

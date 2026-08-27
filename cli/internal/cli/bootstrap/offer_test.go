@@ -129,7 +129,7 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
 		)
 		var out bytes.Buffer
-		err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, &out)
+		err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, &out, nil)
 		if err == nil {
 			t.Fatal("a deploy against a bootstrap missing a feature it needs was allowed through")
 		}
@@ -143,7 +143,7 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
 		)
 		var out bytes.Buffer
-		if err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PREVIEW, nil, false, &out); err != nil {
+		if err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PREVIEW, nil, false, &out, nil); err != nil {
 			t.Fatalf("a bootstrap that is merely behind stopped the deploy: %v", err)
 		}
 		for _, want := range []string{"ocel-bootstrap-isr", "ocel bootstrap preview --features isr"} {
@@ -158,7 +158,7 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
 		)
 		var out bytes.Buffer
-		if err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, &out); err != nil {
+		if err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, &out, nil); err != nil {
 			t.Fatalf("offerBootstrap err = %v", err)
 		}
 		if out.Len() != 0 {

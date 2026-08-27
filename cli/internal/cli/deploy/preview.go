@@ -33,6 +33,7 @@ type previewUpOptions struct {
 	name     string
 	prebuilt bool
 	noUI     bool
+	yes      bool
 }
 
 type previewRmOptions struct {
@@ -44,6 +45,7 @@ type previewRmOptions struct {
 type previewPruneOptions struct {
 	name string
 	keep int
+	yes  bool
 }
 
 const defaultPreviewPruneKeepN = 3
@@ -105,7 +107,7 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 	}
 	rm.Flags().StringVar(&rmOpts.ref, "ref", "", "Tear down the preview for this git `ref` instead of the current branch")
 	rm.Flags().StringVar(&rmOpts.name, "name", "", "Tear down the named preview")
-	rm.Flags().BoolVarP(&rmOpts.yes, "yes", "y", false, "Skip the confirmation prompt")
+	cmddeps.Yes(rm, &rmOpts.yes)
 
 	ls := &cobra.Command{
 		Use:     "ls",
@@ -141,11 +143,12 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 			opts := pruneOpts
 			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
-			return runPreviewPrune(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runPreviewPrune(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	prune.Flags().StringVar(&pruneOpts.name, "name", "", "The named preview to prune")
 	prune.Flags().IntVar(&pruneOpts.keep, "keep", defaultPreviewPruneKeepN, "How many recent deployments to keep (the live one always stays)")
+	cmddeps.Yes(prune, &pruneOpts.yes)
 	_ = prune.MarkFlagRequired("name")
 
 	cmd.AddCommand(up, rm, ls, prune)
@@ -157,6 +160,7 @@ func previewUpFlags(cmd *cobra.Command, opts *previewUpOptions) {
 	cmd.Flags().StringVar(&opts.ref, "ref", "", "Deploy the preview for this git `ref` instead of the current branch")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	cmd.Flags().BoolVar(&opts.noUI, "no-ui", false, noUIFlagUsage)
+	cmddeps.Yes(cmd, &opts.yes)
 }
 
 func previewUpRunE(deps cmddeps.Deps, upOpts *previewUpOptions) func(cmd *cobra.Command, args []string) error {
@@ -190,8 +194,14 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview up", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		if err := preflightPreviewUp(ctx, deps, ui.Presentation(), runner, cfg, env.GetIdentity(), stdout, stdin); err != nil {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview up", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		knownSlugs, err := preflightPreviewUp(ctx, ui, runner, cfg, env.GetIdentity(), stdout, stdin)
+		if err != nil {
+			return err
+		}
+
+		proceed, err := guardNewProject(ctx, ui, cfg, knownSlugs, stdout)
+		if err != nil || !proceed {
 			return err
 		}
 
@@ -325,22 +335,22 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	}
 
 	persistent := env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
-	if persistent && !opts.yes && deps.StdinIsTerminal(stdin) {
-		proceed, err := confirmDestroyPreview(ctx, env.GetIdentity(), stdin)
-		if err != nil {
-			if ctx.Err() != nil {
-				fmt.Fprintln(stdout, "Interrupted.")
-				return &exitsig.ExitError{Code: exitsig.InterruptCode}
-			}
-			return err
-		}
-		if !proceed {
-			fmt.Fprintln(stdout, "Aborted.")
-			return nil
-		}
-	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview rm", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview rm", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if persistent {
+			proceed, err := ui.Guard(ctx, fmt.Sprintf("Tear down the named preview %q?", env.GetIdentity()))
+			if err != nil {
+				if ctx.Err() != nil {
+					fmt.Fprintln(stdout, "Interrupted.")
+					return &exitsig.ExitError{Code: exitsig.InterruptCode}
+				}
+				return err
+			}
+			if !proceed {
+				return nil
+			}
+		}
+
 		if err := preflightPreview(ctx, ui.Presentation(), runner, cfg, stdout); err != nil {
 			return err
 		}
@@ -380,7 +390,7 @@ func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, st
 	})
 }
 
-func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewPruneOptions, stdout, stderr io.Writer) error {
+func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewPruneOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	if opts.name == "" {
 		return fmt.Errorf("`ocel preview prune` needs --name: only named previews are pruned")
 	}
@@ -394,7 +404,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview prune", cfg, stdout), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview prune", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		if err := preflightPreview(ctx, ui.Presentation(), runner, cfg, stdout); err != nil {
 			return err
 		}
@@ -475,10 +485,6 @@ func resolveRmEnvironment(deps cmddeps.Deps, cwd string, opts previewRmOptions) 
 		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 		Identity:  id.Key,
 	}, nil
-}
-
-func confirmDestroyPreview(ctx context.Context, name string, stdin io.Reader) (bool, error) {
-	return confirm(ctx, fmt.Sprintf("Tear down the named preview %q?", name), stdin)
 }
 
 func renderEnvironments(stdout io.Writer, envs []*contractv1.PreviewEnvironment) {

@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
 func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
@@ -146,10 +146,10 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
 			t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-			t.Setenv(changeplan.BypassEnv, "test-app")
+			t.Setenv(runui.BypassEnv, "test-app")
 
 			var stdout, stderr bytes.Buffer
-			if err := runDestroyProduction(context.Background(), deps, root, false, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
