@@ -100,6 +100,9 @@ func appEntry(app *contractv1.ManifestApp, env string) (AppEntry, error) {
 		return AppEntry{}, Refuse(CodeInvalid,
 			"app %q uses the name reserved for the environment's infra stack; rename the app", name)
 	}
+	if err := naming.Validate("app name", name); err != nil {
+		return AppEntry{}, Refuse(CodeInvalid, "%s", err.Error())
+	}
 	identity, err := NewBuild(app.GetDeploymentId(), env, FingerprintVariables(app.GetVariables()))
 	if err != nil {
 		return AppEntry{}, err
