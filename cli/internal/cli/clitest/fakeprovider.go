@@ -1206,7 +1206,7 @@ func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *contr
 		return err
 	}
 	journalEdge(req.GetEdge().GetKind(), nil, nil)
-	if err := stream.Send(fakeProgress("DESTROY PROJECT project=" + req.GetSlug() + " dns=" + req.GetEdge().GetDns().GetKind() + " " + describeEnv(req.GetEnvironment()))); err != nil {
+	if err := stream.Send(fakeProgress("DESTROY PROJECT project=" + req.GetSlug() + " dns=" + req.GetEdge().GetDns().GetKind() + " " + describeEnv(req.GetEnvironment()) + describeConsent(req.GetConsented()))); err != nil {
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
@@ -1248,6 +1248,17 @@ func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *co
 			},
 		},
 	}, nil
+}
+
+func describeConsent(consented *planv1.ChangePlan) string {
+	var names []string
+	for _, group := range consented.GetGroups() {
+		names = append(names, group.GetName())
+	}
+	if len(names) == 0 {
+		return " consented=none"
+	}
+	return " consented=" + strings.Join(names, ",")
 }
 
 func describeEnv(env *environmentv1.Environment) string {

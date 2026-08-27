@@ -242,8 +242,8 @@ message BootstrapRequest {
   // Draw the plan, emit it as a plan event and stop: the stream changes nothing.
   bool dry = 8;
 
-  // The plan a human consented to. An apply carrying one emits no plan of its
-  // own and refuses to exceed it.
+  // An apply carrying a consented plan emits no plan of its own and refuses
+  // work that plan never showed.
   common.plan.v1.ChangePlan consented = 9;
 }
 
@@ -354,7 +354,7 @@ message BootstrapScope {
 
   EdgeSelection edge = 2;
 
-  // The plan a human consented to. A removal carrying one refuses to exceed it.
+  // A removal carrying a consented plan refuses work that plan never showed.
   common.plan.v1.ChangePlan consented = 3;
 }
 
@@ -372,6 +372,9 @@ message ProjectRequest {
   common.environment.v1.Environment environment = 2;
 
   EdgeSelection edge = 3;
+
+  // A removal carrying a consented plan refuses work that plan never showed.
+  common.plan.v1.ChangePlan consented = 4;
 }
 
 message ListEnvironmentsRequest {
