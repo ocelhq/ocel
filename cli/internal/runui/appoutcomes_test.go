@@ -6,8 +6,8 @@ import (
 	"slices"
 	"testing"
 
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func providerResult(success bool, apps ...*progressv1.AppResult) *progressv1.OperationEvent {
