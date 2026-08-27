@@ -164,6 +164,7 @@ func publishStaticAssets(ctx context.Context, cfg Config, app, framework string,
 		read := sync.OnceValues(func() ([]byte, error) { return os.ReadFile(u.src) })
 		for _, to := range u.to {
 			g.Go(func() error {
+				defer takeUploadSlot()()
 				if u.replace {
 					data, err := read()
 					if err != nil {
