@@ -49,6 +49,12 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		if err != nil {
 			return nil, RefusalError(err)
 		}
+		if class == ClassPreview {
+			resp.PreviewWildcard, err = heldPreviewWildcard(ctx, provider)
+			if err != nil {
+				return nil, RefusalError(err)
+			}
+		}
 		return resp, nil
 	}
 

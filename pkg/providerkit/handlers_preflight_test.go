@@ -11,6 +11,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestPreflightReportsWhoThisRunIsAndWhatItCarries(t *testing.T) {
@@ -103,6 +104,41 @@ func TestPreflightRequiresTheFeaturesTheEdgeNeeds(t *testing.T) {
 		if stack.GetFeature() == fake.FeatureCache && !stack.GetRequired() {
 			t.Errorf("%s is not marked required, and the relay edge needs it", fake.FeatureCache)
 		}
+	}
+}
+
+func TestPreflightCarriesTheGlobalPreviewWildcard(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client, _ := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
+
+	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if resp.GetPreviewWildcard() != nil {
+		t.Errorf("Preflight() = %+v, want no wildcard before one is used", resp.GetPreviewWildcard())
+	}
+
+	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
+	}
+
+	resp, err = client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PREVIEW})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	held := resp.GetPreviewWildcard()
+	if held.GetBaseDomain() != "preview.acme.com" {
+		t.Fatalf("Preflight() wildcard = %+v, want the recorded base domain", held)
+	}
+	if !held.GetRouteInstalled() {
+		t.Error("Preflight() says the shared entry route is not installed, though the edge owns it")
+	}
+	if held.GetGrammarMin() != edge.PreviewGrammarMin || held.GetGrammarMax() != edge.PreviewGrammarMax {
+		t.Errorf("Preflight() wildcard grammar = %d–%d, want %d–%d", held.GetGrammarMin(), held.GetGrammarMax(), edge.PreviewGrammarMin, edge.PreviewGrammarMax)
 	}
 }
 
