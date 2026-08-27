@@ -358,6 +358,105 @@ func streamedPlan(t *testing.T, client contractv1connect.ProviderServiceClient, 
 	return plan
 }
 
+func streamedEvents(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.BootstrapRequest) ([]*progressv1.OperationEvent, error) {
+	t.Helper()
+
+	stream, err := client.Bootstrap(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Bootstrap() error = %v", err)
+	}
+	defer stream.Close()
+	var events []*progressv1.OperationEvent
+	for stream.Receive() {
+		events = append(events, stream.Msg())
+	}
+	return events, stream.Err()
+}
+
+func TestAnApplyCarryingAConsentedPlanDrawsNoPlanOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+	req := &contractv1.BootstrapRequest{
+		Tier:     environmentv1.Tier_TIER_PRODUCTION,
+		Features: []string{fake.FeatureImages},
+		Dry:      true,
+	}
+	consented := streamedPlan(t, client, req)
+	if consented == nil {
+		t.Fatal("the dry run streamed no plan, and the only thing consented to is the plan")
+	}
+
+	req.Dry, req.Consented = false, consented
+	events, err := streamedEvents(t, client, req)
+	if err != nil {
+		t.Fatalf("Bootstrap() applying the consented plan = %v", err)
+	}
+	for _, ev := range events {
+		if ev.GetPlan() != nil {
+			t.Errorf("the apply drew a plan of its own, want the run to show one plan — the one it was handed")
+		}
+	}
+}
+
+func TestAnApplyRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.2.3")
+	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+
+	req := &contractv1.BootstrapRequest{
+		Tier:     environmentv1.Tier_TIER_PRODUCTION,
+		Features: []string{fake.FeatureCache},
+		Dry:      true,
+	}
+	consented := streamedPlan(t, client, req)
+	if consented == nil {
+		t.Fatal("the dry run streamed no plan, and the only thing consented to is the plan")
+	}
+	provider.Bootstrapper().Behind(fake.FeatureCache)
+
+	req.Dry, req.Consented = false, consented
+	_, err := streamedEvents(t, client, req)
+	if err == nil {
+		t.Fatal("Bootstrap() = nil, want an apply that outgrew its consented plan refused")
+	}
+	if !strings.Contains(err.Error(), fake.FeatureCache) {
+		t.Errorf("the refusal reads %q, want it to name what moved under the plan", err)
+	}
+}
+
+func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client, provider := contractServed(t, "1.2.3")
+	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+
+	scope := &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION}
+	consented, err := client.PlanRemoveBootstrap(ctx, scope)
+	if err != nil {
+		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
+	}
+
+	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+
+	scope.Consented = consented
+	stream, err := client.RemoveBootstrap(ctx, scope)
+	if err != nil {
+		t.Fatalf("RemoveBootstrap() error = %v", err)
+	}
+	defer stream.Close()
+	for stream.Receive() {
+	}
+	if stream.Err() == nil {
+		t.Fatal("RemoveBootstrap() = nil, want a removal that outgrew its consented plan refused")
+	}
+	if !strings.Contains(stream.Err().Error(), fake.FeatureImages) {
+		t.Errorf("the refusal reads %q, want it to name what stood up under the plan", stream.Err())
+	}
+}
+
 func TestBootstrapShowsThePlanItIsAboutToApply(t *testing.T) {
 	t.Parallel()
 

@@ -253,9 +253,18 @@ func (g Gate) Apply(ctx context.Context, shown Plan, class Class, req ApplyReque
 	return EnsureRecordSchema(ctx, g.Records, class)
 }
 
-func (g Gate) Remove(ctx context.Context, class Class, report Reporter) error {
+func (g Gate) Remove(ctx context.Context, shown Plan, class Class, report Reporter) error {
 	if err := g.Vacant(ctx, class); err != nil {
 		return err
+	}
+	if len(shown.Groups) > 0 {
+		standing, err := g.Bootstrapper.PlanRemoval(ctx, class)
+		if err != nil {
+			return err
+		}
+		if err := RefuseGrowth(shown, standing); err != nil {
+			return err
+		}
 	}
 	if err := g.Bootstrapper.Remove(ctx, class, report); err != nil {
 		return err
