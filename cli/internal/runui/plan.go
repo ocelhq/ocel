@@ -319,7 +319,7 @@ func actionWords(action planv1.Change_Action) string {
 	}
 }
 
-func mutates(plan *planv1.ChangePlan) bool {
+func Mutates(plan *planv1.ChangePlan) bool {
 	_, counts := readPlan(plan)
 	return len(counts.acted) > 0
 }

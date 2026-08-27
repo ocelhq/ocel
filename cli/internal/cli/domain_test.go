@@ -378,8 +378,7 @@ export default {
 			"fronted by the cloudflare edge",
 			"– preview entry worker *.preview.acme.com",
 			"This cannot be undone.",
-			"Left in place:",
-			"  DNS record *.preview.acme.com CNAME you.example.com  — you created it yourself; ocel never wrote it",
+			"1 to delete, 1 unchanged.",
 			"RELEASE DOMAIN tier=TIER_PREVIEW",
 			"Released *.preview.acme.com",
 		} {
@@ -387,8 +386,8 @@ export default {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
 		}
-		if strings.Index(out, "  DNS record") < strings.Index(out, "This cannot be undone.") {
-			t.Errorf("stdout listed a kept item among the doomed ones:\n%s", out)
+		if strings.Contains(out, "you created it yourself") {
+			t.Errorf("stdout spent a row on a record nothing touches:\n%s", out)
 		}
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})

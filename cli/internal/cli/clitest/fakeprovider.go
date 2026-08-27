@@ -561,7 +561,7 @@ func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv
 	if err := refuseToDrawThePlan(); err != nil {
 		return err
 	}
-	if plan := fakeChangePlan(req); plan != nil {
+	if plan := fakeChangePlan(req); plan != nil && req.GetConsented() == nil {
 		if err := stream.Send(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Plan{Plan: plan}}); err != nil {
 			return err
 		}

@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
@@ -148,9 +147,9 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 			return nil
 		}
 
-		printDestroyPlan(stdout, ui.Presentation(), cfg.Slug, false, plan)
+		showDestroyPlan(ui, cfg.Slug, false, plan)
 		if dry {
-			fmt.Fprintln(stdout, "Run without --dry to destroy.")
+			ui.Diagnostic("Run without --dry to destroy.")
 			return nil
 		}
 		granted, err := ui.ConsentByName(ctx, "project name", plan.GetSubject())
@@ -205,9 +204,9 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 			return nil
 		}
 
-		printDestroyPlan(stdout, ui.Presentation(), cfg.Slug, true, plan)
+		showDestroyPlan(ui, cfg.Slug, true, plan)
 		if dry {
-			fmt.Fprintln(stdout, "Run without --dry to destroy.")
+			ui.Diagnostic("Run without --dry to destroy.")
 			return nil
 		}
 
@@ -229,15 +228,15 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 	})
 }
 
-func printDestroyPlan(out io.Writer, present runui.Presentation, slug string, preview bool, plan *planv1.ChangePlan) {
+func showDestroyPlan(ui *runui.Session, slug string, preview bool, plan *planv1.ChangePlan) {
 	if preview {
-		changeplan.NewPrinter(out, present).Print(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
+		ui.Plan(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
 			"– all stored preview assets belonging to this project",
 			"– every preview variable value this project holds, including each preview's own overrides",
 			"The account-level preview bootstrap is left intact. This cannot be undone.")
 		return
 	}
-	changeplan.NewPrinter(out, present).Print(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
+	ui.Plan(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
 		"– all stored assets belonging to this project",
 		"– every production variable value this project holds, and their history",
 		"This cannot be undone.")

@@ -85,6 +85,20 @@ Proposed changes to the production bootstrap:
 	}
 }
 
+func TestAnActionThisCLIDoesNotKnowReadsAsASentence(t *testing.T) {
+	t.Parallel()
+
+	got := projectPlan(t, &planv1.ChangePlan{
+		Headline: "This will permanently destroy production project \"shop\"",
+		Groups: []*planv1.ChangeGroup{
+			{Kind: "certificate", Name: "shop.example.com", Action: planv1.Change_Action(97)},
+		},
+	})
+	if !strings.Contains(got, "an action this CLI does not know") || !strings.Contains(got, "certificate shop.example.com") {
+		t.Errorf("projection = %q, want the unknown action named before the resource", got)
+	}
+}
+
 func TestAPlanPaintsTheSigilAndDimsWhatSaysWhy(t *testing.T) {
 	t.Parallel()
 

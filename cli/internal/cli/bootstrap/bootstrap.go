@@ -11,7 +11,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
@@ -239,12 +238,14 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		if err != nil {
 			return err
 		}
+		var consented *planv1.ChangePlan
 		rendered := len(plan.GetGroups()) > 0
 		if rendered {
-			changeplan.NewPrinter(stdout, ui.Presentation()).Render(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan)
-			if changeplan.AllKeep(plan) {
-				fmt.Fprint(stdout, "\nNo infrastructure changes — applying refreshes bootstrap seals and records.\n")
+			var notes []string
+			if !runui.Mutates(plan) {
+				notes = append(notes, "No infrastructure changes — applying refreshes bootstrap seals and records.")
 			}
+			consented = ui.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan, notes...)
 		} else if len(going) > 0 {
 			fmt.Fprintf(stdout, "Removing %s from the %s bootstrap tears down what it stood up.\n", strings.Join(going, ", "), Name(tier))
 			if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
@@ -277,8 +278,8 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		}
 
 		title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package())
-		if rendered && !changeplan.AllKeep(plan) {
-			title = fmt.Sprintf("%s with %s?", changeplan.ConfirmVerb(plan), runner.Package())
+		if rendered {
+			title = fmt.Sprintf("%s with %s?", runui.ConfirmVerb(consented), runner.Package())
 		}
 		granted, err := ui.Consent(ctx, title)
 		if err != nil || !granted {
@@ -286,6 +287,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		}
 
 		req := request(false)
+		req.Consented = consented
 		req.AcceptReplacements = rendered
 		req.Force = req.Force || len(going) > 0
 

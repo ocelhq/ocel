@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ocelhq/ocel/cli/internal/changeplan"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -63,10 +62,10 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 			ui.Finish(fmt.Sprintf("Nothing to destroy: the %s environment is not bootstrapped", name))
 			return nil
 		}
-		changeplan.NewPrinter(stdout, ui.Presentation()).Print(fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
+		consented := ui.Plan(fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
 			"Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
 		if opts.Dry {
-			fmt.Fprintln(stdout, "Run without --dry to destroy.")
+			ui.Diagnostic("Run without --dry to destroy.")
 			return nil
 		}
 		granted, err := ui.ConsentByName(ctx, "environment name", plan.GetSubject())
@@ -75,8 +74,9 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		}
 
 		req := &contractv1.BootstrapScope{
-			Tier: tier,
-			Edge: edgewire.Selection(cfg),
+			Tier:      tier,
+			Edge:      edgewire.Selection(cfg),
+			Consented: consented,
 		}
 		if err := provider.Stream(ctx, runner, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap, ui.Event); err != nil {
 			return err
