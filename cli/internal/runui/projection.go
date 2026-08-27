@@ -290,6 +290,9 @@ func (p *projector) phaseOf(id string) *block {
 func (p *projector) buffer(stageID []byte, text string) []string {
 	id := stageKey(stageID)
 	lines := indented(text)
+	if len(lines) == 0 {
+		return nil
+	}
 	if b := p.phaseOf(id); b != nil {
 		b.lines = append(b.lines, lines...)
 		return nil
@@ -302,6 +305,12 @@ func (p *projector) buffer(stageID []byte, text string) []string {
 
 func indented(text string) []string {
 	split := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	for len(split) > 0 && strings.TrimSpace(split[0]) == "" {
+		split = split[1:]
+	}
+	for len(split) > 0 && strings.TrimSpace(split[len(split)-1]) == "" {
+		split = split[:len(split)-1]
+	}
 	out := make([]string, 0, len(split))
 	for _, line := range split {
 		out = append(out, blockIndent+line)

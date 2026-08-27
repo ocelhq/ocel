@@ -109,8 +109,11 @@ func (w *lineWriter) take(p []byte) []string {
 		if i < 0 {
 			break
 		}
-		ready = append(ready, string(w.held[:i]))
+		line := string(w.held[:i])
 		w.held = w.held[i+1:]
+		if collapseRewrites(line) != "" {
+			ready = append(ready, line)
+		}
 	}
 	if i := bytes.LastIndexByte(w.held, '\r'); i >= 0 {
 		w.held = w.held[i:]

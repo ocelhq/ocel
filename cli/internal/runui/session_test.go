@@ -960,6 +960,31 @@ func TestASuccessfulBuildCommitsItsWholeOutputInsideTheFlushedBlock(t *testing.T
 	}
 }
 
+func TestABuildLineThatCollapsesToNothingIsNeverEmitted(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	run := startTestRun(t, dir, "ocel deploy")
+	var out bytes.Buffer
+	s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Building()
+	if _, err := s.BuildWriter().Write([]byte("\n\r\n\r\rPackages: +812\n\n\r\n")); err != nil {
+		t.Fatalf("Write() = %v", err)
+	}
+	s.BuildOK()
+
+	var messages []string
+	for _, ev := range parseNDJSON(t, out.String()) {
+		if log := ev.GetOperation().GetLog(); log != nil {
+			messages = append(messages, log.GetMessage())
+		}
+	}
+	if want := []string{"Packages: +812"}; strings.Join(messages, "|") != strings.Join(want, "|") {
+		t.Errorf("log events = %q, want only the line that carries something: %q", messages, want)
+	}
+}
+
 func TestSessionProgressIDsMatchTheProvidersOwnDerivation(t *testing.T) {
 	t.Parallel()
 
@@ -1059,8 +1084,8 @@ func TestABlockCommitsItsLinesVerbatimRightHandWhitespaceIncluded(t *testing.T) 
 	if !strings.Contains(got, blockIndent+padded+"\n") {
 		t.Errorf("stdout = %q, want the line as the stream carried it — only carriage returns collapse, and output is complete on success", got)
 	}
-	if !strings.Contains(got, "\n"+blockIndent+"\n") {
-		t.Errorf("stdout = %q, want the blank line the stream carried kept in the block", got)
+	if strings.Contains(got, "\n"+blockIndent+"\n") {
+		t.Errorf("stdout = %q, want a line that carries nothing dropped rather than committed as a bare indent", got)
 	}
 }
 
