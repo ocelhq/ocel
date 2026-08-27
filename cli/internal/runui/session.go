@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/naming"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -32,6 +34,7 @@ type Session struct {
 	present Presentation
 	gate    gate
 	waiting bool
+	shown   *planv1.ChangePlan
 
 	start      time.Time
 	buildStart time.Time
@@ -142,6 +145,17 @@ func (s *Session) diagnose(message string, level streamv1.DiagnosticLevel) {
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Diagnostic{
 		Diagnostic: &streamv1.DiagnosticEvent{Message: message, Level: level},
 	}})
+}
+
+func (s *Session) Plan(headline string, plan *planv1.ChangePlan, notes ...string) *planv1.ChangePlan {
+	drawn, ok := proto.Clone(plan).(*planv1.ChangePlan)
+	if !ok {
+		return plan
+	}
+	drawn.Headline, drawn.Notes = headline, notes
+	s.logf("[plan] %s", headline)
+	s.shown = s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Plan{Plan: drawn}}).GetPlan()
+	return s.shown
 }
 
 func (s *Session) Building() {

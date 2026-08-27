@@ -30,6 +30,7 @@ var overrides = map[protoreflect.FullName]armFunc{
 	"cli.stream.v1.RunResultEvent":      (*projector).result,
 	"cli.stream.v1.DiagnosticEvent":     (*projector).diagnostic,
 	"cli.stream.v1.WaitingEvent":        (*projector).waiting,
+	"common.plan.v1.ChangePlan":         (*projector).plan,
 }
 
 type block struct {

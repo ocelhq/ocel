@@ -11,6 +11,10 @@ message ChangePlan {
   string edge_kind = 2;
 
   repeated ChangeGroup groups = 3;
+
+  string headline = 4;
+
+  repeated string notes = 5;
 }
 
 message ChangeGroup {

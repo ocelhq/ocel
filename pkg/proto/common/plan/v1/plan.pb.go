@@ -89,6 +89,8 @@ type ChangePlan struct {
 	Subject       string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
 	EdgeKind      string                 `protobuf:"bytes,2,opt,name=edge_kind,json=edgeKind,proto3" json:"edge_kind,omitempty"`
 	Groups        []*ChangeGroup         `protobuf:"bytes,3,rep,name=groups,proto3" json:"groups,omitempty"`
+	Headline      string                 `protobuf:"bytes,4,opt,name=headline,proto3" json:"headline,omitempty"`
+	Notes         []string               `protobuf:"bytes,5,rep,name=notes,proto3" json:"notes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -140,6 +142,20 @@ func (x *ChangePlan) GetEdgeKind() string {
 func (x *ChangePlan) GetGroups() []*ChangeGroup {
 	if x != nil {
 		return x.Groups
+	}
+	return nil
+}
+
+func (x *ChangePlan) GetHeadline() string {
+	if x != nil {
+		return x.Headline
+	}
+	return ""
+}
+
+func (x *ChangePlan) GetNotes() []string {
+	if x != nil {
+		return x.Notes
 	}
 	return nil
 }
@@ -316,12 +332,14 @@ var File_common_plan_v1_plan_proto protoreflect.FileDescriptor
 
 const file_common_plan_v1_plan_proto_rawDesc = "" +
 	"\n" +
-	"\x19common/plan/v1/plan.proto\x12\x0ecommon.plan.v1\"x\n" +
+	"\x19common/plan/v1/plan.proto\x12\x0ecommon.plan.v1\"\xaa\x01\n" +
 	"\n" +
 	"ChangePlan\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x1b\n" +
 	"\tedge_kind\x18\x02 \x01(\tR\bedgeKind\x123\n" +
-	"\x06groups\x18\x03 \x03(\v2\x1b.common.plan.v1.ChangeGroupR\x06groups\"\xe4\x01\n" +
+	"\x06groups\x18\x03 \x03(\v2\x1b.common.plan.v1.ChangeGroupR\x06groups\x12\x1a\n" +
+	"\bheadline\x18\x04 \x01(\tR\bheadline\x12\x14\n" +
+	"\x05notes\x18\x05 \x03(\tR\x05notes\"\xe4\x01\n" +
 	"\vChangeGroup\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +

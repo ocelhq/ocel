@@ -1,0 +1,19 @@
+
+Proposed changes to the production bootstrap, fronted by the cloudflare edge:
+
+~ aws/ocel-bootstrap  [core]
+    ~ OcelRouterFunction  AWS::Lambda::Function
+
++ cloudflare/edge  [cloudflare-edge]
+    + ocel-edge-cache         Cloudflare::R2Bucket
+    + ocel-deployments-store  Cloudflare::Worker
+
+This cannot be undone.
+
+2 to create, 1 to update, 2 unchanged.
+
+→ Environment › Provisioning
+  updating OcelRouterFunction
+✓ Environment › Provisioning  8s
+
+✓ Bootstrapped in 11s
