@@ -49,11 +49,14 @@ func (s *servedApps) realized(logical, physical string) {
 	s.byPhysic[physical] = held
 }
 
-func (s *servedApps) byPhysicalName(physical string) (*servedFunction, bool) {
+func (s *servedApps) byPhysicalName(physical string) (servedFunction, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	held, known := s.byPhysic[physical]
-	return held, known
+	if !known {
+		return servedFunction{}, false
+	}
+	return *held, true
 }
 
 func (s *servedApps) warmed(physical string, reply warmReply) {
