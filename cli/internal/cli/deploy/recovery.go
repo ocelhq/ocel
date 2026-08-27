@@ -3,8 +3,6 @@ package deploy
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io"
 
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -27,8 +25,7 @@ type gateRecovery struct {
 
 	newGate func() *envgate.Gate
 
-	ui     *runui.Session
-	stdout io.Writer
+	ui *runui.Session
 
 	enabled bool
 }
@@ -65,7 +62,7 @@ func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *env
 
 	r.ui.Waiting(refusal.Owed(), varsSession.URL)
 	if err := r.deps.OpenBrowser(varsSession.URL); err != nil {
-		fmt.Fprintln(r.stdout, "  Couldn't open your browser automatically — open the link above yourself.")
+		r.ui.Warning("Couldn't open your browser automatically — open the link above yourself.")
 	}
 
 	run := runtrace.FromContext(ctx)

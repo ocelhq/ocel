@@ -106,6 +106,78 @@ func operation(ev *progressv1.OperationEvent) *streamv1.RunEvent {
 	return &streamv1.RunEvent{Event: &streamv1.RunEvent_Operation{Operation: ev}}
 }
 
+func TestAnOpenBlockFlushesWithTheOutcomeTheRunActuallyHad(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		result *streamv1.RunResultEvent
+		want   string
+	}{
+		{"interrupted", &streamv1.RunResultEvent{Interrupted: true, Headline: "Cancelled"}, warnMark + " web › Building interrupted"},
+		{"failed", &streamv1.RunResultEvent{Detail: "boom"}, failMark + " web › Building failed"},
+		{"succeeded", &streamv1.RunResultEvent{Success: true}, warnMark + " web › Building unfinished"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			unit, phase := appStage(1), appStage(2)
+			p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
+			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
+				Stages: []*progressv1.Stage{
+					{Id: unit, Title: "web"},
+					{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
+				},
+			}}}))
+			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
+				Progress: &progressv1.ProgressEvent{StageId: phase, Message: "step 1"},
+			}}))
+
+			got := strings.Join(p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: tc.result}}), "\n")
+			if !strings.Contains(got, "  step 1\n"+tc.want+"\n") {
+				t.Errorf("result projection =\n%s\nwant the in-flight block flushed whole, closed by %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestARunWhoseEveryPhaseCompletedSaysNothingAboutBeingInterrupted(t *testing.T) {
+	t.Parallel()
+
+	unit, phase := appStage(1), appStage(2)
+	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
+	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
+		Stages: []*progressv1.Stage{
+			{Id: unit, Title: "web"},
+			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
+		},
+	}}}))
+	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
+		SpanId: phase, StartTimeUnixNano: 1, EndTimeUnixNano: int64(time.Second) + 1,
+	}}}))
+
+	got := strings.Join(p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{
+		Result: &streamv1.RunResultEvent{Success: true, Headline: "Deployed", DurationMs: 1000},
+	}}), "\n")
+	if strings.Contains(got, "interrupted") {
+		t.Errorf("result projection =\n%s\nwant no interrupted marker on a run nobody interrupted", got)
+	}
+}
+
+func TestADegradationKeepsItsMarkAndItsOneLine(t *testing.T) {
+	t.Parallel()
+
+	got := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth}).project(
+		operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Degraded{Degraded: &progressv1.DegradedEvent{
+			Need:   "edge-middleware",
+			Detail: "web: middleware runs in the origin",
+		}}}))
+
+	want := []string{warnMark + " edge-middleware: web: middleware runs in the origin"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("projection = %q, want %q", got, want)
+	}
+}
+
 func TestAKindTheProjectionHasNeverSeenStillRenders(t *testing.T) {
 	t.Parallel()
 

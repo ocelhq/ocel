@@ -23,6 +23,7 @@ var overrides = map[protoreflect.FullName]armFunc{
 	"common.progress.v1.LogEvent":       (*projector).log,
 	"common.progress.v1.SpanEvent":      (*projector).span,
 	"common.progress.v1.DnsOwedEvent":   (*projector).dnsOwed,
+	"common.progress.v1.DegradedEvent":  (*projector).degraded,
 	"cli.stream.v1.RunResultEvent":      (*projector).result,
 	"cli.stream.v1.DiagnosticEvent":     (*projector).diagnostic,
 	"cli.stream.v1.WaitingEvent":        (*projector).waiting,
@@ -221,10 +222,7 @@ func screamingSnake(name string) string {
 }
 
 func (p *projector) stagePlan(m protoreflect.Message) []string {
-	ev, ok := m.Interface().(*progressv1.StagePlanEvent)
-	if !ok {
-		return p.generated(m)
-	}
+	ev := m.Interface().(*progressv1.StagePlanEvent)
 	var out []string
 	for _, s := range ev.GetStages() {
 		p.tree.declare(s)
@@ -294,10 +292,7 @@ func (p *projector) buffer(stageID []byte, text string) []string {
 }
 
 func (p *projector) progress(m protoreflect.Message) []string {
-	ev, ok := m.Interface().(*progressv1.ProgressEvent)
-	if !ok {
-		return p.generated(m)
-	}
+	ev := m.Interface().(*progressv1.ProgressEvent)
 	if stageKey(ev.GetStageId()) == "" {
 		return nil
 	}
@@ -305,10 +300,7 @@ func (p *projector) progress(m protoreflect.Message) []string {
 }
 
 func (p *projector) log(m protoreflect.Message) []string {
-	ev, ok := m.Interface().(*progressv1.LogEvent)
-	if !ok {
-		return p.generated(m)
-	}
+	ev := m.Interface().(*progressv1.LogEvent)
 	if !p.present.Verbose {
 		return nil
 	}
@@ -316,17 +308,14 @@ func (p *projector) log(m protoreflect.Message) []string {
 }
 
 func (p *projector) span(m protoreflect.Message) []string {
-	ev, ok := m.Interface().(*progressv1.SpanEvent)
-	if !ok {
-		return p.generated(m)
-	}
+	ev := m.Interface().(*progressv1.SpanEvent)
 	id := stageKey(ev.GetSpanId())
 	b, ok := p.blocks[id]
 	if !ok {
 		return nil
 	}
 	failed := ev.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
-	return p.flush(b, spanDuration(ev), failed, "")
+	return p.settle(b, spanDuration(ev), failed)
 }
 
 func spanDuration(ev *progressv1.SpanEvent) time.Duration {
@@ -337,7 +326,7 @@ func spanDuration(ev *progressv1.SpanEvent) time.Duration {
 	return time.Duration(end - start)
 }
 
-func (p *projector) flush(b *block, d time.Duration, failed bool, note string) []string {
+func (p *projector) take(b *block) []string {
 	delete(p.blocks, b.id)
 	for i, id := range p.open {
 		if id == b.id {
@@ -345,18 +334,18 @@ func (p *projector) flush(b *block, d time.Duration, failed bool, note string) [
 			break
 		}
 	}
-	out := append([]string{}, b.lines...)
-	switch {
-	case note != "":
-		return append(out, fmt.Sprintf("%s %s %s", warnMark, b.path, note))
-	case failed:
-		return append(out, fmt.Sprintf("%s %s failed  %s", failMark, b.path, formatDuration(d)))
-	default:
-		return append(out, fmt.Sprintf("%s %s  %s", okMark, b.path, formatDuration(d)))
-	}
+	return append([]string{}, b.lines...)
 }
 
-func (p *projector) interrupt(note string) []string {
+func (p *projector) settle(b *block, d time.Duration, failed bool) []string {
+	out := p.take(b)
+	if failed {
+		return append(out, fmt.Sprintf("%s %s failed  %s", failMark, b.path, formatDuration(d)))
+	}
+	return append(out, fmt.Sprintf("%s %s  %s", okMark, b.path, formatDuration(d)))
+}
+
+func (p *projector) strand(mark, note string) []string {
 	var out []string
 	for len(p.open) > 0 {
 		b := p.blocks[p.open[0]]
@@ -364,16 +353,13 @@ func (p *projector) interrupt(note string) []string {
 			p.open = p.open[1:]
 			continue
 		}
-		out = append(out, p.flush(b, 0, false, note)...)
+		out = append(out, append(p.take(b), fmt.Sprintf("%s %s %s", mark, b.path, note))...)
 	}
 	return out
 }
 
 func (p *projector) dnsOwed(m protoreflect.Message) []string {
-	ev, ok := m.Interface().(*progressv1.DnsOwedEvent)
-	if !ok {
-		return p.generated(m)
-	}
+	ev := m.Interface().(*progressv1.DnsOwedEvent)
 	records := ev.GetRecords()
 	if len(records) == 0 {
 		return nil
@@ -396,29 +382,25 @@ func (p *projector) dnsOwed(m protoreflect.Message) []string {
 	return append(out, "")
 }
 
+func (p *projector) degraded(m protoreflect.Message) []string {
+	ev := m.Interface().(*progressv1.DegradedEvent)
+	return []string{fmt.Sprintf("%s %s: %s", warnMark, ev.GetNeed(), ev.GetDetail())}
+}
+
 func (p *projector) diagnostic(m protoreflect.Message) []string {
-	ev, ok := m.Interface().(*streamv1.DiagnosticEvent)
-	if !ok {
-		return p.generated(m)
-	}
+	ev := m.Interface().(*streamv1.DiagnosticEvent)
 	if ev.GetMessage() == "" {
 		return nil
 	}
 	lines := strings.Split(strings.TrimRight(ev.GetMessage(), "\n"), "\n")
-	switch ev.GetLevel() {
-	case streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_WARNING:
+	if ev.GetLevel() == streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_WARNING {
 		lines[0] = warnMark + " " + lines[0]
-	case streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_ERROR:
-		lines[0] = failMark + " " + lines[0]
 	}
 	return lines
 }
 
 func (p *projector) waiting(m protoreflect.Message) []string {
-	ev, ok := m.Interface().(*streamv1.WaitingEvent)
-	if !ok {
-		return p.generated(m)
-	}
+	ev := m.Interface().(*streamv1.WaitingEvent)
 	out := []string{""}
 	out = append(out, strings.Split(strings.TrimRight(ev.GetReason(), "\n"), "\n")...)
 	return append(out,
@@ -432,18 +414,17 @@ func (p *projector) waiting(m protoreflect.Message) []string {
 }
 
 func (p *projector) result(m protoreflect.Message) []string {
-	ev, ok := m.Interface().(*streamv1.RunResultEvent)
-	if !ok {
-		return p.generated(m)
-	}
-	out := p.interrupt("interrupted")
+	ev := m.Interface().(*streamv1.RunResultEvent)
 	d := time.Duration(ev.GetDurationMs()) * time.Millisecond
+	if ev.GetInterrupted() {
+		out := p.strand(warnMark, "interrupted")
+		out = append(out, "", fmt.Sprintf("%s %s in %s", warnMark, headlineOr(ev, "Interrupted"), formatDuration(d)))
+		out = append(out, detailLines(ev.GetDetail())...)
+		return append(out, logPointer("Log", ev.GetLogPath())...)
+	}
 	if ev.GetSuccess() {
-		headline := ev.GetHeadline()
-		if headline == "" {
-			headline = "Done"
-		}
-		out = append(out, "", fmt.Sprintf("%s %s in %s", okMark, headline, formatDuration(d)))
+		out := p.strand(warnMark, "unfinished")
+		out = append(out, "", fmt.Sprintf("%s %s in %s", okMark, headlineOr(ev, "Done"), formatDuration(d)))
 		switch {
 		case len(ev.GetAppUrls()) > 0:
 			out = append(out, "")
@@ -459,17 +440,28 @@ func (p *projector) result(m protoreflect.Message) []string {
 		return append(out, logPointer("Details", ev.GetLogPath())...)
 	}
 
-	headline := ev.GetHeadline()
-	if headline == "" {
-		headline = "Failed"
-	}
-	out = append(out, "", failMark+" "+headline)
-	if ev.GetError() != "" {
-		for _, line := range strings.Split(strings.TrimRight(ev.GetError(), "\n"), "\n") {
-			out = append(out, blockIndent+line)
-		}
-	}
+	out := p.strand(failMark, "failed")
+	out = append(out, "", failMark+" "+headlineOr(ev, "Failed"))
+	out = append(out, detailLines(ev.GetDetail())...)
 	return append(out, logPointer("Full log", ev.GetLogPath())...)
+}
+
+func headlineOr(ev *streamv1.RunResultEvent, fallback string) string {
+	if h := ev.GetHeadline(); h != "" {
+		return h
+	}
+	return fallback
+}
+
+func detailLines(detail string) []string {
+	if detail == "" {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(strings.TrimRight(detail, "\n"), "\n") {
+		out = append(out, blockIndent+line)
+	}
+	return out
 }
 
 func logPointer(label, logPath string) []string {

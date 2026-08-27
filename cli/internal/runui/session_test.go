@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -230,6 +231,9 @@ func TestSession(t *testing.T) {
 				t.Errorf("stdout = %q, want it to contain %q", got, want)
 			}
 		}
+		if !strings.Contains(got, warnMark+" Cancelled") {
+			t.Errorf("stdout = %q, want an interruption marked as one rather than as a failure", got)
+		}
 	})
 
 	t.Run("waiting prints where to go and how to abort", func(t *testing.T) {
@@ -308,7 +312,7 @@ func TestSession(t *testing.T) {
 			},
 		}})
 
-		if title := s.stream.Renderer().plan.nodes[stageKey(build)].title; title != "Building" {
+		if title := s.stream.r.plan.nodes[stageKey(build)].title; title != "Building" {
 			t.Errorf("stage title = %q, want %q", title, "Building")
 		}
 	})
@@ -324,7 +328,7 @@ func TestSession(t *testing.T) {
 			},
 		}})
 
-		if title := s.stream.Renderer().plan.nodes[stageKey(stage)].title; title != "Provisioning" {
+		if title := s.stream.r.plan.nodes[stageKey(stage)].title; title != "Provisioning" {
 			t.Errorf("stage title = %q, want the phase label the declaration carries", title)
 		}
 	})
@@ -724,8 +728,28 @@ func TestFormatAxis(t *testing.T) {
 		run := startTestRun(t, dir, "ocel deploy")
 		s := New(&bytes.Buffer{}, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
-		if s.stream.Renderer() != nil {
+		if s.stream.r != nil {
 			t.Error("json format entered the live-region view, which only makes sense for human output on a terminal")
+		}
+	})
+
+	t.Run("verbose build output survives json format, off the stream and in the log", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		run := startTestRun(t, dir, "ocel deploy")
+		var out bytes.Buffer
+		s := New(&out, run, Presentation{Format: FormatJSON, Verbose: true, Width: defaultWidth})
+		t.Cleanup(func() { _ = s.Close() })
+
+		if _, err := io.WriteString(s.BuildWriter(), "webpack compiled\n"); err != nil {
+			t.Fatalf("BuildWriter().Write() = %v", err)
+		}
+
+		if strings.Contains(out.String(), "webpack compiled") {
+			t.Errorf("stdout = %q, want raw build output kept out of the ndjson stream", out.String())
+		}
+		if got := readLog(t, s.LogPath()); !strings.Contains(got, "webpack compiled") {
+			t.Errorf("log = %q, want the build output the stream cannot carry", got)
 		}
 	})
 
@@ -770,7 +794,7 @@ func TestSpanWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
 			var out bytes.Buffer
 			s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 			t.Cleanup(func() { _ = s.Close() })
-			s.stream.Renderer().useClock(func() time.Time { return now })
+			s.stream.r.useClock(func() time.Time { return now })
 
 			s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
 				StagePlan: &progressv1.StagePlanEvent{
@@ -787,7 +811,7 @@ func TestSpanWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
 				},
 			}})
 
-			got := s.stream.Renderer().plan.nodes[stageKey(stage)].doneDur
+			got := s.stream.r.plan.nodes[stageKey(stage)].doneDur
 			if got < 2*time.Minute || got > 2*time.Minute+time.Second {
 				t.Errorf("committed duration = %v, want the 2m the stage actually ran, not a collapsed span end", got)
 			}

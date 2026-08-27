@@ -4,4 +4,4 @@ stages:
 plan:
 waits:
 results:
-  success=false headline="Cancelled" error="" duration_ms=4000
+  success=false interrupted=true headline="Cancelled" detail="Resources may be partially created.\nRe-run `ocel deploy` to reconcile." duration_ms=4000

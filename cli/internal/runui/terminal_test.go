@@ -172,7 +172,7 @@ func TestColoredLiveRowFitsTheTerminal(t *testing.T) {
 	drawnRow := func(colorEnabled bool) string {
 		var out bytes.Buffer
 		s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Color: colorEnabled, Width: 40})
-		s.Renderer().useClock(func() time.Time { return time.Unix(0, 0) })
+		s.r.useClock(func() time.Time { return time.Unix(0, 0) })
 
 		app := appStage(1)
 		s.Emit(stagePlanEvent(&progressv1.Stage{Id: app, Title: "a-long-application-name"}))

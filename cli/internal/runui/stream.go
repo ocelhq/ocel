@@ -36,7 +36,37 @@ func NewStream(w io.Writer, present Presentation) *Stream {
 	return s
 }
 
-func (s *Stream) Renderer() *Renderer { return s.r }
+func (s *Stream) BuildWriter() io.Writer {
+	if s.r == nil {
+		return io.Discard
+	}
+	return s.r
+}
+
+func (s *Stream) Suspend() func() {
+	if s.r == nil {
+		return func() {}
+	}
+	return s.r.Suspend()
+}
+
+func (s *Stream) Pause() {
+	if s.r != nil {
+		s.r.Pause()
+	}
+}
+
+func (s *Stream) Resume() {
+	if s.r != nil {
+		s.r.Resume()
+	}
+}
+
+func (s *Stream) Restart(stageID []byte) {
+	if s.r != nil {
+		s.r.Restart(stageID)
+	}
+}
 
 func (s *Stream) Emit(ev *streamv1.RunEvent) *streamv1.RunEvent {
 	ev = normalize(ev)

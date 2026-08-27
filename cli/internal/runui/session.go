@@ -69,22 +69,25 @@ func (s *Session) BuildWriter() io.Writer {
 		return io.Discard
 	}
 	if s.logWriter != nil {
-		return io.MultiWriter(s.stream.Renderer(), s.logWriter)
+		return io.MultiWriter(s.stream.BuildWriter(), s.logWriter)
 	}
-	return s.stream.Renderer()
+	return s.stream.BuildWriter()
 }
 
-func (s *Session) Suspend() func() {
-	if r := s.stream.Renderer(); r != nil {
-		return r.Suspend()
-	}
-	return func() {}
-}
+func (s *Session) Suspend() func() { return s.stream.Suspend() }
 
 func (s *Session) Diagnostic(message string) {
+	s.diagnose(message, streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_INFO)
+}
+
+func (s *Session) Warning(message string) {
+	s.diagnose(message, streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_WARNING)
+}
+
+func (s *Session) diagnose(message string, level streamv1.DiagnosticLevel) {
 	s.logf("[diagnostic] %s", message)
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Diagnostic{
-		Diagnostic: &streamv1.DiagnosticEvent{Message: message, Level: streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_INFO},
+		Diagnostic: &streamv1.DiagnosticEvent{Message: message, Level: level},
 	}})
 }
 
@@ -122,17 +125,13 @@ func (s *Session) BuildOK() {
 
 func (s *Session) RestartBuild() {
 	s.buildStart = time.Now()
-	if r := s.stream.Renderer(); r != nil {
-		r.Restart(buildStageID)
-	}
+	s.stream.Restart(buildStageID)
 }
 
 func (s *Session) Waiting(reason, url string) {
 	s.logf("[waiting] %s", withoutFragment(url))
 	s.waiting = true
-	if r := s.stream.Renderer(); r != nil {
-		r.Pause()
-	}
+	s.stream.Pause()
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{
 		Waiting: &streamv1.WaitingEvent{Reason: reason, Url: url},
 	}})
@@ -143,9 +142,7 @@ func (s *Session) Resume() {
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Resumed{
 		Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"},
 	}})
-	if r := s.stream.Renderer(); r != nil {
-		r.Resume()
-	}
+	s.stream.Resume()
 }
 
 func (s *Session) Event(ev *progressv1.OperationEvent) {
@@ -190,22 +187,10 @@ func (s *Session) ingestSpan(span *progressv1.SpanEvent) {
 		copy(parentSpanID[:], id)
 	}
 
-	start := unixNano(span.GetStartTimeUnixNano())
-	end := unixNano(span.GetEndTimeUnixNano())
-	if start.IsZero() {
-		start = time.Now().UTC()
-	}
-	if !end.After(start) {
-		end = time.Now().UTC()
-	}
-	if end.Before(start) {
-		end = start
-	}
-
 	s.run.IngestSpan(
 		spanID, parentSpanID,
 		span.GetName(),
-		start, end,
+		unixNano(span.GetStartTimeUnixNano()), unixNano(span.GetEndTimeUnixNano()),
 		spanStatus(span.GetStatus()),
 		spanAttributes(span.GetAttributes()),
 	)
@@ -228,7 +213,7 @@ func (s *Session) Finish(headline string) {
 
 func (s *Session) Fail(err error) {
 	s.logf("[error] %v", err)
-	s.result(&streamv1.RunResultEvent{Success: false, Error: err.Error()})
+	s.result(&streamv1.RunResultEvent{Success: false, Detail: err.Error()})
 }
 
 func (s *Session) Cancel() {
@@ -237,8 +222,11 @@ func (s *Session) Cancel() {
 	if s.waiting {
 		note = "Nothing has been provisioned."
 	}
-	s.Diagnostic(fmt.Sprintf("%s Re-run `%s` to reconcile.", note, s.command))
-	s.result(&streamv1.RunResultEvent{Success: false, Headline: "Cancelled"})
+	s.result(&streamv1.RunResultEvent{
+		Interrupted: true,
+		Headline:    "Cancelled",
+		Detail:      fmt.Sprintf("%s\nRe-run `%s` to reconcile.", note, s.command),
+	})
 }
 
 func (s *Session) result(ev *streamv1.RunResultEvent) {

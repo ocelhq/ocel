@@ -40,12 +40,10 @@ message ResumedEvent {
   string reason = 1;
 }
 
-// How the run ended, and everything a projection needs to say so — no projection
-// holds outcome content the stream lacks.
 message RunResultEvent {
   bool success = 1;
 
-  string error = 2;
+  string detail = 2;
 
   int64 duration_ms = 3;
 
@@ -55,17 +53,17 @@ message RunResultEvent {
 
   repeated string app_urls = 6;
 
-  // Why the run has no address of its own, when it has none.
   string url_note = 7;
 
   common.progress.v1.FlipBound flip_bound = 8;
+
+  bool interrupted = 9;
 }
 
 enum DiagnosticLevel {
   DIAGNOSTIC_LEVEL_UNSPECIFIED = 0;
   DIAGNOSTIC_LEVEL_INFO = 1;
   DIAGNOSTIC_LEVEL_WARNING = 2;
-  DIAGNOSTIC_LEVEL_ERROR = 3;
 }
 
 message DiagnosticEvent {
