@@ -1,4 +1,4 @@
-package cli
+package env
 
 import (
 	"context"
@@ -16,29 +16,25 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 )
 
-var envUICmd = &cobra.Command{
-	Use:   "ui",
-	Short: "Open the variables matrix in a browser",
-	Long: "Open the required-cell matrix for this project: a row per variable your code declares, " +
-		"a column per folder, and the cells that are still owed.\n\n" +
-		"The page ships inside this binary and is served over loopback from the provider session " +
-		"this command already holds, so it needs no hosted service and no network beyond the " +
-		"provider's own calls.",
-	Args: cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvUI(ctx, newDeps(), cwd, envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+func newUICommand(deps cmddeps.Deps) *cobra.Command {
+	var opts envOptions
+	cmd := &cobra.Command{
+		Use:     "ui",
+		Short:   "Open the variable editor",
+		Example: "  $ ocel env ui\n  $ ocel env ui --preview",
+		Args:    cobra.NoArgs,
+	}
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
+			return runEnvUI(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
-	},
-}
-
-func init() {
-	envUICmd.Flags().BoolVar(&envOpts.preview, "preview", false, "Manage the preview bootstrap instead of production")
-	envCmd.AddCommand(envUICmd)
+	}
+	previewFlag(cmd, &opts)
+	return cmd
 }
 
 func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		gate, err := discoverVariables(ctx, cfg, runner, opts, stderr)
 		if err != nil {
 			return err

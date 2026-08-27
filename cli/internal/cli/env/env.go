@@ -1,4 +1,4 @@
-package cli
+package env
 
 import (
 	"context"
@@ -38,15 +38,11 @@ func (o envOptions) checkEnvironment() error {
 	return fmt.Errorf("--environment addresses one preview environment's override, and production has a single environment; pass --preview, or leave --environment off to address the production value")
 }
 
-var envOpts envOptions
-
 type envRefOptions struct {
 	project string
 	folder  string
 	key     string
 }
-
-var envRefOpts envRefOptions
 
 func (o envRefOptions) target(slug, key string) *envvarsv1.Coordinate {
 	project, name := o.project, o.key
@@ -59,141 +55,32 @@ func (o envRefOptions) target(slug, key string) *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{Slug: project, Folder: o.folder, Key: name}
 }
 
-var envCmd = &cobra.Command{
-	Use:   "env",
-	Short: "Manage this project's variable values",
-	Long: "Manage the values behind the variables your code declares.\n\n" +
-		"Which variables a project requires is declared in code; this command manages what " +
-		"they are set to. Values live in your own provider account and are reached through the " +
-		"provider, never by the CLI directly.",
-}
-
-var envLsCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List this project's values, without revealing them",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvLs(ctx, newDeps(), cwd, envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
-	},
-}
-
-var envSetCmd = &cobra.Command{
-	Use:   "set <KEY> <VALUE>",
-	Short: "Set a value",
-	Args:  cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvSet(ctx, newDeps(), cwd, args[0], args[1], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
-	},
-}
-
-var envGetCmd = &cobra.Command{
-	Use:   "get <KEY>",
-	Short: "Show one value's metadata, or the value itself with --reveal",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvGet(ctx, newDeps(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
-	},
-}
-
-var envRmCmd = &cobra.Command{
-	Use:   "rm <KEY>",
-	Short: "Remove a value",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvRm(ctx, newDeps(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
-	},
-}
-
-var envRefCmd = &cobra.Command{
-	Use:   "ref <KEY>",
-	Short: "Point a value at one owned elsewhere instead of copying it",
-	Long: "Point a value at one owned elsewhere instead of copying it.\n\n" +
-		"The cell then holds an address. It is read through to the value behind it every " +
-		"time, so an edit at the source reaches every consumer with nothing to re-run, and " +
-		"the value itself is only ever edited where it is set. Without --target-project the " +
-		"target is this project, which is how one folder reads another's value.",
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvRef(ctx, newDeps(), cwd, args[0], envOpts, envRefOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
-	},
-}
-
-var envRefsCmd = &cobra.Command{
-	Use:   "refs <KEY>",
-	Short: "List what references a value, before an edit changes it",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvRefs(ctx, newDeps(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
-	},
-}
-
-var envHistoryCmd = &cobra.Command{
-	Use:   "history <KEY>",
-	Short: "Show a value's change history, newest first",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runEnvHistory(ctx, newDeps(), cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
-	},
-}
-
-func init() {
-	for _, c := range []*cobra.Command{envLsCmd, envSetCmd, envGetCmd, envRmCmd, envHistoryCmd, envRefCmd, envRefsCmd} {
-		c.Flags().BoolVar(&envOpts.preview, "preview", false, "Act on the preview bootstrap instead of production")
-		envCmd.AddCommand(c)
-	}
-	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd, envRefCmd, envRefsCmd} {
-		c.Flags().StringVar(&envOpts.folder, "folder", "", "Address the value in this folder (e.g. /checkout) instead of the project root")
-	}
-	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd, envRefCmd} {
-		c.Flags().StringVar(&envOpts.environment, "environment", "", "Address the override this named preview environment holds instead of the value bound to all environments")
-	}
-	envRefCmd.Flags().StringVar(&envRefOpts.project, "target-project", "", "Read the value owned by this project instead of this one")
-	envRefCmd.Flags().StringVar(&envRefOpts.folder, "target-folder", "", "Read the value in this folder of the target project instead of its root")
-	envRefCmd.Flags().StringVar(&envRefOpts.key, "target-key", "", "Read the target's value under this name; without it, the same name")
-	envGetCmd.Flags().BoolVar(&envOpts.reveal, "reveal", false, "Print the value itself; without it only metadata is shown")
-	rootCmd.AddCommand(envCmd)
-}
-
-func withEnvCommand(cmd *cobra.Command, run func(context.Context, string) error) error {
+func withCommand(cmd *cobra.Command, deps cmddeps.Deps, run func(context.Context, string) error) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
 	}
-	ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
+	ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 	defer stop()
 	return run(ctx, cwd)
 }
 
-func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config) error) error {
+func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config) error) error {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
-	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
+	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}
 
-	tier, hint := environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"
+	hint := "ocel bootstrap production"
 	if opts.preview {
-		tier, hint = environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview"
+		hint = "ocel bootstrap preview"
 	}
 
 	return provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
-		if err := preflight.Credentials(ctx, deps.Presentation(stderr), runner, cfg, tier, hint, stderr); err != nil {
+		if err := preflight.Credentials(ctx, deps.Presentation(stderr), runner, cfg, envTier(opts), hint, stderr); err != nil {
 			return err
 		}
 		return drive(runner, cfg)
@@ -217,7 +104,7 @@ func runEnvSet(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, o
 			return err
 		}
 	}
-	return withEnvProvider(ctx, deps, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		definitions, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
@@ -272,7 +159,7 @@ func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfi
 }
 
 func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
@@ -302,7 +189,7 @@ func overridden(values []*envvarsv1.ValueMetadata) bool {
 }
 
 func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
@@ -336,7 +223,7 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 }
 
 func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
@@ -366,7 +253,7 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 			return err
 		}
 	}
-	return withEnvProvider(ctx, deps, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		definitions, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
@@ -393,7 +280,7 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 }
 
 func runEnvRefs(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
@@ -411,7 +298,7 @@ func runEnvRefs(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts en
 }
 
 func runEnvHistory(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, stdout, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
