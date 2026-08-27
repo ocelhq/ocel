@@ -80,6 +80,7 @@ func TestOnlyTheTerminalFactsMoveWhenTheTerminalGoesAway(t *testing.T) {
 
 func TestDetectReadsTheTerminalTheCommandWasGiven(t *testing.T) {
 	t.Setenv("COLUMNS", "40")
+	t.Setenv("LINES", "12")
 
 	p := Detect("json", true, &bytes.Buffer{})
 
@@ -91,6 +92,18 @@ func TestDetectReadsTheTerminalTheCommandWasGiven(t *testing.T) {
 	}
 	if p.Width != 40 {
 		t.Errorf("Width = %d, want the 40 columns $COLUMNS declares", p.Width)
+	}
+	if p.Height != 12 {
+		t.Errorf("Height = %d, want the 12 rows $LINES declares", p.Height)
+	}
+}
+
+func TestAnUnknownHeightFallsBackToTwentyFourRows(t *testing.T) {
+	if got := Resolve(Origin{TTY: true}).Height; got != defaultHeight {
+		t.Errorf("Height = %d, want %d when the terminal reports none", got, defaultHeight)
+	}
+	if got := Resolve(Origin{TTY: true, Height: 60}).Height; got != 60 {
+		t.Errorf("Height = %d, want the 60 the terminal reported", got)
 	}
 }
 

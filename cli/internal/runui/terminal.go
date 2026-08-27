@@ -46,15 +46,25 @@ func liveWidth(w io.Writer) (int, bool) {
 }
 
 func termHeight(w io.Writer) int {
-	if f, ok := w.(*os.File); ok {
-		if _, height, err := term.GetSize(int(f.Fd())); err == nil && height > 0 {
-			return height
-		}
+	if n, ok := liveHeight(w); ok {
+		return n
 	}
 	if n, ok := positiveEnvInt("LINES"); ok {
 		return n
 	}
 	return defaultHeight
+}
+
+func liveHeight(w io.Writer) (int, bool) {
+	f, ok := w.(*os.File)
+	if !ok {
+		return 0, false
+	}
+	_, height, err := term.GetSize(int(f.Fd()))
+	if err != nil || height <= 0 {
+		return 0, false
+	}
+	return height, true
 }
 
 func positiveEnvInt(name string) (int, bool) {

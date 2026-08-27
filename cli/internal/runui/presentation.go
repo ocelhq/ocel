@@ -20,6 +20,7 @@ type Origin struct {
 	NoColor   bool
 	TTY       bool
 	Width     int
+	Height    int
 }
 
 type Presentation struct {
@@ -28,6 +29,7 @@ type Presentation struct {
 	Color   bool
 	TTY     bool
 	Width   int
+	Height  int
 }
 
 func Resolve(o Origin) Presentation {
@@ -37,12 +39,16 @@ func Resolve(o Origin) Presentation {
 		Color:   o.TTY && !o.NoColor,
 		TTY:     o.TTY,
 		Width:   o.Width,
+		Height:  o.Height,
 	}
 	if o.LogFormat == FormatJSON {
 		p.Format = FormatJSON
 	}
 	if p.Width <= 0 {
 		p.Width = defaultWidth
+	}
+	if p.Height <= 0 {
+		p.Height = defaultHeight
 	}
 	return p
 }
@@ -58,5 +64,6 @@ func Detect(logFormat Format, verbose bool, w io.Writer) Presentation {
 		NoColor:   color.NoColor || os.Getenv("NO_COLOR") != "",
 		TTY:       IsTerminal(w),
 		Width:     termWidth(w),
+		Height:    termHeight(w),
 	})
 }
