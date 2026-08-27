@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	PromotionGroupKind = "promotion"
-	DeploymentKind     = "deployment"
+	promotionGroupKind = "promotion"
+	deploymentKind     = "deployment"
 
 	valuesGroupName   = "values"
 	membraneGroupName = "membrane"
@@ -89,12 +89,12 @@ func (r *deployRun) drawPromotion() ChangeGroup {
 	changes := make([]Change, 0, len(r.plan.Apps))
 	for _, entry := range r.plan.Apps {
 		changes = append(changes, Change{
-			Kind:   DeploymentKind,
+			Kind:   deploymentKind,
 			Name:   entry.App,
 			Action: ActionCreate,
 		})
 	}
-	group := ChangeGroup{Kind: PromotionGroupKind, Name: r.plan.Pointer, Changes: changes}
+	group := ChangeGroup{Kind: promotionGroupKind, Name: r.plan.Pointer, Changes: changes}
 	if len(changes) == 0 {
 		group.Action, group.Reason = ActionUpdate, reasonPromote
 		return group
