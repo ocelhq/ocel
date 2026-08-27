@@ -44,6 +44,7 @@ func TestOnlyTheProjectionWithoutAWindowCommitsPhaseStartLines(t *testing.T) {
 				&progressv1.Stage{Id: unit, Title: "web"},
 				&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
 			))
+			s.Emit(progressEvent(phase, "compiling", 1, u32(2)))
 
 			if got := strings.Contains(out.String(), startMark+" web › Building\n"); got != tc.want {
 				t.Errorf("committed the phase-start line = %v, want %v — the window is the liveness surface when there is one", got, tc.want)

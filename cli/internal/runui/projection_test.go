@@ -1,6 +1,7 @@
 package runui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -66,8 +67,8 @@ func TestEveryPhaseCommitsAStartLineThenItsBlockWhole(t *testing.T) {
 			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
 		},
 	}}}))
-	if want := []string{"→ web › Building"}; strings.Join(start, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("on the phase beginning, committed %q, want %q", start, want)
+	if len(start) != 0 {
+		t.Fatalf("on the phase being declared, committed %q, want nothing until it says something", start)
 	}
 
 	var got []string
@@ -76,8 +77,8 @@ func TestEveryPhaseCommitsAStartLineThenItsBlockWhole(t *testing.T) {
 			Progress: &progressv1.ProgressEvent{StageId: phase, Message: message},
 		}}))...)
 	}
-	if len(got) != 0 {
-		t.Fatalf("committed %q mid-phase, want the block buffered until the phase completes", got)
+	if want := []string{"→ web › Building"}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("committed %q mid-phase, want %q and the block buffered until the phase completes", got, want)
 	}
 
 	got = p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
@@ -85,7 +86,7 @@ func TestEveryPhaseCommitsAStartLineThenItsBlockWhole(t *testing.T) {
 		StartTimeUnixNano: 1,
 		EndTimeUnixNano:   int64(6*time.Second) + 1,
 	}}}))
-	want := []string{"  step 1", "  step 2", okMark + " web  6s"}
+	want := []string{"", okMark + " web  6s", "  step 1", "  step 2"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("flushed block =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
@@ -114,9 +115,54 @@ func TestABlockDropsBlankLinesAtTheEdgesOfWhatItIsGivenAndKeepsTheOnesInside(t *
 		StartTimeUnixNano: 1,
 		EndTimeUnixNano:   int64(6*time.Second) + 1,
 	}}}))
-	want := []string{"  Packages: +812", "  ", "  compiled", okMark + " web  6s"}
+	want := []string{"", okMark + " web  6s", "  Packages: +812", "  ", "  compiled"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("flushed block =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestABlockIsHeadedByWhatTheRosterSaysTheUnitRuns(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		roster []*progressv1.Stage
+		want   string
+	}{
+		{
+			"a unit that runs one phase is its own headline",
+			[]*progressv1.Stage{
+				{Id: appStage(1), Title: "Edge"},
+				{Id: appStage(2), ParentId: appStage(1), Title: "Provisioning"},
+			},
+			okMark + " Edge  6s",
+		},
+		{
+			"a unit that runs more than one names the phase, from the first block on",
+			[]*progressv1.Stage{
+				{Id: appStage(1), Title: "Environment"},
+				{Id: appStage(2), ParentId: appStage(1), Title: "Provisioning"},
+				{Id: appStage(3), ParentId: appStage(1), Title: "Uploading"},
+			},
+			okMark + " Environment › Provisioning  6s",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
+			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
+				StagePlan: &progressv1.StagePlanEvent{Stages: tc.roster},
+			}}))
+
+			got := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
+				SpanId:            appStage(2),
+				StartTimeUnixNano: 1,
+				EndTimeUnixNano:   int64(6*time.Second) + 1,
+			}}}))
+			if !slices.Contains(got, tc.want) {
+				t.Errorf("the first block closed as %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -184,7 +230,7 @@ func TestAnOpenBlockFlushesWithTheOutcomeTheRunActuallyHad(t *testing.T) {
 			}}))
 
 			got := strings.Join(p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: tc.result}}), "\n")
-			if !strings.Contains(got, "  step 1\n"+tc.want+"\n") {
+			if !strings.Contains(got, tc.want+"\n  step 1\n") {
 				t.Errorf("result projection =\n%s\nwant the in-flight block flushed whole, closed by %q", got, tc.want)
 			}
 		})

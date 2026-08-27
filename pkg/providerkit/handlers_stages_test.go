@@ -77,7 +77,7 @@ func TestDeployClosesEveryDeclaredStageAndEachUnitOnce(t *testing.T) {
 	assertStagesClose(t, events)
 }
 
-func TestDeployDeclaresItsWholeUnitRosterBeforeAnyPhase(t *testing.T) {
+func TestDeployDeclaresEveryUnitAndItsPhasesUpFront(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -87,30 +87,42 @@ func TestDeployDeclaresItsWholeUnitRosterBeforeAnyPhase(t *testing.T) {
 	}
 
 	var roster []string
+	phases := map[string][]string{}
+	units := map[string]string{}
+	first := true
 	for _, event := range events {
 		plan := event.GetStagePlan()
 		if plan == nil {
 			continue
 		}
-		if roster == nil {
-			for _, stage := range plan.GetStages() {
-				if len(stage.GetParentId()) != 0 {
-					t.Fatalf("the first stage plan declares phase %q, want the unit roster declared whole before any phase", stage.GetTitle())
-				}
-				roster = append(roster, stage.GetTitle())
-			}
-			continue
-		}
 		for _, stage := range plan.GetStages() {
-			if len(stage.GetParentId()) == 0 {
-				t.Errorf("unit %q is declared after the roster, want every unit on the spine named up front", stage.GetTitle())
+			parent := string(stage.GetParentId())
+			if parent == "" {
+				if !first {
+					t.Errorf("unit %q is declared after the roster, want every unit on the spine named up front", stage.GetTitle())
+				}
+				units[string(stage.GetId())] = stage.GetTitle()
+				roster = append(roster, stage.GetTitle())
+				continue
 			}
+			unit, declared := units[parent]
+			if !declared {
+				t.Fatalf("phase %q is declared under a unit the roster never named", stage.GetTitle())
+			}
+			if !first {
+				t.Errorf("phase %q is declared after the roster, want every phase named with the unit that runs it", stage.GetTitle())
+			}
+			phases[unit] = append(phases[unit], stage.GetTitle())
 		}
+		first = false
 	}
 
 	want := []string{"Environment", "Shared infrastructure", "web", "Edge", "Promotion"}
 	if strings.Join(roster, ",") != strings.Join(want, ",") {
 		t.Errorf("roster = %v, want %v", roster, want)
+	}
+	if got := strings.Join(phases["Environment"], ","); got != "Provisioning,Uploading" {
+		t.Errorf("Environment declares the phases %q, want both of them before the first one closes", got)
 	}
 }
 

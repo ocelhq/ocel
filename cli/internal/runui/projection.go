@@ -50,6 +50,7 @@ type projector struct {
 	present Presentation
 	tree    *stagePlan
 	blocks  map[string]*block
+	settled map[string]bool
 	open    []string
 
 	orphans    map[string][]blockLine
@@ -62,6 +63,7 @@ func newProjector(present Presentation) *projector {
 		present: present,
 		tree:    newStagePlan(),
 		blocks:  make(map[string]*block),
+		settled: make(map[string]bool),
 		orphans: make(map[string][]blockLine),
 	}
 }
@@ -239,24 +241,24 @@ func screamingSnake(name string) string {
 
 func (p *projector) stagePlan(m protoreflect.Message) []string {
 	ev := m.Interface().(*progressv1.StagePlanEvent)
-	var out []string
 	for _, s := range ev.GetStages() {
 		p.tree.declare(s)
-		id := stageKey(s.GetId())
-		if id == "" || !p.isPhase(id) {
-			continue
-		}
-		if _, exists := p.blocks[id]; exists {
-			continue
-		}
-		p.blocks[id] = &block{id: id}
-		p.open = append(p.open, id)
-		if !p.present.Live() {
-			out = append(out, startMark+" "+p.pathOf(id))
-		}
+		delete(p.settled, stageKey(s.GetId()))
 	}
-	p.adopt()
-	return out
+	return p.adopt()
+}
+
+func (p *projector) openPhase(id string) (*block, []string) {
+	if b, exists := p.blocks[id]; exists {
+		return b, nil
+	}
+	b := &block{id: id}
+	p.blocks[id] = b
+	p.open = append(p.open, id)
+	if p.present.Live() {
+		return b, nil
+	}
+	return b, []string{startMark + " " + p.pathOf(id)}
 }
 
 func (p *projector) isPhase(id string) bool {
@@ -295,18 +297,18 @@ func (p *projector) headline(id string) string {
 	return parent.title + pathSep + n.title
 }
 
-func (p *projector) phaseOf(id string) *block {
+func (p *projector) phaseOf(id string) string {
 	for depth := 0; depth < maxTreeDepth && id != ""; depth++ {
-		if b, ok := p.blocks[id]; ok {
-			return b
+		if _, ok := p.blocks[id]; ok || (p.isPhase(id) && !p.settled[id]) {
+			return id
 		}
 		n, ok := p.tree.nodes[id]
 		if !ok {
-			return nil
+			return ""
 		}
 		id = n.linkedParent
 	}
-	return nil
+	return ""
 }
 
 func (p *projector) buffer(stageID []byte, text string, raw bool) []string {
@@ -315,9 +317,10 @@ func (p *projector) buffer(stageID []byte, text string, raw bool) []string {
 	if len(lines) == 0 {
 		return nil
 	}
-	if b := p.phaseOf(id); b != nil {
+	if phase := p.phaseOf(id); phase != "" {
+		b, started := p.openPhase(phase)
 		b.lines = append(b.lines, lines...)
-		return nil
+		return started
 	}
 	if id != "" {
 		p.hold(id, lines)
@@ -354,19 +357,23 @@ func (p *projector) hold(id string, lines []blockLine) {
 	p.orphanLine += len(lines)
 }
 
-func (p *projector) adopt() {
+func (p *projector) adopt() []string {
+	var out []string
 	var pending []string
 	for _, id := range p.pending {
-		b := p.phaseOf(id)
-		if b == nil {
+		phase := p.phaseOf(id)
+		if phase == "" {
 			pending = append(pending, id)
 			continue
 		}
+		b, started := p.openPhase(phase)
+		out = append(out, started...)
 		b.lines = append(b.lines, p.orphans[id]...)
 		p.orphanLine -= len(p.orphans[id])
 		delete(p.orphans, id)
 	}
 	p.pending = pending
+	return out
 }
 
 func (p *projector) progress(m protoreflect.Message) []string {
@@ -386,12 +393,12 @@ func (p *projector) log(m protoreflect.Message) []string {
 func (p *projector) span(m protoreflect.Message) []string {
 	ev := m.Interface().(*progressv1.SpanEvent)
 	id := stageKey(ev.GetSpanId())
-	b, ok := p.blocks[id]
-	if !ok {
+	if _, open := p.blocks[id]; !open && (p.settled[id] || !p.isPhase(id)) {
 		return nil
 	}
+	b, started := p.openPhase(id)
 	failed := ev.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
-	return p.settle(b, spanDuration(ev), failed)
+	return append(started, p.settle(b, spanDuration(ev), failed)...)
 }
 
 func spanDuration(ev *progressv1.SpanEvent) time.Duration {
@@ -404,6 +411,7 @@ func spanDuration(ev *progressv1.SpanEvent) time.Duration {
 
 func (p *projector) take(b *block, keepRaw bool) []string {
 	delete(p.blocks, b.id)
+	p.settled[b.id] = true
 	for i, id := range p.open {
 		if id == b.id {
 			p.open = append(p.open[:i], p.open[i+1:]...)
@@ -421,11 +429,12 @@ func (p *projector) take(b *block, keepRaw bool) []string {
 }
 
 func (p *projector) settle(b *block, d time.Duration, failed bool) []string {
-	out := p.take(b, p.present.Verbose || failed)
+	body := p.take(b, p.present.Verbose || failed)
+	head := fmt.Sprintf("%s %s  %s", okMark, p.headline(b.id), formatDuration(d))
 	if failed {
-		return append(out, fmt.Sprintf("%s %s failed  %s", failMark, p.headline(b.id), formatDuration(d)))
+		head = fmt.Sprintf("%s %s failed  %s", failMark, p.headline(b.id), formatDuration(d))
 	}
-	return append(out, fmt.Sprintf("%s %s  %s", okMark, p.headline(b.id), formatDuration(d)))
+	return append([]string{"", head}, body...)
 }
 
 func (p *projector) strand(mark, note string) []string {
@@ -436,7 +445,9 @@ func (p *projector) strand(mark, note string) []string {
 			p.open = p.open[1:]
 			continue
 		}
-		out = append(out, append(p.take(b, p.present.Verbose || mark == failMark), fmt.Sprintf("%s %s %s", mark, p.headline(b.id), note))...)
+		body := p.take(b, p.present.Verbose || mark == failMark)
+		out = append(out, "", fmt.Sprintf("%s %s %s", mark, p.headline(b.id), note))
+		out = append(out, body...)
 	}
 	return out
 }

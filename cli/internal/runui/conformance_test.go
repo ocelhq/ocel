@@ -436,8 +436,8 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 	return flushed
 }
 
-func bodyBefore(lines []string, at int, n int) []string {
-	body := lines[max(at-n, 0):at]
+func bodyAfter(lines []string, at int, n int) []string {
+	body := lines[min(at+1, len(lines)):min(at+1+n, len(lines))]
 	out := make([]string, 0, len(body))
 	for _, line := range body {
 		out = append(out, strings.TrimPrefix(line, blockIndent))
@@ -489,7 +489,7 @@ func TestCommittedOutputIsWholeBlocksInPhaseCompletionOrder(t *testing.T) {
 						t.Fatalf("%s output has no %q at or after line %d, so the blocks do not land in phase-completion order:\n%s",
 							projection.name, want, at, projection.text)
 					}
-					body := bodyBefore(lines, found, len(b.lines))
+					body := bodyAfter(lines, found, len(b.lines))
 					if strings.Join(body, "\n") != strings.Join(b.lines, "\n") {
 						t.Errorf("%s block %q is not the whole of what the stream gave it, contiguous.\n--- got ---\n%s\n--- want ---\n%s",
 							projection.name, b.path, strings.Join(body, "\n"), strings.Join(b.lines, "\n"))
@@ -537,7 +537,7 @@ func TestAnInterruptedRunFlushesEveryInFlightBlockWithAnInterruptedMarker(t *tes
 							projection.name, b.path, projection.text)
 						continue
 					}
-					body := bodyBefore(lines, found, len(b.lines))
+					body := bodyAfter(lines, found, len(b.lines))
 					if strings.Join(body, "\n") != strings.Join(b.lines, "\n") {
 						t.Errorf("%s interrupts block %q without flushing what the stream gave it.\n--- got ---\n%s\n--- want ---\n%s",
 							projection.name, b.path, strings.Join(body, "\n"), strings.Join(b.lines, "\n"))

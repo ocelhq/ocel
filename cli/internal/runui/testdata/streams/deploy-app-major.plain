@@ -1,24 +1,31 @@
 → web › Building
 → api › Building
+
 ✓ api  8s
-  Generating static pages (28/28)
+
 ✓ web  24s
+  Generating static pages (28/28)
 → Edge › Provisioning
-  Reconciling the cloudflare edge
+
 ✓ Edge  2s
+  Reconciling the cloudflare edge
 → Shared infrastructure › Provisioning
-  creating bucket assets
+
 ✓ Shared infrastructure  6s
-→ web › Provisioning
+  creating bucket assets
 → api › Provisioning
-  updating function api
+→ web › Provisioning
+
 ✓ api › Provisioning  8s
+  updating function api
+
+✓ web › Provisioning  21s
   waiting for steady state
   2 of 2 tasks healthy
-✓ web › Provisioning  21s
 → Promotion › Finalizing
-  promoting r7 to production
+
 ✓ Promotion  2s
+  promoting r7 to production
 
 ✓ Deployed in 54s
 
