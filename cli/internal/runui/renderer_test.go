@@ -2,15 +2,13 @@ package runui
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -20,15 +18,54 @@ func appStage(n byte) []byte {
 	return []byte{n, 0, 0, 0, 0, 0, 0, 0}
 }
 
+func liveStream(t *testing.T) (*Stream, *bytes.Buffer) {
+	t.Helper()
+	var out bytes.Buffer
+	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
+	return s, &out
+}
+
+func stagePlanEvent(stages ...*progressv1.Stage) *streamv1.RunEvent {
+	return operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
+		StagePlan: &progressv1.StagePlanEvent{Stages: stages},
+	}})
+}
+
+func progressEvent(stageID []byte, message string, current uint32, total *uint32) *streamv1.RunEvent {
+	ev := &progressv1.ProgressEvent{StageId: stageID, Message: message, Total: total}
+	if total != nil {
+		ev.Current = &current
+	}
+	return operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{Progress: ev}})
+}
+
+func spanEvent(stageID []byte, failed bool, d time.Duration) *streamv1.RunEvent {
+	status := progressv1.SpanStatus_SPAN_STATUS_OK
+	if failed {
+		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
+	}
+	return operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
+		Span: &progressv1.SpanEvent{
+			SpanId:            stageID,
+			StartTimeUnixNano: 1,
+			EndTimeUnixNano:   int64(d) + 1,
+			Status:            status,
+		},
+	}})
+}
+
 func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	t.Parallel()
-	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
+	s, out := liveStream(t)
+	r := s.Renderer()
 
-	app := appStage(1)
-	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{{Id: app, Title: "app-a"}}})
-	r.Progress(app, "uploading assets", 1, u32(10))
+	unit, phase := appStage(1), appStage(2)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "app-a"},
+		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Uploading"},
+	))
+	s.Emit(progressEvent(phase, "uploading assets", 1, u32(10)))
 
 	resume := r.Suspend()
 	if r.liveLines != 0 {
@@ -36,13 +73,13 @@ func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	}
 
 	out.Reset()
-	r.Progress(app, "uploading assets", 2, u32(10))
+	s.Emit(progressEvent(phase, "uploading assets", 2, u32(10)))
 	if out.Len() != 0 {
 		t.Errorf("wrote %q while suspended, want the terminal left to the prompt", out.String())
 	}
 
 	resume()
-	if !strings.Contains(out.String(), "app-a") {
+	if !strings.Contains(out.String(), "Uploading") {
 		t.Errorf("after resuming, out = %q, want the live region drawn again", out.String())
 	}
 }
@@ -50,76 +87,46 @@ func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 func TestLiveRegion(t *testing.T) {
 	t.Run("a parallel deploy shows one line per app, each with its own stage", func(t *testing.T) {
 		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
+		s, out := liveStream(t)
 
 		appA, appB := appStage(1), appStage(2)
-		r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-			{Id: appA, Title: "app-a"},
-			{Id: appB, Title: "app-b"},
-		}})
-
-		r.Progress(appA, "uploading assets", 1, u32(10))
-		r.Progress(appB, "uploading assets", 9, u32(10))
+		s.Emit(stagePlanEvent(
+			&progressv1.Stage{Id: appA, Title: "app-a"},
+			&progressv1.Stage{Id: appB, Title: "app-b"},
+		))
+		s.Emit(progressEvent(appA, "uploading assets", 1, u32(10)))
+		s.Emit(progressEvent(appB, "uploading assets", 9, u32(10)))
 
 		got := out.String()
 		if !strings.Contains(got, "app-a") || !strings.Contains(got, "app-b") {
 			t.Fatalf("live region = %q, want a line for both app-a and app-b", got)
 		}
-
-		if len(r.plan.activeOrder) != 2 {
-			t.Fatalf("activeOrder = %v, want both apps live at once", r.plan.activeOrder)
+		if active := s.Renderer().plan.activeOrder; len(active) != 2 {
+			t.Fatalf("activeOrder = %v, want both apps live at once", active)
 		}
 	})
 
 	t.Run("one app finishing does not stop the other's line from updating", func(t *testing.T) {
 		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
+		s, _ := liveStream(t)
 
 		appA, appB := appStage(1), appStage(2)
-		r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-			{Id: appA, Title: "app-a"},
-			{Id: appB, Title: "app-b"},
-		}})
+		s.Emit(stagePlanEvent(
+			&progressv1.Stage{Id: appA, Title: "app-a"},
+			&progressv1.Stage{Id: appB, Title: "app-b"},
+		))
+		s.Emit(progressEvent(appA, "uploading", 1, u32(2)))
+		s.Emit(progressEvent(appB, "uploading", 1, u32(2)))
+		s.Emit(spanEvent(appA, false, time.Second))
 
-		r.Progress(appA, "uploading", 1, u32(2))
-		r.Progress(appB, "uploading", 1, u32(2))
-		r.StageEnd(appA, false, time.Second)
-
-		if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(appB) {
-			t.Fatalf("activeOrder = %v, want only app-b still live", r.plan.activeOrder)
-		}
-		if got := out.String(); !strings.Contains(got, "app-a") {
-			t.Errorf("output = %q, want app-a's finished line committed to scrollback", got)
+		active := s.Renderer().plan.activeOrder
+		if len(active) != 1 || active[0] != stageKey(appB) {
+			t.Fatalf("activeOrder = %v, want only app-b still live", active)
 		}
 
-		r.StageEnd(appB, false, time.Second)
-		if len(r.plan.activeOrder) != 0 {
-			t.Errorf("activeOrder = %v, want both apps finished", r.plan.activeOrder)
-		}
-	})
-
-	t.Run("which app is stuck stays answerable: a slow app keeps its own row", func(t *testing.T) {
-		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
-
-		fast, slow := appStage(1), appStage(2)
-		r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-			{Id: fast, Title: "fast-app"},
-			{Id: slow, Title: "slow-app"},
-		}})
-
-		r.Progress(fast, "uploading", 1, u32(1))
-		r.Progress(slow, "still going", 1, u32(10))
-		r.StageEnd(fast, false, time.Second)
-
-		if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(slow) {
-			t.Fatalf("activeOrder = %v, want only slow-app still shown as live", r.plan.activeOrder)
+		s.Emit(spanEvent(appB, false, time.Second))
+		if active := s.Renderer().plan.activeOrder; len(active) != 0 {
+			t.Errorf("activeOrder = %v, want both apps finished", active)
 		}
 	})
 }
@@ -154,12 +161,19 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
+	s := NewStream(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
 
-	r.Building()
-	r.Progress(nil, "uploading", 1, u32(2))
-	r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{}, "")
+	unit, phase := appStage(1), appStage(2)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "Environment"},
+		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
+	))
+	s.Emit(progressEvent(phase, "uploading", 1, u32(2)))
+	s.Emit(spanEvent(phase, false, time.Second))
+	s.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
+		Success: true, Headline: "Deployed", AppUrls: []string{"https://app.example.workers.dev"},
+	}}})
 
 	if got := out.String(); strings.Contains(got, "\x1b[") {
 		t.Errorf("output = %q, want no ANSI escape codes when the writer is not a terminal", got)
@@ -168,13 +182,13 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 
 func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
+	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
 
 	appA, appB := appStage(1), appStage(2)
-	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: appA, Title: "app-a"},
-		{Id: appB, Title: "app-b"},
-	}})
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: appA, Title: "app-a"},
+		&progressv1.Stage{Id: appB, Title: "app-b"},
+	))
 
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -182,25 +196,25 @@ func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := uint32(0); i < 50; i++ {
-			r.Progress(appA, "uploading", i, u32(50))
+			s.Emit(progressEvent(appA, "uploading", i, u32(50)))
 		}
 	}()
 	go func() {
 		defer wg.Done()
 		for i := uint32(0); i < 50; i++ {
-			r.Progress(appB, "uploading", i, u32(50))
+			s.Emit(progressEvent(appB, "uploading", i, u32(50)))
 		}
 	}()
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
-			fmt.Fprintf(r, "subprocess output line %d\n", i)
+			fmt.Fprintf(s.Renderer(), "subprocess output line %d\n", i)
 		}
 	}()
 
 	wg.Wait()
 	time.Sleep(3 * frameRate)
-	if err := r.Close(); err != nil {
+	if err := s.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
 }
@@ -228,376 +242,140 @@ func TestFormatDurationRoundsToWholeSeconds(t *testing.T) {
 	}
 }
 
-func TestRestartBuildStageDiscardsElapsedTime(t *testing.T) {
+func TestAPhaseCommitsWhenItsSpanArrives(t *testing.T) {
 	t.Parallel()
-	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
+	s, out := liveStream(t)
 
-	var nowNanos atomic.Int64
-	nowNanos.Store(time.Now().UnixNano())
-	r.useClock(func() time.Time { return time.Unix(0, nowNanos.Load()) })
+	unit, slow, quick := appStage(1), appStage(2), appStage(3)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "web"},
+		&progressv1.Stage{Id: quick, ParentId: unit, Title: "Uploading"},
+		&progressv1.Stage{Id: slow, ParentId: unit, Title: "Provisioning"},
+	))
+	s.Emit(progressEvent(quick, "uploading assets", 0, nil))
+	s.Emit(progressEvent(slow, "provisioning", 0, nil))
 
-	r.Building()
-
-	nowNanos.Add(int64(90 * time.Second))
-	r.RestartBuildStage()
-
-	nowNanos.Add(int64(1 * time.Second))
-	r.BuildOK()
-
+	s.Emit(spanEvent(quick, false, 90*time.Second))
 	got := out.String()
-	if !strings.Contains(got, "1s") {
-		t.Errorf("output = %q, want the committed Building line to show 1s, the successful attempt's own duration", got)
+	if !strings.Contains(got, okMark+" web › Uploading  1m30s") {
+		t.Errorf("output = %q, want the phase committed with its span's own duration", got)
 	}
-	if strings.Contains(got, "91s") || strings.Contains(got, "1m3") {
-		t.Errorf("output = %q, want the discarded attempt and the wait excluded from the displayed duration", got)
+	if strings.Contains(got, okMark+" web › Provisioning") {
+		t.Errorf("output = %q, want the unfinished phase left uncommitted", got)
+	}
+
+	s.Emit(spanEvent(slow, true, time.Second))
+	if got := out.String(); !strings.Contains(got, failMark+" web › Provisioning failed") {
+		t.Errorf("output = %q, want the failed phase committed as failed", got)
 	}
 }
 
-func TestStageEndCommitsRowsAsSpansArrive(t *testing.T) {
+func TestAPhaseRowStaysLiveUntilItsSpanArrives(t *testing.T) {
 	t.Parallel()
-	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
+	s, out := liveStream(t)
 
-	appA, appB := appStage(1), appStage(2)
-	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: appA, Title: "app-a"},
-		{Id: appB, Title: "app-b"},
-	}})
+	unit, uploading := appStage(1), appStage(2)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "web"},
+		&progressv1.Stage{Id: uploading, ParentId: unit, Title: "Uploading"},
+	))
+	s.Emit(progressEvent(uploading, "Uploading function artifacts", 1, u32(1)))
 
-	r.Progress(appA, "provisioning", 0, nil)
-	r.Progress(appB, "provisioning", 0, nil)
-
-	r.StageEnd(appA, false, 90*time.Second)
-	if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(appB) {
-		t.Fatalf("activeOrder = %v, want app-a committed the moment its span arrived", r.plan.activeOrder)
-	}
-	if got := out.String(); !strings.Contains(got, "app-a") || !strings.Contains(got, "1m30s") {
-		t.Errorf("output = %q, want app-a committed with the span's own duration", got)
-	}
-
-	r.StageEnd(appB, true, time.Second)
-	if len(r.plan.activeOrder) != 0 {
-		t.Fatalf("activeOrder = %v, want app-b committed by its error span", r.plan.activeOrder)
-	}
-	if got := out.String(); !strings.Contains(got, "app-b failed") {
-		t.Errorf("output = %q, want app-b committed as failed", got)
-	}
-
-	r.StageEnd([]byte{9, 9, 9, 9, 9, 9, 9, 9}, false, time.Second)
-}
-
-func TestFinishedBarWaitsForItsSpan(t *testing.T) {
-	t.Parallel()
-	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
-
-	uploading := appStage(1)
-	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: uploading, Title: "Uploading"},
-	}})
-
-	r.Progress(uploading, "Uploading function artifacts", 1, u32(1))
-	if len(r.plan.activeOrder) != 1 {
-		t.Fatalf("activeOrder = %v, want the row still live at 1/1 — only the stage's span ends it", r.plan.activeOrder)
-	}
-
-	r.Progress(uploading, "Uploading static assets", 0, nil)
 	if got := strings.Count(out.String(), okMark); got != 0 {
-		t.Fatalf("got %d committed lines before the span arrived, want 0", got)
+		t.Fatalf("committed %d finished lines at 1/1, want none — only the stage's span ends it", got)
 	}
 
-	r.StageEnd(uploading, false, 12*time.Second)
-	if len(r.plan.activeOrder) != 0 {
-		t.Errorf("activeOrder = %v, want the row committed by its span", r.plan.activeOrder)
+	s.Emit(spanEvent(uploading, false, 12*time.Second))
+	if active := s.Renderer().plan.activeOrder; len(active) != 0 {
+		t.Errorf("activeOrder = %v, want the phase row retired by its own span", active)
 	}
 }
 
 func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	t.Parallel()
-	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
+	s, out := liveStream(t)
+	r := s.Renderer()
 
 	provisioning, app := appStage(1), appStage(2)
-	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: provisioning, Title: "Provisioning"},
-		{Id: app, ParentId: provisioning, Title: "next-test"},
-	}})
-
-	r.Progress(provisioning, "Reconciling the edge stack", 0, nil)
-	r.Progress(app, "creating resources", 0, nil)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: provisioning, Title: "Provisioning"},
+		&progressv1.Stage{Id: app, ParentId: provisioning, Title: "next-test"},
+	))
+	s.Emit(progressEvent(provisioning, "Reconciling the edge stack", 0, nil))
+	s.Emit(progressEvent(app, "creating resources", 0, nil))
 
 	rows := r.plan.displayRows()
 	if len(rows) != 2 || rows[0].n.title != "Provisioning" || rows[1].n.title != "next-test" || rows[1].depth != 1 {
 		t.Fatalf("displayRows = %+v, want next-test indented under Provisioning", rows)
 	}
 
-	r.StageEnd(app, false, 44*time.Second)
+	s.Emit(spanEvent(app, false, 44*time.Second))
 	if !r.plan.isActive(stageKey(app)) {
-		t.Fatal("want the finished child held in the live region under its still-running parent, not committed to scrollback above it")
+		t.Fatal("want the finished child held in the live region under its still-running parent")
 	}
 	if !strings.Contains(out.String(), "  "+okMark+" next-test") {
 		t.Fatalf("output = %q, want the held child drawn with its result mark, indented under the parent", out.String())
 	}
 
-	r.StageEnd(provisioning, false, 50*time.Second)
-	if len(r.plan.activeOrder) != 0 {
-		t.Fatalf("activeOrder = %v, want the whole subtree committed with the parent", r.plan.activeOrder)
-	}
-	got := out.String()
-	final := got[strings.LastIndex(got, "\x1b[J")+len("\x1b[J"):]
-	parent := strings.Index(final, okMark+" Provisioning")
-	child := strings.Index(final, "  "+okMark+" next-test")
-	if parent == -1 || child == -1 || child < parent {
-		t.Errorf("final block = %q, want the parent committed first with the child indented beneath it", final)
-	}
-	if !strings.Contains(final, "44s") || !strings.Contains(final, "50s") {
-		t.Errorf("final block = %q, want each line stamped with its own span duration", final)
+	s.Emit(spanEvent(provisioning, false, 50*time.Second))
+	if active := r.plan.activeOrder; len(active) != 0 {
+		t.Fatalf("activeOrder = %v, want the whole subtree retired with the parent", active)
 	}
 }
 
-func TestBuildOKLeavesNoStaleSpinnerRow(t *testing.T) {
+func TestNonVerboseHoldsBackRawLogLines(t *testing.T) {
 	t.Parallel()
-	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
+	s, out := liveStream(t)
 
-	r.Building()
-	r.BuildOK()
-
-	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
-	last := lines[len(lines)-1]
-	if !strings.Contains(last, okMark+" Building") {
-		t.Errorf("last line = %q, want the committed Building line to be the final output — anything after it is a stale live row", last)
-	}
-	if !strings.Contains(last, "\033[") {
-		t.Errorf("output = %q, want the live spinner row erased before the committed line was printed", out.String())
-	}
-}
-
-func TestLiveModeHoldsBackRawLogLines(t *testing.T) {
-	t.Parallel()
-	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
-
-	r.Progress(appStage(1), "provisioning", 0, nil)
-	r.Log("pulumi engine line")
+	unit, phase := appStage(1), appStage(2)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "web"},
+		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Provisioning"},
+	))
+	s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+		Log: &progressv1.LogEvent{StageId: phase, Message: "pulumi engine line"},
+	}}))
+	s.Emit(spanEvent(phase, false, time.Second))
 
 	if strings.Contains(out.String(), "pulumi engine line") {
-		t.Errorf("output = %q, want raw Log lines held back from the live view — they belong to the run log", out.String())
+		t.Errorf("output = %q, want raw log lines held back until --verbose asks for them", out.String())
+	}
+}
+
+func TestVerboseFlushesRawLogLinesInsideThePhaseBlock(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	s := NewStream(&out, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
+
+	unit, phase := appStage(1), appStage(2)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "web"},
+		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Provisioning"},
+	))
+	s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+		Log: &progressv1.LogEvent{StageId: phase, Message: "pulumi engine line"},
+	}}))
+	if strings.Contains(out.String(), "pulumi engine line") {
+		t.Fatalf("output = %q, want the line held in its block until the phase completes", out.String())
+	}
+
+	s.Emit(spanEvent(phase, false, time.Second))
+	if !strings.Contains(out.String(), "  pulumi engine line") {
+		t.Errorf("output = %q, want the raw line flushed inside its phase block", out.String())
 	}
 }
 
 func TestProgressWithoutAStageIsDropped(t *testing.T) {
 	t.Parallel()
-	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
+	s, out := liveStream(t)
 
-	r.Progress(nil, "Reclaimed 3 promotion(s): a, b, c", 0, nil)
+	s.Emit(progressEvent(nil, "Reclaimed 3 promotion(s): a, b, c", 0, nil))
 
-	if len(r.plan.nodes) != 0 {
-		t.Fatalf("got %d nodes, want none: there is no bucket for progress that belongs to no stage", len(r.plan.nodes))
+	if got := len(s.Renderer().plan.nodes); got != 0 {
+		t.Fatalf("got %d nodes, want none: there is no bucket for progress that belongs to no stage", got)
 	}
 	if out.Len() != 0 {
 		t.Errorf("output = %q, want nothing drawn for a stageless progress event", out.String())
 	}
-}
-
-func TestTheBuildStageIsTheEnvironmentUnitsBuildingPhase(t *testing.T) {
-	t.Parallel()
-	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
-
-	if got := stageKey(buildStageID); got != "4b5ac07b8124802c" {
-		t.Errorf("build stage id = %s, want the naming digest the provider derives for the same phase", got)
-	}
-	if got := stageKey(environmentUnitID); got != "9f2ecbbdfa2db89d" {
-		t.Errorf("environment unit id = %s, want the naming digest the provider derives for the same unit", got)
-	}
-
-	r.Building()
-	if got := out.String(); !strings.Contains(got, "Building project") {
-		t.Errorf("output = %q, want the build phase live", got)
-	}
-	n, ok := r.plan.nodes[stageKey(buildStageID)]
-	if !ok {
-		t.Fatal("the build phase was never declared as a stage")
-	}
-	if n.parentID != stageKey(environmentUnitID) {
-		t.Errorf("build phase parent = %q, want the environment unit %q", n.parentID, stageKey(environmentUnitID))
-	}
-}
-
-func TestFailedSpanNamesAStageThatNeverReportedProgress(t *testing.T) {
-	t.Parallel()
-	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
-
-	app := appStage(1)
-	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: app, Title: "app-a"},
-	}})
-
-	r.StageEnd(app, true, time.Second)
-
-	if got := out.String(); !strings.Contains(got, failMark+" app-a failed") {
-		t.Errorf("output = %q, want the failed stage named even though it never reported progress", got)
-	}
-}
-
-func TestParentSpanLeavesAStillRunningChildLive(t *testing.T) {
-	t.Parallel()
-	var out bytes.Buffer
-	r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = r.Close() })
-
-	parent, child := appStage(1), appStage(2)
-	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: parent, Title: "Provisioning"},
-		{Id: child, ParentId: parent, Title: "next-test"},
-	}})
-
-	r.Progress(parent, "reconciling", 0, nil)
-	r.Progress(child, "creating resources", 0, nil)
-
-	r.StageEnd(parent, false, 50*time.Second)
-	if len(r.plan.activeOrder) != 1 || r.plan.activeOrder[0] != stageKey(child) {
-		t.Fatalf("activeOrder = %v, want the still-running child left live rather than force-committed as succeeded", r.plan.activeOrder)
-	}
-
-	r.StageEnd(child, true, time.Second)
-	if len(r.plan.activeOrder) != 0 {
-		t.Fatalf("activeOrder = %v, want the child committed by its own span", r.plan.activeOrder)
-	}
-	if got := out.String(); !strings.Contains(got, failMark+" next-test failed") {
-		t.Errorf("output = %q, want the child's late error span rendered as a failed row", got)
-	}
-}
-
-func TestDeployedFlip(t *testing.T) {
-	t.Run("the human render sets the note off from the urls, indented", func(t *testing.T) {
-		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
-
-		r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{Note: "propagates within ~5 s"}, "")
-
-		lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
-		idx := slices.Index(lines, "  propagates within ~5 s")
-		if idx < 2 {
-			t.Fatalf("output = %q, want an indented flip note line below the urls", out.String())
-		}
-		if lines[idx-1] != "" {
-			t.Errorf("line before the note = %q, want a blank line separating it from the urls", lines[idx-1])
-		}
-		if lines[idx-2] != "  https://app.example.workers.dev" {
-			t.Errorf("line above the blank = %q, want the app url", lines[idx-2])
-		}
-	})
-
-	t.Run("a note-less bound renders nothing extra", func(t *testing.T) {
-		t.Parallel()
-		var withBound, without bytes.Buffer
-		for _, tc := range []struct {
-			out  *bytes.Buffer
-			flip Flip
-		}{
-			{&withBound, Flip{Bound: &progressv1.FlipBound{}}},
-			{&without, Flip{}},
-		} {
-			r := NewRenderer(tc.out, Presentation{Format: FormatHuman, Width: defaultWidth})
-			r.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", tc.flip, "")
-			_ = r.Close()
-		}
-		if withBound.String() != without.String() {
-			t.Errorf("output for an instant bound = %q, want it identical to no bound at all (%q)", withBound.String(), without.String())
-		}
-	})
-
-	t.Run("json carries the bound as numbers, never as prose", func(t *testing.T) {
-		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
-
-		r.Deployed("Deployed", nil, "", Flip{
-			Note:  "propagates within ~5 s",
-			Bound: &progressv1.FlipBound{TypicalMs: 5000, Published: true},
-		}, "")
-
-		if strings.Contains(out.String(), "propagates") {
-			t.Errorf("json = %q, want the machine surface free of rendered English", out.String())
-		}
-		var rec struct {
-			FlipBound *struct {
-				TypicalMs float64 `json:"typicalMs"`
-				Published bool    `json:"published"`
-			} `json:"flipBound"`
-		}
-		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
-			t.Fatalf("stdout = %q is not JSON: %v", out.String(), err)
-		}
-		if rec.FlipBound == nil {
-			t.Fatalf("json = %q, want a structured flipBound", out.String())
-		}
-		if rec.FlipBound.TypicalMs != 5000 || !rec.FlipBound.Published {
-			t.Errorf("flipBound = %+v, want 5000 ms published", *rec.FlipBound)
-		}
-	})
-
-	t.Run("a deploy with no address of its own prints why, and never a vendor hostname", func(t *testing.T) {
-		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
-
-		r.Deployed("Deployed", nil, "run `ocel domain add` to settle shop.app.com", Flip{}, "")
-
-		if !strings.Contains(out.String(), "ocel domain add") {
-			t.Errorf("stdout = %q, want the direction printed in place of the addresses", out.String())
-		}
-	})
-
-	t.Run("json carries the note the provider sent instead of addresses", func(t *testing.T) {
-		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
-
-		r.Deployed("Deployed", nil, "run `ocel domain add`", Flip{}, "")
-
-		var rec map[string]any
-		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
-			t.Fatalf("stdout = %q is not JSON: %v", out.String(), err)
-		}
-		if rec["urlNote"] != "run `ocel domain add`" {
-			t.Errorf("json urlNote = %v, want the provider's note", rec["urlNote"])
-		}
-	})
-
-	t.Run("json omits the bound when none was recorded", func(t *testing.T) {
-		t.Parallel()
-		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
-		t.Cleanup(func() { _ = r.Close() })
-
-		r.Deployed("Deployed", nil, "", Flip{}, "")
-
-		var rec map[string]any
-		if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &rec); err != nil {
-			t.Fatalf("stdout = %q is not JSON: %v", out.String(), err)
-		}
-		if _, ok := rec["flipBound"]; ok {
-			t.Errorf("json = %q, want no flipBound key when the provider recorded none", out.String())
-		}
-	})
 }

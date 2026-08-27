@@ -1,7 +1,6 @@
 package runui
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -10,20 +9,16 @@ import (
 
 	"github.com/fatih/color"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 const (
-	okMark   = "✓"
-	failMark = "✗"
-	warnMark = "⚠"
-	barWidth = 12
-)
-
-var (
-	environmentUnitID = naming.UnitID(naming.UnitEnvironment)
-	buildStageID      = naming.PhaseID(naming.UnitEnvironment, naming.PhaseBuilding)
+	okMark    = "✓"
+	failMark  = "✗"
+	warnMark  = "⚠"
+	startMark = "→"
+	barWidth  = 12
 )
 
 type Renderer struct {
@@ -37,7 +32,6 @@ type Renderer struct {
 	spinning  bool
 	spinMsg   string
 	spinFrame int
-	start     time.Time
 
 	tickStop chan struct{}
 	tickDone chan struct{}
@@ -59,7 +53,6 @@ func NewRenderer(w io.Writer, present Presentation) *Renderer {
 		w:       w,
 		present: present,
 		plan:    newStagePlan(),
-		start:   time.Now(),
 	}
 	liveWriters.Store(w, r)
 	if r.present.Live() {
@@ -85,12 +78,6 @@ func (r *Renderer) useClock(now func() time.Time) {
 	r.plan.useClock(now)
 }
 
-func (r *Renderer) RestartBuildStage() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.plan.restart(stageKey(buildStageID))
-}
-
 func (r *Renderer) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -101,6 +88,100 @@ func (r *Renderer) Write(p []byte) (int, error) {
 		return n, err
 	}
 	return r.w.Write(p)
+}
+
+func (r *Renderer) Commit(lines []string) {
+	if len(lines) == 0 {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.eraseLiveLocked()
+	for _, line := range lines {
+		fmt.Fprintln(r.w, r.paint(line))
+	}
+	r.drawLiveLocked()
+}
+
+func (r *Renderer) paint(line string) string {
+	mark, rest, ok := strings.Cut(line, " ")
+	if !ok {
+		return line
+	}
+	switch mark {
+	case okMark:
+		return r.colorFor(color.FgGreen).Sprint(mark) + " " + rest
+	case failMark:
+		return r.colorFor(color.FgRed, color.Bold).Sprint(mark + " " + rest)
+	case warnMark:
+		return r.colorFor(color.FgYellow, color.Bold).Sprint(mark) + " " + rest
+	case startMark:
+		return r.colorFor(color.Faint).Sprint(mark + " " + rest)
+	default:
+		return line
+	}
+}
+
+func (r *Renderer) Ingest(ev *streamv1.RunEvent) {
+	op := ev.GetOperation()
+	if op == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	switch {
+	case op.GetStagePlan() != nil:
+		r.plan.apply(op.GetStagePlan())
+	case op.GetProgress() != nil:
+		p := op.GetProgress()
+		r.trackLocked(stageKey(p.GetStageId()), p.GetMessage(), p.GetCurrent(), p.Total)
+	case op.GetSpan() != nil:
+		r.endLocked(op.GetSpan())
+	default:
+		return
+	}
+	r.eraseLiveLocked()
+	r.drawLiveLocked()
+}
+
+func (r *Renderer) trackLocked(id, message string, current uint32, total *uint32) {
+	if id == "" {
+		return
+	}
+	if n, ok := r.plan.nodes[id]; ok && n.state == stageDone {
+		return
+	}
+	n, tracked := r.plan.progress(id, message, current, total)
+	if n.title == "" {
+		n.title = message
+	}
+	if tracked {
+		r.plan.ensureActive(id)
+	}
+}
+
+func (r *Renderer) endLocked(span *progressv1.SpanEvent) {
+	id := stageKey(span.GetSpanId())
+	n, ok := r.plan.nodes[id]
+	if !ok {
+		return
+	}
+	n.state = stageDone
+	n.doneFailed = span.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
+	n.doneDur = spanDuration(span)
+	if r.plan.hasActiveAncestor(id) {
+		return
+	}
+	for _, row := range r.plan.subtreeRows(id) {
+		r.plan.removeActive(row.n.id)
+	}
+	r.plan.removeActive(id)
+}
+
+func (r *Renderer) Restart(stageID []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.plan.restart(stageKey(stageID))
 }
 
 func (r *Renderer) tickLoop() {
@@ -161,6 +242,20 @@ func (r *Renderer) Suspend() func() {
 	}
 }
 
+func (r *Renderer) Pause() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.eraseLiveLocked()
+	r.waiting = true
+}
+
+func (r *Renderer) Resume() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.waiting = false
+	r.drawLiveLocked()
+}
+
 func (r *Renderer) Spin(msg string) func() {
 	r.mu.Lock()
 	if !r.present.Live() || r.waiting {
@@ -185,403 +280,6 @@ func (r *Renderer) Spin(msg string) func() {
 		r.spinMsg = ""
 		r.drawLiveLocked()
 	}
-}
-
-func (r *Renderer) Progress(stageID []byte, message string, current uint32, total *uint32) {
-	id := stageKey(stageID)
-	if id == "" {
-		return
-	}
-	if r.present.Format == FormatJSON {
-		fields := map[string]any{"message": message, "stageId": id}
-		if total != nil {
-			fields["current"] = current
-			fields["total"] = *total
-		}
-		r.emitJSON("progress", fields)
-		return
-	}
-	if !r.present.Live() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		fmt.Fprintln(r.w, message)
-		return
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.eraseLiveLocked()
-	r.progressStageLocked(id, message, current, total)
-	r.drawLiveLocked()
-}
-
-func (r *Renderer) progressStageLocked(id, message string, current uint32, total *uint32) {
-	if n, ok := r.plan.nodes[id]; ok && n.state == stageDone {
-		return
-	}
-	n, tracked := r.plan.progress(id, message, current, total)
-	if n.title == "" {
-		n.title = message
-	}
-	if !tracked {
-		return
-	}
-	r.plan.ensureActive(id)
-}
-
-func (r *Renderer) StagePlan(ev *progressv1.StagePlanEvent) {
-	if r.present.Format == FormatJSON {
-		r.emitJSON("stagePlan", map[string]any{"count": len(ev.GetStages())})
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.plan.apply(ev)
-}
-
-func (r *Renderer) Log(message string) {
-	if r.present.Format == FormatJSON {
-		r.emitJSON("log", map[string]any{"message": message})
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.present.Verbose {
-		return
-	}
-	if r.present.Live() {
-		r.eraseLiveLocked()
-		fmt.Fprintln(r.w, message)
-		r.drawLiveLocked()
-		return
-	}
-	fmt.Fprintln(r.w, message)
-}
-
-func (r *Renderer) Degraded(need, detail string) {
-	if r.present.Format == FormatJSON {
-		r.emitJSON("degraded", map[string]any{"need": need, "detail": detail})
-		return
-	}
-	line := fmt.Sprintf("%s %s: %s", r.colorFor(color.FgYellow, color.Bold).Sprint(warnMark), need, detail)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.present.Live() {
-		r.eraseLiveLocked()
-		fmt.Fprintln(r.w, line)
-		r.drawLiveLocked()
-		return
-	}
-	fmt.Fprintln(r.w, line)
-}
-
-func (r *Renderer) DNSOwed(headline string, records []*progressv1.DnsRecord, notes []string) {
-	if len(records) == 0 {
-		return
-	}
-	if r.present.Format == FormatJSON {
-		r.emitJSON("dnsOwed", map[string]any{
-			"headline": headline,
-			"records":  dnsJSON(records),
-			"notes":    notes,
-		})
-		return
-	}
-	block := r.dnsBlock(headline, records, notes)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.present.Live() {
-		r.eraseLiveLocked()
-		fmt.Fprint(r.w, block)
-		r.drawLiveLocked()
-		return
-	}
-	fmt.Fprint(r.w, block)
-}
-
-func (r *Renderer) dnsBlock(headline string, records []*progressv1.DnsRecord, notes []string) string {
-	var b strings.Builder
-	b.WriteString("\n")
-	fmt.Fprintf(&b, "%s %s\n\n",
-		r.colorFor(color.FgYellow, color.Bold).Sprint(warnMark),
-		r.colorFor(color.Bold).Sprint(dnsHeadline(headline, records)),
-	)
-	head, rows := dnsRows(records, r.width())
-	if head == "" {
-		for _, line := range dnsStack(records) {
-			b.WriteString(line + "\n")
-		}
-	} else {
-		b.WriteString(r.colorFor(color.Faint).Sprint(head) + "\n")
-		for _, row := range rows {
-			b.WriteString(row + "\n")
-		}
-	}
-	for i, note := range dnsNotes(records, notes) {
-		if i == 0 {
-			b.WriteString("\n")
-		}
-		b.WriteString(r.colorFor(color.Faint).Sprintf("%s%s\n", dnsIndent, note))
-	}
-	b.WriteString("\n")
-	return b.String()
-}
-
-func dnsJSON(records []*progressv1.DnsRecord) []map[string]any {
-	out := make([]map[string]any, 0, len(records))
-	for _, rec := range records {
-		out = append(out, map[string]any{
-			"name":    rec.GetName(),
-			"type":    rec.GetType(),
-			"value":   rec.GetValue(),
-			"proxied": rec.GetProxied(),
-		})
-	}
-	return out
-}
-
-func (r *Renderer) StageEnd(stageID []byte, failed bool, duration time.Duration) {
-	if r.present.Format == FormatJSON {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	id := stageKey(stageID)
-	n, ok := r.plan.nodes[id]
-	if !ok {
-		return
-	}
-	wasDone := n.state == stageDone
-	n.state = stageDone
-	n.doneFailed = failed
-	n.doneDur = duration
-	if !r.plan.isActive(id) {
-		if !failed || wasDone {
-			return
-		}
-		r.eraseLiveLocked()
-		r.commitRowLocked(displayRow{n: n}, r.colorFor(color.FgRed, color.Bold), failMark, "failed")
-		r.drawLiveLocked()
-		return
-	}
-	if r.plan.hasActiveAncestor(id) {
-		r.eraseLiveLocked()
-		r.drawLiveLocked()
-		return
-	}
-	r.eraseLiveLocked()
-	for _, row := range r.plan.subtreeRows(id) {
-		if row.n.id != id && row.n.state != stageDone {
-			continue
-		}
-		r.commitRowLocked(row, r.okColor(), okMark, "")
-	}
-	r.drawLiveLocked()
-}
-
-func (r *Renderer) Building() {
-	r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: environmentUnitID, Title: "Environment"},
-		{Id: buildStageID, ParentId: environmentUnitID, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
-	}})
-	r.Progress(buildStageID, "Building project", 0, nil)
-}
-
-func (r *Renderer) BuildOK() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	key := stageKey(buildStageID)
-	n, ok := r.plan.nodes[key]
-	if !ok || !r.plan.isActive(key) {
-		return
-	}
-	r.eraseLiveLocked()
-	r.commitRowLocked(displayRow{n: n}, r.okColor(), okMark, "")
-	r.drawLiveLocked()
-}
-
-func (r *Renderer) Waiting(reason, url string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.waiting = true
-	if r.present.Format == FormatJSON {
-		r.emitJSONLocked("waiting", map[string]any{"reason": reason, "url": url})
-		return
-	}
-	r.eraseLiveLocked()
-	fmt.Fprintf(r.w, "\n%s\n  Fill them in at:\n\n    %s\n\n  Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.\n\n",
-		reason, url)
-}
-
-func (r *Renderer) Resume() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.waiting = false
-	r.drawLiveLocked()
-}
-
-type Flip struct {
-	Note  string
-	Bound *progressv1.FlipBound
-}
-
-func (r *Renderer) Deployed(headline string, appURLs []string, urlNote string, flip Flip, logPath string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.finishAllLocked(r.okColor(), okMark, "")
-
-	if r.present.Format == FormatJSON {
-		fields := map[string]any{
-			"headline":   headline,
-			"appUrls":    appURLs,
-			"durationMs": time.Since(r.start).Milliseconds(),
-			"logPath":    logPath,
-		}
-		if urlNote != "" {
-			fields["urlNote"] = urlNote
-		}
-		if flip.Bound != nil {
-			fields["flipBound"] = map[string]any{
-				"typicalMs": flip.Bound.GetTypicalMs(),
-				"published": flip.Bound.GetPublished(),
-			}
-		}
-		r.emitJSONLocked("deployed", fields)
-		return
-	}
-
-	fmt.Fprintln(r.w)
-	r.colorFor(color.FgGreen, color.Bold).Fprintf(r.w, "%s %s in %s\n", okMark, headline, formatDuration(time.Since(r.start)))
-	switch {
-	case len(appURLs) > 0:
-		fmt.Fprintln(r.w)
-		url := r.colorFor(color.FgCyan, color.Bold)
-		for _, u := range appURLs {
-			url.Fprintf(r.w, "  %s\n", u)
-		}
-	case urlNote != "":
-		fmt.Fprintln(r.w)
-		r.colorFor(color.FgYellow).Fprintf(r.w, "  %s\n", urlNote)
-	}
-	if flip.Note != "" {
-		fmt.Fprintln(r.w)
-		r.colorFor(color.Faint).Fprintf(r.w, "  %s\n", flip.Note)
-	}
-	r.printLogPointerLocked("Details", logPath)
-}
-
-func (r *Renderer) Finish(headline, logPath string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.finishAllLocked(r.okColor(), okMark, "")
-
-	if r.present.Format == FormatJSON {
-		r.emitJSONLocked("finished", map[string]any{
-			"headline":   headline,
-			"durationMs": time.Since(r.start).Milliseconds(),
-			"logPath":    logPath,
-		})
-		return
-	}
-	fmt.Fprintln(r.w)
-	r.colorFor(color.FgGreen, color.Bold).Fprintf(r.w, "%s %s (%s)\n", okMark, headline, formatDuration(time.Since(r.start)))
-	r.printLogPointerLocked("Details", logPath)
-}
-
-func (r *Renderer) Fail(err error, logPath string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	hadRows := r.finishAllLocked(r.colorFor(color.FgRed, color.Bold), failMark, "failed")
-
-	if r.present.Format == FormatJSON {
-		r.emitJSONLocked("failed", map[string]any{"error": err.Error(), "logPath": logPath})
-		return
-	}
-	if !hadRows {
-		r.colorFor(color.FgRed, color.Bold).Fprintf(r.w, "%s Failed\n", failMark)
-	}
-	for _, line := range strings.Split(strings.TrimRight(err.Error(), "\n"), "\n") {
-		fmt.Fprintf(r.w, "  %s\n", line)
-	}
-	r.printLogPointerLocked("Full log", logPath)
-}
-
-func (r *Renderer) Cancel(command string, waiting bool, logPath string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	hadRows := r.finishAllLocked(r.colorFor(color.FgYellow, color.Bold), warnMark, "cancelled")
-
-	if r.present.Format == FormatJSON {
-		r.emitJSONLocked("cancelled", map[string]any{"waiting": waiting, "command": command, "logPath": logPath})
-		return
-	}
-	if !hadRows {
-		r.colorFor(color.FgYellow, color.Bold).Fprintf(r.w, "%s Cancelled\n", warnMark)
-	}
-	if waiting {
-		fmt.Fprintln(r.w, "  Nothing has been provisioned.")
-	} else {
-		fmt.Fprintln(r.w, "  Resources may be partially created.")
-	}
-	fmt.Fprintf(r.w, "  Re-run `%s` to reconcile.\n", command)
-	r.printLogPointerLocked("Log", logPath)
-}
-
-func (r *Renderer) printLogPointerLocked(label, logPath string) {
-	if logPath == "" {
-		return
-	}
-	fmt.Fprintln(r.w)
-	r.colorFor(color.Faint).Fprintf(r.w, "  %s: %s\n", label, relLog(logPath))
-}
-
-func (r *Renderer) finishAllLocked(c *color.Color, mark, status string) bool {
-	rows := r.plan.displayRows()
-	if len(rows) == 0 {
-		return false
-	}
-	r.eraseLiveLocked()
-	for _, row := range rows {
-		r.commitRowLocked(row, c, mark, status)
-	}
-	r.plan.activeOrder = nil
-	return true
-}
-
-func (r *Renderer) commitRowLocked(row displayRow, c *color.Color, mark, status string) {
-	n := row.n
-	if n.state != stageDone {
-		n.state = stageDone
-		n.doneFailed = status == "failed"
-		n.doneDur = r.plan.now().Sub(n.started)
-	}
-	if status == "" || status == "failed" {
-		fmt.Fprintln(r.w, r.doneLineLocked(n, row.depth))
-	} else {
-		r.finalizeLineLocked(n, c, mark, status, n.doneDur, row.depth)
-	}
-	r.plan.removeActive(n.id)
-}
-
-func (r *Renderer) doneLineLocked(n *stageNode, depth int) string {
-	indent := strings.Repeat("  ", depth)
-	if n.doneFailed {
-		return indent + r.colorFor(color.FgRed, color.Bold).Sprintf("%s %s failed", failMark, n.title)
-	}
-	return fmt.Sprintf("%s%s  %s",
-		indent,
-		r.okColor().Sprintf("%s %s", okMark, n.title),
-		r.colorFor(color.Faint).Sprint(formatDuration(n.doneDur)))
-}
-
-func (r *Renderer) finalizeLineLocked(n *stageNode, c *color.Color, mark, status string, duration time.Duration, depth int) {
-	indent := strings.Repeat("  ", depth)
-	if status == "" {
-		c.Fprintf(r.w, "%s%s %s", indent, mark, n.title)
-		r.colorFor(color.Faint).Fprintf(r.w, "  %s\n", formatDuration(duration))
-		return
-	}
-	c.Fprintf(r.w, "%s%s %s %s\n", indent, mark, n.title, status)
 }
 
 func (r *Renderer) eraseLiveLocked() {
@@ -642,7 +340,13 @@ func (r *Renderer) rowLineLocked(row displayRow) string {
 	n := row.n
 	indent := strings.Repeat("  ", row.depth)
 	if n.state == stageDone {
-		return r.doneLineLocked(n, row.depth)
+		if n.doneFailed {
+			return indent + r.colorFor(color.FgRed, color.Bold).Sprintf("%s %s failed", failMark, n.title)
+		}
+		return fmt.Sprintf("%s%s  %s",
+			indent,
+			r.colorFor(color.FgGreen).Sprintf("%s %s", okMark, n.title),
+			r.colorFor(color.Faint).Sprint(formatDuration(n.doneDur)))
 	}
 	glyph := r.colorFor(color.FgCyan).Sprint(spinnerFrame(n.frame))
 	var b strings.Builder
@@ -657,8 +361,6 @@ func (r *Renderer) rowLineLocked(row displayRow) string {
 	return b.String()
 }
 
-func (r *Renderer) okColor() *color.Color { return r.colorFor(color.FgGreen) }
-
 func (r *Renderer) colorFor(attrs ...color.Attribute) *color.Color {
 	c := color.New(attrs...)
 	if r.present.Color {
@@ -667,24 +369,6 @@ func (r *Renderer) colorFor(attrs ...color.Attribute) *color.Color {
 		c.DisableColor()
 	}
 	return c
-}
-
-func (r *Renderer) emitJSON(kind string, fields map[string]any) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.emitJSONLocked(kind, fields)
-}
-
-func (r *Renderer) emitJSONLocked(kind string, fields map[string]any) {
-	rec := map[string]any{"type": kind}
-	for k, v := range fields {
-		rec[k] = v
-	}
-	raw, err := json.Marshal(rec)
-	if err != nil {
-		return
-	}
-	fmt.Fprintln(r.w, string(raw))
 }
 
 func phaseLabel(p progressv1.Phase) string {

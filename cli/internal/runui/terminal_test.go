@@ -171,15 +171,13 @@ func TestTruncateToWidthHandlesRowsWithNothingToShow(t *testing.T) {
 func TestColoredLiveRowFitsTheTerminal(t *testing.T) {
 	drawnRow := func(colorEnabled bool) string {
 		var out bytes.Buffer
-		r := NewRenderer(&out, Presentation{Format: FormatHuman, TTY: true, Color: colorEnabled, Width: 40})
-		r.useClock(func() time.Time { return time.Unix(0, 0) })
+		s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Color: colorEnabled, Width: 40})
+		s.Renderer().useClock(func() time.Time { return time.Unix(0, 0) })
 
 		app := appStage(1)
-		r.StagePlan(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-			{Id: app, Title: "a-long-application-name"},
-		}})
-		r.Progress(app, "uploading a great many static assets", 1, nil)
-		_ = r.Close()
+		s.Emit(stagePlanEvent(&progressv1.Stage{Id: app, Title: "a-long-application-name"}))
+		s.Emit(progressEvent(app, "uploading a great many static assets", 1, nil))
+		_ = s.Close()
 
 		for _, line := range strings.Split(out.String(), "\n") {
 			if strings.Contains(line, "a-long-application-name") {

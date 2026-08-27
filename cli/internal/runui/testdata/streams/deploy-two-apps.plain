@@ -1,0 +1,43 @@
+Change plan
+  subject: production
+  edge kind: cloudfront
+  groups:
+    - kind: infrastructure
+      name: shared
+      changes:
+        - kind: bucket
+          name: assets
+          action: create
+        - kind: bucket
+          name: logs
+          action: delete
+          reason: no longer declared
+        - kind: function
+          name: api
+          action: update
+→ Environment › Building
+  Bundling web (1/2)
+  Bundling api (2/2)
+✓ Environment › Building  6s
+
+1 variable is not ready — nothing has been built.
+  Fill them in at:
+
+    http://127.0.0.1:5555/#t=abc
+
+  Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.
+
+Resumed
+  reason: the page was answered
+→ web › Provisioning
+→ api › Provisioning
+Degraded
+  need: edge-middleware
+  detail: web: middleware runs in the origin
+  creating bucket assets
+✓ web › Provisioning  12s
+  updating function api
+✗ api › Provisioning failed  3s
+
+✗ Failed
+  updating function api: InsufficientCapacity

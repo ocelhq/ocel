@@ -13,16 +13,26 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/pkg/naming"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
+var (
+	environmentUnitID = naming.UnitID(naming.UnitEnvironment)
+	buildStageID      = naming.PhaseID(naming.UnitEnvironment, naming.PhaseBuilding)
+)
+
 type Session struct {
-	r       *Renderer
+	stream  *Stream
 	run     *runtrace.Run
 	command string
 	present Presentation
 	waiting bool
+
+	start      time.Time
+	buildStart time.Time
 
 	logMu     sync.Mutex
 	log       *os.File
@@ -32,10 +42,11 @@ type Session struct {
 
 func New(stdout io.Writer, run *runtrace.Run, present Presentation) *Session {
 	s := &Session{
-		r:       NewRenderer(stdout, present),
+		stream:  NewStream(stdout, present),
 		run:     run,
 		command: run.Command(),
 		present: present,
+		start:   time.Now(),
 	}
 	p := filepath.Join(run.Dir(), run.TraceID()+".log")
 	if f, err := os.Create(p); err == nil {
@@ -48,9 +59,7 @@ func New(stdout io.Writer, run *runtrace.Run, present Presentation) *Session {
 
 func (s *Session) Presentation() Presentation { return s.present }
 
-func (s *Session) LogPath() string {
-	return s.logPath
-}
+func (s *Session) LogPath() string { return s.logPath }
 
 func (s *Session) BuildWriter() io.Writer {
 	if !s.present.Verbose {
@@ -60,76 +69,104 @@ func (s *Session) BuildWriter() io.Writer {
 		return io.Discard
 	}
 	if s.logWriter != nil {
-		return io.MultiWriter(s.r, s.logWriter)
+		return io.MultiWriter(s.stream.Renderer(), s.logWriter)
 	}
-	return s.r
+	return s.stream.Renderer()
 }
 
-func (s *Session) Suspend() func() { return s.r.Suspend() }
+func (s *Session) Suspend() func() {
+	if r := s.stream.Renderer(); r != nil {
+		return r.Suspend()
+	}
+	return func() {}
+}
 
 func (s *Session) Diagnostic(message string) {
 	s.logf("[diagnostic] %s", message)
-	if s.present.Format == FormatJSON {
-		s.r.emitJSON("diagnostic", map[string]any{"message": message})
-		return
-	}
-	_, _ = fmt.Fprintln(s.r, message)
+	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Diagnostic{
+		Diagnostic: &streamv1.DiagnosticEvent{Message: message, Level: streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_INFO},
+	}})
 }
 
 func (s *Session) Building() {
 	s.logf("[building] Building project")
-	s.r.Building()
+	s.buildStart = time.Now()
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
+		StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
+			{Id: environmentUnitID, Title: "Environment"},
+			{Id: buildStageID, ParentId: environmentUnitID, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
+		}},
+	}})
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
+		Progress: &progressv1.ProgressEvent{StageId: buildStageID, Message: "Building project"},
+	}})
 }
 
 func (s *Session) BuildOK() {
-	s.r.BuildOK()
+	if s.buildStart.IsZero() {
+		return
+	}
+	end := time.Now()
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
+		Span: &progressv1.SpanEvent{
+			SpanId:            buildStageID,
+			ParentSpanId:      environmentUnitID,
+			Name:              naming.PhaseBuilding,
+			StartTimeUnixNano: s.buildStart.UnixNano(),
+			EndTimeUnixNano:   end.UnixNano(),
+			Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
+		},
+	}})
+	s.buildStart = time.Time{}
 }
 
 func (s *Session) RestartBuild() {
-	s.r.RestartBuildStage()
+	s.buildStart = time.Now()
+	if r := s.stream.Renderer(); r != nil {
+		r.Restart(buildStageID)
+	}
 }
 
 func (s *Session) Waiting(reason, url string) {
 	s.logf("[waiting] %s", withoutFragment(url))
 	s.waiting = true
-	s.r.Waiting(reason, url)
+	if r := s.stream.Renderer(); r != nil {
+		r.Pause()
+	}
+	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{
+		Waiting: &streamv1.WaitingEvent{Reason: reason, Url: url},
+	}})
 }
 
 func (s *Session) Resume() {
 	s.waiting = false
-	s.r.Resume()
+	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Resumed{
+		Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"},
+	}})
+	if r := s.stream.Renderer(); r != nil {
+		r.Resume()
+	}
 }
 
 func (s *Session) Event(ev *progressv1.OperationEvent) {
-	if p := ev.GetProgress(); p != nil {
-		message := collapseRewrites(p.GetMessage())
-		s.logf("[progress] %s", progressLogLine(message, p.GetCurrent(), p.Total))
-		s.r.Progress(p.GetStageId(), message, p.GetCurrent(), p.Total)
-		return
-	}
-	if l := ev.GetLog(); l != nil {
-		message := collapseRewrites(l.GetMessage())
-		s.logf("[log] %s", message)
-		s.r.Log(message)
-		return
-	}
-	if d := ev.GetDegraded(); d != nil {
-		s.logf("[degraded] %s: %s", d.GetNeed(), d.GetDetail())
-		s.r.Degraded(d.GetNeed(), d.GetDetail())
-		return
-	}
-	if owed := ev.GetDnsOwed(); owed != nil {
-		s.logf("[dns] %s: %s", owed.GetHeadline(), dnsLogLine(owed.GetRecords()))
-		s.r.DNSOwed(owed.GetHeadline(), owed.GetRecords(), owed.GetNotes())
-		return
-	}
-	if sp := ev.GetStagePlan(); sp != nil {
-		s.r.StagePlan(sp)
-		return
-	}
-	if span := ev.GetSpan(); span != nil {
+	out := s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Operation{Operation: ev}}).GetOperation()
+	s.logOperation(out)
+	if span := out.GetSpan(); span != nil {
 		s.ingestSpan(span)
-		return
+	}
+}
+
+func (s *Session) logOperation(ev *progressv1.OperationEvent) {
+	switch {
+	case ev.GetProgress() != nil:
+		p := ev.GetProgress()
+		s.logf("[progress] %s", progressLogLine(p.GetMessage(), p.GetCurrent(), p.Total))
+	case ev.GetLog() != nil:
+		s.logf("[log] %s", ev.GetLog().GetMessage())
+	case ev.GetDegraded() != nil:
+		s.logf("[degraded] %s: %s", ev.GetDegraded().GetNeed(), ev.GetDegraded().GetDetail())
+	case ev.GetDnsOwed() != nil:
+		s.logf("[dns] %s: %s", ev.GetDnsOwed().GetHeadline(), dnsLogLine(ev.GetDnsOwed().GetRecords()))
 	}
 }
 
@@ -156,10 +193,10 @@ func (s *Session) ingestSpan(span *progressv1.SpanEvent) {
 	start := unixNano(span.GetStartTimeUnixNano())
 	end := unixNano(span.GetEndTimeUnixNano())
 	if start.IsZero() {
-		start = s.now()
+		start = time.Now().UTC()
 	}
 	if !end.After(start) {
-		end = s.now()
+		end = time.Now().UTC()
 	}
 	if end.Before(start) {
 		end = start
@@ -172,37 +209,46 @@ func (s *Session) ingestSpan(span *progressv1.SpanEvent) {
 		spanStatus(span.GetStatus()),
 		spanAttributes(span.GetAttributes()),
 	)
-
-	s.r.StageEnd(spanID[:], span.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR, end.Sub(start))
-}
-
-func (s *Session) now() time.Time {
-	s.r.mu.Lock()
-	defer s.r.mu.Unlock()
-	return s.r.plan.now().UTC()
 }
 
 func (s *Session) Deployed(headline string, appURLs []string, urlNote string, flip Flip, links []*linksv1.Link, functions []*progressv1.FunctionOutput) {
 	s.logOutputs(links, functions)
-	s.r.Deployed(headline, appURLs, urlNote, flip, s.logPath)
+	s.result(&streamv1.RunResultEvent{
+		Success:   true,
+		Headline:  headline,
+		AppUrls:   appURLs,
+		UrlNote:   urlNote,
+		FlipBound: flip.Bound,
+	})
 }
 
 func (s *Session) Finish(headline string) {
-	s.r.Finish(headline, s.logPath)
+	s.result(&streamv1.RunResultEvent{Success: true, Headline: headline})
 }
 
 func (s *Session) Fail(err error) {
 	s.logf("[error] %v", err)
-	s.r.Fail(err, s.logPath)
+	s.result(&streamv1.RunResultEvent{Success: false, Error: err.Error()})
 }
 
 func (s *Session) Cancel() {
 	s.logf("[cancelled] interrupted")
-	s.r.Cancel(s.command, s.waiting, s.logPath)
+	note := "Resources may be partially created."
+	if s.waiting {
+		note = "Nothing has been provisioned."
+	}
+	s.Diagnostic(fmt.Sprintf("%s Re-run `%s` to reconcile.", note, s.command))
+	s.result(&streamv1.RunResultEvent{Success: false, Headline: "Cancelled"})
+}
+
+func (s *Session) result(ev *streamv1.RunResultEvent) {
+	ev.DurationMs = time.Since(s.start).Milliseconds()
+	ev.LogPath = s.logPath
+	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: ev}})
 }
 
 func (s *Session) Close() error {
-	_ = s.r.Close()
+	_ = s.stream.Close()
 	if s.log != nil {
 		return s.log.Close()
 	}
