@@ -228,17 +228,34 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	if err != nil {
 		return nil, RefusalError(err)
 	}
+	wildcard := w.proto(ctx)
+	wildcard.Certificate = certificateState(w.held.Settled, w.held.Settled.Probe, nil, health.Status)
 	return &contractv1.GetPreviewWildcardResponse{
-		Wildcard: &contractv1.PreviewWildcard{
-			BaseDomain:     w.held.BaseDomain,
-			EdgeScope:      w.held.Scope,
-			GrammarMin:     w.held.GrammarMin,
-			GrammarMax:     w.held.GrammarMax,
-			RouteInstalled: w.routeInstalled(ctx),
-			Certificate:    certificateState(w.held.Settled, w.held.Settled.Probe, nil, health.Status),
-		},
+		Wildcard: wildcard,
 		Projects: served,
 	}, nil
+}
+
+func heldPreviewWildcard(ctx context.Context, provider Provider) (*contractv1.PreviewWildcard, error) {
+	held, err := readWildcard(ctx, provider.Records())
+	if err != nil {
+		return nil, err
+	}
+	if held.BaseDomain == "" {
+		return nil, nil
+	}
+	w := &wildcards{provider: provider, records: provider.Records(), held: held}
+	return w.proto(ctx), nil
+}
+
+func (w *wildcards) proto(ctx context.Context) *contractv1.PreviewWildcard {
+	return &contractv1.PreviewWildcard{
+		BaseDomain:     w.held.BaseDomain,
+		EdgeScope:      w.held.Scope,
+		GrammarMin:     w.held.GrammarMin,
+		GrammarMax:     w.held.GrammarMax,
+		RouteInstalled: w.routeInstalled(ctx),
+	}
 }
 
 func (w *wildcards) routeInstalled(ctx context.Context) bool {
