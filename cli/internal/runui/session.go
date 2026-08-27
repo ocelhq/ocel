@@ -36,8 +36,9 @@ type Session struct {
 	waiting bool
 	shown   *planv1.ChangePlan
 
-	start      time.Time
-	buildStart time.Time
+	start        time.Time
+	buildStart   time.Time
+	buildAttempt int
 
 	build   *lineWriter
 	process *lineWriter
@@ -175,28 +176,29 @@ func (s *Session) BuildOK() {
 	}
 	s.build.flush()
 	end := time.Now()
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
-		Span: &progressv1.SpanEvent{
-			SpanId:            buildStageID,
-			ParentSpanId:      environmentUnitID,
-			Name:              naming.PhaseBuilding,
-			StartTimeUnixNano: s.buildStart.UnixNano(),
-			EndTimeUnixNano:   end.UnixNano(),
-			Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
-		},
-	}})
+	span := &progressv1.SpanEvent{
+		SpanId:            buildStageID,
+		ParentSpanId:      environmentUnitID,
+		Name:              naming.PhaseBuilding,
+		StartTimeUnixNano: s.buildStart.UnixNano(),
+		EndTimeUnixNano:   end.UnixNano(),
+		Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
+	}
+	if s.buildAttempt > 0 {
+		span.Attributes = []*progressv1.SpanAttribute{{
+			Key:   progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT,
+			Value: strconv.Itoa(s.buildAttempt),
+		}}
+	}
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: span}})
 	s.buildStart = time.Time{}
-}
-
-func (s *Session) RestartBuild() {
-	s.buildStart = time.Now()
-	s.stream.Restart(buildStageID)
 }
 
 func (s *Session) Waiting(reason, url string) {
 	s.logf("[waiting] %s", withoutFragment(url))
 	s.waiting = true
-	s.stream.Pause()
+	s.build.flush()
+	s.buildStart = time.Time{}
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{
 		Waiting: &streamv1.WaitingEvent{Reason: reason, Url: url},
 	}})
@@ -204,10 +206,12 @@ func (s *Session) Waiting(reason, url string) {
 
 func (s *Session) Resume() {
 	s.waiting = false
+	s.buildAttempt++
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Resumed{
 		Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"},
 	}})
-	s.stream.Resume()
+	s.stream.Restart(buildStageID)
+	s.Building()
 }
 
 func (s *Session) Event(ev *progressv1.OperationEvent) {

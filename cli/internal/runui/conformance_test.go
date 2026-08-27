@@ -323,24 +323,31 @@ type phaseBlock struct {
 	mark   string
 }
 
-func blocksOnTheStream(events []*streamv1.RunEvent) (blocks map[string]*phaseBlock, declared, flushed []string) {
-	blocks = map[string]*phaseBlock{}
+func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
+	open := map[string]*phaseBlock{}
 	units := map[string]string{}
 	holder := map[string]string{}
 	claim := func(stageID []byte, text string) {
-		b := blocks[holder[hex.EncodeToString(stageID)]]
-		if b == nil || b.closed {
+		b := open[holder[hex.EncodeToString(stageID)]]
+		if b == nil {
 			return
 		}
 		b.lines = append(b.lines, strings.Split(strings.TrimSuffix(text, "\n"), "\n")...)
 	}
 	close := func(id, mark string) {
-		b := blocks[id]
-		if b == nil || b.closed {
+		b := open[id]
+		if b == nil {
 			return
 		}
 		b.closed, b.mark = true, mark
-		flushed = append(flushed, id)
+		delete(open, id)
+		flushed = append(flushed, b)
+	}
+	var order []string
+	closeAll := func(mark string) {
+		for _, id := range order {
+			close(id, mark)
+		}
 	}
 
 	for _, raw := range events {
@@ -354,9 +361,9 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (blocks map[string]*phaseBlo
 				case parent == "":
 					units[id] = st.GetTitle()
 				case units[parent] != "":
-					blocks[id] = &phaseBlock{id: id, path: units[parent] + " › " + phaseTitle(st)}
+					open[id] = &phaseBlock{id: id, path: units[parent] + " › " + phaseTitle(st)}
 					holder[id] = id
-					declared = append(declared, id)
+					order = append(order, id)
 				default:
 					holder[id] = holder[parent]
 				}
@@ -374,17 +381,17 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (blocks map[string]*phaseBlo
 				mark = failMark
 			}
 			close(hex.EncodeToString(op.GetSpan().GetSpanId()), mark)
+		case ev.GetWaiting() != nil:
+			closeAll(warnMark)
 		case ev.GetResult() != nil:
 			mark := warnMark
 			if !ev.GetResult().GetSuccess() && !ev.GetResult().GetInterrupted() {
 				mark = failMark
 			}
-			for _, id := range declared {
-				close(id, mark)
-			}
+			closeAll(mark)
 		}
 	}
-	return blocks, declared, flushed
+	return flushed
 }
 
 func bodyBefore(lines []string, at int, n int) []string {
@@ -422,7 +429,7 @@ func TestCommittedOutputIsWholeBlocksInPhaseCompletionOrder(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			_, events := fixtureStream(t, name)
-			blocks, _, flushed := blocksOnTheStream(events)
+			flushed := blocksOnTheStream(events)
 			if len(flushed) == 0 {
 				t.Fatalf("fixture %s flushes no block — it cannot hold this projection to account", name)
 			}
@@ -433,8 +440,7 @@ func TestCommittedOutputIsWholeBlocksInPhaseCompletionOrder(t *testing.T) {
 			} {
 				lines := strings.Split(strings.TrimSuffix(projection.text, "\n"), "\n")
 				at := 0
-				for _, id := range flushed {
-					b := blocks[id]
+				for _, b := range flushed {
 					want := closeLine(b)
 					found := findFrom(lines, want, at)
 					if found < 0 {
@@ -466,11 +472,9 @@ func TestAnInterruptedRunFlushesEveryInFlightBlockWithAnInterruptedMarker(t *tes
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			blocks, _, flushed := blocksOnTheStream(events)
-
 			var inFlight []*phaseBlock
-			for _, id := range flushed {
-				if b := blocks[id]; b.mark == warnMark {
+			for _, b := range blocksOnTheStream(events) {
+				if b.mark == warnMark {
 					inFlight = append(inFlight, b)
 				}
 			}

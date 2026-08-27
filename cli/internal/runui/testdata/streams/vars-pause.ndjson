@@ -1,0 +1,10 @@
+{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"BgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILDING"}]}}}
+{"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"Building project"}}}
+{"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"Reading ocel.aws.config.ts"}}}
+{"waiting":{"reason":"1 variable is not ready — nothing has been built.\n\n  STRIPE_API_KEY (project root), read by web\n    no value is set\n    fix: ocel env set STRIPE_API_KEY <VALUE>\n","url":"http://127.0.0.1:5555/#t=abc"}}
+{"resumed":{"reason":"the page was answered"}}
+{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"BgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILDING"}]}}}
+{"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"Building project"}}}
+{"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"▲ Next.js 15.4.2\n ✓ Compiled successfully"}}}
+{"operation":{"span":{"spanId":"BgAAAAAAAAA=","parentSpanId":"AQAAAAAAAAA=","name":"building","startTimeUnixNano":"1000000000","endTimeUnixNano":"5000000000","status":"SPAN_STATUS_OK","attributes":[{"key":"ATTRIBUTE_KEY_RETRY_COUNT","value":"1"}]}}}
+{"result":{"success":true,"headline":"Deployed","durationMs":"12000","appUrls":["https://acme.example.com"]}}

@@ -1063,3 +1063,103 @@ func TestABlockCommitsItsLinesVerbatimRightHandWhitespaceIncluded(t *testing.T) 
 		t.Errorf("stdout = %q, want the blank line the stream carried kept in the block", got)
 	}
 }
+
+func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the stream re-declares the build phase after the resume", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		run := startTestRun(t, dir, "ocel deploy")
+		var out bytes.Buffer
+		s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
+		t.Cleanup(func() { _ = s.Close() })
+
+		s.Building()
+		s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+		s.Resume()
+		s.BuildOK()
+
+		var order []string
+		for _, ev := range parseNDJSON(t, out.String()) {
+			switch {
+			case ev.GetWaiting() != nil:
+				order = append(order, "waiting")
+			case ev.GetResumed() != nil:
+				order = append(order, "resumed")
+			case ev.GetOperation().GetStagePlan() != nil:
+				for _, st := range ev.GetOperation().GetStagePlan().GetStages() {
+					if bytes.Equal(st.GetId(), buildStageID) {
+						order = append(order, "build phase declared")
+					}
+				}
+			case ev.GetOperation().GetSpan() != nil:
+				if bytes.Equal(ev.GetOperation().GetSpan().GetSpanId(), buildStageID) {
+					order = append(order, "build phase ended")
+				}
+			}
+		}
+
+		want := []string{"build phase declared", "waiting", "resumed", "build phase declared", "build phase ended"}
+		if strings.Join(order, ", ") != strings.Join(want, ", ") {
+			t.Errorf("stream = %v, want %v", order, want)
+		}
+	})
+
+	t.Run("the resumed build ends on a span marked with the retry count", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		run := startTestRun(t, dir, "ocel deploy")
+		var out bytes.Buffer
+		s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
+		t.Cleanup(func() { _ = s.Close() })
+
+		s.Building()
+		s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+		s.Resume()
+		s.BuildOK()
+
+		var spans []*progressv1.SpanEvent
+		for _, ev := range parseNDJSON(t, out.String()) {
+			if span := ev.GetOperation().GetSpan(); span != nil && bytes.Equal(span.GetSpanId(), buildStageID) {
+				spans = append(spans, span)
+			}
+		}
+		if len(spans) != 1 {
+			t.Fatalf("stream carries %d build spans, want the one the resumed phase ends on", len(spans))
+		}
+		attrs := spans[0].GetAttributes()
+		if len(attrs) != 1 || attrs[0].GetKey() != progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT || attrs[0].GetValue() != "1" {
+			t.Errorf("build span attributes = %v, want the retry count at 1", attrs)
+		}
+	})
+
+	t.Run("the transcript reads build, waiting card, build again", func(t *testing.T) {
+		t.Parallel()
+		s, out, _ := newTestSession(t, "ocel deploy")
+
+		s.Building()
+		fmt.Fprintln(s.BuildWriter(), "Reading ocel.aws.config.ts")
+		s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+		s.Resume()
+		fmt.Fprintln(s.BuildWriter(), "Compiled successfully")
+		s.BuildOK()
+
+		got := out.String()
+		var at int
+		for _, want := range []string{
+			blockIndent + "Reading ocel.aws.config.ts\n",
+			warnMark + " Environment › Building paused\n",
+			"http://127.0.0.1:5555/#t=abc",
+			startMark + " Environment › Building\n",
+			blockIndent + "Compiled successfully\n",
+			okMark + " Environment › Building",
+		} {
+			i := strings.Index(got[at:], want)
+			if i < 0 {
+				t.Fatalf("transcript has no %q at or after offset %d:\n%s", want, at, got)
+			}
+			at += i + len(want)
+		}
+	})
+}

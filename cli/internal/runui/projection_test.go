@@ -19,13 +19,15 @@ func TestAnArmWithNoOverrideIsProjectedFromItsDescriptor(t *testing.T) {
 	t.Parallel()
 
 	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
-	got := p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Resumed{Resumed: &streamv1.ResumedEvent{
-		Reason: "the page was answered",
-	}}})
+	got := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+		Success: true,
+		UrlNote: "the certificate is still issuing",
+	}}}))
 
 	want := []string{
-		"Resumed",
-		"  reason: the page was answered",
+		"Result",
+		"  success: true",
+		"  url note: the certificate is still issuing",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("projection =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

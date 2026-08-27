@@ -24,14 +24,12 @@ import (
 
 const noBrowserEnvVar = "OCEL_NO_BROWSER"
 
-func canOpenVarsUI(deps cmddeps.Deps, stdin io.Reader, noUI bool) bool {
-	if noUI || os.Getenv(noBrowserEnvVar) != "" {
+func canOpenVarsUI(deps cmddeps.Deps, stdin io.Reader) bool {
+	if os.Getenv(noBrowserEnvVar) != "" {
 		return false
 	}
 	return deps.StdinIsTerminal(stdin)
 }
-
-const noUIFlagUsage = "Fail on a missing or invalid variable instead of pausing to open the variables UI"
 
 const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building first (produce it with ocel build)"
 
@@ -39,7 +37,6 @@ type deployOptions struct {
 	yes      bool
 	tag      string
 	prebuilt bool
-	noUI     bool
 }
 
 func NewCommand(deps cmddeps.Deps) *cobra.Command {
@@ -74,7 +71,6 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	cmddeps.Yes(cmd, &opts.yes)
 	cmd.Flags().StringVar(&opts.tag, "tag", "", "Mark this deploy with an immutable `label` to roll back to by name (ocel rollback --tag)")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
-	cmd.Flags().BoolVar(&opts.noUI, "no-ui", false, noUIFlagUsage)
 
 	return cmd
 }
@@ -116,7 +112,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 				}, envwire.Scope(cfg, false, ""))
 			},
 			ui:      ui,
-			enabled: canOpenVarsUI(deps, stdin, opts.noUI),
+			enabled: canOpenVarsUI(deps, stdin),
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {

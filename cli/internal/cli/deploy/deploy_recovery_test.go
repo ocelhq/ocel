@@ -474,49 +474,26 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		}
 	})
 
-	t.Run("a non-interactive run never waits", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-		t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
-		deps := clitest.NewDeps()
-		var mu sync.Mutex
-		var opened []string
-		recordBrowser(&deps, &opened, &mu)
-		built := false
-		stubAppBuildRecorder(&deps, &built)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		var stdout, stderr bytes.Buffer
-		err := runDeploy(ctx, deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
-		if err == nil {
-			t.Fatal("runDeploy err = nil, want a non-interactive run to hard-fail")
-		}
-		if varsUIURL.MatchString(stdout.String()) {
-			t.Errorf("stdout = %q, want no variables UI opened without a terminal", stdout.String())
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		if len(opened) != 0 {
-			t.Errorf("opened = %v, want no browser launched without a terminal", opened)
-		}
-	})
-
-	t.Run("the opt-outs keep a terminal from waiting", func(t *testing.T) {
+	t.Run("interactivity alone decides whether a vars requirement can pause", func(t *testing.T) {
 		for _, tc := range []struct {
-			name string
-			opts deployOptions
-			env  string
+			name     string
+			terminal bool
+			opts     deployOptions
+			env      string
 		}{
-			{name: "--no-ui", opts: deployOptions{yes: true, noUI: true}},
-			{name: noBrowserEnvVar, opts: deployOptions{yes: true}, env: "1"},
-			{name: noBrowserEnvVar + "=anything", opts: deployOptions{yes: true}, env: "true"},
+			{name: "off a terminal", opts: deployOptions{}},
+			{name: "off a terminal with --yes", opts: deployOptions{yes: true}},
+			{name: noBrowserEnvVar, terminal: true, opts: deployOptions{}, env: "1"},
+			{name: noBrowserEnvVar + "=anything", terminal: true, opts: deployOptions{yes: true}, env: "true"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
 				t.Setenv(noBrowserEnvVar, tc.env)
 				deps := clitest.NewDeps()
-				terminalStdin(&deps)
+				if tc.terminal {
+					terminalStdin(&deps)
+				}
 				var mu sync.Mutex
 				var opened []string
 				recordBrowser(&deps, &opened, &mu)
@@ -528,13 +505,23 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 				var stdout, stderr bytes.Buffer
 				err := runDeploy(ctx, deps, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 				if err == nil {
-					t.Fatal("runDeploy err = nil, want the opt-out to keep the hard refusal")
+					t.Fatal("runDeploy err = nil, want the vars requirement to be terminal")
+				}
+				for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY"} {
+					if !strings.Contains(stdout.String(), want) {
+						t.Errorf("stdout = %q, want the refusal to list the owed variable (%q)", stdout.String(), want)
+					}
 				}
 				if varsUIURL.MatchString(stdout.String()) {
 					t.Errorf("stdout = %q, want no variables UI opened", stdout.String())
 				}
 				if built {
 					t.Error("the app was built, want the gate to refuse before any build runs")
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				if len(opened) != 0 {
+					t.Errorf("opened = %v, want no browser launched", opened)
 				}
 			})
 		}
@@ -589,7 +576,7 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 			opts     previewUpOptions
 		}{
 			{name: "no terminal", opts: previewUpOptions{name: "staging"}},
-			{name: "--no-ui", terminal: true, opts: previewUpOptions{name: "staging", noUI: true}},
+			{name: "no terminal with --yes", opts: previewUpOptions{name: "staging", yes: true}},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)

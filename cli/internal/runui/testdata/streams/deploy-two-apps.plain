@@ -21,8 +21,8 @@ Change plan, fronted by the cloudfront edge:
 
   Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.
 
-Resumed
-  reason: the page was answered
+✓ Resumed — the page was answered
+
 → web › Provisioning
 → api › Provisioning
 ⚠ edge-middleware: web: middleware runs in the origin
