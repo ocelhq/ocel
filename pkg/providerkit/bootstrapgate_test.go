@@ -202,7 +202,7 @@ func TestAdmitHealsAStaleBootstrapUnattended(t *testing.T) {
 	}
 }
 
-func TestAdmitLeavesAStaleBootstrapAloneWhenNobodyAskedForHealing(t *testing.T) {
+func TestAdmitLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoHealing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -217,6 +217,34 @@ func TestAdmitLeavesAStaleBootstrapAloneWhenNobodyAskedForHealing(t *testing.T) 
 	}
 	if got := len(bootstrapper.Applied()); got != 1 {
 		t.Errorf("Apply() ran %d times, want only the bootstrap that stood it up", got)
+	}
+	if !strings.Contains(report.told(), "its content is behind") {
+		t.Errorf("Admit() said %q, want it to report the drift it left standing", report.told())
+	}
+}
+
+func TestAdmitAsksForNoHealingAndGetsNone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gate, provider := gated(t, "2.0.0")
+	bootstrapper := provider.Bootstrapper()
+	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+	if err := gate.RecordBootstrap(ctx, providerkit.ClassProduction, providerkit.BootstrapState{AutoHeal: true}); err != nil {
+		t.Fatal(err)
+	}
+	bootstrapper.Behind(fake.FeatureCache)
+
+	report := &recorder{}
+	standing, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, false, report)
+	if err != nil {
+		t.Fatalf("Admit() error = %v", err)
+	}
+	if got := len(bootstrapper.Applied()); got != 1 {
+		t.Errorf("Apply() ran %d times, want a caller that asked for no healing to get none though the account opted in", got)
+	}
+	if stale := standing.Stale([]string{fake.FeatureCache}); len(stale) != 1 {
+		t.Errorf("Admit() reports %v behind, want the drift it was told to leave standing", stale)
 	}
 	if !strings.Contains(report.told(), "its content is behind") {
 		t.Errorf("Admit() said %q, want it to report the drift it left standing", report.told())
