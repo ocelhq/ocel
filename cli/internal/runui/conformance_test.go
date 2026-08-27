@@ -315,9 +315,15 @@ func phaseTitle(st *progressv1.Stage) string {
 	return phaseLabel(st.GetPhase())
 }
 
+type blockText struct {
+	text string
+	raw  bool
+}
+
 type phaseBlock struct {
 	id     string
 	path   string
+	held   []blockText
 	lines  []string
 	closed bool
 	mark   string
@@ -327,12 +333,14 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 	open := map[string]*phaseBlock{}
 	units := map[string]string{}
 	holder := map[string]string{}
-	claim := func(stageID []byte, text string) {
+	claim := func(stageID []byte, text string, raw bool) {
 		b := open[holder[hex.EncodeToString(stageID)]]
 		if b == nil {
 			return
 		}
-		b.lines = append(b.lines, strings.Split(strings.TrimSuffix(text, "\n"), "\n")...)
+		for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+			b.held = append(b.held, blockText{text: line, raw: raw})
+		}
 	}
 	close := func(id, mark string) {
 		b := open[id]
@@ -340,6 +348,12 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 			return
 		}
 		b.closed, b.mark = true, mark
+		for _, line := range b.held {
+			if line.raw && mark != failMark {
+				continue
+			}
+			b.lines = append(b.lines, line.text)
+		}
 		delete(open, id)
 		flushed = append(flushed, b)
 	}
@@ -371,10 +385,10 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 		case op.GetProgress() != nil:
 			p := op.GetProgress()
 			if line := progressLogLine(p.GetMessage(), p.GetCurrent(), p.Total); line != "" {
-				claim(p.GetStageId(), line)
+				claim(p.GetStageId(), line, false)
 			}
 		case op.GetLog() != nil:
-			claim(op.GetLog().GetStageId(), op.GetLog().GetMessage())
+			claim(op.GetLog().GetStageId(), op.GetLog().GetMessage(), true)
 		case op.GetSpan() != nil:
 			mark := okMark
 			if op.GetSpan().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR {

@@ -439,15 +439,19 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	}
 }
 
-func TestRawLogLinesFlushInsideTheirPhaseBlockAtEveryVerbosity(t *testing.T) {
+func TestRawEngineOutputIsShownOnlyWhenVerboseOrWhenThePhaseFailed(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		present Presentation
+		failed  bool
+		want    bool
 	}{
-		{"a live terminal", Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight}},
-		{"a pipe", Presentation{Format: FormatHuman, Width: defaultWidth}},
-		{"--verbose", Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth}},
+		{"a live terminal", Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight}, false, false},
+		{"a pipe", Presentation{Format: FormatHuman, Width: defaultWidth}, false, false},
+		{"--verbose", Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth}, false, true},
+		{"a live terminal whose phase failed", Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight}, true, true},
+		{"a pipe whose phase failed", Presentation{Format: FormatHuman, Width: defaultWidth}, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -460,16 +464,21 @@ func TestRawLogLinesFlushInsideTheirPhaseBlockAtEveryVerbosity(t *testing.T) {
 				&progressv1.Stage{Id: unit, Title: "web"},
 				&progressv1.Stage{Id: phase, ParentId: unit, Title: "Provisioning"},
 			))
+			s.Emit(progressEvent(phase, "creating bucket assets", 0, nil))
 			s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-				Log: &progressv1.LogEvent{StageId: phase, Message: "pulumi engine line"},
+				Log: &progressv1.LogEvent{StageId: phase, Message: "@ updating....."},
 			}}))
-			if strings.Contains(out.String(), "pulumi engine line") {
+			if strings.Contains(out.String(), "@ updating.....") {
 				t.Fatalf("output = %q, want the line held in its block until the phase completes", out.String())
 			}
 
-			s.Emit(spanEvent(phase, false, time.Second))
-			if !strings.Contains(out.String(), "  pulumi engine line") {
-				t.Errorf("output = %q, want the raw line flushed inside its phase block", out.String())
+			s.Emit(spanEvent(phase, tc.failed, time.Second))
+			got := out.String()
+			if strings.Contains(got, "  @ updating.....") != tc.want {
+				t.Errorf("output = %q, want the raw engine line shown = %v", got, tc.want)
+			}
+			if !strings.Contains(got, "  creating bucket assets") {
+				t.Errorf("output = %q, want what the phase said about itself kept whatever the verbosity", got)
 			}
 		})
 	}

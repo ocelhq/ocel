@@ -1,17 +1,10 @@
 → web › Building
 → api › Building
-  go: downloading github.com/ocelhq/ocel/sdk v0.4.1
-  go build ./...
 ✓ api › Building  8s
-  Packages: +812
-  ▲ Next.js 15.4.2
-   ✓ Compiled successfully
   Generating static pages (28/28)
-  Route (app)                     Size     First Load JS
 ✓ web › Building  24s
 → Edge › Provisioning
   Reconciling the cloudflare edge
-  routes pruned: 3
 ✓ Edge › Provisioning  2s
 → Shared infrastructure › Provisioning
   creating bucket assets
@@ -19,7 +12,6 @@
 → web › Provisioning
 → api › Provisioning
   updating function api
-  api: 2 of 2 tasks healthy
 ✓ api › Provisioning  8s
   waiting for steady state
   2 of 2 tasks healthy
