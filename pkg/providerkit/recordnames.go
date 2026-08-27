@@ -28,6 +28,14 @@ func StacksRecord(class Class, slug string) RecordName {
 	return rooted(RootStacks, class, slug)
 }
 
+func EnvironmentsRecord(class Class, slug string) RecordName {
+	return rooted(RootEnvironments, class, slug)
+}
+
+func EnvironmentRecord(class Class, slug, env string) RecordName {
+	return append(EnvironmentsRecord(class, slug), env)
+}
+
 func EdgeStackRecord(class Class, slug string) RecordName {
 	return rooted(RootEdgeStacks, class, slug)
 }
@@ -43,16 +51,17 @@ func LedgerRecord(scope string, rest ...string) RecordName {
 }
 
 var classSegment = map[string]int{
-	RootSchema:      1,
-	RootProjects:    1,
-	RootStacks:      1,
-	RootBootstrap:   1,
-	RootEdgeStacks:  1,
-	RootWildcard:    1,
-	RootLedger:      1,
-	RootConformance: 1,
-	RootValueRefs:   1,
-	RootValues:      2,
+	RootSchema:       1,
+	RootProjects:     1,
+	RootStacks:       1,
+	RootEnvironments: 1,
+	RootBootstrap:    1,
+	RootEdgeStacks:   1,
+	RootWildcard:     1,
+	RootLedger:       1,
+	RootConformance:  1,
+	RootValueRefs:    1,
+	RootValues:       2,
 }
 
 func ClassOf(name RecordName) (Class, bool) {

@@ -950,7 +950,14 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if err := r.stack.Promote(ctx, promotion, r.plan.Pointer); err != nil {
 				return err
 			}
-			return r.checkpoint(ctx)
+			if err := r.checkpoint(ctx); err != nil {
+				return err
+			}
+			if r.plan.Class != ClassPreview {
+				return nil
+			}
+			return recordEnvironmentMeta(ctx, r.provider.Records(),
+				r.plan.Class, r.plan.Slug, r.plan.Env, r.plan.Label, r.plan.Ephemeral)
 		})
 	}); err != nil {
 		return nil, err

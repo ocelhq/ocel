@@ -29,6 +29,9 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 		resp.Environments = append(resp.Environments, &contractv1.PreviewEnvironment{
 			Identity:  environment.Identity,
 			Lifecycle: lifecycleOf(environment.Persisted),
+			Label:     environment.Label,
+			CreatedAt: environment.CreatedAt,
+			ExpiresAt: environment.ExpiresAt,
 		})
 	}
 	return resp, nil
@@ -65,6 +68,9 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 			return err
 		}
 		if err := removePreviewInfra(ctx, session.provider, req.GetSlug(), pointer, report); err != nil {
+			return err
+		}
+		if err := Forget(ctx, session.provider.Records(), EnvironmentRecord(ClassPreview, req.GetSlug(), pointer)); err != nil {
 			return err
 		}
 		for _, line := range pruneLines(removed) {

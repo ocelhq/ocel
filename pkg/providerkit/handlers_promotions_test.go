@@ -2,10 +2,13 @@ package providerkit_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -278,11 +281,101 @@ func TestListEnvironmentsNamesEveryPreviewAndItsLifecycle(t *testing.T) {
 	}
 }
 
+func TestListEnvironmentsCarriesWhatTheDeployRecordedAboutEachPreview(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	release := naming.NewRelease("b1", "")
+	seedEnvironment(t, provider, "shop",
+		naming.AppStack("pr-7", "web", release),
+		naming.AppStack("staging", "web", release),
+		naming.InfraStack("staging"),
+	)
+	before := time.Now().Unix()
+	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
+		providerkit.ClassPreview, "shop", "pr-7", "pr-123", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
+		providerkit.ClassPreview, "shop", "staging", "", false); err != nil {
+		t.Fatal(err)
+	}
+
+	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatalf("ListEnvironments() error = %v", err)
+	}
+	environments := map[string]*contractv1.PreviewEnvironment{}
+	for _, environment := range listed.GetEnvironments() {
+		environments[environment.GetIdentity()] = environment
+	}
+
+	preview := environments["pr-7"]
+	if preview.GetLabel() != "pr-123" {
+		t.Errorf("pr-7 is labelled %q, want the pull request it was deployed for", preview.GetLabel())
+	}
+	if preview.GetCreatedAt() < before {
+		t.Errorf("pr-7 was created at %d, want the moment the deploy recorded it", preview.GetCreatedAt())
+	}
+	if want := preview.GetCreatedAt() + int64(providerkit.PreviewTTL.Seconds()); preview.GetExpiresAt() != want {
+		t.Errorf("pr-7 expires at %d, want %d: an ephemeral preview lives a preview's lifetime from its deploy",
+			preview.GetExpiresAt(), want)
+	}
+	if persistent := environments["staging"]; persistent.GetExpiresAt() != 0 {
+		t.Errorf("staging expires at %d, want never: a persistent preview stands until it is removed", persistent.GetExpiresAt())
+	}
+}
+
+func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing.T) {
+	t.Parallel()
+	_, provider := contractServed(t, "1.0.0")
+	ctx := context.Background()
+	if err := providerkit.RecordEnvironmentMeta(ctx, provider.Records(),
+		providerkit.ClassPreview, "shop", "pr-7", "pr-123", true); err != nil {
+		t.Fatal(err)
+	}
+	first := readEnvironmentMeta(t, provider, "shop", "pr-7")
+
+	if err := providerkit.RecordEnvironmentMeta(ctx, provider.Records(),
+		providerkit.ClassPreview, "shop", "pr-7", "", true); err != nil {
+		t.Fatal(err)
+	}
+	second := readEnvironmentMeta(t, provider, "shop", "pr-7")
+
+	if second.CreatedAt != first.CreatedAt {
+		t.Errorf("the second deploy moved the creation to %d, want it left at %d: a preview is created once",
+			second.CreatedAt, first.CreatedAt)
+	}
+	if second.ExpiresAt < first.ExpiresAt {
+		t.Errorf("the second deploy expires at %d, want no earlier than %d: deploying to a preview extends it",
+			second.ExpiresAt, first.ExpiresAt)
+	}
+	if second.Label != "pr-123" {
+		t.Errorf("the second deploy labelled the preview %q, want the label kept: this deploy names none", second.Label)
+	}
+}
+
+func readEnvironmentMeta(t *testing.T, provider *fake.Provider, slug, env string) providerkit.EnvironmentMeta {
+	t.Helper()
+	held, err := provider.Records().Read(context.Background(), providerkit.EnvironmentRecord(providerkit.ClassPreview, slug, env))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var meta providerkit.EnvironmentMeta
+	if err := json.Unmarshal(held.Bytes, &meta); err != nil {
+		t.Fatal(err)
+	}
+	return meta
+}
+
 func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, providerkit.ClassPreview, "shop")
 	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1", "p2")
+	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
+		providerkit.ClassPreview, "shop", "pr-7", "pr-123", true); err != nil {
+		t.Fatal(err)
+	}
 
 	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
 		Slug: "shop",
@@ -308,6 +401,10 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	}
 	if len(history) != 0 {
 		t.Errorf("pr-7 still holds %v, want its promotions gone with the pointer", history)
+	}
+	name := providerkit.EnvironmentRecord(providerkit.ClassPreview, "shop", "pr-7")
+	if _, err := provider.Records().Read(context.Background(), name); !errors.Is(err, providerkit.ErrNoRecord) {
+		t.Errorf("reading %s after the removal = %v, want it forgotten with the environment it described", name, err)
 	}
 }
 

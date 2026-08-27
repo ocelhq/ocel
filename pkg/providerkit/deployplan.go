@@ -16,7 +16,10 @@ type DeployPlan struct {
 	Slug    string
 	Class   Class
 	Env     string
+	Label   string
 	Pointer string
+
+	Ephemeral bool
 
 	Infra naming.StackName
 	Apps  []AppEntry
@@ -54,7 +57,9 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 		Slug:        slug,
 		Class:       class,
 		Env:         name,
+		Label:       env.GetLabel(),
 		Pointer:     pointerFor(class, name),
+		Ephemeral:   ephemeral(env),
 		PromotionID: promotionID,
 		Tag:         req.GetTag(),
 		Builds:      make(map[string]string, len(manifest.GetApps())),

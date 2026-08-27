@@ -2,8 +2,10 @@ package providerkit
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -11,9 +13,68 @@ import (
 
 const ProductionEnv = "prod"
 
+const PreviewTTL = 7 * 24 * time.Hour
+
 type Environment struct {
 	Identity  string
 	Persisted bool
+	Label     string
+	CreatedAt int64
+	ExpiresAt int64
+}
+
+type EnvironmentMeta struct {
+	Label     string `json:"label,omitempty"`
+	CreatedAt int64  `json:"created_at,omitempty"`
+	ExpiresAt int64  `json:"expires_at,omitempty"`
+}
+
+func recordEnvironmentMeta(ctx context.Context, records RecordStore, class Class, slug, env, label string, ephemeral bool) error {
+	name := EnvironmentRecord(class, slug, env)
+	held, err := Held(ctx, records, name)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", name, err)
+	}
+	var meta EnvironmentMeta
+	if len(held.Bytes) > 0 {
+		if err := json.Unmarshal(held.Bytes, &meta); err != nil {
+			return fmt.Errorf("read %s: %w", name, err)
+		}
+	}
+	now := time.Now().Unix()
+	if meta.CreatedAt == 0 {
+		meta.CreatedAt = now
+	}
+	meta.ExpiresAt = 0
+	if ephemeral {
+		meta.ExpiresAt = now + int64(PreviewTTL.Seconds())
+	}
+	if label != "" {
+		meta.Label = label
+	}
+	if held.Bytes, err = json.Marshal(meta); err != nil {
+		return fmt.Errorf("record %s: %w", name, err)
+	}
+	if _, err := records.Write(ctx, held); err != nil {
+		return fmt.Errorf("record %s: %w", name, err)
+	}
+	return nil
+}
+
+func environmentMeta(ctx context.Context, records RecordStore, class Class, slug string) (map[string]EnvironmentMeta, error) {
+	held, err := records.List(ctx, EnvironmentsRecord(class, slug))
+	if err != nil {
+		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
+	}
+	meta := make(map[string]EnvironmentMeta, len(held))
+	for _, record := range held {
+		var recorded EnvironmentMeta
+		if err := json.Unmarshal(record.Bytes, &recorded); err != nil {
+			continue
+		}
+		meta[record.Name[len(record.Name)-1]] = recorded
+	}
+	return meta, nil
 }
 
 func stackNames(ctx context.Context, records RecordStore, class Class, slug string) ([]naming.StackName, error) {
@@ -49,9 +110,19 @@ func previewEnvironments(ctx context.Context, records RecordStore, slug string) 
 		persisted[stack.Env] = persisted[stack.Env] || stack.IsInfra()
 	}
 	slices.Sort(identities)
+	meta, err := environmentMeta(ctx, records, ClassPreview, slug)
+	if err != nil {
+		return nil, err
+	}
 	environments := make([]Environment, 0, len(identities))
 	for _, identity := range identities {
-		environments = append(environments, Environment{Identity: identity, Persisted: persisted[identity]})
+		environments = append(environments, Environment{
+			Identity:  identity,
+			Persisted: persisted[identity],
+			Label:     meta[identity].Label,
+			CreatedAt: meta[identity].CreatedAt,
+			ExpiresAt: meta[identity].ExpiresAt,
+		})
 	}
 	return environments, nil
 }
