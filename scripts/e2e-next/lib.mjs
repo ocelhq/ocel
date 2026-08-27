@@ -547,6 +547,19 @@ export function tail(text, maxLines) {
   return lines.slice(Math.max(0, lines.length - maxLines)).join("\n");
 }
 
+export const PLAN_APPLY_HINT = "Run without --dry to apply.";
+
+export function planProblems(output, { resultWritten }) {
+  const problems = [];
+  if (!String(output ?? "").includes(PLAN_APPLY_HINT)) {
+    problems.push(`the plan never said how to apply it: no "${PLAN_APPLY_HINT}" in the output`);
+  }
+  if (resultWritten) {
+    problems.push(`${DEPLOY_RESULT_FILE} was written by a run that was only ever supposed to plan`);
+  }
+  return problems;
+}
+
 const HARNESS_OUTPUT = /--test output start-- (.*) --test output end--/;
 const HARNESS_STARTING = /\bStarting (\S+\.test\.\w+) retry \d+\/\d+/;
 

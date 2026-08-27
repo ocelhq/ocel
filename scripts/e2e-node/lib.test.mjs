@@ -7,6 +7,7 @@ import {
   DNS_LABEL,
   MAX_SLUG_LEN,
   PREVIEW_LABEL_MAX_LEN,
+  PLAN_APPLY_HINT,
   PREVIEW_ROOT_STACK_PARAM_PREFIX,
   SLUG_PREFIX,
   SMOKE_APPS,
@@ -20,6 +21,7 @@ import {
   envSegment,
   isFunctionURLHost,
   lambdaFunctionNames,
+  planProblems,
   previewLabel,
   previewLabelProblem,
   previewRef,
@@ -330,16 +332,16 @@ describe("lambdaFunctionNames", () => {
 });
 
 describe("toolchainArtifacts", () => {
-  it("names the node half, the CLI and both provider binaries, each with the command that builds it", () => {
+  it("names the node half, the CLI and the provider binary, each with the command that builds it", () => {
     const artifacts = toolchainArtifacts("/repo");
-    expect(artifacts).toHaveLength(4);
+    expect(artifacts).toHaveLength(3);
     for (const artifact of artifacts) {
       expect(artifact.path.startsWith("/repo/")).toBe(true);
       expect(artifact.how).toBeTruthy();
     }
     expect(artifacts.some((a) => a.path.includes("packages/ocel/dist"))).toBe(true);
+    expect(artifacts.some((a) => a.path.includes("/ocel"))).toBe(true);
     expect(artifacts.some((a) => a.path.includes("/deploy"))).toBe(true);
-    expect(artifacts.some((a) => a.path.includes("/runtime"))).toBe(true);
   });
 });
 
@@ -468,6 +470,20 @@ describe("summarizeOutcomes", () => {
 
   it("says so when nothing at all was seen", () => {
     expect(summarizeOutcomes([])).toContain("no compile-cache lines");
+  });
+});
+
+describe("planProblems", () => {
+  it("passes a plan that says how to apply it and wrote no result", () => {
+    expect(planProblems(`+ e2en-x--infra\n\n${PLAN_APPLY_HINT}\n`, { resultWritten: false })).toEqual([]);
+  });
+
+  it("fails a run that printed no plan", () => {
+    expect(planProblems("deploying...\n", { resultWritten: false })).toHaveLength(1);
+  });
+
+  it("fails a run that recorded a deploy it never made", () => {
+    expect(planProblems(PLAN_APPLY_HINT, { resultWritten: true })).toHaveLength(1);
   });
 });
 

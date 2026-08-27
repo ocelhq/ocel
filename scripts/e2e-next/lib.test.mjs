@@ -14,6 +14,7 @@ import {
   ISR_REVALIDATE_SECONDS,
   ISR_ROUTE,
   MAX_SLUG_LEN,
+  PLAN_APPLY_HINT,
   PREVIEW_ROOT_STACK_PARAM_PREFIX,
   SLUG_PREFIX,
   WARM_SUMMARY_MARKER,
@@ -35,6 +36,7 @@ import {
   logWindowVerdict,
   markerLines,
   mergeBaselineManifest,
+  planProblems,
   previewRef,
   previewRefForApp,
   projectSlug,
@@ -947,6 +949,20 @@ function buildZip(entries, comment = "") {
   eocd.writeUInt16LE(commentBytes.length, 20);
   return Buffer.concat([...locals, directory, eocd, commentBytes]);
 }
+
+describe("planProblems", () => {
+  it("passes a plan that says how to apply it and wrote no result", () => {
+    expect(planProblems(`+ e2e-x--infra\n\n${PLAN_APPLY_HINT}\n`, { resultWritten: false })).toEqual([]);
+  });
+
+  it("fails a run that printed no plan", () => {
+    expect(planProblems("deploying...\n", { resultWritten: false })).toHaveLength(1);
+  });
+
+  it("fails a run that recorded a deploy it never made", () => {
+    expect(planProblems(PLAN_APPLY_HINT, { resultWritten: true })).toHaveLength(1);
+  });
+});
 
 describe("tail", () => {
   it("keeps only the last n lines", () => {
