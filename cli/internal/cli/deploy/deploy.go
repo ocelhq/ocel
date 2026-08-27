@@ -103,7 +103,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			return err
 		}
 
-		proceed, err := guardNewProject(ctx, ui, cfg, knownSlugs, stdout)
+		proceed, err := guardNewProject(ctx, ui, cfg, knownSlugs)
 		if err != nil || !proceed {
 			return err
 		}

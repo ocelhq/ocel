@@ -49,6 +49,7 @@ func Run(ctx context.Context, spec Spec, body Body) error {
 	defer run.Close()
 
 	ui := New(spec.Stdout, run, spec.Present)
+	g.say = ui.Diagnostic
 	ui.gate = g
 	defer ui.Close()
 

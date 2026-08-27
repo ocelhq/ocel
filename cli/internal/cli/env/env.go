@@ -80,7 +80,7 @@ func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts en
 	}
 
 	return provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
-		if err := preflight.Credentials(ctx, deps.Presentation(stderr), runner, cfg, envTier(opts), hint, stderr); err != nil {
+		if err := preflight.Credentials(ctx, runui.Plain(deps.Presentation(stderr), stderr), runner, cfg, envTier(opts), hint); err != nil {
 			return err
 		}
 		return drive(runner, cfg)

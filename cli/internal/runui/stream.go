@@ -43,6 +43,13 @@ func (s *Stream) Suspend() func() {
 	return s.r.Suspend()
 }
 
+func (s *Stream) Spin(message string) *Spinner {
+	if s.r == nil {
+		return &Spinner{}
+	}
+	return &Spinner{stopFn: s.r.Spin(message)}
+}
+
 func (s *Stream) Restart(stageID []byte) {
 	if s.r != nil {
 		s.r.Restart(stageID)

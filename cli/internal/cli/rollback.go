@@ -62,7 +62,7 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 	defer run.Close()
 
 	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
-		if err := preflight.Tier(ctx, deps.Presentation(stdout), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production", stdout); err != nil {
+		if err := preflight.Tier(ctx, runui.Plain(deps.Presentation(stdout), stdout), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
 		}
 

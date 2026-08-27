@@ -207,7 +207,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			return err
 		}
 
-		proceed, err := guardNewProject(ctx, ui, cfg, knownSlugs, stdout)
+		proceed, err := guardNewProject(ctx, ui, cfg, knownSlugs)
 		if err != nil || !proceed {
 			return err
 		}
@@ -265,7 +265,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	})
 }
 
-func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, out io.Writer) error {
+func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, rep runui.Reporter) error {
 	declared := ""
 	if hosts := preflight.Hostnames(cfg, "preview"); len(hosts) > 0 {
 		declared = hosts[0]
@@ -285,11 +285,11 @@ func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.Previe
 		if err := checkGlobalPreviewDomain(wildcard, id, configName); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "Serving previews on the global preview domain *.%s — this project declares no domains.preview of its own\n", base)
+		rep.Diagnostic(fmt.Sprintf("Serving previews on the global preview domain *.%s — this project declares no domains.preview of its own", base))
 
 	case base != "":
-		fmt.Fprintf(out, "Serving previews on %s, this project's own domains.preview — the global preview domain *.%s exists and is ignored (remove domains.preview from %s to serve on it)\n",
-			declared, base, configName)
+		rep.Diagnostic(fmt.Sprintf("Serving previews on %s, this project's own domains.preview — the global preview domain *.%s exists and is ignored (remove domains.preview from %s to serve on it)",
+			declared, base, configName))
 	}
 
 	labelSlug, labelBase := "", strings.TrimPrefix(declared, "*.")
@@ -362,7 +362,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			}
 		}
 
-		if err := preflightPreview(ctx, ui.Presentation(), runner, cfg, stdout); err != nil {
+		if err := preflightPreview(ctx, ui, runner, cfg); err != nil {
 			return err
 		}
 
@@ -416,7 +416,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 	}
 
 	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview prune", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		if err := preflightPreview(ctx, ui.Presentation(), runner, cfg, stdout); err != nil {
+		if err := preflightPreview(ctx, ui, runner, cfg); err != nil {
 			return err
 		}
 		req := &contractv1.RemoveStalePromotionsRequest{
