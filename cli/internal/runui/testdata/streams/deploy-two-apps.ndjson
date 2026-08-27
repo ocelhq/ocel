@@ -1,4 +1,5 @@
 {"plan":{"subject":"production","edgeKind":"cloudfront","groups":[{"kind":"infrastructure","name":"shared","changes":[{"kind":"function","name":"api","action":"ACTION_UPDATE"},{"kind":"bucket","name":"logs","action":"ACTION_DELETE","reason":"no longer declared"},{"kind":"bucket","name":"assets","action":"ACTION_CREATE"}]}]}}
+{"diagnostic":{"message":"web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts","level":"DIAGNOSTIC_LEVEL_WARNING"}}
 {"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"AgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILDING"}]}}}
 {"operation":{"progress":{"stageId":"AgAAAAAAAAA=","message":"Bundling web","current":1,"total":2}}}
 {"operation":{"progress":{"stageId":"AgAAAAAAAAA=","message":"Bundling api","current":2,"total":2}}}
@@ -11,4 +12,4 @@
 {"operation":{"degraded":{"need":"edge-middleware","detail":"web: middleware runs in the origin"}}}
 {"operation":{"span":{"spanId":"BAAAAAAAAAA=","parentSpanId":"AwAAAAAAAAA=","name":"provisioning","startTimeUnixNano":"7000000000","endTimeUnixNano":"19000000000","status":"SPAN_STATUS_OK"}}}
 {"operation":{"span":{"spanId":"BgAAAAAAAAA=","parentSpanId":"BQAAAAAAAAA=","name":"provisioning","startTimeUnixNano":"7000000000","endTimeUnixNano":"10000000000","status":"SPAN_STATUS_ERROR"}}}
-{"result":{"error":"updating function api: InsufficientCapacity","durationMs":"21000","logPath":""}}
+{"result":{"detail":"updating function api: InsufficientCapacity","durationMs":"21000","logPath":""}}

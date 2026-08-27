@@ -81,7 +81,7 @@ func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
 			if res.GetSuccess() {
 				t.Fatalf("run result reports success, want the unsupported need to fail the run: %s", stdout.String())
 			}
-			message = res.GetError()
+			message = res.GetDetail()
 		}
 	}
 	if message == "" {

@@ -149,43 +149,44 @@ func TestPlainAndLiveCommitTheSameContent(t *testing.T) {
 	}
 }
 
-func TestTheNDJSONProjectionIsTheStreamItself(t *testing.T) {
+func TestTheNDJSONProjectionIsOneProtojsonLinePerEnvelopeWrittenAsItLands(t *testing.T) {
 	t.Parallel()
 	for _, name := range fixtureNames(t) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			raw, events := fixtureStream(t, name)
+			_, events := fixtureStream(t, name)
 
 			var out bytes.Buffer
 			s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
-			for _, ev := range events {
+			for i, ev := range events {
 				s.Emit(ev)
+
+				written := out.String()
+				if !strings.HasSuffix(written, "\n") {
+					t.Fatalf("after envelope %d the stream ends mid-line — ndjson must never buffer:\n%s", i, written)
+				}
+				lines := strings.Split(strings.TrimSuffix(written, "\n"), "\n")
+				if len(lines) != i+1 {
+					t.Fatalf("after envelope %d the stream holds %d lines, want one line per envelope emitted so far", i, len(lines))
+				}
+
+				want, err := protojson.Marshal(normalize(ev))
+				if err != nil {
+					t.Fatalf("marshal: %v", err)
+				}
+				var compact bytes.Buffer
+				if err := json.Compact(&compact, want); err != nil {
+					t.Fatalf("compact: %v", err)
+				}
+				if got := lines[i]; got != compact.String() {
+					t.Fatalf("line %d is not the protojson of its envelope.\n--- got ---\n%s\n--- want ---\n%s", i, got, compact.String())
+				}
 			}
 			if err := s.Close(); err != nil {
 				t.Fatalf("Close() = %v", err)
 			}
-			if got, want := canonicalNDJSON(t, out.String()), canonicalNDJSON(t, raw); got != want {
-				t.Errorf("the ndjson projection is not the recorded stream.\n--- got ---\n%s\n--- want ---\n%s", got, want)
-			}
 		})
 	}
-}
-
-func canonicalNDJSON(t *testing.T, raw string) string {
-	t.Helper()
-	var lines []string
-	for _, ev := range parseNDJSON(t, raw) {
-		b, err := protojson.MarshalOptions{}.Marshal(normalize(ev))
-		if err != nil {
-			t.Fatalf("marshal: %v", err)
-		}
-		var stable bytes.Buffer
-		if err := json.Compact(&stable, b); err != nil {
-			t.Fatalf("compact: %v", err)
-		}
-		lines = append(lines, stable.String())
-	}
-	return strings.Join(lines, "\n") + "\n"
 }
 
 type reconstruction struct {
@@ -214,8 +215,8 @@ func reconstruct(events []*streamv1.RunEvent) reconstruction {
 			r.waits = append(r.waits, "resumed "+ev.GetResumed().GetReason())
 		case ev.GetResult() != nil:
 			res := ev.GetResult()
-			r.results = append(r.results, fmt.Sprintf("success=%v headline=%q error=%q duration_ms=%d",
-				res.GetSuccess(), res.GetHeadline(), res.GetError(), res.GetDurationMs()))
+			r.results = append(r.results, fmt.Sprintf("success=%v interrupted=%v headline=%q detail=%q duration_ms=%d",
+				res.GetSuccess(), res.GetInterrupted(), res.GetHeadline(), res.GetDetail(), res.GetDurationMs()))
 		case ev.GetOperation().GetStagePlan() != nil:
 			for _, st := range ev.GetOperation().GetStagePlan().GetStages() {
 				id := hex.EncodeToString(st.GetId())

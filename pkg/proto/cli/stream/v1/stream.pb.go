@@ -30,7 +30,6 @@ const (
 	DiagnosticLevel_DIAGNOSTIC_LEVEL_UNSPECIFIED DiagnosticLevel = 0
 	DiagnosticLevel_DIAGNOSTIC_LEVEL_INFO        DiagnosticLevel = 1
 	DiagnosticLevel_DIAGNOSTIC_LEVEL_WARNING     DiagnosticLevel = 2
-	DiagnosticLevel_DIAGNOSTIC_LEVEL_ERROR       DiagnosticLevel = 3
 )
 
 // Enum value maps for DiagnosticLevel.
@@ -39,13 +38,11 @@ var (
 		0: "DIAGNOSTIC_LEVEL_UNSPECIFIED",
 		1: "DIAGNOSTIC_LEVEL_INFO",
 		2: "DIAGNOSTIC_LEVEL_WARNING",
-		3: "DIAGNOSTIC_LEVEL_ERROR",
 	}
 	DiagnosticLevel_value = map[string]int32{
 		"DIAGNOSTIC_LEVEL_UNSPECIFIED": 0,
 		"DIAGNOSTIC_LEVEL_INFO":        1,
 		"DIAGNOSTIC_LEVEL_WARNING":     2,
-		"DIAGNOSTIC_LEVEL_ERROR":       3,
 	}
 )
 
@@ -323,19 +320,17 @@ func (x *ResumedEvent) GetReason() string {
 	return ""
 }
 
-// How the run ended, and everything a projection needs to say so — no projection
-// holds outcome content the stream lacks.
 type RunResultEvent struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Success    bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Error      string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	DurationMs int64                  `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	LogPath    string                 `protobuf:"bytes,4,opt,name=log_path,json=logPath,proto3" json:"log_path,omitempty"`
-	Headline   string                 `protobuf:"bytes,5,opt,name=headline,proto3" json:"headline,omitempty"`
-	AppUrls    []string               `protobuf:"bytes,6,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
-	// Why the run has no address of its own, when it has none.
-	UrlNote       string         `protobuf:"bytes,7,opt,name=url_note,json=urlNote,proto3" json:"url_note,omitempty"`
-	FlipBound     *v11.FlipBound `protobuf:"bytes,8,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Detail        string                 `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
+	DurationMs    int64                  `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	LogPath       string                 `protobuf:"bytes,4,opt,name=log_path,json=logPath,proto3" json:"log_path,omitempty"`
+	Headline      string                 `protobuf:"bytes,5,opt,name=headline,proto3" json:"headline,omitempty"`
+	AppUrls       []string               `protobuf:"bytes,6,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
+	UrlNote       string                 `protobuf:"bytes,7,opt,name=url_note,json=urlNote,proto3" json:"url_note,omitempty"`
+	FlipBound     *v11.FlipBound         `protobuf:"bytes,8,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
+	Interrupted   bool                   `protobuf:"varint,9,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -377,9 +372,9 @@ func (x *RunResultEvent) GetSuccess() bool {
 	return false
 }
 
-func (x *RunResultEvent) GetError() string {
+func (x *RunResultEvent) GetDetail() string {
 	if x != nil {
-		return x.Error
+		return x.Detail
 	}
 	return ""
 }
@@ -424,6 +419,13 @@ func (x *RunResultEvent) GetFlipBound() *v11.FlipBound {
 		return x.FlipBound
 	}
 	return nil
+}
+
+func (x *RunResultEvent) GetInterrupted() bool {
+	if x != nil {
+		return x.Interrupted
+	}
+	return false
 }
 
 type DiagnosticEvent struct {
@@ -505,10 +507,10 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x8c\x02\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xb0\x02\n" +
 	"\x0eRunResultEvent\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\x12\x1f\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
+	"\x06detail\x18\x02 \x01(\tR\x06detail\x12\x1f\n" +
 	"\vduration_ms\x18\x03 \x01(\x03R\n" +
 	"durationMs\x12\x19\n" +
 	"\blog_path\x18\x04 \x01(\tR\alogPath\x12\x1a\n" +
@@ -516,16 +518,16 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\bapp_urls\x18\x06 \x03(\tR\aappUrls\x12\x19\n" +
 	"\burl_note\x18\a \x01(\tR\aurlNote\x12<\n" +
 	"\n" +
-	"flip_bound\x18\b \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\"u\n" +
+	"flip_bound\x18\b \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x12 \n" +
+	"\vinterrupted\x18\t \x01(\bR\vinterrupted\"u\n" +
 	"\x0fDiagnosticEvent\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
-	"\x05level\x18\x03 \x01(\x0e2\x1e.cli.stream.v1.DiagnosticLevelR\x05level*\x88\x01\n" +
+	"\x05level\x18\x03 \x01(\x0e2\x1e.cli.stream.v1.DiagnosticLevelR\x05level*l\n" +
 	"\x0fDiagnosticLevel\x12 \n" +
 	"\x1cDIAGNOSTIC_LEVEL_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15DIAGNOSTIC_LEVEL_INFO\x10\x01\x12\x1c\n" +
-	"\x18DIAGNOSTIC_LEVEL_WARNING\x10\x02\x12\x1a\n" +
-	"\x16DIAGNOSTIC_LEVEL_ERROR\x10\x03B9Z7github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1b\x06proto3"
+	"\x18DIAGNOSTIC_LEVEL_WARNING\x10\x02B9Z7github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1b\x06proto3"
 
 var (
 	file_cli_stream_v1_stream_proto_rawDescOnce sync.Once

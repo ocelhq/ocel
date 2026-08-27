@@ -15,6 +15,7 @@ Change plan
         - kind: function
           name: api
           action: update
+⚠ web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts
 → Environment › Building
   Bundling web (1/2)
   Bundling api (2/2)
@@ -31,9 +32,7 @@ Resumed
   reason: the page was answered
 → web › Provisioning
 → api › Provisioning
-Degraded
-  need: edge-middleware
-  detail: web: middleware runs in the origin
+⚠ edge-middleware: web: middleware runs in the origin
   creating bucket assets
 ✓ web › Provisioning  12s
   updating function api

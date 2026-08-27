@@ -41,7 +41,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, err
 	}
 	for _, warning := range warnings {
-		ui.Diagnostic("warning: " + warning)
+		ui.Warning(warning)
 	}
 	if err := gate.Check(); err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, err
 	}
 	for _, warning := range edgeWarnings {
-		ui.Diagnostic("warning: " + warning)
+		ui.Warning(warning)
 	}
 
 	if len(functions) == 0 {

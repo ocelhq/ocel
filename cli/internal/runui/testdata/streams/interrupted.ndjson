@@ -1,4 +1,3 @@
 {"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"AgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILDING"}]}}}
 {"operation":{"progress":{"stageId":"AgAAAAAAAAA=","message":"Bundling web"}}}
-{"diagnostic":{"message":"Resources may be partially created. Re-run `ocel deploy` to reconcile.","level":"DIAGNOSTIC_LEVEL_WARNING"}}
-{"result":{"headline":"Cancelled","durationMs":"4000"}}
+{"result":{"interrupted":true,"headline":"Cancelled","detail":"Resources may be partially created.\nRe-run `ocel deploy` to reconcile.","durationMs":"4000"}}

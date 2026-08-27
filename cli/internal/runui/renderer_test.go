@@ -58,7 +58,7 @@ func spanEvent(stageID []byte, failed bool, d time.Duration) *streamv1.RunEvent 
 func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	t.Parallel()
 	s, out := liveStream(t)
-	r := s.Renderer()
+	r := s.r
 
 	unit, phase := appStage(1), appStage(2)
 	s.Emit(stagePlanEvent(
@@ -101,7 +101,7 @@ func TestLiveRegion(t *testing.T) {
 		if !strings.Contains(got, "app-a") || !strings.Contains(got, "app-b") {
 			t.Fatalf("live region = %q, want a line for both app-a and app-b", got)
 		}
-		if active := s.Renderer().plan.activeOrder; len(active) != 2 {
+		if active := s.r.plan.activeOrder; len(active) != 2 {
 			t.Fatalf("activeOrder = %v, want both apps live at once", active)
 		}
 	})
@@ -119,13 +119,13 @@ func TestLiveRegion(t *testing.T) {
 		s.Emit(progressEvent(appB, "uploading", 1, u32(2)))
 		s.Emit(spanEvent(appA, false, time.Second))
 
-		active := s.Renderer().plan.activeOrder
+		active := s.r.plan.activeOrder
 		if len(active) != 1 || active[0] != stageKey(appB) {
 			t.Fatalf("activeOrder = %v, want only app-b still live", active)
 		}
 
 		s.Emit(spanEvent(appB, false, time.Second))
-		if active := s.Renderer().plan.activeOrder; len(active) != 0 {
+		if active := s.r.plan.activeOrder; len(active) != 0 {
 			t.Errorf("activeOrder = %v, want both apps finished", active)
 		}
 	})
@@ -208,7 +208,7 @@ func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
-			fmt.Fprintf(s.Renderer(), "subprocess output line %d\n", i)
+			fmt.Fprintf(s.r, "subprocess output line %d\n", i)
 		}
 	}()
 
@@ -286,7 +286,7 @@ func TestAPhaseRowStaysLiveUntilItsSpanArrives(t *testing.T) {
 	}
 
 	s.Emit(spanEvent(uploading, false, 12*time.Second))
-	if active := s.Renderer().plan.activeOrder; len(active) != 0 {
+	if active := s.r.plan.activeOrder; len(active) != 0 {
 		t.Errorf("activeOrder = %v, want the phase row retired by its own span", active)
 	}
 }
@@ -294,7 +294,7 @@ func TestAPhaseRowStaysLiveUntilItsSpanArrives(t *testing.T) {
 func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	t.Parallel()
 	s, out := liveStream(t)
-	r := s.Renderer()
+	r := s.r
 
 	provisioning, app := appStage(1), appStage(2)
 	s.Emit(stagePlanEvent(
@@ -372,7 +372,7 @@ func TestProgressWithoutAStageIsDropped(t *testing.T) {
 
 	s.Emit(progressEvent(nil, "Reclaimed 3 promotion(s): a, b, c", 0, nil))
 
-	if got := len(s.Renderer().plan.nodes); got != 0 {
+	if got := len(s.r.plan.nodes); got != 0 {
 		t.Fatalf("got %d nodes, want none: there is no bucket for progress that belongs to no stage", got)
 	}
 	if out.Len() != 0 {
