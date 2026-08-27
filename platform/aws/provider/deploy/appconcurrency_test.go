@@ -3,8 +3,10 @@ package deploy
 import (
 	"context"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
@@ -19,8 +21,42 @@ func siblingAppRoot(t *testing.T, apps ...string) string {
 	for _, app := range apps {
 		files["apps/"+app+"/routing-manifest.json"] = routedManifest
 		files["apps/"+app+"/serve.json"] = `{"framework":"next","buildId":"WEB1","edgeRouting":true,"entry":"/"}`
+		files["apps/"+app+"/static/"+app+".txt"] = "an asset only " + app + " ships"
 	}
 	return writeTree(t, files)
+}
+
+type recordingReporter struct {
+	mu    sync.Mutex
+	said  []string
+	spans []string
+}
+
+func (r *recordingReporter) Say(message string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.said = append(r.said, message)
+}
+
+func (r *recordingReporter) Detail(message string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.said = append(r.said, message)
+}
+
+func (r *recordingReporter) Span(name string, _, _ time.Time, err error, _ ...providerkit.Attr) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err != nil {
+		name += " (failed)"
+	}
+	r.spans = append(r.spans, name)
+}
+
+func (r *recordingReporter) reported() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append(slices.Clone(r.said), r.spans...)
 }
 
 func siblingAppPlan(t *testing.T, app string) providerkit.StackPlan {
@@ -73,17 +109,23 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 	cfg.PulumiProject = "ocel-shop"
 	cfg.Region = "us-east-1"
 	cfg.ImageOptimizerURL = ""
+	cfg.Uploader = &fakeUploader{exists: map[string]bool{}}
+	cfg.CacheStoreBucket = "isr"
+	cfg.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
 
 	engine := &mockedEngine{outputs: siblingAppOutputs(apps...)}
 	releaser := newReleaser(fixed(cfg), &Realized{}, engine)
 
 	var wg sync.WaitGroup
 	failures := make([]error, len(apps))
+	results := make([]providerkit.StackResult, len(apps))
+	reports := make([]*recordingReporter, len(apps))
 	for slot, app := range apps {
+		reports[slot] = &recordingReporter{}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, failures[slot] = releaser.Provision(context.Background(), siblingAppPlan(t, app), nil)
+			results[slot], failures[slot] = releaser.Provision(context.Background(), siblingAppPlan(t, app), reports[slot])
 		}()
 	}
 	wg.Wait()
@@ -98,14 +140,32 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 	if len(ran) != len(apps) {
 		t.Fatalf("the engine ran %v, want one stack per app", ran)
 	}
-	for _, app := range apps {
+	for slot, app := range apps {
 		stack := naming.AppStack("prod", app, fixedRelease(t)).String()
 		if !slices.Contains(ran, stack) {
 			t.Errorf("the engine never ran %s: %v", stack, ran)
 		}
-		held, known := releaser.served.byPhysicalName("shop-prod-" + app + "-entry")
-		if !known || held.App != app {
-			t.Errorf("the served index lost %s's entry function under concurrency: %+v", app, held)
+
+		want := providerkit.Function{
+			Name:     "fn--" + app + "--entry",
+			Physical: "shop-prod-" + app + "-entry",
+			URL:      "https://" + app + ".lambda-url.us-east-1.on.aws/",
+		}
+		if got := results[slot].Functions; len(got) != 1 || got[0] != want {
+			t.Errorf("Provision(%s) returned %+v, want the one function %+v: a sibling standing up beside it may not change what it hands back", app, got, want)
+		}
+
+		reported := reports[slot].reported()
+		if !slices.ContainsFunc(reported, func(line string) bool { return strings.Contains(line, app) }) {
+			t.Errorf("%s's reporter heard %v, want its own app named: the surface has to say which app it is speaking for", app, reported)
+		}
+		for _, sibling := range apps {
+			if sibling == app {
+				continue
+			}
+			if slices.ContainsFunc(reported, func(line string) bool { return strings.Contains(line, sibling) }) {
+				t.Errorf("%s's reporter heard %v, want nothing of %s: siblings standing up at once may not report into each other's stage", app, reported, sibling)
+			}
 		}
 	}
 }
