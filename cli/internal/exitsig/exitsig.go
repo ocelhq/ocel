@@ -36,13 +36,13 @@ func ExitCode(err error) (int, bool) {
 	return 0, false
 }
 
-func Install(parent context.Context, stderr io.Writer, window time.Duration, forceKill func()) (context.Context, context.CancelFunc) {
+func Install(parent context.Context, stderr io.Writer, window time.Duration, teardown, forceKill func()) (context.Context, context.CancelFunc) {
 	ch := make(chan os.Signal, 2)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
-	return InstallWithExit(parent, stderr, ch, window, forceKill, os.Exit)
+	return InstallWithExit(parent, stderr, ch, window, teardown, forceKill, os.Exit)
 }
 
-func InstallWithExit(parent context.Context, stderr io.Writer, ch chan os.Signal, window time.Duration, forceKill func(), exit func(int)) (context.Context, context.CancelFunc) {
+func InstallWithExit(parent context.Context, stderr io.Writer, ch chan os.Signal, window time.Duration, teardown, forceKill func(), exit func(int)) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(parent)
 	done := make(chan struct{})
 
@@ -57,7 +57,8 @@ func InstallWithExit(parent context.Context, stderr io.Writer, ch chan os.Signal
 		timer := time.NewTimer(window)
 		defer timer.Stop()
 
-		for {
+		var notice string
+		for notice == "" {
 			select {
 			case <-done:
 				return
@@ -65,14 +66,15 @@ func InstallWithExit(parent context.Context, stderr io.Writer, ch chan os.Signal
 				if sig != os.Interrupt {
 					continue
 				}
-				fmt.Fprintln(stderr, "Interrupted again: exiting immediately, cloud resources may be mid-flight.")
+				notice = "Interrupted again: exiting immediately, cloud resources may be mid-flight."
 			case <-timer.C:
-				fmt.Fprintf(stderr, "Graceful shutdown did not finish in %s: exiting, cloud resources may be mid-flight.\n", window)
+				notice = fmt.Sprintf("Graceful shutdown did not finish in %s: exiting, cloud resources may be mid-flight.", window)
 			}
-			forceKill()
-			exit(InterruptCode)
-			return
 		}
+		teardown()
+		fmt.Fprintln(stderr, notice)
+		forceKill()
+		exit(InterruptCode)
 	}()
 
 	var stopOnce sync.Once

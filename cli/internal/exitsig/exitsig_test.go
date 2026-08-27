@@ -28,7 +28,7 @@ func fakeExit(t *testing.T) (exit func(int), calls func() []int) {
 		}
 }
 
-func fakeForceKill(t *testing.T) (forceKill func(), callCount func() int) {
+func fakeCall(t *testing.T) (call func(), callCount func() int) {
 	t.Helper()
 	var mu sync.Mutex
 	var count int
@@ -49,9 +49,10 @@ func TestInterruptHandlerFirstSignalCancelsContext(t *testing.T) {
 	var stderr bytes.Buffer
 	ch := make(chan os.Signal, 2)
 	exit, calls := fakeExit(t)
-	forceKill, forceKillCalls := fakeForceKill(t)
+	forceKill, forceKillCalls := fakeCall(t)
+	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, forceKill, exit)
+	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
 	defer stop()
 
 	select {
@@ -74,6 +75,9 @@ func TestInterruptHandlerFirstSignalCancelsContext(t *testing.T) {
 	if got := forceKillCalls(); got != 0 {
 		t.Errorf("forceKill called %d times after only one signal, want a normal teardown to run instead", got)
 	}
+	if got := teardownCalls(); got != 0 {
+		t.Errorf("teardown called %d times, want 0 — the live frame is erased on the same path forceKill runs on", got)
+	}
 }
 
 func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
@@ -82,9 +86,10 @@ func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
 	var stderr bytes.Buffer
 	ch := make(chan os.Signal, 2)
 	exit, calls := fakeExit(t)
-	forceKill, forceKillCalls := fakeForceKill(t)
+	forceKill, forceKillCalls := fakeCall(t)
+	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, forceKill, exit)
+	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
 	defer stop()
 
 	ch <- os.Interrupt
@@ -104,6 +109,9 @@ func TestInterruptHandlerSecondSignalForcesExit(t *testing.T) {
 	if got := forceKillCalls(); got != 1 {
 		t.Errorf("forceKill called %d times, want exactly 1 before the forced exit", got)
 	}
+	if got := teardownCalls(); got != 1 {
+		t.Errorf("teardown called %d times, want 1 — the live frame is erased on the same path forceKill runs on", got)
+	}
 }
 
 func TestInterruptHandlerTerminateDoesNotCutTheWindowShort(t *testing.T) {
@@ -112,9 +120,10 @@ func TestInterruptHandlerTerminateDoesNotCutTheWindowShort(t *testing.T) {
 	var stderr bytes.Buffer
 	ch := make(chan os.Signal, 2)
 	exit, calls := fakeExit(t)
-	forceKill, forceKillCalls := fakeForceKill(t)
+	forceKill, forceKillCalls := fakeCall(t)
+	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, forceKill, exit)
+	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
 	defer stop()
 
 	ch <- os.Interrupt
@@ -127,6 +136,9 @@ func TestInterruptHandlerTerminateDoesNotCutTheWindowShort(t *testing.T) {
 	}
 	if got := forceKillCalls(); got != 0 {
 		t.Errorf("forceKill called %d times, want the graceful shutdown left to finish", got)
+	}
+	if got := teardownCalls(); got != 0 {
+		t.Errorf("teardown called %d times, want 0 — the live frame is erased on the same path forceKill runs on", got)
 	}
 	if strings.Contains(stderr.String(), "Interrupted again") {
 		t.Errorf("stderr = %q, want a SIGTERM not read as a second Ctrl-C", stderr.String())
@@ -144,9 +156,10 @@ func TestInterruptHandlerGracefulWindowExpiryForcesExit(t *testing.T) {
 	var stderr bytes.Buffer
 	ch := make(chan os.Signal, 2)
 	exit, calls := fakeExit(t)
-	forceKill, forceKillCalls := fakeForceKill(t)
+	forceKill, forceKillCalls := fakeCall(t)
+	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, 20*time.Millisecond, forceKill, exit)
+	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, 20*time.Millisecond, teardown, forceKill, exit)
 	defer stop()
 
 	ch <- os.Interrupt
@@ -167,6 +180,9 @@ func TestInterruptHandlerGracefulWindowExpiryForcesExit(t *testing.T) {
 	if got := forceKillCalls(); got != 1 {
 		t.Errorf("forceKill called %d times, want exactly 1 when the graceful window itself expires", got)
 	}
+	if got := teardownCalls(); got != 1 {
+		t.Errorf("teardown called %d times, want 1 — the live frame is erased on the same path forceKill runs on", got)
+	}
 }
 
 func TestInterruptHandlerStopPreventsForcedExit(t *testing.T) {
@@ -175,9 +191,10 @@ func TestInterruptHandlerStopPreventsForcedExit(t *testing.T) {
 	var stderr bytes.Buffer
 	ch := make(chan os.Signal, 2)
 	exit, calls := fakeExit(t)
-	forceKill, forceKillCalls := fakeForceKill(t)
+	forceKill, forceKillCalls := fakeCall(t)
+	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, 20*time.Millisecond, forceKill, exit)
+	ctx, stop := InstallWithExit(context.Background(), &stderr, ch, 20*time.Millisecond, teardown, forceKill, exit)
 
 	ch <- os.Interrupt
 	<-ctx.Done()
@@ -190,6 +207,9 @@ func TestInterruptHandlerStopPreventsForcedExit(t *testing.T) {
 	if got := forceKillCalls(); got != 0 {
 		t.Errorf("forceKill called %d times after stop(), want the handler to have shut down cleanly", got)
 	}
+	if got := teardownCalls(); got != 0 {
+		t.Errorf("teardown called %d times, want 0 — the live frame is erased on the same path forceKill runs on", got)
+	}
 }
 
 func TestInterruptHandlerStopIsSafeToCallTwice(t *testing.T) {
@@ -198,9 +218,10 @@ func TestInterruptHandlerStopIsSafeToCallTwice(t *testing.T) {
 	var stderr bytes.Buffer
 	ch := make(chan os.Signal, 2)
 	exit, _ := fakeExit(t)
-	forceKill, _ := fakeForceKill(t)
+	forceKill, _ := fakeCall(t)
+	teardown, _ := fakeCall(t)
 
-	_, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, forceKill, exit)
+	_, stop := InstallWithExit(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
 
 	stop()
 	stop()
@@ -236,6 +257,49 @@ func TestExitCodeLeavesOrdinaryErrorsAlone(t *testing.T) {
 	if code, ok := ExitCode(nil); ok {
 		t.Errorf("ExitCode = (%d, true), want no mapping for a nil error", code)
 	}
+}
+
+func TestForcedExitTearsTheUIDownBeforeAnythingElseTouchesTheTerminal(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var order []string
+	record := func(name string) func() {
+		return func() {
+			mu.Lock()
+			defer mu.Unlock()
+			order = append(order, name)
+		}
+	}
+
+	ch := make(chan os.Signal, 2)
+	exit, calls := fakeExit(t)
+
+	ctx, stop := InstallWithExit(context.Background(), recordingWriter{record: record("stderr")}, ch, time.Hour, record("teardown"), record("forceKill"), exit)
+	defer stop()
+
+	ch <- os.Interrupt
+	<-ctx.Done()
+	ch <- os.Interrupt
+
+	if !waitFor(func() bool { return len(calls()) == 1 }, 2*time.Second) {
+		t.Fatalf("exit was not called after a second signal; calls = %v", calls())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	want := []string{"teardown", "stderr", "forceKill"}
+	if strings.Join(order, ",") != strings.Join(want, ",") {
+		t.Errorf("order = %v, want %v — the live frame must come down before anything else writes to the terminal", order, want)
+	}
+}
+
+type recordingWriter struct {
+	record func()
+}
+
+func (w recordingWriter) Write(p []byte) (int, error) {
+	w.record()
+	return len(p), nil
 }
 
 func waitFor(cond func() bool, timeout time.Duration) bool {
