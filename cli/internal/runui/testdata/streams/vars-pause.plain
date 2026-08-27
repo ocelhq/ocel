@@ -1,0 +1,27 @@
+→ Environment › Building
+  Building project
+  Reading ocel.aws.config.ts
+⚠ Environment › Building paused
+
+1 variable is not ready — nothing has been built.
+
+  STRIPE_API_KEY (project root), read by web
+    no value is set
+    fix: ocel env set STRIPE_API_KEY <VALUE>
+  Fill them in at:
+
+    http://127.0.0.1:5555/#t=abc
+
+  Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.
+
+✓ Resumed — the page was answered
+
+→ Environment › Building
+  Building project
+  ▲ Next.js 15.4.2
+   ✓ Compiled successfully
+✓ Environment › Building  4s
+
+✓ Deployed in 12s
+
+  https://acme.example.com

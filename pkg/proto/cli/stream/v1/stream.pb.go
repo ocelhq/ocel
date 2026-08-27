@@ -276,6 +276,7 @@ func (x *WaitingEvent) GetUrl() string {
 	return ""
 }
 
+// The end of a pause.
 type ResumedEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Reason        string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`

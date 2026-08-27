@@ -76,7 +76,6 @@ func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *env
 
 	switch {
 	case waitErr == nil:
-		r.ui.RestartBuild()
 		r.ui.Resume()
 		return nil
 	case errors.Is(waitErr, varsui.ErrAbandoned):

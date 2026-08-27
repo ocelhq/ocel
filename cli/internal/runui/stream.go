@@ -43,18 +43,6 @@ func (s *Stream) Suspend() func() {
 	return s.r.Suspend()
 }
 
-func (s *Stream) Pause() {
-	if s.r != nil {
-		s.r.Pause()
-	}
-}
-
-func (s *Stream) Resume() {
-	if s.r != nil {
-		s.r.Resume()
-	}
-}
-
 func (s *Stream) Restart(stageID []byte) {
 	if s.r != nil {
 		s.r.Restart(stageID)
@@ -70,8 +58,14 @@ func (s *Stream) Emit(ev *streamv1.RunEvent) *streamv1.RunEvent {
 		return ev
 	}
 	lines := s.proj.project(ev)
+	if ev.GetWaiting() != nil {
+		s.r.Pause()
+	}
 	s.r.Ingest(ev)
 	s.r.Commit(lines)
+	if ev.GetResumed() != nil {
+		s.r.Resume()
+	}
 	return ev
 }
 

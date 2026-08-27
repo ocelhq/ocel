@@ -30,6 +30,7 @@ var overrides = map[protoreflect.FullName]armFunc{
 	"cli.stream.v1.RunResultEvent":      (*projector).result,
 	"cli.stream.v1.DiagnosticEvent":     (*projector).diagnostic,
 	"cli.stream.v1.WaitingEvent":        (*projector).waiting,
+	"cli.stream.v1.ResumedEvent":        (*projector).resumed,
 	"common.plan.v1.ChangePlan":         (*projector).plan,
 }
 
@@ -445,7 +446,7 @@ func (p *projector) diagnostic(m protoreflect.Message) []string {
 
 func (p *projector) waiting(m protoreflect.Message) []string {
 	ev := m.Interface().(*streamv1.WaitingEvent)
-	out := []string{""}
+	out := append(p.strand(warnMark, "paused"), "")
 	out = append(out, strings.Split(strings.TrimRight(ev.GetReason(), "\n"), "\n")...)
 	return append(out,
 		"  Fill them in at:",
@@ -455,6 +456,11 @@ func (p *projector) waiting(m protoreflect.Message) []string {
 		"  Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.",
 		"",
 	)
+}
+
+func (p *projector) resumed(m protoreflect.Message) []string {
+	ev := m.Interface().(*streamv1.ResumedEvent)
+	return []string{okMark + " Resumed — " + ev.GetReason(), ""}
 }
 
 func (p *projector) result(m protoreflect.Message) []string {

@@ -36,6 +36,7 @@ message WaitingEvent {
   string url = 2;
 }
 
+// The end of a pause.
 message ResumedEvent {
   string reason = 1;
 }

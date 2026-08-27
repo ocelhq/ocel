@@ -32,7 +32,6 @@ type previewUpOptions struct {
 	ref      string
 	name     string
 	prebuilt bool
-	noUI     bool
 	yes      bool
 }
 
@@ -159,7 +158,6 @@ func previewUpFlags(cmd *cobra.Command, opts *previewUpOptions) {
 	cmd.Flags().StringVar(&opts.name, "name", "", "Deploy the preview with this `name`, kept across branches, instead of the current branch's")
 	cmd.Flags().StringVar(&opts.ref, "ref", "", "Deploy the preview for this git `ref` instead of the current branch")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
-	cmd.Flags().BoolVar(&opts.noUI, "no-ui", false, noUIFlagUsage)
 	cmddeps.Yes(cmd, &opts.yes)
 }
 
@@ -219,7 +217,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 				}, envwire.Scope(cfg, true, env.GetIdentity()))
 			},
 			ui:      ui,
-			enabled: canOpenVarsUI(deps, stdin, opts.noUI),
+			enabled: canOpenVarsUI(deps, stdin),
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
