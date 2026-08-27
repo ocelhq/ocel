@@ -119,6 +119,8 @@ func normalizeMessage(m protoreflect.Message) {
 		return true
 	})
 	switch v := m.Interface().(type) {
+	case *planv1.ChangePlan:
+		sortGroups(v)
 	case *planv1.ChangeGroup:
 		sortChanges(v)
 	case *progressv1.SpanEvent:
@@ -154,6 +156,23 @@ func normalizeValue(fd protoreflect.FieldDescriptor, v protoreflect.Value, set f
 		if collapsed := collapseRewrites(v.String()); collapsed != v.String() {
 			set(protoreflect.ValueOfString(collapsed))
 		}
+	}
+}
+
+func sortGroups(plan *planv1.ChangePlan) {
+	sort.SliceStable(plan.Groups, func(i, j int) bool {
+		return spineRank(plan.Groups[i].GetKind()) < spineRank(plan.Groups[j].GetKind())
+	})
+}
+
+func spineRank(kind string) int {
+	switch kind {
+	case sharedStackKind, parameterKind:
+		return 0
+	case edgeKind:
+		return 2
+	default:
+		return 1
 	}
 }
 
