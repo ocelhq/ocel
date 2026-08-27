@@ -28,16 +28,17 @@ const (
 )
 
 var partitionSegments = map[string]int{
-	kit.RootValues:      3,
-	kit.RootValueRefs:   3,
-	kit.RootStacks:      3,
-	kit.RootConformance: 3,
-	kit.RootLedger:      2,
-	kit.RootEdgeStacks:  2,
-	kit.RootSchema:      1,
-	kit.RootProjects:    2,
-	kit.RootBootstrap:   2,
-	kit.RootWildcard:    2,
+	kit.RootValues:       3,
+	kit.RootValueRefs:    3,
+	kit.RootStacks:       3,
+	kit.RootEnvironments: 3,
+	kit.RootConformance:  3,
+	kit.RootLedger:       2,
+	kit.RootEdgeStacks:   2,
+	kit.RootSchema:       1,
+	kit.RootProjects:     2,
+	kit.RootBootstrap:    2,
+	kit.RootWildcard:     2,
 }
 
 type DynamoAPI interface {
