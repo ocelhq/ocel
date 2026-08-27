@@ -266,7 +266,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			fmt.Fprintln(stdout, downgradeWarning(tier, status))
 		}
 		if opts.Dry {
-			fmt.Fprintln(stdout, "Run without --dry to apply.")
+			ui.Diagnostic("Run without --dry to apply.")
 			return nil
 		}
 
