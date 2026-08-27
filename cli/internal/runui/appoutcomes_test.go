@@ -3,6 +3,7 @@ package runui
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"testing"
 
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -71,14 +72,8 @@ func TestRunResultCarriesTheProviderAppOutcomes(t *testing.T) {
 			s.Event(providerResult(false, tc.apps...))
 			tc.finish(s)
 
-			got := appOutcomesOf(t, out.String())
-			if len(got) != len(tc.want) {
+			if got := appOutcomesOf(t, out.String()); !slices.Equal(got, tc.want) {
 				t.Fatalf("the run result reports %v, want %v", got, tc.want)
-			}
-			for i := range got {
-				if got[i] != tc.want[i] {
-					t.Fatalf("the run result reports %v, want %v", got, tc.want)
-				}
 			}
 		})
 	}
