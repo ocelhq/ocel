@@ -35,7 +35,7 @@ func (g gate) blocked() error {
 }
 
 func (g gate) guard(ctx context.Context, question string) (bool, error) {
-	if g.yes || !g.interactive {
+	if g.dry || g.yes || !g.interactive {
 		return true, nil
 	}
 	return g.decide(prompt.New(g.out, g.in).Confirm(ctx, question))
@@ -52,6 +52,8 @@ func (g gate) consent(ctx context.Context, ask func(prompt.Prompter) (bool, erro
 }
 
 func (s *Session) Interactive() bool { return s.gate.interactive }
+
+func (s *Session) Dry() bool { return s.gate.dry }
 
 func (s *Session) Asking() bool { return s.gate.interactive && !s.gate.yes }
 

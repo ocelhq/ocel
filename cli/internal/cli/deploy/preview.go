@@ -33,6 +33,7 @@ type previewUpOptions struct {
 	name     string
 	prebuilt bool
 	yes      bool
+	dry      bool
 }
 
 type previewRmOptions struct {
@@ -158,6 +159,7 @@ func previewUpFlags(cmd *cobra.Command, opts *previewUpOptions) {
 	cmd.Flags().StringVar(&opts.name, "name", "", "Deploy the preview with this `name`, kept across branches, instead of the current branch's")
 	cmd.Flags().StringVar(&opts.ref, "ref", "", "Deploy the preview for this git `ref` instead of the current branch")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
+	cmd.Flags().BoolVar(&opts.dry, "dry", false, dryFlagUsage)
 	cmddeps.Yes(cmd, &opts.yes)
 }
 
@@ -185,14 +187,19 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 
-	if err := deployresult.Clear(cfg.Dir); err != nil {
-		return err
-	}
-	if err := servicemap.Clear(cfg.Dir); err != nil {
-		return err
+	if !opts.dry {
+		if err := deployresult.Clear(cfg.Dir); err != nil {
+			return err
+		}
+		if err := servicemap.Clear(cfg.Dir); err != nil {
+			return err
+		}
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview up", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	spec := deps.Spec(runui.Convergent, "ocel preview up", cfg, opts.yes, stdout, stdin)
+	spec.Dry = opts.dry
+
+	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		knownSlugs, err := preflightPreviewUp(ctx, ui, runner, cfg, env.GetIdentity(), stdout, stdin)
 		if err != nil {
 			return err
@@ -233,6 +240,11 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			Manifest:    manifest,
 			Environment: env,
 			Edge:        edgewire.Selection(cfg),
+			Dry:         opts.dry,
+		}
+
+		if opts.dry {
+			return showDeployPlan(ctx, runner, ui, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()))
 		}
 
 		var out deployOutcome

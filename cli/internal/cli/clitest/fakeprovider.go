@@ -260,6 +260,17 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 		}
 	}
 
+	if req.GetDry() {
+		if err := stream.Send(&progressv1.OperationEvent{
+			Event: &progressv1.OperationEvent_Plan{Plan: fakeDeployPlan(req)},
+		}); err != nil {
+			return err
+		}
+		return stream.Send(&progressv1.OperationEvent{
+			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		})
+	}
+
 	if err := stream.Send(fakeProgress("provisioning...")); err != nil {
 		return err
 	}
@@ -278,6 +289,53 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 			Links:       fakeLinks(req.GetManifest()),
 		}},
 	})
+}
+
+func fakeDeployPlan(req *contractv1.DeployRequest) *planv1.ChangePlan {
+	manifest := req.GetManifest()
+	class := strings.ToLower(strings.TrimPrefix(req.GetEnvironment().GetTier().String(), "TIER_"))
+
+	infra := &planv1.ChangeGroup{Kind: "stack", Name: "aws/" + manifest.GetSlug() + "--infra", Action: planv1.Change_ACTION_CREATE}
+	values := &planv1.ChangeGroup{Kind: "parameters", Name: "values", Action: planv1.Change_ACTION_CREATE}
+	for _, r := range manifest.GetResources() {
+		name := r.GetResource().GetName()
+		infra.Changes = append(infra.Changes, &planv1.Change{Kind: "postgres", Name: name, Action: planv1.Change_ACTION_CREATE})
+		values.Changes = append(values.Changes, &planv1.Change{Kind: "postgres", Name: name, Action: planv1.Change_ACTION_CREATE})
+	}
+
+	plan := &planv1.ChangePlan{Subject: manifest.GetSlug(), EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind())}
+	plan.Groups = append(plan.Groups, infra)
+	if len(values.Changes) > 0 {
+		plan.Groups = append(plan.Groups, values)
+	}
+	promotion := &planv1.ChangeGroup{Kind: "promotion", Name: class, Action: planv1.Change_ACTION_CREATE}
+	for _, app := range manifest.GetApps() {
+		group := &planv1.ChangeGroup{
+			Kind:   "stack",
+			Name:   "aws/" + manifest.GetSlug() + "--" + app.GetName(),
+			Action: planv1.Change_ACTION_CREATE,
+		}
+		for _, fn := range manifest.GetFunctions() {
+			if fn.GetApp() != app.GetName() {
+				continue
+			}
+			group.Changes = append(group.Changes,
+				&planv1.Change{Kind: "artifact", Name: fn.GetLogicalName(), Action: planv1.Change_ACTION_CREATE},
+				&planv1.Change{Kind: "function", Name: fn.GetLogicalName(), Action: planv1.Change_ACTION_CREATE})
+		}
+		plan.Groups = append(plan.Groups, group)
+		promotion.Changes = append(promotion.Changes,
+			&planv1.Change{Kind: "deployment", Name: app.GetName(), Action: planv1.Change_ACTION_CREATE})
+	}
+	plan.Groups = append(plan.Groups,
+		&planv1.ChangeGroup{
+			Kind:   "edge",
+			Name:   resolvedEdgeKind(req.GetEdge().GetKind()) + "/edge",
+			Action: planv1.Change_ACTION_CREATE,
+			Reason: "reconciled to serve this release",
+		},
+		promotion)
+	return plan
 }
 
 func fakeFlipBound() *progressv1.FlipBound {
