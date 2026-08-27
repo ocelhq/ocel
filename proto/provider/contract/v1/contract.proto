@@ -241,6 +241,10 @@ message BootstrapRequest {
 
   // Draw the plan, emit it as a plan event and stop: the stream changes nothing.
   bool dry = 8;
+
+  // The plan a run already showed and a human already consented to. An apply
+  // carrying one draws no plan of its own and refuses to exceed this one.
+  common.plan.v1.ChangePlan consented = 9;
 }
 
 message DescribeBootstrapRequest {
@@ -349,6 +353,10 @@ message BootstrapScope {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
   EdgeSelection edge = 2;
+
+  // The plan a run already showed and a human already consented to. A removal
+  // carrying one refuses to exceed it.
+  common.plan.v1.ChangePlan consented = 3;
 }
 
 message RemoveEnvironmentRequest {

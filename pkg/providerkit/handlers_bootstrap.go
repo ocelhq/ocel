@@ -60,15 +60,17 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	intent := applyRequestOf(req)
 
 	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
-		standing, err := gate.Standing(ctx, class)
-		if err != nil {
-			return nil, RefusalError(err)
+		plan := PlanOf(req.GetConsented())
+		if req.GetConsented() == nil {
+			standing, err := gate.Standing(ctx, class)
+			if err != nil {
+				return nil, RefusalError(err)
+			}
+			if plan, err = gate.PlanFrom(ctx, standing, intent); err != nil {
+				return nil, RefusalError(err)
+			}
+			sender.send(planEvent(ChangePlanProto(plan, string(class), string(edgeKind(provider, req.GetEdge().GetKind())))))
 		}
-		plan, err := gate.PlanFrom(ctx, standing, intent)
-		if err != nil {
-			return nil, RefusalError(err)
-		}
-		sender.send(planEvent(ChangePlanProto(plan, string(class), string(edgeKind(provider, req.GetEdge().GetKind())))))
 		if req.GetDry() {
 			return okResult(), nil
 		}
@@ -156,6 +158,50 @@ func GroupProto(group ChangeGroup) *planv1.ChangeGroup {
 		})
 	}
 	return rendered
+}
+
+func PlanOf(shown *planv1.ChangePlan) Plan {
+	plan := Plan{}
+	for _, group := range shown.GetGroups() {
+		held := ChangeGroup{
+			Kind:    group.GetKind(),
+			Name:    group.GetName(),
+			Feature: group.GetFeature(),
+			Action:  changeAction(group.GetAction()),
+			Reason:  group.GetReason(),
+			Slow:    group.GetSlow(),
+		}
+		for _, change := range group.GetChanges() {
+			held.Changes = append(held.Changes, Change{
+				Kind:   change.GetKind(),
+				Name:   change.GetName(),
+				Action: changeAction(change.GetAction()),
+				Reason: change.GetReason(),
+				Slow:   change.GetSlow(),
+			})
+		}
+		plan.Groups = append(plan.Groups, held)
+	}
+	return plan
+}
+
+func changeAction(action planv1.Change_Action) ChangeAction {
+	switch action {
+	case planv1.Change_ACTION_CREATE:
+		return ActionCreate
+	case planv1.Change_ACTION_UPDATE:
+		return ActionUpdate
+	case planv1.Change_ACTION_REPLACE:
+		return ActionReplace
+	case planv1.Change_ACTION_DELETE:
+		return ActionDelete
+	case planv1.Change_ACTION_DISABLE_THEN_DELETE:
+		return ActionDisableThenDelete
+	case planv1.Change_ACTION_KEEP:
+		return ActionKeep
+	default:
+		return ""
+	}
 }
 
 func planAction(action ChangeAction) planv1.Change_Action {
@@ -248,7 +294,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	}
 
 	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
-		return gate.Remove(ctx, class, report)
+		return gate.Remove(ctx, PlanOf(req.GetConsented()), class, report)
 	})
 }
 
