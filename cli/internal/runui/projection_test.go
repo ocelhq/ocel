@@ -65,7 +65,7 @@ func TestEveryPhaseCommitsAStartLineThenItsBlockWhole(t *testing.T) {
 		StartTimeUnixNano: 1,
 		EndTimeUnixNano:   int64(6*time.Second) + 1,
 	}}}))
-	want := []string{"  step 1", "  step 2", okMark + " web › Building  6s"}
+	want := []string{"  step 1", "  step 2", okMark + " web  6s"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("flushed block =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
@@ -94,7 +94,7 @@ func TestABlockDropsBlankLinesAtTheEdgesOfWhatItIsGivenAndKeepsTheOnesInside(t *
 		StartTimeUnixNano: 1,
 		EndTimeUnixNano:   int64(6*time.Second) + 1,
 	}}}))
-	want := []string{"  Packages: +812", "  ", "  compiled", okMark + " web › Building  6s"}
+	want := []string{"  Packages: +812", "  ", "  compiled", okMark + " web  6s"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("flushed block =\n%q\nwant\n%q", got, want)
 	}
@@ -145,9 +145,9 @@ func TestAnOpenBlockFlushesWithTheOutcomeTheRunActuallyHad(t *testing.T) {
 		result *streamv1.RunResultEvent
 		want   string
 	}{
-		{"interrupted", &streamv1.RunResultEvent{Interrupted: true, Headline: "Cancelled"}, warnMark + " web › Building interrupted"},
-		{"failed", &streamv1.RunResultEvent{Detail: "boom"}, failMark + " web › Building failed"},
-		{"succeeded", &streamv1.RunResultEvent{Success: true}, warnMark + " web › Building unfinished"},
+		{"interrupted", &streamv1.RunResultEvent{Interrupted: true, Headline: "Cancelled"}, warnMark + " web interrupted"},
+		{"failed", &streamv1.RunResultEvent{Detail: "boom"}, failMark + " web failed"},
+		{"succeeded", &streamv1.RunResultEvent{Success: true}, warnMark + " web unfinished"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

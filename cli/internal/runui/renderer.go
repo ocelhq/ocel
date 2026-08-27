@@ -18,7 +18,7 @@ const (
 	failMark  = "✗"
 	warnMark  = "⚠"
 	startMark = "→"
-	pendMark  = "·"
+	pathSep   = " › "
 	barWidth  = 12
 
 	scrollGuard = 3
@@ -295,16 +295,17 @@ func (r *Renderer) drawLiveLocked() {
 
 	live := r.plan.units()
 	shape := make([]windowUnit, len(live))
+	tails := make([]string, len(live))
 	for i, u := range live {
-		shape[i] = windowUnit{tier: u.tier, output: u.output != nil}
+		tails[i] = r.tailLineLocked(u)
+		shape[i] = windowUnit{tier: u.tier, output: tails[i] != ""}
 	}
 	frame := planWindow(shape, r.windowHeightLocked())
 
 	for _, row := range frame.rows {
-		u := live[row.unit]
-		emit(r.unitLineLocked(u))
+		emit(r.unitLineLocked(live[row.unit]))
 		if row.output {
-			emit(r.outputLineLocked(u))
+			emit(tails[row.unit])
 		}
 	}
 	if frame.more > 0 {
@@ -332,36 +333,43 @@ func (r *Renderer) spinRowLocked() string {
 	return fmt.Sprintf("%s %s", glyph, r.spinMsg)
 }
 
-func (r *Renderer) unitLineLocked(u liveUnit) string {
-	title := u.root.title
-	switch u.tier {
-	case tierFailed:
-		return r.colorFor(color.FgRed, color.Bold).Sprintf("%s %s failed", failMark, title)
-	case tierDone:
-		return fmt.Sprintf("%s  %s",
-			r.colorFor(color.FgGreen).Sprintf("%s %s", okMark, title),
-			r.colorFor(color.Faint).Sprint(formatDuration(u.root.doneDur)))
-	case tierPending:
-		return r.colorFor(color.Faint).Sprintf("%s %s", pendMark, title)
-	default:
-		return fmt.Sprintf("%s %s  %s",
-			r.colorFor(color.FgCyan).Sprint(spinnerFrame(u.frame())),
-			title,
-			r.colorFor(color.Faint).Sprint(formatDuration(r.plan.now().Sub(u.started()))))
-	}
+func namesPhase(u liveUnit) bool {
+	return u.phase != nil && len(u.root.children) > 1
 }
 
-func (r *Renderer) outputLineLocked(u liveUnit) string {
-	n := u.output
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s%s", blockIndent, r.colorFor(color.Faint).Sprintf("%s › %s", u.root.title, n.title))
+func (r *Renderer) unitLineLocked(u liveUnit) string {
+	if u.tier == tierFailed {
+		return r.colorFor(color.FgRed, color.Bold).Sprintf("%s %s failed", failMark, u.root.title)
+	}
+	name := r.colorFor(color.Bold).Sprint(u.root.title)
+	if namesPhase(u) {
+		name += r.colorFor(color.Faint).Sprint(pathSep + u.phase.title)
+	}
+	return fmt.Sprintf("%s %s  %s",
+		r.colorFor(color.FgCyan).Sprint(spinnerFrame(u.frame())),
+		name,
+		r.colorFor(color.Faint).Sprint(formatDuration(r.plan.now().Sub(u.started()))))
+}
+
+func (r *Renderer) tailLineLocked(u liveUnit) string {
+	n := u.tail
+	if n == nil {
+		return ""
+	}
+	var parts []string
+	if n != u.root && (n != u.phase || !namesPhase(u)) {
+		parts = append(parts, n.title)
+	}
 	switch {
 	case n.total != nil:
-		fmt.Fprintf(&b, "  %s %d/%d", bar(n.current, *n.total), n.current, *n.total)
+		parts = append(parts, fmt.Sprintf("%s %d/%d", bar(n.current, *n.total), n.current, *n.total))
 	case n.message != "" && n.message != n.title:
-		fmt.Fprintf(&b, "  %s", r.colorFor(color.Faint).Sprintf("— %s", n.message))
+		parts = append(parts, n.message)
 	}
-	return b.String()
+	if len(parts) == 0 {
+		return ""
+	}
+	return blockIndent + r.colorFor(color.Faint).Sprint(strings.Join(parts, "  "))
 }
 
 func (r *Renderer) colorFor(attrs ...color.Attribute) *color.Color {

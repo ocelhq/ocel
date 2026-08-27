@@ -34,13 +34,13 @@ func TestAUnitGetsOneRowAndItsBuildShowsUnderIt(t *testing.T) {
 
 	rows := liveRegion(t, s, out)
 	if len(rows) != 2 {
-		t.Fatalf("live region = %q, want one row for the unit and one output line under it", rows)
+		t.Fatalf("live region = %q, want one row for the unit and one tail line under it", rows)
 	}
 	if !strings.Contains(rows[0], "web") || strings.Contains(rows[0], "Building") {
-		t.Errorf("unit row = %q, want just the unit", rows[0])
+		t.Errorf("unit row = %q, want the unit alone — its one phase adds nothing to the name", rows[0])
 	}
-	if !strings.Contains(rows[1], "web › Building") || !strings.Contains(rows[1], "6/9") {
-		t.Errorf("output line = %q, want the app's build with the counts the producer declared", rows[1])
+	if !strings.Contains(rows[1], "6/9") {
+		t.Errorf("tail line = %q, want what the build is saying now, with the counts the producer declared", rows[1])
 	}
 }
 
@@ -57,10 +57,10 @@ func TestTheRendererNeverInventsCountsAProducerDidNotDeclare(t *testing.T) {
 
 	rows := liveRegion(t, s, out)
 	if len(rows) != 2 {
-		t.Fatalf("live region = %q, want the unit row and its output line", rows)
+		t.Fatalf("live region = %q, want the unit row and its tail line", rows)
 	}
 	if strings.Contains(rows[1], "/") {
-		t.Errorf("output line = %q, want no counts when the producer declared no total", rows[1])
+		t.Errorf("tail line = %q, want no counts when the producer declared no total", rows[1])
 	}
 }
 
@@ -104,7 +104,7 @@ func TestUnitsBeyondTheTerminalHeightFallIntoTheOverflowLineAndComeBack(t *testi
 	}
 }
 
-func TestAUnitDeclaredButNotYetStartedWaitsBelowTheRunningOnes(t *testing.T) {
+func TestAUnitDeclaredButNotYetStartedIsAbsentFromTheWindow(t *testing.T) {
 	t.Parallel()
 	s, out := liveStreamOfHeight(t, 40)
 	spineOf(t, s, 1)
@@ -112,11 +112,11 @@ func TestAUnitDeclaredButNotYetStartedWaitsBelowTheRunningOnes(t *testing.T) {
 	s.Emit(stagePlanEvent(&progressv1.Stage{Id: appStage(60), Title: "api"}))
 
 	rows := liveRegion(t, s, out)
-	if len(rows) != 3 {
-		t.Fatalf("live region = %q, want the running unit, its output line, and the waiting unit", rows)
+	if len(rows) != 2 {
+		t.Fatalf("live region = %q, want the running unit and its tail alone", rows)
 	}
-	if !strings.Contains(rows[2], pendMark) || !strings.Contains(rows[2], "api") {
-		t.Errorf("last row = %q, want the declared unit waiting under the running one", rows[2])
+	if strings.Contains(strings.Join(rows, "\n"), "api") {
+		t.Errorf("live region = %q, want a unit that has not started kept out of the window", rows)
 	}
 }
 
@@ -137,8 +137,8 @@ func TestTheOutputLineFollowsDeclarationOrderNotActivationOrder(t *testing.T) {
 	}
 
 	rows := liveRegion(t, s, out)
-	if len(rows) != 2 || !strings.Contains(rows[1], "web › Building") {
-		t.Fatalf("live region = %q, want the first child in declaration order on the output line", rows)
+	if len(rows) != 2 || !strings.Contains(rows[0], "web › Building") {
+		t.Fatalf("live region = %q, want the first phase in declaration order named on the unit row", rows)
 	}
 }
 
@@ -151,18 +151,18 @@ func TestARunningBuildKeepsItsOutputLineWhileTheRestOfTheSpineWaits(t *testing.T
 	}
 
 	rows := liveRegion(t, s, out)
-	if !strings.Contains(rows[1], "app-01 › Building") || !strings.Contains(rows[1], "6/9") {
-		t.Fatalf("live region = %q, want the running build's output line — waiting units cannot cost the running tier its second line", rows)
+	if len(rows) != 4 {
+		t.Fatalf("live region = %q, want a row and a tail for each running unit and nothing for the units that never started", rows)
 	}
-	if !strings.Contains(rows[3], "app-02 › Building") {
+	if !strings.Contains(rows[0], "app-01") || !strings.Contains(rows[1], "6/9") {
+		t.Fatalf("live region = %q, want the running build keeping its tail line", rows)
+	}
+	if !strings.Contains(rows[2], "app-02") || !strings.Contains(rows[3], "6/9") {
 		t.Errorf("live region = %q, want every running unit at the same height", rows)
-	}
-	if got := rows[len(rows)-1]; !strings.Contains(got, "+2 more: 2 waiting") {
-		t.Errorf("overflow line = %q, want the waiting units that did not fit counted below the fold", got)
 	}
 }
 
-func TestAFinishedUnitRanksLastAsASingleRow(t *testing.T) {
+func TestAFinishedUnitLeavesTheWindow(t *testing.T) {
 	t.Parallel()
 	s, out := liveStreamOfHeight(t, 40)
 	spineOf(t, s, 2)
@@ -171,21 +171,21 @@ func TestAFinishedUnitRanksLastAsASingleRow(t *testing.T) {
 	s.Emit(spanEvent(appStage(2), false, time.Second))
 
 	rows := liveRegion(t, s, out)
-	if got := rows[len(rows)-1]; !strings.Contains(got, okMark) || !strings.Contains(got, "app-01") {
-		t.Fatalf("live region = %q, want the finished unit ranked under the running one, not gone", rows)
+	if got := strings.Join(rows, "\n"); strings.Contains(got, "app-01") {
+		t.Fatalf("live region = %q, want the finished unit gone — its record is the block it flushed", rows)
 	}
-	if got := strings.Count(strings.Join(rows, "\n"), "app-01"); got != 1 {
-		t.Errorf("live region = %q, want the finished unit as one row — its story is already in scrollback", rows)
+	if len(rows) != 2 || !strings.Contains(rows[0], "app-02") {
+		t.Errorf("live region = %q, want the still-running unit alone in the window", rows)
 	}
 
 	out.Reset()
 	s.Emit(progressEvent(appStage(5), "compiling", 8, u32(9)))
-	if got := strings.Count(out.String(), "app-01"); got != 1 {
-		t.Errorf("frame = %q, want the finished unit's row redrawn once and its committed block left in scrollback", out.String())
+	if strings.Contains(out.String(), "app-01") {
+		t.Errorf("frame = %q, want the finished unit left in scrollback, never redrawn", out.String())
 	}
 }
 
-func TestTheOverflowLineCountsFinishedUnits(t *testing.T) {
+func TestTheOverflowLineCountsOnlyWhatIsStillOnTheSpine(t *testing.T) {
 	t.Parallel()
 	s, out := liveStreamOfHeight(t, 9)
 	spineOf(t, s, 8)
@@ -194,8 +194,8 @@ func TestTheOverflowLineCountsFinishedUnits(t *testing.T) {
 	s.Emit(spanEvent(appStage(2), false, time.Second))
 
 	rows := liveRegion(t, s, out)
-	if got := rows[len(rows)-1]; !strings.Contains(got, "+3 more: 2 running · 1 done") {
-		t.Errorf("overflow line = %q, want the finished unit counted below the fold", got)
+	if got := rows[len(rows)-1]; !strings.Contains(got, "+2 more: 2 running") {
+		t.Errorf("overflow line = %q, want the finished unit counted nowhere at all", got)
 	}
 }
 

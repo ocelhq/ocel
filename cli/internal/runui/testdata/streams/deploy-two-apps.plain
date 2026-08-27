@@ -12,7 +12,7 @@ Change plan, fronted by the cloudfront edge:
 → Environment › Building
   Bundling web (1/2)
   Bundling api (2/2)
-✓ Environment › Building  6s
+✓ Environment  6s
 
 1 variable is not ready — nothing has been built.
   Fill them in at:
@@ -27,9 +27,9 @@ Change plan, fronted by the cloudfront edge:
 → api › Provisioning
 ⚠ edge-middleware: web: middleware runs in the origin
   creating bucket assets
-✓ web › Provisioning  12s
+✓ web  12s
   updating function api
-✗ api › Provisioning failed  3s
+✗ api failed  3s
 
 ✗ Failed
   updating function api: InsufficientCapacity

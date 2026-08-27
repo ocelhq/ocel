@@ -629,7 +629,7 @@ func TestProviderProcessOutputRidesTheDiagnosticArmAndNeverEntersABlock(t *testi
 			}
 			s.Event(closeProvisioning())
 
-			got := out.String()
+			got := scrollback(out.String())
 			if !strings.Contains(got, marker+"\n") {
 				t.Errorf("stdout = %q, want provider process output committed on the diagnostic arm at every verbosity", got)
 			}
@@ -948,7 +948,7 @@ func TestASuccessfulBuildKeepsItsRawOutputToTheRunLogUnlessVerboseWasAskedFor(t 
 			t.Errorf("stdout = %q, want %q left out of the default projection", got, unwanted)
 		}
 	}
-	if !strings.Contains(got, okMark+" Environment › Building") {
+	if !strings.Contains(got, okMark+" Environment  ") {
 		t.Errorf("stdout = %q, want the phase still committed with its own line", got)
 	}
 	if err := s.Close(); err != nil {
@@ -984,7 +984,7 @@ func TestASuccessfulBuildCommitsItsWholeOutputInsideTheFlushedBlockWhenVerbose(t
 	}
 	header := strings.Index(got, startMark+" Environment › Building")
 	first := strings.Index(got, "  Packages: +812")
-	closed := strings.Index(got, okMark+" Environment › Building")
+	closed := strings.Index(got, okMark+" Environment  ")
 	if header < 0 || first < header || closed < first {
 		t.Errorf("stdout = %q, want the whole build output between the phase-start line and the completed-phase line", got)
 	}
@@ -1092,7 +1092,7 @@ func TestAnOrphanLogWaitsForItsStageAndFoldsIntoThatStagesBlock(t *testing.T) {
 				t.Errorf("stdout = %q, want %q inside the flushed block", got, want)
 			}
 		}
-		if at, closed := strings.Index(got, "the vertex spoke first"), strings.Index(got, okMark+" Environment › Provisioning"); at < 0 || at > closed {
+		if at, closed := strings.Index(got, "the vertex spoke first"), strings.Index(got, okMark+" Environment  "); at < 0 || at > closed {
 			t.Errorf("stdout = %q, want the adopted orphan flushed with the block rather than after it", got)
 		}
 	})
@@ -1248,11 +1248,11 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 		var at int
 		for _, want := range []string{
 			blockIndent + "Reading ocel.aws.config.ts\n",
-			warnMark + " Environment › Building paused\n",
+			warnMark + " Environment paused\n",
 			"http://127.0.0.1:5555/#t=abc",
 			startMark + " Environment › Building\n",
 			blockIndent + "Compiled successfully\n",
-			okMark + " Environment › Building",
+			okMark + " Environment  ",
 		} {
 			i := strings.Index(got[at:], want)
 			if i < 0 {
