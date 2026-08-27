@@ -62,6 +62,9 @@ func (s *Session) Guard(ctx context.Context, question string) (bool, error) {
 }
 
 func (s *Session) Consent(ctx context.Context, question string) (bool, error) {
+	if s.settled() {
+		return true, nil
+	}
 	resume := s.Suspend()
 	defer resume()
 	return s.gate.consent(ctx, func(p prompt.Prompter) (bool, error) {
@@ -70,11 +73,18 @@ func (s *Session) Consent(ctx context.Context, question string) (bool, error) {
 }
 
 func (s *Session) ConsentByName(ctx context.Context, label, name string) (bool, error) {
+	if s.settled() {
+		return true, nil
+	}
 	resume := s.Suspend()
 	defer resume()
 	return s.gate.consent(ctx, func(p prompt.Prompter) (bool, error) {
 		return p.Phrase(ctx, label, name)
 	})
+}
+
+func (s *Session) settled() bool {
+	return len(s.shown.GetGroups()) > 0 && !mutates(s.shown)
 }
 
 func (g gate) decide(granted bool, err error) (bool, error) {

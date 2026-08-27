@@ -1,0 +1,11 @@
+stages:
+  Environment
+    Provisioning
+plan:
+  edge/cloudflare/edge ACTION_CREATE Cloudflare::Worker/ocel-deployments-store
+  edge/cloudflare/edge ACTION_CREATE Cloudflare::R2Bucket/ocel-edge-cache
+  stack/aws/ocel-bootstrap ACTION_UPDATE AWS::Lambda::Function/OcelRouterFunction
+  stack/aws/ocel-bootstrap ACTION_KEEP AWS::SecretsManager::Secret/OcelOriginSecret
+waits:
+results:
+  success=true interrupted=false headline="Bootstrapped" detail="" duration_ms=11000

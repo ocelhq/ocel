@@ -8,11 +8,16 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 )
 
 func TestMain(m *testing.M) {
@@ -393,4 +398,104 @@ func TestTheRefusalNamesTheCommandAndTheRemedyThatCommandOffers(t *testing.T) {
 	if !strings.Contains(err.Error(), "OCEL_DESTROY_BYPASS_CONFIRMATION") {
 		t.Errorf("Run() = %q, want the refusal to offer the remedy this command actually has, not --yes", err)
 	}
+}
+
+type planningBody struct {
+	drawn     *planv1.ChangePlan
+	consented *planv1.ChangePlan
+	granted   bool
+}
+
+func (b *planningBody) run(ctx context.Context, _ *provider.Runner, ui *runui.Session) error {
+	b.consented = ui.Plan("Proposed changes to the production bootstrap", b.drawn)
+	granted, err := ui.Consent(ctx, "Apply these changes?")
+	b.granted = granted
+	return err
+}
+
+func keepingPlan() *planv1.ChangePlan {
+	return &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
+		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
+	}}
+}
+
+func mutatingPlan() *planv1.ChangePlan {
+	return &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
+		{Kind: "edge", Name: "cloudflare/edge", Action: planv1.Change_ACTION_CREATE},
+		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: planv1.Change_ACTION_KEEP, Reason: "already current"},
+	}}
+}
+
+func TestAPlanThatChangesNothingRaisesNoGateToConsentTo(t *testing.T) {
+	var out bytes.Buffer
+	spec := planFirstSpec(t, &out)
+	spec.Interactive = true
+	spec.Stdin = strings.NewReader("n\n")
+
+	body := planningBody{drawn: keepingPlan()}
+	if err := runui.Run(context.Background(), spec, body.run); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+	if !body.granted {
+		t.Error("consent was withheld, want a plan of nothing but keeps to have nothing to consent to")
+	}
+	if strings.Contains(out.String(), "Apply these changes?") {
+		t.Errorf("stdout = %q, want no question where the plan shows no change", out.String())
+	}
+}
+
+func TestAPlanThatChangesSomethingStillRaisesTheGate(t *testing.T) {
+	var out bytes.Buffer
+	spec := planFirstSpec(t, &out)
+	spec.Interactive = true
+	spec.Stdin = strings.NewReader("n\n")
+
+	body := planningBody{drawn: mutatingPlan()}
+	if err := runui.Run(context.Background(), spec, body.run); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+	if body.granted {
+		t.Error("consent was granted, want one create among the keeps to keep the gate up")
+	}
+	if !strings.Contains(out.String(), "Apply these changes?") {
+		t.Errorf("stdout = %q, want the plan's own confirmation put to the terminal", out.String())
+	}
+}
+
+func TestTheApplyCarriesThePlanTheRunShowed(t *testing.T) {
+	var out bytes.Buffer
+	spec := planFirstSpec(t, &out)
+	spec.Present = runui.Resolve(runui.Origin{LogFormat: "json"})
+	spec.Yes = true
+
+	body := planningBody{drawn: mutatingPlan()}
+	if err := runui.Run(context.Background(), spec, body.run); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+
+	shown := shownPlan(t, out.String())
+	if !proto.Equal(shown, body.consented) {
+		t.Errorf("the plan the body carries into the apply is\n%v\nand the plan the run showed is\n%v", body.consented, shown)
+	}
+	if body.consented.GetHeadline() != "Proposed changes to the production bootstrap" {
+		t.Errorf("consented headline = %q, want the plan to carry the sentence it was shown under", body.consented.GetHeadline())
+	}
+	if first := body.consented.GetGroups()[0].GetKind(); first != "stack" {
+		t.Errorf("the consented plan opens on a %q group, want the spine order the run showed, not the order the body drew", first)
+	}
+}
+
+func shownPlan(t *testing.T, stream string) *planv1.ChangePlan {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimRight(stream, "\n"), "\n") {
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
+		}
+		if plan := ev.GetPlan(); plan != nil {
+			return plan
+		}
+	}
+	t.Fatal("the run put no plan on the stream")
+	return nil
 }

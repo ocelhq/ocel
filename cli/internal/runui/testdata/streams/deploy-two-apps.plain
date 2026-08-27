@@ -1,20 +1,13 @@
-Change plan
-  subject: production
-  edge kind: cloudfront
-  groups:
-    - kind: infrastructure
-      name: shared
-      changes:
-        - kind: bucket
-          name: assets
-          action: create
-        - kind: bucket
-          name: logs
-          action: delete
-          reason: no longer declared
-        - kind: function
-          name: api
-          action: update
+
+Change plan, fronted by the cloudfront edge:
+
+~ infrastructure shared
+    + assets  bucket
+    – logs    bucket   — no longer declared
+    ~ api     function
+
+1 to create, 1 to update, 1 to delete.
+
 ⚠ web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts
 → Environment › Building
   Bundling web (1/2)
