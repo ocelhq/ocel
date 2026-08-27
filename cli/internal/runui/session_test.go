@@ -79,6 +79,72 @@ func progressN(msg string, current, total uint32) *progressv1.OperationEvent {
 	}}
 }
 
+func liveSession(t *testing.T) (*Session, *bytes.Buffer) {
+	t.Helper()
+	run := startTestRun(t, t.TempDir(), "ocel deploy")
+	var out bytes.Buffer
+	s := New(&out, run, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
+	t.Cleanup(func() { _ = s.Close() })
+	return s, &out
+}
+
+func TestAnInterruptTakesTheLiveFrameBackAndFlushesWhatWasInFlight(t *testing.T) {
+	t.Parallel()
+
+	s, out := liveSession(t)
+	s.Event(declareProvisioning())
+	s.Event(progress("provisioning the account"))
+	if _, err := s.ProcessWriter().Write([]byte("a line the run never finished")); err != nil {
+		t.Fatalf("Write() = %v", err)
+	}
+
+	s.interrupt()
+
+	if got := s.stream.r.liveLines; got != 0 {
+		t.Errorf("liveLines = %d, want the live frame taken back so no frame is committed to the scrollback", got)
+	}
+	got := out.String()
+	if !strings.Contains(got, "a line the run never finished") {
+		t.Errorf("stdout = %q, want the in-flight block flushed by the interrupt", got)
+	}
+	if !strings.Contains(got, "interrupted") {
+		t.Errorf("stdout = %q, want the interrupted marker on the flushed strand", got)
+	}
+	if !strings.Contains(got, "Cancelled") {
+		t.Errorf("stdout = %q, want the run to say where it stopped", got)
+	}
+}
+
+func TestAnInterruptedRunIsNotCancelledTwiceWhenItsCloseStillRuns(t *testing.T) {
+	t.Parallel()
+
+	s, out := liveSession(t)
+	s.interrupt()
+	settled := out.String()
+
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+	if got := out.String(); got != settled {
+		t.Errorf("Close() after an interrupt wrote %q more, want the teardown to happen exactly once", got[len(settled):])
+	}
+}
+
+func TestInterruptReachesEveryRunUIStillOwningATerminal(t *testing.T) {
+	s, out := liveSession(t)
+	s.Event(declareProvisioning())
+	s.Event(progress("provisioning the account"))
+
+	Interrupt()
+
+	if got := s.stream.r.liveLines; got != 0 {
+		t.Errorf("liveLines = %d, want the exit path to reach the live run-UI it never got to close", got)
+	}
+	if !strings.Contains(out.String(), "Cancelled") {
+		t.Errorf("stdout = %q, want the interrupted result committed", out.String())
+	}
+}
+
 func readLog(t *testing.T, path string) string {
 	t.Helper()
 	raw, err := os.ReadFile(path)

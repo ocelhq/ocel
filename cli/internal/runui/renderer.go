@@ -36,8 +36,9 @@ type Renderer struct {
 	spinMsg   string
 	spinFrame int
 
-	tickStop chan struct{}
-	tickDone chan struct{}
+	tickStop  chan struct{}
+	tickDone  chan struct{}
+	closeOnce sync.Once
 }
 
 var liveWriters sync.Map
@@ -204,15 +205,16 @@ func (r *Renderer) tickLoop() {
 }
 
 func (r *Renderer) Close() error {
-	if r.tickStop != nil {
-		close(r.tickStop)
-		<-r.tickDone
-		r.tickStop = nil
-	}
-	r.mu.Lock()
-	r.eraseLiveLocked()
-	r.mu.Unlock()
-	liveWriters.Delete(r.w)
+	r.closeOnce.Do(func() {
+		if r.tickStop != nil {
+			close(r.tickStop)
+			<-r.tickDone
+		}
+		r.mu.Lock()
+		r.eraseLiveLocked()
+		r.mu.Unlock()
+		liveWriters.Delete(r.w)
+	})
 	return nil
 }
 

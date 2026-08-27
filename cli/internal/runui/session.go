@@ -48,6 +48,19 @@ type Session struct {
 	log       *os.File
 	logPath   string
 	logWriter *syncFileWriter
+
+	closeOnce sync.Once
+}
+
+var liveSessions sync.Map
+
+func Interrupt() {
+	liveSessions.Range(func(k, _ any) bool {
+		if s, ok := k.(*Session); ok {
+			s.interrupt()
+		}
+		return true
+	})
 }
 
 func New(stdout io.Writer, run *runtrace.Run, present Presentation) *Session {
@@ -66,6 +79,7 @@ func New(stdout io.Writer, run *runtrace.Run, present Presentation) *Session {
 		s.logPath = p
 		s.logWriter = &syncFileWriter{f: f, mu: &s.logMu}
 	}
+	liveSessions.Store(s, struct{}{})
 	return s
 }
 
@@ -312,6 +326,20 @@ func (s *Session) result(ev *streamv1.RunResultEvent) {
 }
 
 func (s *Session) Close() error {
+	var err error
+	s.closeOnce.Do(func() { err = s.shutdown() })
+	return err
+}
+
+func (s *Session) interrupt() {
+	s.closeOnce.Do(func() {
+		s.Cancel()
+		_ = s.shutdown()
+	})
+}
+
+func (s *Session) shutdown() error {
+	liveSessions.Delete(s)
 	s.build.flush()
 	s.process.flush()
 	_ = s.stream.Close()
