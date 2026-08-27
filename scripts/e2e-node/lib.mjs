@@ -362,13 +362,19 @@ export function tail(text, maxLines) {
 
 export const PLAN_APPLY_HINT = "Run without --dry to apply.";
 
-export function planProblems(output, { resultWritten }) {
+export function planProblems(output, { resultWritten, listed, ref }) {
   const problems = [];
   if (!String(output ?? "").includes(PLAN_APPLY_HINT)) {
     problems.push(`the plan never said how to apply it: no "${PLAN_APPLY_HINT}" in the output`);
   }
   if (resultWritten) {
     problems.push(`${DEPLOY_RESULT_FILE} was written by a run that was only ever supposed to plan`);
+  }
+  const readBack = String(listed ?? "").trim();
+  if (!readBack) {
+    problems.push("`ocel preview ls` read nothing back, so nothing proves the account is as the plan found it");
+  } else if (readBack.includes(ref)) {
+    problems.push(`\`ocel preview ls\` shows ${ref} standing in the account, and only an apply may stand one up`);
   }
   return problems;
 }
