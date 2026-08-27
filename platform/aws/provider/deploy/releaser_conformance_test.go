@@ -26,9 +26,42 @@ import (
 type mockedEngine struct {
 	outputs   auto.OutputMap
 	mocks     sdk.MockResourceMonitor
+	pending   *pendingSets
 	mu        sync.Mutex
 	ran       []string
 	previewed []providerkit.Change
+}
+
+type pushingAssetSets struct {
+	inner   sdk.MockResourceMonitor
+	pending *pendingSets
+}
+
+func (p pushingAssetSets) NewResource(args sdk.MockResourceArgs) (string, resource.PropertyMap, error) {
+	if args.TypeToken == assetSetToken && p.pending != nil {
+		id := pendingKey(args.Inputs["stack"].StringValue(), args.Inputs["set"].StringValue())
+		held, waiting := p.pending.take(id)
+		if !waiting {
+			return "", nil, fmt.Errorf("the program declared %s but the run held nothing to push for it", id)
+		}
+		if err := held.set.push(context.Background(), held.report); err != nil {
+			return "", nil, err
+		}
+	}
+	return p.inner.NewResource(args)
+}
+
+func (p pushingAssetSets) Call(args sdk.MockCallArgs) (resource.PropertyMap, error) {
+	return p.inner.Call(args)
+}
+
+func standingUp(cfg Config, engine *mockedEngine) *Releaser {
+	if engine == nil {
+		return newReleaser(fixed(cfg), &Realized{}, nil)
+	}
+	held := newReleaser(fixed(cfg), &Realized{}, engine)
+	engine.pending = held.pending
+	return held
 }
 
 func (e *mockedEngine) stacks() []string {
@@ -44,6 +77,7 @@ func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerki
 	if e.mocks != nil {
 		monitor = e.mocks
 	}
+	monitor = pushingAssetSets{inner: monitor, pending: e.pending}
 	if err := sdk.RunErr(setup.Program, sdk.WithMocks("shop", setup.Stack, monitor)); err != nil {
 		return nil, err
 	}
@@ -135,11 +169,11 @@ func provisionedOutputs() auto.OutputMap {
 	}
 }
 
-func conformingReleaser(engine kitpulumi.Engine) *Releaser {
+func conformingReleaser(engine *mockedEngine) *Releaser {
 	return releaserPlacingInto(engine, &fakeUploader{})
 }
 
-func releaserPlacingInto(engine kitpulumi.Engine, uploader *fakeUploader) *Releaser {
+func releaserPlacingInto(engine *mockedEngine, uploader *fakeUploader) *Releaser {
 	cfg := Config{
 		Slug:           "conformance",
 		Region:         "eu-west-1",
@@ -153,7 +187,7 @@ func releaserPlacingInto(engine kitpulumi.Engine, uploader *fakeUploader) *Relea
 		ArtifactBucket: conformanceArtifactBucket,
 		Uploader:       uploader,
 	}
-	return newReleaser(fixed(cfg), &Realized{}, engine)
+	return standingUp(cfg, engine)
 }
 
 const conformanceArtifactBucket = "ocel-artifacts"

@@ -7,7 +7,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -22,9 +21,9 @@ func releasing(t *testing.T, cfg Config) *release {
 	return releasingOn(t, cfg, nil)
 }
 
-func releasingOn(t *testing.T, cfg Config, engine kitpulumi.Engine) *release {
+func releasingOn(t *testing.T, cfg Config, engine *mockedEngine) *release {
 	t.Helper()
-	held, err := newReleaser(fixed(cfg), &Realized{}, engine).at(context.Background(), providerkit.StackRef{}, "")
+	held, err := standingUp(cfg, engine).at(context.Background(), providerkit.StackRef{}, "")
 	if err != nil {
 		t.Fatalf("open a release: %v", err)
 	}

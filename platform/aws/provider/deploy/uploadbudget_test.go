@@ -74,7 +74,7 @@ func TestPublishingAssetsSharesOneBudgetAcrossTheAppsUploadingAtOnce(t *testing.
 		go func() {
 			defer group.Done()
 			coord := storageCoordinate("prod", "shop", app, fixedRelease(t))
-			failures[slot] = publishStaticAssets(context.Background(), cfg, app, frameworkNext, coord, quietReporter{})
+			failures[slot] = pushStaticAssetSet(context.Background(), cfg, app, frameworkNext, coord)
 		}()
 	}
 
@@ -91,7 +91,7 @@ func TestPublishingAssetsSharesOneBudgetAcrossTheAppsUploadingAtOnce(t *testing.
 
 	for slot, err := range failures {
 		if err != nil {
-			t.Fatalf("publishStaticAssets(%s) = %v", apps[slot], err)
+			t.Fatalf("pushStaticAssetSet(%s) = %v", apps[slot], err)
 		}
 	}
 	if uploader.peak > uploadConcurrency {

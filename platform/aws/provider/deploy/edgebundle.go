@@ -49,26 +49,40 @@ func edgeSealedDelivered(cfg Config, bundle appBundle) bool {
 	return cfg.CacheStoreBucket != "" && cfg.CacheStoreUploader != nil && len(bundle.Ciphertext) > 0
 }
 
-func publishEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coordinate, sealed appBundle, report providerkit.Reporter) error {
+func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBundle) (*assetSet, error) {
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
-		return nil
+		return nil, nil
 	}
-	phaseStart := time.Now()
-	stats := newUploadBatchStats()
-	err := putEdgeBundle(ctx, cfg, app, coord, sealed, stats, report)
-	emitUploadBatch(report, uploadKindEdgeBundle, stats, err, phaseStart)
-	return err
+	bundle, held, err := readEdgeBundle(cfg, app)
+	if err != nil {
+		return nil, err
+	}
+	if !held {
+		return nil, nil
+	}
+	manifest := newSetManifest()
+	manifest.add(cfg.CacheStoreBucket, appEdgeBundleKey(coord), int64(len(bundle)))
+	if edgeSealedDelivered(cfg, sealed) {
+		manifest.add(cfg.CacheStoreBucket, appEdgeSealedKey(coord), int64(len(sealed.Ciphertext)))
+	}
+
+	return &assetSet{
+		name:   edgeBundleSetName,
+		app:    app,
+		files:  manifest.files,
+		digest: manifest.digest(),
+		push: func(ctx context.Context, report providerkit.Reporter) error {
+			phaseStart := time.Now()
+			stats := newUploadBatchStats()
+			err := putEdgeBundle(ctx, cfg, app, coord, bundle, sealed, stats, report)
+			emitUploadBatch(report, uploadKindEdgeBundle, stats, err, phaseStart)
+			return err
+		},
+	}, nil
 }
 
-func putEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coordinate, sealed appBundle, stats *uploadBatchStats, report providerkit.Reporter) error {
-	bundle, ok, err := readEdgeBundle(cfg, app)
-	if err != nil {
-		return recordUploadFailure(stats, err)
-	}
-	if !ok {
-		return nil
-	}
-	report.Say("Uploading " + app + "'s edge bundle")
+func putEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coordinate, bundle []byte, sealed appBundle, stats *uploadBatchStats, report providerkit.Reporter) error {
+	say(report, "Uploading "+app+"'s edge bundle")
 	if err := tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, appEdgeBundleKey(coord), objectHeaders{contentType: "application/json"}, bundle, stats); err != nil {
 		return err
 	}
@@ -84,12 +98,6 @@ func checkAppEdgeVariables(cfg Config, app string, values providerkit.AppValues,
 		return err
 	}
 	return checkEdgeVariables(app, values, bundle.Ciphertext)
-}
-
-func recordUploadFailure(stats *uploadBatchStats, err error) error {
-	now := time.Now()
-	stats.record(uploadOutcome{Start: now, End: now, Failed: true, Err: err})
-	return err
 }
 
 func loaderID(bundle []byte, compatDate string, compatFlags []string) string {

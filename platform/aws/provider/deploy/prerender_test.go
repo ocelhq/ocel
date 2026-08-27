@@ -140,10 +140,22 @@ func (quietReporter) Detail(string) {}
 
 func (quietReporter) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
 
+func pushSet(ctx context.Context, set *assetSet, err error) error {
+	if err != nil || set == nil {
+		return err
+	}
+	return set.push(ctx, quietReporter{})
+}
+
+func pushStaticAssetSet(ctx context.Context, cfg Config, app, framework string, coord naming.Coordinate) error {
+	set, err := staticAssetSet(cfg, app, framework, coord)
+	return pushSet(ctx, set, err)
+}
+
 func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
 	for _, app := range manifestApps(deployedManifest(manifest)) {
 		name := app.GetName()
-		if err := publishStaticAssets(ctx, deployedConfig(cfg), name, app.GetFramework(), builds.coords[name], quietReporter{}); err != nil {
+		if err := pushStaticAssetSet(ctx, deployedConfig(cfg), name, app.GetFramework(), builds.coords[name]); err != nil {
 			return err
 		}
 	}
@@ -152,7 +164,8 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Ma
 
 func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) error {
 	for _, name := range slices.Sorted(maps.Keys(builds.coords)) {
-		if err := publishPrerenderAssets(ctx, deployedConfig(cfg), name, builds.caches[name], quietReporter{}); err != nil {
+		set, err := prerenderAssetSet(deployedConfig(cfg), name, builds.caches[name])
+		if err := pushSet(ctx, set, err); err != nil {
 			return err
 		}
 	}
@@ -162,7 +175,8 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) er
 func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
 	for _, app := range manifestApps(deployedManifest(manifest)) {
 		name := app.GetName()
-		if err := publishEdgeBundle(ctx, deployedConfig(cfg), name, builds.coords[name], builds.baked[name], quietReporter{}); err != nil {
+		set, err := edgeBundleSet(deployedConfig(cfg), name, builds.coords[name], builds.baked[name])
+		if err := pushSet(ctx, set, err); err != nil {
 			return err
 		}
 	}

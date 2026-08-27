@@ -114,7 +114,7 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 	cfg.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
 
 	engine := &mockedEngine{outputs: siblingAppOutputs(apps...)}
-	releaser := newReleaser(fixed(cfg), &Realized{}, engine)
+	releaser := standingUp(cfg, engine)
 
 	var wg sync.WaitGroup
 	failures := make([]error, len(apps))

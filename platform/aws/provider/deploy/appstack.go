@@ -46,6 +46,7 @@ type appStackFunctions struct {
 	RoleName  pulumi.StringInput
 	Layer     payloads.Placement
 	Shipped   map[string]pulumi.Resource
+	Pushed    []pulumi.Resource
 }
 
 func (a appStackFunctions) register(ctx *pulumi.Context) error {
@@ -132,9 +133,12 @@ func (a appStackFunctions) declare(
 }
 
 func (a appStackFunctions) shippedTo(logical string) []pulumi.ResourceOption {
-	object, shipped := a.Shipped[logical]
-	if !shipped {
+	before := append([]pulumi.Resource(nil), a.Pushed...)
+	if object, shipped := a.Shipped[logical]; shipped {
+		before = append(before, object)
+	}
+	if len(before) == 0 {
 		return nil
 	}
-	return []pulumi.ResourceOption{pulumi.DependsOn([]pulumi.Resource{object})}
+	return []pulumi.ResourceOption{pulumi.DependsOn(before)}
 }

@@ -104,58 +104,77 @@ func assetPlaneTargets(cfg Config) []uploadTarget {
 	}
 }
 
-func publishStaticAssets(ctx context.Context, cfg Config, app, framework string, coord naming.Coordinate, report providerkit.Reporter) error {
+type assetUpload struct {
+	key, src string
+	to       []uploadTarget
+	replace  bool
+	headers  objectHeaders
+}
+
+func staticAssetSet(cfg Config, app, framework string, coord naming.Coordinate) (*assetSet, error) {
 	if framework != frameworkNext {
-		return nil
+		return nil, nil
 	}
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
-		return nil
+		return nil, nil
 	}
 
 	assetBucket := uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket, class: cfg.Class}
 	plane := assetPlaneTargets(cfg)
-	type upload struct {
-		key, src string
-		to       []uploadTarget
-		replace  bool
-		headers  objectHeaders
-	}
-	var uploads []upload
+	var uploads []assetUpload
+	manifest := newSetManifest()
 	root := appArtifactRoot(cfg.ArtifactRoot, app)
 	dir := filepath.Join(root, staticAssetsDir)
-	rels, err := collectFiles(dir)
+	files, err := collectFiles(dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	for _, rel := range rels {
-		uploads = append(uploads, upload{
-			key:     coord.AssetKey(rel),
-			src:     filepath.Join(dir, filepath.FromSlash(rel)),
+	for _, file := range files {
+		key := coord.AssetKey(file.rel)
+		uploads = append(uploads, assetUpload{
+			key:     key,
+			src:     filepath.Join(dir, filepath.FromSlash(file.rel)),
 			to:      plane,
-			headers: assetHeaders(rel),
+			headers: assetHeaders(file.rel),
 		})
+		for _, to := range plane {
+			manifest.add(to.bucket, key, file.size)
+		}
 	}
 	imageConfig := filepath.Join(root, imageConfigFile)
-	switch _, err := os.Stat(imageConfig); {
+	switch info, err := os.Stat(imageConfig); {
 	case err == nil:
-		uploads = append(uploads, upload{
+		uploads = append(uploads, assetUpload{
 			key:     coord.ImageConfigKey(),
 			src:     imageConfig,
 			to:      []uploadTarget{assetBucket},
 			replace: true,
 			headers: objectHeaders{contentType: "application/json"},
 		})
+		manifest.add(assetBucket.bucket, coord.ImageConfigKey(), info.Size())
 	case !errors.Is(err, fs.ErrNotExist):
-		return fmt.Errorf("stat image config for %s: %w", app, err)
+		return nil, fmt.Errorf("stat image config for %s: %w", app, err)
 	}
 	if len(uploads) == 0 {
-		return nil
+		return nil, nil
 	}
 	if err := assetBucket.validate(); err != nil {
-		return err
+		return nil, err
 	}
 
-	report.Say("Uploading " + app + "'s static assets")
+	return &assetSet{
+		name:   staticAssetSetName,
+		app:    app,
+		files:  manifest.files,
+		digest: manifest.digest(),
+		push: func(ctx context.Context, report providerkit.Reporter) error {
+			return pushStaticAssets(ctx, app, uploads, report)
+		},
+	}, nil
+}
+
+func pushStaticAssets(ctx context.Context, app string, uploads []assetUpload, report providerkit.Reporter) error {
+	say(report, "Uploading "+app+"'s static assets")
 	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
@@ -179,7 +198,7 @@ func publishStaticAssets(ctx context.Context, cfg Config, app, framework string,
 			})
 		}
 	}
-	err = g.Wait()
+	err := g.Wait()
 	emitUploadBatch(report, uploadKindStaticAsset, stats, err, phaseStart)
 	return err
 }

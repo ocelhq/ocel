@@ -41,9 +41,14 @@ func bytecodePrefixOf(c naming.Coordinate) string {
 	return strings.TrimSuffix(c.BytecodePrefix(), naming.PathSeparator)
 }
 
-func publishPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isrConfig, report providerkit.Reporter) error {
+type prerenderUpload struct {
+	key, src string
+	to       uploadTarget
+}
+
+func prerenderAssetSet(cfg Config, app string, cache *isrConfig) (*assetSet, error) {
 	if cache == nil {
-		return nil
+		return nil, nil
 	}
 
 	segments := []struct {
@@ -54,25 +59,44 @@ func publishPrerenderAssets(ctx context.Context, cfg Config, app string, cache *
 		{"fetch-cache", uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket, class: cfg.Class}},
 	}
 
-	type upload struct {
-		key, src string
-		to       uploadTarget
-	}
-	var uploads []upload
+	var uploads []prerenderUpload
+	manifest := newSetManifest()
 	for _, seg := range segments {
 		dir := filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), seg.dir)
 		entries, err := collectFiles(dir)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		for _, rel := range entries {
-			uploads = append(uploads, upload{
-				key: path.Join(cache.Prefix, seg.dir, rel),
-				src: filepath.Join(dir, filepath.FromSlash(rel)),
+		for _, entry := range entries {
+			key := path.Join(cache.Prefix, seg.dir, entry.rel)
+			uploads = append(uploads, prerenderUpload{
+				key: key,
+				src: filepath.Join(dir, filepath.FromSlash(entry.rel)),
 				to:  seg.to,
 			})
+			manifest.add(seg.to.bucket, key, entry.size)
 		}
 	}
+	if len(uploads) > 0 {
+		for _, seg := range segments {
+			if err := seg.to.validate(); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return &assetSet{
+		name:   prerenderAssetSetName,
+		app:    app,
+		files:  manifest.files,
+		digest: manifest.digest(),
+		push: func(ctx context.Context, report providerkit.Reporter) error {
+			return pushPrerenderAssets(ctx, cfg, app, cache, uploads, report)
+		},
+	}, nil
+}
+
+func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isrConfig, uploads []prerenderUpload, report providerkit.Reporter) error {
 	if err := seedTagSnapshot(ctx, cfg, cache, time.Now()); err != nil {
 		return err
 	}
@@ -83,13 +107,7 @@ func publishPrerenderAssets(ctx context.Context, cfg Config, app string, cache *
 		return nil
 	}
 
-	for _, seg := range segments {
-		if err := seg.to.validate(); err != nil {
-			return err
-		}
-	}
-
-	report.Say("Uploading " + app + "'s prerendered pages")
+	say(report, "Uploading "+app+"'s prerendered pages")
 	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
@@ -206,8 +224,13 @@ func isrEntriesAdopted(stores ObjectStores) bool {
 	return stores.CacheStoreBucket != "" && stores.CacheStoreUploader != nil
 }
 
-func collectFiles(dir string) ([]string, error) {
-	var rels []string
+type collectedFile struct {
+	rel  string
+	size int64
+}
+
+func collectFiles(dir string) ([]collectedFile, error) {
+	var files []collectedFile
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -219,7 +242,11 @@ func collectFiles(dir string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		rels = append(rels, filepath.ToSlash(rel))
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		files = append(files, collectedFile{rel: filepath.ToSlash(rel), size: info.Size()})
 		return nil
 	})
 	if err != nil {
@@ -228,5 +255,5 @@ func collectFiles(dir string) ([]string, error) {
 		}
 		return nil, fmt.Errorf("crawl %s: %w", dir, err)
 	}
-	return rels, nil
+	return files, nil
 }
