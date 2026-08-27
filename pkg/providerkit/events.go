@@ -20,6 +20,8 @@ type eventSender struct {
 	done   chan struct{}
 	ctx    context.Context
 
+	detail func(*progressv1.ResultEvent)
+
 	mu     sync.RWMutex
 	closed bool
 	err    error
@@ -33,6 +35,10 @@ func newEventSender(ctx context.Context, send func(*progressv1.OperationEvent) e
 	}
 	go s.drain(send)
 	return s
+}
+
+func (s *eventSender) detailing(detail func(*progressv1.ResultEvent)) {
+	s.detail = detail
 }
 
 func (s *eventSender) drain(send func(*progressv1.OperationEvent) error) {
@@ -60,7 +66,11 @@ func (s *eventSender) fail(err error) error {
 	if refusedRequest(err) {
 		return err
 	}
-	s.send(failureResult(err))
+	event := failureResult(err)
+	if s.detail != nil {
+		s.detail(event.GetResult())
+	}
+	s.send(event)
 	return nil
 }
 

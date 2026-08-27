@@ -137,6 +137,28 @@ message DegradedEvent {
   string detail = 2;
 }
 
+// What became of one app in a multi-app apply. Promotion is the failure gate: unless
+// every app SUCCEEDED, none is promoted, so a run can carry successes and still fail.
+enum AppOutcome {
+  APP_OUTCOME_UNSPECIFIED = 0;
+
+  APP_OUTCOME_SUCCEEDED = 1;
+
+  APP_OUTCOME_FAILED = 2;
+
+  // Shared infrastructure failed before the apps were reached.
+  APP_OUTCOME_NOT_RUN = 3;
+}
+
+message AppResult {
+  string app = 1;
+
+  AppOutcome outcome = 2;
+
+  // Set only on APP_OUTCOME_FAILED.
+  string error = 3;
+}
+
 message ResultEvent {
   bool success = 1;
   string error = 2;
@@ -152,6 +174,9 @@ message ResultEvent {
   FlipBound flip_bound = 7;
 
   string url_note = 8;
+
+  // One entry per app the apply covered, in manifest order whatever order they finished in.
+  repeated AppResult apps = 9;
 }
 
 message FunctionOutput {
