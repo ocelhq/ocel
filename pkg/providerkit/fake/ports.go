@@ -276,6 +276,9 @@ func (r *Releaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ pr
 }
 
 func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+	if err := ctx.Err(); err != nil {
+		return providerkit.StackResult{}, err
+	}
 	r.mu.Lock()
 	entered := r.entered
 	r.mu.Unlock()

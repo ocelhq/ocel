@@ -12,6 +12,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 )
@@ -61,6 +62,78 @@ func outcomes(result *progressv1.ResultEvent) []string {
 		reported = append(reported, app.GetApp()+"="+app.GetOutcome().String())
 	}
 	return reported
+}
+
+func queuedAppRequest(apps []string) *contractv1.DeployRequest {
+	req := deployRequest()
+	manifest := req.GetManifest()
+	manifest.Apps = nil
+	manifest.Functions = nil
+	manifest.Usages = nil
+	for slot, app := range apps {
+		manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
+			Name:         app,
+			Framework:    "next",
+			DeploymentId: fmt.Sprintf("%032x", slot+1),
+		})
+		manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{
+			LogicalName:  app + "-server",
+			App:          app,
+			Runtime:      "nodejs22.x",
+			Handler:      "index.handler",
+			ArtifactPath: appArtifactPath(app),
+		})
+	}
+	return req
+}
+
+func TestDeployStartsTheAppsStillQueuedWhenAnEarlyAppFails(t *testing.T) {
+	apps := make([]string, 0, providerkit.AppConcurrency+2)
+	for slot := range cap(apps) {
+		apps = append(apps, fmt.Sprintf("app%d", slot))
+	}
+	queued := apps[providerkit.AppConcurrency:]
+
+	builtApps(t, apps...)
+	client, provider := deployServed(t)
+
+	inFlight := appBarrier(t, providerkit.AppConcurrency)
+	provider.Releases().(*fake.Releaser).Entering(func(plan providerkit.StackPlan) error {
+		if plan.App == nil {
+			return nil
+		}
+		if err := inFlight(plan); err != nil {
+			return err
+		}
+		if plan.App.App == apps[0] {
+			return errors.New(webRefusal)
+		}
+		return nil
+	})
+
+	result, events := deploy(t, client, queuedAppRequest(apps))
+	if result == nil || result.GetSuccess() {
+		t.Fatalf("Deploy() succeeded, want it to fail: one of its apps did not stand up")
+	}
+
+	want := make([]string, 0, len(apps))
+	for slot, app := range apps {
+		outcome := "APP_OUTCOME_SUCCEEDED"
+		if slot == 0 {
+			outcome = "APP_OUTCOME_FAILED"
+		}
+		want = append(want, app+"="+outcome)
+	}
+	if got := outcomes(result); !slices.Equal(got, want) {
+		t.Fatalf("the result reports %v, want %v: an app the run had not reached still launches and still reports for itself", got, want)
+	}
+
+	statuses := spanStatuses(events)
+	for _, app := range queued {
+		if got := statuses[app]; got != progressv1.SpanStatus_SPAN_STATUS_OK {
+			t.Errorf("%s is %s, want SPAN_STATUS_OK: it had not started when its sibling failed, so it still had to launch", app, got)
+		}
+	}
 }
 
 func TestDeployProvisionsAppsAtTheSameTime(t *testing.T) {
