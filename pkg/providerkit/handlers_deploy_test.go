@@ -85,6 +85,19 @@ func deployRequest() *contractv1.DeployRequest {
 
 func deploy(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.DeployRequest) (*progressv1.ResultEvent, []*progressv1.OperationEvent) {
 	t.Helper()
+	result, events, err := deployStream(t, client, req)
+	if err != nil {
+		t.Fatalf("Deploy() stream error = %v", err)
+	}
+	return result, events
+}
+
+func deployStream(
+	t *testing.T,
+	client contractv1connect.ProviderServiceClient,
+	req *contractv1.DeployRequest,
+) (*progressv1.ResultEvent, []*progressv1.OperationEvent, error) {
+	t.Helper()
 	stream, err := client.Deploy(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Deploy() error = %v", err)
@@ -100,10 +113,7 @@ func deploy(t *testing.T, client contractv1connect.ProviderServiceClient, req *c
 			result = held
 		}
 	}
-	if err := stream.Err(); err != nil {
-		t.Fatalf("Deploy() stream error = %v", err)
-	}
-	return result, events
+	return result, events, stream.Err()
 }
 
 func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {

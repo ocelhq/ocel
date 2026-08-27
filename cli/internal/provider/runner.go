@@ -337,7 +337,7 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[p
 		if onEvent != nil {
 			onEvent(ev)
 		}
-		if result := ev.GetResult(); result != nil {
+		if result := ev.GetResult(); result != nil && !result.GetRefused() {
 			if result.GetSuccess() {
 				return nil
 			}

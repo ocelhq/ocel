@@ -1087,7 +1087,10 @@ type ResultEvent struct {
 	FlipBound   *FlipBound             `protobuf:"bytes,7,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
 	UrlNote     string                 `protobuf:"bytes,8,opt,name=url_note,json=urlNote,proto3" json:"url_note,omitempty"`
 	// One entry per app the apply covered, in manifest order whatever order they finished in.
-	Apps          []*AppResult `protobuf:"bytes,9,rep,name=apps,proto3" json:"apps,omitempty"`
+	Apps []*AppResult `protobuf:"bytes,9,rep,name=apps,proto3" json:"apps,omitempty"`
+	// The request was refused: the stream's own error is the verdict, and this envelope
+	// carries only what the run learned before the refusal.
+	Refused       bool `protobuf:"varint,10,opt,name=refused,proto3" json:"refused,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1183,6 +1186,13 @@ func (x *ResultEvent) GetApps() []*AppResult {
 		return x.Apps
 	}
 	return nil
+}
+
+func (x *ResultEvent) GetRefused() bool {
+	if x != nil {
+		return x.Refused
+	}
+	return false
 }
 
 type FunctionOutput struct {
@@ -1353,7 +1363,7 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\tAppResult\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\xf6\x02\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\x90\x03\n" +
 	"\vResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12+\n" +
@@ -1364,7 +1374,9 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\n" +
 	"flip_bound\x18\a \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x12\x19\n" +
 	"\burl_note\x18\b \x01(\tR\aurlNote\x121\n" +
-	"\x04apps\x18\t \x03(\v2\x1d.common.progress.v1.AppResultR\x04apps\"E\n" +
+	"\x04apps\x18\t \x03(\v2\x1d.common.progress.v1.AppResultR\x04apps\x12\x18\n" +
+	"\arefused\x18\n" +
+	" \x01(\bR\arefused\"E\n" +
 	"\x0eFunctionOutput\x12!\n" +
 	"\flogical_name\x18\x02 \x01(\tR\vlogicalName\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\"H\n" +

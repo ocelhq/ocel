@@ -163,6 +163,20 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 		return stream.Send(&progressv1.OperationEvent{
 			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: "simulated deploy failure"}},
 		})
+	case "refuse-deploy":
+		if err := stream.Send(&progressv1.OperationEvent{
+			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+				Refused: true,
+				Error:   "simulated deploy refusal",
+				Apps: []*progressv1.AppResult{
+					{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED},
+					{App: "admin", Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED, Error: "simulated deploy refusal"},
+				},
+			}},
+		}); err != nil {
+			return err
+		}
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("simulated deploy refusal"))
 	case "hang-deploy":
 		time.Sleep(30 * time.Second)
 		return nil

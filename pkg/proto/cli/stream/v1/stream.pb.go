@@ -332,7 +332,7 @@ type RunResultEvent struct {
 	UrlNote     string                 `protobuf:"bytes,7,opt,name=url_note,json=urlNote,proto3" json:"url_note,omitempty"`
 	FlipBound   *v11.FlipBound         `protobuf:"bytes,8,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
 	Interrupted bool                   `protobuf:"varint,9,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
-	// Per-app outcomes as the provider reported them, in manifest order.
+	// common.progress.v1.ResultEvent.apps as the provider reported it.
 	Apps          []*v11.AppResult `protobuf:"bytes,10,rep,name=apps,proto3" json:"apps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

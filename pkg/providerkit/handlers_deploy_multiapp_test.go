@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	connect "connectrpc.com/connect"
+
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
@@ -174,6 +176,33 @@ func TestDeployStartsNoAppWhenTheSharedInfrastructureFails(t *testing.T) {
 		}
 	}
 	want := []string{"web=APP_OUTCOME_NOT_RUN", "admin=APP_OUTCOME_NOT_RUN"}
+	if got := outcomes(result); !slices.Equal(got, want) {
+		t.Fatalf("the result reports %v, want %v", got, want)
+	}
+}
+
+func TestDeployReportsAppOutcomesWhenAnAppRefusesTheRequest(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	req := twoAppRequest()
+	for _, fn := range req.GetManifest().GetFunctions() {
+		if fn.GetApp() == "admin" {
+			fn.ArtifactPath = ""
+		}
+	}
+
+	result, _, err := deployStream(t, client, req)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("Deploy() = %v, want it refused: an app names no build artifact", err)
+	}
+	if !strings.Contains(err.Error(), "names no build artifact") {
+		t.Fatalf("Deploy() = %v, want the refusal to name what the manifest is missing", err)
+	}
+	if result == nil {
+		t.Fatal("a refused run reported no per-app outcomes at all, so the sibling that stood up is lost")
+	}
+	want := []string{"web=APP_OUTCOME_SUCCEEDED", "admin=APP_OUTCOME_FAILED"}
 	if got := outcomes(result); !slices.Equal(got, want) {
 		t.Fatalf("the result reports %v, want %v", got, want)
 	}
