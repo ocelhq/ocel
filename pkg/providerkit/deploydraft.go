@@ -104,7 +104,5 @@ func (r *deployRun) drawPromotion() ChangeGroup {
 }
 
 func (r *deployRun) drawn() *planv1.ChangePlan {
-	shown := ChangePlanProto(r.draft.plan(), r.plan.Slug, string(r.front.Kind()))
-	shown.Subject = r.plan.Slug
-	return shown
+	return ChangePlanProto(r.draft.plan(), r.plan.Slug, string(r.front.Kind()))
 }
