@@ -21,7 +21,7 @@ const (
 	pendMark  = "·"
 	barWidth  = 12
 
-	liveChrome = 3
+	scrollGuard = 3
 )
 
 type Renderer struct {
@@ -79,10 +79,7 @@ func (r *Renderer) height() int {
 	if n, ok := liveHeight(r.w); ok {
 		return n
 	}
-	if r.present.Height > 0 {
-		return r.present.Height
-	}
-	return defaultHeight
+	return r.present.Height
 }
 
 func (r *Renderer) useClock(now func() time.Time) {
@@ -320,7 +317,7 @@ func (r *Renderer) drawLiveLocked() {
 }
 
 func (r *Renderer) windowHeightLocked() int {
-	budget := r.height() - liveChrome
+	budget := r.height() - scrollGuard
 	if r.spinning {
 		budget--
 	}

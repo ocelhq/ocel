@@ -21,7 +21,7 @@ func appStage(n byte) []byte {
 func liveStream(t *testing.T) (*Stream, *bytes.Buffer) {
 	t.Helper()
 	var out bytes.Buffer
-	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
+	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 	t.Cleanup(func() { _ = s.Close() })
 	return s, &out
 }
@@ -34,14 +34,25 @@ func liveStreamOfHeight(t *testing.T, height int) (*Stream, *bytes.Buffer) {
 	return s, &out
 }
 
-func liveRegion(s *Stream, out *bytes.Buffer) []string {
-	written := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
-	s.r.mu.Lock()
-	defer s.r.mu.Unlock()
-	if s.r.liveLines > len(written) {
-		return written
+func liveRegion(t *testing.T, s *Stream, out *bytes.Buffer) []string {
+	t.Helper()
+	s.Pause()
+	out.Reset()
+	s.Resume()
+
+	drawn := out.String()
+	out.Reset()
+	s.Pause()
+	if want := fmt.Sprintf("\033[%dA\033[J", strings.Count(drawn, "\n")); drawn != "" && out.String() != want {
+		t.Fatalf("erase = %q, want %q — the renderer must take back exactly the lines it drew", out.String(), want)
 	}
-	return written[len(written)-s.r.liveLines:]
+	out.Reset()
+	s.Resume()
+
+	if drawn == "" {
+		return nil
+	}
+	return strings.Split(strings.TrimSuffix(drawn, "\n"), "\n")
 }
 
 func stagePlanEvent(stages ...*progressv1.Stage) *streamv1.RunEvent {
@@ -137,13 +148,13 @@ func TestLiveRegion(t *testing.T) {
 		s.Emit(progressEvent(appB, "uploading", 1, u32(2)))
 		s.Emit(spanEvent(appA, false, time.Second))
 
-		rows := liveRegion(s, out)
+		rows := liveRegion(t, s, out)
 		if len(rows) != 2 || !strings.Contains(rows[0], "app-b") || !strings.Contains(rows[1], okMark+" app-a") {
 			t.Fatalf("live region = %q, want app-b still spinning above the finished app-a", rows)
 		}
 
 		s.Emit(spanEvent(appB, false, time.Second))
-		rows = liveRegion(s, out)
+		rows = liveRegion(t, s, out)
 		if len(rows) != 2 || !strings.Contains(rows[0], okMark+" app-a") || !strings.Contains(rows[1], okMark+" app-b") {
 			t.Errorf("live region = %q, want both apps finished and still counted in spine order", rows)
 		}
@@ -201,7 +212,7 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 
 func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	var out bytes.Buffer
-	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth})
+	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 
 	appA, appB := appStage(1), appStage(2)
 	s.Emit(stagePlanEvent(
@@ -307,7 +318,7 @@ func TestAPhaseRowStaysLiveUntilItsSpanArrives(t *testing.T) {
 	}
 
 	s.Emit(spanEvent(uploading, false, 12*time.Second))
-	if rows := liveRegion(s, out); len(rows) != 1 || !strings.Contains(rows[0], okMark+" web") {
+	if rows := liveRegion(t, s, out); len(rows) != 1 || !strings.Contains(rows[0], okMark+" web") {
 		t.Errorf("live region = %q, want the phase's spinning row settled by its own span into the unit's done row", rows)
 	}
 }
@@ -325,7 +336,7 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	s.Emit(progressEvent(provisioning, "Reconciling the edge stack", 0, nil))
 	s.Emit(progressEvent(app, "creating resources", 0, nil))
 
-	rows := liveRegion(s, out)
+	rows := liveRegion(t, s, out)
 	if len(rows) != 2 || !strings.Contains(rows[0], "Provisioning") || !strings.Contains(rows[1], "Provisioning › next-test") {
 		t.Fatalf("live region = %q, want next-test as the unit's output line", rows)
 	}
@@ -334,7 +345,7 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	if !r.plan.isActive(stageKey(app)) {
 		t.Fatal("want the finished child held in the live region under its still-running parent")
 	}
-	if rows := liveRegion(s, out); len(rows) != 1 || !strings.Contains(rows[0], "Provisioning") {
+	if rows := liveRegion(t, s, out); len(rows) != 1 || !strings.Contains(rows[0], "Provisioning") {
 		t.Fatalf("live region = %q, want the unit down to its own row once the child finished", rows)
 	}
 
@@ -342,7 +353,7 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	if active := r.plan.activeOrder; len(active) != 1 || active[0] != stageKey(provisioning) {
 		t.Fatalf("activeOrder = %v, want the subtree folded into the unit's own done row", active)
 	}
-	if rows := liveRegion(s, out); len(rows) != 1 || !strings.Contains(rows[0], okMark+" Provisioning") {
+	if rows := liveRegion(t, s, out); len(rows) != 1 || !strings.Contains(rows[0], okMark+" Provisioning") {
 		t.Fatalf("live region = %q, want the finished unit ranked last as a single row", rows)
 	}
 }
@@ -353,7 +364,7 @@ func TestRawLogLinesFlushInsideTheirPhaseBlockAtEveryVerbosity(t *testing.T) {
 		name    string
 		present Presentation
 	}{
-		{"a live terminal", Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth}},
+		{"a live terminal", Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight}},
 		{"a pipe", Presentation{Format: FormatHuman, Width: defaultWidth}},
 		{"--verbose", Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth}},
 	} {

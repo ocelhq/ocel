@@ -171,7 +171,7 @@ func TestTruncateToWidthHandlesRowsWithNothingToShow(t *testing.T) {
 func TestColoredLiveRowFitsTheTerminal(t *testing.T) {
 	drawnRow := func(colorEnabled bool) string {
 		var out bytes.Buffer
-		s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Color: colorEnabled, Width: 40})
+		s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Color: colorEnabled, Width: 40, Height: defaultHeight})
 		s.r.useClock(func() time.Time { return time.Unix(0, 0) })
 
 		app := appStage(1)
