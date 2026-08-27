@@ -35,6 +35,7 @@ const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building 
 
 type deployOptions struct {
 	yes      bool
+	dry      bool
 	tag      string
 	prebuilt bool
 }
@@ -48,10 +49,12 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		Long: "Deploy this project to your own infrastructure.\n\n" +
 			"Builds the apps, provisions the resources they declare, and releases the result " +
 			"into your provider account. Every deploy is kept: list them with `ocel deployments`, " +
-			"return to one with `ocel rollback`.",
+			"return to one with `ocel rollback`.\n\n" +
+			"--dry builds, then prints every change the deploy would make to your account and stops.",
 		Example: "  $ ocel deploy\n" +
 			"  $ ocel deploy --tag v1.2.0\n" +
 			"  $ ocel deploy --prebuilt\n" +
+			"  $ ocel deploy --dry\n" +
 			"  $ ocel deploy --yes",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -71,6 +74,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	cmddeps.Yes(cmd, &opts.yes)
 	cmd.Flags().StringVar(&opts.tag, "tag", "", "Mark this deploy with an immutable `label` to roll back to by name (ocel rollback --tag)")
 	cmd.Flags().BoolVar(&opts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
+	cmd.Flags().BoolVar(&opts.dry, "dry", false, dryFlagUsage)
 
 	return cmd
 }
@@ -81,14 +85,19 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		return err
 	}
 
-	if err := deployresult.Clear(cfg.Dir); err != nil {
-		return err
-	}
-	if err := servicemap.Clear(cfg.Dir); err != nil {
-		return err
+	if !opts.dry {
+		if err := deployresult.Clear(cfg.Dir); err != nil {
+			return err
+		}
+		if err := servicemap.Clear(cfg.Dir); err != nil {
+			return err
+		}
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel deploy", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	spec := deps.Spec(runui.Convergent, "ocel deploy", cfg, opts.yes, stdout, stdin)
+	spec.Dry = opts.dry
+
+	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
 		knownSlugs, err := preflightDeploy(ctx, ui, runner, cfg, stdout, stdin)
 		if err != nil {
 			return err
@@ -133,6 +142,11 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			Environment: env,
 			Tag:         opts.tag,
 			Edge:        edgewire.Selection(cfg),
+			Dry:         opts.dry,
+		}
+
+		if opts.dry {
+			return showDeployPlan(ctx, runner, ui, req, "Proposed changes to production")
 		}
 
 		var out deployOutcome

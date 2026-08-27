@@ -31,7 +31,7 @@ func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return nil, err
 	}
-	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, edgewire.Selection(cfg), ui.Interactive(), out, in); err != nil {
+	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, edgewire.Selection(cfg), ui.Interactive() && !ui.Dry(), out, in); err != nil {
 		return nil, err
 	}
 	if err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, out); err != nil {
@@ -49,7 +49,7 @@ func preflightDeploy(ctx context.Context, ui *runui.Session, runner *provider.Ru
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return nil, err
 	}
-	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, edgewire.Selection(cfg), ui.Interactive(), out, in); err != nil {
+	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, edgewire.Selection(cfg), ui.Interactive() && !ui.Dry(), out, in); err != nil {
 		return nil, err
 	}
 	return resp.GetKnownSlugs(), nil

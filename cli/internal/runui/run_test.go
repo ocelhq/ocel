@@ -185,6 +185,41 @@ func TestAConvergentGuardIsGrantedInAdvanceByYes(t *testing.T) {
 	}
 }
 
+type dryBody struct {
+	granted bool
+	dry     bool
+}
+
+func (b *dryBody) run(ctx context.Context, _ *provider.Runner, ui *runui.Session) error {
+	b.dry = ui.Dry()
+	granted, err := ui.Guard(ctx, `Tear down the named preview "staging"?`)
+	b.granted = granted
+	return err
+}
+
+func TestAConvergentDryRunAsksNothingAndTellsTheBodyItChangesNothing(t *testing.T) {
+	var out bytes.Buffer
+	spec := specFor(t, &out)
+	spec.Consent = runui.Convergent
+	spec.Dry = true
+	spec.Interactive = true
+	spec.Stdin = strings.NewReader("n\n")
+
+	var body dryBody
+	if err := runui.Run(context.Background(), spec, body.run); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+	if !body.dry {
+		t.Error("the body was not told the run is dry, want the seam to carry --dry to the work it gates")
+	}
+	if !body.granted {
+		t.Error("the guard stopped the body, want a run that changes nothing to need no guard")
+	}
+	if strings.Contains(out.String(), "Tear down") {
+		t.Errorf("stdout = %q, want --dry to leave the guard unasked: there is nothing to guard against", out.String())
+	}
+}
+
 func TestYesIsSilentWhereTheCommandRaisesNoGate(t *testing.T) {
 	var out bytes.Buffer
 	spec := specFor(t, &out)
