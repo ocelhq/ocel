@@ -2,6 +2,15 @@ name: Go
 
 on:
   pull_request:
+    paths:
+      - "cli/**"
+      - "sdk/**"
+      - "pkg/**"
+      - "platform/**"
+      - "packages/ocel/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/go.yml"
+      - ".github/actions/gobuildcache/**"
   workflow_dispatch:
 
 concurrency:

@@ -2,6 +2,18 @@ name: Build
 
 on:
   pull_request:
+    paths:
+      - "packages/**"
+      - "cli/node/**"
+      - "frameworks/**"
+      - "platform/**"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/build.yml"
+      - "!**/*.go"
+      - "!**/go.mod"
+      - "!**/go.sum"
   workflow_dispatch:
 
 jobs:
