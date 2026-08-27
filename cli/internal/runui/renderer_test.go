@@ -108,8 +108,8 @@ func TestAnInRunNoticeIsCommittedAboveALiveFrameThatStillErasesExactly(t *testin
 		t.Errorf("stdout = %q, want the notice committed as stream content", out.String())
 	}
 	rows := liveRegion(t, s, out)
-	if len(rows) != 2 {
-		t.Fatalf("live region = %q, want the unit and its output line still standing after a notice landed", rows)
+	if len(rows) != 1 {
+		t.Fatalf("live region = %q, want the unit's row still standing after a notice landed", rows)
 	}
 	for _, row := range rows {
 		if strings.Contains(row, notice) {
@@ -131,12 +131,12 @@ func TestASpinnerRaisedThroughTheRunUIBecomesARowOfTheLiveFrame(t *testing.T) {
 
 	spinner := s.Spin("Checking credentials")
 	rows := liveRegion(t, s, out)
-	if len(rows) != 3 || !strings.Contains(rows[2], "Checking credentials") {
+	if len(rows) != 2 || !strings.Contains(rows[1], "Checking credentials") {
 		t.Fatalf("live region = %q, want the spinner drawn as the frame's own last row", rows)
 	}
 
 	spinner.Stop()
-	if rows := liveRegion(t, s, out); len(rows) != 2 {
+	if rows := liveRegion(t, s, out); len(rows) != 1 {
 		t.Errorf("live region = %q, want the spinner row gone once it stops", rows)
 	}
 }
@@ -160,7 +160,7 @@ func TestNoRawSpinnerCanTouchATerminalALiveFrameOwns(t *testing.T) {
 	if elsewhere.Len() != 0 {
 		t.Errorf("the fallback spinner wrote %q, want it inert while a live frame owns the terminal", elsewhere.String())
 	}
-	if rows := liveRegion(t, s, out); len(rows) != 2 {
+	if rows := liveRegion(t, s, out); len(rows) != 1 {
 		t.Errorf("live region = %q, want the frame untouched by a spinner raised behind its back", rows)
 	}
 }
@@ -230,7 +230,7 @@ func TestLiveRegion(t *testing.T) {
 		s.Emit(spanEvent(appA, false, time.Second))
 
 		rows := liveRegion(t, s, out)
-		if len(rows) != 2 || !strings.Contains(rows[0], "app-b") {
+		if len(rows) != 1 || !strings.Contains(rows[0], "app-b") {
 			t.Fatalf("live region = %q, want app-b still spinning with the finished app-a gone from the window", rows)
 		}
 
@@ -420,15 +420,15 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	s.Emit(progressEvent(app, "creating resources", 0, nil))
 
 	rows := liveRegion(t, s, out)
-	if len(rows) != 2 || !strings.Contains(rows[0], "Provisioning") || !strings.Contains(rows[1], "next-test") {
-		t.Fatalf("live region = %q, want next-test on the unit's tail line", rows)
+	if len(rows) != 1 || !strings.Contains(rows[0], "Provisioning") || !strings.Contains(rows[0], "next-test") {
+		t.Fatalf("live region = %q, want next-test named as the detail of the unit's row", rows)
 	}
 
 	s.Emit(spanEvent(app, false, 44*time.Second))
 	if !r.plan.isActive(stageKey(app)) {
 		t.Fatal("want the finished child held in the live region under its still-running parent")
 	}
-	if rows := liveRegion(t, s, out); len(rows) != 2 || !strings.Contains(rows[0], "Provisioning") {
+	if rows := liveRegion(t, s, out); len(rows) != 1 || !strings.Contains(rows[0], "Provisioning") {
 		t.Fatalf("live region = %q, want the unit still running on its own row once the child finished", rows)
 	}
 

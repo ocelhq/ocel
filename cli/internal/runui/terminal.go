@@ -80,9 +80,12 @@ func positiveEnvInt(name string) (int, bool) {
 }
 
 func truncateToWidth(s string, width int) string {
-	limit := width - 1
-	if limit < 1 {
-		limit = 1
+	return fitToWidth(s, max(width-1, 1))
+}
+
+func fitToWidth(s string, columns int) string {
+	if columns < 1 {
+		return ""
 	}
-	return ansi.Truncate(s, limit, "")
+	return ansi.Truncate(s, columns, "")
 }
