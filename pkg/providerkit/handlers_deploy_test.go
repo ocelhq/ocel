@@ -850,9 +850,10 @@ func TestDeployAnnouncesThePreviewHostnameOfTheProjectsOwnWildcard(t *testing.T)
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	want := "https://" + edge.PreviewHost("shop", "pr-7", "", "preview.example")
+	want := "https://" + edge.PreviewHost("", "pr-7", "", "preview.example")
 	if !slices.Equal(result.GetAppUrls(), []string{want}) {
-		t.Errorf("the preview deploy announced %v, want %s", result.GetAppUrls(), want)
+		t.Errorf("the preview deploy announced %v, want %s: the project's own wildcard serves only this project, so no slug segment names it",
+			result.GetAppUrls(), want)
 	}
 }
 
@@ -871,6 +872,33 @@ func TestDeployAnnouncesThePreviewHostnameOfTheGlobalWildcard(t *testing.T) {
 	want := "https://" + edge.PreviewHost("shop", "pr-7", "", "preview.acme.com")
 	if !slices.Equal(result.GetAppUrls(), []string{want}) {
 		t.Errorf("the preview deploy announced %v, want %s: the project declares no domains.preview, so the global wildcard serves it",
+			result.GetAppUrls(), want)
+	}
+}
+
+func TestDeployAnnouncesAPreviewHostnamePerAppWhenTheProjectCarriesMoreThanOne(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	previewBootstrapped(t, client)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
+	}
+
+	req := twoAppRequest()
+	req.Manifest.Domains = nil
+	req.Environment = &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"}
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+
+	result, _ := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	want := []string{
+		"https://" + edge.PreviewHost("shop", "pr-7", "web", "preview.acme.com"),
+		"https://" + edge.PreviewHost("shop", "pr-7", "admin", "preview.acme.com"),
+	}
+	if !slices.Equal(result.GetAppUrls(), want) {
+		t.Errorf("the preview deploy announced %v, want %v: the appless hostname is ambiguous once a project carries two apps",
 			result.GetAppUrls(), want)
 	}
 }

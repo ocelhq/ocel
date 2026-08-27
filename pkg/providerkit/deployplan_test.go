@@ -1,6 +1,7 @@
 package providerkit
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -252,6 +253,23 @@ func functionRequest(fn *contractv1.ManifestFunction, apps ...*contractv1.Manife
 	req := productionRequest(apps...)
 	req.Manifest.Functions = []*contractv1.ManifestFunction{fn}
 	return req
+}
+
+func TestBuildDeployPlanRefusesAnAppNameNoHostnameCanCarry(t *testing.T) {
+	t.Parallel()
+
+	_, err := buildDeployPlan(productionRequest(
+		&contractv1.ManifestApp{Name: "Web", DeploymentId: deploymentID}), "p1")
+	if err == nil {
+		t.Fatal("buildDeployPlan() accepted an app named \"Web\", so the store would record a name the edge lowercases out of every hostname")
+	}
+	var refusal Refusal
+	if !errors.As(err, &refusal) || refusal.Code != CodeInvalid {
+		t.Fatalf("buildDeployPlan() = %v, want a %s refusal", err, CodeInvalid)
+	}
+	if !strings.Contains(refusal.Message, "Web") {
+		t.Errorf("buildDeployPlan() = %q, want the refusal to name the app it will not carry", refusal.Message)
+	}
 }
 
 func TestBuildDeployPlanRefusesAFunctionNoDeclaredAppOwns(t *testing.T) {
