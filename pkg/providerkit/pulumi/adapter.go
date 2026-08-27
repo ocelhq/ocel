@@ -80,13 +80,18 @@ type Config struct {
 	Refresh func(ref providerkit.StackRef, op Op) bool
 
 	Engine Engine
+
+	Plugins []Plugin
 }
 
 type Adapter struct {
-	config Config
+	config  Config
+	plugins *hostedPlugins
 }
 
-func New(config Config) *Adapter { return &Adapter{config: config} }
+func New(config Config) *Adapter {
+	return &Adapter{config: config, plugins: &hostedPlugins{declared: config.Plugins}}
+}
 
 func (a *Adapter) Access() Access { return a.config.Access }
 
@@ -142,7 +147,10 @@ func (a *Adapter) workspace(plan providerkit.StackPlan, op Op) (Setup, error) {
 		Runtime: workspace.NewProjectRuntimeInfo("go", nil),
 		Backend: &workspace.ProjectBackend{URL: access.BackendURL},
 	}
-	env := a.env()
+	env, err := a.env()
+	if err != nil {
+		return Setup{}, err
+	}
 	program := func(ctx *pulumi.Context) error { return a.config.Program.Run(ctx, plan) }
 
 	return Setup{
@@ -173,7 +181,7 @@ func (a *Adapter) refreshes(ref providerkit.StackRef, op Op) bool {
 	return a.config.Refresh != nil && a.config.Refresh(ref, op)
 }
 
-func (a *Adapter) env() map[string]string {
+func (a *Adapter) env() (map[string]string, error) {
 	env := map[string]string{
 		passphraseEnvVar:           a.config.Access.Passphrase,
 		backendEnvVar:              a.config.Access.BackendURL,
@@ -183,7 +191,14 @@ func (a *Adapter) env() map[string]string {
 	for _, key := range slices.Sorted(maps.Keys(a.config.Access.Env)) {
 		env[key] = a.config.Access.Env[key]
 	}
-	return env
+	attached, err := a.plugins.attach()
+	if err != nil {
+		return nil, err
+	}
+	if attached != "" {
+		env[debugProvidersEnvVar] = attached
+	}
+	return env, nil
 }
 
 func (a *Adapter) Stack(ctx context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error) {
