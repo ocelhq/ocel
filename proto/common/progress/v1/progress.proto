@@ -146,7 +146,7 @@ enum AppOutcome {
 
   APP_OUTCOME_FAILED = 2;
 
-  // Shared infrastructure failed before the apps were reached.
+  // The run failed before this app was reached, so nothing of it was attempted.
   APP_OUTCOME_NOT_RUN = 3;
 }
 
