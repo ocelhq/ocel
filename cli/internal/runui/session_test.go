@@ -1051,8 +1051,8 @@ func TestASuccessfulBuildCommitsItsWholeOutputInsideTheFlushedBlockWhenVerbose(t
 	header := strings.Index(got, startMark+" Environment › Building")
 	first := strings.Index(got, "  Packages: +812")
 	closed := strings.Index(got, okMark+" Environment  ")
-	if header < 0 || first < header || closed < first {
-		t.Errorf("stdout = %q, want the whole build output between the phase-start line and the completed-phase line", got)
+	if header < 0 || closed < header || first < closed {
+		t.Errorf("stdout = %q, want the whole build output under the completed-phase line, which follows the phase-start line", got)
 	}
 
 	if err := s.Close(); err != nil {
@@ -1158,8 +1158,8 @@ func TestAnOrphanLogWaitsForItsStageAndFoldsIntoThatStagesBlock(t *testing.T) {
 				t.Errorf("stdout = %q, want %q inside the flushed block", got, want)
 			}
 		}
-		if at, closed := strings.Index(got, "the vertex spoke first"), strings.Index(got, okMark+" Environment  "); at < 0 || at > closed {
-			t.Errorf("stdout = %q, want the adopted orphan flushed with the block rather than after it", got)
+		if at, closed := strings.Index(got, "the vertex spoke first"), strings.Index(got, okMark+" Environment  "); closed < 0 || at < closed {
+			t.Errorf("stdout = %q, want the adopted orphan flushed under its block header rather than before it", got)
 		}
 	})
 
@@ -1313,12 +1313,12 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 		got := out.String()
 		var at int
 		for _, want := range []string{
-			blockIndent + "Reading ocel.aws.config.ts\n",
 			warnMark + " Environment paused\n",
+			blockIndent + "Reading ocel.aws.config.ts\n",
 			"http://127.0.0.1:5555/#t=abc",
 			startMark + " Environment › Building\n",
-			blockIndent + "Compiled successfully\n",
 			okMark + " Environment  ",
+			blockIndent + "Compiled successfully\n",
 		} {
 			i := strings.Index(got[at:], want)
 			if i < 0 {

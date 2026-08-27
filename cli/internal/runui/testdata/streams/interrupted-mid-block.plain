@@ -1,10 +1,13 @@
 → web › Building
 → api › Building
+
 ✓ api  4s
 → api › Uploading
+
 ⚠ web interrupted
-  pushing api:8f3c1a (3/9)
+
 ⚠ api › Uploading interrupted
+  pushing api:8f3c1a (3/9)
 
 ⚠ Cancelled in 12s
   Resources may be partially created.

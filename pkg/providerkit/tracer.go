@@ -38,6 +38,15 @@ type Stage struct {
 	Name     string
 	Title    string
 	Phase    progressv1.Phase
+	Phases   []progressv1.Phase
+}
+
+func (s Stage) phaseStages() []Stage {
+	out := make([]Stage, 0, len(s.Phases))
+	for _, phase := range s.Phases {
+		out = append(out, PhaseStage(s.Name, phase))
+	}
+	return out
 }
 
 var phaseNames = map[progressv1.Phase]string{
@@ -91,8 +100,8 @@ const (
 	infraUnitTitle       = "Shared infrastructure"
 )
 
-func UnitStage(name, title string) Stage {
-	return Stage{ID: derivedStageID(naming.UnitID(name)), Name: name, Title: sanitizeTitle(title)}
+func UnitStage(name, title string, phases ...progressv1.Phase) Stage {
+	return Stage{ID: derivedStageID(naming.UnitID(name)), Name: name, Title: sanitizeTitle(title), Phases: phases}
 }
 
 func PhaseStage(unitName string, phase progressv1.Phase) Stage {
@@ -208,9 +217,12 @@ func (s *stageScope) declare(stages ...Stage) {
 	s.mu.Lock()
 	var fresh []Stage
 	for _, stage := range stages {
-		if !s.declared[stage.ID] {
-			s.declared[stage.ID] = true
-			fresh = append(fresh, stage)
+		for _, declaring := range append([]Stage{stage}, stage.phaseStages()...) {
+			if s.declared[declaring.ID] {
+				continue
+			}
+			s.declared[declaring.ID] = true
+			fresh = append(fresh, declaring)
 		}
 	}
 	s.mu.Unlock()

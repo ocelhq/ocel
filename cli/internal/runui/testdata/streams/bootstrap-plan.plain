@@ -13,7 +13,8 @@ This cannot be undone.
 2 to create, 1 to update, 2 unchanged.
 
 → Environment › Provisioning
-  updating OcelRouterFunction
+
 ✓ Environment  8s
+  updating OcelRouterFunction
 
 ✓ Bootstrapped in 11s

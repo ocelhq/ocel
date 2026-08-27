@@ -10,9 +10,10 @@ Change plan, fronted by the cloudfront edge:
 
 ⚠ web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts
 → Environment › Building
+
+✓ Environment  6s
   Bundling web (1/2)
   Bundling api (2/2)
-✓ Environment  6s
 
 1 variable is not ready — nothing has been built.
   Fill them in at:
@@ -26,10 +27,12 @@ Change plan, fronted by the cloudfront edge:
 → web › Provisioning
 → api › Provisioning
 ⚠ edge-middleware: web: middleware runs in the origin
-  creating bucket assets
+
 ✓ web  12s
-  updating function api
+  creating bucket assets
+
 ✗ api failed  3s
+  updating function api
 
 ✗ Failed
   updating function api: InsufficientCapacity

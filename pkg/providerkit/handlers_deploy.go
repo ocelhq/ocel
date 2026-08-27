@@ -44,18 +44,19 @@ type deployStages struct {
 
 func newDeployStages(plan DeployPlan) deployStages {
 	s := deployStages{
-		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle),
-		Infra:       UnitStage(plan.Infra.String(), infraUnitTitle),
-		Edge:        UnitStage(naming.UnitEdge, edgeUnitTitle),
-		Promotion:   UnitStage(naming.UnitPromotion, promotionUnitTitle),
-		Apps:        make(map[string]Stage, len(plan.Apps)),
+		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle,
+			progressv1.Phase_PHASE_PROVISIONING, progressv1.Phase_PHASE_UPLOADING),
+		Infra:     UnitStage(plan.Infra.String(), infraUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
+		Edge:      UnitStage(naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
+		Promotion: UnitStage(naming.UnitPromotion, promotionUnitTitle, progressv1.Phase_PHASE_FINALIZING),
+		Apps:      make(map[string]Stage, len(plan.Apps)),
 	}
 	s.Roster = append(s.Roster, s.Environment)
 	if !plan.Infra.IsZero() {
 		s.Roster = append(s.Roster, s.Infra)
 	}
 	for _, entry := range plan.Apps {
-		app := UnitStage(entry.Stack.String(), entry.App)
+		app := UnitStage(entry.Stack.String(), entry.App, progressv1.Phase_PHASE_PROVISIONING)
 		s.Apps[entry.App] = app
 		s.Roster = append(s.Roster, app)
 	}
