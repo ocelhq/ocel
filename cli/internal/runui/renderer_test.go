@@ -208,7 +208,9 @@ func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
-			fmt.Fprintf(s.r, "subprocess output line %d\n", i)
+			s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+				Log: &progressv1.LogEvent{StageId: appA, Message: fmt.Sprintf("subprocess output line %d", i)},
+			}}))
 		}
 	}()
 
@@ -323,46 +325,39 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	}
 }
 
-func TestNonVerboseHoldsBackRawLogLines(t *testing.T) {
+func TestRawLogLinesFlushInsideTheirPhaseBlockAtEveryVerbosity(t *testing.T) {
 	t.Parallel()
-	s, out := liveStream(t)
+	for _, tc := range []struct {
+		name    string
+		present Presentation
+	}{
+		{"a live terminal", Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth}},
+		{"a pipe", Presentation{Format: FormatHuman, Width: defaultWidth}},
+		{"--verbose", Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var out bytes.Buffer
+			s := NewStream(&out, tc.present)
+			t.Cleanup(func() { _ = s.Close() })
 
-	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Provisioning"},
-	))
-	s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-		Log: &progressv1.LogEvent{StageId: phase, Message: "pulumi engine line"},
-	}}))
-	s.Emit(spanEvent(phase, false, time.Second))
+			unit, phase := appStage(1), appStage(2)
+			s.Emit(stagePlanEvent(
+				&progressv1.Stage{Id: unit, Title: "web"},
+				&progressv1.Stage{Id: phase, ParentId: unit, Title: "Provisioning"},
+			))
+			s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+				Log: &progressv1.LogEvent{StageId: phase, Message: "pulumi engine line"},
+			}}))
+			if strings.Contains(out.String(), "pulumi engine line") {
+				t.Fatalf("output = %q, want the line held in its block until the phase completes", out.String())
+			}
 
-	if strings.Contains(out.String(), "pulumi engine line") {
-		t.Errorf("output = %q, want raw log lines held back until --verbose asks for them", out.String())
-	}
-}
-
-func TestVerboseFlushesRawLogLinesInsideThePhaseBlock(t *testing.T) {
-	t.Parallel()
-	var out bytes.Buffer
-	s := NewStream(&out, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
-	t.Cleanup(func() { _ = s.Close() })
-
-	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Provisioning"},
-	))
-	s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-		Log: &progressv1.LogEvent{StageId: phase, Message: "pulumi engine line"},
-	}}))
-	if strings.Contains(out.String(), "pulumi engine line") {
-		t.Fatalf("output = %q, want the line held in its block until the phase completes", out.String())
-	}
-
-	s.Emit(spanEvent(phase, false, time.Second))
-	if !strings.Contains(out.String(), "  pulumi engine line") {
-		t.Errorf("output = %q, want the raw line flushed inside its phase block", out.String())
+			s.Emit(spanEvent(phase, false, time.Second))
+			if !strings.Contains(out.String(), "  pulumi engine line") {
+				t.Errorf("output = %q, want the raw line flushed inside its phase block", out.String())
+			}
+		})
 	}
 }
 

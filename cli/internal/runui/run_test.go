@@ -3,11 +3,13 @@ package runui_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -349,6 +351,29 @@ func TestYesTakesTheCommandOutOfTheAskingBusinessAltogether(t *testing.T) {
 				t.Errorf("Asking() = %v, want %v", body.asking, tc.want)
 			}
 		})
+	}
+}
+
+func TestCtrlCFlushesTheBlockTheRunWasInsideOf(t *testing.T) {
+	var out bytes.Buffer
+	spec := specFor(t, &out)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	err := runui.Run(ctx, spec, func(ctx context.Context, _ *provider.Runner, ui *runui.Session) error {
+		ui.Building()
+		if _, err := io.WriteString(ui.BuildWriter(), "Packages: +812\n▲ Next.js 15.4.2\n"); err != nil {
+			return err
+		}
+		cancel()
+		return ctx.Err()
+	})
+
+	if code, ok := exitsig.ExitCode(err); !ok || code != exitsig.InterruptCode {
+		t.Fatalf("Run() = %v (exit code %d), want the interrupt exit code %d", err, code, exitsig.InterruptCode)
+	}
+	want := "  Packages: +812\n  ▲ Next.js 15.4.2\n⚠ Environment › Building interrupted\n"
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("stdout = %q, want the in-flight block flushed whole under an interrupted marker:\n%s", out.String(), want)
 	}
 }
 

@@ -3,6 +3,7 @@ package providerkit_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -74,6 +75,43 @@ func TestDeployClosesEveryDeclaredStageAndEachUnitOnce(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 	assertStagesClose(t, events)
+}
+
+func TestDeployDeclaresItsWholeUnitRosterBeforeAnyPhase(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	result, events := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	var roster []string
+	for _, event := range events {
+		plan := event.GetStagePlan()
+		if plan == nil {
+			continue
+		}
+		if roster == nil {
+			for _, stage := range plan.GetStages() {
+				if len(stage.GetParentId()) != 0 {
+					t.Fatalf("the first stage plan declares phase %q, want the unit roster declared whole before any phase", stage.GetTitle())
+				}
+				roster = append(roster, stage.GetTitle())
+			}
+			continue
+		}
+		for _, stage := range plan.GetStages() {
+			if len(stage.GetParentId()) == 0 {
+				t.Errorf("unit %q is declared after the roster, want every unit on the spine named up front", stage.GetTitle())
+			}
+		}
+	}
+
+	want := []string{"Environment", "Shared infrastructure", "web", "Promotion"}
+	if strings.Join(roster, ",") != strings.Join(want, ",") {
+		t.Errorf("roster = %v, want %v", roster, want)
+	}
 }
 
 func TestBootstrapClosesEveryDeclaredStage(t *testing.T) {

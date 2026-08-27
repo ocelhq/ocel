@@ -277,33 +277,27 @@ func (p *projector) phaseOf(id string) *block {
 }
 
 func (p *projector) buffer(stageID []byte, text string) []string {
-	if text == "" {
-		return nil
-	}
-	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
 	b := p.phaseOf(stageKey(stageID))
 	if b == nil {
-		return lines
+		return nil
 	}
-	for _, line := range lines {
-		b.lines = append(b.lines, blockIndent+line)
+	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		b.lines = append(b.lines, strings.TrimRight(blockIndent+line, " \t"))
 	}
 	return nil
 }
 
 func (p *projector) progress(m protoreflect.Message) []string {
 	ev := m.Interface().(*progressv1.ProgressEvent)
-	if stageKey(ev.GetStageId()) == "" {
+	line := progressLogLine(ev.GetMessage(), ev.GetCurrent(), ev.Total)
+	if line == "" {
 		return nil
 	}
-	return p.buffer(ev.GetStageId(), progressLogLine(ev.GetMessage(), ev.GetCurrent(), ev.Total))
+	return p.buffer(ev.GetStageId(), line)
 }
 
 func (p *projector) log(m protoreflect.Message) []string {
 	ev := m.Interface().(*progressv1.LogEvent)
-	if !p.present.Verbose {
-		return nil
-	}
 	return p.buffer(ev.GetStageId(), ev.GetMessage())
 }
 

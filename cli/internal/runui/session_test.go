@@ -40,6 +40,32 @@ func newTestSession(t *testing.T, command string) (*Session, *bytes.Buffer, stri
 
 var testStageID = naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning)
 
+func declareProvisioning() *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
+		StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
+			{Id: naming.UnitID(naming.UnitEnvironment), Title: "Environment"},
+			{Id: testStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Phase: progressv1.Phase_PHASE_PROVISIONING},
+		}},
+	}}
+}
+
+func closeProvisioning() *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
+		Span: &progressv1.SpanEvent{
+			SpanId:            testStageID,
+			StartTimeUnixNano: 1,
+			EndTimeUnixNano:   int64(time.Second) + 1,
+			Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
+		},
+	}}
+}
+
+func logLine(msg string) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+		Log: &progressv1.LogEvent{StageId: testStageID, Message: msg},
+	}}
+}
+
 func progress(msg string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
 		Progress: &progressv1.ProgressEvent{StageId: testStageID, Message: msg},
@@ -62,15 +88,16 @@ func readLog(t *testing.T, path string) string {
 }
 
 func TestSession(t *testing.T) {
-	t.Run("raw mode streams progress and writes the log, but keeps raw log lines out of non-verbose stdout", func(t *testing.T) {
+	t.Run("progress lands in its flushed block, and content with no stage behind it never reaches stdout", func(t *testing.T) {
 		t.Parallel()
 		s, out, logPath := newTestSession(t, "ocel deploy")
 
-		s.Building()
+		s.Event(declareProvisioning())
 		s.Event(progress("Uploading function artifacts"))
 		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
 			Log: &progressv1.LogEvent{Message: "pulumi engine line"},
 		}})
+		s.Event(closeProvisioning())
 		s.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{}, nil, nil)
 
 		got := out.String()
@@ -84,34 +111,17 @@ func TestSession(t *testing.T) {
 			}
 		}
 		if strings.Contains(got, "pulumi engine line") {
-			t.Errorf("stdout = %q, want raw Log lines held back from the default non-verbose view", got)
+			t.Errorf("stdout = %q, want a log line no stage claims kept out of the app-major view", got)
 		}
 
 		if err := s.Close(); err != nil {
 			t.Fatalf("Close() = %v", err)
 		}
 		log := readLog(t, logPath)
-		for _, want := range []string{"[building]", "[progress] Uploading function artifacts", "[log] pulumi engine line"} {
+		for _, want := range []string{"[progress] Uploading function artifacts", "[log] pulumi engine line"} {
 			if !strings.Contains(log, want) {
 				t.Errorf("log = %q, want it to contain %q", log, want)
 			}
-		}
-	})
-
-	t.Run("verbose surfaces raw log lines that non-verbose holds back", func(t *testing.T) {
-		t.Parallel()
-		dir := t.TempDir()
-		run := startTestRun(t, dir, "ocel deploy")
-		var out bytes.Buffer
-		s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
-		t.Cleanup(func() { _ = s.Close() })
-
-		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-			Log: &progressv1.LogEvent{Message: "pulumi engine line"},
-		}})
-
-		if !strings.Contains(out.String(), "pulumi engine line") {
-			t.Errorf("stdout = %q, want verbose to surface the raw log line", out.String())
 		}
 	})
 
@@ -120,19 +130,15 @@ func TestSession(t *testing.T) {
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
 		var out bytes.Buffer
-		s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
+		s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 		logPath := s.LogPath()
 
-		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-			Log: &progressv1.LogEvent{Message: "uploading 10%\ruploading 60%\ruploaded"},
-		}})
+		s.Event(declareProvisioning())
+		s.Event(logLine("uploading 10%\ruploading 60%\ruploaded"))
 		s.Event(progress("provisioning 1%\rprovisioning done"))
-		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-			Log: &progressv1.LogEvent{Message: "carriage returned\r"},
-		}})
-		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-			Log: &progressv1.LogEvent{Message: "first of two\r\nsecond of two"},
-		}})
+		s.Event(logLine("carriage returned\r"))
+		s.Event(logLine("first of two\r\nsecond of two"))
+		s.Event(closeProvisioning())
 		if err := s.Close(); err != nil {
 			t.Fatalf("Close() = %v", err)
 		}
@@ -585,46 +591,35 @@ func traceSpanAttrs(t *testing.T, run *runtrace.Run, spanName string) []traceAtt
 	return nil
 }
 
-func TestBuildWriterSendsTheRawFirehoseToTheTerminalOnlyWhenVerbose(t *testing.T) {
+func TestProviderProcessNoiseIsRecordedButNeverBreaksIntoTheAppMajorView(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name         string
-		origin       Origin
-		wantTerminal bool
+		name   string
+		origin Origin
 	}{
-		{"a terminal, no --verbose: the live view owns the screen", Origin{LogFormat: "human", TTY: true}, false},
-		{"a terminal with --verbose: terminal and log", Origin{LogFormat: "human", TTY: true, Verbose: true}, true},
-		{"a pipe, no --verbose: log only, no firehose to a non-verbose terminal", Origin{LogFormat: "human"}, false},
-		{"a pipe with --verbose: terminal and log", Origin{LogFormat: "human", Verbose: true}, true},
+		{"a terminal", Origin{LogFormat: "human", TTY: true}},
+		{"a terminal with --verbose", Origin{LogFormat: "human", TTY: true, Verbose: true}},
+		{"a pipe", Origin{LogFormat: "human"}},
+		{"a pipe with --verbose", Origin{LogFormat: "human", Verbose: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			dir := t.TempDir()
+			run := startTestRun(t, dir, "ocel deploy")
 			var out bytes.Buffer
-			present := Resolve(tc.origin)
-			logFile, err := os.CreateTemp(t.TempDir(), "session-*.log")
-			if err != nil {
-				t.Fatalf("create log file: %v", err)
-			}
-			defer logFile.Close()
-
-			s := &Session{stream: NewStream(&out, present), present: present, log: logFile}
-			s.logWriter = &syncFileWriter{f: logFile, mu: &s.logMu}
+			s := New(&out, run, Resolve(tc.origin))
+			t.Cleanup(func() { _ = s.Close() })
 
 			const marker = "raw subprocess output"
-			if _, err := s.BuildWriter().Write([]byte(marker)); err != nil {
+			if _, err := s.ProcessWriter().Write([]byte(marker + "\n")); err != nil {
 				t.Fatalf("Write() = %v", err)
 			}
 
-			if gotTerminal := strings.Contains(out.String(), marker); gotTerminal != tc.wantTerminal {
-				t.Errorf("terminal received the marker = %v, want %v (stdout = %q)", gotTerminal, tc.wantTerminal, out.String())
+			if strings.Contains(out.String(), marker) {
+				t.Errorf("stdout = %q, want subprocess noise kept out of the committed blocks", out.String())
 			}
-
-			logRaw, err := os.ReadFile(logFile.Name())
-			if err != nil {
-				t.Fatalf("read log file: %v", err)
-			}
-			if !strings.Contains(string(logRaw), marker) {
-				t.Errorf("log file = %q, want the raw output always recorded regardless of verbosity", logRaw)
+			if log := readLog(t, s.LogPath()); !strings.Contains(log, marker) {
+				t.Errorf("log file = %q, want the raw output always recorded regardless of verbosity", log)
 			}
 		})
 	}
@@ -733,23 +728,31 @@ func TestFormatAxis(t *testing.T) {
 		}
 	})
 
-	t.Run("verbose build output survives json format, off the stream and in the log", func(t *testing.T) {
+	t.Run("build output rides the stream as a log envelope tagged with the build phase", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
 		var out bytes.Buffer
-		s := New(&out, run, Presentation{Format: FormatJSON, Verbose: true, Width: defaultWidth})
+		s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
 		if _, err := io.WriteString(s.BuildWriter(), "webpack compiled\n"); err != nil {
 			t.Fatalf("BuildWriter().Write() = %v", err)
 		}
 
-		if strings.Contains(out.String(), "webpack compiled") {
-			t.Errorf("stdout = %q, want raw build output kept out of the ndjson stream", out.String())
+		got := parseNDJSON(t, out.String())
+		if len(got) != 1 {
+			t.Fatalf("recorded %d envelopes, want the build line carried as one", len(got))
+		}
+		log := got[0].GetOperation().GetLog()
+		if log.GetMessage() != "webpack compiled" {
+			t.Errorf("log message = %q, want the build line", log.GetMessage())
+		}
+		if stageKey(log.GetStageId()) != stageKey(buildStageID) {
+			t.Errorf("log stage = %s, want the environment building phase", stageKey(log.GetStageId()))
 		}
 		if got := readLog(t, s.LogPath()); !strings.Contains(got, "webpack compiled") {
-			t.Errorf("log = %q, want the build output the stream cannot carry", got)
+			t.Errorf("log = %q, want the build output recorded in the run log too", got)
 		}
 	})
 
@@ -761,7 +764,9 @@ func TestFormatAxis(t *testing.T) {
 		s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
+		s.Event(declareProvisioning())
 		s.Event(progress("Building project"))
+		s.Event(closeProvisioning())
 
 		if !strings.Contains(out.String(), "Building project") {
 			t.Errorf("stdout = %q, want the human-readable line", out.String())
@@ -838,6 +843,44 @@ func TestBar(t *testing.T) {
 				t.Errorf("bar(%d,%d) filled = %d, want %d", tc.current, tc.total, filled, tc.wantFilled)
 			}
 		})
+	}
+}
+
+func TestASuccessfulBuildCommitsItsWholeOutputInsideTheFlushedBlock(t *testing.T) {
+	t.Parallel()
+	s, out, logPath := newTestSession(t, "ocel deploy")
+
+	s.Building()
+	if _, err := s.BuildWriter().Write([]byte("Packages: +812\n▲ Next.js 15.4.2\n")); err != nil {
+		t.Fatalf("Write() = %v", err)
+	}
+	if _, err := s.BuildWriter().Write([]byte("Route (app)")); err != nil {
+		t.Fatalf("Write() = %v", err)
+	}
+	if strings.Contains(out.String(), "Packages: +812") {
+		t.Fatalf("stdout = %q, want build output held in its block until the phase completes", out.String())
+	}
+
+	s.BuildOK()
+
+	got := out.String()
+	for _, want := range []string{"  Packages: +812", "  ▲ Next.js 15.4.2", "  Route (app)"} {
+		if !strings.Contains(got, want+"\n") {
+			t.Errorf("stdout = %q, want the build line %q flushed inside its block", got, want)
+		}
+	}
+	header := strings.Index(got, startMark+" Environment › Building")
+	first := strings.Index(got, "  Packages: +812")
+	closed := strings.Index(got, okMark+" Environment › Building")
+	if header < 0 || first < header || closed < first {
+		t.Errorf("stdout = %q, want the whole build output between the phase-start line and the completed-phase line", got)
+	}
+
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+	if log := readLog(t, logPath); !strings.Contains(log, "Packages: +812") {
+		t.Errorf("log = %q, want the build output recorded in the run log too", log)
 	}
 }
 

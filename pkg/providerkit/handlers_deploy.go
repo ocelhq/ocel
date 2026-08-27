@@ -37,6 +37,27 @@ type deployStages struct {
 	Infra       Stage
 	Apps        map[string]Stage
 	Promotion   Stage
+	Roster      []Stage
+}
+
+func newDeployStages(plan DeployPlan) deployStages {
+	s := deployStages{
+		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle),
+		Infra:       UnitStage(plan.Infra.String(), infraUnitTitle),
+		Promotion:   UnitStage(naming.UnitPromotion, promotionUnitTitle),
+		Apps:        make(map[string]Stage, len(plan.Apps)),
+	}
+	s.Roster = append(s.Roster, s.Environment)
+	if !plan.Infra.IsZero() {
+		s.Roster = append(s.Roster, s.Infra)
+	}
+	for _, entry := range plan.Apps {
+		app := UnitStage(entry.Stack.String(), entry.App)
+		s.Apps[entry.App] = app
+		s.Roster = append(s.Roster, app)
+	}
+	s.Roster = append(s.Roster, s.Promotion)
+	return s
 }
 
 type deployRun struct {
@@ -111,15 +132,8 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if run.state, err = run.store.read(ctx); err != nil {
 		return nil, err
 	}
-	run.stages = deployStages{
-		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle),
-		Infra:       UnitStage(plan.Infra.String(), infraUnitTitle),
-		Promotion:   UnitStage(naming.UnitPromotion, promotionUnitTitle),
-		Apps:        map[string]Stage{},
-	}
-	for _, entry := range plan.Apps {
-		run.stages.Apps[entry.App] = UnitStage(entry.Stack.String(), entry.App)
-	}
+	run.stages = newDeployStages(plan)
+	run.tracked.declare(run.stages.Roster...)
 	return run, nil
 }
 

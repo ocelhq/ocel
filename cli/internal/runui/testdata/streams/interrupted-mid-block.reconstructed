@@ -1,0 +1,11 @@
+stages:
+  Environment
+  web
+  api
+    Building
+    Building
+    Uploading
+plan:
+waits:
+results:
+  success=false interrupted=true headline="Cancelled" detail="Resources may be partially created.\nRe-run `ocel deploy` to reconcile." duration_ms=12000
