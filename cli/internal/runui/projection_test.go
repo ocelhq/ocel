@@ -71,6 +71,35 @@ func TestEveryPhaseCommitsAStartLineThenItsBlockWhole(t *testing.T) {
 	}
 }
 
+func TestABlockDropsBlankLinesAtTheEdgesOfWhatItIsGivenAndKeepsTheOnesInside(t *testing.T) {
+	t.Parallel()
+
+	unit, phase := appStage(1), appStage(2)
+	p := newProjector(Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
+
+	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
+		Stages: []*progressv1.Stage{
+			{Id: unit, Title: "web"},
+			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
+		},
+	}}}))
+	for _, message := range []string{"", "\n", "  \n\n", "\n\nPackages: +812\n\ncompiled\n\n"} {
+		p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+			Log: &progressv1.LogEvent{StageId: phase, Message: message},
+		}}))
+	}
+
+	got := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
+		SpanId:            phase,
+		StartTimeUnixNano: 1,
+		EndTimeUnixNano:   int64(6*time.Second) + 1,
+	}}}))
+	want := []string{"  Packages: +812", "  ", "  compiled", okMark + " web › Building  6s"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("flushed block =\n%q\nwant\n%q", got, want)
+	}
+}
+
 func TestBlocksFlushInPhaseCompletionOrder(t *testing.T) {
 	t.Parallel()
 
