@@ -30,7 +30,7 @@ func rosterTitles(stages []Stage) []string {
 func TestTheDeployRosterIsTheSpineInOrder(t *testing.T) {
 	t.Parallel()
 
-	t.Run("environment, shared infrastructure, apps in manifest order, promotion", func(t *testing.T) {
+	t.Run("environment, shared infrastructure, apps in manifest order, edge, promotion", func(t *testing.T) {
 		plan, err := buildDeployPlan(productionRequest(
 			&contractv1.ManifestApp{Name: "web", DeploymentId: deploymentID},
 			&contractv1.ManifestApp{Name: "admin", DeploymentId: deploymentID},
@@ -39,7 +39,7 @@ func TestTheDeployRosterIsTheSpineInOrder(t *testing.T) {
 		if err != nil {
 			t.Fatalf("buildDeployPlan() error = %v", err)
 		}
-		want := []string{"Environment", "Shared infrastructure", "web", "admin", "api", "Promotion"}
+		want := []string{"Environment", "Shared infrastructure", "web", "admin", "api", "Edge", "Promotion"}
 		if got := rosterTitles(newDeployStages(plan).Roster); strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Errorf("roster = %v, want %v", got, want)
 		}
@@ -57,7 +57,7 @@ func TestTheDeployRosterIsTheSpineInOrder(t *testing.T) {
 		if err != nil {
 			t.Fatalf("buildDeployPlan() error = %v", err)
 		}
-		want := []string{"Environment", "web", "Promotion"}
+		want := []string{"Environment", "web", "Edge", "Promotion"}
 		if got := rosterTitles(newDeployStages(plan).Roster); strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Errorf("roster = %v, want %v", got, want)
 		}

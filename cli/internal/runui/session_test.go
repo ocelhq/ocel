@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -591,7 +592,7 @@ func traceSpanAttrs(t *testing.T, run *runtrace.Run, spanName string) []traceAtt
 	return nil
 }
 
-func TestProviderProcessNoiseIsRecordedButNeverBreaksIntoTheAppMajorView(t *testing.T) {
+func TestProviderProcessOutputRidesTheDiagnosticArmAndNeverEntersABlock(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name   string
@@ -611,17 +612,92 @@ func TestProviderProcessNoiseIsRecordedButNeverBreaksIntoTheAppMajorView(t *test
 			t.Cleanup(func() { _ = s.Close() })
 
 			const marker = "raw subprocess output"
+			s.Event(declareProvisioning())
+			s.Event(logLine("a line the phase owns"))
 			if _, err := s.ProcessWriter().Write([]byte(marker + "\n")); err != nil {
 				t.Fatalf("Write() = %v", err)
 			}
+			s.Event(closeProvisioning())
 
-			if strings.Contains(out.String(), marker) {
-				t.Errorf("stdout = %q, want subprocess noise kept out of the committed blocks", out.String())
+			got := out.String()
+			if !strings.Contains(got, marker+"\n") {
+				t.Errorf("stdout = %q, want provider process output committed on the diagnostic arm at every verbosity", got)
+			}
+			if strings.Contains(got, blockIndent+marker) {
+				t.Errorf("stdout = %q, want global text kept out of the phase block, which belongs to the unit", got)
+			}
+			if at, block := strings.Index(got, marker), strings.Index(got, blockIndent+"a line the phase owns"); at > block {
+				t.Errorf("stdout = %q, want the diagnostic committed as it landed, before the block it interrupted flushed", got)
 			}
 			if log := readLog(t, s.LogPath()); !strings.Contains(log, marker) {
 				t.Errorf("log file = %q, want the raw output always recorded regardless of verbosity", log)
 			}
 		})
+	}
+}
+
+func TestCarriageReturnProgressWithNoNewlineIsCollapsedRatherThanHeld(t *testing.T) {
+	t.Parallel()
+
+	var emitted []string
+	w := &lineWriter{emit: func(line string) { emitted = append(emitted, line) }}
+	for i := 0; i < 20000; i++ {
+		if _, err := fmt.Fprintf(w, "\rProgress: resolved %d, reused 0, downloaded %d", i, i); err != nil {
+			t.Fatalf("Write() = %v", err)
+		}
+	}
+	if len(emitted) != 0 {
+		t.Errorf("the writer emitted %d lines, want a repainted line held until it is finished", len(emitted))
+	}
+	if len(w.held) > 128 {
+		t.Errorf("the writer holds %d bytes of one repainted line, want only the draft still on screen", len(w.held))
+	}
+
+	w.flush()
+	if len(emitted) != 1 {
+		t.Fatalf("flush emitted %d lines, want the one draft that survived the repaints", len(emitted))
+	}
+	if got, want := collapseRewrites(emitted[0]), "Progress: resolved 19999, reused 0, downloaded 19999"; got != want {
+		t.Errorf("flushed line = %q, want %q", got, want)
+	}
+}
+
+func TestALineThatNeverEndsIsCutRatherThanHeldForever(t *testing.T) {
+	t.Parallel()
+
+	var emitted []string
+	w := &lineWriter{emit: func(line string) { emitted = append(emitted, line) }}
+	for i := 0; i < 64; i++ {
+		if _, err := w.Write(bytes.Repeat([]byte("x"), 4096)); err != nil {
+			t.Fatalf("Write() = %v", err)
+		}
+	}
+	if len(emitted) == 0 {
+		t.Fatalf("a subprocess wrote 256KiB with no line break and nothing was emitted, want the residue bounded")
+	}
+	if len(w.held) > maxHeldLine {
+		t.Errorf("the writer holds %d bytes, want at most %d", len(w.held), maxHeldLine)
+	}
+}
+
+func TestABuildRepaintingOneLineCommitsOnlyTheDraftItLeft(t *testing.T) {
+	t.Parallel()
+	s, out, _ := newTestSession(t, "ocel deploy")
+
+	s.Building()
+	for i := 1; i <= 500; i++ {
+		if _, err := fmt.Fprintf(s.BuildWriter(), "\rProgress: resolved %d", i); err != nil {
+			t.Fatalf("Write() = %v", err)
+		}
+	}
+	s.BuildOK()
+
+	got := out.String()
+	if strings.Contains(got, "Progress: resolved 1\n") || strings.Count(got, "Progress: resolved") != 1 {
+		t.Errorf("stdout = %q, want the repainted line committed once, as the draft the build left behind", got)
+	}
+	if !strings.Contains(got, blockIndent+"Progress: resolved 500\n") {
+		t.Errorf("stdout = %q, want the last draft inside the build block", got)
 	}
 }
 
@@ -892,5 +968,98 @@ func TestSessionProgressIDsMatchTheProvidersOwnDerivation(t *testing.T) {
 	}
 	if got := stageKey(naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning)); got != "ed0ca2aae3a67905" {
 		t.Errorf("environment provisioning phase id = %s, want the digest the provider derives for the same pair", got)
+	}
+}
+
+func TestAnOrphanLogWaitsForItsStageAndFoldsIntoThatStagesBlock(t *testing.T) {
+	t.Parallel()
+
+	t.Run("addressed to a phase declared later", func(t *testing.T) {
+		t.Parallel()
+		s, out, _ := newTestSession(t, "ocel deploy")
+
+		s.Event(logLine("the vertex spoke first"))
+		if got := out.String(); strings.Contains(got, "the vertex spoke first") {
+			t.Fatalf("stdout = %q, want an orphan held until its stage is declared, never committed out of band", got)
+		}
+
+		s.Event(declareProvisioning())
+		s.Event(logLine("and again once it was declared"))
+		s.Event(closeProvisioning())
+
+		got := out.String()
+		for _, want := range []string{blockIndent + "the vertex spoke first", blockIndent + "and again once it was declared"} {
+			if !strings.Contains(got, want+"\n") {
+				t.Errorf("stdout = %q, want %q inside the flushed block", got, want)
+			}
+		}
+		if at, closed := strings.Index(got, "the vertex spoke first"), strings.Index(got, okMark+" Environment › Provisioning"); at < 0 || at > closed {
+			t.Errorf("stdout = %q, want the adopted orphan flushed with the block rather than after it", got)
+		}
+	})
+
+	t.Run("addressed to a detail node declared later under a phase", func(t *testing.T) {
+		t.Parallel()
+		s, out, _ := newTestSession(t, "ocel deploy")
+
+		vertex := []byte{9, 9, 9, 9, 9, 9, 9, 9}
+		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+			Log: &progressv1.LogEvent{StageId: vertex, Message: "[build 6/9] RUN pnpm build"},
+		}})
+		s.Event(declareProvisioning())
+		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
+			StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
+				{Id: vertex, ParentId: testStageID, Title: "RUN pnpm build"},
+			}},
+		}})
+		s.Event(closeProvisioning())
+
+		if got := out.String(); !strings.Contains(got, blockIndent+"[build 6/9] RUN pnpm build\n") {
+			t.Errorf("stdout = %q, want the orphan folded into the block of the phase its stage turned out to sit under", got)
+		}
+	})
+}
+
+func TestAnOrphanWhoseStageIsNeverDeclaredNeverCommits(t *testing.T) {
+	t.Parallel()
+	s, out, logPath := newTestSession(t, "ocel deploy")
+
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+		Log: &progressv1.LogEvent{StageId: []byte{1, 2, 3, 4, 5, 6, 7, 8}, Message: "a stage nothing ever declared"},
+	}})
+	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+		Log: &progressv1.LogEvent{Message: "no stage at all"},
+	}})
+	s.Event(declareProvisioning())
+	s.Event(closeProvisioning())
+	s.Deployed("Deployed", nil, "", Flip{}, nil, nil)
+
+	got := out.String()
+	for _, unwanted := range []string{"a stage nothing ever declared", "no stage at all"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("stdout = %q, want %q kept out of the human projection — nothing commits out of band", got, unwanted)
+		}
+	}
+	if log := readLog(t, logPath); !strings.Contains(log, "a stage nothing ever declared") || !strings.Contains(log, "no stage at all") {
+		t.Errorf("log = %q, want both lines recorded even though neither reaches a block", log)
+	}
+}
+
+func TestABlockCommitsItsLinesVerbatimRightHandWhitespaceIncluded(t *testing.T) {
+	t.Parallel()
+	s, out, _ := newTestSession(t, "ocel deploy")
+
+	const padded = "Route (app)                     Size     First Load JS   "
+	s.Event(declareProvisioning())
+	s.Event(logLine(padded))
+	s.Event(logLine(""))
+	s.Event(closeProvisioning())
+
+	got := out.String()
+	if !strings.Contains(got, blockIndent+padded+"\n") {
+		t.Errorf("stdout = %q, want the line as the stream carried it — only carriage returns collapse, and output is complete on success", got)
+	}
+	if !strings.Contains(got, "\n"+blockIndent+"\n") {
+		t.Errorf("stdout = %q, want the blank line the stream carried kept in the block", got)
 	}
 }

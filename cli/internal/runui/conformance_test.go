@@ -332,9 +332,7 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (blocks map[string]*phaseBlo
 		if b == nil || b.closed {
 			return
 		}
-		for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
-			b.lines = append(b.lines, strings.TrimRight(blockIndent+line, " \t"))
-		}
+		b.lines = append(b.lines, strings.Split(strings.TrimSuffix(text, "\n"), "\n")...)
 	}
 	close := func(id, mark string) {
 		b := blocks[id]
@@ -389,6 +387,24 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (blocks map[string]*phaseBlo
 	return blocks, declared, flushed
 }
 
+func bodyBefore(lines []string, at int, n int) []string {
+	body := lines[max(at-n, 0):at]
+	out := make([]string, 0, len(body))
+	for _, line := range body {
+		out = append(out, strings.TrimPrefix(line, blockIndent))
+	}
+	return out
+}
+
+func findFrom(lines []string, prefix string, at int) int {
+	for i := at; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i], prefix) {
+			return i
+		}
+	}
+	return -1
+}
+
 func closeLine(b *phaseBlock) string {
 	switch b.mark {
 	case okMark:
@@ -420,18 +436,12 @@ func TestCommittedOutputIsWholeBlocksInPhaseCompletionOrder(t *testing.T) {
 				for _, id := range flushed {
 					b := blocks[id]
 					want := closeLine(b)
-					found := -1
-					for i := at; i < len(lines); i++ {
-						if strings.HasPrefix(lines[i], want) {
-							found = i
-							break
-						}
-					}
+					found := findFrom(lines, want, at)
 					if found < 0 {
 						t.Fatalf("%s output has no %q at or after line %d, so the blocks do not land in phase-completion order:\n%s",
 							projection.name, want, at, projection.text)
 					}
-					body := lines[max(found-len(b.lines), 0):found]
+					body := bodyBefore(lines, found, len(b.lines))
 					if strings.Join(body, "\n") != strings.Join(b.lines, "\n") {
 						t.Errorf("%s block %q is not the whole of what the stream gave it, contiguous.\n--- got ---\n%s\n--- want ---\n%s",
 							projection.name, b.path, strings.Join(body, "\n"), strings.Join(b.lines, "\n"))
@@ -472,11 +482,19 @@ func TestAnInterruptedRunFlushesEveryInFlightBlockWithAnInterruptedMarker(t *tes
 				{"plain", projectPlain(t, events)},
 				{"live", scrollback(projectLive(t, events))},
 			} {
+				lines := strings.Split(strings.TrimSuffix(projection.text, "\n"), "\n")
 				for _, b := range inFlight {
-					want := strings.Join(append(append([]string{}, b.lines...), warnMark+" "+b.path+" interrupted"), "\n")
-					if !strings.Contains(projection.text, want+"\n") {
-						t.Errorf("%s output does not flush the in-flight block %q with an interrupted marker.\n--- want ---\n%s\n--- got ---\n%s",
-							projection.name, b.path, want, projection.text)
+					marker := warnMark + " " + b.path + " interrupted"
+					found := findFrom(lines, marker, 0)
+					if found < 0 {
+						t.Errorf("%s output does not flush the in-flight block %q with an interrupted marker:\n%s",
+							projection.name, b.path, projection.text)
+						continue
+					}
+					body := bodyBefore(lines, found, len(b.lines))
+					if strings.Join(body, "\n") != strings.Join(b.lines, "\n") {
+						t.Errorf("%s interrupts block %q without flushing what the stream gave it.\n--- got ---\n%s\n--- want ---\n%s",
+							projection.name, b.path, strings.Join(body, "\n"), strings.Join(b.lines, "\n"))
 					}
 				}
 			}

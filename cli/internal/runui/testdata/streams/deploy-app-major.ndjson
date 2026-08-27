@@ -1,4 +1,4 @@
-{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"AgAAAAAAAAA=","title":"Shared infrastructure"},{"id":"AwAAAAAAAAA=","title":"web"},{"id":"BAAAAAAAAAA=","title":"api"},{"id":"BQAAAAAAAAA=","title":"Promotion"}]}}}
+{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"AgAAAAAAAAA=","title":"Shared infrastructure"},{"id":"AwAAAAAAAAA=","title":"web"},{"id":"BAAAAAAAAAA=","title":"api"},{"id":"DQAAAAAAAAA=","title":"Edge"},{"id":"BQAAAAAAAAA=","title":"Promotion"}]}}}
 {"operation":{"stagePlan":{"stages":[{"id":"BgAAAAAAAAA=","parentId":"AwAAAAAAAAA=","phase":"PHASE_BUILDING"},{"id":"BwAAAAAAAAA=","parentId":"BAAAAAAAAAA=","phase":"PHASE_BUILDING"}]}}}
 {"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"Packages: +812"}}}
 {"operation":{"log":{"stageId":"BwAAAAAAAAA=","message":"go: downloading github.com/ocelhq/ocel/sdk v0.4.1"}}}
@@ -8,6 +8,10 @@
 {"operation":{"span":{"spanId":"BwAAAAAAAAA=","parentSpanId":"BAAAAAAAAAA=","name":"building","startTimeUnixNano":"1000000000","endTimeUnixNano":"9000000000","status":"SPAN_STATUS_OK"}}}
 {"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"Route (app)                     Size     First Load JS"}}}
 {"operation":{"span":{"spanId":"BgAAAAAAAAA=","parentSpanId":"AwAAAAAAAAA=","name":"building","startTimeUnixNano":"1000000000","endTimeUnixNano":"25000000000","status":"SPAN_STATUS_OK"}}}
+{"operation":{"stagePlan":{"stages":[{"id":"DgAAAAAAAAA=","parentId":"DQAAAAAAAAA=","phase":"PHASE_PROVISIONING"}]}}}
+{"operation":{"progress":{"stageId":"DgAAAAAAAAA=","message":"Reconciling the cloudflare edge"}}}
+{"operation":{"log":{"stageId":"DgAAAAAAAAA=","message":"routes pruned: 3"}}}
+{"operation":{"span":{"spanId":"DgAAAAAAAAA=","parentSpanId":"DQAAAAAAAAA=","name":"provisioning","startTimeUnixNano":"25000000000","endTimeUnixNano":"27000000000","status":"SPAN_STATUS_OK"}}}
 {"operation":{"stagePlan":{"stages":[{"id":"CAAAAAAAAAA=","parentId":"AgAAAAAAAAA=","phase":"PHASE_PROVISIONING"}]}}}
 {"operation":{"progress":{"stageId":"CAAAAAAAAAA=","message":"creating bucket assets"}}}
 {"operation":{"span":{"spanId":"CAAAAAAAAAA=","parentSpanId":"AgAAAAAAAAA=","name":"provisioning","startTimeUnixNano":"25000000000","endTimeUnixNano":"31000000000","status":"SPAN_STATUS_OK"}}}

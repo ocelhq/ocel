@@ -9,6 +9,10 @@
   Generating static pages (28/28)
   Route (app)                     Size     First Load JS
 ✓ web › Building  24s
+→ Edge › Provisioning
+  Reconciling the cloudflare edge
+  routes pruned: 3
+✓ Edge › Provisioning  2s
 → Shared infrastructure › Provisioning
   creating bucket assets
 ✓ Shared infrastructure › Provisioning  6s
