@@ -147,6 +147,30 @@ func TestADryRunRefusesOnAnUnbootstrappedAccount(t *testing.T) {
 	}
 }
 
+func TestADryRunRefusesABootstrapThatIsBehindTheBuild(t *testing.T) {
+	deps := dryDeps(t)
+	deps.StdinIsTerminal = func(io.Reader) bool { return true }
+	root, _ := clitest.SetUpDeployFixture(t)
+	addAppToFixtureConfig(t, root)
+	writeServeDescriptor(t, root, "api", "bld_api_1")
+	t.Setenv(clitest.FakeBootstrapEnvVar, "stale")
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), deps, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatalf("runDeploy err = nil, want a refusal; stdout=%s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Run `ocel bootstrap production --features") {
+		t.Errorf("stdout = %q, want the refusal to name the bootstrap that would have to run first", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "Run without --dry to apply.") {
+		t.Errorf("stdout = %q, want no plan drawn against a bootstrap that could not serve it", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "now?") {
+		t.Errorf("stdout = %q, want a dry run never to offer to bootstrap: it changes nothing", stdout.String())
+	}
+}
+
 func TestADryRunNeverOpensTheVarsUI(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

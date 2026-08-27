@@ -86,6 +86,19 @@ func (p Plan) Refusal(tier environmentv1.Tier) error {
 	)
 }
 
+func (p Plan) Insist(tier environmentv1.Tier) error {
+	if err := p.Refusal(tier); err != nil {
+		return err
+	}
+	if len(p.Stale) == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"the %s bootstrap is behind what this build has: %s.\nRun `%s` and try again",
+		Name(tier), strings.Join(p.Stale, ", "), p.Command(tier),
+	)
+}
+
 func (p Plan) Advise(tier environmentv1.Tier, out io.Writer) error {
 	if err := p.Refusal(tier); err != nil {
 		return err

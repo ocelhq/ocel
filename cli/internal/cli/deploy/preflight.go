@@ -31,7 +31,7 @@ func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return nil, err
 	}
-	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, edgewire.Selection(cfg), ui.Interactive() && !ui.Dry(), out, in); err != nil {
+	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
 		return nil, err
 	}
 	if err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, out); err != nil {
@@ -49,10 +49,17 @@ func preflightDeploy(ctx context.Context, ui *runui.Session, runner *provider.Ru
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return nil, err
 	}
-	if err := bootstrap.Offer(ctx, runner, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, edgewire.Selection(cfg), ui.Interactive() && !ui.Dry(), out, in); err != nil {
+	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
 		return nil, err
 	}
 	return resp.GetKnownSlugs(), nil
+}
+
+func settleBootstrap(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
+	if ui.Dry() {
+		return bootstrap.PlanFor(status).Insist(tier)
+	}
+	return bootstrap.Offer(ctx, runner, status, tier, edgewire.Selection(cfg), ui.Interactive(), out, in)
 }
 
 func slugToScopeBy(ui *runui.Session, domains []string, cfg *projectconfig.Config) string {
