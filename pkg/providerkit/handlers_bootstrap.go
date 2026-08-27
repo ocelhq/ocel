@@ -60,7 +60,10 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	intent := applyRequestOf(req)
 
 	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
-		plan := PlanOf(req.GetConsented())
+		plan, err := PlanOf(req.GetConsented())
+		if err != nil {
+			return nil, err
+		}
 		if req.GetConsented() == nil {
 			standing, err := gate.Standing(ctx, class)
 			if err != nil {
@@ -160,68 +163,69 @@ func GroupProto(group ChangeGroup) *planv1.ChangeGroup {
 	return rendered
 }
 
-func PlanOf(shown *planv1.ChangePlan) Plan {
+func PlanOf(shown *planv1.ChangePlan) (Plan, error) {
 	plan := Plan{}
 	for _, group := range shown.GetGroups() {
+		action, err := changeAction(group.GetAction())
+		if err != nil {
+			return Plan{}, err
+		}
 		held := ChangeGroup{
 			Kind:    group.GetKind(),
 			Name:    group.GetName(),
 			Feature: group.GetFeature(),
-			Action:  changeAction(group.GetAction()),
+			Action:  action,
 			Reason:  group.GetReason(),
 			Slow:    group.GetSlow(),
 		}
 		for _, change := range group.GetChanges() {
+			if action, err = changeAction(change.GetAction()); err != nil {
+				return Plan{}, err
+			}
 			held.Changes = append(held.Changes, Change{
 				Kind:   change.GetKind(),
 				Name:   change.GetName(),
-				Action: changeAction(change.GetAction()),
+				Action: action,
 				Reason: change.GetReason(),
 				Slow:   change.GetSlow(),
 			})
 		}
 		plan.Groups = append(plan.Groups, held)
 	}
-	return plan
+	return plan, nil
 }
 
-func changeAction(action planv1.Change_Action) ChangeAction {
-	switch action {
-	case planv1.Change_ACTION_CREATE:
-		return ActionCreate
-	case planv1.Change_ACTION_UPDATE:
-		return ActionUpdate
-	case planv1.Change_ACTION_REPLACE:
-		return ActionReplace
-	case planv1.Change_ACTION_DELETE:
-		return ActionDelete
-	case planv1.Change_ACTION_DISABLE_THEN_DELETE:
-		return ActionDisableThenDelete
-	case planv1.Change_ACTION_KEEP:
-		return ActionKeep
-	default:
-		return ""
-	}
+var planActions = map[ChangeAction]planv1.Change_Action{
+	"":                      planv1.Change_ACTION_UNSPECIFIED,
+	ActionCreate:            planv1.Change_ACTION_CREATE,
+	ActionUpdate:            planv1.Change_ACTION_UPDATE,
+	ActionReplace:           planv1.Change_ACTION_REPLACE,
+	ActionDelete:            planv1.Change_ACTION_DELETE,
+	ActionDisableThenDelete: planv1.Change_ACTION_DISABLE_THEN_DELETE,
+	ActionKeep:              planv1.Change_ACTION_KEEP,
 }
 
-func planAction(action ChangeAction) planv1.Change_Action {
-	switch action {
-	case ActionCreate:
-		return planv1.Change_ACTION_CREATE
-	case ActionUpdate:
-		return planv1.Change_ACTION_UPDATE
-	case ActionReplace:
-		return planv1.Change_ACTION_REPLACE
-	case ActionDelete:
-		return planv1.Change_ACTION_DELETE
-	case ActionDisableThenDelete:
-		return planv1.Change_ACTION_DISABLE_THEN_DELETE
-	case ActionKeep:
-		return planv1.Change_ACTION_KEEP
-	default:
-		return planv1.Change_ACTION_UNSPECIFIED
+var changeActions = invertActions(planActions)
+
+func invertActions(held map[ChangeAction]planv1.Change_Action) map[planv1.Change_Action]ChangeAction {
+	inverted := make(map[planv1.Change_Action]ChangeAction, len(held))
+	for action, drawn := range held {
+		inverted[drawn] = action
 	}
+	return inverted
 }
+
+func changeAction(drawn planv1.Change_Action) (ChangeAction, error) {
+	action, known := changeActions[drawn]
+	if !known {
+		return "", Refuse(CodeInvalid,
+			"this plan names %s, an action this provider cannot carry out; draw the plan again and consent to what it shows now",
+			drawn)
+	}
+	return action, nil
+}
+
+func planAction(action ChangeAction) planv1.Change_Action { return planActions[action] }
 
 func BootstrapStatusProto(standing Standing, writing Writer, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
 	status := &contractv1.BootstrapStatus{
@@ -294,7 +298,11 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	}
 
 	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
-		return gate.Remove(ctx, PlanOf(req.GetConsented()), class, report)
+		shown, err := PlanOf(req.GetConsented())
+		if err != nil {
+			return err
+		}
+		return gate.Remove(ctx, shown, class, report)
 	})
 }
 
