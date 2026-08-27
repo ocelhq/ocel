@@ -15,22 +15,42 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func TestAnArmWithNoOverrideIsProjectedFromItsDescriptor(t *testing.T) {
+func TestTheProviderResultIsNotProjectedAtTheHuman(t *testing.T) {
 	t.Parallel()
 
 	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
 	got := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
-		Success: true,
-		UrlNote: "the certificate is still issuing",
+		Success:     true,
+		PromotionId: "prm_1",
+		AppUrls:     []string{"https://app.example.com"},
+		Functions:   []*progressv1.FunctionOutput{{LogicalName: "server", Url: "https://fn.example.com"}},
 	}}}))
 
-	want := []string{
-		"Result",
-		"  success: true",
-		"  url note: the certificate is still issuing",
+	if len(got) != 0 {
+		t.Errorf("the provider's result was projected as %q, want the run's own result to be the only one a human is shown", got)
 	}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Errorf("projection =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+}
+
+func TestTheSuccessResultIsTheURLsColoured(t *testing.T) {
+	t.Parallel()
+
+	p := newProjector(Presentation{Format: FormatHuman, TTY: true, Color: true, Width: defaultWidth})
+	got := strings.Join(p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
+		Success:    true,
+		Headline:   "Deployed shop to production",
+		DurationMs: 1000,
+		AppUrls:    []string{"https://shop.example"},
+		LogPath:    "run.log",
+	}}}), "\n")
+
+	for _, want := range []string{
+		"\x1b[32;1m✓ Deployed shop to production in 1s\x1b[0;22m",
+		blockIndent + "\x1b[36mhttps://shop.example\x1b[0m",
+		"\x1b[2m" + blockIndent + "Details: run.log\x1b[22m",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("projection =\n%q\nwant it to carry %q", got, want)
+		}
 	}
 }
 
