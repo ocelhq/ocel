@@ -130,7 +130,21 @@ func TestPlainOutputIsReconstructibleFromTheSerializedStream(t *testing.T) {
 	}
 }
 
-func TestPlainAndLiveCommitTheSameContent(t *testing.T) {
+func withoutStartLines(text string) string {
+	var kept []string
+	for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+		if strings.HasPrefix(line, startMark+" ") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if len(kept) == 0 {
+		return ""
+	}
+	return strings.Join(kept, "\n") + "\n"
+}
+
+func TestTheLiveScrollbackIsPlainWithoutThePhaseStartLines(t *testing.T) {
 	t.Parallel()
 	for _, name := range fixtureNames(t) {
 		t.Run(name, func(t *testing.T) {
@@ -142,8 +156,10 @@ func TestPlainAndLiveCommitTheSameContent(t *testing.T) {
 			if live == plain {
 				t.Errorf("the live projection wrote no live window at all — it should differ from plain before the window is stripped")
 			}
-			if got := scrollback(live); got != plain {
-				t.Errorf("what the live run leaves in the scrollback differs from plain output.\n--- live ---\n%s\n--- plain ---\n%s", got, plain)
+			if want := withoutStartLines(plain); want == plain {
+				t.Fatalf("fixture %s commits no phase-start line in plain output — it cannot hold this projection to account", name)
+			} else if got := scrollback(live); got != want {
+				t.Errorf("what the live run leaves in the scrollback is not plain minus its phase-start lines.\n--- live ---\n%s\n--- want ---\n%s", got, want)
 			}
 		})
 	}
@@ -267,7 +283,7 @@ func TestTheStageTreePlanWaitsAndResultsComeBackFromNDJSONAlone(t *testing.T) {
 	}
 }
 
-func TestEveryPhaseOnTheStreamCommitsAStartLine(t *testing.T) {
+func TestEveryPhaseOnTheStreamCommitsAStartLineOffTheTerminal(t *testing.T) {
 	t.Parallel()
 	for _, name := range fixtureNames(t) {
 		t.Run(name, func(t *testing.T) {
@@ -298,10 +314,11 @@ func TestEveryPhaseOnTheStreamCommitsAStartLine(t *testing.T) {
 				t.Fatalf("fixture %s declares no phase — it cannot hold this projection to account", name)
 			}
 			for _, want := range wantStarts {
-				for _, projection := range []struct{ name, text string }{{"plain", plain}, {"live", live}} {
-					if !strings.Contains(projection.text, want+"\n") {
-						t.Errorf("%s output has no phase-start line %q:\n%s", projection.name, want, projection.text)
-					}
+				if !strings.Contains(plain, want+"\n") {
+					t.Errorf("plain output has no phase-start line %q:\n%s", want, plain)
+				}
+				if strings.Contains(live, want+"\n") {
+					t.Errorf("the live run committed the phase-start line %q, which its window already shows:\n%s", want, live)
 				}
 			}
 		})
