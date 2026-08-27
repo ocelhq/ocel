@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/deploy"
 	"github.com/ocelhq/ocel/cli/internal/cli/doctor"
+	"github.com/ocelhq/ocel/cli/internal/cli/env"
 	"github.com/ocelhq/ocel/cli/internal/cli/permissions"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
@@ -77,6 +78,7 @@ func init() {
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(deploy.NewCommand(s))
 	rootCmd.AddCommand(deploy.NewPreviewCommand(s))
+	rootCmd.AddCommand(env.NewCommand(s))
 	rootCmd.AddCommand(rollbackCmd)
 	rootCmd.AddCommand(deploymentsCmd)
 	rootCmd.AddCommand(loginCmd)
