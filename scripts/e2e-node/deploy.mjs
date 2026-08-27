@@ -10,6 +10,7 @@ import {
   SKIP_DRIFT_CHECK_ENV,
   SMOKE_APPS,
   STATE_FILE,
+  planProblems,
   previewLabelProblem,
   previewRefForApp,
   projectSlugForRun,
@@ -65,6 +66,7 @@ function deploy() {
   linkOcel(appDir, adapterDir);
 
   runOcel(adapterDir, ["build"]);
+  planFirst(adapterDir, ref);
   runOcel(adapterDir, ["preview", "up", "--ref", ref, "--prebuilt"]);
 
   const resultPath = join(appDir, DEPLOY_RESULT_FILE);
@@ -77,6 +79,19 @@ function deploy() {
     ...resolved.map((entry) => `${entry.app} ${entry.framework} ${entry.url ?? "(no url)"}`),
     ...unattributed.map((url) => `(unattributed) ${url}`),
   ];
+}
+
+function planFirst(adapterDir, ref) {
+  const logPath = join(appDir, BUILD_LOG_FILE);
+  const before = existsSync(logPath) ? readFileSync(logPath, "utf8").length : 0;
+  runOcel(adapterDir, ["preview", "up", "--ref", ref, "--prebuilt", "--dry"]);
+  const problems = planProblems(readFileSync(logPath, "utf8").slice(before), {
+    resultWritten: existsSync(join(appDir, DEPLOY_RESULT_FILE)),
+  });
+  if (problems.length > 0) {
+    throw new Error(`--dry did not stay a plan:\n  ${problems.join("\n  ")}`);
+  }
+  console.error("[ocel-e2e-node] --dry planned this preview and changed nothing");
 }
 
 function runOcel(adapterDir, args) {
