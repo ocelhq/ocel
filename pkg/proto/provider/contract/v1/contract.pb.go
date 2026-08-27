@@ -1439,8 +1439,8 @@ type BootstrapRequest struct {
 	Remove             []string               `protobuf:"bytes,7,rep,name=remove,proto3" json:"remove,omitempty"`
 	// Draw the plan, emit it as a plan event and stop: the stream changes nothing.
 	Dry bool `protobuf:"varint,8,opt,name=dry,proto3" json:"dry,omitempty"`
-	// The plan a run already showed and a human already consented to. An apply
-	// carrying one draws no plan of its own and refuses to exceed this one.
+	// The plan a human consented to. An apply carrying one emits no plan of its
+	// own and refuses to exceed it.
 	Consented     *v12.ChangePlan `protobuf:"bytes,9,opt,name=consented,proto3" json:"consented,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2199,8 +2199,7 @@ type BootstrapScope struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Tier  v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Edge  *EdgeSelection         `protobuf:"bytes,2,opt,name=edge,proto3" json:"edge,omitempty"`
-	// The plan a run already showed and a human already consented to. A removal
-	// carrying one refuses to exceed it.
+	// The plan a human consented to. A removal carrying one refuses to exceed it.
 	Consented     *v12.ChangePlan `protobuf:"bytes,3,opt,name=consented,proto3" json:"consented,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
