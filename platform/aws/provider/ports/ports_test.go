@@ -197,6 +197,7 @@ func TestNoRootKeepsAWholeAccountInOnePartition(t *testing.T) {
 		providerkit.WildcardRecord(providerkit.ClassPreview),
 		providerkit.EdgeStacksRecord(providerkit.ClassPreview),
 		providerkit.StacksRecord(providerkit.ClassProduction, "shop"),
+		providerkit.EnvironmentsRecord(providerkit.ClassPreview, "shop"),
 	} {
 		partition, err := awsports.Partition(name)
 		if err != nil {
