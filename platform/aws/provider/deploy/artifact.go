@@ -19,6 +19,13 @@ import (
 
 const uploadConcurrency = 64
 
+var uploadSlots = make(chan struct{}, uploadConcurrency)
+
+func takeUploadSlot() func() {
+	uploadSlots <- struct{}{}
+	return func() { <-uploadSlots }
+}
+
 type ArtifactUploader = payloads.ObjectStore
 
 func writeLenPrefixed(h io.Writer, b []byte) {

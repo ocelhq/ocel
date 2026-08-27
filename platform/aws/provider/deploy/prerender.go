@@ -96,6 +96,7 @@ func publishPrerenderAssets(ctx context.Context, cfg Config, app string, cache *
 	stats := newUploadBatchStats()
 	for _, u := range uploads {
 		g.Go(func() error {
+			defer takeUploadSlot()()
 			return tracedUpload(ctx, u.to.up, u.to.bucket, u.key, objectHeaders{}, func() ([]byte, error) {
 				return os.ReadFile(u.src)
 			}, stats)
