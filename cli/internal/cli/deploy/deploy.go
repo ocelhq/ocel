@@ -121,7 +121,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 				}, envwire.Scope(cfg, false, ""))
 			},
 			ui:      ui,
-			enabled: canOpenVarsUI(deps, stdin),
+			enabled: !opts.dry && canOpenVarsUI(deps, stdin),
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
