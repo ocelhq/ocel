@@ -83,6 +83,7 @@ type deployRun struct {
 	scope     values.Scope
 	published *publishedLinks
 
+	dry           bool
 	allowDegraded []string
 	withheld      string
 
@@ -151,6 +152,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		artifacts: map[string]ArtifactRef{},
 		functions: map[string][]Function{},
 
+		dry:           req.GetDry(),
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
 	}
 	run.published = &publishedLinks{store: run.values, scope: run.scope, environment: plan.linkEnvironment()}
@@ -182,6 +184,9 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 			return r.settle(ctx, report)
 		}); err != nil {
 			return err
+		}
+		if r.dry {
+			return nil
 		}
 		return env.phase(progressv1.Phase_PHASE_UPLOADING, func(report Reporter) error {
 			return r.upload(ctx, report)

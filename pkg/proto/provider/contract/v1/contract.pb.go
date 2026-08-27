@@ -1366,6 +1366,7 @@ type DeployRequest struct {
 	Environment   *v1.Environment        `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
 	Tag           string                 `protobuf:"bytes,3,opt,name=tag,proto3" json:"tag,omitempty"`
 	Edge          *EdgeSelection         `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
+	Dry           bool                   `protobuf:"varint,5,opt,name=dry,proto3" json:"dry,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1426,6 +1427,13 @@ func (x *DeployRequest) GetEdge() *EdgeSelection {
 		return x.Edge
 	}
 	return nil
+}
+
+func (x *DeployRequest) GetDry() bool {
+	if x != nil {
+		return x.Dry
+	}
+	return false
 }
 
 type BootstrapRequest struct {
@@ -3724,12 +3732,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\bpostgres\x18\x03 \x01(\v2 .app.resources.v1.PostgresConfigH\x00R\bpostgres\x128\n" +
 	"\x06bucket\x18\x04 \x01(\v2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n" +
 	"\x06linked\x18\x05 \x01(\bR\x06linkedB\b\n" +
-	"\x06config\"\x80\x02\n" +
+	"\x06config\"\x92\x02\n" +
 	"\rDeployRequest\x12B\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x12,\n" +
 	"\x03tag\x18\x03 \x01(\tB\x1a\xbaH\x17r\x15\x18@2\x11^[A-Za-z0-9._-]*$R\x03tag\x127\n" +
-	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xfd\x02\n" +
+	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x10\n" +
+	"\x03dry\x18\x05 \x01(\bR\x03dry\"\xfd\x02\n" +
 	"\x10BootstrapRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x12\x1a\n" +
 	"\bfeatures\x18\x02 \x03(\tR\bfeatures\x12\x14\n" +

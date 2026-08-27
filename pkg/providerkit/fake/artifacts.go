@@ -32,6 +32,12 @@ func (a *Artifacts) Put(_ context.Context, ref providerkit.ArtifactRef, body io.
 	return nil
 }
 
+func (a *Artifacts) Keys() []providerkit.ArtifactRef {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Collect(maps.Keys(a.objects))
+}
+
 func (a *Artifacts) Has(_ context.Context, ref providerkit.ArtifactRef) (bool, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

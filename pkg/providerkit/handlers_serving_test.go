@@ -93,3 +93,49 @@ func TestAProviderCarryingNoMembraneStandsAnAppUpWithout(t *testing.T) {
 		t.Errorf("Membrane = %+v where the provider carries none, want nothing placed", ref)
 	}
 }
+
+func placedMembranes(t *testing.T, store providerkit.ArtifactStore) int {
+	t.Helper()
+	objects, holds := store.(*fake.Artifacts)
+	if !holds {
+		t.Fatalf("Artifacts() = %T, want the store the test reads placements back from", store)
+	}
+	placed := 0
+	for _, ref := range objects.Keys() {
+		if strings.HasPrefix(ref.Key, providerkit.MembranePrefix) {
+			placed++
+		}
+	}
+	return placed
+}
+
+func TestADryDeployPlacesNoMembrane(t *testing.T) {
+	builtProject(t)
+	provider := carrying{fake.NewProvider(fake.Options{})}
+	client := servedBy(t, provider)
+
+	req := deployRequest()
+	req.Dry = true
+
+	result, _ := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if placed := placedMembranes(t, provider.Artifacts()); placed != 0 {
+		t.Errorf("a dry deploy placed %d membranes, want a run that asks to write nothing", placed)
+	}
+}
+
+func TestADeployThatIsNotDryPlacesTheMembrane(t *testing.T) {
+	builtProject(t)
+	provider := carrying{fake.NewProvider(fake.Options{})}
+	client := servedBy(t, provider)
+
+	result, _ := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if placed := placedMembranes(t, provider.Artifacts()); placed != 1 {
+		t.Errorf("an applying deploy placed %d membranes, want the one its functions boot through", placed)
+	}
+}
