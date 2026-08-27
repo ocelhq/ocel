@@ -1,6 +1,7 @@
 package runui
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
@@ -18,6 +19,36 @@ func spineOf(t *testing.T, s *Stream, n int) {
 			&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
 		))
 		s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+	}
+}
+
+func TestOnlyTheProjectionWithoutAWindowCommitsPhaseStartLines(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		present Presentation
+		want    bool
+	}{
+		{"a live terminal", Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight}, false},
+		{"a pipe", Presentation{Format: FormatHuman, Width: defaultWidth}, true},
+		{"a terminal with --verbose", Presentation{Format: FormatHuman, TTY: true, Verbose: true, Width: defaultWidth, Height: defaultHeight}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var out bytes.Buffer
+			s := NewStream(&out, tc.present)
+			t.Cleanup(func() { _ = s.Close() })
+
+			unit, phase := appStage(1), appStage(2)
+			s.Emit(stagePlanEvent(
+				&progressv1.Stage{Id: unit, Title: "web"},
+				&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
+			))
+
+			if got := strings.Contains(out.String(), startMark+" web › Building\n"); got != tc.want {
+				t.Errorf("committed the phase-start line = %v, want %v — the window is the liveness surface when there is one", got, tc.want)
+			}
+		})
 	}
 }
 

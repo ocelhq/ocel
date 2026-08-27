@@ -249,7 +249,9 @@ func (p *projector) stagePlan(m protoreflect.Message) []string {
 		}
 		p.blocks[id] = &block{id: id}
 		p.open = append(p.open, id)
-		out = append(out, startMark+" "+p.pathOf(id))
+		if !p.present.Live() {
+			out = append(out, startMark+" "+p.pathOf(id))
+		}
 	}
 	p.adopt()
 	return out
