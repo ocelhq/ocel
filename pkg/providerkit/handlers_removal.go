@@ -206,7 +206,15 @@ func (r *projectRemoval) holdToPlan(consented *planv1.ChangePlan) error {
 	if err != nil {
 		return err
 	}
-	return RefuseGrowth(PlanOf(consented), PlanOf(standing))
+	shown, err := PlanOf(consented)
+	if err != nil {
+		return err
+	}
+	drawn, err := PlanOf(standing)
+	if err != nil {
+		return err
+	}
+	return RefuseGrowth(shown, drawn)
 }
 
 func (r *projectRemoval) run(ctx context.Context, report Reporter) error {

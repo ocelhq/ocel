@@ -426,6 +426,26 @@ func TestAnApplyRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 	}
 }
 
+func TestAnApplyRefusesAConsentedPlanItCannotRead(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+	unreadable := planv1.Change_Action(len(planv1.Change_Action_name) + 40)
+	_, err := streamedEvents(t, client, &contractv1.BootstrapRequest{
+		Tier:     environmentv1.Tier_TIER_PRODUCTION,
+		Features: []string{fake.FeatureImages},
+		Consented: &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
+			{Kind: providerkit.StackGroupKind, Name: "core", Action: unreadable},
+		}},
+	})
+	if err == nil {
+		t.Fatal("Bootstrap() = nil, want an apply carrying an action this kit cannot read refused")
+	}
+	if !strings.Contains(err.Error(), unreadable.String()) {
+		t.Errorf("the refusal reads %q, want it to name the action it could not read", err)
+	}
+}
+
 func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 	t.Parallel()
 
