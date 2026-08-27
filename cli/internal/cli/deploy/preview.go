@@ -74,10 +74,12 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 		Long: "Deploy or refresh a preview.\n\n" +
 			"With no flags the preview is the current branch's: deploying the same branch again replaces it, " +
 			"and `ocel preview rm` tears it down. --name instead deploys a preview that keeps its name " +
-			"across branches — a staging environment.",
+			"across branches — a staging environment.\n\n" +
+			"--dry builds, then prints every change the preview would make to your account and stops.",
 		Example: "  $ ocel preview up\n" +
 			"  $ ocel preview up --name staging\n" +
-			"  $ ocel preview up --ref feature/checkout",
+			"  $ ocel preview up --ref feature/checkout\n" +
+			"  $ ocel preview up --dry",
 		Args: cobra.NoArgs,
 		RunE: previewUpRunE(deps, &upOpts),
 	}
