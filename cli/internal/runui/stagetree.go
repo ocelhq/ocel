@@ -39,11 +39,6 @@ type stageNode struct {
 	doneDur    time.Duration
 }
 
-type displayRow struct {
-	n     *stageNode
-	depth int
-}
-
 type stagePlan struct {
 	nodes       map[string]*stageNode
 	roots       []string
@@ -243,44 +238,37 @@ func (p *stagePlan) activeSet() map[string]bool {
 	return active
 }
 
-func (p *stagePlan) hasActiveAncestor(id string) bool {
-	n, ok := p.nodes[id]
-	if !ok {
-		return false
-	}
-	parent := n.linkedParent
-	for depth := 0; depth < maxTreeDepth && parent != ""; depth++ {
-		if p.isActive(parent) {
+func (p *stagePlan) animating() bool {
+	for _, id := range p.activeOrder {
+		if n, ok := p.nodes[id]; ok && n.state == stageActive {
 			return true
 		}
-		pn, ok := p.nodes[parent]
-		if !ok {
-			return false
-		}
-		parent = pn.linkedParent
 	}
 	return false
 }
 
-func (p *stagePlan) emitSubtree(out []displayRow, active map[string]bool, id string, depth int) []displayRow {
-	n, ok := p.nodes[id]
-	if !ok {
-		return out
-	}
-	out = append(out, displayRow{n, depth})
-	if depth >= maxTreeDepth {
-		return out
-	}
-	for _, childID := range n.children {
-		if active[childID] {
-			out = p.emitSubtree(out, active, childID, depth+1)
+func (p *stagePlan) foldSubtree(id string) {
+	p.walk(id, func(n *stageNode) bool {
+		if n.id != id {
+			p.removeActive(n.id)
 		}
-	}
-	return out
+		return true
+	})
+	p.ensureActive(id)
 }
 
-func (p *stagePlan) subtreeRows(id string) []displayRow {
-	return p.emitSubtree(nil, p.activeSet(), id, 0)
+func (p *stagePlan) walk(id string, visit func(*stageNode) bool) {
+	p.walkFrom(id, 0, visit)
+}
+
+func (p *stagePlan) walkFrom(id string, depth int, visit func(*stageNode) bool) {
+	n, ok := p.nodes[id]
+	if !ok || depth > maxTreeDepth || !visit(n) {
+		return
+	}
+	for _, childID := range n.children {
+		p.walkFrom(childID, depth+1, visit)
+	}
 }
 
 type liveUnit struct {
@@ -307,21 +295,27 @@ func (p *stagePlan) units() []liveUnit {
 	active := p.activeSet()
 	var out []liveUnit
 	for _, id := range p.roots {
-		if u, ok := p.unitFor(id, active); ok {
+		if u, shown := p.unitIfShown(id, active); shown {
 			out = append(out, u)
 		}
 	}
 	return out
 }
 
-func (p *stagePlan) unitFor(id string, active map[string]bool) (liveUnit, bool) {
+func (p *stagePlan) unitIfShown(id string, active map[string]bool) (liveUnit, bool) {
 	root, ok := p.nodes[id]
 	if !ok {
 		return liveUnit{}, false
 	}
 	u := liveUnit{root: root, tier: tierPending}
-	live := 0
-	for _, n := range p.collectLive(nil, active, id, 0) {
+	live, ran := 0, false
+	p.walk(id, func(n *stageNode) bool {
+		if n.state != stagePending {
+			ran = true
+		}
+		if !active[n.id] {
+			return true
+		}
 		live++
 		switch {
 		case n.state == stageDone && n.doneFailed:
@@ -336,42 +330,10 @@ func (p *stagePlan) unitFor(id string, active map[string]bool) (liveUnit, bool) 
 		case n.state == stageDone && u.tier == tierPending:
 			u.tier = tierDone
 		}
-	}
+		return true
+	})
 	if u.tier == tierFailed {
 		u.output = nil
 	}
-	if live > 0 {
-		return u, true
-	}
-	return u, !p.everRan(id, 0)
-}
-
-func (p *stagePlan) collectLive(out []*stageNode, active map[string]bool, id string, depth int) []*stageNode {
-	n, ok := p.nodes[id]
-	if !ok || depth > maxTreeDepth {
-		return out
-	}
-	if active[id] {
-		out = append(out, n)
-	}
-	for _, childID := range n.children {
-		out = p.collectLive(out, active, childID, depth+1)
-	}
-	return out
-}
-
-func (p *stagePlan) everRan(id string, depth int) bool {
-	n, ok := p.nodes[id]
-	if !ok || depth > maxTreeDepth {
-		return false
-	}
-	if n.state != stagePending {
-		return true
-	}
-	for _, childID := range n.children {
-		if p.everRan(childID, depth+1) {
-			return true
-		}
-	}
-	return false
+	return u, live > 0 || !ran
 }

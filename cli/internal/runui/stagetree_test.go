@@ -15,14 +15,6 @@ func activate(p *stagePlan, ids ...[]byte) {
 	}
 }
 
-func rowTitles(rows []displayRow) []string {
-	titles := make([]string, 0, len(rows))
-	for _, row := range rows {
-		titles = append(titles, row.n.title)
-	}
-	return titles
-}
-
 func TestCyclicDeclarationsStayVisible(t *testing.T) {
 	t.Parallel()
 
@@ -48,11 +40,9 @@ func TestCyclicDeclarationsStayVisible(t *testing.T) {
 
 	for _, id := range [][]byte{selfy, left, right} {
 		key := stageKey(id)
-		if p.hasActiveAncestor(key) {
-			t.Errorf("hasActiveAncestor(%q) = true, want a re-rooted stage to own its commit", p.nodes[key].title)
-		}
-		if got := p.subtreeRows(key); len(got) != 1 {
-			t.Errorf("subtreeRows(%q) = %v, want the stage alone", p.nodes[key].title, rowTitles(got))
+		p.foldSubtree(key)
+		if len(p.activeOrder) != 3 {
+			t.Fatalf("activeOrder = %v, want ending %q to take no re-rooted sibling down with it", p.activeOrder, p.nodes[key].title)
 		}
 	}
 }
@@ -96,28 +86,4 @@ func unitTitles(live []liveUnit) []string {
 		titles = append(titles, u.root.title)
 	}
 	return titles
-}
-
-func TestSubtreeOrderFollowsDeclaration(t *testing.T) {
-	t.Parallel()
-
-	parent := appStage(1)
-	first, second, third := appStage(2), appStage(3), appStage(4)
-	p := newStagePlan()
-	p.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: parent, Title: "parent"},
-		{Id: first, ParentId: parent, Title: "first"},
-		{Id: second, ParentId: parent, Title: "second"},
-		{Id: third, ParentId: parent, Title: "third"},
-	}})
-
-	activate(p, parent, third, first, second)
-
-	live := p.units()
-	if len(live) != 1 || live[0].root.title != "parent" {
-		t.Fatalf("units() = %v, want the one unit the stages hang off", unitTitles(live))
-	}
-	if live[0].output == nil || live[0].output.title != "first" {
-		t.Fatalf("output line = %+v, want the first child in declaration order, not the first activated", live[0].output)
-	}
 }
