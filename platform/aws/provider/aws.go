@@ -220,10 +220,25 @@ func (p *Provider) Buckets(ctx context.Context, class providerkit.Class) (awspor
 			return buckets, err
 		}
 		if params.CacheStore.Bucket != "" {
-			buckets.Caches = append(buckets.Caches, params.CacheStore.Bucket)
+			buckets.Caches = append(buckets.Caches, awsports.CacheBucket{
+				Name: params.CacheStore.Bucket,
+				S3:   cacheStoreClient(params.CacheStore),
+			})
 		}
 	}
 	return buckets, nil
+}
+
+func cacheStoreClient(store bootstrap.CacheStore) awsports.S3API {
+	if store.Endpoint == "" {
+		return nil
+	}
+	return s3.New(s3.Options{
+		Region:       store.Region,
+		BaseEndpoint: aws.String(store.Endpoint),
+		UsePathStyle: true,
+		Credentials:  credentials.NewStaticCredentialsProvider(store.AccessKeyID, store.SecretAccessKey, ""),
+	})
 }
 
 func (p *Provider) bootstrapped(ctx context.Context, class providerkit.Class) (bootstrap.Deployed, error) {

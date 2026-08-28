@@ -190,9 +190,18 @@ func TestBucketsSweepTheCacheStoreOfEveryStandingEdge(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for kind, bucket := range map[edge.Kind]string{cloudflare.Kind: "cache-cloudflare", cloudfront.Kind: "cache-cloudfront"} {
+	for kind, store := range map[edge.Kind]bootstrap.CacheStore{
+		cloudflare.Kind: {
+			Bucket:          "cache-cloudflare",
+			Endpoint:        "https://account.r2.cloudflarestorage.com",
+			Region:          "auto",
+			AccessKeyID:     "key",
+			SecretAccessKey: "secret",
+		},
+		cloudfront.Kind: {Bucket: "cache-cloudfront"},
+	} {
 		if _, err := p.params.resolve(classEdge{class: providerkit.ClassProduction, kind: kind}, func() (bootstrap.ClassParams, error) {
-			return bootstrap.ClassParams{CacheStore: bootstrap.CacheStore{Bucket: bucket}}, nil
+			return bootstrap.ClassParams{CacheStore: store}, nil
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -202,7 +211,15 @@ func TestBucketsSweepTheCacheStoreOfEveryStandingEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Buckets error = %v", err)
 	}
-	got := slices.Clone(held.Caches)
+	var got []string
+	for _, cache := range held.Caches {
+		got = append(got, cache.Name)
+		reached := cache.S3 != nil
+		if want := cache.Name == "cache-cloudflare"; reached != want {
+			t.Errorf("cache %q carries its own client = %v, want %v: only a store off this account's endpoint needs one",
+				cache.Name, reached, want)
+		}
+	}
 	slices.Sort(got)
 	if !slices.Equal(got, []string{"cache-cloudflare", "cache-cloudfront"}) {
 		t.Fatalf("Buckets() carries caches %v, want one for each edge standing in the account", got)
