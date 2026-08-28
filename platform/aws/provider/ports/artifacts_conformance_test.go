@@ -85,7 +85,10 @@ func artifacts() ports.Artifacts {
 	return ports.Artifacts{S3: newFakeS3(), Stores: classBuckets{}}
 }
 
-type classBuckets struct{ cacheless bool }
+type classBuckets struct {
+	cacheless bool
+	cache     ports.S3API
+}
 
 func (b classBuckets) Buckets(_ context.Context, class providerkit.Class) (ports.Buckets, error) {
 	held := ports.Buckets{
@@ -93,7 +96,7 @@ func (b classBuckets) Buckets(_ context.Context, class providerkit.Class) (ports
 		Assets:    "ocel-assets-" + string(class),
 	}
 	if !b.cacheless {
-		held.Caches = []string{"ocel-cache-" + string(class)}
+		held.Caches = []ports.CacheBucket{{Name: "ocel-cache-" + string(class), S3: b.cache}}
 	}
 	return held, nil
 }
@@ -143,5 +146,41 @@ func TestAPrefixSweepReachesEveryStoreTheAccountKeeps(t *testing.T) {
 			body.Close()
 			t.Errorf("%s survived the sweep, and a reclaimed release must leave nothing behind", ref.Bucket)
 		}
+	}
+}
+
+func TestACacheStoreOffTheAccountsEndpointIsSweptThroughItsOwnClient(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	elsewhere := newFakeS3()
+	store := ports.Artifacts{S3: newFakeS3(), Stores: classBuckets{cache: elsewhere}}
+	ref := providerkitCacheRef()
+	if err := store.Put(ctx, ref, bytes.NewReader([]byte("x"))); err != nil {
+		t.Fatal(err)
+	}
+	if _, held := elsewhere.objects[elsewhere.at("ocel-cache-"+string(ref.Class), ref.Key)]; !held {
+		t.Fatal("Put() wrote the cache artifact through the account's own client, not the store's")
+	}
+	if err := store.RemovePrefix(ctx, providerkit.ClassProduction, "shop/prod/", nil); err != nil {
+		t.Fatalf("RemovePrefix() = %v", err)
+	}
+	if len(elsewhere.objects) != 0 {
+		t.Fatalf("the cache store still holds %d object(s) after the sweep", len(elsewhere.objects))
+	}
+}
+
+type goneS3 struct{ *fakeS3 }
+
+func (goneS3) ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
+	return nil, &s3types.NoSuchBucket{}
+}
+
+func TestASweepOfACacheStoreAlreadyTornDownIsNoWork(t *testing.T) {
+	t.Parallel()
+
+	store := ports.Artifacts{S3: newFakeS3(), Stores: classBuckets{cache: goneS3{newFakeS3()}}}
+	if err := store.RemovePrefix(context.Background(), providerkit.ClassProduction, "shop/prod/", nil); err != nil {
+		t.Fatalf("RemovePrefix() over a cache bucket already gone = %v, want the destroy to carry on", err)
 	}
 }

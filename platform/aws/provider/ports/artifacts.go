@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
@@ -37,7 +37,12 @@ type Stores interface {
 type Buckets struct {
 	Functions string
 	Assets    string
-	Caches    []string
+	Caches    []CacheBucket
+}
+
+type CacheBucket struct {
+	Name string
+	S3   S3API
 }
 
 func (b Buckets) Buckets(context.Context, kit.Class) (Buckets, error) { return b, nil }
@@ -53,12 +58,12 @@ func (a Artifacts) buckets(ctx context.Context, class kit.Class) (Buckets, error
 	return a.Stores.Buckets(ctx, class)
 }
 
-func (a Artifacts) bucket(ctx context.Context, class kit.Class, store string) (string, error) {
+func (a Artifacts) bucket(ctx context.Context, class kit.Class, store string) (string, S3API, error) {
 	held, err := a.buckets(ctx, class)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	var name string
+	name, client := "", a.S3
 	switch store {
 	case providerkit.StoreFunctions:
 		name = held.Functions
@@ -66,26 +71,33 @@ func (a Artifacts) bucket(ctx context.Context, class kit.Class, store string) (s
 		name = held.Assets
 	case providerkit.StoreCache:
 		if len(held.Caches) > 1 {
-			return "", kit.Refuse(kit.CodeInvalid,
+			return "", nil, kit.Refuse(kit.CodeInvalid,
 				"this account keeps %d cache stores, one for each edge it fronts, and an artifact names no edge", len(held.Caches))
 		}
 		if len(held.Caches) == 1 {
-			name = held.Caches[0]
+			name, client = held.Caches[0].Name, a.reach(held.Caches[0])
 		}
 	default:
-		return "", kit.Refuse(kit.CodeInvalid,
+		return "", nil, kit.Refuse(kit.CodeInvalid,
 			"this provider keeps no %q store; it keeps %q, %q and %q",
 			store, providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache)
 	}
 	if name == "" {
-		return "", kit.Refuse(kit.CodeNotReady,
+		return "", nil, kit.Refuse(kit.CodeNotReady,
 			"this account has no %s store yet.\nRun `%s` to create it, then try again", store, providerkit.BootstrapCommand(class))
 	}
-	return name, nil
+	return name, client, nil
+}
+
+func (a Artifacts) reach(cache CacheBucket) S3API {
+	if cache.S3 != nil {
+		return cache.S3
+	}
+	return a.S3
 }
 
 func (a Artifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
-	bucket, err := a.bucket(ctx, ref.Class, ref.Bucket)
+	bucket, client, err := a.bucket(ctx, ref.Class, ref.Bucket)
 	if err != nil {
 		return err
 	}
@@ -97,7 +109,7 @@ func (a Artifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io
 		}
 		seeker = bytes.NewReader(blob)
 	}
-	if _, err := a.S3.PutObject(ctx, &s3.PutObjectInput{
+	if _, err := client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(ref.Key),
 		Body:   seeker,
@@ -108,11 +120,11 @@ func (a Artifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io
 }
 
 func (a Artifacts) Has(ctx context.Context, ref providerkit.ArtifactRef) (bool, error) {
-	bucket, err := a.bucket(ctx, ref.Class, ref.Bucket)
+	bucket, client, err := a.bucket(ctx, ref.Class, ref.Bucket)
 	if err != nil {
 		return false, err
 	}
-	if _, err := a.S3.HeadObject(ctx, &s3.HeadObjectInput{
+	if _, err := client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(ref.Key),
 	}); err != nil {
@@ -124,6 +136,15 @@ func (a Artifacts) Has(ctx context.Context, ref providerkit.ArtifactRef) (bool, 
 	return true, nil
 }
 
+func bucketGone(err error) bool {
+	var missing *s3types.NoSuchBucket
+	if errors.As(err, &missing) {
+		return true
+	}
+	var apiErr smithy.APIError
+	return errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchBucket"
+}
+
 func absent(err error) bool {
 	var missing *s3types.NotFound
 	var gone *s3types.NoSuchKey
@@ -131,11 +152,11 @@ func absent(err error) bool {
 }
 
 func (a Artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
-	bucket, err := a.bucket(ctx, ref.Class, ref.Bucket)
+	bucket, client, err := a.bucket(ctx, ref.Class, ref.Bucket)
 	if err != nil {
 		return nil, err
 	}
-	out, err := a.S3.GetObject(ctx, &s3.GetObjectInput{
+	out, err := client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(ref.Key),
 	})
@@ -156,12 +177,16 @@ func (a Artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, pr
 	if err != nil {
 		return err
 	}
+	sweeps := []CacheBucket{{Name: held.Functions, S3: a.S3}, {Name: held.Assets, S3: a.S3}}
+	for _, cache := range held.Caches {
+		sweeps = append(sweeps, CacheBucket{Name: cache.Name, S3: a.reach(cache)})
+	}
 	var errs []error
-	for _, bucket := range slices.Concat([]string{held.Functions, held.Assets}, held.Caches) {
-		if bucket == "" {
+	for _, sweeping := range sweeps {
+		if sweeping.Name == "" {
 			continue
 		}
-		if err := a.sweep(ctx, bucket, prefix); err != nil {
+		if err := a.sweep(ctx, sweeping.S3, sweeping.Name, prefix); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -171,15 +196,18 @@ func (a Artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, pr
 	return errors.Join(errs...)
 }
 
-func (a Artifacts) sweep(ctx context.Context, bucket, prefix string) error {
+func (a Artifacts) sweep(ctx context.Context, client S3API, bucket, prefix string) error {
 	var token *string
 	for {
-		out, err := a.S3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		out, err := client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 			Bucket:            aws.String(bucket),
 			Prefix:            aws.String(prefix),
 			ContinuationToken: token,
 		})
 		if err != nil {
+			if bucketGone(err) {
+				return nil
+			}
 			return fmt.Errorf("list %s/%s: %w", bucket, prefix, err)
 		}
 		if len(out.Contents) > 0 {
@@ -187,10 +215,13 @@ func (a Artifacts) sweep(ctx context.Context, bucket, prefix string) error {
 			for i, obj := range out.Contents {
 				ids[i] = s3types.ObjectIdentifier{Key: obj.Key}
 			}
-			if _, err := a.S3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+			if _, err := client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 				Bucket: aws.String(bucket),
 				Delete: &s3types.Delete{Objects: ids},
 			}); err != nil {
+				if bucketGone(err) {
+					return nil
+				}
 				return fmt.Errorf("delete %s/%s: %w", bucket, prefix, err)
 			}
 		}
