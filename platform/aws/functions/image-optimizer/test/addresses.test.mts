@@ -82,6 +82,10 @@ describe("blocks a hand-rolled list would miss", () => {
     ["64:ff9b::1.2.3.4", "NAT64"],
     ["2001::1", "Teredo"],
     ["100::1", "discard"],
+    ["::7f00:1", "IPv4-compatible loopback"],
+    ["::127.0.0.1", "IPv4-compatible loopback, dotted"],
+    ["::a9fe:a9fe", "IPv4-compatible link-local"],
+    ["[::a9fe:a9fe]", "IPv4-compatible link-local, bracketed"],
   ];
   for (const [address, why] of cases) {
     test(`${address} (${why})`, () => {
