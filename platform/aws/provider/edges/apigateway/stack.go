@@ -255,7 +255,7 @@ func (s *stack) previewHost(pointer string) (string, string) {
 	if pointerOr(pointer) == edge.DefaultPointer {
 		return "", ""
 	}
-	host := edge.PreviewHost(s.slug(), pointer, "", base)
+	host := edge.SharedPreview(s.slug(), base).Host(pointer, "")
 	if host == "" {
 		return "", ""
 	}

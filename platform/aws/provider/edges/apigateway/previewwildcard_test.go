@@ -39,7 +39,7 @@ func previewWildcardSpec() edge.PreviewWildcardSpec {
 }
 
 func previewHostname() string {
-	return edge.PreviewLabel(conformanceSlug, previewPoint, "") + "." + previewBase
+	return edge.SharedPreview(conformanceSlug, previewBase).Host(previewPoint, "")
 }
 
 func previewing(t *testing.T, w *world) (*provider, edge.EdgeStack) {
@@ -381,7 +381,7 @@ func TestDestroyTakesEveryPreviewItRouted(t *testing.T) {
 
 	left := rulesOn(t, w, previewWild)
 	for _, pointer := range []string{"pr1", "pr2"} {
-		host := edge.PreviewLabel(conformanceSlug, pointer, "") + "." + previewBase
+		host := edge.SharedPreview(conformanceSlug, previewBase).Host(pointer, "")
 		if left[host] != nil {
 			t.Errorf("%s is still routed after the stack that served it was destroyed", host)
 		}

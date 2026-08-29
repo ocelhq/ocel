@@ -215,30 +215,30 @@ func (s *stack) servedHostnames(pointer string) []string {
 	return s.state.Bound
 }
 
-func (s *stack) previewBase() string {
+func (s *stack) previewSite() edge.PreviewSite {
 	if s.class() != edge.ClassPreview {
-		return ""
+		return edge.PreviewSite{}
 	}
-	if base := s.state.GlobalPreview; base != "" {
-		return base
+	base := s.state.GlobalPreview
+	if base == "" {
+		base = s.own.PreviewBase
 	}
-	return s.own.PreviewBase
+	return edge.SharedPreview(s.slug(), base)
 }
 
 func (s *stack) onPreviewWildcard() bool {
-	return s.own.Distribution == "" && s.previewBase() != ""
+	return s.own.Distribution == "" && s.previewSite().Serves()
 }
 
 func (s *stack) previewHost(pointer string) string {
-	base := s.previewBase()
-	if base == "" || pointerOr(pointer) == edge.DefaultPointer {
+	if pointerOr(pointer) == edge.DefaultPointer {
 		return ""
 	}
-	return edge.PreviewHost(s.slug(), pointer, "", base)
+	return s.previewSite().Host(pointer, "")
 }
 
 func (s *stack) unroutePreviews(ctx context.Context, c Clients) error {
-	if s.previewBase() == "" {
+	if !s.previewSite().Serves() {
 		return nil
 	}
 	pointers, err := s.ledger(c).Pointers(ctx)

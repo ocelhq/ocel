@@ -409,28 +409,18 @@ func (r *deployRun) hostnames() []string {
 	return nil
 }
 
+func (r *deployRun) previewSite() edge.PreviewSite {
+	if r.world() == hostingGlobalPreview {
+		return edge.SharedPreview(r.plan.Slug, r.previewOn)
+	}
+	return edge.ProjectPreview(r.previewOn)
+}
+
 func (r *deployRun) servedHostnames() []string {
 	if r.plan.Class != ClassPreview {
 		return r.hostnames()
 	}
-	slug := ""
-	if r.world() == hostingGlobalPreview {
-		slug = r.plan.Slug
-	}
-	apps := r.appNames()
-	if len(apps) < 2 {
-		if host := edge.PreviewHost(slug, r.plan.Pointer, "", r.previewOn); host != "" {
-			return []string{host}
-		}
-		return nil
-	}
-	hosts := make([]string, 0, len(apps))
-	for _, app := range apps {
-		if host := edge.PreviewHost(slug, r.plan.Pointer, app, r.previewOn); host != "" {
-			hosts = append(hosts, host)
-		}
-	}
-	return hosts
+	return r.previewSite().Hosts(r.plan.Pointer, r.appNames())
 }
 
 func (r *deployRun) checkpoint(ctx context.Context) error {

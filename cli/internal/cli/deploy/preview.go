@@ -292,25 +292,19 @@ func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.Previe
 			declared, base, configName))
 	}
 
-	labelSlug, labelBase := "", strings.TrimPrefix(declared, "*.")
+	site := edge.ProjectPreview(strings.TrimPrefix(declared, "*."))
 	if declared == "" {
-		labelSlug, labelBase = cfg.Slug, base
+		site = edge.SharedPreview(cfg.Slug, base)
 	}
-	return edge.PreviewLabelProblem(labelSlug, intendedPreviewHostnames(cfg, labelSlug, pointer, labelBase))
+	return site.LabelProblem(site.Hosts(pointer, previewAppNames(cfg)))
 }
 
-func intendedPreviewHostnames(cfg *projectconfig.Config, slug, pointer, base string) []string {
-	if pointer == "" || base == "" {
-		return nil
-	}
-	if len(cfg.Apps) < 2 {
-		return []string{edge.PreviewHost(slug, pointer, "", base)}
-	}
-	hosts := make([]string, 0, len(cfg.Apps))
+func previewAppNames(cfg *projectconfig.Config) []string {
+	names := make([]string, 0, len(cfg.Apps))
 	for _, app := range cfg.Apps {
-		hosts = append(hosts, edge.PreviewHost(slug, pointer, app.Name, base))
+		names = append(names, app.Name)
 	}
-	return hosts
+	return names
 }
 
 func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, configName string) error {
