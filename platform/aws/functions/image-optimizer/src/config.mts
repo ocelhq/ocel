@@ -21,7 +21,8 @@ export async function loadImageConfig(
   if (!/^[0-9a-f]{64}$/.test(configHash)) {
     throw new BootstrapError("configHash is not a sha256 digest", configHash);
   }
-  const cached = memo.get(configHash);
+  const memoKey = `${assetPrefix} ${configHash}`;
+  const cached = memo.get(memoKey);
   if (cached) return cached;
 
   const key = imageConfigKey(assetPrefix);
@@ -50,7 +51,7 @@ export async function loadImageConfig(
   assertShape(config, key);
 
   if (memo.size >= MEMO_LIMIT) memo.delete(memo.keys().next().value!);
-  memo.set(configHash, config);
+  memo.set(memoKey, config);
   return config;
 }
 
@@ -66,6 +67,7 @@ function assertShape(config: CompiledImageConfig, key: string): void {
       ["minimumCacheTTL", typeof config?.minimumCacheTTL === "number"],
       ["maximumResponseBody", typeof config?.maximumResponseBody === "number"],
       ["dangerouslyAllowSVG", typeof config?.dangerouslyAllowSVG === "boolean"],
+      ["dangerouslyAllowLocalIP", typeof config?.dangerouslyAllowLocalIP === "boolean"],
       ["contentSecurityPolicy", typeof config?.contentSecurityPolicy === "string"],
       ["contentDispositionType", typeof config?.contentDispositionType === "string"],
     ] as const

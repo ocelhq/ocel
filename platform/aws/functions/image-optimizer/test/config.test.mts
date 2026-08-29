@@ -85,6 +85,7 @@ test("refuses an authentic config missing any single field this side reads", asy
     "minimumCacheTTL",
     "maximumResponseBody",
     "dangerouslyAllowSVG",
+    "dangerouslyAllowLocalIP",
     "contentSecurityPolicy",
     "contentDispositionType",
   ] as const) {
@@ -119,6 +120,16 @@ describe("memoization", () => {
     store.put(KEY, { bytes: new TextEncoder().encode(serialize(second)) });
     await expect(loadImageConfig(store, ASSET_PREFIX, configHash(second))).resolves.toEqual(second);
     expect(store.reads).toEqual([KEY, KEY]);
+  });
+
+  test("a warm entry is bound to its asset prefix", async () => {
+    const config = imageConfig();
+    const store = storeWithConfig(config);
+    const hash = configHash(config);
+    await loadImageConfig(store, ASSET_PREFIX, hash);
+    await expect(
+      loadImageConfig(store, "prod/proj1/web/r0000000/assets", hash),
+    ).rejects.toThrow(/no image config at/);
   });
 
   test("a rejected config is never memoized", async () => {
