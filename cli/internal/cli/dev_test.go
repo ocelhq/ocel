@@ -29,6 +29,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
+func init() {
+	watchDebounce = 20 * time.Millisecond
+}
+
 func TestMergeEnv(t *testing.T) {
 	t.Parallel()
 
@@ -350,10 +354,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		prevDebounce := watchDebounce
-		watchDebounce = 20 * time.Millisecond
-		defer func() { watchDebounce = prevDebounce }()
-
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
@@ -418,10 +418,6 @@ export default { slug: "test-app" };
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		prevDebounce := watchDebounce
-		watchDebounce = 20 * time.Millisecond
-		defer func() { watchDebounce = prevDebounce }()
-
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
 
@@ -484,10 +480,6 @@ export default { slug: "test-app" };
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
-
-		prevDebounce := watchDebounce
-		watchDebounce = 20 * time.Millisecond
-		defer func() { watchDebounce = prevDebounce }()
 
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
@@ -556,10 +548,6 @@ export default { slug: "test-app" };
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
-
-		prevDebounce := watchDebounce
-		watchDebounce = 20 * time.Millisecond
-		defer func() { watchDebounce = prevDebounce }()
 
 		resolveServer := newFakeResolveServer(t)
 		defer resolveServer.Close()
@@ -682,6 +670,10 @@ func toMap(env []string) map[string]string {
 func newFakeResolveServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/blob/detect" {
+			json.NewEncoder(w).Encode(map[string]any{"completions": []any{}})
+			return
+		}
 		if r.URL.Path != "/api/resources/resolve" {
 			http.NotFound(w, r)
 			return
