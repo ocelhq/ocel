@@ -850,7 +850,7 @@ func TestDeployAnnouncesThePreviewHostnameOfTheProjectsOwnWildcard(t *testing.T)
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	want := "https://" + edge.PreviewHost("", "pr-7", "", "preview.example")
+	want := "https://" + edge.ProjectPreview("preview.example").Host("pr-7", "")
 	if !slices.Equal(result.GetAppUrls(), []string{want}) {
 		t.Errorf("the preview deploy announced %v, want %s: the project's own wildcard serves only this project, so no slug segment names it",
 			result.GetAppUrls(), want)
@@ -869,7 +869,7 @@ func TestDeployAnnouncesThePreviewHostnameOfTheGlobalWildcard(t *testing.T) {
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	want := "https://" + edge.PreviewHost("shop", "pr-7", "", "preview.acme.com")
+	want := "https://" + edge.SharedPreview("shop", "preview.acme.com").Host("pr-7", "")
 	if !slices.Equal(result.GetAppUrls(), []string{want}) {
 		t.Errorf("the preview deploy announced %v, want %s: the project declares no domains.preview, so the global wildcard serves it",
 			result.GetAppUrls(), want)
@@ -894,8 +894,8 @@ func TestDeployAnnouncesAPreviewHostnamePerAppWhenTheProjectCarriesMoreThanOne(t
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	want := []string{
-		"https://" + edge.PreviewHost("shop", "pr-7", "web", "preview.acme.com"),
-		"https://" + edge.PreviewHost("shop", "pr-7", "admin", "preview.acme.com"),
+		"https://" + edge.SharedPreview("shop", "preview.acme.com").Host("pr-7", "web"),
+		"https://" + edge.SharedPreview("shop", "preview.acme.com").Host("pr-7", "admin"),
 	}
 	if !slices.Equal(result.GetAppUrls(), want) {
 		t.Errorf("the preview deploy announced %v, want %v: the appless hostname is ambiguous once a project carries two apps",

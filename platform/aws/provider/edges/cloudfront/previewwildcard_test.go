@@ -38,7 +38,7 @@ func previewWildcardSpec() edge.PreviewWildcardSpec {
 }
 
 func previewHostname() string {
-	return edge.PreviewHost(conformanceSlug, previewPointer, "", previewBase)
+	return edge.SharedPreview(conformanceSlug, previewBase).Host(previewPointer, "")
 }
 
 func previewBootstrapped(t *testing.T, w *world) *provider {

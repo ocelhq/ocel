@@ -145,11 +145,11 @@ func TestDestroyTakesARuleTheLedgerNeverRecorded(t *testing.T) {
 	w := newWorld()
 	_, stack := previewing(t, w)
 	promotePreview(t, stack, previewPoint)
-	orphan := edge.PreviewLabel(conformanceSlug, "pr-crashed", "") + "." + previewBase
+	orphan := edge.SharedPreview(conformanceSlug, previewBase).Host("pr-crashed", "")
 	if err := putHostRule(ctx, w.clients(), previewWild, orphan, "api-crashed", 0); err != nil {
 		t.Fatalf("putHostRule: %v", err)
 	}
-	neighbour := edge.PreviewLabel("other", "pr1", "") + "." + previewBase
+	neighbour := edge.SharedPreview("other", previewBase).Host("pr1", "")
 	if err := putHostRule(ctx, w.clients(), previewWild, neighbour, "api-neighbour", 0); err != nil {
 		t.Fatalf("putHostRule: %v", err)
 	}
