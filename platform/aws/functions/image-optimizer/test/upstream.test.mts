@@ -100,6 +100,14 @@ describe("the happy path", () => {
   });
 });
 
+describe("a href the URL parser rejects", () => {
+  test("is an upstream failure, never a raw TypeError", async () => {
+    await expect(fetchUpstream("http://in valid/x.jpg", config())).rejects.toThrow(
+      '"url" parameter is valid but upstream response is invalid',
+    );
+  });
+});
+
 describe("the address policy at connect time", () => {
   test("a literal loopback target never opens a socket", async () => {
     const { port, requests } = await serveJpeg();
@@ -251,6 +259,23 @@ describe("the lookup's all contract", () => {
       ) => resolve(err)) as never),
     );
     expect(error).toBeInstanceOf(Error);
+  });
+
+  test("a numeric options argument keeps the family it names", async () => {
+    let seen: unknown;
+    const constrained: UpstreamDeps = {
+      lookup: ((_h: string, options: unknown, cb: Function) => {
+        seen = options;
+        cb(null, [{ address: "8.8.8.8", family: 4 }]);
+      }) as UpstreamDeps["lookup"],
+      isReachable: isReachableAddress,
+    };
+    const result = await new Promise<unknown[]>((resolve) =>
+      guardedLookup(constrained)("cdn.test", 4 as never, ((...args: unknown[]) =>
+        resolve(args)) as never),
+    );
+    expect(seen).toMatchObject({ family: 4, all: true });
+    expect(result).toEqual([null, "8.8.8.8", 4]);
   });
 
   test("a resolver failure is relayed rather than swallowed", async () => {

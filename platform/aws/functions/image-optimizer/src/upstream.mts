@@ -46,7 +46,13 @@ export function guardedLookup(
 
   return ((hostname: string, options: any, callback: LookupCallback) => {
     const wantsAll = typeof options === "object" && options !== null && options.all === true;
-    const opts = { ...(typeof options === "object" && options !== null ? options : {}), all: true };
+    const base =
+      typeof options === "object" && options !== null
+        ? options
+        : typeof options === "number"
+          ? { family: options }
+          : {};
+    const opts = { ...base, all: true };
     resolve(hostname, opts, (err: NodeJS.ErrnoException | null, addresses: unknown) => {
       if (err) return callback(err, "", 0);
       const list = (addresses as LookupAddress[]) ?? [];
@@ -101,10 +107,10 @@ export async function fetchUpstream(
 }
 
 function assertReachableLiteral(
-  href: string,
+  url: URL,
   isReachable: (address: string) => boolean,
 ): void {
-  const hostname = new URL(href).hostname;
+  const hostname = url.hostname;
   const bare =
     hostname.startsWith("[") && hostname.endsWith("]")
       ? hostname.slice(1, -1)
@@ -124,7 +130,12 @@ async function follow(
   const limit = config.maximumResponseBody;
   const maxHops = Math.min(config.maximumRedirects ?? MAX_REDIRECTS, MAX_REDIRECTS);
 
-  let current = href;
+  let current: URL;
+  try {
+    current = new URL(href);
+  } catch (error) {
+    throw upstreamFailure(error);
+  }
   for (let hop = 0; ; hop++) {
     if (!config.dangerouslyAllowLocalIP) {
       assertReachableLiteral(current, isReachable);
@@ -148,8 +159,7 @@ async function follow(
     if (REDIRECT_STATUSES.has(response.statusCode) && location) {
       await response.body.dump().catch(() => {});
       if (hop >= maxHops) throw upstreamFailure(`too many redirects for ${href}`);
-      const next = resolveHop(location, current, config);
-      current = next;
+      current = resolveHop(location, current, config);
       continue;
     }
 
@@ -180,9 +190,9 @@ async function follow(
 
 function resolveHop(
   location: string,
-  from: string,
+  from: URL,
   config: CompiledImageConfig,
-): string {
+): URL {
   let next: URL;
   try {
     next = new URL(location, from);
@@ -195,7 +205,7 @@ function resolveHop(
   if (!isAllowedRemote(config, next)) {
     throw upstreamFailure(`redirect to disallowed ${next.href} from ${from}`);
   }
-  return next.href;
+  return next;
 }
 
 function header(value: string | string[] | undefined): string | null {
