@@ -38,7 +38,22 @@ coordinate() {
 }
 
 scratch="$root/.staging.$$"
-trap 'rm -f "$scratch".desired "$scratch".actual "$scratch".running "$scratch".going "$scratch".staged' EXIT
+clean() {
+	rm -f "$scratch".desired "$scratch".actual "$scratch".running "$scratch".going "$scratch".staged
+}
+trap clean EXIT
+trap 'clean; exit 129' HUP
+trap 'clean; exit 130' INT
+trap 'clean; exit 143' TERM
+
+for stale in "$root"/.staging.*; do
+	[ -e "$stale" ] || continue
+	who=${stale#"$root"/.staging.}
+	who=${who%.*}
+	case $who in '' | *[!0-9]*) continue ;; esac
+	if kill -0 "$who" 2>/dev/null; then continue; fi
+	rm -f "$stale"
+done
 
 case "$verb" in
 promote)
