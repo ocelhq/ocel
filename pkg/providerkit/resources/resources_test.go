@@ -716,6 +716,12 @@ func TestDestroyRefusesByNameWhenNothingCanTakeTheRecordedContainerDown(t *testi
 	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, resources.AppContainersPrimitive) {
 		t.Fatalf("Destroy() of a recorded container nothing stands up = %v, want a refusal naming %s", err, resources.AppContainersPrimitive)
 	}
+	if strings.Contains(refusal.Message, "nothing here declares") {
+		t.Errorf("the refusal reads %q, and a destroy declares nothing at all: the sentence an orphan sweep gives is false here", refusal.Message)
+	}
+	if !strings.Contains(refusal.Message, "this destroy would take down") {
+		t.Errorf("the refusal reads %q, want it to say what a destroy is doing to the container", refusal.Message)
+	}
 }
 
 func TestAnAppMovingToAComputeThisProviderLacksIsRefusedBeforeItsFunctionsAreTakenDown(t *testing.T) {

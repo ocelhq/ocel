@@ -256,38 +256,43 @@ func (f *fanout) Destroy(ctx context.Context, ref providerkit.StackRef, report p
 			return err
 		}
 	}
-	if err := f.removeFunctions(ctx, ref, recorded.Functions, report); err != nil {
+	if err := f.removeFunctions(ctx, ref, recorded.Functions, torn, report); err != nil {
 		return err
 	}
-	return f.removeContainers(ctx, ref, recorded.Containers, report)
+	return f.removeContainers(ctx, ref, recorded.Containers, torn, report)
 }
 
-func (f *fanout) removeFunctions(ctx context.Context, ref providerkit.StackRef, going []providerkit.Function, report providerkit.Reporter) error {
+const (
+	undeclared = "nothing here declares"
+	torn       = "this destroy would take down"
+)
+
+func (f *fanout) removeFunctions(ctx context.Context, ref providerkit.StackRef, going []providerkit.Function, because string, report providerkit.Reporter) error {
 	if len(going) == 0 {
 		return nil
 	}
 	functions, serves := f.impl.(Functions)
 	if !serves {
-		return unownable(ref, len(going), "function", FunctionsPrimitive)
+		return unownable(ref, len(going), "function", because, FunctionsPrimitive)
 	}
 	return functions.RemoveFunctions(ctx, ref, going, report)
 }
 
-func (f *fanout) removeContainers(ctx context.Context, ref providerkit.StackRef, going []providerkit.AppContainer, report providerkit.Reporter) error {
+func (f *fanout) removeContainers(ctx context.Context, ref providerkit.StackRef, going []providerkit.AppContainer, because string, report providerkit.Reporter) error {
 	if len(going) == 0 {
 		return nil
 	}
 	containers, serves := f.impl.(AppContainers)
 	if !serves {
-		return unownable(ref, len(going), "container", AppContainersPrimitive)
+		return unownable(ref, len(going), "container", because, AppContainersPrimitive)
 	}
 	return containers.RemoveContainers(ctx, ref, going, report)
 }
 
-func unownable(ref providerkit.StackRef, going int, noun, primitive string) error {
+func unownable(ref providerkit.StackRef, going int, noun, because, primitive string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s holds %d %s(s) nothing here declares and this provider implements no %s, so they would be left standing and unowned",
-		ref.Name, going, noun, primitive)
+		"%s holds %d %s(s) %s, and this provider implements no %s, so they would be left standing and unowned",
+		ref.Name, going, noun, because, primitive)
 }
 
 func (f *fanout) removeOrphans(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, report providerkit.Reporter) error {
@@ -320,7 +325,7 @@ func (f *fanout) removeOrphanFunctions(ctx context.Context, plan providerkit.Sta
 		reportUndeclared(report, held.Name)
 		orphans = append(orphans, held)
 	}
-	return f.removeFunctions(ctx, plan.Ref, orphans, report)
+	return f.removeFunctions(ctx, plan.Ref, orphans, undeclared, report)
 }
 
 func (f *fanout) removeOrphanContainers(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, report providerkit.Reporter) error {
@@ -333,7 +338,7 @@ func (f *fanout) removeOrphanContainers(ctx context.Context, plan providerkit.St
 		reportUndeclared(report, held.Name)
 		orphans = append(orphans, held)
 	}
-	return f.removeContainers(ctx, plan.Ref, orphans, report)
+	return f.removeContainers(ctx, plan.Ref, orphans, undeclared, report)
 }
 
 func reportUndeclared(report providerkit.Reporter, name string) {
