@@ -60,7 +60,7 @@ func (h *Host) holds(ctx context.Context, class providerkit.Class) (bool, error)
 	if stood {
 		return true, nil
 	}
-	rendered, err := h.run(ctx, "ask where "+string(class)+" keeps its records",
+	rendered, err := h.reach(ctx, "ask where "+string(class)+" keeps its records",
 		"if [ -x "+quoted(recordsHelper)+" ] && [ -d "+quoted(RecordsDir(class))+" ]; then echo held; fi", nil)
 	if err != nil || strings.TrimSpace(rendered) != "held" {
 		return false, err

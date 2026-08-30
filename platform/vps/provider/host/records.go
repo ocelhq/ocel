@@ -176,11 +176,7 @@ func (r *Records) helper(ctx context.Context, class providerkit.Class, stdin io.
 	for _, arg := range args {
 		command += " " + quoted(arg)
 	}
-	elevation, err := r.host.elevate(ctx)
-	if err != nil {
-		return "", err
-	}
-	result, err := r.host.stream(ctx, command, stdin, elevation)
+	result, err := r.host.stream(ctx, command, stdin, r.host.reaching(ctx))
 	if err != nil {
 		return "", err
 	}
