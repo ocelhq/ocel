@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -357,7 +358,7 @@ func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 	t.Parallel()
 
 	report := &watched{}
-	_, err := released(t, aRelease(), session.Result{Stdout: drainExpired + " " + retired + " 2\n"}, report)
+	_, err := released(t, aRelease(), session.Result{Stdout: caddyadmin.DrainExpired + " " + retired + " 2\n"}, report)
 	if err != nil {
 		t.Fatalf("Release() over an expired drain = %v, want the new release serving", err)
 	}

@@ -33,7 +33,6 @@ const (
 	gateInterval  = 250 * time.Millisecond
 	gateAttempt   = 2 * time.Second
 	drainInterval = 250 * time.Millisecond
-	drainExpired  = "drain-expired"
 )
 
 const (
@@ -198,7 +197,7 @@ func draining(socket, address string, window time.Duration, out, errs io.Writer)
 		}
 		time.Sleep(drainInterval)
 	}
-	fmt.Fprintf(out, "%s %s %d\n", drainExpired, address, inFlight)
+	fmt.Fprintf(out, "%s %s %d\n", caddyadmin.DrainExpired, address, inFlight)
 	return 0
 }
 

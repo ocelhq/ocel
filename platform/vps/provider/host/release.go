@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 )
 
 const (
-	drainExpired = "drain-expired"
 	healthKey    = "health.path"
 	appLogTail   = "200"
 	noLogOutput  = "(no output)"
@@ -107,7 +107,7 @@ func claiming(routes []AppRoute, taken AppRoute) []AppRoute {
 func warnExpiry(report providerkit.Reporter, said string) {
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
-		if len(fields) != 3 || fields[0] != drainExpired {
+		if len(fields) != 3 || fields[0] != caddyadmin.DrainExpired {
 			continue
 		}
 		if report != nil {

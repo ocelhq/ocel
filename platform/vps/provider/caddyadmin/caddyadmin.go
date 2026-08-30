@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const DrainExpired = "drain-expired"
+
 func Listen(socket string) string { return "unix/" + socket }
 
 func Keeps(document []byte, socket string) error {
