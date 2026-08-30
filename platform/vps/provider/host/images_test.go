@@ -159,6 +159,41 @@ func TestALoginOutsideTheDockerGroupReachesTheDaemonAsRoot(t *testing.T) {
 	}
 }
 
+func TestADaemonThatIsDownIsNotReadAsALoginOutsideTheDockerGroup(t *testing.T) {
+	stood := machine(nil)
+	stood.facts = session.Facts{Systemd: true}
+	var probes int
+	stood.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, dockerReach) {
+			probes++
+			return session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"}, true
+		}
+		if strings.HasPrefix(command, "sudo -n ") {
+			return session.Result{Code: 1, Stderr: "sudo: a password is required"}, true
+		}
+		return session.Result{}, false
+	}
+	h := stood.host()
+
+	_, err := h.HoldsImage(context.Background(), coordinate)
+	if err == nil {
+		t.Fatal("HoldsImage() over a machine whose daemon is down succeeded")
+	}
+	if !strings.Contains(err.Error(), "Is the docker daemon running?") {
+		t.Errorf("HoldsImage() = %v, want the reason the unelevated probe gave", err)
+	}
+	if strings.Contains(err.Error(), "password") {
+		t.Errorf("HoldsImage() = %v: a daemon that is down is reported as a login that cannot become root", err)
+	}
+
+	if _, err := h.HoldsImage(context.Background(), coordinate); err == nil {
+		t.Fatal("HoldsImage() = nil on a second ask over the same dead daemon")
+	}
+	if probes != 2 {
+		t.Errorf("the daemon was probed %d times over two asks, want one probe each: a refusal that is cached leaves the deploy unable to recover once the daemon returns", probes)
+	}
+}
+
 func TestTheDaemonIsFoundOnceHoweverManyImagesAreAskedAbout(t *testing.T) {
 	stood := machine(nil)
 	imaged(stood, true)

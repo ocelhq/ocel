@@ -16,11 +16,16 @@ func (h *Host) reachDocker(ctx context.Context) (string, error) {
 	if h.engined {
 		return h.engine, nil
 	}
-	result, err := h.stream(ctx, dockerReach+" >/dev/null 2>&1", nil, "")
+	result, err := h.stream(ctx, dockerReach+" >/dev/null", nil, "")
 	if err != nil {
 		return "", err
 	}
 	if result.Code != 0 {
+		if !deniedSocket(result.Stderr) {
+			return "", providerkit.Refuse(providerkit.CodeNotReady,
+				"%s cannot run docker, and an image reaches this machine through its daemon: %s",
+				h.named(), spoken(result))
+		}
 		elevation, err := h.elevate(ctx)
 		if err != nil {
 			return "", err
@@ -29,6 +34,10 @@ func (h *Host) reachDocker(ctx context.Context) (string, error) {
 	}
 	h.engined = true
 	return h.engine, nil
+}
+
+func deniedSocket(stderr string) bool {
+	return strings.Contains(strings.ToLower(stderr), "permission denied")
 }
 
 func (h *Host) HoldsImage(ctx context.Context, coordinate string) (bool, error) {
