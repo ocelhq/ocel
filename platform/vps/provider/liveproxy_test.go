@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -19,6 +20,11 @@ func (vm machine) inspects(t *testing.T, what, name, format string) string {
 func (vm machine) inside(t *testing.T, command string) string {
 	t.Helper()
 	return vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" sh -c "+quote(command)+" 2>&1 || true")
+}
+
+func (vm machine) drives(t *testing.T, argv string) string {
+	t.Helper()
+	return strings.TrimSpace(vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" "+host.ProxyHelperMount+" "+argv+" 2>&1 || true"))
 }
 
 func (vm machine) peers(t *testing.T, command string) string {
@@ -115,8 +121,16 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 		t.Errorf("the proxy publishes %s, and the control plane's socket never leaves the container: %s", adminPort, published)
 	}
 
-	if flight := strings.TrimSpace(vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" "+host.ProxyHelperMount+" upstreams")); flight != "[]" {
+	if flight := vm.drives(t, "upstreams"); flight != "[]" {
 		t.Errorf("the helper read the proxy's upstreams as %q, want an empty set over the socket: the file bootstrap mounts is what the release loop drives", flight)
+	}
+	if kind := strings.TrimSpace(vm.ssh(t, "sudo head -c 4 "+host.ProxyHelper+" | od -An -c | tr -d ' '")); !strings.Contains(kind, "ELF") {
+		t.Errorf("%s stands as %q, want an elf executable: the image lends the release loop no interpreter and no http client", host.ProxyHelper, kind)
+	}
+	for _, borrowed := range []string{"curl", "wget"} {
+		if answer := vm.inside(t, "command -v "+borrowed+" >/dev/null && echo carried || echo absent"); strings.Contains(answer, "absent") {
+			t.Logf("the proxy image carries no %s, which is the dependence the helper exists to remove", borrowed)
+		}
 	}
 	if written := vm.inside(t, "printf x >> "+quote(host.ProxyHelperMount)+" && echo wrote || echo refused"); !strings.Contains(written, "refused") {
 		t.Errorf("the helper is writable from inside the proxy, and a file the container can rewrite is one the release loop cannot trust: %q", written)
@@ -174,8 +188,51 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 		t.Fatalf("%s is still gone after the run that was meant to write it back:\n%s",
 			host.ProxyContainer, vm.ssh(t, "sudo docker logs --tail 40 "+host.ProxyContainer+" 2>&1 || true"))
 	}
-	if flight := strings.TrimSpace(vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" "+host.ProxyHelperMount+" upstreams")); flight != "[]" {
+	if flight := vm.drives(t, "upstreams"); flight != "[]" {
 		t.Errorf("the proxy that was written back answers its own socket with %q", flight)
+	}
+}
+
+func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
+	vm := live(t)
+	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	p := vm.provider(t)
+	defer closing(t, p)
+
+	ctx := context.Background()
+	class := providerkit.ClassProduction
+	bootstrapper, err := p.Bootstrap("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply() = %v", err)
+	}
+	defer func() {
+		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+			t.Errorf("Remove() = %v", err)
+		}
+	}()
+
+	seeded := vm.drives(t, "config apps/http/grace_period")
+	if seeded == "" || seeded == "null" {
+		t.Fatalf("the proxy reports its grace period as %q, so what it serves cannot be read back here", seeded)
+	}
+
+	moved := strings.Trim(seeded, `"`) + "1s"
+	vm.ssh(t, "sudo sed -i "+quote("s/"+strings.Trim(seeded, `"`)+"/"+moved+"/")+" "+host.ProxyConfig)
+	vm.ssh(t, "sudo docker restart "+host.ProxyContainer)
+	for at := 0; at < 20 && !vm.running(t, host.ProxyContainer); at++ {
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	if served := vm.drives(t, "config apps/http/grace_period"); served != `"`+moved+`"` {
+		t.Errorf("the file on the box declares %q and the running proxy serves %s: caddy's --resume uses the last autosaved configuration, overriding --config, so a box recreated after a changed config would keep serving the old one while every digest ocel holds says it does not",
+			moved, served)
+	}
+
+	if flags := vm.inspects(t, "container", host.ProxyContainer, "{{json .Config.Cmd}}"); strings.Contains(flags, "resume") {
+		t.Errorf("the proxy is run as %s, and the file every deploy replaces is then read and thrown away", flags)
 	}
 }
 
@@ -203,8 +260,7 @@ func TestLiveTheProxysConfigIsStatedAndItsLogCarriesNoQueryString(t *testing.T) 
 	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U:%a "+host.ProxyConfig)); owner != deployLogin+":640" {
 		t.Errorf("%s stands as %q, want the deploy principal's own file: the config is what a deploy renders", host.ProxyConfig, owner)
 	}
-	grace := strings.TrimSpace(vm.ssh(t, "sudo docker exec "+host.ProxyContainer+
-		" curl -sS --unix-socket "+host.ProxyAdminSocket+" http://localhost/config/apps/http/grace_period"))
+	grace := vm.drives(t, "config apps/http/grace_period")
 	if grace == "" || grace == "null" {
 		t.Errorf("the proxy reports its grace period as %q, and caddy's default is eternal: one hung request would hold a retired server open forever", grace)
 	}

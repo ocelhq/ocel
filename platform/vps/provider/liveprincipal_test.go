@@ -125,7 +125,7 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
-	for _, item := range host.Items(class, nil) {
+	for _, item := range host.Items(class, nil, host.ArchAMD64) {
 		if item.Owner != deployLogin || item.Kind == "linux:user" {
 			continue
 		}

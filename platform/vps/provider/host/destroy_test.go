@@ -108,7 +108,7 @@ func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 		return Item{Kind: KindFile, Name: StampPath(class), Mode: 0o644, Owner: rootOwner, Content: []byte(`{"schema": 2, "sta`)}
 	}
 	stood := machine(map[providerkit.Class][]Item{
-		class:  append(Items(class, []byte(aKey+"\n")), truncated(class)),
+		class:  append(Items(class, []byte(aKey+"\n"), ArchAMD64), truncated(class)),
 		beside: {truncated(beside)},
 	})
 
@@ -134,7 +134,7 @@ func TestTheHostRemovesNothingItCannotNameAsAPathItWrote(t *testing.T) {
 		"the unit that starts it":                      taking(KindUnit, dockerUnit, ""),
 		"a name rooted at nothing":                     taking(KindDir, dockerEngine, ""),
 	} {
-		err := held.remove(context.Background(), taken)
+		_, err := held.remove(context.Background(), taken)
 		var refusal providerkit.Refusal
 		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 			t.Errorf("Remove(%s) = %v, want a refusal: rm -rf is not the fallback for anything ocel was not asked about", name, err)
@@ -208,6 +208,9 @@ func TestTheLastDestroyLeavesNothingOcelEverWroteOnTheHost(t *testing.T) {
 func gone(taken []string, name string) bool {
 	for _, command := range taken {
 		if strings.HasSuffix(strings.TrimSuffix(command, " || true"), quoted(name)) {
+			return true
+		}
+		if strings.Contains(command, "docker network rm "+quoted(name)) {
 			return true
 		}
 		if under, sweeping := strings.CutPrefix(command, "rm -rf "); sweeping &&

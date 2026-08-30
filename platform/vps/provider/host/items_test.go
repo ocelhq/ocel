@@ -16,7 +16,7 @@ const aKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample bootstrap@laptop"
 func TestTheClassTierIsRootsAndTheStateTierIsTheDeployPrincipalsAlone(t *testing.T) {
 	t.Parallel()
 
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"))
+	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64)
 	owners := map[string]string{}
 	for _, item := range items {
 		owners[item.Name] = item.Owner
@@ -41,7 +41,7 @@ func TestTheClassTierIsRootsAndTheStateTierIsTheDeployPrincipalsAlone(t *testing
 func TestThePrincipalIsWrittenBeforeAnythingItOwns(t *testing.T) {
 	t.Parallel()
 
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"))
+	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64)
 	account := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindUser })
 	if account < 0 {
 		t.Fatal("nothing in the item set creates the deploy principal")
@@ -58,7 +58,7 @@ func TestTheDeployKeysAreTheOnesTheItemCarries(t *testing.T) {
 
 	keys := []byte(aKey + "\n")
 	var written Item
-	for _, item := range Items(providerkit.ClassProduction, keys) {
+	for _, item := range Items(providerkit.ClassProduction, keys, ArchAMD64) {
 		if item.Name == authorizedKeys {
 			written = item
 		}
@@ -109,12 +109,12 @@ func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatStandsIsKept(t *testing.T
 
 	class := providerkit.ClassProduction
 	keys := []byte(aKey + "\n")
-	fresh := planFor(planned(Reading{Class: class, Keys: keys, Observed: map[string]string{}}), principal().ID())
+	fresh := planFor(planned(Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: map[string]string{}}), principal().ID())
 	if fresh.Action != providerkit.ActionCreate {
 		t.Errorf("a host with no %s plans %q, want it created", deployUser, fresh.Action)
 	}
 
-	standing := Reading{Class: class, Keys: keys, Observed: digests(Items(class, keys))}
+	standing := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: digests(Items(class, keys, ArchAMD64))}
 	if kept := planFor(planned(standing), principal().ID()); kept.Action != providerkit.ActionKeep {
 		t.Errorf("a host whose principal stands as ocel writes it plans %q, want it kept", kept.Action)
 	}
@@ -129,8 +129,8 @@ func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	stood := Items(class, []byte(aKey+"\n"))
-	moved := Reading{Class: class, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(stood)}
+	stood := Items(class, []byte(aKey+"\n"), ArchAMD64)
+	moved := Reading{Arch: ArchAMD64, Class: class, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(stood)}
 	for _, change := range planned(moved) {
 		want := providerkit.ActionKeep
 		if change.Name == authorizedKeys {
@@ -147,9 +147,9 @@ func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	keys := []byte(aKey + "\n")
-	held := digests(Items(production, keys))
+	held := digests(Items(production, keys, ArchAMD64))
 
-	alone := removing(Reading{Class: production, Keys: keys, Observed: held}, Reading{Class: preview, Observed: map[string]string{}})
+	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}})
 	taken := slices.IndexFunc(alone, func(r removal) bool { return r.kind == KindUser && r.path == deployUser })
 	if taken < 0 {
 		t.Fatal("destroying the last class leaves the deploy principal behind, and a login nothing uses is a login nobody revokes")
@@ -158,8 +158,8 @@ func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T
 		t.Error("the principal is removed before its home, and userdel over a home ocel still holds is a home nothing owns")
 	}
 
-	beside := digests(Items(preview, keys))
-	shared := removing(Reading{Class: production, Keys: keys, Observed: held}, Reading{Class: preview, Keys: keys, Observed: beside})
+	beside := digests(Items(preview, keys, ArchAMD64))
+	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside})
 	for _, r := range shared {
 		if r.kind == KindUser {
 			t.Error("destroying one class takes the deploy principal a standing sibling still deploys as")
@@ -172,11 +172,11 @@ func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	keys := []byte(aKey + "\n")
-	standing := Reading{Class: production, Keys: keys, Observed: digests(Items(production, keys))}
+	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
 
 	for name, sibling := range map[string]Reading{
 		"the last class on the host": {Class: preview, Observed: map[string]string{}},
-		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys))},
+		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))},
 	} {
 		taken := removing(standing, sibling)
 		stamp := index(taken, ClassDir(production))
@@ -201,8 +201,8 @@ func TestDestroyOfAHalfWrittenHostNamesWhatStandsAndNothingBeside(t *testing.T) 
 		half[item.ID()] = item.Digest()
 	}
 	taken := removing(
-		Reading{Class: production, Observed: half},
-		Reading{Class: preview, Observed: map[string]string{}},
+		Reading{Arch: ArchAMD64, Class: production, Observed: half},
+		Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}},
 	)
 	for _, r := range taken {
 		if _, stands := half[r.kind+" "+r.path]; !stands {

@@ -12,18 +12,19 @@ func standingHost() Reading {
 	class := providerkit.ClassProduction
 	keys := []byte(aKey + "\n")
 	return Reading{
+		Arch:     ArchAMD64,
 		Class:    class,
 		Present:  true,
 		Keys:     keys,
-		Stamp:    Stamp{Schema: providerkit.BootstrapSchema, State: StateComplete, Digests: digests(Items(class, keys))},
-		Observed: digests(Items(class, keys)),
+		Stamp:    Stamp{Schema: providerkit.BootstrapSchema, State: StateComplete, Digests: digests(Items(class, keys, ArchAMD64))},
+		Observed: digests(Items(class, keys, ArchAMD64)),
 	}
 }
 
 func drifted(t *testing.T, read Reading, name string) Reading {
 	t.Helper()
 
-	for _, item := range Items(read.Class, read.Keys) {
+	for _, item := range Items(read.Class, read.Keys, ArchAMD64) {
 		if item.Name != name {
 			continue
 		}
@@ -51,7 +52,7 @@ func TestHealReassertsTheStateTheDeployLoginOwns(t *testing.T) {
 	t.Parallel()
 
 	read := drifted(t, standingHost(), RecordsDir(providerkit.ClassProduction))
-	work, err := healable(read)
+	work, _, err := healable(read)
 	if err != nil {
 		t.Fatalf("healable() over a drifted record tier = %v, want the deploy login's own state reasserted", err)
 	}
@@ -64,7 +65,7 @@ func TestHealRefusesAMixedSetWholeRatherThanDoingThePartItMay(t *testing.T) {
 	t.Parallel()
 
 	read := drifted(t, drifted(t, standingHost(), RecordsDir(providerkit.ClassProduction)), recordsHelper)
-	work, err := healable(read)
+	work, _, err := healable(read)
 	refused := refusal(t, err, providerkit.CodeDenied)
 	if !strings.Contains(refused.Message, recordsHelper) {
 		t.Errorf("the refusal says %q, want it to name %s as what heal may not write", refused.Message, recordsHelper)
@@ -108,7 +109,7 @@ func TestHealReadsAKeyItCannotOpenAsTheKeyThatStands(t *testing.T) {
 	read := drifted(t, standingHost(), RecordsDir(providerkit.ClassProduction))
 	read.Stamp.Seal = Seal{Fingerprint: "the key the stamp records"}
 	read.Seal = Seal{}
-	if _, err := healing(read, true); err != nil {
+	if _, _, err := healing(read, true); err != nil {
 		t.Errorf("heal driven by a login that cannot read the key's bytes = %v, want the key that stands taken as the key that stands: nothing but root ever writes it", err)
 	}
 }
@@ -117,7 +118,7 @@ func TestHealRunsTheUnattendedGateTheRestOfApplyRuns(t *testing.T) {
 	t.Parallel()
 
 	read := drifted(t, standingHost(), RecordsDir(providerkit.ClassProduction))
-	work, err := healing(read, true)
+	work, _, err := healing(read, true)
 	if err != nil {
 		t.Fatalf("an unattended heal over a drifted record tier = %v, want the converge to proceed", err)
 	}
@@ -131,12 +132,12 @@ func TestHealIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	read := drifted(t, standingHost(), RecordsDir(class))
-	for _, item := range Items(class, read.Keys) {
+	for _, item := range Items(class, read.Keys, ArchAMD64) {
 		if item.Name == sudoersSeal || item.Kind == KindUser {
 			delete(read.Observed, item.ID())
 		}
 	}
-	work, err := healing(read, true)
+	work, _, err := healing(read, true)
 	if err != nil {
 		t.Fatalf("heal over a survey that could read neither %s nor the shadow database = %v, want the record tier reasserted anyway", sudoersSeal, err)
 	}
@@ -160,11 +161,11 @@ func TestHealHasNothingToReassertWhereNoBootstrapStands(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	fresh := Reading{Class: class, Observed: map[string]string{}}
+	fresh := Reading{Arch: ArchAMD64, Class: class, Observed: map[string]string{}}
 	refusal(t, second(healable(fresh)), providerkit.CodeDenied)
 }
 
-func second(_ []Item, err error) error { return err }
+func second(_ []Item, _ []string, err error) error { return err }
 
 func ids(items []Item) []string {
 	var out []string
@@ -178,8 +179,8 @@ func TestAnUnattendedApplyInstallsWhatIsAbsent(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	fresh := Reading{Class: class, Observed: map[string]string{}}
-	if err := refuseReplacements(fresh, Items(class, nil)); err != nil {
+	fresh := Reading{Arch: ArchAMD64, Class: class, Observed: map[string]string{}}
+	if err := refuseReplacements(fresh, Items(class, nil, ArchAMD64)); err != nil {
 		t.Errorf("an unattended apply over a machine nothing has bootstrapped = %v, want the installs to proceed", err)
 	}
 }
@@ -190,7 +191,7 @@ func TestAnUnattendedApplyWillNotWriteOverWhatAlreadyStands(t *testing.T) {
 	class := providerkit.ClassProduction
 	for _, name := range []string{recordsHelper, SealKeyPath(class), deployUser, dockerEngine} {
 		read := drifted(t, standingHost(), name)
-		refused := refusal(t, refuseReplacements(read, Items(read.Class, read.Keys)), providerkit.CodeNotReady)
+		refused := refusal(t, refuseReplacements(read, Items(read.Class, read.Keys, ArchAMD64)), providerkit.CodeNotReady)
 		if !strings.Contains(refused.Message, name) {
 			t.Errorf("the refusal says %q, want it to name %s as the thing it would write over", refused.Message, name)
 		}
@@ -206,7 +207,7 @@ func TestAnUnattendedApplyConvergesAHostRatherThanRefusingEveryChange(t *testing
 	class := providerkit.ClassProduction
 	for _, name := range []string{dockerUnit, RecordsDir(class), stateRoot, helperRoot} {
 		read := drifted(t, standingHost(), name)
-		if err := refuseReplacements(read, Items(read.Class, read.Keys)); err != nil {
+		if err := refuseReplacements(read, Items(read.Class, read.Keys, ArchAMD64)); err != nil {
 			t.Errorf("an unattended apply over a host whose %s has moved = %v, want a converge that destroys nothing to proceed", name, err)
 		}
 	}
@@ -216,7 +217,7 @@ func TestNothingHealMayWriteIsAReplacementClassChange(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	for _, item := range Items(class, []byte(aKey+"\n")) {
+	for _, item := range Items(class, []byte(aKey+"\n"), ArchAMD64) {
 		if deployOwned(item) && replacing(item) {
 			t.Errorf("heal may write %s and writing it replaces rather than converges, so the one unattended path with nobody watching would rebuild it", item.ID())
 		}

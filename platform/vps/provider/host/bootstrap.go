@@ -61,7 +61,7 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 }
 
 func planned(read Reading) []providerkit.Change {
-	items := Items(read.Class, read.Keys)
+	items := read.Items()
 	changes := make([]providerkit.Change, 0, len(items))
 	for _, item := range items {
 		change := providerkit.Change{
@@ -129,7 +129,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err := standing.adopting(); err != nil {
 		return err
 	}
-	items := Items(req.Class, standing.Keys)
+	items := standing.Items()
 	if err := providerkit.RefuseGrowth(itemPlan(shown), itemPlan(standing)); err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err := b.write(ctx, standing, EngineItems(), report); err != nil {
 		return err
 	}
-	if err := b.write(ctx, standing, ProxyItems(), report); err != nil {
+	if err := b.write(ctx, standing, ProxyItems(standing.Arch), report); err != nil {
 		return err
 	}
 	stamp.State, stamp.Seal = StateComplete, minted.Seal
@@ -184,44 +184,47 @@ func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest
 	if err != nil {
 		return err
 	}
-	work, err := healing(read, req.Unattended)
+	work, left, err := healing(read, req.Unattended)
 	if err != nil {
 		return err
+	}
+	for _, id := range left {
+		say(report, id+": left as this host holds it, and heal reasserts only what "+deployUser+" owns under "+stateRoot)
 	}
 	return b.writing(ctx, read, work, report, b.host.Reassert)
 }
 
-func healing(read Reading, unattended bool) ([]Item, error) {
-	work, err := healable(read)
+func healing(read Reading, unattended bool) ([]Item, []string, error) {
+	work, left, err := healable(read)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if unattended {
 		if err := refuseReplacements(read, work); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return work, nil
+	return work, left, nil
 }
 
-func healable(read Reading) ([]Item, error) {
+func healable(read Reading) ([]Item, []string, error) {
 	command := providerkit.BootstrapCommand(read.Class)
 	if !read.Present {
-		return nil, providerkit.Refuse(providerkit.CodeDenied,
+		return nil, nil, providerkit.Refuse(providerkit.CodeDenied,
 			"nothing has bootstrapped the %s class on this host, and heal reasserts what a bootstrap wrote rather than writing one.\nRun `%s`",
 			read.Class, command)
 	}
 	if read.unfinished() {
-		return nil, providerkit.Refuse(providerkit.CodeDenied,
+		return nil, nil, providerkit.Refuse(providerkit.CodeDenied,
 			"%s records an apply that never finished, and heal finishes nothing it did not start.\nRun `%s` to plan the work that is left and finish it",
 			StampPath(read.Class), command)
 	}
 	if err := read.adopting(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var work []Item
-	var denied []string
-	for _, item := range Items(read.Class, read.Keys) {
+	var left, denied []string
+	for _, item := range read.Items() {
 		if read.current(item) {
 			continue
 		}
@@ -229,17 +232,18 @@ func healable(read Reading) ([]Item, error) {
 			work = append(work, item)
 			continue
 		}
-		if !read.standing(item.Kind, item.Name) {
+		if beneath(proxyRoot, item.Name) || !read.standing(item.Kind, item.Name) {
+			left = append(left, item.ID())
 			continue
 		}
 		denied = append(denied, item.ID())
 	}
 	if len(denied) > 0 {
-		return nil, providerkit.Refuse(providerkit.CodeDenied,
+		return nil, nil, providerkit.Refuse(providerkit.CodeDenied,
 			"heal writes what %s owns under %s and nothing else, and this one would write %s.\nRun `%s` as the login that bootstrapped this host",
 			deployUser, stateRoot, strings.Join(denied, ", "), command)
 	}
-	return work, nil
+	return work, left, nil
 }
 
 func deployOwned(item Item) bool {
@@ -258,7 +262,7 @@ func beneath(root, name string) bool {
 
 func replacing(item Item) bool {
 	switch item.Kind {
-	case KindDir, KindUnit, KindNetwork, KindVolume, KindContainer:
+	case KindDir, KindUnit, KindNetwork, KindVolume, KindContainer, KindProxyConfig:
 		return false
 	default:
 		return true
@@ -368,8 +372,13 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 			say(report, "kept "+removal.kind+" "+removal.path)
 			continue
 		}
-		if err := b.host.remove(ctx, removal); err != nil {
+		taken, err := b.host.remove(ctx, removal)
+		if err != nil {
 			return err
+		}
+		if !taken {
+			say(report, "kept "+removal.kind+" "+removal.path+", which something else on this host is still attached to")
+			continue
 		}
 		say(report, "removed "+removal.kind+" "+removal.path)
 	}
@@ -404,7 +413,8 @@ func (r removal) command() string {
 	case r.kind == KindVolume:
 		return "docker volume rm " + quoted(r.path)
 	case r.kind == KindNetwork:
-		return "docker network rm " + quoted(r.path) + " || true"
+		return "if ! docker network rm " + quoted(r.path) + " >/dev/null 2>&1 && " +
+			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkHeld) + "; fi"
 	case r.shared:
 		return "rmdir --ignore-fail-on-non-empty " + quoted(r.path)
 	default:

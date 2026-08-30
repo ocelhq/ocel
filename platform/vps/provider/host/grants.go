@@ -12,8 +12,10 @@ type Grant struct {
 	Detail string
 }
 
-func Grants(class providerkit.Class) []Grant {
-	items := Items(class, nil)
+func Grants(class providerkit.Class) []Grant { return grants(class, ArchAMD64) }
+
+func grants(class providerkit.Class, arch string) []Grant {
+	items := Items(class, nil, arch)
 	held := deployLogin()
 
 	var grants []Grant

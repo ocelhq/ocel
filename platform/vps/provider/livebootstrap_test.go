@@ -95,7 +95,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if stamp.Writer != "live-suite" {
 		t.Errorf("the stamp reads writer %q, want the writer that applied it", stamp.Writer)
 	}
-	for _, item := range host.Items(class, nil) {
+	for _, item := range host.Items(class, nil, host.ArchAMD64) {
 		if stamp.Digests[item.ID()] == "" {
 			t.Errorf("the stamp carries no digest for %s, and nothing can say whether it drifted", item.ID())
 		}
