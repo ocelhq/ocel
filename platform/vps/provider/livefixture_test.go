@@ -3,11 +3,18 @@ package vps_test
 import (
 	"archive/tar"
 	"bytes"
+	"context"
+	"errors"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -27,12 +34,28 @@ import (
 	"time"
 )
 
+var accepted []net.Conn
+
 func main() {
-	switch os.Getenv("MODE") {
-	case "hang":
-		select {}
-	case "crash":
+	if os.Getenv("MODE") == "crash" {
 		os.Exit(3)
+	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	listener, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		panic(err)
+	}
+	if os.Getenv("MODE") == "hang" {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			accepted = append(accepted, conn)
+		}
 	}
 	release := os.Getenv("RELEASE")
 	health, err := strconv.Atoi(os.Getenv("HEALTH_STATUS"))
@@ -84,14 +107,6 @@ func main() {
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, release)
 	})
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	listener, err := net.Listen("tcp", ":"+port)
-	if err != nil {
-		panic(err)
-	}
 	panic(http.Serve(listener, mux))
 }
 `
@@ -125,7 +140,7 @@ func (vm machine) arch(t *testing.T) string {
 	}
 }
 
-func fixtureBinary(t *testing.T, arch string) []byte {
+func fixtureBuilt(t *testing.T, goos, arch string) string {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(fixtureSource), 0o600); err != nil {
@@ -137,11 +152,16 @@ func fixtureBinary(t *testing.T, arch string) []byte {
 	built := filepath.Join(dir, "app")
 	build := exec.Command("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", built, ".")
 	build.Dir = dir
-	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+arch, "GOFLAGS=")
+	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+arch, "GOFLAGS=")
 	if said, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build the fixture app: %v\n%s", err, said)
 	}
-	read, err := os.ReadFile(built)
+	return built
+}
+
+func fixtureBinary(t *testing.T, arch string) []byte {
+	t.Helper()
+	read, err := os.ReadFile(fixtureBuilt(t, "linux", arch))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,3 +204,72 @@ func fixtures(t *testing.T, vm machine) {
 }
 
 func fixtureAt(tag string) string { return fixtureRepo + ":" + tag }
+
+func TestTheHungFixtureStaysUpAndAnswersNothingItAccepts(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	run := exec.Command(fixtureBuilt(t, runtime.GOOS, runtime.GOARCH))
+	run.Env = []string{"MODE=hang", "PORT=" + port}
+	wrote, err := os.CreateTemp(t.TempDir(), "output")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.Stdout, run.Stderr = wrote, wrote
+	said := func() string {
+		read, err := os.ReadFile(wrote.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(read)
+	}
+	if err := run.Start(); err != nil {
+		t.Fatal(err)
+	}
+	died := make(chan error, 1)
+	go func() { died <- run.Wait() }()
+	t.Cleanup(func() {
+		_ = run.Process.Kill()
+		<-died
+	})
+
+	bound := false
+	for range 100 {
+		conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, time.Second)
+		if err == nil {
+			_ = conn.Close()
+			bound = true
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !bound {
+		t.Fatalf("the hung fixture never bound %s, and connection-refused is a different bug from never-answered:\n%s", port, said())
+	}
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	answer, err := client.Get("http://127.0.0.1:" + port + healthPath)
+	if err == nil {
+		_ = answer.Body.Close()
+		t.Fatalf("the hung fixture answered %s with %d, and the gate it is built to defeat would pass it", healthPath, answer.StatusCode)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) && !strings.Contains(err.Error(), "Client.Timeout") {
+		t.Fatalf("a probe of the hung fixture failed with %v, want a connection accepted and left unanswered", err)
+	}
+	select {
+	case fell := <-died:
+		t.Fatalf("the hung fixture ended with %v, so a restart policy loops it and a crash is what the release reports:\n%s", fell, said())
+	default:
+	}
+	if written := said(); written != "" {
+		t.Errorf("the hung fixture wrote\n%s\nand a refusal quoting its logs would no longer read as the absence the diagnosis turns on", written)
+	}
+}
