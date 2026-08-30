@@ -98,7 +98,15 @@ func (m *machine) ClaimHost(_ context.Context, claim host.HostClaim) error {
 
 func (m *machine) DisclaimHost(_ context.Context, hostname, owner string) error {
 	m.calls = append(m.calls, "disclaim "+hostname)
-	m.claims = host.Disclaiming(m.claims, hostname, owner)
+	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool {
+		return claim.Hostname == hostname && claim.Owner == owner
+	})
+	return nil
+}
+
+func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
+	m.calls = append(m.calls, "disclaim "+owner)
+	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool { return claim.Owner == owner })
 	return nil
 }
 

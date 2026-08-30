@@ -71,10 +71,8 @@ func Claiming(claims []HostClaim, taken HostClaim) ([]HostClaim, error) {
 	return append(kept, taken), nil
 }
 
-func Disclaiming(claims []HostClaim, hostname, owner string) []HostClaim {
-	return slices.DeleteFunc(slices.Clone(claims), func(claim HostClaim) bool {
-		return claim.Hostname == hostname && claim.Owner == owner
-	})
+func Disclaiming(claims []HostClaim, dropped func(HostClaim) bool) []HostClaim {
+	return slices.DeleteFunc(slices.Clone(claims), dropped)
 }
 
 func Routing(routes []AppRoute, taken AppRoute) []AppRoute {

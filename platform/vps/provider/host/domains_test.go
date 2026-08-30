@@ -276,6 +276,26 @@ func TestDisclaimingAHostnameTakesTheClaimAndLeavesTheRest(t *testing.T) {
 	}
 }
 
+func TestDisclaimingASurfaceTakesEveryHostnameItHoldsAndNoOneElses(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	kept := HostClaim{Hostname: "kept.example.com", Owner: otherSurface}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}, kept, {Hostname: "other.example.com", Owner: surface}}
+	stood := claimingBox(t, state)
+	if err := stood.host().DisclaimSurface(context.Background(), surface); err != nil {
+		t.Fatalf("DisclaimSurface() = %v", err)
+	}
+
+	held, err := ReadProxyState([]byte(stood.held))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(held.Claims, []HostClaim{kept}) {
+		t.Errorf("the claims left are %v, want only %v: a torn-down surface answers for nothing, and every hostname it held has to come back into circulation without a shell on this box", held.Claims, kept)
+	}
+}
+
 func TestAHostnameAnotherSurfaceHoldsIsRefusedRatherThanTakenOffIt(t *testing.T) {
 	t.Parallel()
 

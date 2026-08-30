@@ -60,7 +60,16 @@ func (h *Host) ClaimHost(ctx context.Context, claim HostClaim) error {
 
 func (h *Host) DisclaimHost(ctx context.Context, hostname, owner string) error {
 	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
-		state.Claims = Disclaiming(state.Claims, hostname, owner)
+		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool {
+			return claim.Hostname == hostname && claim.Owner == owner
+		})
+		return state, nil
+	})
+}
+
+func (h *Host) DisclaimSurface(ctx context.Context, owner string) error {
+	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
+		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool { return claim.Owner == owner })
 		return state, nil
 	})
 }

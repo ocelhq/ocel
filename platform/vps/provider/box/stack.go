@@ -158,9 +158,12 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 
 func (s *stack) Destroy(ctx context.Context) error {
 	var errs []error
-	for _, hostname := range slices.Clone(s.state.Bound) {
-		if err := s.UnbindDomain(ctx, hostname); err != nil {
-			errs = append(errs, err)
+	if err := s.e.machine.DisclaimSurface(ctx, s.surface()); err != nil {
+		errs = append(errs, err)
+	} else {
+		for _, hostname := range slices.Clone(s.state.Bound) {
+			s.state.Release(hostname)
+			s.state.PublishFront(hostname, "")
 		}
 	}
 	if err := s.e.machine.UnrouteSurface(ctx, s.surface()); err != nil {
