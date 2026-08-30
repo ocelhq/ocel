@@ -377,7 +377,7 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 	}, nil
 }
 
-var envVarName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var envVarName = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 
 func normalizeRegistry(raw rawConfig) (*Registry, error) {
 	if raw.Registry == nil {
@@ -395,7 +395,7 @@ func normalizeRegistry(raw rawConfig) (*Registry, error) {
 		return nil, errors.New("`password` names the environment variable holding the registry password or token, and a push authenticates, so there is no anonymous form to fall back to")
 	}
 	if !envVarName.MatchString(password) {
-		return nil, errors.New("`password` is the name of an environment variable, not the secret itself, and this value is no variable name: put the secret in the environment and name it here")
+		return nil, errors.New("`password` is the name of an environment variable, not the secret itself, and this value is no variable name — write it as \"REGISTRY_TOKEN\", in upper case, and put the secret in the environment under that name")
 	}
 	return &Registry{
 		Server:   server,

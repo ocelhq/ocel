@@ -61,6 +61,28 @@ func TestARegistryWhoseVariableIsUnsetStopsTheDeployBeforeAnythingIsBuilt(t *tes
 	}
 }
 
+func TestARegistryPasswordPastedAsATokenIsRefusedWithoutEchoingIt(t *testing.T) {
+	const token = "ghp_16C7e42F292c6912E7710c838347Ae178B4a"
+	deps, root, built := registryProject(t, `
+  registry: { server: "ghcr.io", password: "`+token+`" },`)
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy() took a pasted token as the name of an environment variable, and would authenticate as nobody")
+	}
+	said := err.Error() + stdout.String() + stderr.String()
+	if strings.Contains(said, token) {
+		t.Errorf("the deploy said %q, and the pasted token reached the terminal, the CI log and anything scraping either", said)
+	}
+	if !strings.Contains(said, "password") {
+		t.Errorf("the deploy said %q, want it to name the field that is wrong", said)
+	}
+	if built() {
+		t.Error("the image was built before the deploy discovered its registry credential was nonsense")
+	}
+}
+
 func TestARegistryWhoseVariableIsSetDeploysAsUsual(t *testing.T) {
 	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
 	deps, root, _ := registryProject(t, `
