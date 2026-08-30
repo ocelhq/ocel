@@ -129,3 +129,16 @@ func TestARealProxyForwardsAClaimedHostnameToTheProjectThatClaimedIt(t *testing.
 		t.Errorf("a hostname the other project never claimed was answered %d by %q, want the box's own 404", said.status, said.edge)
 	}
 }
+
+func TestARealProxyAnswersEveryHostnameOneSurfaceClaimsOnTheAppItRuns(t *testing.T) {
+	second := "second.example.com"
+	state := routed()
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}, {Hostname: second, Owner: surface}}
+	ask := probing(t, state)
+
+	for _, hostname := range []string{claimed, second} {
+		if said := ask(hostname); said.status == http.StatusNotFound || said.edge == EdgeName {
+			t.Errorf("%q was answered %d by the box's own default, want the one app its surface runs: a project binds a second domain without giving up the first, and the route this renders carries every hostname the surface claims", hostname, said.status)
+		}
+	}
+}
