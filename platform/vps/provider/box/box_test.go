@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
@@ -484,10 +485,12 @@ func TestARollbackOntoASweptImageIsRefusedBeforeThePointerMoves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, entry := range entries {
-		if entry.Active && entry.PromotionID != "p2" {
-			t.Errorf("the pointer stands at %s after a refused rollback, want the release still serving: the ensure runs before the flip so a rollback that cannot serve leaves nothing moved", entry.PromotionID)
-		}
+	at := slices.IndexFunc(entries, func(entry edge.HistoryEntry) bool { return entry.Active })
+	if at < 0 {
+		t.Fatalf("the ledger holds no active promotion after a refused rollback (%v), and a pointer standing at nothing is not the release still serving", entries)
+	}
+	if entries[at].PromotionID != "p2" {
+		t.Errorf("the pointer stands at %s after a refused rollback, want the release still serving: the ensure runs before the flip so a rollback that cannot serve leaves nothing moved", entries[at].PromotionID)
 	}
 }
 
@@ -509,6 +512,29 @@ func TestAPromotionPutsTheReleaseItServesAtTheHeadOfTheBoxsWindow(t *testing.T) 
 
 	if len(stood.headed) == 0 || stood.headed[len(stood.headed)-1] != imageFor("web", "b1") {
 		t.Errorf("the box's release window heads at %v, want %s: a rollback that leaves the window alone is swept off the box by the next deploy's reconcile while the ledger still offers it", stood.headed, imageFor("web", "b1"))
+	}
+}
+
+type reported struct{ lines []string }
+
+func (r *reported) Say(message string)    { r.lines = append(r.lines, message) }
+func (r *reported) Detail(message string) { r.lines = append(r.lines, message) }
+
+func (r *reported) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+
+func TestAPromotionSaysItIsStandingTheContainerBackUpBeforeItStandsIt(t *testing.T) {
+	t.Parallel()
+
+	_, _, stack := standing(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	heard := &reported{}
+	if err := stack.Promote(context.Background(), edge.Promotion{
+		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
+	}, "", heard); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if !slices.ContainsFunc(heard.lines, func(line string) bool { return strings.Contains(line, "shop-web-1111") }) {
+		t.Errorf("the promotion reported %v and never named the container it stood up; a rollback provisions nothing, so this is the only row saying the box put a container back before the flip", heard.lines)
 	}
 }
 

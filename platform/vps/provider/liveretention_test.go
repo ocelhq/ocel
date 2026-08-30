@@ -65,10 +65,10 @@ func sweepsUp(t *testing.T, p *vps.Provider, tag string) {
 	}
 }
 
-func sweepWindow(t *testing.T, vm machine) []string {
+func windowOf(t *testing.T, vm machine, app string) []string {
 	t.Helper()
 	held := strings.TrimSpace(vm.sshAs(t, deployLogin,
-		"cat "+host.ReleasesDir()+"/"+sweepApp+"/"+string(providerkit.ClassProduction)))
+		"cat "+host.ReleasesDir()+"/"+app+"/"+string(providerkit.ClassProduction)))
 	if held == "" {
 		return nil
 	}
@@ -94,14 +94,14 @@ func TestLiveTheWindowKeepsThreeAndMovesARepeatedRefToTheHead(t *testing.T) {
 	for _, tag := range []string{"r1", "r2", "r3", "r4"} {
 		sweepsUp(t, p, tag)
 	}
-	held := sweepWindow(t, vm)
+	held := windowOf(t, vm, sweepApp)
 	want := []string{sweepAt("r4"), sweepAt("r3"), sweepAt("r2")}
 	if strings.Join(held, ",") != strings.Join(want, ",") {
 		t.Fatalf("the box's window reads %v, want %v: three deep, most recently served first", held, want)
 	}
 
 	sweepsUp(t, p, "r2")
-	held = sweepWindow(t, vm)
+	held = windowOf(t, vm, sweepApp)
 	want = []string{sweepAt("r2"), sweepAt("r4"), sweepAt("r3")}
 	if strings.Join(held, ",") != strings.Join(want, ",") {
 		t.Errorf("the box's window reads %v, want %v: a ref already held moves to the head and evicts nothing", held, want)
