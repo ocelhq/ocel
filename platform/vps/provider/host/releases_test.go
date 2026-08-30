@@ -230,6 +230,48 @@ func TestAPromoteKilledMidWriteTakesItsStagingFileWithIt(t *testing.T) {
 	}
 }
 
+func TestOneAppsSlowWriteNeverHoldsAnotherAppUp(t *testing.T) {
+	root := releasesDir(t)
+	script := filepath.Join(t.TempDir(), "releases")
+	if err := os.WriteFile(script, releasesScript, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	slow := exec.Command("/bin/sh", script, "web", "promote", "production", "ocel/web:one")
+	slow.Env = append(os.Environ(), "OCEL_RELEASES_ROOT="+root, "PATH="+slowGrep(t)+":"+os.Getenv("PATH"))
+	slow.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := slow.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = syscall.Kill(-slow.Process.Pid, syscall.SIGKILL)
+		_ = slow.Wait()
+	})
+	for range 200 {
+		if len(staging(t, root)) > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(staging(t, root)) == 0 {
+		t.Fatal("web's promote never reached its write, so it is holding no lock and this test proves nothing")
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		other := exec.Command("/bin/sh", script, "api", "promote", "production", "ocel/api:one")
+		other.Env = append(os.Environ(), "OCEL_RELEASES_ROOT="+root)
+		done <- other.Run()
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("api's promote exited: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("api's promote was still waiting while web was mid-write: one lock over the whole release root serialises every app on the box, and it is held across the sweep's every docker rmi")
+	}
+}
+
 func TestAPromoteReclaimsTheStagingFilesOfHelpersNoLongerRunning(t *testing.T) {
 	root := releasesDir(t)
 	dead := filepath.Join(root, ".staging.4294967290.staged")
