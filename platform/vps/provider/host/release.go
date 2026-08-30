@@ -156,7 +156,11 @@ func (h *Host) writeProxyConfig(ctx context.Context, expected string, state Prox
 }
 
 func (h *Host) writeProxyDocument(ctx context.Context, expected, document string) (string, error) {
-	result, err := h.stream(ctx, stagedWrite(expected), strings.NewReader(document), h.reaching(ctx))
+	elevation, err := h.elevate(ctx)
+	if err != nil {
+		return "", err
+	}
+	result, err := h.stream(ctx, stagedWrite(expected), strings.NewReader(document), elevation)
 	if err != nil {
 		return "", err
 	}
