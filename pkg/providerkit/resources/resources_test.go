@@ -771,3 +771,37 @@ func TestAnAppNamingNoComputeIsRefusedBeforeItsContainerIsTakenDown(t *testing.T
 		t.Fatalf("the fan-out took down %v on a release it then refused, leaving the app down with nothing standing in its place", own.removed)
 	}
 }
+
+type misnaming struct{ *withContainers }
+
+func (m misnaming) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.AppContainer, error) {
+	m.stood = append(m.stood, plan)
+	return []providerkit.AppContainer{container(plan.Ref, plan.App.App+"-svc")}, nil
+}
+
+func TestAContainerStandingUnderAnyNameButItsAppsIsSweptOnTheNextRelease(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := appRef()
+	own := &withContainers{buckets: &buckets{}}
+	releaser := resources.Releaser(records, fake.NewArtifacts(), misnaming{own})
+	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackApp, App: containerApp("web")}
+
+	stood, err := releaser.Provision(ctx, plan, nil)
+	if err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(stood.Containers) != 1 || stood.Containers[0].Name != "web-svc" {
+		t.Fatalf("Provision() returned %v, want the container this provider names for itself", stood.Containers)
+	}
+	recordContainers(t, records, ref, stood.Containers[0].Name)
+
+	if _, err := releaser.Provision(ctx, plan, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(own.removed) != 1 || own.removed[0].Name != "web-svc" {
+		t.Fatalf("the fan-out took down %v; a release declares the app's own name and nothing else, so a container standing under any other name is swept the next time round", own.removed)
+	}
+}
