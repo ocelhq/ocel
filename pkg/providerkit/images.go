@@ -27,6 +27,14 @@ type ImagePusher interface {
 	Images(ctx context.Context, target RegistryTarget) (ImageStore, error)
 }
 
+type ImageLoader interface {
+	DirectImages(ctx context.Context) (ImageStore, error)
+}
+
+type ImageDestination interface {
+	ImageDestination() string
+}
+
 type ImagePlan struct {
 	Store  ImageStore
 	Pushes []ImagePush
@@ -67,13 +75,20 @@ func (p ImagePlan) Ship(ctx context.Context, report Reporter) error {
 			continue
 		}
 		if report != nil {
-			report.Say("Pushing " + push.App + "'s image to " + push.Target)
+			report.Say("Sending " + push.App + "'s image to " + p.destination(push))
 		}
 		if err := p.Store.Push(ctx, push, report); err != nil {
 			return fmt.Errorf("push %s's image to %s: %w", push.App, push.Target, err)
 		}
 	}
 	return nil
+}
+
+func (p ImagePlan) destination(push ImagePush) string {
+	if named, says := p.Store.(ImageDestination); says {
+		return named.ImageDestination()
+	}
+	return push.Target
 }
 
 func (p ImagePlan) held(ctx context.Context, push ImagePush) (bool, error) {
@@ -97,12 +112,26 @@ func imagePush(app, ref string, target RegistryTarget) (ImagePush, error) {
 	return ImagePush{
 		App:    app,
 		Source: ref,
-		Target: target.Coordinate(naming.RepositorySegment(repository), naming.DigestTag(digest)),
+		Target: coordinate(repository, naming.DigestTag(digest), target),
 		Digest: digest,
 	}, nil
 }
 
+func coordinate(repository, tag string, target RegistryTarget) string {
+	if target.Server == "" {
+		return repository + ":" + tag
+	}
+	return target.Coordinate(naming.RepositorySegment(repository), tag)
+}
+
 func imageStoreFor(ctx context.Context, provider Provider, target RegistryTarget) (ImageStore, error) {
+	if target.Server == "" {
+		loading, takes := provider.(ImageLoader)
+		if !takes {
+			return nil, nil
+		}
+		return loading.DirectImages(ctx)
+	}
 	if pushing, own := provider.(ImagePusher); own {
 		return pushing.Images(ctx, target)
 	}

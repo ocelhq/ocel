@@ -9,6 +9,7 @@ import (
 
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 )
@@ -253,4 +254,140 @@ func TestTheImageStoreIsOpenedFromTheTargetTheDeployCarries(t *testing.T) {
 	if pushed := store.Pushed(); len(pushed) != 1 {
 		t.Errorf("Ship() pushed %d times, want the second run to find the digest already there", len(pushed))
 	}
+}
+
+const loadedCoordinate = "ocel/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+type loadingProvider struct {
+	*fake.Provider
+	direct *fake.Images
+}
+
+func (p loadingProvider) DirectImages(context.Context) (providerkit.ImageStore, error) {
+	return p.direct, nil
+}
+
+func loadServed(t *testing.T) (contractv1connect.ProviderServiceClient, loadingProvider) {
+	t.Helper()
+	provider := loadingProvider{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), direct: fake.NewImages()}
+	return servedBy(t, provider), provider
+}
+
+func TestAProviderThatTakesImagesDirectlyIsHandedTheOneTheBuildProduced(t *testing.T) {
+	builtProject(t)
+	client, provider := loadServed(t)
+
+	result, _ := deploy(t, client, containerDeployRequest("/"))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	handed := provider.direct.Pushed()
+	if len(handed) != 1 {
+		t.Fatalf("the deploy handed over %v, want the one image its container app runs: a box with no registry account is the zero-config default", handed)
+	}
+	if handed[0].Source != containerTestImage {
+		t.Errorf("the transfer read %q from the local store, want %q", handed[0].Source, containerTestImage)
+	}
+	if handed[0].Target != loadedCoordinate {
+		t.Errorf("the transfer landed %q, want the cli-owned coordinate %q verbatim, so release, rollback and retention never learn which path carried it",
+			handed[0].Target, loadedCoordinate)
+	}
+	if pushed := provider.Registry().Pushed(); len(pushed) != 0 {
+		t.Errorf("a deploy naming no registry pushed %v to one", pushed)
+	}
+}
+
+func TestADigestTheBoxAlreadyHoldsIsNotSentAgain(t *testing.T) {
+	builtProject(t)
+	client, provider := loadServed(t)
+	provider.direct.Holds(loadedCoordinate)
+
+	result, _ := deploy(t, client, containerDeployRequest("/"))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if len(provider.direct.Asked()) == 0 {
+		t.Error("the deploy streamed without asking whether the image was already there")
+	}
+	if handed := provider.direct.Pushed(); len(handed) != 0 {
+		t.Errorf("the redeploy sent %v again over a box that already holds the digest", handed)
+	}
+}
+
+func TestANamedRegistryTakesTheImageFromAProviderThatWouldOtherwiseLoadItDirectly(t *testing.T) {
+	builtProject(t)
+	client, provider := loadServed(t)
+
+	result, _ := deploy(t, client, registryDeployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	pushed := provider.Registry().Pushed()
+	if len(pushed) != 1 || pushed[0].Target != pushedCoordinate {
+		t.Fatalf("the deploy pushed %v, want the one registry coordinate %q", pushed, pushedCoordinate)
+	}
+	if handed := provider.direct.Pushed(); len(handed) != 0 {
+		t.Errorf("the same deploy also carried %v straight onto the box: the registry setting is the only switch, and both paths ran", handed)
+	}
+	if asked := provider.direct.Asked(); len(asked) != 0 {
+		t.Errorf("the direct store was asked about %v where a registry was named", asked)
+	}
+}
+
+func TestADirectTransferStandsOnThePlanLikeAPush(t *testing.T) {
+	builtProject(t)
+	client, provider := loadServed(t)
+	provider.direct.Holds(loadedCoordinate)
+
+	req := containerDeployRequest("/")
+	req.Dry = true
+	_, events := deploy(t, client, req)
+
+	rows := imageRows(lastPlan(events))
+	if len(rows) != 1 || rows[0].GetAction() != planv1.Change_ACTION_KEEP {
+		t.Errorf("the plan shows %v for an image the box already holds, want one %q row", rows, providerkit.ActionKeep)
+	}
+	if handed := provider.direct.Pushed(); len(handed) != 0 {
+		t.Errorf("a dry deploy carried %v onto the box", handed)
+	}
+}
+
+type addressedImages struct {
+	*fake.Images
+	at string
+}
+
+func (a addressedImages) ImageDestination() string { return a.at }
+
+type addressingProvider struct {
+	*fake.Provider
+	direct addressedImages
+}
+
+func (p addressingProvider) DirectImages(context.Context) (providerkit.ImageStore, error) {
+	return p.direct, nil
+}
+
+func TestTheDeploySaysWhereTheImageWentRatherThanWhatItIsCalledThere(t *testing.T) {
+	builtProject(t)
+	provider := addressingProvider{
+		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
+		direct:   addressedImages{Images: fake.NewImages(), at: "deploy@box.invalid"},
+	}
+	client := servedBy(t, provider)
+
+	result, events := deploy(t, client, containerDeployRequest("/"))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	want := "Sending web's image to deploy@box.invalid"
+	for _, event := range events {
+		if strings.Contains(event.String(), want) {
+			return
+		}
+	}
+	t.Errorf("no event says %q: a transfer onto a machine reported as a push to %q names the coordinate where the reader expects the destination", want, loadedCoordinate)
 }
