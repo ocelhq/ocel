@@ -146,6 +146,7 @@ func (s settler) release(ctx context.Context, written []edge.Record, say func(st
 
 func (s settler) await(ctx context.Context, hostname string, say func(string)) (Probe, error) {
 	attempts := max(s.attempts, 1)
+	began := s.now()
 	var serving edge.Kind
 	for attempt := range attempts {
 		var err error
@@ -163,11 +164,11 @@ func (s settler) await(ctx context.Context, hostname string, say func(string)) (
 			return Probe{At: s.now().Unix(), Edge: serving}, err
 		}
 	}
-	return Probe{At: s.now().Unix(), Edge: serving}, s.unresolved(hostname, serving)
+	return Probe{At: s.now().Unix(), Edge: serving}, s.unresolved(hostname, serving, began)
 }
 
-func (s settler) unresolved(hostname string, serving edge.Kind) error {
-	waited := time.Duration(max(s.attempts, 1)-1) * s.wait
+func (s settler) unresolved(hostname string, serving edge.Kind, began time.Time) error {
+	waited := s.now().Sub(began).Round(time.Second)
 	if serving == "" {
 		return Refuse(CodeNotReady,
 			"%s does not answer as the %s edge yet — this run gave up after about %s, and re-running it picks up where this one stopped",
