@@ -644,7 +644,10 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 					Framework:       entry.Manifest.GetFramework(),
 					Entry:           entryFunction(r.manifest, entry.App),
 					Deployment:      entry.Build.DeploymentID(),
+					Compute:         entry.Compute(),
 					Functions:       r.functionSpecs(entry),
+					Image:           entry.Image,
+					HealthCheckPath: entry.HealthCheckPath,
 					Values:          values,
 					Grants:          grants,
 					Routing:         facts.Routing,
@@ -680,12 +683,13 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 				return err
 			}
 			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, Stack{
-				Kind:      StackApp,
-				App:       entry.App,
-				Release:   entry.Build.Release().String(),
-				Identity:  entry.Build.String(),
-				Functions: result.Functions,
-				Writer:    WriterFor(""),
+				Kind:       StackApp,
+				App:        entry.App,
+				Release:    entry.Build.Release().String(),
+				Identity:   entry.Build.String(),
+				Functions:  result.Functions,
+				Containers: result.Containers,
+				Writer:     WriterFor(""),
 			})
 		})
 	})

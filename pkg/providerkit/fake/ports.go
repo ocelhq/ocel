@@ -311,6 +311,14 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 				URL:      "https://" + physical + ".fn.fake.invalid",
 			})
 		}
+		if plan.App.Compute == providerkit.ComputeContainer {
+			physical := plan.Ref.Name.String() + "-" + plan.App.App
+			result.Containers = append(result.Containers, providerkit.AppContainer{
+				Name:     plan.App.App,
+				Physical: physical,
+				URL:      "https://" + physical + ".ctr.fake.invalid",
+			})
+		}
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
