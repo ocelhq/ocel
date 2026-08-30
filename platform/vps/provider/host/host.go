@@ -245,6 +245,9 @@ func (h *Host) remove(ctx context.Context, taken removal) error {
 	case KindUser:
 		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, "userdel -f "+quoted(taken.path), nil)
 		return err
+	case KindNetwork, KindVolume, KindContainer:
+		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
+		return err
 	case KindDir, KindFile, KindSealKey:
 		if !strings.HasPrefix(taken.path, "/") {
 			return providerkit.Refuse(providerkit.CodeInvalid,

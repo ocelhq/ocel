@@ -50,7 +50,7 @@ func TestRemoveTakesWhatStandsAndSaysWhatItTookAndWhatItLeft(t *testing.T) {
 		t.Errorf("Remove() never spells the line that drops this host from known_hosts:\n%s", strings.Join(report.lines, "\n"))
 	}
 	for _, command := range stood.taking() {
-		if strings.Contains(command, dockerEngine) || strings.Contains(command, dockerUnit) {
+		if strings.Contains(command, quoted(dockerEngine)) || strings.Contains(command, quoted(dockerUnit)) {
 			t.Errorf("Remove() ran %q, and removing ocel is not removing the workloads this host serves", command)
 		}
 	}
@@ -207,7 +207,7 @@ func TestTheLastDestroyLeavesNothingOcelEverWroteOnTheHost(t *testing.T) {
 
 func gone(taken []string, name string) bool {
 	for _, command := range taken {
-		if strings.HasSuffix(command, quoted(name)) {
+		if strings.HasSuffix(strings.TrimSuffix(command, " || true"), quoted(name)) {
 			return true
 		}
 		if under, sweeping := strings.CutPrefix(command, "rm -rf "); sweeping &&

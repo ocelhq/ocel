@@ -60,7 +60,8 @@ func (b *bench) taking() []string {
 	var taken []string
 	for _, command := range b.commands() {
 		if strings.HasPrefix(command, "rm ") || strings.HasPrefix(command, "rm -rf ") ||
-			strings.HasPrefix(command, "rmdir ") || strings.HasPrefix(command, "userdel ") {
+			strings.HasPrefix(command, "rmdir ") || strings.HasPrefix(command, "userdel ") ||
+			strings.HasPrefix(command, "docker ") {
 			taken = append(taken, command)
 		}
 	}
