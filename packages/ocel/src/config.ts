@@ -52,15 +52,42 @@ export interface ProjectDomainConfig extends AppDomainConfig {
  */
 export type Compute = "serverless" | "container";
 
-export interface AppConfig {
+/** The framework an app is served with. */
+export type Framework = "next" | "express" | "fastify" | "hono";
+
+/**
+ * How a container app's image is built. Left off, the app is built from its
+ * own directory: with a `Dockerfile` sitting in it if there is one, and
+ * otherwise with no configuration at all.
+ */
+export interface BuildConfig {
+  /**
+   * The Dockerfile to build from, resolved against the app's directory and
+   * free to point outside it. Naming one builds from it whether or not the
+   * app has a `Dockerfile` of its own. The build context is the app's
+   * directory either way.
+   */
+  dockerfile?: string;
+}
+
+interface AppFields {
   name: string;
   path: string;
-  framework: "next" | "express" | "fastify" | "hono";
-  compute?: Compute;
   entrypoint?: string;
   domains?: AppDomainConfig;
   folder?: string;
 }
+
+/**
+ * An app in a project. A serverless app is packed per route and declares the
+ * framework that is packed; a container app is one image serving everything,
+ * built from the app's directory, so it declares a framework only if it wants
+ * to. An app that leaves `compute` to its provider may land on either, so it
+ * declares one.
+ */
+export type AppConfig =
+  | (AppFields & { compute?: "serverless"; framework: Framework })
+  | (AppFields & { compute: "container"; framework?: Framework; build?: BuildConfig });
 
 export interface OcelConfig {
   slug: string;

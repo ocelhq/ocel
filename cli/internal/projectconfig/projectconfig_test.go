@@ -318,6 +318,40 @@ export default {
 			},
 		},
 		{
+			name: "reads the dockerfile a container app's build names",
+			config: `
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: "services/api", compute: "container", build: { dockerfile: "../shared/Dockerfile" } }],
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.Apps[0].Build == nil {
+					t.Fatalf("Apps[0].Build = nil, want the build the config writes")
+				}
+				if got, want := cfg.Apps[0].Build.Dockerfile, "../shared/Dockerfile"; got != want {
+					t.Fatalf("Apps[0].Build.Dockerfile = %q, want %q, resolved against the app's own directory", got, want)
+				}
+			},
+		},
+		{
+			name: "leaves an app that writes no build without one",
+			config: `
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: "services/api", compute: "container" }],
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.Apps[0].Build != nil {
+					t.Fatalf("Apps[0].Build = %+v, want nil where the app configures no build", cfg.Apps[0].Build)
+				}
+				if cfg.Apps[0].Framework != "" {
+					t.Fatalf("Apps[0].Framework = %q, want a container app to load with none", cfg.Apps[0].Framework)
+				}
+			},
+		},
+		{
 			name: "writes build artifacts under the ocel dir",
 			config: `
 export default {
