@@ -9,7 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func releasesDir(t *testing.T) string {
@@ -172,6 +174,77 @@ func TestConcurrentPromotesOfOneClassLoseNoUpdate(t *testing.T) {
 		if !slices.Equal(held, refs) {
 			t.Fatalf("round %d left the window holding %v, want all of %v: promote reads the window, prepends and renames, and two of those interleaving without the lock drops whichever landed first", round, held, refs)
 		}
+	}
+}
+
+func slowGrep(t *testing.T) string {
+	t.Helper()
+	real, err := exec.LookPath("grep")
+	if err != nil {
+		t.Skip("no grep on this machine")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "grep"),
+		[]byte("#!/bin/sh\nsleep 5\nexec "+real+" \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func staging(t *testing.T, root string) []string {
+	t.Helper()
+	found, err := filepath.Glob(filepath.Join(root, ".staging.*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return found
+}
+
+func TestAPromoteKilledMidWriteTakesItsStagingFileWithIt(t *testing.T) {
+	root := releasesDir(t)
+	script := filepath.Join(t.TempDir(), "releases")
+	if err := os.WriteFile(script, releasesScript, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sh", script, "web", "promote", "production", "ocel/web:one")
+	cmd.Env = append(os.Environ(), "OCEL_RELEASES_ROOT="+root, "PATH="+slowGrep(t)+":"+os.Getenv("PATH"))
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	for range 200 {
+		if len(staging(t, root)) > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(staging(t, root)) == 0 {
+		t.Fatal("the promote reached its write without staging anything, and this test has nothing to interrupt")
+	}
+	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	_ = cmd.Wait()
+	if left := staging(t, root); len(left) != 0 {
+		t.Errorf("%v stands after the helper was killed, and a cli whose ssh channel dies delivers exactly this: a trap on EXIT alone never runs, so every interrupted deploy leaves a file no later run removes", left)
+	}
+}
+
+func TestAPromoteReclaimsTheStagingFilesOfHelpersNoLongerRunning(t *testing.T) {
+	root := releasesDir(t)
+	dead := filepath.Join(root, ".staging.4294967290.staged")
+	live := filepath.Join(root, ".staging."+strconv.Itoa(os.Getpid())+".staged")
+	for _, name := range []string{dead, live} {
+		if err := os.WriteFile(name, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	promote(t, root, "web", "production", "ocel/web:one")
+	if _, err := os.Stat(dead); !os.IsNotExist(err) {
+		t.Errorf("%s stands after a later run held the lock (%v), and nothing else on this box ever sweeps it", dead, err)
+	}
+	if _, err := os.Stat(live); err != nil {
+		t.Errorf("the sweep took %s, whose helper is still running: a staging file is only stale once its writer is gone", live)
 	}
 }
 
