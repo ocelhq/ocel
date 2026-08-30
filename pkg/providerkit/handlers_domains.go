@@ -326,7 +326,7 @@ func (d *hostnames) pendingOn(host string, cert Certificate, health CertificateH
 	case !bound:
 		return fmt.Sprintf("%s is not bound to the %s edge yet; run `ocel domain add`", host, d.settle.kind)
 	case !probe.OK:
-		return fmt.Sprintf("%s does not answer as the %s edge yet", host, d.settle.kind)
+		return fmt.Sprintf("%s does not answer as the %s edge yet%s", host, d.settle.kind, d.settle.unreached(host))
 	}
 	return ""
 }

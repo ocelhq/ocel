@@ -259,3 +259,25 @@ func TestAProviderThatDiagnosesItsOwnProbeIsAskedThroughTheKitsResolver(t *testi
 		t.Errorf("await() refused with %q, and the cause the provider recorded never reaches the operator", refusal.Message)
 	}
 }
+
+func TestAStatusLineForAHostnameThatWillNotAnswerNamesWhatStoppedTheProbe(t *testing.T) {
+	t.Parallel()
+
+	cause := "x509: certificate signed by unknown authority"
+	settle, _ := waiting(stopped{cause: cause}, 1)
+	settle.kind = "box"
+	rows := &hostnames{
+		stackSession: &stackSession{settle: settle},
+		configured:   []string{"shop.example.com"},
+	}
+
+	probe := rows.probe(context.Background(), "shop.example.com")
+	if probe.OK {
+		t.Fatal("a hostname nothing answered for probed OK, and this test states nothing about the line it is reported under")
+	}
+	pending := rows.pendingOn("shop.example.com", Certificate{}, CertificateHealth{}, true, probe)
+	if !strings.Contains(pending, cause) {
+		t.Errorf("`domain status` reports %q, and never what stopped the probe: the operator is told the hostname does not answer yet and left to guess between a firewall, a record that has not propagated and a chain nothing trusts",
+			pending)
+	}
+}
