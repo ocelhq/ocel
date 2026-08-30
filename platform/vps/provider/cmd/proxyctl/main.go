@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -14,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 )
 
 const (
@@ -207,33 +208,11 @@ func flip(socket, path string, out, errs io.Writer) int {
 		fmt.Fprintf(errs, "ocel-proxyctl: %s is no config this host can read: %v\n", path, err)
 		return exitRefused
 	}
-	if err := keepsAdmin(document, socket); err != nil {
+	if err := caddyadmin.Keeps(document, socket); err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %s %v\n", path, err)
 		return exitRefused
 	}
 	return speak(socket, http.MethodPost, loadPath, document, out, errs)
-}
-
-func keepsAdmin(document []byte, socket string) error {
-	var read struct {
-		Admin *struct {
-			Disabled bool   `json:"disabled"`
-			Listen   string `json:"listen"`
-		} `json:"admin"`
-	}
-	if err := json.Unmarshal(document, &read); err != nil {
-		return fmt.Errorf("is not json a proxy could load: %w", err)
-	}
-	wanted := "unix/" + socket
-	moving := errors.New("declares no admin endpoint at " + wanted +
-		", and caddy moves the admin endpoint before it validates the rest: a config without one takes the socket this helper is reached through with it and opens a tcp listener in its place")
-	if read.Admin == nil || read.Admin.Disabled {
-		return moving
-	}
-	if listen, _, _ := strings.Cut(read.Admin.Listen, "|"); listen != wanted {
-		return moving
-	}
-	return nil
 }
 
 func ask(socket, path string, out, errs io.Writer) int {
