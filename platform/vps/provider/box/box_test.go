@@ -386,8 +386,13 @@ func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testin
 	for _, change := range groups[0].Changes {
 		kinds = append(kinds, change.Kind)
 	}
-	if !slices.Contains(kinds, box.RouteKind) || !slices.Contains(kinds, box.CertificateKind) {
-		t.Errorf("the removal rows are %v, want the routes claimed and the certificates held", kinds)
+	if !slices.Contains(kinds, box.RouteKind) {
+		t.Errorf("the removal rows are %v, want the routes this project claimed", kinds)
+	}
+	for _, change := range groups[0].Changes {
+		if strings.Contains(change.Reason, "certificate") {
+			t.Errorf("the removal plan offers to delete %q: this box's proxy listens on :80 alone, which disables automatic https, so nothing here ever obtained a certificate to delete", change.Reason)
+		}
 	}
 }
 
