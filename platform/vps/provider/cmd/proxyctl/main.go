@@ -27,6 +27,11 @@ const (
 )
 
 const (
+	gateInterval = 250 * time.Millisecond
+	gateAttempt  = 2 * time.Second
+)
+
+const (
 	loadPath      = "/load"
 	upstreamsPath = "/reverse_proxy/upstreams"
 	configPath    = "/config/"
@@ -80,22 +85,40 @@ func gate(target, path, window string, out, errs io.Writer) int {
 		fmt.Fprintf(errs, "ocel-proxyctl: %q is no number of seconds to wait\n", window)
 		return exitRefused
 	}
+	return gating(target, path, time.Duration(seconds)*time.Second, out, errs)
+}
+
+func gating(target, path string, window time.Duration, out, errs io.Writer) int {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	client := &http.Client{Timeout: time.Duration(seconds) * time.Second}
-	answer, err := client.Get("http://" + target + path)
-	if err != nil {
-		fmt.Fprintf(errs, "%s never answered %s within %ds\n", target, path, seconds)
+	attempt := min(window, gateAttempt)
+	client := &http.Client{Timeout: attempt}
+	deadline := time.Now().Add(window)
+	status := 0
+	for {
+		answer, err := client.Get("http://" + target + path)
+		if err == nil {
+			status = answer.StatusCode
+			_, _ = io.Copy(io.Discard, answer.Body)
+			_ = answer.Body.Close()
+			if status/100 == 2 {
+				fmt.Fprintln(out, status)
+				return 0
+			}
+		}
+		if time.Now().Add(gateInterval).After(deadline) {
+			break
+		}
+		time.Sleep(gateInterval)
+	}
+	if status == 0 {
+		fmt.Fprintf(errs, "%s never answered %s within %s\n", target, path, window)
 		return exitSilent
 	}
-	defer answer.Body.Close()
-	_, _ = io.Copy(io.Discard, answer.Body)
-	fmt.Fprintln(out, answer.StatusCode)
-	if answer.StatusCode/100 != 2 {
-		return exitUnhealthy
-	}
-	return 0
+	fmt.Fprintln(out, status)
+	fmt.Fprintf(errs, "%s answered %s with status %d and never with a 2xx within %s\n", target, path, status, window)
+	return exitUnhealthy
 }
 
 func flip(socket, path string, out, errs io.Writer) int {
