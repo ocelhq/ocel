@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"encoding/pem"
 	"flag"
 	"fmt"
 	"io"
@@ -40,6 +42,11 @@ const (
 	configPath    = "/config/"
 )
 
+const (
+	servingAt      = "127.0.0.1:443"
+	servingTimeout = 10 * time.Second
+)
+
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 func run(argv []string, out, errs io.Writer) int {
@@ -67,6 +74,11 @@ func run(argv []string, out, errs io.Writer) int {
 			return usage(errs)
 		}
 		return ask(socket, configPath+strings.TrimPrefix(rest[0], "/"), out, errs)
+	case "leaf":
+		if len(rest) != 1 {
+			return usage(errs)
+		}
+		return serving(rest[0], out, errs)
 	case "deploy":
 		return deploy(socket, rest, out, errs)
 	default:
@@ -75,10 +87,38 @@ func run(argv []string, out, errs io.Writer) int {
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: ocel-proxyctl flip <config> | upstreams | config <path> |")
+	fmt.Fprintln(errs, "usage: ocel-proxyctl flip <config> | upstreams | config <path> | leaf <hostname> |")
 	fmt.Fprintln(errs, "       deploy --target <host:port> --health-check-path <path> --deploy-timeout <seconds>")
 	fmt.Fprintln(errs, "              --config <path> --drain-timeout <seconds> [--retire <host:port>]")
 	return exitRefused
+}
+
+func serving(hostname string, out, errs io.Writer) int {
+	held, err := net.DialTimeout("tcp", servingAt, servingTimeout)
+	if err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: nothing answered %s from inside the proxy: %v\n", servingAt, err)
+		return exitRefused
+	}
+	spoken := tls.Client(held, &tls.Config{ServerName: hostname, InsecureSkipVerify: true})
+	defer spoken.Close()
+	if err := spoken.SetDeadline(time.Now().Add(servingTimeout)); err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+		return exitRefused
+	}
+	if err := spoken.Handshake(); err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: the proxy served no certificate for %s: %v\n", hostname, err)
+		return exitUnhealthy
+	}
+	chain := spoken.ConnectionState().PeerCertificates
+	if len(chain) == 0 {
+		fmt.Fprintf(errs, "ocel-proxyctl: the proxy completed a handshake for %s and presented no certificate\n", hostname)
+		return exitUnhealthy
+	}
+	if err := pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: chain[0].Raw}); err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+		return exitRefused
+	}
+	return 0
 }
 
 func deploy(socket string, argv []string, out, errs io.Writer) int {

@@ -55,14 +55,24 @@ func live(t *testing.T) machine {
 	return vm
 }
 
-func (vm machine) provider(t *testing.T) *vps.Provider {
+type shaping func(*vps.Options)
+
+func withPins(pinned map[string]string) shaping {
+	return func(o *vps.Options) { o.Certificates = pinned }
+}
+
+func (vm machine) provider(t *testing.T, shaped ...shaping) *vps.Provider {
 	t.Helper()
-	return vps.NewProvider(vps.Options{SSH: vps.Target{
+	options := vps.Options{SSH: vps.Target{
 		Host:         vm.addr,
 		User:         vm.user,
 		IdentityFile: vm.key,
 		Config:       vm.config,
-	}})
+	}}
+	for _, shape := range shaped {
+		shape(&options)
+	}
+	return vps.NewProvider(options)
 }
 
 func closing(t *testing.T, p *vps.Provider) {
