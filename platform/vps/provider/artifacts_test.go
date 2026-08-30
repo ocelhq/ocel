@@ -21,16 +21,19 @@ func storeless(t *testing.T) providerkit.ArtifactStore {
 func TestTheArtifactPortIsTheKitsStoreForAProviderThatKeepsNothing(t *testing.T) {
 	t.Parallel()
 
-	if _, kept := storeless(t).(providerkit.NoArtifacts); !kept {
-		t.Fatalf("Artifacts() = %T, want providerkit.NoArtifacts: a container app puts nothing in the store", storeless(t))
+	store := storeless(t)
+	if _, kept := store.(providerkit.NoArtifacts); !kept {
+		t.Fatalf("Artifacts() = %T, want providerkit.NoArtifacts: a container app puts nothing in the store", store)
 	}
 }
 
 func TestTheArtifactPortRunsTheKitsPortTier(t *testing.T) {
+	t.Parallel()
+
 	conformance.RunArtifactStore(t, storeless(t))
 }
 
-func TestAnUploadDrawsAPlanRowAndThenFailsTheApplyLoudly(t *testing.T) {
+func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -57,8 +60,12 @@ func TestAnUploadDrawsAPlanRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SynthesizedPlan() of a stack shipping one artifact = %v, want the row the human consents to", err)
 	}
-	if rows := uploadRows(drawn); rows != 1 {
-		t.Fatalf("the plan drew %d artifact rows, want 1: the row must precede the write even when the write is going to refuse", rows)
+	rows := uploadRows(drawn)
+	if len(rows) != 1 {
+		t.Fatalf("the plan drew %d artifact rows, want 1: the row must precede the write even when the write is going to refuse", len(rows))
+	}
+	if rows[0].Action != providerkit.ActionCreate {
+		t.Fatalf("the artifact row's action is %q, want %q: a store holding nothing has nothing to keep, and a keep row reads to the human as nothing to do", rows[0].Action, providerkit.ActionCreate)
 	}
 
 	var refusal providerkit.Refusal
@@ -71,12 +78,12 @@ func TestAnUploadDrawsAPlanRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	}
 }
 
-func uploadRows(plan providerkit.Plan) int {
-	rows := 0
+func uploadRows(plan providerkit.Plan) []providerkit.Change {
+	var rows []providerkit.Change
 	for _, group := range plan.Groups {
 		for _, change := range group.Changes {
 			if change.Kind == providerkit.UploadKind {
-				rows++
+				rows = append(rows, change)
 			}
 		}
 	}
