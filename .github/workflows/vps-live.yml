@@ -9,6 +9,8 @@ on:
       - "cli/internal/provider/**"
       - "cli/internal/prompt/**"
       - "cli/internal/cli/bootstrap/**"
+      - "cli/internal/cli/preflight/**"
+      - "cli/internal/imagebuild/**"
       - "pnpm-lock.yaml"
       - "scripts/incus.sh"
       - "scripts/assert-ran.sh"
@@ -95,6 +97,14 @@ jobs:
       - name: Assert the live suite ran
         run: scripts/assert-ran.sh live.json TestLive
 
+      - name: Run the build pipeline against a machine's own daemon
+        run: |
+          set -euo pipefail
+          sg incus-admin -c "scripts/incus.sh run ocel-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} -- go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." | tee build.json
+
+      - name: Assert the build live suite ran
+        run: scripts/assert-ran.sh build.json TestLive
+
       - name: Run the CLI e2e on a machine of its own
         run: |
           set -euo pipefail
@@ -106,6 +116,6 @@ jobs:
       - name: No VM left behind
         if: always()
         run: |
-          for name in "ocel-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; do
+          for name in "ocel-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "ocel-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; do
             sg incus-admin -c "scripts/incus.sh destroy $name" || echo "could not destroy $name"
           done
