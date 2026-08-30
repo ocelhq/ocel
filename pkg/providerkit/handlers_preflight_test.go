@@ -230,6 +230,30 @@ func TestPreflightDoesNotReportThisProjectsOwnHostnameAsSomeoneElsesClaim(t *tes
 	}
 }
 
+func TestPreflightDoesNotRefuseAHostnameThisProjectAlreadyClaimsButNeverRecorded(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
+		Edge: edge.StackState{Slug: "shop", Class: providerkit.ClassProduction},
+	})
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+		Domains:      []string{"acme.com"},
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	claims := resp.GetDomainClaims()
+	if len(claims) != 1 || claims[0].GetStatus() != contractv1.DomainClaim_STATUS_UNCLAIMED {
+		t.Fatalf("Preflight() reported %+v for a hostname this project's own surface serves on the edge while its record says nothing is bound, want it unclaimed: a bind that wrote the route and stopped before the record would otherwise lock the project out of its own hostname, and the refusal would tell it to tear itself down", claims)
+	}
+}
+
 func TestPreflightTreatsTheSharedPreviewEntryAsNobodysClaim(t *testing.T) {
 	t.Parallel()
 

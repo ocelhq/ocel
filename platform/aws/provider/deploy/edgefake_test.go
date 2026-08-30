@@ -139,6 +139,10 @@ func (f *recordingEdge) DomainOwner(_ context.Context, hostname string) (string,
 	return f.bound[hostname], nil
 }
 
+func (f *recordingEdge) ProjectOwner(slug string, class edge.Class) string {
+	return slug + "-" + string(class)
+}
+
 func (f *recordingEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
 	return "", nil
 }

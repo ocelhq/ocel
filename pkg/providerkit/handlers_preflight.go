@@ -88,6 +88,10 @@ func (h *handlers) domainClaims(ctx context.Context, provider Provider, class Cl
 	if err != nil {
 		return nil, err
 	}
+	var mine string
+	if slug := req.GetSlug(); slug != "" {
+		mine = front.ProjectOwner(slug, class)
+	}
 	claims := make([]*contractv1.DomainClaim, 0, len(req.GetDomains()))
 	for _, hostname := range req.GetDomains() {
 		claim := &contractv1.DomainClaim{Hostname: hostname, Status: contractv1.DomainClaim_STATUS_UNCLAIMED}
@@ -96,7 +100,7 @@ func (h *handlers) domainClaims(ctx context.Context, provider Provider, class Cl
 			if err != nil {
 				return nil, err
 			}
-			if owner != "" && owner != edge.PreviewEntryOwner {
+			if owner != "" && owner != edge.PreviewEntryOwner && owner != mine {
 				claim.Status, claim.Owner = contractv1.DomainClaim_STATUS_CLAIMED, owner
 			}
 		}

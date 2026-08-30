@@ -300,6 +300,10 @@ func (p *provider) Open(state edge.StackState) (edge.EdgeStack, error) {
 	return s, nil
 }
 
+func (p *provider) ProjectOwner(slug string, class edge.Class) string {
+	return apiName(slug, class, "")
+}
+
 func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, error) {
 	c, err := p.clientsFor(ctx)
 	if err != nil {

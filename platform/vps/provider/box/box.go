@@ -99,6 +99,10 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 	return claims[at].Owner, nil
 }
 
+func (e *Edge) ProjectOwner(slug string, class edge.Class) string {
+	return Surface(slug, class)
+}
+
 func (e *Edge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
 	return "", e.unbuilt("serve a preview wildcard")
 }
