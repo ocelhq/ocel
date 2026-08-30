@@ -98,6 +98,7 @@ type rawConfig struct {
 		Name       string     `json:"name"`
 		Path       string     `json:"path"`
 		Framework  string     `json:"framework"`
+		Compute    string     `json:"compute"`
 		Entrypoint string     `json:"entrypoint"`
 		Folder     string     `json:"folder"`
 		Domains    rawDomains `json:"domains"`
@@ -205,8 +206,6 @@ func PreviewBaseDomain(previewDomain string) string {
 	}
 	return previewDomain[len("*."):]
 }
-
-const defaultCompute = "serverless"
 
 func Resolve(ctx context.Context, startDir, explicitPath string) (*Config, error) {
 	return resolve(ctx, startDir, explicitPath, false)
@@ -498,7 +497,7 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			Framework:  a.Framework,
 			Entrypoint: a.Entrypoint,
 			Domains:    domains,
-			Compute:    defaultCompute,
+			Compute:    a.Compute,
 			Folder:     a.Folder,
 		})
 	}

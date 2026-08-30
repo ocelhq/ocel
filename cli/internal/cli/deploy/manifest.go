@@ -26,7 +26,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session) (*contractv1.Manifest, error) {
+func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string) (*contractv1.Manifest, error) {
 	buildOut := ui.BuildWriter()
 
 	captured := &boundedCapture{}
@@ -100,7 +100,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages), toDeclarations(cfg.Dir, resources), cfg.Links, functions, variablesByApp(variables, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute), compute, toDeclarations(cfg.Dir, resources), cfg.Links, functions, variablesByApp(variables, functions))
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +242,7 @@ func edgeApps(cfg *projectconfig.Config) []string {
 	return []string{envwire.RootApp}
 }
 
-func toApps(apps []projectconfig.App, usages []attribution.Usage) []manifestbuilder.App {
+func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string) []manifestbuilder.App {
 	byApp := make(map[string][]manifestbuilder.Usage, len(apps))
 	for _, u := range usages {
 		byApp[u.App] = append(byApp[u.App], manifestbuilder.Usage{Type: u.Type, Name: u.Name, Files: u.Files})
@@ -255,6 +255,7 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage) []manifestbuil
 		out = append(out, manifestbuilder.App{
 			Name:      a.Name,
 			Framework: a.Framework,
+			Compute:   a.Compute,
 			Domains:   a.Domains,
 			Folder:    a.Folder,
 			Usages:    byApp[a.Name],
@@ -262,7 +263,7 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage) []manifestbuil
 	}
 	for _, name := range slices.Sorted(maps.Keys(byApp)) {
 		if !named[name] {
-			out = append(out, manifestbuilder.App{Name: name, Usages: byApp[name]})
+			out = append(out, manifestbuilder.App{Name: name, Compute: compute, Usages: byApp[name]})
 		}
 	}
 	return out

@@ -3720,15 +3720,16 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\vTierDomains\x12;\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04tier\x12\x1c\n" +
-	"\thostnames\x18\x02 \x03(\tR\thostnames\"\xb7\x02\n" +
+	"\thostnames\x18\x02 \x03(\tR\thostnames\"\xd5\x02\n" +
 	"\vManifestApp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tframework\x18\x02 \x01(\tR\tframework\x12;\n" +
 	"\adomains\x18\x03 \x03(\v2!.provider.contract.v1.TierDomainsR\adomains\x12D\n" +
 	"\tvariables\x18\x04 \x03(\v2&.provider.contract.v1.ManifestVariableR\tvariables\x124\n" +
 	"\x06folder\x18\x05 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12#\n" +
-	"\rdeployment_id\x18\x06 \x01(\tR\fdeploymentId\x12\x18\n" +
-	"\acompute\x18\a \x01(\tR\acompute\"\xeb\x01\n" +
+	"\rdeployment_id\x18\x06 \x01(\tR\fdeploymentId\x126\n" +
+	"\acompute\x18\a \x01(\tB\x1c\xbaH\x19r\x17R\n" +
+	"serverlessR\tcontainerR\acompute\"\xeb\x01\n" +
 	"\x10ManifestVariable\x12+\n" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12?\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12\x19\n" +

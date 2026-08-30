@@ -23,36 +23,48 @@ func preflightPreview(ctx context.Context, ui *runui.Session, runner *provider.R
 	return preflight.Tier(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
 }
 
-func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) ([]string, error) {
+func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) ([]string, string, error) {
 	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Hostnames(cfg, "preview"), preflight.Frameworks(cfg), "ocel bootstrap preview")
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	compute, err := resolveComputes(cfg, resp)
+	if err != nil {
+		return nil, "", err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, ui); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return resp.GetKnownSlugs(), nil
+	return resp.GetKnownSlugs(), compute, nil
 }
 
-func preflightDeploy(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) ([]string, error) {
+func preflightDeploy(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) ([]string, string, error) {
 	domains := preflight.Hostnames(cfg, "production")
 	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(ui, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	compute, err := resolveComputes(cfg, resp)
+	if err != nil {
+		return nil, "", err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return resp.GetKnownSlugs(), nil
+	return resp.GetKnownSlugs(), compute, nil
+}
+
+func resolveComputes(cfg *projectconfig.Config, resp *contractv1.PreflightResponse) (string, error) {
+	return preflight.ResolveComputes(cfg, resp.GetComputes(), resp.GetIdentity().GetProvider())
 }
 
 func settleBootstrap(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {

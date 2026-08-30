@@ -26,6 +26,7 @@ type Declaration struct {
 type App struct {
 	Name      string
 	Framework string
+	Compute   string
 	Domains   map[string][]string
 	Folder    string
 	Usages    []Usage
@@ -156,7 +157,7 @@ func (e *AmbiguousLinkError) Error() string {
 	)
 }
 
-func Build(slug string, domains map[string][]string, apps []App, declarations []Declaration, links []string, functions []Function, variables map[string][]Variable) (*contractv1.Manifest, error) {
+func Build(slug string, domains map[string][]string, apps []App, compute string, declarations []Declaration, links []string, functions []Function, variables map[string][]Variable) (*contractv1.Manifest, error) {
 	seen := make(map[identity]Declaration, len(declarations))
 	named := make(map[string]string, len(declarations)+len(functions))
 
@@ -250,7 +251,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		return nil, err
 	}
 
-	manifestApps, err := buildApps(apps, functions, variables)
+	manifestApps, err := buildApps(apps, compute, functions, variables)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +355,7 @@ func tierDomains(domains map[string][]string) ([]*contractv1.TierDomains, error)
 	return out, nil
 }
 
-func buildApps(apps []App, functions []Function, variables map[string][]Variable) ([]*contractv1.ManifestApp, error) {
+func buildApps(apps []App, compute string, functions []Function, variables map[string][]Variable) ([]*contractv1.ManifestApp, error) {
 	frameworkByApp := make(map[string]string, len(functions))
 	for _, f := range functions {
 		if f.App != "" && f.Framework != "" {
@@ -379,6 +380,7 @@ func buildApps(apps []App, functions []Function, variables map[string][]Variable
 		manifestApps = append(manifestApps, &contractv1.ManifestApp{
 			Name:      a.Name,
 			Framework: framework,
+			Compute:   a.Compute,
 			Domains:   appDomains,
 			Variables: manifestVariables(variables[a.Name]),
 			Folder:    a.Folder,
@@ -393,6 +395,7 @@ func buildApps(apps []App, functions []Function, variables map[string][]Variable
 		manifestApps = append(manifestApps, &contractv1.ManifestApp{
 			Name:      f.App,
 			Framework: frameworkByApp[f.App],
+			Compute:   compute,
 			Variables: manifestVariables(variables[f.App]),
 		})
 	}
