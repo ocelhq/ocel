@@ -1,0 +1,7 @@
+{
+  "name": "configured",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  }
+}
