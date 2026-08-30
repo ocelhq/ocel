@@ -1,4 +1,4 @@
-package preflight
+package appimages
 
 import (
 	"bytes"

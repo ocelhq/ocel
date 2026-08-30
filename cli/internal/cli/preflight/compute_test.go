@@ -121,20 +121,6 @@ func TestAProviderWhoseIdentityIsEmptyIsStillNamedByThePlan(t *testing.T) {
 	}
 }
 
-func TestThreeComputesReadAsAList(t *testing.T) {
-	t.Parallel()
-
-	if got, want := list([]string{"a", "b", "c"}), `"a", "b" and "c"`; got != want {
-		t.Errorf("list() = %s, want %s", got, want)
-	}
-	if got, want := list([]string{"a", "b"}), `"a" and "b"`; got != want {
-		t.Errorf("list() = %s, want %s", got, want)
-	}
-	if got, want := list([]string{"a"}), `"a"`; got != want {
-		t.Errorf("list() = %s, want %s", got, want)
-	}
-}
-
 func TestAServerlessAppThatConfiguresABuildFailsThePlanByName(t *testing.T) {
 	t.Parallel()
 

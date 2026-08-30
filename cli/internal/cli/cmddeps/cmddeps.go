@@ -21,6 +21,8 @@ type Deps struct {
 	LoadCredentials     func() (credentials.Credentials, error)
 	FetchAccount        func(ctx context.Context, apiURL, token, projectID string) (resolve.Account, error)
 	BuildApp            func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out io.Writer) error
+	RequireImageBuilder func(ctx context.Context, rep runui.Reporter, cfg *projectconfig.Config) error
+	BuildAppImages      func(ctx context.Context, cfg *projectconfig.Config, out io.Writer) (map[string]string, error)
 	CollectAppFunctions func(projectDir string) ([]manifestbuilder.Function, error)
 	DeploymentID        func(projectDir, app string) (string, error)
 	CollectDeclarations func(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error)

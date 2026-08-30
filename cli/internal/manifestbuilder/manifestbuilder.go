@@ -262,7 +262,7 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 		return nil, err
 	}
 
-	containers, err := buildContainers(manifestApps, apps)
+	containers, err := buildContainers(manifestApps, apps, functions)
 	if err != nil {
 		return nil, err
 	}

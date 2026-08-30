@@ -1,6 +1,7 @@
 package manifestbuilder
 
 import (
+	"strings"
 	"testing"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -69,6 +70,34 @@ func TestAContainerThatAsksForNoHealthPathIsCarriedWithTheDefaultOne(t *testing.
 	}
 }
 
+func TestAnAppOnlyTheBuildNamesCannotLandOnContainerCompute(t *testing.T) {
+	t.Parallel()
+
+	_, err := Build("proj-1", nil, nil, "container", nil, nil, []Function{
+		{App: "api", Route: "index", Runtime: "nodejs22.x", Handler: "index.handler", ArtifactPath: "apps/api/functions/index"},
+	}, nil)
+	if err == nil {
+		t.Fatal("Build() landed an app the config never names on container compute, and nothing would have told a provider what image to run")
+	}
+	for _, want := range []string{`"api"`, "apps"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Build() error = %q, want it to name %s", err, want)
+		}
+	}
+}
+
+func TestAContainerAppWithNoImageRefusesTheManifest(t *testing.T) {
+	t.Parallel()
+
+	_, err := Build("proj-1", nil, []App{{Name: "api", Compute: "container"}}, "container", nil, nil, nil, nil)
+	if err == nil {
+		t.Fatal("Build() carried a container app with no image, so a provider would be handed an app it has nothing to run")
+	}
+	if !strings.Contains(err.Error(), `"api"`) {
+		t.Errorf("Build() error = %q, want it to name the app", err)
+	}
+}
+
 func TestAnImageCarriesADigestAndNeverATag(t *testing.T) {
 	t.Parallel()
 
@@ -91,6 +120,22 @@ func TestAServerlessAppIsCarriedAsNoContainerAtAll(t *testing.T) {
 	}
 	if len(manifest.GetContainers()) != 0 {
 		t.Errorf("manifest carries %+v, want no container for an app that runs serverless", manifest.GetContainers())
+	}
+}
+
+func TestAContainerAppCarriesNoFunction(t *testing.T) {
+	t.Parallel()
+
+	_, err := Build("proj-1", nil, []App{
+		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
+	}, "container", nil, nil, []Function{
+		{App: "api", Route: "index", Runtime: "nodejs22.x", Handler: "index.handler", ArtifactPath: "apps/api/functions/index"},
+	}, nil)
+	if err == nil {
+		t.Fatal("Build() carried both a container and a function for one app, so routing would have two answers for the same request")
+	}
+	if !strings.Contains(err.Error(), `"api"`) {
+		t.Errorf("Build() error = %q, want it to name the app", err)
 	}
 }
 

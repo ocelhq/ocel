@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/attribution"
@@ -24,6 +25,7 @@ func TestTheManifestCarriesEveryAppsCompute(t *testing.T) {
 			Slug: "prebuilt",
 			Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: "express", Compute: "container"}},
 		}
+		clitest.StubAppImages(&deps, "api")
 		manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless")
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
@@ -33,7 +35,7 @@ func TestTheManifestCarriesEveryAppsCompute(t *testing.T) {
 		}
 	})
 
-	t.Run("an app only the build names carries the compute the provider defaults to", func(t *testing.T) {
+	t.Run("an app only the build names cannot land on the provider's container default", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		deps := clitest.NewDeps()
@@ -41,12 +43,12 @@ func TestTheManifestCarriesEveryAppsCompute(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		cfg := &projectconfig.Config{Dir: root, Slug: "prebuilt"}
-		manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "container")
-		if err != nil {
-			t.Fatalf("collectAndBuildManifest: %v", err)
+		_, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "container")
+		if err == nil {
+			t.Fatal("collectAndBuildManifest() landed an app the config never names on container compute, so a provider would be handed an app with no image")
 		}
-		if got := computeOf(t, manifest, "api"); got != "container" {
-			t.Errorf("manifest app %q compute = %q, want %q", "api", got, "container")
+		if !strings.Contains(err.Error(), `"api"`) {
+			t.Errorf("collectAndBuildManifest() error = %q, want it to name the app", err)
 		}
 	})
 }
@@ -56,7 +58,7 @@ func TestAnAppOnlyItsUsagesNameTakesTheProvidersDefaultCompute(t *testing.T) {
 
 	got := toApps(nil, []attribution.Usage{
 		{App: "web", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"},
-	}, "container")
+	}, "container", nil)
 
 	if len(got) != 1 || got[0].Compute != "container" {
 		t.Errorf("toApps() = %+v, want the one attributed app carrying %q", got, "container")
@@ -86,6 +88,7 @@ func TestAContainerAppThatNamesNoFrameworkStillReachesTheProvider(t *testing.T) 
 		Slug: "prebuilt",
 		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "container"}},
 	}
+	clitest.StubAppImages(&deps, "api")
 
 	manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "container")
 	if err != nil {

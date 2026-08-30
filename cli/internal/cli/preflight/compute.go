@@ -3,9 +3,9 @@ package preflight
 import (
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -22,7 +22,7 @@ func ResolveComputes(cfg *projectconfig.Config, computes []string, provider stri
 		}
 		return "", fmt.Errorf(
 			"%s names %q among the computes it runs, and ocel knows no such compute — it knows %s: upgrade ocel if %q is newer than this build, or pin a provider version this ocel understands",
-			provider, compute, list(providerkit.ComputeNames(providerkit.Computes())), compute,
+			provider, compute, runui.Quoted(providerkit.ComputeNames(providerkit.Computes())), compute,
 		)
 	}
 
@@ -36,7 +36,7 @@ func ResolveComputes(cfg *projectconfig.Config, computes []string, provider stri
 		if !slices.Contains(computes, app.Compute) {
 			return "", fmt.Errorf(
 				"app %q asks for compute %q, which %s does not run — it runs %s: give %q a compute from that list, or deploy it to a provider that runs %q",
-				app.Name, app.Compute, provider, list(computes), app.Name, app.Compute,
+				app.Name, app.Compute, provider, runui.Quoted(computes), app.Name, app.Compute,
 			)
 		}
 		resolved[i] = app.Compute
@@ -69,15 +69,4 @@ func containerOnly(app projectconfig.App, compute string) error {
 		)
 	}
 	return nil
-}
-
-func list(values []string) string {
-	quoted := make([]string, 0, len(values))
-	for _, value := range values {
-		quoted = append(quoted, fmt.Sprintf("%q", value))
-	}
-	if len(quoted) < 2 {
-		return strings.Join(quoted, "")
-	}
-	return strings.Join(quoted[:len(quoted)-1], ", ") + " and " + quoted[len(quoted)-1]
 }

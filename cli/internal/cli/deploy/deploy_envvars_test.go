@@ -267,7 +267,7 @@ func TestToApps(t *testing.T) {
 		got := toApps([]projectconfig.App{
 			{Name: "admin", Framework: "express", Folder: "/admin"},
 			{Name: "web", Framework: "express"},
-		}, nil, "serverless")
+		}, nil, "serverless", nil)
 
 		want := []manifestbuilder.App{
 			{Name: "admin", Framework: "express", Folder: "/admin"},
@@ -284,7 +284,7 @@ func TestToApps(t *testing.T) {
 		got := toApps([]projectconfig.App{{Name: "admin"}, {Name: "web"}}, []attribution.Usage{
 			{App: "web", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/server.ts"}},
 			{App: "admin", Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}},
-		}, "serverless")
+		}, "serverless", nil)
 
 		want := []manifestbuilder.App{
 			{Name: "admin", Usages: []manifestbuilder.Usage{{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}}}},

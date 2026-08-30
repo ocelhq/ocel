@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/node"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -176,7 +177,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		AllowDegraded: cfg.AllowDegraded,
 		Apps:          make([]appInput, 0, len(cfg.Apps)),
 	}
-	for _, a := range cfg.Apps {
+	for _, a := range packable(cfg.Apps) {
 		req.Apps = append(req.Apps, appInput{
 			Name:       a.Name,
 			Cwd:        filepath.Join(cfg.Dir, a.Path),
@@ -185,6 +186,9 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 			Env:        withDeploymentID(envByApp[a.Name], deploymentIDs[a.Name]),
 			Folder:     a.Folder,
 		})
+	}
+	if len(cfg.Apps) > 0 && len(req.Apps) == 0 {
+		return nil
 	}
 
 	payload, err := json.Marshal(req)
@@ -212,6 +216,17 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		return err
 	}
 	return recordDetectedDeploymentID(cfg.Dir, outputDir, detectedID)
+}
+
+func packable(apps []projectconfig.App) []projectconfig.App {
+	var out []projectconfig.App
+	for _, a := range apps {
+		if a.Compute == string(providerkit.ComputeContainer) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 func recordDetectedDeploymentID(projectDir, outputDir, id string) error {

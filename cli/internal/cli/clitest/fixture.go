@@ -2,6 +2,8 @@ package clitest
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/appimages"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
@@ -31,6 +34,8 @@ func NewDeps() cmddeps.Deps {
 		LoadCredentials:     credentials.Load,
 		FetchAccount:        resolve.StubAccount,
 		BuildApp:            appbuilder.Build,
+		RequireImageBuilder: appimages.RequireBuilder,
+		BuildAppImages:      appimages.Build,
 		CollectAppFunctions: appbuilder.CollectFunctions,
 		DeploymentID:        appbuilder.DeploymentID,
 		CollectDeclarations: deploycollector.Collect,
@@ -174,6 +179,22 @@ func StubBuild(deps *cmddeps.Deps, functions []manifestbuilder.Function) {
 		return functions, nil
 	}
 	StubRecordedDeploymentIDs(deps)
+}
+
+func FixtureImage(app string) string {
+	sum := sha256.Sum256([]byte("ocel-test-image/" + app))
+	return "ocel/" + app + "@sha256:" + hex.EncodeToString(sum[:])
+}
+
+func StubAppImages(deps *cmddeps.Deps, apps ...string) {
+	refs := make(map[string]string, len(apps))
+	for _, app := range apps {
+		refs[app] = FixtureImage(app)
+	}
+	deps.RequireImageBuilder = func(context.Context, runui.Reporter, *projectconfig.Config) error { return nil }
+	deps.BuildAppImages = func(context.Context, *projectconfig.Config, io.Writer) (map[string]string, error) {
+		return refs, nil
+	}
 }
 
 func StubRecordedDeploymentIDs(deps *cmddeps.Deps) {

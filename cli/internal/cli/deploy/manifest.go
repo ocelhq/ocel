@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/appimages"
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
@@ -71,10 +72,16 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		}
 	}
 
+	images, err := deps.BuildAppImages(ctx, cfg, buildOut)
+	if err != nil {
+		return nil, err
+	}
+
 	functions, err := deps.CollectAppFunctions(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
+	functions = servedByFunctions(functions, cfg)
 
 	edgeWarnings, err := envgate.LintEdge(gate.Definitions(), envwire.Apps(cfg), edgeApps(cfg))
 	if err != nil {
@@ -84,7 +91,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		ui.Warning(warning)
 	}
 
-	if len(functions) == 0 {
+	if len(functions) == 0 && len(images) == 0 {
 		if len(resources) == 0 {
 			return nil, nil
 		}
@@ -100,7 +107,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute), compute, toDeclarations(cfg.Dir, resources), cfg.Links, functions, variablesByApp(variables, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute, images), compute, toDeclarations(cfg.Dir, resources), cfg.Links, functions, variablesByApp(variables, functions))
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +249,20 @@ func edgeApps(cfg *projectconfig.Config) []string {
 	return []string{envwire.RootApp}
 }
 
-func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string) []manifestbuilder.App {
+func servedByFunctions(functions []manifestbuilder.Function, cfg *projectconfig.Config) []manifestbuilder.Function {
+	containers := make(map[string]bool, len(cfg.Apps))
+	for _, app := range appimages.Apps(cfg) {
+		containers[app.Name] = true
+	}
+	if len(containers) == 0 {
+		return functions
+	}
+	return slices.DeleteFunc(slices.Clone(functions), func(f manifestbuilder.Function) bool {
+		return containers[f.App]
+	})
+}
+
+func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string, images map[string]string) []manifestbuilder.App {
 	byApp := make(map[string][]manifestbuilder.Usage, len(apps))
 	for _, u := range usages {
 		byApp[u.App] = append(byApp[u.App], manifestbuilder.Usage{Type: u.Type, Name: u.Name, Files: u.Files})
@@ -253,12 +273,14 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string
 	for _, a := range apps {
 		named[a.Name] = true
 		out = append(out, manifestbuilder.App{
-			Name:      a.Name,
-			Framework: a.Framework,
-			Compute:   a.Compute,
-			Domains:   a.Domains,
-			Folder:    a.Folder,
-			Usages:    byApp[a.Name],
+			Name:            a.Name,
+			Framework:       a.Framework,
+			Compute:         a.Compute,
+			Domains:         a.Domains,
+			Folder:          a.Folder,
+			Usages:          byApp[a.Name],
+			Image:           images[a.Name],
+			HealthCheckPath: healthPathOf(a),
 		})
 	}
 	for _, name := range slices.Sorted(maps.Keys(byApp)) {
@@ -267,6 +289,13 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string
 		}
 	}
 	return out
+}
+
+func healthPathOf(app projectconfig.App) string {
+	if app.Health == nil {
+		return ""
+	}
+	return app.Health.Path
 }
 
 func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function) ([]attribution.App, error) {

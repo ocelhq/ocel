@@ -98,7 +98,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	spec.Dry = opts.dry
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		knownSlugs, compute, err := preflightDeploy(ctx, ui, runner, cfg, stdout, stdin)
+		knownSlugs, compute, err := preflightDeploy(ctx, deps, ui, runner, cfg, stdout, stdin)
 		if err != nil {
 			return err
 		}
