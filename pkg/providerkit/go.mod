@@ -3,6 +3,7 @@ module github.com/ocelhq/ocel/pkg/providerkit
 go 1.27.0
 
 require (
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260709200747-435963d16310.1
 	connectrpc.com/connect v1.20.0
 	connectrpc.com/validate v0.6.0
 	github.com/ocelhq/ocel/pkg/channel v0.0.0
@@ -14,7 +15,6 @@ require (
 )
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260709200747-435963d16310.1 // indirect
 	buf.build/go/protovalidate v1.0.0 // indirect
 	cel.dev/expr v0.24.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
