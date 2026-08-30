@@ -15,7 +15,10 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-const liveHostname = "shop.example.invalid"
+const (
+	liveHostname  = "shop.example.invalid"
+	claimHostname = "claimed.example.invalid"
+)
 
 func (vm machine) state(t *testing.T, container string) string {
 	t.Helper()
@@ -23,23 +26,36 @@ func (vm machine) state(t *testing.T, container string) string {
 		"sudo docker inspect -f '{{.State.Status}}' "+quote(container)+" 2>/dev/null || echo gone"))
 }
 
-func fronting(t *testing.T, p *vps.Provider, slug string) (edge.Edge, edge.EdgeStack) {
+type front struct {
+	edge     edge.Edge
+	stack    edge.EdgeStack
+	hostname string
+}
+
+func fronting(t *testing.T, p *vps.Provider, slug string) front {
 	t.Helper()
 
-	front, err := p.Edges().Open(boxedge.Kind)
+	opened, err := p.Edges().Open(boxedge.Kind)
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", boxedge.Kind, err)
 	}
-	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
+	stack, err := opened.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: slug,
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: host.ProxyContainer}); err != nil {
-		t.Fatalf("BindDomain(%s): %v", host.ProxyContainer, err)
+	hostname := slug + ".example.invalid"
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Fatalf("BindDomain(%s): %v", hostname, err)
 	}
-	return front, stack
+	return front{edge: opened, stack: stack, hostname: hostname}
+}
+
+func (f front) serves(t *testing.T, vm machine, path string) string {
+	t.Helper()
+	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 -H "+quote("Host: "+f.hostname)+
+		" http://"+host.ProxyContainer+path))
 }
 
 func promotes(t *testing.T, stack edge.EdgeStack, id, tag string, held release, at int64) {
@@ -67,17 +83,18 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackRunsItAgain(
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
-	_, stack := fronting(t, p, "rollback")
+	f := fronting(t, p, "rollback")
+	stack := f.stack
 
 	one := standsUp(t, p, "one")
 	promotes(t, stack, "p-one", "one", one, 1)
-	if served := servedBy(t, vm, "/"); served != "one" {
+	if served := f.serves(t, vm, "/"); served != "one" {
 		t.Fatalf("the proxy served %q after the first promotion, want the release it was pointed at", served)
 	}
 
 	two := standsUp(t, p, "two")
 	promotes(t, stack, "p-two", "two", two, 2)
-	if served := servedBy(t, vm, "/"); served != "two" {
+	if served := f.serves(t, vm, "/"); served != "two" {
 		t.Fatalf("the proxy served %q after the second promotion, want the release it was pointed at", served)
 	}
 	if state := vm.state(t, one.physical); state != "exited" {
@@ -89,7 +106,7 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackRunsItAgain(
 	if state := vm.state(t, one.physical); state != "running" {
 		t.Errorf("the container the rollback re-points at reads as %q, want it running: nothing provisions on this path, so a promote that does not make the containers running is a ledger edit and not a restored site. The rollback runs the image again under that name rather than starting the container that stood there", state)
 	}
-	if served := servedBy(t, vm, "/"); served != "one" {
+	if served := f.serves(t, vm, "/"); served != "one" {
 		t.Errorf("the proxy served %q after the rollback, want the release it was rolled back onto", served)
 	}
 	if state := vm.state(t, two.physical); state != "exited" {
@@ -104,7 +121,8 @@ func TestLiveARollbackRunsTheSameImageDigestTheBoxAlreadyHeld(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
-	_, stack := fronting(t, p, "retained")
+	f := fronting(t, p, "retained")
+	stack := f.stack
 
 	one := standsUp(t, p, "one")
 	promotes(t, stack, "p-one", "one", one, 1)
@@ -118,7 +136,7 @@ func TestLiveARollbackRunsTheSameImageDigestTheBoxAlreadyHeld(t *testing.T) {
 	if again := vm.inspects(t, "image", fixtureAt("one"), "{{.Id}}"); again != held {
 		t.Errorf("the image the rollback ran is %q, want the %q this box already held: a rollback re-points at a retained digest, and a coordinate that resolves to a different image is one this box rebuilt or fetched behind the rollback", again, held)
 	}
-	if served := servedBy(t, vm, "/"); served != "one" {
+	if served := f.serves(t, vm, "/"); served != "one" {
 		t.Errorf("the proxy served %q after the rollback, want the release it was rolled back onto", served)
 	}
 }
@@ -127,42 +145,43 @@ func TestLiveAClaimedHostnameIsLoadedOntoTheProxyAndChangesNothingItServes(t *te
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
-	front, stack := fronting(t, p, "domains")
+	f := fronting(t, p, "domains")
+	stack := f.stack
 	ctx := context.Background()
 
 	one := standsUp(t, p, "one")
 	promotes(t, stack, "p-one", "one", one, 1)
 
-	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: liveHostname}); err != nil {
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: claimHostname}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
 	t.Cleanup(func() {
-		if err := stack.UnbindDomain(context.Background(), liveHostname); err != nil {
+		if err := stack.UnbindDomain(context.Background(), claimHostname); err != nil {
 			t.Errorf("UnbindDomain: %v", err)
 		}
 	})
 
-	owner, err := front.DomainOwner(ctx, liveHostname)
+	owner, err := f.edge.DomainOwner(ctx, claimHostname)
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
 	if want := boxedge.Surface("domains", edge.ClassProduction); owner != want {
-		t.Errorf("DomainOwner(%q) = %q, want %q read back off the configuration the running proxy was given", liveHostname, owner, want)
+		t.Errorf("DomainOwner(%q) = %q, want %q read back off the configuration the running proxy was given", claimHostname, owner, want)
 	}
 
-	claimed := strings.TrimSpace(vm.peers(t, "curl -sS -m 10 -H "+quote("Host: "+liveHostname)+" http://"+host.ProxyContainer+"/"))
+	claimed := strings.TrimSpace(vm.peers(t, "curl -sS -m 10 -H "+quote("Host: "+claimHostname)+" http://"+host.ProxyContainer+"/"))
 	if claimed != "one" {
 		t.Errorf("the proxy answered %q for the claimed hostname, want the release it serves: claiming a hostname records which project answers it and is not itself what answers it", claimed)
 	}
-	if served := servedBy(t, vm, "/"); served != "one" {
-		t.Errorf("the proxy served %q for every other hostname after the claim, want the release it served before it", served)
+	if served := f.serves(t, vm, "/"); served != "one" {
+		t.Errorf("the proxy served %q on the hostname it was already answering, want the release it served before the second claim: binding another name adds one, and a claim that moves what the names already bound answer breaks a site to add a domain to it", served)
 	}
 	refused := vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: unclaimed.example.invalid")+" http://"+host.ProxyContainer+"/")
 	if !strings.Contains(refused, "404") || !strings.Contains(strings.ToLower(refused), strings.ToLower(host.EdgeHeader)+": "+host.EdgeName) {
 		t.Errorf("a hostname nothing on this box claims was answered with\n%s\nwant a bare 404 carrying %s: %s, because an empty 200 reads as healthy to everything that checks it", refused, host.EdgeHeader, host.EdgeName)
 	}
 
-	unclaimed, err := front.DomainOwner(ctx, "unclaimed.example.invalid")
+	unclaimed, err := f.edge.DomainOwner(ctx, "unclaimed.example.invalid")
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
@@ -199,7 +218,8 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
-	_, stack := fronting(t, p, "swept")
+	f := fronting(t, p, "swept")
+	stack := f.stack
 
 	one := standsUp(t, p, "one")
 	promotes(t, stack, "p-one", "one", one, 1)
@@ -218,7 +238,7 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 	if !strings.Contains(err.Error(), "deploy again") {
 		t.Errorf("the refusal reads %q and never says what to do instead", err)
 	}
-	if served := servedBy(t, vm, "/"); served != "two" {
+	if served := f.serves(t, vm, "/"); served != "two" {
 		t.Errorf("the proxy served %q after a refused rollback, want the release that was serving before it: the ensure runs before the flip, so a rollback that cannot serve moves nothing", served)
 	}
 }
