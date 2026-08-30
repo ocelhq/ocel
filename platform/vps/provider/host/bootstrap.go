@@ -172,7 +172,11 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err := b.write(ctx, standing, EngineItems(), report); err != nil {
 		return err
 	}
-	if err := b.write(ctx, standing, ProxyItems(standing.Arch), report); err != nil {
+	served, err := b.host.Read(ctx, req.Class)
+	if err != nil {
+		return err
+	}
+	if err := b.write(ctx, served, ProxyItems(standing.Arch), report); err != nil {
 		return err
 	}
 	stamp.State, stamp.Seal = StateComplete, minted.Seal
@@ -232,7 +236,7 @@ func healable(read Reading) ([]Item, []string, error) {
 			work = append(work, item)
 			continue
 		}
-		if beneath(proxyRoot, item.Name) || !read.standing(item.Kind, item.Name) {
+		if daemonHeld(item) || beneath(proxyRoot, item.Name) || !read.standing(item.Kind, item.Name) {
 			left = append(left, item.ID())
 			continue
 		}
@@ -244,6 +248,15 @@ func healable(read Reading) ([]Item, []string, error) {
 			deployUser, stateRoot, strings.Join(denied, ", "), command)
 	}
 	return work, left, nil
+}
+
+func daemonHeld(item Item) bool {
+	switch item.Kind {
+	case KindEngine, KindUnit, KindNetwork, KindVolume, KindContainer:
+		return true
+	default:
+		return false
+	}
 }
 
 func deployOwned(item Item) bool {

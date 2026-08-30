@@ -762,3 +762,38 @@ func TestAProxyThatNeverComesUpFailsTheWriteWithWhatTheEngineSaysAboutIt(t *test
 		t.Errorf("the write said %d lines and a refusal carries %d, so the evidence is cut before it is read:\n%s", lines, saidLines, said)
 	}
 }
+
+func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := settledOn(t, class)
+	for at, item := range stood.stands[class] {
+		if item.Kind == KindEngine {
+			stood.stands[class][at].Content = []byte("engine=" + unservedFact + "\n")
+		}
+	}
+	stood.after = func(b *bench, command string) {
+		if !strings.Contains(command, dockerSource) {
+			return
+		}
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		held := b.stands[class]
+		for at, item := range held {
+			if item.Kind == KindContainer {
+				held[at].Content = []byte("state=exited\n")
+			}
+		}
+	}
+
+	report := &said{}
+	if err := Bootstrap(stood.host()).Apply(context.Background(),
+		providerkit.BootstrapRequest{Class: class, Writer: "the-suite"}, report); err != nil {
+		t.Fatalf("Apply() = %v", err)
+	}
+	if at := report.at("wrote " + KindContainer + " " + ProxyContainer); at < 0 {
+		t.Errorf("the apply installed the engine, the proxy went down under it, and the apply still called the container current:\n%s",
+			strings.Join(report.lines, "\n"))
+	}
+}

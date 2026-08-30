@@ -59,6 +59,32 @@ func mode(t *testing.T, vm machine, path string) string {
 	return strings.TrimSpace(vm.ssh(t, "sudo stat -c %a "+path))
 }
 
+type planning interface {
+	Plan(context.Context, providerkit.BootstrapRequest) (providerkit.Plan, error)
+}
+
+func stillMoving(t *testing.T, planner planning, class providerkit.Class, held any) string {
+	t.Helper()
+
+	plan, err := planner.Plan(context.Background(),
+		providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: held})
+	if err != nil {
+		return "and a re-plan over it said " + err.Error()
+	}
+	var moving []string
+	for _, group := range plan.Groups {
+		for _, change := range group.Changes {
+			if change.Action != providerkit.ActionKeep {
+				moving = append(moving, change.Kind+" "+change.Name+" plans as "+string(change.Action))
+			}
+		}
+	}
+	if len(moving) == 0 {
+		return "and a re-plan over it moves nothing, so the stamp and the survey disagree over what is recorded rather than over what stands"
+	}
+	return "and a re-plan moves " + strings.Join(moving, ", ")
+}
+
 func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	vm := live(t)
 	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel "+helperDir)
@@ -144,7 +170,8 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !finished.Stacks[0].DigestCurrent {
-		t.Error("Describe() still reads the host as drifted after the apply that finished it")
+		t.Errorf("Describe() still reads the host as drifted after the apply that finished it, %s",
+			stillMoving(t, bootstrapper, class, finished.Held))
 	}
 	if finished.Unfinished {
 		t.Error("Describe() still banners the host as half-applied after the apply that finished it")
