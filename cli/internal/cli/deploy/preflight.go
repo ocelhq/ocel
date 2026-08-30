@@ -40,7 +40,7 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Sessio
 	if err := deps.RequireImageBuilder(ctx, ui, cfg); err != nil {
 		return nil, "", err
 	}
-	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
+	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), ui.Warning); err != nil {
 		return nil, "", err
 	}
 	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
@@ -68,7 +68,7 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, 
 	if err := deps.RequireImageBuilder(ctx, ui, cfg); err != nil {
 		return nil, "", err
 	}
-	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
+	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), ui.Warning); err != nil {
 		return nil, "", err
 	}
 	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
@@ -100,9 +100,14 @@ func guardNewProject(ctx context.Context, ui *runui.Session, cfg *projectconfig.
 	return ui.Guard(ctx, "Continue?")
 }
 
-func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string) error {
+func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string, warn func(string)) error {
 	var b strings.Builder
 	for _, claim := range claims {
+		if cause := claim.GetCause(); cause != "" {
+			warn(fmt.Sprintf("Could not read who serves %s: %s\n  → this deploy carries on; if another project holds that hostname, this run takes it over",
+				claim.GetHostname(), cause))
+			continue
+		}
 		if claim.GetStatus() != contractv1.DomainClaim_STATUS_CLAIMED {
 			continue
 		}

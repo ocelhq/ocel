@@ -3094,6 +3094,7 @@ type DomainClaim struct {
 	Hostname      string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	Status        DomainClaim_Status     `protobuf:"varint,2,opt,name=status,proto3,enum=provider.contract.v1.DomainClaim_Status" json:"status,omitempty"`
 	Owner         string                 `protobuf:"bytes,3,opt,name=owner,proto3" json:"owner,omitempty"`
+	Cause         string                 `protobuf:"bytes,4,opt,name=cause,proto3" json:"cause,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3145,6 +3146,13 @@ func (x *DomainClaim) GetStatus() DomainClaim_Status {
 func (x *DomainClaim) GetOwner() string {
 	if x != nil {
 		return x.Owner
+	}
+	return ""
+}
+
+func (x *DomainClaim) GetCause() string {
+	if x != nil {
+		return x.Cause
 	}
 	return ""
 }
@@ -4153,11 +4161,12 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\vgrammar_max\x18\x04 \x01(\rR\n" +
 	"grammarMax\x12'\n" +
 	"\x0froute_installed\x18\x05 \x01(\bR\x0erouteInstalled\x12H\n" +
-	"\vcertificate\x18\x06 \x01(\v2&.provider.contract.v1.CertificateStateR\vcertificate\"\xcd\x01\n" +
+	"\vcertificate\x18\x06 \x01(\v2&.provider.contract.v1.CertificateStateR\vcertificate\"\xe3\x01\n" +
 	"\vDomainClaim\x12\x1a\n" +
 	"\bhostname\x18\x01 \x01(\tR\bhostname\x12@\n" +
 	"\x06status\x18\x02 \x01(\x0e2(.provider.contract.v1.DomainClaim.StatusR\x06status\x12\x14\n" +
-	"\x05owner\x18\x03 \x01(\tR\x05owner\"J\n" +
+	"\x05owner\x18\x03 \x01(\tR\x05owner\x12\x14\n" +
+	"\x05cause\x18\x04 \x01(\tR\x05cause\"J\n" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10STATUS_UNCLAIMED\x10\x01\x12\x12\n" +
