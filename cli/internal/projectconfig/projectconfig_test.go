@@ -277,6 +277,56 @@ export default {
 			},
 		},
 		{
+			name: "reads the registry a project pushes its images to",
+			config: `
+export default {
+  slug: "test-app",
+  registry: { server: "ghcr.io", username: "acme-bot", password: "GHCR_TOKEN" },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.Registry == nil {
+					t.Fatalf("Registry = nil, want the registry the config names")
+				}
+				if got, want := cfg.Registry.Server, "ghcr.io"; got != want {
+					t.Errorf("Registry.Server = %q, want %q", got, want)
+				}
+				if got, want := cfg.Registry.Username, "acme-bot"; got != want {
+					t.Errorf("Registry.Username = %q, want %q", got, want)
+				}
+				if got, want := cfg.Registry.Password, "GHCR_TOKEN"; got != want {
+					t.Errorf("Registry.Password = %q, want %q, the name of the variable holding the secret", got, want)
+				}
+			},
+		},
+		{
+			name: "leaves a project that names no registry without one",
+			config: `
+export default {
+  slug: "test-app",
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.Registry != nil {
+					t.Fatalf("Registry = %+v, want nil where the project names none", cfg.Registry)
+				}
+			},
+		},
+		{
+			name: "leaves the username off a registry that authenticates on its token alone",
+			config: `
+export default {
+  slug: "test-app",
+  registry: { server: "registry.fly.io", password: "FLY_TOKEN" },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.Registry.Username != "" {
+					t.Errorf("Registry.Username = %q, want none where the config writes none", cfg.Registry.Username)
+				}
+			},
+		},
+		{
 			name: "leaves apps absent by default",
 			config: `
 export default {
@@ -845,6 +895,46 @@ export default {
 };
 `,
 			wantErr: []string{`has an invalid "allowDegraded"`, `"isr" is not a need`, "edge-middleware, edge-runtime, ppr-resume, edge-cache, streaming"},
+		},
+		{
+			name: "rejects a registry with no server, which names nowhere to push",
+			config: `
+export default {
+  slug: "test-app",
+  registry: { password: "GHCR_TOKEN" },
+};
+`,
+			wantErr: []string{`invalid "registry"`, "server"},
+		},
+		{
+			name: "rejects a registry server written as a url",
+			config: `
+export default {
+  slug: "test-app",
+  registry: { server: "https://ghcr.io/acme", password: "GHCR_TOKEN" },
+};
+`,
+			wantErr: []string{`invalid "registry"`, "server", "ghcr.io"},
+		},
+		{
+			name: "rejects a registry password given as a secret rather than a variable name",
+			config: `
+export default {
+  slug: "test-app",
+  registry: { server: "ghcr.io", password: "ghp_livesecret/value" },
+};
+`,
+			wantErr: []string{`invalid "registry"`, "password", "environment variable"},
+		},
+		{
+			name: "rejects a registry with no password, so nothing falls back to an anonymous push",
+			config: `
+export default {
+  slug: "test-app",
+  registry: { server: "ghcr.io" },
+};
+`,
+			wantErr: []string{`invalid "registry"`, "password"},
 		},
 		{
 			name: "refuses route53 paired with a cloudflare edge",
