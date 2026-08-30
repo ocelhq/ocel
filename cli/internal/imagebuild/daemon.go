@@ -8,26 +8,21 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/moby/buildkit/client"
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-const (
-	DockerHostEnv      = "DOCKER_HOST"
-	DockerTLSVerifyEnv = "DOCKER_TLS_VERIFY"
-	DockerCertPathEnv  = "DOCKER_CERT_PATH"
-)
+const DockerHostEnv = providerkit.DockerHostEnv
 
 const (
 	buildPath   = "/grpc"
 	sessionPath = "/session"
 	upgradeTo   = "h2c"
-
-	pipeNetwork = "npipe"
 
 	snapshotterLabel = "org.mobyproject.buildkit.worker.snapshotter"
 
@@ -35,47 +30,19 @@ const (
 )
 
 type daemon struct {
-	address string
-	network string
-	target  string
+	providerkit.DockerHost
 }
 
 func openDaemon() (daemon, error) {
-	host := os.Getenv(DockerHostEnv)
-	if host == "" {
-		host = platformAddress()
+	host, err := providerkit.OpenDockerHost()
+	if err != nil {
+		return daemon{}, err
 	}
-	scheme, rest, split := strings.Cut(host, "://")
-	if !split {
-		return daemon{}, fmt.Errorf("%s is %q, which names no scheme: point it at a docker daemon as unix:///path/to/docker.sock or tcp://host:port", DockerHostEnv, host)
-	}
-	switch scheme {
-	case "unix":
-		return daemon{address: host, network: "unix", target: rest}, nil
-	case "tcp", "http":
-		if stated := statedTLS(); stated != "" {
-			return daemon{}, fmt.Errorf("%s asks for a tls connection to the daemon at %s, and ocel speaks none: it would send the whole build context — your source tree — over plain tcp, where it can be read and the image it builds substituted: unset %s to accept that, or run the build on the machine the daemon is on", stated, host, stated)
-		}
-		return daemon{address: host, network: "tcp", target: strings.TrimSuffix(rest, "/")}, nil
-	case pipeNetwork:
-		if d, ok := pipeDaemon(host, rest); ok {
-			return d, nil
-		}
-	}
-	return daemon{}, fmt.Errorf("%s is %q, and ocel builds images over unix://, tcp://, and npipe:// on windows: set %s to one of those, or run the build where the daemon is", DockerHostEnv, host, DockerHostEnv)
-}
-
-func statedTLS() string {
-	for _, name := range []string{DockerTLSVerifyEnv, DockerCertPathEnv} {
-		if os.Getenv(name) != "" {
-			return name
-		}
-	}
-	return ""
+	return daemon{DockerHost: host}, nil
 }
 
 func (d daemon) hijack(ctx context.Context, path, proto string, meta map[string][]string) (net.Conn, error) {
-	conn, err := dial(ctx, d.network, d.target)
+	conn, err := d.Dial(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +70,7 @@ func (d daemon) hijack(ctx context.Context, path, proto string, meta map[string]
 		return nil, closing(conn, err)
 	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
-		return nil, closing(conn, fmt.Errorf("the daemon at %s answered %q to the %s upgrade on %s, so it serves no builder", d.address, resp.Status, proto, path))
+		return nil, closing(conn, fmt.Errorf("the daemon at %s answered %q to the %s upgrade on %s, so it serves no builder", d.Address, resp.Status, proto, path))
 	}
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return nil, closing(conn, err)
@@ -160,7 +127,7 @@ func (d daemon) addressable(workers []*client.WorkerInfo) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under, and where buildkit additionally refuses the merge operations a railpack plan is assembled from: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.address, DockerHostEnv)
+	return fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under, and where buildkit additionally refuses the merge operations a railpack plan is assembled from: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.Address, DockerHostEnv)
 }
 
 func (d daemon) tag(ctx context.Context, image Image) error {
@@ -172,30 +139,26 @@ func (d daemon) tag(ctx context.Context, image Image) error {
 	if err != nil {
 		return err
 	}
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return dial(ctx, d.network, d.target)
-		},
-	}
+	transport := d.Transport()
 	defer transport.CloseIdleConnections()
 	resp, err := (&http.Client{Transport: transport}).Do(req)
 	if err != nil {
-		return fmt.Errorf("name %s in the daemon at %s: %w", image.Ref, d.address, err)
+		return fmt.Errorf("name %s in the daemon at %s: %w", image.Ref, d.Address, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		said, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("the daemon at %s answered %q naming %s, so the image it just built cannot be reached by the ref a release pins: %s", d.address, resp.Status, image.Ref, strings.TrimSpace(string(said)))
+		return fmt.Errorf("the daemon at %s answered %q naming %s, so the image it just built cannot be reached by the ref a release pins: %s", d.Address, resp.Status, image.Ref, strings.TrimSpace(string(said)))
 	}
 	return nil
 }
 
 func (d daemon) unreachable(err error) error {
-	return fmt.Errorf("no docker daemon answers at %s, and a container app's image is built by the one on this machine: start docker, or set %s to a daemon that is running\n    %v", d.address, DockerHostEnv, err)
+	return fmt.Errorf("no docker daemon answers at %s, and a container app's image is built by the one on this machine: start docker, or set %s to a daemon that is running\n    %v", d.Address, DockerHostEnv, err)
 }
 
 func (d daemon) noBuilder(err error) error {
-	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %v", d.address, DockerHostEnv, err)
+	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %v", d.Address, DockerHostEnv, err)
 }
 
 func Reachable(ctx context.Context) error {

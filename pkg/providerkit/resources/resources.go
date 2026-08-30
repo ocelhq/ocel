@@ -149,6 +149,9 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 	if err := f.removeOrphans(ctx, plan, recorded, report); err != nil {
 		return providerkit.StackResult{}, err
 	}
+	if err := plan.Images.Ship(ctx, report); err != nil {
+		return providerkit.StackResult{}, err
+	}
 	if err := providerkit.ShipUploads(ctx, f.artifacts, plan.Uploads, report); err != nil {
 		return providerkit.StackResult{}, err
 	}

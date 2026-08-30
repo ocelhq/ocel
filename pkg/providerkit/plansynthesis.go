@@ -13,11 +13,16 @@ const (
 )
 
 func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, standing StackResult) (Plan, error) {
+	images, err := plan.Images.Rows(ctx)
+	if err != nil {
+		return Plan{}, err
+	}
 	uploads, err := UploadRows(ctx, store, plan.Uploads)
 	if err != nil {
 		return Plan{}, err
 	}
-	changes := make([]Change, 0, len(plan.Resources)+len(standing.Links)+len(uploads))
+	changes := make([]Change, 0, len(plan.Resources)+len(standing.Links)+len(uploads)+len(images))
+	changes = append(changes, images...)
 	changes = append(changes, uploads...)
 	for _, resource := range plan.Resources {
 		changes = append(changes, Change{
