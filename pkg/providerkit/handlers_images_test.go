@@ -165,6 +165,12 @@ func TestAContainerAppOnAProviderTakingNeitherPathFailsNamingTheGap(t *testing.T
 			t.Errorf("Deploy() = %q, want the gap named down to %q", refused, want)
 		}
 	}
+	for _, want := range []string{"\u2192 name a `registry` in the project config", "`password`"} {
+		if !strings.Contains(refused, want) {
+			t.Errorf("Deploy() = %q, want the way out of it named down to %q: a plan-time refusal that names only the gap "+
+				"leaves the reader to guess what to type", refused, want)
+		}
+	}
 	if opened := provider.Registry().Opened(); len(opened) != 0 {
 		t.Errorf("a registry was opened as %v where the deploy named none", opened)
 	}
