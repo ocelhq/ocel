@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -27,6 +28,7 @@ type Machine interface {
 	UnroutePointer(ctx context.Context, owner, pointer string) error
 	UnrouteSurface(ctx context.Context, owner string) error
 	Claims(ctx context.Context) ([]host.HostClaim, error)
+	Pins() []host.Pin
 	ClaimHost(ctx context.Context, claim host.HostClaim) error
 	DisclaimHost(ctx context.Context, hostname, owner string) error
 	DisclaimSurface(ctx context.Context, owner string) error
@@ -123,14 +125,22 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 		group.Changes = append(group.Changes,
 			edge.PlanChange{Kind: RouteKind, Name: hostname, Action: edge.PlanDelete,
 				Reason: "the route on this box's proxy claiming " + hostname + " for " + Surface(scope.Slug, scope.Class)},
-			edge.PlanChange{Kind: CertificateKind, Name: hostname, Action: edge.PlanKeep,
-				Reason: "the certificate this box's proxy obtained for " + hostname + " and renews, which stays in the proxy's own store: ocel placed no key here so it removes none, and a hostname bound again inside the certificate's life is served off it rather than ordered again"})
+			e.certificateKept(hostname))
 	}
 	if len(group.Changes) == 0 {
 		group.Action = edge.PlanKeep
 		group.Reason = "this project claims no hostname on this box, and the containers it runs are the release surface's rows rather than the edge's"
 	}
 	return []edge.PlanGroup{group}
+}
+
+func (e *Edge) certificateKept(hostname string) edge.PlanChange {
+	if path := host.Covering(e.machine.Pins(), hostname); path != "" {
+		return edge.PlanChange{Kind: CertificateKind, Name: certs.PinHandle(path), Action: edge.PlanKeep,
+			Reason: "the pair you placed at " + path + " and renew, which serves " + hostname + " and every other name it covers: ocel never placed it and removes nothing it did not place"}
+	}
+	return edge.PlanChange{Kind: CertificateKind, Name: certs.ProxyHandle(hostname), Action: edge.PlanKeep,
+		Reason: "the certificate this box's proxy obtained for " + hostname + " and renews, which stays in the proxy's own store: ocel placed no key here so it removes none, and a hostname bound again inside the certificate's life is served off it rather than ordered again"}
 }
 
 func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.PlanGroup) {
