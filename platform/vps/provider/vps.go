@@ -139,7 +139,15 @@ func New(_ context.Context, options providerkit.Options) (providerkit.Provider, 
 
 func NewProvider(options Options) *Provider {
 	p := &Provider{options: options}
-	p.host = host.New(p.conn, host.Keys{Path: options.DeployKey})
+	return p.standing(p.conn)
+}
+
+func newProvider(options Options, dial host.Dial) *Provider {
+	return (&Provider{options: options}).standing(dial)
+}
+
+func (p *Provider) standing(dial host.Dial) *Provider {
+	p.host = host.New(dial, host.Keys{Path: p.options.DeployKey})
 	p.records = host.NewRecords(p.host)
 	p.sealer = host.NewSealer(p.host)
 	return p
