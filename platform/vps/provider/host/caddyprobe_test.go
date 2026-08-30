@@ -1,6 +1,8 @@
 package host
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"os"
@@ -27,7 +29,7 @@ func probing(t *testing.T, state ProxyState) func(hostname string) answered {
 	return probingConfig(t, rendered)
 }
 
-func probingConfig(t *testing.T, rendered []byte) func(hostname string) answered {
+func probingConfig(t *testing.T, rendered []byte, joined ...string) func(hostname string) answered {
 	t.Helper()
 
 	engineOrSkip(t)
@@ -39,10 +41,14 @@ func probingConfig(t *testing.T, rendered []byte) func(hostname string) answered
 
 	name := probeName(t)
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
-	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
+	run := []string{"run", "--rm", "--detach", "--name", name,
 		"--publish", "127.0.0.1::80",
-		"--volume", config+":"+proxyConfigMount+":ro",
-		ProxyImage, "caddy", "run", "--config", proxyConfigMount).CombinedOutput()
+		"--volume", config + ":" + proxyConfigMount + ":ro"}
+	for _, network := range joined {
+		run = append(run, "--network", network)
+	}
+	run = append(run, ProxyImage, "caddy", "run", "--config", proxyConfigMount)
+	stood, err := exec.Command(dockerEngine, run...).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run %s: %s", ProxyImage, stood)
 	}
@@ -93,7 +99,9 @@ func probingConfig(t *testing.T, rendered []byte) func(hostname string) answered
 }
 
 func probeName(t *testing.T) string {
-	return "ocel-probe-" + strings.ToLower(strings.NewReplacer("/", "-", " ", "-").Replace(t.Name()))
+	readable := strings.ToLower(strings.NewReplacer("/", "-", " ", "-").Replace(t.Name()))
+	sum := sha256.Sum256([]byte(t.Name()))
+	return "ocel-probe-" + readable[:min(len(readable), 28)] + "-" + hex.EncodeToString(sum[:4])
 }
 
 func logsOf(name string) string {
@@ -158,4 +166,77 @@ func TestARealProxyAnswersEveryHostnameOneSurfaceClaimsOnTheAppItRuns(t *testing
 			t.Errorf("%q is served by the surface's own route and answers %s: %q, want %q: every response this box emits names the box, or the bind's probe reads the app's answer as nobody's", hostname, EdgeHeader, said.edge, EdgeName)
 		}
 	}
+}
+
+func standingApp(t *testing.T, body string) (network, upstream string) {
+	t.Helper()
+
+	engineOrSkip(t)
+	network, name := probeName(t)+"-net", probeName(t)+"-app"
+	exec.Command(dockerEngine, "network", "rm", network).Run()
+	if out, err := exec.Command(dockerEngine, "network", "create", network).CombinedOutput(); err != nil {
+		t.Skipf("this machine's engine will not create a network for the app the proxy forwards to: %s", out)
+	}
+	t.Cleanup(func() { exec.Command(dockerEngine, "network", "rm", network).Run() })
+
+	exec.Command(dockerEngine, "rm", "--force", name).Run()
+	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
+		"--network", network, ProxyImage,
+		"caddy", "respond", "--listen", ":"+AppPort, body).CombinedOutput()
+	if err != nil {
+		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
+	}
+	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
+	return network, name + ":" + AppPort
+}
+
+func TestARealProxyServesTheAppsBodyUnderTheHostnameAndNamesTheEdgeThatServedIt(t *testing.T) {
+	network, upstream := standingApp(t, "the app answered")
+
+	state := ProxyState{
+		Grace:  DrainWindow,
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
+		Claims: []HostClaim{{Hostname: claimed, Owner: surface}},
+	}
+	said := probingConfig(t, issuedByNobody(t, mustRender(t, state)), network)(claimed)
+
+	if said.status != http.StatusOK || said.body != "the app answered" {
+		t.Errorf("the bound hostname was answered %d %q, want the body of the app its surface runs", said.status, said.body)
+	}
+	if said.edge != EdgeName {
+		t.Errorf("the bound hostname was answered with %s: %q, want %q. The settle reads that header off the answer to decide which edge serves a hostname, so a forwarded route that names no edge leaves `ocel domain add` waiting on a box that is already serving",
+			EdgeHeader, said.edge, EdgeName)
+	}
+}
+
+func TestARealProxyStopsServingAHostnameTheProjectUnbound(t *testing.T) {
+	network, upstream := standingApp(t, "the app answered")
+
+	bound := ProxyState{
+		Grace:  DrainWindow,
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
+		Claims: []HostClaim{{Hostname: claimed, Owner: surface}},
+	}
+	unbound := bound
+	unbound.Claims = Disclaiming(bound.Claims, func(claim HostClaim) bool {
+		return claim.Hostname == claimed && claim.Owner == surface
+	})
+
+	rendered := mustRender(t, unbound)
+	if strings.Contains(string(rendered), claimed) {
+		t.Errorf("the configuration an unbind renders still names %s:\n%s", claimed, rendered)
+	}
+
+	t.Run("bound", func(t *testing.T) {
+		if said := probingConfig(t, issuedByNobody(t, mustRender(t, bound)), network)(claimed); said.body != "the app answered" {
+			t.Fatalf("the hostname answered %d %q while bound, want the app's body", said.status, said.body)
+		}
+	})
+	t.Run("unbound", func(t *testing.T) {
+		said := probingConfig(t, issuedByNobody(t, rendered), network)(claimed)
+		if said.status != http.StatusNotFound || said.edge != EdgeName || said.body != "" {
+			t.Errorf("the unbound hostname was answered %d %q by %q, want the box's own bare 404: an unbind that leaves the route matching keeps serving a site the project gave back",
+				said.status, said.body, said.edge)
+		}
+	})
 }
