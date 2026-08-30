@@ -158,6 +158,10 @@ func (e *AmbiguousLinkError) Error() string {
 }
 
 func Build(slug string, domains map[string][]string, apps []App, compute string, declarations []Declaration, links []string, functions []Function, variables map[string][]Variable) (*contractv1.Manifest, error) {
+	if compute == "" {
+		return nil, fmt.Errorf("manifestbuilder: project %q was built with no compute resolved — every app on the wire has to name the compute it runs on, and the manifest is built after preflight so that a provider's own answer is what fills it", slug)
+	}
+
 	seen := make(map[identity]Declaration, len(declarations))
 	named := make(map[string]string, len(declarations)+len(functions))
 
@@ -373,6 +377,10 @@ func buildApps(apps []App, compute string, functions []Function, variables map[s
 		if framework == "" {
 			framework = frameworkByApp[a.Name]
 		}
+		appCompute := a.Compute
+		if appCompute == "" {
+			appCompute = compute
+		}
 		appDomains, err := tierDomains(a.Domains)
 		if err != nil {
 			return nil, err
@@ -380,7 +388,7 @@ func buildApps(apps []App, compute string, functions []Function, variables map[s
 		manifestApps = append(manifestApps, &contractv1.ManifestApp{
 			Name:      a.Name,
 			Framework: framework,
-			Compute:   a.Compute,
+			Compute:   appCompute,
 			Domains:   appDomains,
 			Variables: manifestVariables(variables[a.Name]),
 			Folder:    a.Folder,
