@@ -2,14 +2,13 @@ package vps
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -23,24 +22,43 @@ func (p *Provider) Serving(ctx context.Context, _ edge.Kind, hostname string) (e
 	}
 	said, err := p.probe().Do(request)
 	if err != nil {
-		return "", unreached(ctx, hostname, err)
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		p.stopped(hostname, transport(err))
+		return "", nil
 	}
 	defer said.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(said.Body, 1<<12))
+	p.stopped(hostname, "")
 	return edge.Kind(strings.TrimSpace(said.Header.Get(edge.HeaderEdge))), nil
 }
 
-func unreached(ctx context.Context, hostname string, err error) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
+func (p *Provider) Unreached(hostname string) string {
+	p.probed.Lock()
+	defer p.probed.Unlock()
+	return p.unreached[hostname]
+}
+
+func (p *Provider) stopped(hostname, cause string) {
+	p.probed.Lock()
+	defer p.probed.Unlock()
+	if cause == "" {
+		delete(p.unreached, hostname)
+		return
 	}
-	var unverified *tls.CertificateVerificationError
-	if errors.As(err, &unverified) {
-		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s served a certificate this probe would not accept, and reading %s off a hostname is the proof a valid certificate was served for it: %v",
-			hostname, edge.HeaderEdge, unverified)
+	if p.unreached == nil {
+		p.unreached = map[string]string{}
 	}
-	return nil
+	p.unreached[hostname] = cause
+}
+
+func transport(err error) string {
+	var reached *url.Error
+	if errors.As(err, &reached) {
+		err = reached.Err
+	}
+	return err.Error()
 }
 
 func (p *Provider) probe() *http.Client {

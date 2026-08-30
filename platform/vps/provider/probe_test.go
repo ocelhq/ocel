@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -104,7 +103,7 @@ func TestTheEdgeIsReadOffTheHostnameProbedAndNotOffWhereeverItPointsOn(t *testin
 	}
 }
 
-func TestAHostnameServingACertificateNothingTrustsIsRefusedRatherThanReportedUnserved(t *testing.T) {
+func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *testing.T) {
 	t.Parallel()
 
 	served := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -124,13 +123,56 @@ func TestAHostnameServingACertificateNothingTrustsIsRefusedRatherThanReportedUns
 		},
 	}})
 
-	var refusal providerkit.Refusal
 	kind, err := p.Serving(context.Background(), boxedge.Kind, "shop.example.com")
-	if !errors.As(err, &refusal) {
-		t.Fatalf("Serving() = %q, %v, want a refusal naming the chain: a hostname whose certificate nothing trusts reads as one that does not answer yet, and the run gives up after a full minute with the cause thrown away", kind, err)
+	if err != nil {
+		t.Fatalf("Serving() over a certificate nothing trusts = %v, want it reported unserved: a settle writes the record and probes at once, so for the whole of the old record's ttl the probe reaches the previous host, and a deploy that dies on attempt 1 there never moves the domain at all",
+			err)
 	}
-	if !strings.Contains(refusal.Message, "shop.example.com") {
-		t.Errorf("Serving() refused with %q, want it to name the hostname the chain was refused for", refusal.Message)
+	if kind != "" {
+		t.Errorf("Serving() = %q, want nothing: no header is readable off a handshake the client refused", kind)
+	}
+	if cause := p.Unreached("shop.example.com"); !strings.Contains(cause, "x509") {
+		t.Errorf("Unreached() = %q, want the chain the client refused: the settle gives up after a full minute with nothing for the operator to act on", cause)
+	}
+}
+
+func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
+	t.Parallel()
+
+	served := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(edge.HeaderEdge, string(boxedge.Kind))
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(served.Close)
+
+	at, err := url.Parse(served.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refused := true
+	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p.Probing(&http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			if refused {
+				refused = false
+				return nil, errors.New("connect: connection refused")
+			}
+			return (&net.Dialer{}).DialContext(ctx, network, at.Host)
+		},
+	}})
+
+	if _, err := p.Serving(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if p.Unreached("shop.example.com") == "" {
+		t.Fatal("a hostname the probe never reached carries no cause, and this test states nothing about clearing one")
+	}
+	if _, err := p.Serving(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if cause := p.Unreached("shop.example.com"); cause != "" {
+		t.Errorf("Unreached() = %q for a hostname that answered, and a stale cause is read out on whatever the settle gives up on next", cause)
 	}
 }
 
