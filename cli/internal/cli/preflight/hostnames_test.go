@@ -1,6 +1,8 @@
 package preflight
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -57,21 +59,24 @@ func TestHostnames(t *testing.T) {
 			"app.acme.com": "web",
 			"api.acme.com": "api",
 		}
+		got := map[string]string{}
 		for _, host := range Hostnames(cfg, "production") {
-			if host.App != want[host.Name] {
-				t.Errorf("%q is attributed to app %q, want %q: a box points one hostname at one app, and a hostname that reaches the edge naming no app is one a multi-app project cannot bind at all",
-					host.Name, host.App, want[host.Name])
-			}
+			got[host.Name] = host.App
+		}
+		if !maps.Equal(got, want) {
+			t.Errorf("production hostnames are attributed %v, want %v: a box points one hostname at one app, and a hostname that reaches the edge naming no app is one a multi-app project cannot bind at all", got, want)
 		}
 	})
 
 	t.Run("a hostname the project declares and an app repeats stays the project's", func(t *testing.T) {
 		t.Parallel()
 
-		for _, host := range Hostnames(cfg, "production") {
-			if host.Name == "acme.com" && host.App != "" {
-				t.Errorf("acme.com is attributed to %q; the project declares it and web repeats it, and the project-wide declaration is the one that was there first", host.App)
-			}
+		at := slices.IndexFunc(Hostnames(cfg, "production"), func(host Hostname) bool { return host.Name == "acme.com" })
+		if at < 0 {
+			t.Fatal("acme.com is not among the production hostnames at all, and the attribution this test is about never arises")
+		}
+		if app := Hostnames(cfg, "production")[at].App; app != "" {
+			t.Errorf("acme.com is attributed to %q; the project declares it and web repeats it, and the project-wide declaration is the one that was there first", app)
 		}
 	})
 }
