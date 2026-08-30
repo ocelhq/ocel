@@ -74,11 +74,12 @@ func (p ImagePlan) Ship(ctx context.Context, report Reporter) error {
 		if held {
 			continue
 		}
+		where := p.destination(push)
 		if report != nil {
-			report.Say("Sending " + push.App + "'s image to " + p.destination(push))
+			report.Say("Sending " + push.App + "'s image to " + where)
 		}
 		if err := p.Store.Push(ctx, push, report); err != nil {
-			return fmt.Errorf("push %s's image to %s: %w", push.App, push.Target, err)
+			return fmt.Errorf("send %s's image to %s: %w", push.App, where, err)
 		}
 	}
 	return nil
@@ -98,7 +99,7 @@ func (p ImagePlan) held(ctx context.Context, push ImagePush) (bool, error) {
 	}
 	held, err := p.Store.Has(ctx, push)
 	if err != nil {
-		return false, fmt.Errorf("look for %s's image in %s: %w", push.App, push.Target, err)
+		return false, fmt.Errorf("look for %s's image in %s: %w", push.App, p.destination(push), err)
 	}
 	return held, nil
 }
