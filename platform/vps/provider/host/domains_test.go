@@ -606,6 +606,103 @@ func TestOneSurfacesHostnameIsNotHandedToEveryAppThatSurfaceRuns(t *testing.T) {
 	}
 }
 
+func matchedBy(t *testing.T, rendered []byte) map[string][]string {
+	t.Helper()
+
+	var read struct {
+		Apps struct {
+			HTTP struct {
+				Servers map[string]struct{ Routes []caddyRoute } `json:"servers"`
+			} `json:"http"`
+		} `json:"apps"`
+	}
+	if err := json.Unmarshal(rendered, &read); err != nil {
+		t.Fatal(err)
+	}
+	answered := map[string][]string{}
+	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
+		if forwardedTo(route) == "" {
+			continue
+		}
+		for _, match := range route.Match {
+			answered[route.Identity] = append(answered[route.Identity], match.Host...)
+		}
+	}
+	return answered
+}
+
+func TestAHostnameDeclaredUnderOneAppOfAMultiAppSurfaceReachesThatAppAlone(t *testing.T) {
+	t.Parallel()
+
+	state := twoApps()
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, App: "api"}}
+
+	answered := matchedBy(t, mustRender(t, state))
+	if got := answered[keyed("api").identity()]; !slices.Equal(got, []string{claimed}) {
+		t.Errorf("the api route answers %v, want %q alone: the project declared the hostname under api, and a box that cannot honour that refuses every multi-app project a domain at all", got, claimed)
+	}
+	if got := answered[keyed("web").identity()]; len(got) != 0 {
+		t.Errorf("the web route answers %v, want nothing: reverse_proxy is terminal, so a second route carrying the same hostname is either dead configuration or the app that answers it", got)
+	}
+}
+
+func TestAClaimNamingTheAppItWasDeclaredUnderReadsBackCarryingThatApp(t *testing.T) {
+	t.Parallel()
+
+	state := twoApps()
+	state.Claims = []HostClaim{
+		{Hostname: claimed, Owner: surface, App: "api"},
+		{Hostname: "www.example.com", Owner: surface, App: "web"},
+	}
+
+	read, err := ReadProxyState(mustRender(t, state))
+	if err != nil {
+		t.Fatalf("ReadProxyState() = %v", err)
+	}
+	want := slices.SortedFunc(slices.Values(state.Claims), func(a, b HostClaim) int {
+		return strings.Compare(a.Hostname, b.Hostname)
+	})
+	if !slices.Equal(read.Claims, want) {
+		t.Errorf("the claims read back as %v, want %v: the rendered configuration is the box's only record of which app a hostname was declared under, so an app it does not carry is one the next deploy cannot restore", read.Claims, want)
+	}
+}
+
+func TestAProjectWideClaimStillNamesNoAppOnTheWireItIsWrittenTo(t *testing.T) {
+	t.Parallel()
+
+	wide := routed()
+	wide.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	rendered := mustRender(t, wide)
+
+	if want := claimIdentity + surface + claimSeparator + claimed; !strings.Contains(string(rendered), `"@id":"`+want+`"`) {
+		t.Errorf("a project-wide claim renders its identity as something other than %q:\n%s", want, rendered)
+	}
+	attributed := routed()
+	attributed.Claims = []HostClaim{{Hostname: claimed, Owner: surface, App: "web"}}
+	if want := claimIdentity + surface + claimSeparator + claimed + claimSeparator + "web"; !strings.Contains(string(mustRender(t, attributed)), `"@id":"`+want+`"`) {
+		t.Errorf("a claim declared under an app renders its identity without the app, so nothing distinguishes it from the project-wide claim it is not")
+	}
+}
+
+func TestAnUnattributedHostnameOnAMultiAppSurfaceIsRefusedAndNamesTheFormThatFixesIt(t *testing.T) {
+	t.Parallel()
+
+	state := twoApps()
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+
+	_, err := RenderProxyConfig(state)
+	if err == nil {
+		t.Fatal("a project running two apps and claiming a hostname project-wide rendered both routes matching it")
+	}
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("the render failed with %v, want %s", err, providerkit.CodeInvalid)
+	}
+	if !strings.Contains(err.Error(), "domains.production") {
+		t.Errorf("the refusal is\n%s\nand never names domains.production: the config form that fixes this is declaring the hostname under the app, and a refusal that does not say so reads as a box that cannot serve multi-app projects", err)
+	}
+}
+
 func TestTwoAppsOnASurfaceThatClaimsNothingAreBothStillWritten(t *testing.T) {
 	t.Parallel()
 

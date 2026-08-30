@@ -139,7 +139,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err != nil {
 		return err
 	}
-	if err := s.e.machine.ClaimHost(ctx, host.HostClaim{Hostname: binding.Hostname, Owner: s.surface()}); err != nil {
+	if err := s.e.machine.ClaimHost(ctx, host.HostClaim{Hostname: binding.Hostname, Owner: s.surface(), App: binding.App}); err != nil {
 		return err
 	}
 	s.state.Bind(binding.Hostname)

@@ -240,7 +240,7 @@ func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, runner *pro
 	spinner := runui.StartSpinner(deps.Presentation(out), out, "Reading the hostnames this project serves")
 	resp, err := client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 		Slug:       cfg.Slug,
-		Configured: preflight.Hostnames(cfg, "production"),
+		Configured: preflight.Configured(preflight.Hostnames(cfg, "production")),
 		Edge:       edgewire.Selection(cfg),
 	})
 	spinner.Stop()
@@ -325,7 +325,7 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 	if err != nil {
 		return err
 	}
-	configured := preflight.Hostnames(cfg, "production")
+	configured := preflight.Names(preflight.Hostnames(cfg, "production"))
 	if len(configured) == 0 {
 		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
 	}
@@ -335,7 +335,7 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 		}
 		req := &contractv1.HostnameRequest{
 			Slug:       cfg.Slug,
-			Configured: configured,
+			Configured: preflight.Configured(preflight.Hostnames(cfg, "production")),
 			Host:       host,
 			Edge:       edgewire.Selection(cfg),
 		}
@@ -366,7 +366,7 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdou
 		}
 		req := &contractv1.HostnameRequest{
 			Slug:       cfg.Slug,
-			Configured: preflight.Hostnames(cfg, "production"),
+			Configured: preflight.Configured(preflight.Hostnames(cfg, "production")),
 			Host:       host,
 			Edge:       edgewire.Selection(cfg),
 		}
@@ -485,8 +485,6 @@ func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts do
 	if err != nil {
 		return err
 	}
-	configured := preflight.Hostnames(cfg, "production")
-
 	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
 		if err := preflight.Tier(ctx, runui.Plain(deps.Presentation(stdout), stdout), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
@@ -497,7 +495,7 @@ func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts do
 		}
 		req := &contractv1.HostnameRequest{
 			Slug:       cfg.Slug,
-			Configured: configured,
+			Configured: preflight.Configured(preflight.Hostnames(cfg, "production")),
 			Edge:       edgewire.Selection(cfg),
 			Probe:      true,
 		}

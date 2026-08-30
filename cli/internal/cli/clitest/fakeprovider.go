@@ -1068,15 +1068,15 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 	say := func(message string) error {
 		return stream.Send(fakeProgress(message))
 	}
-	if host := req.GetHost(); host != "" && !slices.Contains(req.GetConfigured(), host) {
+	if host := req.GetHost(); host != "" && !slices.Contains(fakeConfigured(req), host) {
 		return stream.Send(&progressv1.OperationEvent{
 			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 				Success: false,
-				Error:   fmt.Sprintf("this project does not declare %q: add it to domains.production and run this again — no command edits the config, which declares %s", host, strings.Join(req.GetConfigured(), ", ")),
+				Error:   fmt.Sprintf("this project does not declare %q: add it to domains.production and run this again — no command edits the config, which declares %s", host, strings.Join(fakeConfigured(req), ", ")),
 			}},
 		})
 	}
-	hosts := fakeDomainTargets(req.GetConfigured(), req.GetHost())
+	hosts := fakeDomainTargets(fakeConfigured(req), req.GetHost())
 	if err := say(fmt.Sprintf("DOMAIN ADD slug=%s hosts=%s dns=%s edge=%s", req.GetSlug(), strings.Join(hosts, ","), req.GetEdge().GetDns().GetKind(), resolvedEdgeKind(req.GetEdge().GetKind()))); err != nil {
 		return err
 	}
@@ -1124,7 +1124,7 @@ func (s *deployFakeProviderServer) RemoveHostname(ctx context.Context, req *cont
 	say := func(message string) error {
 		return stream.Send(fakeProgress(message))
 	}
-	if err := say(fmt.Sprintf("DOMAIN RM slug=%s host=%s configured=%s dns=%s edge=%s", req.GetSlug(), req.GetHost(), strings.Join(req.GetConfigured(), ","), req.GetEdge().GetDns().GetKind(), resolvedEdgeKind(req.GetEdge().GetKind()))); err != nil {
+	if err := say(fmt.Sprintf("DOMAIN RM slug=%s host=%s configured=%s dns=%s edge=%s", req.GetSlug(), req.GetHost(), strings.Join(fakeConfigured(req), ","), req.GetEdge().GetDns().GetKind(), resolvedEdgeKind(req.GetEdge().GetKind()))); err != nil {
 		return err
 	}
 	for _, host := range fakeDomainTargets(nil, req.GetHost()) {
@@ -1135,6 +1135,14 @@ func (s *deployFakeProviderServer) RemoveHostname(ctx context.Context, req *cont
 	return stream.Send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	})
+}
+
+func fakeConfigured(req *contractv1.HostnameRequest) []string {
+	named := make([]string, 0, len(req.GetConfigured()))
+	for _, host := range req.GetConfigured() {
+		named = append(named, host.GetHostname())
+	}
+	return named
 }
 
 func fakeDomainTargets(configured []string, host string) []string {
@@ -1168,7 +1176,7 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *c
 	expires, _ := strconv.ParseInt(os.Getenv(FakeDomainExpiresEnvVar), 10, 64)
 
 	resp := &contractv1.GetHostnameStatusResponse{Ready: ready && len(req.GetConfigured()) > 0}
-	for _, host := range req.GetConfigured() {
+	for _, host := range fakeConfigured(req) {
 		row := &contractv1.ProductionHostname{
 			Hostname: host,
 			Declared: true,

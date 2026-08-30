@@ -89,10 +89,16 @@ message GetPreviewWildcardResponse {
   repeated string projects = 2;
 }
 
+message ConfiguredHostname {
+  string hostname = 1;
+
+  string app = 2;
+}
+
 message HostnameRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  repeated string configured = 2;
+  repeated ConfiguredHostname configured = 2;
 
   string host = 3;
 

@@ -806,7 +806,7 @@ func hostnameAdded(t *testing.T, client contractv1connect.ProviderServiceClient)
 	t.Helper()
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"shop.example"},
+		Configured: configuredHosts("shop.example"),
 		Edge:       &contractv1.EdgeSelection{Dns: &contractv1.Dns{Kind: string(fake.KindZone), Zone: "shop.example"}},
 	})
 	if err != nil {

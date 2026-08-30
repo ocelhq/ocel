@@ -115,6 +115,7 @@ type EdgeStack interface {
 type DomainBinding struct {
 	Hostname    string
 	Certificate string
+	App         string
 }
 
 type Ledger interface {

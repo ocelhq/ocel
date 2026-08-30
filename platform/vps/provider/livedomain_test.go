@@ -138,7 +138,7 @@ func TestLiveDomainAddOwesAnARecordNamingTheBoxAndTheBoxThenServesTheHostname(t 
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       domainSlug,
-		Configured: []string{hostname},
+		Configured: configuredHosts(hostname),
 		Edge:       &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
 	})
 	if err != nil {
@@ -182,7 +182,7 @@ func TestLiveDomainStatusNamesTheRecordsOwedTheCertificateHandleAndWhoRenewsIt(t
 
 	req := &contractv1.HostnameRequest{
 		Slug:       domainSlug,
-		Configured: []string{hostname},
+		Configured: configuredHosts(hostname),
 		Edge:       &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
 	}
 	stream, err := client.AddHostname(context.Background(), req)
@@ -225,7 +225,7 @@ func TestLiveDomainRmStopsTheHostnameServingAndLeavesNothingOfItLoaded(t *testin
 
 	bound := &contractv1.HostnameRequest{
 		Slug:       domainSlug,
-		Configured: []string{hostname},
+		Configured: configuredHosts(hostname),
 		Edge:       &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
 	}
 	stream, err := client.AddHostname(context.Background(), bound)
@@ -269,7 +269,7 @@ func TestLiveTheCertificateBehindAnUnboundHostnameStaysOnTheBox(t *testing.T) {
 
 	req := &contractv1.HostnameRequest{
 		Slug:       domainSlug,
-		Configured: []string{hostname},
+		Configured: configuredHosts(hostname),
 		Edge:       &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
 	}
 	stream, err := client.AddHostname(context.Background(), req)
@@ -304,7 +304,7 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       domainSlug,
-		Configured: []string{hostname},
+		Configured: configuredHosts(hostname),
 		Edge:       &contractv1.EdgeSelection{Kind: string(boxedge.Kind)},
 	})
 	if err != nil {
@@ -352,4 +352,12 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 		t.Errorf("the project that bound %s reads its own hostname as %v, want it unclaimed: every redeploy after a `domain add` would otherwise be refused for holding its own domain",
 			hostname, held)
 	}
+}
+
+func configuredHosts(named ...string) []*contractv1.ConfiguredHostname {
+	wired := make([]*contractv1.ConfiguredHostname, 0, len(named))
+	for _, host := range named {
+		wired = append(wired, &contractv1.ConfiguredHostname{Hostname: host})
+	}
+	return wired
 }

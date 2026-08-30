@@ -276,7 +276,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, rep runui.Reporter) error {
 	declared := ""
 	if hosts := preflight.Hostnames(cfg, "preview"); len(hosts) > 0 {
-		declared = hosts[0]
+		declared = hosts[0].Name
 	}
 	base := wildcard.GetBaseDomain()
 	configName := filepath.Base(cfg.Path)

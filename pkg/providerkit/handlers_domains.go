@@ -17,7 +17,7 @@ import (
 
 type hostnames struct {
 	*stackSession
-	configured []string
+	configured []ConfiguredHost
 	host       string
 	live       bool
 }
@@ -56,10 +56,10 @@ func (d *hostnames) add(ctx context.Context, report Reporter) error {
 		return Refuse(CodeNotReady,
 			"this project declares no domains.production, so there is no production hostname to add; declare one in the config and run this again — no command edits the config")
 	}
-	if d.host != "" && !slices.Contains(d.configured, d.host) {
+	if d.host != "" && !slices.Contains(d.declared(), d.host) {
 		return Refuse(CodeInvalid,
 			"this project does not declare %q: add it to domains.production and run this again — no command edits the config, which declares %s",
-			d.host, strings.Join(d.configured, ", "))
+			d.host, strings.Join(d.declared(), ", "))
 	}
 	var settledAny bool
 	for _, host := range d.addTargets() {
@@ -70,19 +70,22 @@ func (d *hostnames) add(ctx context.Context, report Reporter) error {
 		settledAny = settledAny || changed
 	}
 	if !settledAny && d.host == "" {
-		report.Say(fmt.Sprintf("Every hostname this project declares is already served: %s", strings.Join(d.configured, ", ")))
+		report.Say(fmt.Sprintf("Every hostname this project declares is already served: %s", strings.Join(d.declared(), ", ")))
 	}
 	return nil
 }
 
-func (d *hostnames) addTargets() []string {
-	if d.host != "" {
-		return []string{d.host}
+func (d *hostnames) declared() []string { return hostnamesOf(d.configured) }
+
+func (d *hostnames) addTargets() []ConfiguredHost {
+	if d.host == "" {
+		return d.configured
 	}
-	return d.configured
+	return slices.DeleteFunc(slices.Clone(d.configured), func(held ConfiguredHost) bool { return held.Hostname != d.host })
 }
 
-func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter) (bool, error) {
+func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, report Reporter) (bool, error) {
+	host := target.Hostname
 	settled := d.state.Host(host)
 	serving := settled.Serving()
 	held := settled.Certificate.ID
@@ -96,7 +99,7 @@ func (d *hostnames) settleHost(ctx context.Context, host string, report Reporter
 	}
 
 	report.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.settle.kind))
-	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate.ID}); err != nil {
+	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate.ID, App: target.App}); err != nil {
 		return true, err
 	}
 	if err := d.checkpoint(ctx); err != nil {
@@ -222,7 +225,7 @@ func (d *hostnames) removeTargets() ([]string, error) {
 	}
 	var targets []string
 	for _, host := range provisioned {
-		if !slices.Contains(d.configured, host) {
+		if !slices.Contains(d.declared(), host) {
 			targets = append(targets, host)
 		}
 	}
@@ -257,7 +260,7 @@ func (d *hostnames) status(ctx context.Context) (*contractv1.GetHostnameStatusRe
 }
 
 func (d *hostnames) statusHosts() []string {
-	hosts := slices.Clone(d.configured)
+	hosts := d.declared()
 	for _, host := range d.state.Hostnames() {
 		if !slices.Contains(hosts, host) {
 			hosts = append(hosts, host)
@@ -291,7 +294,7 @@ func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.Prod
 	}
 	row := &contractv1.ProductionHostname{
 		Hostname:       host,
-		Declared:       slices.Contains(d.configured, host),
+		Declared:       slices.Contains(d.declared(), host),
 		Certificate:    certificateState(settled, probe, owed, health.Status),
 		RenewalStatus:  health.Renewal,
 		ExpiresAt:      health.ExpiresAt,
@@ -315,7 +318,7 @@ func (d *hostnames) probe(ctx context.Context, host string) Probe {
 
 func (d *hostnames) pendingOn(host string, cert Certificate, health CertificateHealth, bound bool, probe Probe) string {
 	switch {
-	case !slices.Contains(d.configured, host):
+	case !slices.Contains(d.declared(), host):
 		return fmt.Sprintf("this project no longer declares %s; `ocel domain rm` gives it back", host)
 	case health.Terminates && !cert.Held():
 		return fmt.Sprintf("no certificate covers %s yet; run `ocel domain add`", host)

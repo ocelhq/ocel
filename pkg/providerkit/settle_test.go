@@ -268,7 +268,7 @@ func TestAStatusLineForAHostnameThatWillNotAnswerNamesWhatStoppedTheProbe(t *tes
 	settle.kind = "box"
 	rows := &hostnames{
 		stackSession: &stackSession{settle: settle},
-		configured:   []string{"shop.example.com"},
+		configured:   []ConfiguredHost{{Hostname: "shop.example.com"}},
 	}
 
 	probe := rows.probe(context.Background(), "shop.example.com")
