@@ -41,10 +41,28 @@ func ResolveComputes(cfg *projectconfig.Config, computes []string, provider stri
 		}
 		resolved[i] = app.Compute
 	}
+	for i, app := range cfg.Apps {
+		if err := containerOnly(app, resolved[i]); err != nil {
+			return "", err
+		}
+	}
 	for i := range cfg.Apps {
 		cfg.Apps[i].Compute = resolved[i]
 	}
 	return fallback, nil
+}
+
+func containerOnly(app projectconfig.App, compute string) error {
+	if compute == string(providerkit.ComputeContainer) {
+		return nil
+	}
+	if app.Build != nil {
+		return fmt.Errorf(
+			"app %q configures a `build`, and it runs on %q compute, which builds no image: `build` configures a container image and nothing else — give %q `compute: \"container\"`, or remove its `build`",
+			app.Name, compute, app.Name,
+		)
+	}
+	return nil
 }
 
 func list(values []string) string {
