@@ -44,7 +44,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := refuseClaimedDomains(tc.claims, projectconfig.ConfigFileName)
+			err := refuseClaimedDomains(tc.claims, projectconfig.ConfigFileName, func(string) {})
 			if !tc.refuse {
 				if err != nil {
 					t.Fatalf("refuseClaimedDomains err = %v, want nil", err)
@@ -67,9 +67,24 @@ func TestRefuseClaimedDomains(t *testing.T) {
 
 		err := refuseClaimedDomains([]*contractv1.DomainClaim{
 			{Hostname: "*.previews.ocel.dev", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: edge.PreviewEntryOwner},
-		}, projectconfig.ConfigFileName)
+		}, projectconfig.ConfigFileName, func(string) {})
 		if err != nil {
 			t.Fatalf("refuseClaimedDomains err = %v, want the shared entry worker to pass", err)
+		}
+	})
+
+	t.Run("a hostname whose owner could not be read warns and deploys", func(t *testing.T) {
+		t.Parallel()
+
+		var warned []string
+		err := refuseClaimedDomains([]*contractv1.DomainClaim{
+			{Hostname: "acme.com", Cause: "the edge was throttled listing what it serves"},
+		}, projectconfig.ConfigFileName, func(message string) { warned = append(warned, message) })
+		if err != nil {
+			t.Fatalf("refuseClaimedDomains err = %v, want a deploy that carries on when the provider could not say who serves the hostname", err)
+		}
+		if len(warned) != 1 || !strings.Contains(warned[0], "acme.com") || !strings.Contains(warned[0], "throttled") {
+			t.Errorf("warnings = %q, want one naming the hostname and why its owner could not be read", warned)
 		}
 	})
 
@@ -80,7 +95,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 			{Hostname: "acme.com", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-other-production-web"},
 			{Hostname: "www.acme.com", Status: contractv1.DomainClaim_STATUS_UNCLAIMED},
 			{Hostname: "shop.acme.com", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-third-production-web"},
-		}, projectconfig.ConfigFileName)
+		}, projectconfig.ConfigFileName, func(string) {})
 		if err == nil {
 			t.Fatal("refuseClaimedDomains err = nil, want a refusal")
 		}

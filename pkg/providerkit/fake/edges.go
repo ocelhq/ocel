@@ -101,6 +101,8 @@ type Edge struct {
 	serving  map[string]string
 	serves   *[]edge.Need
 	refusal  error
+
+	unreadable error
 }
 
 func (e *Edge) Bindings() []edge.DomainBinding {
@@ -264,7 +266,16 @@ func (e *Edge) DestroyPreviewWildcard(_ context.Context, baseDomain string) erro
 func (e *Edge) DomainOwner(_ context.Context, hostname string) (string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.unreadable != nil {
+		return "", e.unreadable
+	}
 	return e.owners[hostname], nil
+}
+
+func (e *Edge) OwnersUnreadable(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.unreadable = err
 }
 
 func (e *Edge) ProjectOwner(slug string, class edge.Class) string {

@@ -97,10 +97,12 @@ func (h *handlers) domainClaims(ctx context.Context, provider Provider, class Cl
 		claim := &contractv1.DomainClaim{Hostname: hostname, Status: contractv1.DomainClaim_STATUS_UNCLAIMED}
 		if !slices.Contains(ours, hostname) {
 			owner, err := front.DomainOwner(ctx, hostname)
-			if err != nil {
+			switch {
+			case err != nil && ctx.Err() != nil:
 				return nil, err
-			}
-			if owner != "" && owner != edge.PreviewEntryOwner && owner != mine {
+			case err != nil:
+				claim.Status, claim.Cause = contractv1.DomainClaim_STATUS_UNSPECIFIED, err.Error()
+			case owner != "" && owner != edge.PreviewEntryOwner && owner != mine:
 				claim.Status, claim.Owner = contractv1.DomainClaim_STATUS_CLAIMED, owner
 			}
 		}
