@@ -11,8 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-var knownComputes = []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
-
 func namesTheComputesItRuns(t *testing.T, suite Suite, provider contractv1connect.ProviderServiceClient) {
 	t.Helper()
 
@@ -34,33 +32,26 @@ func namesTheComputesItRuns(t *testing.T, suite Suite, provider contractv1connec
 			t.Errorf("PreflightResponse.computes names %q twice, and the first entry is the default, so a repeat leaves the default ambiguous", compute)
 		}
 		seen[compute] = true
-		if !slices.Contains(knownComputes, providerkit.Compute(compute)) {
-			t.Errorf("PreflightResponse.computes names %q, which is no compute the kit knows: %v", compute, providerkit.ComputeNames(knownComputes))
+		if !providerkit.KnownCompute(compute) {
+			t.Errorf("PreflightResponse.computes names %q, which is no compute the kit knows: %v", compute, providerkit.ComputeNames(providerkit.Computes()))
 		}
 	}
 
-	declared, ok := computesDeclared(t, suite)
-	if !ok {
-		return
-	}
+	declared := computesDeclared(t, suite)
 	if want := providerkit.ComputeNames(declared); !slices.Equal(served, want) {
 		t.Errorf("PreflightResponse.computes = %v, want %v — the wire answers what Computes() answers, order included", served, want)
 	}
 }
 
-func computesDeclared(t *testing.T, suite Suite) ([]providerkit.Compute, bool) {
+func computesDeclared(t *testing.T, suite Suite) []providerkit.Compute {
 	t.Helper()
 
-	build := suite.Spec.New
-	if build == nil {
-		build = suite.New
+	if suite.Spec.New == nil {
+		t.Fatal("the suite carries no Spec.New, so nothing can read Computes() back off the provider the wire is serving")
 	}
-	if build == nil {
-		return nil, false
-	}
-	provider, err := build(context.Background(), suite.Options)
+	provider, err := suite.Spec.New(context.Background(), suite.Options)
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider to read Computes() from", err)
 	}
-	return provider.Computes(), true
+	return provider.Computes()
 }
