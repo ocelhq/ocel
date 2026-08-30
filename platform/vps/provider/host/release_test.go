@@ -478,6 +478,79 @@ func TestExitedRestartingAndHungReadAsThreeDifferentThings(t *testing.T) {
 	}
 }
 
+func strandedByWrite(t *testing.T, back session.Result) (*flipped, string) {
+	t.Helper()
+	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
+	writes := 0
+	stood.answer = func(command string) (session.Result, bool) {
+		switch {
+		case strings.HasPrefix(command, "cat "+quoted(ProxyConfig)):
+			return session.Result{Stdout: stood.held}, true
+		case strings.Contains(command, "cat > "+quoted(ProxyConfig)):
+			stood.mu.Lock()
+			writes++
+			first := writes == 1
+			if first {
+				stood.held = ""
+			} else if back.Code == 0 {
+				stood.held = stood.fed[len(stood.fed)-1]
+			}
+			stood.mu.Unlock()
+			if first {
+				return session.Result{Code: 1, Stderr: "no space left on device"}, true
+			}
+			return back, true
+		default:
+			return session.Result{}, false
+		}
+	}
+	err := stood.host().Release(context.Background(), aRelease(), nil)
+	if err == nil {
+		t.Fatal("a release whose flip configuration was never written released successfully")
+	}
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) {
+		t.Errorf("a flip configuration that could not be written failed with %T, want the refusal every other failure renders", err)
+	}
+	return stood, err.Error()
+}
+
+func TestAFlipConfigurationThatCannotBeWrittenLeavesNeitherAStandingContainerNorATruncatedFile(t *testing.T) {
+	t.Parallel()
+
+	stood, said := strandedByWrite(t, session.Result{})
+	if stood.at(quoted("deploy")) >= 0 {
+		t.Errorf("a flip configuration that was never written still reached the helper: %v", stood.commands())
+	}
+	if stood.at("docker rm --force "+quoted(physical)) < 0 {
+		t.Errorf("a flip configuration that could not be written left %s standing with nothing routing to it: %v", physical, stood.commands())
+	}
+	state, err := ReadProxyState([]byte(stood.held))
+	if err != nil {
+		t.Fatalf("%s was left as %q, which a restarted proxy reads as its serving configuration: %v", ProxyConfig, stood.held, err)
+	}
+	if len(state.Routes) != 1 || state.Routes[0].Upstream != retired {
+		t.Errorf("%s was left naming %v rather than the upstream that is still live", ProxyConfig, state.Routes)
+	}
+	for what, wanted := range map[string]string{
+		"the file it could not write":  ProxyConfig,
+		"why the write failed":         "no space left on device",
+		"what became of the container": physical,
+	} {
+		if !strings.Contains(said, wanted) {
+			t.Errorf("a flip configuration that could not be written is refused with\n%s\nand that names no %s (%s)", said, what, wanted)
+		}
+	}
+}
+
+func TestAFlipConfigurationThatCannotBeWrittenBackEitherSaysTheFileMayBeTruncated(t *testing.T) {
+	t.Parallel()
+
+	_, said := strandedByWrite(t, session.Result{Code: 1, Stderr: "no space left on device"})
+	if !strings.Contains(said, "truncat") {
+		t.Errorf("a %s that could be neither written nor put back is refused with\n%s\nwhich never warns that the file a restarted proxy serves may be truncated", ProxyConfig, said)
+	}
+}
 func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T) {
 	t.Parallel()
 
