@@ -152,7 +152,8 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	vm.runs(t, workload)
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 
-	singletons := []string{"/var/lib/ocel", "/usr/local/lib/ocel", "/usr/local/lib/ocel/seal", "/usr/local/lib/ocel/records", "/etc/sudoers.d/ocel-seal", "/etc/ocel"}
+	singletons := []string{"/var/lib/ocel", "/usr/local/lib/ocel", "/usr/local/lib/ocel/seal", "/usr/local/lib/ocel/records",
+		host.ProxyHelper, host.ProxyConfig, "/etc/sudoers.d/ocel-seal", "/etc/ocel"}
 
 	first, err := bootstrapper.PlanRemoval(ctx, production)
 	if err != nil {
@@ -193,6 +194,9 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	}
 	if !vm.running(t, workload) {
 		t.Errorf("%s is gone after the first destroy", workload)
+	}
+	if !vm.running(t, host.ProxyContainer) {
+		t.Errorf("%s went with the %s class, and the %s sibling is still served through it", host.ProxyContainer, production, preview)
 	}
 
 	last, err := bootstrapper.PlanRemoval(ctx, preview)
