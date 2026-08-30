@@ -234,16 +234,21 @@ func TestTheControlPlaneBindsAUnixSocketAndNothingPublishesAPortForIt(t *testing
 		t.Errorf("the proxy config names caddy's default admin port, and the whole of this pick is that nothing listens on it:\n%s", proxyBaseline)
 	}
 	command := containerCommand()
-	if strings.Count(command, "--publish") != 1 || !strings.Contains(command, quoted("--publish")+" "+quoted(proxyPort+":"+proxyPort)) {
-		t.Errorf("the proxy is run with something other than the one published port %s:\n%s", proxyPort, command)
+	if strings.Count(command, "--publish") != len(proxyServing()) {
+		t.Errorf("the proxy is run with something other than the ports requests arrive on:\n%s", command)
+	}
+	for _, port := range proxyServing() {
+		if !strings.Contains(command, quoted("--publish")+" "+quoted(port+":"+port)) {
+			t.Errorf("the proxy does not publish %s, and a request that never reaches it is one the box cannot answer:\n%s", port, command)
+		}
 	}
 	ports := map[string][]map[string]string{}
 	if err := json.Unmarshal([]byte(marshalled(proxyPorts())), &ports); err != nil {
 		t.Fatal(err)
 	}
 	for port := range ports {
-		if port != proxyPort+"/tcp" {
-			t.Errorf("the proxy publishes %s, and the only port it may publish is the one requests arrive on", port)
+		if !slices.Contains(proxyServing(), strings.TrimSuffix(port, "/tcp")) {
+			t.Errorf("the proxy publishes %s, and the only ports it may publish are the ones requests arrive on", port)
 		}
 	}
 	if strings.Contains(command, ProxyAdminSocket) {

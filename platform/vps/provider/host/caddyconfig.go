@@ -54,10 +54,25 @@ type HostClaim struct {
 	Owner    string
 }
 
+type Pin struct {
+	Hostname string
+	Path     string
+}
+
+const (
+	pinCertificate = ".crt"
+	pinKey         = ".key"
+)
+
+func PinCertificate(path string) string { return path + pinCertificate }
+
+func PinKey(path string) string { return path + pinKey }
+
 type ProxyState struct {
 	Grace    time.Duration
 	Claims   []HostClaim
 	Routes   []AppRoute
+	Pins     []Pin
 	Retiring string
 }
 
@@ -95,6 +110,21 @@ type caddyAdmin struct {
 
 type caddyApps struct {
 	HTTP caddyHTTP `json:"http"`
+	TLS  *caddyTLS `json:"tls,omitempty"`
+}
+
+type caddyTLS struct {
+	Certificates caddyCertificates `json:"certificates"`
+}
+
+type caddyCertificates struct {
+	LoadFiles []caddyLoadFile `json:"load_files"`
+}
+
+type caddyLoadFile struct {
+	Certificate string   `json:"certificate"`
+	Key         string   `json:"key"`
+	Tags        []string `json:"tags"`
 }
 
 type caddyHTTP struct {
@@ -196,13 +226,20 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 
 	live := seeded.Apps.HTTP.Servers[proxyServer]
 	live.Routes = routes
+	pinned, err := loadFiles(state.Pins)
+	if err != nil {
+		return nil, err
+	}
 	rendered := caddyConfig{
 		Admin:   caddyAdmin{Listen: caddyadmin.Listen(ProxyAdminSocket)},
 		Logging: seeded.Logging,
-		Apps: caddyApps{HTTP: caddyHTTP{
-			GracePeriod: spelled(state.Grace),
-			Servers:     map[string]caddyServer{proxyServer: live},
-		}},
+		Apps: caddyApps{
+			HTTP: caddyHTTP{
+				GracePeriod: spelled(state.Grace),
+				Servers:     map[string]caddyServer{proxyServer: live},
+			},
+			TLS: pinned,
+		},
 	}
 	if state.Retiring != "" {
 		rendered.Apps.HTTP.Servers[proxyDrainServer] = caddyServer{
@@ -211,6 +248,50 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 		}
 	}
 	return json.Marshal(rendered)
+}
+
+func loadFiles(pins []Pin) (*caddyTLS, error) {
+	if len(pins) == 0 {
+		return nil, nil
+	}
+	files := make([]caddyLoadFile, 0, len(pins))
+	for _, pin := range slices.SortedFunc(slices.Values(pins), func(a, b Pin) int {
+		return strings.Compare(a.Hostname, b.Hostname)
+	}) {
+		if err := validPin(pin); err != nil {
+			return nil, err
+		}
+		files = append(files, caddyLoadFile{
+			Certificate: PinCertificate(pin.Path),
+			Key:         PinKey(pin.Path),
+			Tags:        []string{pin.Hostname},
+		})
+	}
+	return &caddyTLS{Certificates: caddyCertificates{LoadFiles: files}}, nil
+}
+
+func validPin(pin Pin) error {
+	if pin.Hostname == "" || !strings.HasPrefix(pin.Path, "/") {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"a pinned certificate on this box names host %q at %q, and the proxy loads a pair off a path this host spells in full",
+			pin.Hostname, pin.Path)
+	}
+	return nil
+}
+
+func pinnedBy(read caddyConfig) ([]Pin, error) {
+	if read.Apps.TLS == nil {
+		return nil, nil
+	}
+	var pins []Pin
+	for _, file := range read.Apps.TLS.Certificates.LoadFiles {
+		path, cut := strings.CutSuffix(file.Certificate, pinCertificate)
+		if len(file.Tags) != 1 || !cut || file.Key != PinKey(path) {
+			return nil, unwritten("pinned certificate", file.Certificate)
+		}
+		pins = append(pins, Pin{Hostname: file.Tags[0], Path: path})
+	}
+	return pins, nil
 }
 
 func ReadProxyState(document []byte) (ProxyState, error) {
@@ -229,7 +310,11 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 			return ProxyState{}, unwritten("server", named)
 		}
 	}
-	state := ProxyState{Grace: grace}
+	pins, err := pinnedBy(read)
+	if err != nil {
+		return ProxyState{}, err
+	}
+	state := ProxyState{Grace: grace, Pins: pins}
 	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
 		if route.Identity == boxIdentity {
 			continue

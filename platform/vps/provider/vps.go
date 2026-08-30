@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -20,8 +21,9 @@ import (
 const Vendor providerkit.Vendor = "vps"
 
 type Options struct {
-	SSH       Target `json:"ssh"`
-	DeployKey string `json:"deployKey"`
+	SSH          Target            `json:"ssh"`
+	DeployKey    string            `json:"deployKey"`
+	Certificates map[string]string `json:"certificates"`
 }
 
 type Target struct {
@@ -148,7 +150,7 @@ func newProvider(options Options, dial host.Dial) *Provider {
 }
 
 func (p *Provider) standing(dial host.Dial) *Provider {
-	p.host = host.New(dial, host.Keys{Path: p.options.DeployKey})
+	p.host = host.New(dial, host.Keys{Path: p.options.DeployKey}, pins(p.options.Certificates))
 	p.records = host.NewRecords(p.host)
 	p.sealer = host.NewSealer(p.host)
 	return p
@@ -184,6 +186,15 @@ func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{p} }
 
 func (p *Provider) box() *box.Edge {
 	return box.New(p.host, p.records, p.options.SSH.session().Destination())
+}
+
+func pins(configured map[string]string) []host.Pin {
+	held := make([]host.Pin, 0, len(configured))
+	for hostname, path := range configured {
+		held = append(held, host.Pin{Hostname: hostname, Path: strings.TrimSuffix(path, "/")})
+	}
+	slices.SortFunc(held, func(a, b host.Pin) int { return strings.Compare(a.Hostname, b.Hostname) })
+	return held
 }
 
 func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
