@@ -123,7 +123,7 @@ func TestAServerlessAppIsCarriedAsNoContainerAtAll(t *testing.T) {
 	}
 }
 
-func TestAContainerAppCarriesNoFunction(t *testing.T) {
+func TestACallerThatPacksAContainerAppIsRefusedByTheBuilder(t *testing.T) {
 	t.Parallel()
 
 	_, err := Build("proj-1", nil, []App{
