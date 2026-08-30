@@ -529,6 +529,11 @@ func RunArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
 	ref := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
 	body := []byte("a build artifact")
 
+	if _, storeless := artifacts.(providerkit.NoArtifacts); storeless {
+		runStorelessArtifactStore(t, artifacts, ref)
+		return
+	}
+
 	t.Run("what Put stores, Open reads back", func(t *testing.T) {
 		if err := artifacts.Put(ctx, ref, bytes.NewReader(body)); err != nil {
 			t.Fatalf("Put() = %v, want the artifact stored", err)
@@ -605,6 +610,57 @@ func RunArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
 	t.Run("RemovePrefix of a prefix holding nothing is not an error", func(t *testing.T) {
 		if err := artifacts.RemovePrefix(ctx, ref.Class, "conformance/"+t.Name()+"/nothing-here/", nil); err != nil {
 			t.Fatalf("RemovePrefix() of a prefix nothing was written under = %v, want nil", err)
+		}
+	})
+}
+
+func runStorelessArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore, ref providerkit.ArtifactRef) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	t.Run("Put refuses rather than accepting a write nothing will ever read back", func(t *testing.T) {
+		var refusal providerkit.Refusal
+		err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("a build artifact")))
+		if !errors.As(err, &refusal) {
+			t.Fatalf("Put() into a provider that keeps no artifacts = %v, want a refusal: a store that reports a write it loses is worse than one that has none", err)
+		}
+		if refusal.Code != providerkit.CodeInvalid {
+			t.Errorf("Put() refused with %q, want %q so the CLI renders it as the caller's mistake", refusal.Code, providerkit.CodeInvalid)
+		}
+		if refusal.Message == "" {
+			t.Error("Put() refused with no message, so the CLI has nothing to tell the user")
+		}
+	})
+
+	t.Run("Open refuses rather than answering empty", func(t *testing.T) {
+		var refusal providerkit.Refusal
+		opened, err := artifacts.Open(ctx, ref)
+		if !errors.As(err, &refusal) {
+			if err == nil {
+				opened.Close()
+			}
+			t.Fatalf("Open() from a provider that keeps no artifacts = %v, want a refusal: a missing artifact must never read as an empty one", err)
+		}
+	})
+
+	t.Run("Has answers a plain false", func(t *testing.T) {
+		held, err := artifacts.Has(ctx, ref)
+		if err != nil {
+			t.Fatalf("Has() = %v, want a plain false: plan synthesis draws its create row from this answer", err)
+		}
+		if held {
+			t.Error("Has() claims a provider that keeps no artifacts holds one")
+		}
+	})
+
+	t.Run("RemovePrefix of any prefix, including one nothing wrote under, is nil", func(t *testing.T) {
+		for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+			for _, prefix := range []string{"conformance/" + t.Name() + "/", "conformance/" + t.Name() + "/nothing-here/"} {
+				if err := artifacts.RemovePrefix(ctx, class, prefix, nil); err != nil {
+					t.Errorf("RemovePrefix(%s, %q) = %v, want nil: teardown sweeps it on every destroy and every preview reap", class, prefix, err)
+				}
+			}
 		}
 	})
 }
