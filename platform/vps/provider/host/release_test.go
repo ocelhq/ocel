@@ -155,6 +155,46 @@ func TestEveryWayTheOneCallCanFailReachesTheSameEndState(t *testing.T) {
 	}
 }
 
+func TestAFailureThePostCanOnlyReachAfterItLandedPutsThePreviousConfigBackOnTheProxy(t *testing.T) {
+	t.Parallel()
+
+	for what, answered := range map[string]session.Result{
+		"a retired upstream gone from the pool": {Code: 5, Stderr: "carries no upstream " + retired},
+		"a socket that stopped answering":       {Code: 2, Stderr: "the proxy answered nothing over /run/caddy-admin.sock"},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			stood, err := released(t, aRelease(), answered, nil)
+			if err == nil {
+				t.Fatalf("%s released successfully", what)
+			}
+			called := stood.at(quoted("deploy"))
+			wrote, posted := -1, -1
+			for at, command := range stood.commands() {
+				if at <= called {
+					continue
+				}
+				if wrote < 0 && strings.Contains(command, "cat > "+quoted(ProxyConfig)) {
+					wrote = at
+				}
+				if posted < 0 && strings.Contains(command, quoted("flip")) {
+					posted = at
+				}
+			}
+			if posted < 0 {
+				t.Fatalf("%s rolled the file back and never re-posted it, so the proxy is left live-routing to an upstream this loop then removes: %v", what, stood.commands())
+			}
+			if wrote < 0 || posted < wrote {
+				t.Errorf("%s posted a configuration it had not written back first: %v", what, stood.commands())
+			}
+			if removed := stood.at("docker rm --force " + quoted(physical)); removed < 0 || removed < posted {
+				t.Errorf("%s removed %s before the proxy was put back onto %s: %v", what, physical, retired, stood.commands())
+			}
+		})
+	}
+}
+
 func TestAFirstDeployThatFailsLeavesNothingServingAndIsNotAPathOfItsOwn(t *testing.T) {
 	t.Parallel()
 

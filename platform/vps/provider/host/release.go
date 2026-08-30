@@ -159,7 +159,7 @@ func (h *Host) evidence(ctx context.Context, rel Release, result session.Result,
 		logs = noLogOutput
 	}
 
-	unwound := h.unwind(ctx, rel, previous)
+	unwound := h.unwind(ctx, rel, previous, elevation)
 
 	return providerkit.Refuse(providerkit.CodeNotReady,
 		"release %s onto %s: the proxy's flip helper exited %d and the previous release is still the live upstream\n"+
@@ -172,12 +172,21 @@ func (h *Host) evidence(ctx context.Context, rel Release, result session.Result,
 		state, appLogTail, logs+unwound)
 }
 
-func (h *Host) unwind(ctx context.Context, rel Release, previous string) string {
-	var left []string
+func (h *Host) restore(ctx context.Context, previous, elevation string) error {
 	if err := h.writeProxyDocument(ctx, previous); err != nil {
-		left = append(left, fmt.Sprintf("%s still holds the configuration this release rendered and the proxy never accepted, so a restart would adopt it: %v", ProxyConfig, err))
+		return err
 	}
-	if err := h.RemoveContainer(ctx, rel.targetName()); err != nil {
+	_, err := h.ran(ctx, "put the proxy back onto the previous release",
+		words(helperCommand("flip", proxyConfigMount)), nil, elevation)
+	return err
+}
+
+func (h *Host) unwind(ctx context.Context, rel Release, previous, elevation string) string {
+	var left []string
+	if err := h.restore(ctx, previous, elevation); err != nil {
+		left = append(left, fmt.Sprintf("%s and the running proxy were not put back, so %s may still be the live upstream and is left standing rather than removed: %v",
+			ProxyConfig, rel.targetName(), err))
+	} else if err := h.RemoveContainer(ctx, rel.targetName()); err != nil {
 		left = append(left, fmt.Sprintf("%s is still standing and serving nothing: %v", rel.targetName(), err))
 	}
 	if len(left) == 0 {
