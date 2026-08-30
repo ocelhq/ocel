@@ -20,13 +20,13 @@ func Repository(coordinate string) (string, bool) {
 }
 
 func (h *Host) Promote(ctx context.Context, class providerkit.Class, app, coordinate string) error {
-	_, err := h.releases(ctx, "record "+coordinate+" as what "+app+" most recently served",
+	_, err := h.releases(ctx, "record "+coordinate+" as what "+app+" most recently served", "",
 		app, "promote", string(class), coordinate)
 	return err
 }
 
 func (h *Host) Forget(ctx context.Context, class providerkit.Class, app string) error {
-	_, err := h.releases(ctx, "drop the window "+app+" was served from",
+	_, err := h.releases(ctx, "drop the window "+app+" was served from", "",
 		app, "forget", string(class))
 	return err
 }
@@ -37,7 +37,11 @@ func (h *Host) Reconcile(ctx context.Context, app, coordinate string, report pro
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"%s runs %s, which names no repository this host can list, and a sweep whose filter and desired set disagree on scope removes the wrong thing", app, coordinate)
 	}
-	said, err := h.releases(ctx, "reconcile "+app+"'s images", app, "reconcile", repository)
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return err
+	}
+	said, err := h.releases(ctx, "reconcile "+app+"'s images", elevation, app, "reconcile", repository)
 	if err != nil {
 		return err
 	}
@@ -54,11 +58,7 @@ func (h *Host) Reconcile(ctx context.Context, app, coordinate string, report pro
 	return nil
 }
 
-func (h *Host) releases(ctx context.Context, what, app string, args ...string) (string, error) {
-	elevation, err := h.reachDocker(ctx)
-	if err != nil {
-		return "", err
-	}
+func (h *Host) releases(ctx context.Context, what, elevation, app string, args ...string) (string, error) {
 	command := quoted(releasesHelper) + " " + quoted(app)
 	for _, arg := range args {
 		command += " " + quoted(arg)

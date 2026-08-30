@@ -18,13 +18,14 @@ import (
 const loadedCoordinate = "ocel/web:sha256-abc"
 
 type box struct {
-	mu      sync.Mutex
-	ran     []string
-	fed     []string
-	holds   bool
-	serves  map[string]string
-	images  map[string]string
-	refuses func(command string) (session.Result, bool)
+	mu       sync.Mutex
+	ran      []string
+	fed      []string
+	holds    bool
+	unsocket bool
+	serves   map[string]string
+	images   map[string]string
+	refuses  func(command string) (session.Result, bool)
 }
 
 func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
@@ -44,6 +45,9 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 		if result, refused := b.refuses(command); refused {
 			return result, nil
 		}
+	}
+	if b.unsocket && strings.Contains(command, "docker version") {
+		return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, nil
 	}
 	var said string
 	for _, line := range strings.Split(command, "\n") {
@@ -100,7 +104,9 @@ func (b *box) Run(ctx context.Context, command string) (string, error) {
 }
 
 func (b *box) Preflight(context.Context) (session.Facts, error) {
-	return session.Facts{Root: true, Systemd: true}, nil
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return session.Facts{Root: !b.unsocket, Systemd: true}, nil
 }
 
 func (b *box) Destination() session.Destination {
