@@ -534,6 +534,9 @@ func TestBuild(t *testing.T) {
 		if apps[0].GetFramework() != "next" {
 			t.Fatalf("app framework = %q, want %q", apps[0].GetFramework(), "next")
 		}
+		if apps[0].GetCompute() != "serverless" {
+			t.Errorf("app compute = %q, want %q — an app nobody configured takes the compute preflight resolved", apps[0].GetCompute(), "serverless")
+		}
 	})
 
 	t.Run("fills a configured app's framework from its functions", func(t *testing.T) {
@@ -553,12 +556,36 @@ func TestBuild(t *testing.T) {
 	t.Run("a configured app with no functions still appears", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express"}}, "serverless", nil, nil, nil, nil)
+		manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express", Compute: "container"}}, "serverless", nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 		if len(manifest.GetApps()) != 1 || manifest.GetApps()[0].GetName() != "web" {
 			t.Fatalf("apps = %v, want one app named web", manifest.GetApps())
+		}
+		if got := manifest.GetApps()[0].GetCompute(); got != "container" {
+			t.Errorf("app compute = %q, want the %q the config asked for rather than the project default", got, "container")
+		}
+	})
+
+	t.Run("a configured app that names no compute takes the resolved one", func(t *testing.T) {
+		t.Parallel()
+
+		manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express"}}, "container", nil, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		if got := manifest.GetApps()[0].GetCompute(); got != "container" {
+			t.Errorf("app compute = %q, want %q", got, "container")
+		}
+	})
+
+	t.Run("refuses to build with no compute resolved", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express"}}, "", nil, nil, nil, nil)
+		if err == nil || !strings.Contains(err.Error(), "compute") {
+			t.Fatalf("Build err = %v, want a refusal naming the compute the manifest was never given", err)
 		}
 	})
 
