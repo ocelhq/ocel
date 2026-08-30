@@ -133,22 +133,7 @@ func TestLiveARailpackBuildLandsAWorkingImageInTheDaemon(t *testing.T) {
 		t.Fatalf("Build() against a real daemon = %v", err)
 	}
 
-	if image.Repository != "ocel/web-api" {
-		t.Errorf("the image's repository is %q, want one derived from the app's name", image.Repository)
-	}
-	if want := image.Repository + "@" + image.Digest; image.Ref != want {
-		t.Errorf("the image's ref is %q, want %q", image.Ref, want)
-	}
-	for _, coordinate := range []string{image.Ref, image.Repository + ":" + image.Tag} {
-		if _, err := vm.attempt("docker image inspect " + coordinate); err != nil {
-			t.Errorf("the daemon holds no image at %s, so the coordinate ocel hands a provider names nothing: %v", coordinate, err)
-		}
-	}
-
-	repoDigests := vm.ssh(t, "docker image inspect --format '{{json .RepoDigests}}' "+image.Repository+":"+image.Tag)
-	if !strings.Contains(repoDigests, image.Ref) {
-		t.Errorf("the daemon addresses the image it built by %s, and %s is not among them: the digest ocel hands a provider is not the one the daemon answers to", repoDigests, image.Ref)
-	}
+	vm.addresses(t, image, "ocel/web-api")
 
 	if pulled := vm.ssh(t, "docker image ls --format '{{.Repository}}'"); strings.Contains(pulled, "railpack-frontend") {
 		t.Errorf("the daemon pulled a railpack frontend image, so the build was not in-process:\n%s", pulled)
@@ -165,25 +150,63 @@ func TestLiveARailpackBuildLandsAWorkingImageInTheDaemon(t *testing.T) {
 		}
 	}
 
-	name := "ocel-live-build"
+	if said := vm.serves(t, image, 18080); said != "plainserver" {
+		t.Errorf("the running image answered %q, want the app's own response", said)
+	}
+}
+
+func (vm machine) addresses(t *testing.T, image imagebuild.Image, repository string) {
+	t.Helper()
+	if image.Repository != repository {
+		t.Errorf("the image's repository is %q, want %q, derived from the app's name", image.Repository, repository)
+	}
+	if want := image.Repository + "@" + image.Digest; image.Ref != want {
+		t.Errorf("the image's ref is %q, want %q", image.Ref, want)
+	}
+	for _, coordinate := range []string{image.Ref, image.Repository + ":" + image.Tag} {
+		if _, err := vm.attempt("docker image inspect " + coordinate); err != nil {
+			t.Errorf("the daemon holds no image at %s, so the coordinate ocel hands a provider names nothing: %v", coordinate, err)
+		}
+	}
+	repoDigests := vm.ssh(t, "docker image inspect --format '{{json .RepoDigests}}' "+image.Repository+":"+image.Tag)
+	if !strings.Contains(repoDigests, image.Ref) {
+		t.Errorf("the daemon addresses the image it built by %s, and %s is not among them: the digest ocel hands a provider is not the one the daemon answers to", repoDigests, image.Ref)
+	}
+}
+
+func (vm machine) serves(t *testing.T, image imagebuild.Image, port int) string {
+	t.Helper()
+	name := fmt.Sprintf("ocel-live-%d", port)
 	vm.ssh(t, "docker rm -f "+name+" >/dev/null 2>&1 || true")
 	t.Cleanup(func() { _, _ = vm.attempt("docker rm -f " + name) })
-	vm.ssh(t, fmt.Sprintf("docker run -d --name %s -e PORT=8080 -p 127.0.0.1:18080:8080 %s", name, image.Ref))
+	vm.ssh(t, fmt.Sprintf("docker run -d --name %s -e PORT=8080 -p 127.0.0.1:%d:8080 %s", name, port, image.Ref))
 
-	var said string
 	deadline := time.Now().Add(60 * time.Second)
 	for {
-		out, err := vm.attempt("curl -sf -m 2 http://127.0.0.1:18080/")
+		said, err := vm.attempt(fmt.Sprintf("curl -sf -m 2 http://127.0.0.1:%d/", port))
 		if err == nil {
-			said = out
-			break
+			return said
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the image railpack built never served on the injected PORT: %v\n%s", err, vm.ssh(t, "docker logs "+name+" 2>&1 | tail -30"))
+			t.Fatalf("the image built for %s never served on the injected PORT: %v\n%s", image.Ref, err, vm.ssh(t, "docker logs "+name+" 2>&1 | tail -30"))
 		}
 		time.Sleep(2 * time.Second)
 	}
-	if said != "plainserver" {
-		t.Errorf("the running image answered %q, want the app's own response", said)
+}
+
+func TestLiveADockerfileBuildLandsTheSameCoordinateAsARailpackOne(t *testing.T) {
+	vm := live(t)
+	vm.engine(t)
+	vm.forward(t)
+
+	image, err := imagebuild.Builder{Progress: progress{t}}.Build(context.Background(), imagebuild.App{Name: "Docs Site", Dir: "testdata/dockerfileapp"})
+	if err != nil {
+		t.Fatalf("Build() of an app with a Dockerfile against a real daemon = %v", err)
+	}
+
+	vm.addresses(t, image, "ocel/docs-site")
+
+	if said := vm.serves(t, image, 18081); said != "dockerfile" {
+		t.Errorf("the running image answered %q: the app's Dockerfile is what sets that, so %q was built by railpack instead", said, image.Ref)
 	}
 }
