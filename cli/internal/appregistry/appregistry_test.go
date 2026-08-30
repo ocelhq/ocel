@@ -134,6 +134,23 @@ func TestAProviderThatFailsTheResolveFailsTheDeploy(t *testing.T) {
 	}
 }
 
+func TestAProjectPushingNoImageAsksTheProviderForNoRegistry(t *testing.T) {
+	native := hosting()
+	cfg := project(nil)
+	cfg.Apps = []projectconfig.App{{Name: "api", Compute: "serverless", Framework: "express"}}
+
+	target, named, err := Resolve(context.Background(), cfg, native)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v, want a deploy that pushes nothing to want no registry", err)
+	}
+	if named {
+		t.Errorf("Resolve() = %+v, want nothing where no app is pushed anywhere", target)
+	}
+	if calls := native.calls(); len(calls) != 0 {
+		t.Errorf("the provider was asked %v to resolve a registry for no repository at all", calls)
+	}
+}
+
 func TestATransferNeedingARegistryWithNoneNamesTheGap(t *testing.T) {
 	_, err := Demand(context.Background(), project(nil), hostless())
 	if err == nil {

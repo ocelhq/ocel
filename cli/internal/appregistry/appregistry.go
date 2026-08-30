@@ -73,6 +73,9 @@ func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host) (Target,
 	if err != nil {
 		return Target{}, false, err
 	}
+	if len(pushing) == 0 {
+		return Target{}, false, nil
+	}
 	resp, err := host.ResolveImageRegistry(ctx, &contractv1.ResolveImageRegistryRequest{Repositories: pushing})
 	if connect.CodeOf(err) == connect.CodeUnimplemented {
 		return Target{}, false, nil
