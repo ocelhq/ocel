@@ -1071,3 +1071,21 @@ func TestEveryFactTheProbeReadsIsOneTheItemStates(t *testing.T) {
 		t.Errorf("the probe hashes what the box says in the order the box happens to say it:\n%s", containerProbe())
 	}
 }
+
+func TestThePinRootIsNoWiderThanTheRootThatReadsIt(t *testing.T) {
+	t.Parallel()
+
+	var pins Item
+	for _, item := range ProxyItems(ArchAMD64) {
+		if item.Kind == KindDir && item.Name == ProxyPins {
+			pins = item
+		}
+	}
+	if pins.Name != ProxyPins {
+		t.Fatalf("the proxy writes no %s at all, and this test states nothing about what it opens", ProxyPins)
+	}
+	if pins.Mode&0o077 != 0 {
+		t.Errorf("%s is written %o, and every apply reopens a root an operator closed around their private keys to every login on the box",
+			ProxyPins, pins.Mode)
+	}
+}
