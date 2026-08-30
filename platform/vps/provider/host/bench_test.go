@@ -179,3 +179,83 @@ func TestASurveyedHostReadsBackAsTheItemsThatStandOnIt(t *testing.T) {
 		}
 	}
 }
+
+func settledOn(t *testing.T, class providerkit.Class) *bench {
+	t.Helper()
+
+	keys := []byte(aKey + "\n")
+	items := Items(class, keys, ArchAMD64)
+	minted := []byte("the key this box minted for itself")
+	standing := make([]Item, 0, len(items)+1)
+	for _, item := range items {
+		if item.Kind == KindSealKey {
+			item.Content = minted
+		}
+		standing = append(standing, item)
+	}
+	stamp, err := Stamp{
+		Schema:  providerkit.BootstrapSchema,
+		State:   StateComplete,
+		Writer:  "the-suite",
+		Seal:    Seal{Fingerprint: contentSum(minted), Algorithm: SealAlgorithm, CreatedAt: "2026-01-01T00:00:00Z"},
+		Digests: digests(items),
+	}.item(class)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stood := machine(map[providerkit.Class][]Item{class: append(standing, stamp)})
+	stood.answer = func(command string) (session.Result, bool) {
+		if command != "cat ~/.ssh/authorized_keys 2>/dev/null" {
+			return session.Result{}, false
+		}
+		return session.Result{Stdout: aKey + "\n"}, true
+	}
+	return stood
+}
+
+func TestABoxStandingAtTheStampAWriteLeftDescribesItselfAsCurrent(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := settledOn(t, class)
+
+	described, err := Bootstrap(stood.host()).Describe(context.Background(), class)
+	if err != nil {
+		t.Fatalf("Describe() = %v", err)
+	}
+	if !described.Present {
+		t.Fatal("Describe() reads no bootstrap where a stamp stands")
+	}
+	if !described.Stacks[0].DigestCurrent {
+		t.Fatalf("Describe() calls a box standing at every digest its stamp records drifted, and a box that can never report itself settled is one every re-run rewrites: %+v",
+			described.Stacks)
+	}
+}
+
+func TestOneItemTheReadingCannotHashIsDriftRatherThanAnAbsence(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := settledOn(t, class)
+	held := stood.stands[class]
+	for at, item := range held {
+		if item.Name == ProxyHelper {
+			held[at].Content = nil
+		}
+	}
+
+	read, err := stood.host().Read(context.Background(), class)
+	if err != nil {
+		t.Fatalf("Read() = %v", err)
+	}
+	if read.current(proxyItem(KindFile)) {
+		t.Fatal("the reading calls a helper it read no bytes of current, so this test proves nothing about what drift is")
+	}
+	if !read.standing(KindFile, ProxyHelper) {
+		t.Errorf("%s is absent from a reading every write is planned against, and absence is a lie there: a file this reading could not hash is drift it must name",
+			ProxyHelper)
+	}
+	if read.settled() {
+		t.Errorf("a box whose %s does not hash as ocel writes it reports itself settled", ProxyHelper)
+	}
+}
