@@ -31,6 +31,12 @@ const (
 )
 
 const (
+	edgeHandler    = "headers"
+	forwardHandler = "reverse_proxy"
+	refuseHandler  = "static_response"
+)
+
+const (
 	DeployWindow = 60 * time.Second
 	DrainWindow  = 30 * time.Second
 )
@@ -199,7 +205,7 @@ type caddyDial struct {
 
 func namingTheEdge() caddyForward {
 	return caddyForward{
-		Handler:  "headers",
+		Handler:  edgeHandler,
 		Response: &caddyHeaderOps{Set: map[string][]string{EdgeHeader: {EdgeName}}},
 	}
 }
@@ -208,7 +214,7 @@ func forwarding(identity, upstream string) caddyRoute {
 	return caddyRoute{
 		Identity: identity,
 		Handle: []caddyForward{namingTheEdge(), {
-			Handler:   "reverse_proxy",
+			Handler:   forwardHandler,
 			Upstreams: []caddyDial{{Dial: upstream}},
 		}},
 	}
@@ -218,7 +224,7 @@ func refusing(identity string) caddyRoute {
 	return caddyRoute{
 		Identity: identity,
 		Handle: []caddyForward{{
-			Handler: "static_response",
+			Handler: refuseHandler,
 			Status:  http.StatusNotFound,
 			Headers: map[string][]string{EdgeHeader: {EdgeName}},
 		}},
@@ -429,9 +435,12 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 		}
 		named, keyed := strings.CutPrefix(route.Identity, routeIdentity)
 		fields := strings.Split(named, claimSeparator)
-		upstream := forwardedTo(route)
-		if !keyed || len(fields) != 3 || upstream == "" {
+		if !keyed || len(fields) != 3 {
 			return ProxyState{}, unwritten("route", route.Identity)
+		}
+		upstream, err := forwardedBy(route)
+		if err != nil {
+			return ProxyState{}, err
 		}
 		state.Routes = append(state.Routes, AppRoute{
 			RouteKey: RouteKey{Owner: fields[0], Pointer: fields[1], App: fields[2]},
@@ -439,6 +448,31 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 		})
 	}
 	return state, nil
+}
+
+func forwardedBy(route caddyRoute) (string, error) {
+	if len(route.Handle) != 2 {
+		return "", misshapen(route.Identity, fmt.Sprintf("%d handlers", len(route.Handle)))
+	}
+	naming, forwards := route.Handle[0], route.Handle[1]
+	edged := naming.Response != nil && maps.EqualFunc(naming.Response.Set, map[string][]string{EdgeHeader: {EdgeName}}, slices.Equal)
+	switch {
+	case naming.Handler != edgeHandler || !edged || len(naming.Upstreams) > 0 || naming.Status != 0 || len(naming.Headers) > 0:
+		return "", misshapen(route.Identity, fmt.Sprintf("a leading %q handler that does not set %s to %q and nothing else", naming.Handler, EdgeHeader, EdgeName))
+	case forwards.Handler != forwardHandler || forwards.Status != 0 || len(forwards.Headers) > 0 || forwards.Response != nil:
+		return "", misshapen(route.Identity, fmt.Sprintf("a terminal %q handler", forwards.Handler))
+	case len(forwards.Upstreams) != 1:
+		return "", misshapen(route.Identity, fmt.Sprintf("%d upstreams", len(forwards.Upstreams)))
+	case forwards.Upstreams[0].Dial == "":
+		return "", misshapen(route.Identity, "an upstream naming nothing to dial")
+	}
+	return forwards.Upstreams[0].Dial, nil
+}
+
+func misshapen(named, found string) error {
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"%s forwards %q through %s, and a route ocel writes is a %s handler naming this box's edge ahead of a terminal %s with one upstream: a deploy that rewrites this file whole would take what it found there with it",
+		ProxyConfig, named, found, edgeHandler, forwardHandler)
 }
 
 func forwardedTo(route caddyRoute) string {
