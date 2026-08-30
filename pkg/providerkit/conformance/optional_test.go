@@ -25,6 +25,46 @@ func takesImagesDirectly(t *testing.T) loadingProvider {
 	}
 }
 
+type pullingProvider struct {
+	*fake.Provider
+	pulled *fake.Images
+}
+
+func (p pullingProvider) Images(context.Context, providerkit.RegistryTarget) (providerkit.ImageStore, error) {
+	return p.pulled, nil
+}
+
+func makesTheMachinePull(t *testing.T) pullingProvider {
+	t.Helper()
+	return pullingProvider{
+		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
+		pulled:   fake.NewImages(),
+	}
+}
+
+func TestTheOptionalSweepDrivesAProviderThatMakesTheMachinePull(t *testing.T) {
+	provider := makesTheMachinePull(t)
+
+	var swept bool
+	for _, set := range optionalSets {
+		if set.name != "ImagePusher" {
+			continue
+		}
+		swept = true
+		if !set.onRoot(provider) {
+			t.Error("the sweep does not see Images on a provider that declares it, so the port it opens is covered by nothing")
+		}
+		for _, port := range wrapPorts(t, provider) {
+			if set.onPort(port.value) {
+				t.Errorf("Images is reachable through the wrapped %s port, which only holds while nothing wraps it", port.name)
+			}
+		}
+	}
+	if !swept {
+		t.Fatal("no optional set names ImagePusher, so a provider that carries an image through a registry passes the sweep by being scanned for nothing")
+	}
+}
+
 func TestTheOptionalSweepDrivesAProviderThatTakesImagesDirectly(t *testing.T) {
 	provider := takesImagesDirectly(t)
 
