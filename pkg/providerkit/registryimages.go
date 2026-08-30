@@ -66,7 +66,7 @@ func (r registryImages) look(ctx context.Context, client *http.Client, endpoint,
 		return false, true, 0, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		authorization, err := r.authorize(ctx, client, resp, repository)
+		authorization, err := r.authorize(ctx, client, resp, server, repository)
 		resp.Body.Close()
 		if err != nil {
 			return false, false, 0, err
@@ -134,13 +134,13 @@ func (r registryImages) head(ctx context.Context, client *http.Client, endpoint,
 	return resp, nil
 }
 
-func (r registryImages) authorize(ctx context.Context, client *http.Client, refused *http.Response, repository string) (string, error) {
+func (r registryImages) authorize(ctx context.Context, client *http.Client, refused *http.Response, server, repository string) (string, error) {
 	scheme, params := challenge(refused.Header.Get("WWW-Authenticate"))
 	switch strings.ToLower(scheme) {
 	case "basic":
 		return r.basic(), nil
 	case "bearer":
-		return r.bearer(ctx, client, params, repository)
+		return r.bearer(ctx, client, params, server, repository)
 	default:
 		return "", fmt.Errorf("the registry refused an unauthenticated read and asked for %q, which ocel does not speak", refused.Header.Get("WWW-Authenticate"))
 	}
@@ -150,10 +150,13 @@ func (r registryImages) basic() string {
 	return "Basic " + base64.StdEncoding.EncodeToString([]byte(r.target.Username+":"+r.target.Password))
 }
 
-func (r registryImages) bearer(ctx context.Context, client *http.Client, params map[string]string, repository string) (string, error) {
+func (r registryImages) bearer(ctx context.Context, client *http.Client, params map[string]string, server, repository string) (string, error) {
 	realm := params["realm"]
 	if realm == "" {
 		return "", fmt.Errorf("the registry asked for a bearer token and named no realm to fetch it from")
+	}
+	if err := credentialsTravelTo(realm, server); err != nil {
+		return "", err
 	}
 	query := url.Values{}
 	if service := params["service"]; service != "" {
@@ -197,13 +200,27 @@ func (r registryImages) bearer(ctx context.Context, client *http.Client, params 
 	return "Bearer " + token, nil
 }
 
+func credentialsTravelTo(realm, server string) error {
+	at, err := url.Parse(realm)
+	if err != nil {
+		return fmt.Errorf("%s asked for a token to be bought at %q, which is no url ocel can reach: %w", server, realm, err)
+	}
+	switch {
+	case at.Scheme == "https":
+		return nil
+	case at.Scheme == "http" && at.Host == server && registryScheme(server) == "http":
+		return nil
+	}
+	return fmt.Errorf("%s asked for the deploy's registry password to be presented at %q, which is neither an https realm nor the registry itself: ocel hands that password to nobody else", server, realm)
+}
+
 func challenge(header string) (string, map[string]string) {
 	scheme, rest, split := strings.Cut(strings.TrimSpace(header), " ")
 	params := map[string]string{}
 	if !split {
 		return scheme, params
 	}
-	for _, pair := range strings.Split(rest, ",") {
+	for _, pair := range unquotedFields(rest) {
 		key, value, named := strings.Cut(strings.TrimSpace(pair), "=")
 		if !named {
 			continue
@@ -211,6 +228,21 @@ func challenge(header string) (string, map[string]string) {
 		params[strings.ToLower(key)] = strings.Trim(value, `"`)
 	}
 	return scheme, params
+}
+
+func unquotedFields(value string) []string {
+	var fields []string
+	quoted, start := false, 0
+	for i, r := range value {
+		switch {
+		case r == '"':
+			quoted = !quoted
+		case r == ',' && !quoted:
+			fields = append(fields, value[start:i])
+			start = i + 1
+		}
+	}
+	return append(fields, value[start:])
 }
 
 func splitCoordinate(coordinate string) (server, repository, tag string, err error) {
