@@ -85,6 +85,9 @@ type deployRun struct {
 	scope     values.Scope
 	published *publishedLinks
 
+	registry RegistryTarget
+	images   ImageStore
+
 	dry           bool
 	draft         draft
 	allowDegraded []string
@@ -157,6 +160,9 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 
 		dry:           req.GetDry(),
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
+	}
+	if err := run.openRegistry(ctx, req.GetImageRegistry()); err != nil {
+		return nil, err
 	}
 	run.published = &publishedLinks{store: run.values, scope: run.scope, environment: plan.linkEnvironment()}
 	if run.state, err = run.store.read(ctx); err != nil {
@@ -632,12 +638,17 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 				return err
 			}
 			defer discardStaged(staged)
+			images, err := r.imagePlan(entry)
+			if err != nil {
+				return err
+			}
 			plan := StackPlan{
 				Ref:     r.ref(entry.Stack),
 				Kind:    StackApp,
 				Edge:    r.front,
 				Tags:    r.plan.tags(entry),
 				Uploads: staged,
+				Images:  images,
 				Links:   r.reader(),
 				App: &AppPlan{
 					App:             entry.App,
@@ -1139,4 +1150,33 @@ func linkOf(message *linksv1.Link) Link {
 		}
 	}
 	return link
+}
+
+func (r *deployRun) openRegistry(ctx context.Context, wired *contractv1.ImageRegistry) error {
+	if wired.GetServer() == "" {
+		return nil
+	}
+	r.registry = RegistryTarget{
+		Server:    wired.GetServer(),
+		Namespace: wired.GetNamespace(),
+		Username:  wired.GetUsername(),
+		Password:  wired.GetPassword(),
+	}
+	store, err := imageStoreFor(ctx, r.provider, r.registry)
+	if err != nil {
+		return err
+	}
+	r.images = store
+	return nil
+}
+
+func (r *deployRun) imagePlan(entry AppEntry) (ImagePlan, error) {
+	if r.images == nil || entry.Compute() != ComputeContainer || entry.Image == "" {
+		return ImagePlan{}, nil
+	}
+	push, err := imagePush(entry.App, entry.Image, r.registry)
+	if err != nil {
+		return ImagePlan{}, err
+	}
+	return ImagePlan{Store: r.images, Pushes: []ImagePush{push}}, nil
 }

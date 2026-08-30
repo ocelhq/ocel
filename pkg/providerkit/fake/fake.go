@@ -34,6 +34,7 @@ type Provider struct {
 	options   Options
 	records   *Records
 	artifacts providerkit.ArtifactStore
+	images    *Images
 	sealer    *Sealer
 	bootstrap *Bootstrapper
 	releases  *Releaser
@@ -57,6 +58,7 @@ func NewProvider(options Options) *Provider {
 		options:   options,
 		records:   records,
 		artifacts: artifacts,
+		images:    NewImages(),
 		sealer:    NewSealer(),
 		bootstrap: NewBootstrapper(),
 		releases:  NewReleaser(artifacts),
@@ -71,6 +73,13 @@ func (p *Provider) Ships(store providerkit.ArtifactStore) *Provider {
 	p.releases.artifacts = store
 	return p
 }
+
+func (p *Provider) Images(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
+	p.images.open(target)
+	return p.images, nil
+}
+
+func (p *Provider) Registry() *Images { return p.images }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
 

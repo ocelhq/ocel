@@ -1,0 +1,276 @@
+package providerkit
+
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+)
+
+type registryImages struct {
+	target RegistryTarget
+}
+
+func RegistryImages(target RegistryTarget) ImageStore { return registryImages{target: target} }
+
+var manifestTypes = []string{
+	"application/vnd.oci.image.index.v1+json",
+	"application/vnd.oci.image.manifest.v1+json",
+	"application/vnd.docker.distribution.manifest.list.v2+json",
+	"application/vnd.docker.distribution.manifest.v2+json",
+}
+
+func (r registryImages) Has(ctx context.Context, push ImagePush) (bool, error) {
+	server, repository, tag, err := splitCoordinate(push.Target)
+	if err != nil {
+		return false, err
+	}
+	client := &http.Client{}
+	endpoint := registryScheme(server) + "://" + server + "/v2/" + repository + "/manifests/" + url.PathEscape(tag)
+
+	resp, err := r.head(ctx, client, endpoint, "")
+	if err != nil {
+		return false, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		authorization, err := r.authorize(ctx, client, resp, repository)
+		resp.Body.Close()
+		if err != nil {
+			return false, err
+		}
+		if resp, err = r.head(ctx, client, endpoint, authorization); err != nil {
+			return false, err
+		}
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	default:
+		return false, fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, push.Target)
+	}
+}
+
+func (r registryImages) head(ctx context.Context, client *http.Client, endpoint, authorization string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", strings.Join(manifestTypes, ", "))
+	if authorization != "" {
+		req.Header.Set("Authorization", authorization)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ask %s whether it already holds this image: %w", endpoint, err)
+	}
+	return resp, nil
+}
+
+func (r registryImages) authorize(ctx context.Context, client *http.Client, refused *http.Response, repository string) (string, error) {
+	scheme, params := challenge(refused.Header.Get("WWW-Authenticate"))
+	switch strings.ToLower(scheme) {
+	case "basic":
+		return r.basic(), nil
+	case "bearer":
+		return r.bearer(ctx, client, params, repository)
+	default:
+		return "", fmt.Errorf("the registry refused an unauthenticated read and asked for %q, which ocel does not speak", refused.Header.Get("WWW-Authenticate"))
+	}
+}
+
+func (r registryImages) basic() string {
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(r.target.Username+":"+r.target.Password))
+}
+
+func (r registryImages) bearer(ctx context.Context, client *http.Client, params map[string]string, repository string) (string, error) {
+	realm := params["realm"]
+	if realm == "" {
+		return "", fmt.Errorf("the registry asked for a bearer token and named no realm to fetch it from")
+	}
+	query := url.Values{}
+	if service := params["service"]; service != "" {
+		query.Set("service", service)
+	}
+	scope := params["scope"]
+	if scope == "" {
+		scope = "repository:" + repository + ":pull"
+	}
+	query.Set("scope", scope)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, realm+"?"+query.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
+	if r.target.Username != "" || r.target.Password != "" {
+		req.SetBasicAuth(r.target.Username, r.target.Password)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch a token from %s: %w", realm, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("%s answered %q handing out a token for %s: the registry credentials this deploy carries are not accepted", realm, resp.Status, repository)
+	}
+	var handed struct {
+		Token       string `json:"token"`
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&handed); err != nil {
+		return "", fmt.Errorf("read the token %s handed out: %w", realm, err)
+	}
+	token := handed.Token
+	if token == "" {
+		token = handed.AccessToken
+	}
+	if token == "" {
+		return "", fmt.Errorf("%s handed out an empty token for %s", realm, repository)
+	}
+	return "Bearer " + token, nil
+}
+
+func challenge(header string) (string, map[string]string) {
+	scheme, rest, split := strings.Cut(strings.TrimSpace(header), " ")
+	params := map[string]string{}
+	if !split {
+		return scheme, params
+	}
+	for _, pair := range strings.Split(rest, ",") {
+		key, value, named := strings.Cut(strings.TrimSpace(pair), "=")
+		if !named {
+			continue
+		}
+		params[strings.ToLower(key)] = strings.Trim(value, `"`)
+	}
+	return scheme, params
+}
+
+func splitCoordinate(coordinate string) (server, repository, tag string, err error) {
+	host, path, split := strings.Cut(coordinate, "/")
+	if !split {
+		return "", "", "", fmt.Errorf("%q names no registry to push to", coordinate)
+	}
+	colon := strings.LastIndex(path, ":")
+	if colon < 0 {
+		return "", "", "", fmt.Errorf("%q carries no tag, and an image is pushed under one", coordinate)
+	}
+	return host, path[:colon], path[colon+1:], nil
+}
+
+func registryScheme(server string) string {
+	host, _, split := strings.Cut(server, ":")
+	if !split {
+		host = server
+	}
+	switch host {
+	case "localhost", "127.0.0.1", "[::1]", "::1":
+		return "http"
+	}
+	return "https"
+}
+
+func (r registryImages) Push(ctx context.Context, push ImagePush, report Reporter) error {
+	host, err := OpenDockerHost()
+	if err != nil {
+		return err
+	}
+	transport := host.Transport()
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport}
+
+	server, repository, tag, err := splitCoordinate(push.Target)
+	if err != nil {
+		return err
+	}
+	named := server + "/" + repository
+	if err := r.name(ctx, client, host, push.Source, named, tag); err != nil {
+		return err
+	}
+	return r.upload(ctx, client, host, named, tag, report)
+}
+
+func (r registryImages) name(ctx context.Context, client *http.Client, host DockerHost, source, named, tag string) error {
+	endpoint := "http://docker/images/" + source + "/tag?" + url.Values{"repo": {named}, "tag": {tag}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("name %s as %s:%s in the daemon at %s: %w", source, named, tag, host.Address, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("the daemon at %s answered %q naming %s as %s:%s: %s",
+			host.Address, resp.Status, source, named, tag, said(resp.Body))
+	}
+	return nil
+}
+
+func (r registryImages) upload(ctx context.Context, client *http.Client, host DockerHost, named, tag string, report Reporter) error {
+	endpoint := "http://docker/images/" + named + "/push?" + url.Values{"tag": {tag}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	authorization, err := r.registryAuth()
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Registry-Auth", authorization)
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("push %s:%s from the daemon at %s: %w", named, tag, host.Address, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("the daemon at %s answered %q pushing %s:%s: %s", host.Address, resp.Status, named, tag, said(resp.Body))
+	}
+	return drainPush(resp.Body, report)
+}
+
+func (r registryImages) registryAuth() (string, error) {
+	encoded, err := json.Marshal(map[string]string{
+		"username":      r.target.Username,
+		"password":      r.target.Password,
+		"serveraddress": r.target.Server,
+	})
+	if err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(encoded), nil
+}
+
+func drainPush(body io.Reader, report Reporter) error {
+	decoder := json.NewDecoder(body)
+	for {
+		var line struct {
+			Status string `json:"status"`
+			Error  string `json:"error"`
+		}
+		if err := decoder.Decode(&line); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return fmt.Errorf("read the daemon's push progress: %w", err)
+		}
+		if line.Error != "" {
+			return fmt.Errorf("the registry refused the push: %s", line.Error)
+		}
+		if report != nil && line.Status != "" {
+			report.Detail(line.Status)
+		}
+	}
+}
+
+func said(body io.Reader) string {
+	raw, _ := io.ReadAll(io.LimitReader(body, 4096))
+	return strings.TrimSpace(string(raw))
+}

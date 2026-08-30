@@ -288,6 +288,9 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 			return providerkit.StackResult{}, err
 		}
 	}
+	if err := plan.Images.Ship(ctx, report); err != nil {
+		return providerkit.StackResult{}, err
+	}
 	if err := providerkit.ShipUploads(ctx, r.artifacts, plan.Uploads, report); err != nil {
 		return providerkit.StackResult{}, err
 	}
