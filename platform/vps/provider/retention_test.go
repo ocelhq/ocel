@@ -156,14 +156,30 @@ func TestAnAppNameOfMetacharactersReachesTheHelperAsOneWord(t *testing.T) {
 func TestACoordinateNamingNoRepositoryIsRefusedRatherThanSwept(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{}
-	ref := aStack(t, anApp()).Ref
-	err := over(machine).ReconcileImages(context.Background(), ref, "web", "ocel/web", nil)
-	if err == nil {
-		t.Fatal("a coordinate carrying no tag swept anyway, and a filter that names a whole repository removes the wrong thing")
+	for _, coordinate := range []string{
+		"ocel/web",
+		"ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		"ocel/web:",
+		"registry.invalid:5000/ocel/web",
+	} {
+		machine := &box{}
+		ref := aStack(t, anApp()).Ref
+		err := over(machine).ReconcileImages(context.Background(), ref, "web", coordinate, nil)
+		if err == nil {
+			t.Errorf("%s swept anyway, and a filter that names anything but one repository removes the wrong thing", coordinate)
+		}
+		if len(helperCalls(machine, "reconcile")) != 0 {
+			t.Errorf("%s reached the sweep before it was read", coordinate)
+		}
 	}
-	if len(helperCalls(machine, "reconcile")) != 0 {
-		t.Error("the sweep ran before the coordinate was read")
+}
+
+func TestADigestCoordinateNamesNoRepositoryToSweep(t *testing.T) {
+	t.Parallel()
+
+	pinned := "ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	if repository, named := host.Repository(pinned); named {
+		t.Errorf("Repository(%s) = %q, and a digest is not a tag: everything left of the last colon is the repository plus half a digest algorithm, which lists nothing and names nothing the desired set holds", pinned, repository)
 	}
 }
 

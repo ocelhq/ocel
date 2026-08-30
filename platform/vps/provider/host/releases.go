@@ -12,8 +12,11 @@ import (
 var releasesScript []byte
 
 func Repository(coordinate string) (string, bool) {
+	if strings.Contains(coordinate, "@") {
+		return "", false
+	}
 	at := strings.LastIndex(coordinate, ":")
-	if at <= 0 || strings.ContainsAny(coordinate[at+1:], "/@") || at+1 == len(coordinate) {
+	if at <= 0 || strings.Contains(coordinate[at+1:], "/") || at+1 == len(coordinate) {
 		return "", false
 	}
 	return coordinate[:at], true
