@@ -58,6 +58,12 @@ func sweepPlan(t *testing.T, tag string) providerkit.StackPlan {
 	}
 }
 
+func sweepStood(t *testing.T, tag string) string {
+	t.Helper()
+	plan := sweepPlan(t, tag)
+	return host.ContainerName(plan.Ref.Name.String(), plan.App.App, plan.App.Deployment, plan.App.Image)
+}
+
 func sweepsUp(t *testing.T, p *vps.Provider, tag string) {
 	t.Helper()
 	if _, err := p.ProvisionContainers(context.Background(), sweepPlan(t, tag), nil); err != nil {
@@ -172,7 +178,7 @@ func TestLiveARollbackToARetainedDigestCarriesNothingAndLeadsTheWindow(t *testin
 	before := vm.inspects(t, "image", sweepAt("r1"), "{{.Id}}")
 
 	ref := sweepPlan(t, "r1").Ref
-	if err := p.EnsureRelease(context.Background(), ref, sweepApp, sweepAt("r1"), nil); err != nil {
+	if err := p.EnsureRelease(context.Background(), ref, sweepApp, sweepStood(t, "r1"), sweepAt("r1"), nil); err != nil {
 		t.Fatalf("EnsureRelease(%s) = %v", sweepAt("r1"), err)
 	}
 	if after := vm.inspects(t, "image", sweepAt("r1"), "{{.Id}}"); after != before {
@@ -188,7 +194,7 @@ func TestLiveARollbackPastTheWindowSaysDeployAgain(t *testing.T) {
 
 	sweepsUp(t, p, "r1")
 	ref := sweepPlan(t, "r1").Ref
-	err := p.EnsureRelease(context.Background(), ref, sweepApp, sweepAt("gone"), nil)
+	err := p.EnsureRelease(context.Background(), ref, sweepApp, sweepStood(t, "gone"), sweepAt("gone"), nil)
 	if err == nil {
 		t.Fatal("a rollback to an image this box never held succeeded")
 	}

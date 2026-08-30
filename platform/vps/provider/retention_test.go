@@ -172,7 +172,7 @@ func TestARollbackToARetainedDigestTransfersNothingAndTakesTheWindowHead(t *test
 
 	machine := &box{holds: true}
 	ref := aStack(t, anApp()).Ref
-	if err := over(machine).EnsureRelease(context.Background(), ref, "web", loadedCoordinate, nil); err != nil {
+	if err := over(machine).EnsureRelease(context.Background(), ref, "web", "prod-web-x", loadedCoordinate, nil); err != nil {
 		t.Fatalf("EnsureRelease() = %v", err)
 	}
 	joined := strings.Join(machine.commands(), "\n")
@@ -190,12 +190,34 @@ func TestARollbackToARetainedDigestTransfersNothingAndTakesTheWindowHead(t *test
 	}
 }
 
+func TestARollbackRevivesTheContainerTheReleaseRecorded(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{holds: true}
+	ref := aStack(t, anApp()).Ref
+	stood := host.ContainerName(ref.Name.String(), "web", deployment, loadedCoordinate)
+	if err := over(machine).EnsureRelease(context.Background(), ref, "web", stood, loadedCoordinate, nil); err != nil {
+		t.Fatalf("EnsureRelease() = %v", err)
+	}
+	joined := strings.Join(machine.commands(), "\n")
+	if !strings.Contains(joined, quoted(stood)) {
+		t.Errorf("the rollback never named %s, the container the release wrote down", stood)
+	}
+	renamed := host.ContainerName(ref.Name.String(), "web", "", loadedCoordinate)
+	if renamed == stood {
+		t.Fatal("the coordinate and the deployment name the same container, and this test proves nothing")
+	}
+	if strings.Contains(joined, quoted(renamed)) {
+		t.Errorf("the rollback named %s, a container no release ever stood up: an ensure that renames stands a second container up beside the one already serving", renamed)
+	}
+}
+
 func TestARollbackPastTheWindowSaysDeployAgain(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
 	ref := aStack(t, anApp()).Ref
-	err := over(machine).EnsureRelease(context.Background(), ref, "web", loadedCoordinate, nil)
+	err := over(machine).EnsureRelease(context.Background(), ref, "web", "prod-web-x", loadedCoordinate, nil)
 	if err == nil {
 		t.Fatal("a rollback past the window succeeded over a box holding no such image")
 	}

@@ -498,6 +498,40 @@ func TestTheStagedRecordNamesTheImageThatReleaseRuns(t *testing.T) {
 	}
 }
 
+func TestTheStagedRecordNamesTheContainerTheReleaseStoodUp(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	held := staging(t, provider)
+
+	result, _ := deploy(t, client, registryDeployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	staged := held.records()
+	if len(staged) != 1 {
+		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+	}
+	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), providerkit.ClassProduction, "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stood string
+	for _, entry := range entries {
+		for _, container := range entry.Containers {
+			if container.Name == staged[0].App {
+				stood = container.Physical
+			}
+		}
+	}
+	if stood == "" {
+		t.Fatal("the deploy stood no container up at all, and this test needs one to name")
+	}
+	if staged[0].Physical != stood {
+		t.Errorf("the staged record names the container %q, want %q: a rollback re-points the container the release stood up, and a name derived from anything else stands a second one up beside it", staged[0].Physical, stood)
+	}
+}
+
 func TestAServerlessRecordNamesNoImage(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
