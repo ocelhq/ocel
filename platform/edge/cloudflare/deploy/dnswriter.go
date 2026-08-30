@@ -156,7 +156,8 @@ type recordParam interface {
 }
 
 func recordBody(want edge.Record) recordParam {
-	if want.Type == edge.RecordTypeCNAME {
+	switch want.Type {
+	case edge.RecordTypeCNAME:
 		return dns.CNAMERecordParam{
 			Name:    cf.F(want.Name),
 			Type:    cf.F(dns.CNAMERecordTypeCNAME),
@@ -165,14 +166,24 @@ func recordBody(want edge.Record) recordParam {
 			TTL:     cf.F(dns.TTL(1)),
 			Comment: cf.F(recordComment),
 		}
-	}
-	return dns.AAAARecordParam{
-		Name:    cf.F(want.Name),
-		Type:    cf.F(dns.AAAARecordTypeAAAA),
-		Content: cf.F(want.Value),
-		Proxied: cf.F(want.Proxied),
-		TTL:     cf.F(dns.TTL(1)),
-		Comment: cf.F(recordComment),
+	case edge.RecordTypeA:
+		return dns.ARecordParam{
+			Name:    cf.F(want.Name),
+			Type:    cf.F(dns.ARecordTypeA),
+			Content: cf.F(want.Value),
+			Proxied: cf.F(want.Proxied),
+			TTL:     cf.F(dns.TTL(1)),
+			Comment: cf.F(recordComment),
+		}
+	default:
+		return dns.AAAARecordParam{
+			Name:    cf.F(want.Name),
+			Type:    cf.F(dns.AAAARecordTypeAAAA),
+			Content: cf.F(want.Value),
+			Proxied: cf.F(want.Proxied),
+			TTL:     cf.F(dns.TTL(1)),
+			Comment: cf.F(recordComment),
+		}
 	}
 }
 
