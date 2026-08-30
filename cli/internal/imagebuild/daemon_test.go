@@ -140,7 +140,7 @@ func TestADaemonKeepingImagesInTheClassicStoreIsRefusedAtPreflight(t *testing.T)
 
 	err := imagebuild.Reachable(context.Background())
 	if err == nil {
-		t.Fatal("Reachable() passed a daemon whose store cannot merge, so the refusal lands after the user has consented to a bootstrap")
+		t.Fatal("Reachable() passed a daemon whose store addresses no image by its digest, so the refusal lands after the user has consented to a bootstrap")
 	}
 	if !strings.Contains(err.Error(), "containerd") {
 		t.Errorf("Reachable() = %v, and the reader is never told which image store to turn on", err)
@@ -151,7 +151,7 @@ func TestOneWorkerWithTheContainerdStoreIsEnoughToBuildOn(t *testing.T) {
 	servesBuilder(t, classic(), containerd())
 
 	if err := imagebuild.Reachable(context.Background()); err != nil {
-		t.Fatalf("Reachable() = %v, want the daemon accepted on the worker that can merge", err)
+		t.Fatalf("Reachable() = %v, want the daemon accepted on the worker whose store either builder can be exported into", err)
 	}
 }
 
