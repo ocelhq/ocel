@@ -71,7 +71,7 @@ func standsUp(t *testing.T, p *vps.Provider, tag string) release {
 }
 
 func releasing(p *vps.Provider, held release, retire string, drain time.Duration, report providerkit.Reporter) error {
-	return p.Release(context.Background(), host.Release{
+	return p.Host().Release(context.Background(), host.Release{
 		App:           liveApp,
 		Target:        held.address,
 		Retire:        retire,
