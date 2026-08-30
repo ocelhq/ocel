@@ -12,10 +12,7 @@ const LocalNamespace = "ocel"
 
 const maxRepository = 255
 
-var (
-	digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-	namePattern   = regexp.MustCompile(`^[a-z0-9]+([._-][a-z0-9]+)*$`)
-)
+var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type Image struct {
 	Name       string
@@ -27,7 +24,7 @@ type Image struct {
 
 func Repository(app string) (string, error) {
 	name := naming.Sanitize(app)
-	if !namePattern.MatchString(name) || len(LocalNamespace)+len("/")+len(name) > maxRepository {
+	if !naming.IsRepositorySegment(name) || len(LocalNamespace)+len("/")+len(name) > maxRepository {
 		return "", fmt.Errorf("%q names an image repository of %q, which docker cannot hold: name the app something a repository can be derived from", app, name)
 	}
 	return name, nil

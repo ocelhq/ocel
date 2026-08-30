@@ -20,7 +20,14 @@ const (
 	truncationLen    = len(truncationMarker) + truncationDigits
 )
 
-var ingestPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+var (
+	ingestPattern     = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+	repositoryPattern = regexp.MustCompile(`^[a-z0-9]+([._-][a-z0-9]+)*$`)
+)
+
+func IsRepositorySegment(value string) bool {
+	return repositoryPattern.MatchString(value)
+}
 
 func Validate(field, value string) error {
 	switch {

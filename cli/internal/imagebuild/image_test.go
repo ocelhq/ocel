@@ -3,6 +3,8 @@ package imagebuild
 import (
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const someDigest = "sha256:30b585f5c19dd011bedba3bd1ca35d5b53d9db693b3f36295a09fa0a8d77c239"
@@ -40,7 +42,7 @@ func TestAnAppNamedInSymbolsAloneIsStillGivenARepository(t *testing.T) {
 			t.Errorf("imageFor(%q) = %v, want a repository derived from what the name leaves", app, err)
 			continue
 		}
-		if !namePattern.MatchString(image.Name) {
+		if !naming.IsRepositorySegment(image.Name) {
 			t.Errorf("imageFor(%q) named %q, which is no repository docker can hold", app, image.Repository)
 		}
 	}
