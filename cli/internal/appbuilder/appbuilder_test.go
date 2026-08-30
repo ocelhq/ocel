@@ -118,8 +118,8 @@ func TestBuild(t *testing.T) {
 		cfg := &projectconfig.Config{
 			Dir: root,
 			Apps: []projectconfig.App{
-				{Name: "api", Path: "apps/api", Framework: "express", Entrypoint: "src/server.ts", Compute: "serverless"},
-				{Name: "worker", Path: "apps/worker", Framework: "express", Compute: "serverless"},
+				{Name: "api", Path: "apps/api", Framework: "express", Entrypoint: "src/server.ts"},
+				{Name: "worker", Path: "apps/worker", Framework: "express"},
 			},
 		}
 
@@ -190,7 +190,7 @@ func TestBuild(t *testing.T) {
 		root := t.TempDir()
 		cfg := &projectconfig.Config{
 			Dir:  root,
-			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
+			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express"}},
 		}
 
 		err := Build(context.Background(), cfg, nil, io.Discard)
@@ -248,7 +248,7 @@ func TestBuild(t *testing.T) {
 		writeBuilder(t, root)
 		cfg := &projectconfig.Config{
 			Dir:  root,
-			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
+			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express"}},
 		}
 
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
@@ -447,7 +447,7 @@ func TestBuild(t *testing.T) {
 
 		cfg := &projectconfig.Config{
 			Dir:  root,
-			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
+			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express"}},
 		}
 		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
@@ -589,7 +589,7 @@ func TestBuild(t *testing.T) {
 		fixtureRoot := expressFixture(t)
 		cfg := &projectconfig.Config{
 			Dir:  fixtureRoot,
-			Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: "express", Compute: "serverless"}},
+			Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: "express"}},
 		}
 
 		var stderr bytes.Buffer
