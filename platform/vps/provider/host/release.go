@@ -178,7 +178,7 @@ func unelevated(refused, why error) error {
 		return why
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"%v\n\nocel wrote as this login because it could not elevate: %v", why, refused)
+		"%v\n\nocel ran as this login because it could not elevate: %v", why, refused)
 }
 
 func stagedWrite(expected string) string {

@@ -176,7 +176,8 @@ func (r *Records) helper(ctx context.Context, class providerkit.Class, stdin io.
 	for _, arg := range args {
 		command += " " + quoted(arg)
 	}
-	result, err := r.host.stream(ctx, command, stdin, r.host.reaching(ctx))
+	elevation, refused := r.host.elevate(ctx)
+	result, err := r.host.stream(ctx, command, stdin, elevation)
 	if err != nil {
 		return "", err
 	}
@@ -188,7 +189,7 @@ func (r *Records) helper(ctx context.Context, class providerkit.Class, stdin io.
 	case exitStale:
 		return "", providerkit.ErrStale
 	default:
-		return "", r.host.refuse("records "+args[0], result)
+		return "", unelevated(refused, r.host.refuse("records "+args[0], result))
 	}
 }
 
