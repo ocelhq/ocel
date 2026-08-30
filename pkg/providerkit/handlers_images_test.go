@@ -17,14 +17,7 @@ import (
 const pushedCoordinate = "ghcr.io/acme/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func registryDeployRequest() *contractv1.DeployRequest {
-	req := containerDeployRequest("/")
-	req.ImageRegistry = &contractv1.ImageRegistry{
-		Server:    "ghcr.io",
-		Namespace: "acme",
-		Username:  "acme-bot",
-		Password:  "hunter2",
-	}
-	return req
+	return namingARegistry(containerDeployRequest("/"))
 }
 
 func imageRows(plan *planv1.ChangePlan) []*planv1.Change {
@@ -152,18 +145,25 @@ func TestADigestTheRegistryAlreadyHoldsStandsOnThePlan(t *testing.T) {
 	}
 }
 
-func TestADeployWithNoRegistryPushesNothingAndShowsNoImageRow(t *testing.T) {
+func TestAContainerAppOnAProviderTakingNeitherPathFailsNamingTheGap(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 
 	req := containerDeployRequest("/")
 	req.Dry = true
-	result, events := deploy(t, client, req)
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	result, _, err := deployStream(t, client, req)
+	if err == nil && result.GetSuccess() {
+		t.Fatal("Deploy() succeeded where nothing names a registry and the provider takes no image directly, " +
+			"so the plan promised a container the box would never be given an image for")
 	}
-	if rows := imageRows(lastPlan(events)); len(rows) != 0 {
-		t.Errorf("the plan shows %d image rows where nothing named a registry", len(rows))
+	refused := result.GetError()
+	if err != nil {
+		refused = err.Error()
+	}
+	for _, want := range []string{"web", "registry"} {
+		if !strings.Contains(refused, want) {
+			t.Errorf("Deploy() = %q, want the gap named down to %q", refused, want)
+		}
 	}
 	if opened := provider.Registry().Opened(); len(opened) != 0 {
 		t.Errorf("a registry was opened as %v where the deploy named none", opened)
