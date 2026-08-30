@@ -690,7 +690,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 			if err := r.embed(ctx, entry, result.Functions, report); err != nil {
 				return err
 			}
-			if err := r.stage(ctx, entry, result.Functions, result.Containers, grants); err != nil {
+			if err := r.stage(ctx, entry, images, result.Functions, result.Containers, grants); err != nil {
 				return err
 			}
 			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, Stack{
@@ -905,14 +905,10 @@ func (r *deployRun) warm(ctx context.Context, functions []Function, report Repor
 	return warmer.Warm(ctx, targets, report)
 }
 
-func (r *deployRun) stage(ctx context.Context, entry AppEntry, functions []Function, containers []AppContainer, grants []Link) error {
+func (r *deployRun) stage(ctx context.Context, entry AppEntry, images ImagePlan, functions []Function, containers []AppContainer, grants []Link) error {
 	urls := make(map[string]string, len(functions))
 	for _, fn := range functions {
 		urls[fn.Name] = fn.URL
-	}
-	images, err := r.imagePlan(entry)
-	if err != nil {
-		return err
 	}
 	coordinate := r.plan.coordinate(entry.App, entry.Build.Release())
 	record := edge.DeploymentRecord{
