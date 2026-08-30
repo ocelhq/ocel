@@ -87,7 +87,7 @@ const (
 
 func (h *Host) pulling(ctx context.Context, target providerkit.RegistryTarget, coordinate, command, elevation string) (string, error) {
 	what := "pull " + coordinate + " from " + target.Server
-	var said string
+	var said, stderr string
 	var err error
 	for attempt := range pullAttempts {
 		if attempt > 0 {
@@ -99,7 +99,7 @@ func (h *Host) pulling(ctx context.Context, target providerkit.RegistryTarget, c
 		if target.Password != "" {
 			secret = strings.NewReader(target.Password)
 		}
-		if said, err = h.ran(ctx, what, command, secret, elevation); err == nil || !providerkit.Throttled(err.Error()) {
+		if said, stderr, err = h.spoke(ctx, what, command, secret, elevation); err == nil || !providerkit.Throttled(stderr) {
 			return said, err
 		}
 	}
