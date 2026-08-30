@@ -2,15 +2,20 @@ package host
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"text/template"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const (
-	appImage = "ocel/web:sha256-abc"
-	physical = "shop-web-abc123def456"
+	appImage   = "ocel/web:sha256-abc"
+	physical   = "shop-web-abc123def456"
+	fixtureRef = "registry.example.com/web@sha256:0000"
 )
 
 func aContainer() Container {
@@ -116,19 +121,74 @@ func TestTakingAContainerDownStopsItBeforeItIsRemoved(t *testing.T) {
 	}
 }
 
+func inspected(t *testing.T) map[string]any {
+	t.Helper()
+	read, err := os.ReadFile(filepath.Join("testdata", "inspect.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var held []map[string]any
+	if err := json.Unmarshal(read, &held); err != nil {
+		t.Fatal(err)
+	}
+	if len(held) != 1 {
+		t.Fatalf("testdata/inspect.json holds %d containers, want the one a daemon answers --type container with", len(held))
+	}
+	return held[0]
+}
+
+func rendering(t *testing.T, format string) string {
+	t.Helper()
+	parsed, err := template.New("").Option("missingkey=error").Parse(format)
+	if err != nil {
+		t.Fatalf("docker inspect --format %q does not parse: %v", format, err)
+	}
+	var written strings.Builder
+	if err := parsed.Execute(&written, inspected(t)); err != nil {
+		t.Fatalf("docker inspect --format %q against what a daemon really answers: %v", format, err)
+	}
+	return written.String()
+}
+
 func TestTheInspectedStateNamesTheSevenFieldsItNeedsAndNothingTheContainerWasGiven(t *testing.T) {
 	t.Parallel()
 
-	command := stateCommand(physical)
+	said := rendering(t, strings.Join(stateSelectors(), " "))
 	for _, field := range stateFields {
-		if !strings.Contains(command, ".State."+field) {
-			t.Errorf("the inspected state reads %q and never .State.%s: exited, running-with-no-answer and restarting are told apart by these and nothing else", command, field)
+		if !strings.Contains(said, field.label+"=") {
+			t.Errorf("the inspected state of a real container reads %q and never %s: exited, running-with-no-answer and restarting are told apart by these and nothing else", said, field.label)
 		}
 	}
+	command := stateCommand(physical)
 	for _, leak := range []string{".Config", ".Env", "{{json .}}", "{{.}}"} {
 		if strings.Contains(command, leak) {
 			t.Errorf("the inspected state reads %q, and %s prints the container's whole environment into a deploy's failure output", command, leak)
 		}
+	}
+}
+
+func TestTheStateLineOfACrashLoopingContainerCountsItsRestarts(t *testing.T) {
+	t.Parallel()
+
+	said := rendering(t, strings.Join(stateSelectors(), " "))
+	for _, wanted := range []string{"Status=restarting", "ExitCode=3", "OOMKilled=false", "RestartCount=6"} {
+		if !strings.Contains(said, wanted) {
+			t.Errorf("a daemon's crash-looping container renders as %q, which never says %s: a restart policy makes the loop invisible without it", said, wanted)
+		}
+	}
+	if strings.Contains(said, "RestartCount=0") {
+		t.Errorf("a container a daemon has restarted six times renders as %q", said)
+	}
+}
+
+func TestWhatIsAlreadyServingIsReadFromWhereADaemonKeepsIt(t *testing.T) {
+	t.Parallel()
+
+	if !strings.Contains(servingCommand(physical), quoted(servingSelectors())) {
+		t.Fatalf("the serving check reads %q and no longer asks the daemon for the format it reads", servingCommand(physical))
+	}
+	if said := rendering(t, servingSelectors()); said != "true "+fixtureRef {
+		t.Errorf("a running container labelled %s reads as %q, and a release would stand a second copy of what is already up", fixtureRef, said)
 	}
 }
 

@@ -22,7 +22,15 @@ const (
 	nameShort  = 12
 )
 
-var stateFields = []string{"Status", "ExitCode", "OOMKilled", "Error", "StartedAt", "FinishedAt", "RestartCount"}
+var stateFields = []struct{ label, selector string }{
+	{"Status", ".State.Status"},
+	{"ExitCode", ".State.ExitCode"},
+	{"OOMKilled", ".State.OOMKilled"},
+	{"Error", ".State.Error"},
+	{"StartedAt", ".State.StartedAt"},
+	{"FinishedAt", ".State.FinishedAt"},
+	{"RestartCount", ".RestartCount"},
+}
 
 type Container struct {
 	Name  string
@@ -51,9 +59,13 @@ func containerRun(spec Container) []string {
 	}
 }
 
+func servingSelectors() string {
+	return "{{.State.Running}} {{index .Config.Labels " + strconv.Quote(LabelRef) + "}}"
+}
+
 func servingCommand(name string) string {
 	return "docker inspect --type container --format " +
-		quoted("{{.State.Running}} {{index .Config.Labels "+strconv.Quote(LabelRef)+"}}") + " " +
+		quoted(servingSelectors()) + " " +
 		quoted(name) + " 2>/dev/null || true"
 }
 
@@ -105,7 +117,7 @@ func (h *Host) RemoveContainer(ctx context.Context, name string) error {
 func stateSelectors() []string {
 	selectors := make([]string, 0, len(stateFields))
 	for _, field := range stateFields {
-		selectors = append(selectors, field+"={{.State."+field+"}}")
+		selectors = append(selectors, field.label+"={{"+field.selector+"}}")
 	}
 	return selectors
 }
