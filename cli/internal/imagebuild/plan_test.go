@@ -75,6 +75,22 @@ func TestThePlanCarriesNothingFromTheEnvironmentOcelRunsIn(t *testing.T) {
 	}
 }
 
+func TestNoVariableOcelRunsUnderAppearsAnywhereInThePlanItHandsTheFrontend(t *testing.T) {
+	const leak = "a value the plan must never carry"
+	t.Setenv("OCEL_PLAN_LEAK", leak)
+
+	raw, err := imagebuild.Plan("testdata/plainserver")
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+
+	for _, secret := range []string{"OCEL_PLAN_LEAK", leak} {
+		if strings.Contains(string(raw), secret) {
+			t.Errorf("the plan the frontend reads carries %q, so ocel's own environment reaches the build through the plan rather than through a build arg:\n%s", secret, raw)
+		}
+	}
+}
+
 func TestADirectoryRailpackCannotReadSaysWhyInsteadOfPlanningNothing(t *testing.T) {
 	_, err := imagebuild.Plan(t.TempDir())
 	if err == nil {

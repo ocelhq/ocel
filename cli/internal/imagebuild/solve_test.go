@@ -1,6 +1,7 @@
 package imagebuild
 
 import (
+	"os"
 	"slices"
 	"testing"
 )
@@ -21,6 +22,34 @@ func TestTheSolveMountsTheAppBesideThePlanAndNothingElse(t *testing.T) {
 	}
 }
 
+func TestTheMountedPlanIsTheFileTheFrontendReads(t *testing.T) {
+	dir, err := stagePlan([]byte(`{"steps":[]}`))
+	if err != nil {
+		t.Fatalf("stagePlan() = %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	staged := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		staged = append(staged, entry.Name())
+	}
+	if want := []string{PlanFileName}; !slices.Equal(staged, want) {
+		t.Fatalf("the mounted directory holds %v, want %v — railpack's frontend reads that name and nothing else from it", staged, want)
+	}
+
+	opt, err := solveOptions("testdata/plainserver", dir)
+	if err != nil {
+		t.Fatalf("solveOptions() = %v", err)
+	}
+	if opt.LocalMounts[planMount] == nil {
+		t.Fatalf("the solve mounts %v, and the plan is not among them under %q, the mount railpack reads its plan from", opt.LocalMounts, planMount)
+	}
+}
+
 func TestTheSolveCarriesNoEnvironmentNoSecretsAndNoBuildArgs(t *testing.T) {
 	opt, err := solveOptions("testdata/plainserver", t.TempDir())
 	if err != nil {
@@ -32,6 +61,9 @@ func TestTheSolveCarriesNoEnvironmentNoSecretsAndNoBuildArgs(t *testing.T) {
 	}
 	if len(opt.FrontendAttrs) != 0 {
 		t.Errorf("the solve carries frontend options %v, want none — railpack reads build args from these", opt.FrontendAttrs)
+	}
+	if len(opt.FrontendInputs) != 0 {
+		t.Errorf("the solve carries frontend inputs %v, want none — a state handed to the frontend here is a second way into the build", opt.FrontendInputs)
 	}
 	if opt.Frontend != "" {
 		t.Errorf("the solve names frontend %q, want none: the frontend is linked into this binary, and naming one makes buildkitd pull an image", opt.Frontend)
