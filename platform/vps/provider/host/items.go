@@ -130,8 +130,6 @@ func (i Item) command() string {
 		return unitCommand()
 	case KindNetwork:
 		return networkCommand()
-	case KindVolume:
-		return volumeCommand()
 	case KindContainer:
 		return containerCommand()
 	case KindProxyConfig:
@@ -155,8 +153,6 @@ func (i Item) probe() string {
 		return unitProbe()
 	case KindNetwork:
 		return networkProbe()
-	case KindVolume:
-		return volumeProbe()
 	case KindContainer:
 		return containerProbe()
 	case KindProxyConfig:

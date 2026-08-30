@@ -69,8 +69,8 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 	if networks := vm.inspects(t, "container", host.ProxyContainer, "{{range $n, $v := .NetworkSettings.Networks}}{{$n}} {{end}}"); networks != host.ProxyNetwork {
 		t.Errorf("the proxy sits on %q, want the one network %q every deploy target resolves across", networks, host.ProxyNetwork)
 	}
-	if driver := vm.inspects(t, "volume", host.ProxyVolume, "{{.Name}}"); driver != host.ProxyVolume {
-		t.Errorf("the volume holding what the proxy persists reads as %q, want %q", driver, host.ProxyVolume)
+	if mode := strings.TrimSpace(vm.ssh(t, "sudo stat -c '%a %U' "+quote(host.ProxyData))); mode != "700 root" {
+		t.Errorf("%s stands as %q, want 700 root: it holds every private key on this box and the acme account key that issues for all of them", host.ProxyData, mode)
 	}
 
 	for _, held := range []string{"/data/caddy", "/data/config/caddy/autosave.json"} {
@@ -79,13 +79,11 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 		}
 	}
 	mounts := vm.inspects(t, "container", host.ProxyContainer, "{{range .Mounts}}{{.Type}}:{{.Destination}}:{{.RW}} {{end}}")
-	if !strings.Contains(mounts, "volume:/data:true") {
-		t.Errorf("the proxy holds /data as %q, want a named volume: its data records every route and will one day hold private keys", mounts)
+	if !strings.Contains(mounts, "bind:/data:true") {
+		t.Errorf("the proxy holds /data as %q, want the bootstrap-owned host path: a named volume appears in no removal plan and would leave every private key on this box after a destroy", mounts)
 	}
-	for _, wider := range []string{"bind:/data", "bind:/config"} {
-		if strings.Contains(mounts, wider) {
-			t.Errorf("the proxy binds %s from the host, and what it persists is then readable by everything on the box: %s", wider, mounts)
-		}
+	if strings.Contains(mounts, "bind:/config") {
+		t.Errorf("the proxy binds /config from the host, and what caddy autosaves belongs under the one path a destroy takes: %s", mounts)
 	}
 
 	socket := vm.inside(t, "stat -c %a:%U "+quote(host.ProxyAdminSocket))
@@ -310,7 +308,7 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 		t.Fatalf("PlanRemoval() = %v", err)
 	}
 	leaving := onlyGroup(t, removal)
-	for _, taken := range []string{host.ProxyContainer, host.ProxyVolume, host.ProxyNetwork} {
+	for _, taken := range []string{host.ProxyContainer, host.ProxyData, host.ProxyNetwork} {
 		planned := planFor(leaving, taken)
 		if planned.Action != providerkit.ActionDelete {
 			t.Errorf("PlanRemoval() plans %s as %q, want it taken: what ocel wrote is what ocel takes back", taken, planned.Action)
@@ -326,12 +324,10 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 	if vm.running(t, host.ProxyContainer) {
 		t.Errorf("%s still runs after a destroy, and a proxy nobody wrote back is one nobody takes down", host.ProxyContainer)
 	}
-	for what, name := range map[string]string{"volume": host.ProxyVolume, "network": host.ProxyNetwork} {
-		if stood := vm.inspects(t, what, name, "{{.Name}}"); stood != "" {
-			t.Errorf("the %s %s stands after a destroy, and every byte the proxy persisted is still on this machine", what, name)
-		}
+	if stood := vm.inspects(t, "network", host.ProxyNetwork, "{{.Name}}"); stood != "" {
+		t.Errorf("the network %s stands after a destroy", host.ProxyNetwork)
 	}
-	for _, gone := range []string{host.ProxyHelper, host.ProxyConfig} {
+	for _, gone := range []string{host.ProxyHelper, host.ProxyConfig, host.ProxyData} {
 		if vm.stands(t, gone) {
 			t.Errorf("%s stands after a destroy took the last class on this host", gone)
 		}

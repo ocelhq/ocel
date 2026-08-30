@@ -56,7 +56,7 @@ func dockered(t *testing.T, held engineHolding) map[string]string {
 			t.Fatal(err)
 		}
 	}
-	cmd := exec.Command("/bin/sh", "-c", strings.Join([]string{networkProbe(), volumeProbe(), containerProbe()}, "\n"))
+	cmd := exec.Command("/bin/sh", "-c", strings.Join([]string{networkProbe(), containerProbe()}, "\n"))
 	cmd.Env = []string{"PATH=" + dir}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -305,16 +305,30 @@ func TestWhatTheProxyPersistsGoesNoWiderThanTheProxy(t *testing.T) {
 	if data == "" {
 		t.Fatalf("nothing holds %s, so caddy's autosaved config and the certificates it issues live in a layer a recreate takes with it", proxyDataMount)
 	}
-	if strings.Contains(data, "/") {
-		t.Errorf("%s is bound from %q: caddy's data records the whole route topology and will one day hold private keys, and a host path puts it where anything on the box can read it",
-			proxyDataMount, data)
+	if data != ProxyData {
+		t.Errorf("%s is bound from %q, want %s: a docker named volume appears in no removal plan, so a destroy would report a clean teardown and leave every private key and the acme account key on this box",
+			proxyDataMount, data, ProxyData)
 	}
-	if data != proxyItem(KindVolume).Name {
-		t.Errorf("%s is held by %q and the volume ocel writes is %q, so a destroy leaves what the proxy persisted behind", proxyDataMount, data, proxyItem(KindVolume).Name)
+	held := itemAt(t, ProxyItems(ArchAMD64), KindDir, ProxyData)
+	if held.Owner != rootOwner || held.Mode != 0o700 {
+		t.Errorf("%s is written as %s at %04o, want root at 0700: it holds every certificate's private key and the acme account key that issues for every other hostname on the account",
+			ProxyData, held.Owner, held.Mode)
+	}
+	if !strings.HasPrefix(ProxyData, proxyRoot+"/") {
+		t.Errorf("%s sits outside %s, and only what the bootstrap owns is named in the removal plan a destroy runs", ProxyData, proxyRoot)
 	}
 	if !strings.Contains(containerCommand(), quoted("XDG_CONFIG_HOME="+proxyDataMount+"/config")) {
-		t.Errorf("caddy's config directory is left where the image puts it, and the autosaved config recording every route lives outside the volume that holds the rest:\n%s", containerCommand())
+		t.Errorf("caddy's config directory is left where the image puts it, and the autosaved config recording every route lives outside the directory that holds the rest:\n%s", containerCommand())
 	}
+}
+
+func itemAt(t *testing.T, items []Item, kind, name string) Item {
+	t.Helper()
+	at := slices.IndexFunc(items, func(i Item) bool { return i.Kind == kind && i.Name == name })
+	if at < 0 {
+		t.Fatalf("the proxy's items carry no %s %s", kind, name)
+	}
+	return items[at]
 }
 
 func TestTheHelperIsAFileTheProxyMayReadAndNothingThereMayWrite(t *testing.T) {
@@ -538,7 +552,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	keys := []byte(aKey + "\n")
 	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))}
-	proxied := []string{ProxyContainer, ProxyVolume, ProxyNetwork, proxyRoot, ProxyHelper, ProxyConfig}
+	proxied := []string{ProxyContainer, ProxyData, ProxyNetwork, proxyRoot, ProxyHelper, ProxyConfig}
 
 	for _, taken := range removing(standing, beside) {
 		if slices.Contains(proxied, taken.path) && taken.action == providerkit.ActionDelete {
@@ -556,11 +570,11 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	if reason := removalOf(last, ProxyContainer).reason; reason == "" {
 		t.Error("the proxy is taken with no reason, and the typed confirmation must name what goes before a user types")
 	}
-	if reason := removalOf(last, ProxyVolume).reason; reason == "" {
-		t.Error("the proxy's volume is taken with no reason, and every certificate it holds goes with it")
+	if reason := removalOf(last, ProxyData).reason; reason == "" {
+		t.Error("the proxy's data directory is taken with no reason, and every private key and the acme account key it holds go with it")
 	}
 	container := slices.IndexFunc(last, func(r removal) bool { return r.path == ProxyContainer })
-	for _, after := range []string{ProxyVolume, ProxyNetwork, proxyRoot} {
+	for _, after := range []string{ProxyData, ProxyNetwork, proxyRoot} {
 		if at := slices.IndexFunc(last, func(r removal) bool { return r.path == after }); at < container {
 			t.Errorf("%s is taken at %d and the container using it at %d, and nothing takes what a running container holds", after, at, container)
 		}

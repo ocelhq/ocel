@@ -97,7 +97,7 @@ func TestHealLeavesWhatADaemonHoldsRatherThanRefusingOverIt(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	held := []string{dockerEngine, dockerUnit, ProxyNetwork, ProxyVolume, ProxyContainer}
+	held := []string{dockerEngine, dockerUnit, ProxyNetwork, ProxyContainer}
 	for _, name := range held {
 		read := drifted(t, drifted(t, standingHost(), RecordsDir(class)), name)
 		work, left, err := healing(read, true)

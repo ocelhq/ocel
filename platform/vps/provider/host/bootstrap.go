@@ -252,7 +252,7 @@ func healable(read Reading) ([]Item, []string, error) {
 
 func daemonHeld(item Item) bool {
 	switch item.Kind {
-	case KindEngine, KindUnit, KindNetwork, KindVolume, KindContainer:
+	case KindEngine, KindUnit, KindNetwork, KindContainer:
 		return true
 	default:
 		return false
@@ -275,7 +275,7 @@ func beneath(root, name string) bool {
 
 func replacing(item Item) bool {
 	switch item.Kind {
-	case KindDir, KindUnit, KindNetwork, KindVolume, KindContainer, KindProxyConfig:
+	case KindDir, KindUnit, KindNetwork, KindContainer, KindProxyConfig:
 		return false
 	default:
 		return true
@@ -423,8 +423,6 @@ func (r removal) command() string {
 	switch {
 	case r.kind == KindContainer:
 		return "docker rm --force " + quoted(r.path)
-	case r.kind == KindVolume:
-		return "docker volume rm " + quoted(r.path)
 	case r.kind == KindNetwork:
 		return "if ! docker network rm " + quoted(r.path) + " >/dev/null 2>&1 && " +
 			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkHeld) + "; fi"

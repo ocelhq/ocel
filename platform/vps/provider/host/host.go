@@ -303,7 +303,7 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 	case KindNetwork:
 		rendered, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return strings.TrimSpace(rendered) != networkHeld, err
-	case KindVolume, KindContainer:
+	case KindContainer:
 		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return err == nil, err
 	case KindDir, KindFile, KindSealKey, KindProxyConfig:
