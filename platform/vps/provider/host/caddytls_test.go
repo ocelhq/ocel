@@ -76,7 +76,7 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 		t.Fatalf("the config names a pinned pair by a path other than the one the proxy is handed it at:\n%s", rendered)
 	}
 	write := exec.Command("/bin/sh", "-c", stood.here(stagedWrite(contentSum(proxyBaseline))))
-	write.Stdin = strings.NewReader(string(rendered))
+	write.Stdin = strings.NewReader(string(issuedByNobody(t, rendered)))
 	if out, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
 	}
@@ -112,6 +112,9 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 	}
 	if strings.Contains(logsOf(ProxyContainer), "obtain") {
 		t.Errorf("the proxy tried to obtain a certificate for a name a pinned pair already covers:\n%s", logsOf(ProxyContainer))
+	}
+	if strings.Contains(logsOf(ProxyContainer), acmeDirectory) {
+		t.Errorf("the proxy reached a public CA from a package-level `go test`: this renders a claim for an example.com name, and what keeps the order off the wire is the load_files suppression this very test exists to check:\n%s", logsOf(ProxyContainer))
 	}
 }
 
