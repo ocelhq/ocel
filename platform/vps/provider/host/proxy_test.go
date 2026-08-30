@@ -857,3 +857,39 @@ func TestTheProxyIsNeverStartedAgainstABindSourceDockerWouldInvent(t *testing.T)
 		t.Errorf("the write reached the engine %d times over a bind source that does not stand, want it refused before docker is asked for anything", at)
 	}
 }
+
+func TestAProxyStandingAsWrittenButNotRunningIsPlannedBackAndNeverCalledSettled(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	keys := []byte(aKey + "\n")
+	items := Items(class, keys, ArchAMD64)
+	minted := []byte("the key this box minted for itself")
+
+	for _, between := range []string{"created", "restarting", "exited", "paused"} {
+		observed := digests(items)
+		idle := bytes.Replace(containerItem().Content, []byte("state=running"), []byte("state="+between), 1)
+		if bytes.Equal(idle, containerItem().Content) {
+			t.Fatalf("the container is surveyed without a state at all, so what %q proves here is nothing", between)
+		}
+		observed[containerItem().ID()] = digest(KindContainer, ProxyContainer, 0, rootOwner, contentSum(idle))
+
+		read := Reading{
+			Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
+			Seal: Seal{Fingerprint: contentSum(minted)},
+			Stamp: Stamp{
+				Schema: providerkit.BootstrapSchema, State: StateComplete,
+				Seal: Seal{Fingerprint: contentSum(minted)}, Digests: digests(items),
+			},
+		}
+
+		if back := planFor(planned(read), containerItem().ID()); back.Action != providerkit.ActionUpdate {
+			t.Errorf("a proxy whose every configuration fact is as ocel wrote it and whose state is %q plans %q, want it written back: a proxy nothing notices is one nothing repairs",
+				between, back.Action)
+		}
+		if read.settled() {
+			t.Errorf("a box whose proxy is %q reports itself settled, and Describe would call it current while a re-run plans an update over it",
+				between)
+		}
+	}
+}
