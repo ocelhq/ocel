@@ -382,8 +382,12 @@ func TestTheFileTheProxyIsStartedFromIsTheWholeOfWhatItServes(t *testing.T) {
 	if strings.Contains(run, "--resume") {
 		t.Errorf("the proxy is run with --resume:\n%s", command)
 	}
-	if !strings.Contains(command, quoted(ProxyConfig+":"+proxyConfigMount+":ro")) {
-		t.Errorf("the file the proxy is started from is not the one ocel writes at %s:\n%s", ProxyConfig, command)
+	if !strings.Contains(command, quoted(proxyRoot+":"+proxyConfigDir+":ro")) {
+		t.Errorf("the proxy is handed something other than %s, the directory ocel writes %s in:\n%s\na deploy replaces that file by staging beside it and renaming, and a bind of the file itself pins the container to the inode it started on, so every flip after the first reloads whatever the box was seeded with",
+			proxyRoot, ProxyConfig, command)
+	}
+	if proxyConfigMount != proxyConfigDir+strings.TrimPrefix(ProxyConfig, proxyRoot) {
+		t.Errorf("the proxy is started from %s, which is not where %s lands under the directory it is handed", proxyConfigMount, ProxyConfig)
 	}
 }
 

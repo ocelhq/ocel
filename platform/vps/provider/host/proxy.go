@@ -31,12 +31,14 @@ const (
 const (
 	ProxyHelper = helperRoot + "/" + proxyHelperName
 	proxyRoot   = stateRoot + "/proxy"
-	ProxyConfig = proxyRoot + "/caddy.json"
+	ProxyConfig = proxyRoot + "/" + proxyConfigName
 )
 
 const (
 	proxyHelperName  = "ocel-proxyctl"
-	proxyConfigMount = "/etc/caddy/ocel.json"
+	proxyConfigName  = "caddy.json"
+	proxyConfigDir   = "/etc/caddy/ocel"
+	proxyConfigMount = proxyConfigDir + "/" + proxyConfigName
 	ProxyHelperMount = "/ocel/" + proxyHelperName
 	proxyDataMount   = "/data"
 	ProxyAdminSocket = "/run/caddy-admin.sock"
@@ -200,7 +202,7 @@ func proxyFactsOver(binds []string) []byte {
 
 func proxyBinds() []string {
 	return []string{
-		ProxyConfig + ":" + proxyConfigMount + ":ro",
+		proxyRoot + ":" + proxyConfigDir + ":ro",
 		ProxyHelper + ":" + ProxyHelperMount + ":ro",
 		ProxyVolume + ":" + proxyDataMount,
 	}
