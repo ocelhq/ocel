@@ -8,6 +8,7 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
@@ -52,6 +53,10 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		if err != nil {
 			return nil, RefusalError(err)
 		}
+		resp.DomainClaims, err = h.domainClaims(ctx, provider, class, req)
+		if err != nil {
+			return nil, RefusalError(err)
+		}
 		if class == ClassPreview {
 			resp.PreviewWildcard, err = heldPreviewWildcard(ctx, provider)
 			if err != nil {
@@ -69,6 +74,46 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		resp.InfraTier, resp.InfrastructurePresent = tierOf(sibling.Class), true
 	}
 	return resp, nil
+}
+
+func (h *handlers) domainClaims(ctx context.Context, provider Provider, class Class, req *contractv1.PreflightRequest) ([]*contractv1.DomainClaim, error) {
+	if len(req.GetDomains()) == 0 {
+		return nil, nil
+	}
+	front, err := h.edgeFor(provider, req.GetEdge())
+	if err != nil {
+		return nil, err
+	}
+	ours, err := boundHere(ctx, provider.Records(), class, req.GetSlug())
+	if err != nil {
+		return nil, err
+	}
+	claims := make([]*contractv1.DomainClaim, 0, len(req.GetDomains()))
+	for _, hostname := range req.GetDomains() {
+		claim := &contractv1.DomainClaim{Hostname: hostname, Status: contractv1.DomainClaim_STATUS_UNCLAIMED}
+		if !slices.Contains(ours, hostname) {
+			owner, err := front.DomainOwner(ctx, hostname)
+			if err != nil {
+				return nil, err
+			}
+			if owner != "" && owner != edge.PreviewEntryOwner {
+				claim.Status, claim.Owner = contractv1.DomainClaim_STATUS_CLAIMED, owner
+			}
+		}
+		claims = append(claims, claim)
+	}
+	return claims, nil
+}
+
+func boundHere(ctx context.Context, records RecordStore, class Class, slug string) ([]string, error) {
+	if slug == "" {
+		return nil, nil
+	}
+	state, err := (stackStore{records: records, name: EdgeStackRecord(class, slug)}).read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return state.Edge.Bound, nil
 }
 
 func slugsBesides(ctx context.Context, gate Gate, class Class, slug string) ([]string, error) {
