@@ -83,13 +83,39 @@ func TestHealRefusesEveryItemOutsideTheRecordTier(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	for _, name := range []string{
-		ClassDir(class), SealKeyPath(class), SealHelper, sudoersSeal, deployUser, dockerEngine, dockerUnit,
-		sshDir, authorizedKeys,
+		ClassDir(class), SealKeyPath(class), SealHelper, sudoersSeal, deployUser, sshDir, authorizedKeys,
 	} {
 		read := drifted(t, standingHost(), name)
 		refused := refusal(t, second(healable(read)), providerkit.CodeDenied)
 		if !strings.Contains(refused.Message, name) {
 			t.Errorf("heal over a drifted %s says %q, want it named as what heal may not write", name, refused.Message)
+		}
+	}
+}
+
+func TestHealLeavesWhatADaemonHoldsRatherThanRefusingOverIt(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	held := []string{dockerEngine, dockerUnit, ProxyNetwork, ProxyVolume, ProxyContainer}
+	for _, name := range held {
+		read := drifted(t, drifted(t, standingHost(), RecordsDir(class)), name)
+		work, left, err := healing(read, true)
+		if err != nil {
+			t.Fatalf("heal over a box whose %s is not as the stamp records = %v, want it left: heal stands nothing up and a daemon reports what it holds, so a stopped one is not drift heal can refuse over",
+				name, err)
+		}
+		if len(work) != 1 || work[0].Name != RecordsDir(class) {
+			t.Errorf("healing() over a drifted %s = %v, want only the record tier", name, ids(work))
+		}
+		if !slices.ContainsFunc(left, func(id string) bool { return strings.HasSuffix(id, " "+name) }) {
+			t.Errorf("heal left %v over a drifted %s, and a box told nothing about what heal declined is one nobody can read the exit code of", left, name)
+		}
+	}
+
+	for _, item := range Items(class, []byte(aKey+"\n"), ArchAMD64) {
+		if daemonHeld(item) && deployOwned(item) {
+			t.Errorf("%s is both a daemon's to report and heal's to write, and the two dispositions cannot both hold", item.ID())
 		}
 	}
 }
