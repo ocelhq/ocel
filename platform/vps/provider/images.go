@@ -87,7 +87,7 @@ func (p pulled) Push(ctx context.Context, push providerkit.ImagePush, report pro
 			return err
 		}
 	}
-	said, err := p.host.PullImage(ctx, p.target, push.Target)
+	said, err := p.host.PullImage(ctx, p.target, push.Target, push.Digest)
 	if err != nil {
 		return err
 	}

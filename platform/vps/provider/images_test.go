@@ -18,10 +18,13 @@ import (
 const loadedCoordinate = "ocel/web:sha256-abc"
 
 type box struct {
-	mu    sync.Mutex
-	ran   []string
-	fed   []string
-	holds bool
+	mu      sync.Mutex
+	ran     []string
+	fed     []string
+	holds   bool
+	serves  map[string]string
+	images  map[string]string
+	refuses func(command string) (session.Result, bool)
 }
 
 func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
@@ -37,22 +40,59 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 	defer b.mu.Unlock()
 	b.ran = append(b.ran, command)
 	b.fed = append(b.fed, carried)
-	switch {
-	case strings.Contains(command, "docker load"):
-		b.holds = true
-		return session.Result{Stdout: "Loaded image: " + loadedCoordinate + "\n"}, nil
-	case strings.Contains(command, "docker pull"):
-		b.holds = true
-		return session.Result{Stdout: "Status: Downloaded newer image\n"}, nil
-	case strings.Contains(command, "docker image ls"):
-		if b.holds {
-			return session.Result{Stdout: "sha256:abcdef\n"}, nil
+	if b.refuses != nil {
+		if result, refused := b.refuses(command); refused {
+			return result, nil
 		}
-		return session.Result{}, nil
-	default:
-		return session.Result{}, nil
 	}
+	var said string
+	for _, line := range strings.Split(command, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[0] != "docker" {
+			continue
+		}
+		switch {
+		case fields[1] == "load":
+			b.holds = true
+			b.name(loadedCoordinate, loadedCoordinate)
+			said = "Loaded image: " + loadedCoordinate + "\n"
+		case fields[1] == "pull" && len(fields) > 2:
+			ref := unquoted(fields[2])
+			b.holds = true
+			b.name(ref, b.served(ref))
+			said = "Status: Downloaded newer image\n"
+		case fields[1] == "tag" && len(fields) > 3:
+			b.name(unquoted(fields[3]), b.images[unquoted(fields[2])])
+		case fields[1] == "image" && len(fields) > 2 && fields[2] == "ls":
+			if b.holds {
+				said = "sha256:abcdef\n"
+			}
+		}
+	}
+	return session.Result{Stdout: said}, nil
 }
+
+func (b *box) name(ref, image string) {
+	if b.images == nil {
+		b.images = map[string]string{}
+	}
+	b.images[ref] = image
+}
+
+func (b *box) served(ref string) string {
+	if image, serves := b.serves[ref]; serves {
+		return image
+	}
+	return ref
+}
+
+func (b *box) under(ref string) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.images[ref]
+}
+
+func unquoted(field string) string { return strings.Trim(field, "'") }
 
 func (b *box) Run(ctx context.Context, command string) (string, error) {
 	result, err := b.Stream(ctx, command, nil)

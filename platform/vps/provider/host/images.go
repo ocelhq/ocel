@@ -52,8 +52,8 @@ func (h *Host) HoldsImage(ctx context.Context, coordinate string) (bool, error) 
 	return strings.TrimSpace(named) != "", nil
 }
 
-func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget, coordinate string) (string, error) {
-	command, secret, err := pull(target, coordinate)
+func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget, coordinate, digest string) (string, error) {
+	command, secret, err := pull(target, coordinate, digest)
 	if err != nil {
 		return "", err
 	}
@@ -77,24 +77,46 @@ func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget,
 	return strings.TrimSpace(said), nil
 }
 
-func pull(target providerkit.RegistryTarget, coordinate string) (string, io.Reader, error) {
-	fetch := "docker pull " + quoted(coordinate)
-	if target.Password == "" {
-		return fetch, nil, nil
+func pull(target providerkit.RegistryTarget, coordinate, digest string) (string, io.Reader, error) {
+	pinned, err := pinnedTo(coordinate, digest)
+	if err != nil {
+		return "", nil, err
 	}
-	if target.Username == "" {
-		return "", nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s is reached with a password and no username to present it under, and a docker login takes both: "+
-				"name `username` beside `password` in the project's `registry`", target.Server)
+	var secret io.Reader
+	steps := []string{"set -e"}
+	if target.Password != "" {
+		if target.Username == "" {
+			return "", nil, providerkit.Refuse(providerkit.CodeInvalid,
+				"%s is reached with a password and no username to present it under, and a docker login takes both: "+
+					"name `username` beside `password` in the project's `registry`", target.Server)
+		}
+		secret = strings.NewReader(target.Password)
+		steps = append(steps,
+			`config=$(mktemp -d)`,
+			`trap 'docker logout `+quoted(target.Server)+` >/dev/null 2>&1; rm -rf "$config"' EXIT`,
+			`export DOCKER_CONFIG="$config"`,
+			"docker login --username "+quoted(target.Username)+" --password-stdin "+quoted(target.Server),
+		)
 	}
-	return strings.Join([]string{
-		"set -e",
-		`config=$(mktemp -d)`,
-		`trap 'docker logout ` + quoted(target.Server) + ` >/dev/null 2>&1; rm -rf "$config"' EXIT`,
-		`export DOCKER_CONFIG="$config"`,
-		"docker login --username " + quoted(target.Username) + " --password-stdin " + quoted(target.Server),
-		fetch,
-	}, "\n"), strings.NewReader(target.Password), nil
+	steps = append(steps,
+		"docker pull "+quoted(pinned),
+		"docker tag "+quoted(pinned)+" "+quoted(coordinate),
+	)
+	return strings.Join(steps, "\n"), secret, nil
+}
+
+func pinnedTo(coordinate, digest string) (string, error) {
+	if digest == "" {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"%s pins no digest, and a tag is whatever the registry was last told it is: ocel pulls what this deploy built or nothing",
+			coordinate)
+	}
+	repository := coordinate
+	slash := strings.LastIndex(coordinate, "/")
+	if colon := strings.LastIndex(coordinate[slash+1:], ":"); colon >= 0 {
+		repository = coordinate[:slash+1+colon]
+	}
+	return repository + "@" + digest, nil
 }
 
 func (h *Host) LoadImage(ctx context.Context, coordinate string, tar io.Reader) (string, error) {
