@@ -148,6 +148,59 @@ func TestARouteNamingASurfaceAndNoHostIsNotOneOcelWrote(t *testing.T) {
 	}
 }
 
+func planted(t *testing.T, was, now string) []byte {
+	t.Helper()
+
+	document := strings.Replace(string(mustRender(t, routed())), was, now, 1)
+	if !strings.Contains(document, now) {
+		t.Fatalf("this test never planted the shape it is about:\n%s", document)
+	}
+	return []byte(document)
+}
+
+func refusedRead(t *testing.T, document []byte, said string) {
+	t.Helper()
+
+	_, err := ReadProxyState(document)
+	if err == nil {
+		t.Fatalf("this document reads back as routes ocel wrote, and the next deploy renders the file whole from them: %s", said)
+	}
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("the read failed with %v, want %s", err, providerkit.CodeInvalid)
+	}
+	if !strings.Contains(err.Error(), keyed("web").identity()) {
+		t.Errorf("the read is refused with\n%s\nand never names the route it will not rewrite over", err)
+	}
+}
+
+func TestAForwardingRouteCarryingAHandlerOcelDidNotWriteIsRefused(t *testing.T) {
+	t.Parallel()
+
+	refusedRead(t, planted(t,
+		`"handle":[{"handler":"headers"`,
+		`"handle":[{"handler":"rewrite"},{"handler":"headers"`),
+		"an operator's own handler runs ahead of the one this route was written with, and a read that takes the upstream and ignores the rest drops it on the next flip")
+}
+
+func TestAForwardingRouteWhoseLeadingHandlerNoLongerNamesTheEdgeIsRefused(t *testing.T) {
+	t.Parallel()
+
+	refusedRead(t, planted(t,
+		`{"handler":"headers","response":{"set":{"`+EdgeHeader+`":["`+EdgeName+`"]}}}`,
+		`{"handler":"headers","response":{"set":{"`+EdgeHeader+`":["someone-elses-edge"]}}}`),
+		"the header that tells a response came through this box says something else, and a read that never looks at it re-emits ocel's own value over the answer")
+}
+
+func TestAForwardingRouteFanningOutToASecondUpstreamIsRefused(t *testing.T) {
+	t.Parallel()
+
+	refusedRead(t, planted(t,
+		`"upstreams":[{"dial":"shop-web-2222:`+AppPort+`"}]`,
+		`"upstreams":[{"dial":"shop-web-2222:`+AppPort+`"},{"dial":"someone-elses:`+AppPort+`"}]`),
+		"a route ocel writes forwards to the one container this deploy stood up, and a read that takes the first of two upstreams drops the second with no row naming it")
+}
+
 func TestAServerNoDeployWroteIsRefusedTheWayARouteNoDeployWroteIs(t *testing.T) {
 	t.Parallel()
 
