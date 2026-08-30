@@ -1,9 +1,11 @@
 package host
 
 import (
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -54,20 +56,32 @@ func seenByTheEngine(t *testing.T) string {
 	return dir
 }
 
-func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
+type standingProxy struct {
+	dir    string
+	helper string
+	here   func(string) string
+}
+
+func proxyStanding(t *testing.T) standingProxy {
+	t.Helper()
+
 	engineOrSkip(t)
 	dir := seenByTheEngine(t)
 
-	config, helper := filepath.Join(dir, "caddy.json"), filepath.Join(dir, proxyHelperName)
+	arch, err := Architecture(runtime.GOARCH)
+	if err != nil {
+		t.Skipf("no flip helper is built for a machine reporting %q", runtime.GOARCH)
+	}
+	config, helper := filepath.Join(dir, proxyConfigName), filepath.Join(dir, proxyHelperName)
 	if err := os.WriteFile(config, proxyBaseline, 0o640); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(helper, proxyHelper(ArchAMD64), 0o750); err != nil {
+	if err := os.WriteFile(helper, proxyHelper(arch), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	here := func(written string) string {
-		return strings.ReplaceAll(strings.ReplaceAll(written, ProxyConfig, config), ProxyHelper, helper)
-	}
+	stood := standingProxy{dir: dir, helper: helper, here: func(written string) string {
+		return strings.ReplaceAll(strings.ReplaceAll(written, proxyRoot, dir), ProxyHelper, helper)
+	}}
 
 	if out, err := exec.Command(dockerEngine, "network", "create", ProxyNetwork).CombinedOutput(); err != nil {
 		t.Fatalf("create the network every deploy resolves across: %v\n%s", err, out)
@@ -79,9 +93,15 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 	t.Cleanup(func() { exec.Command(dockerEngine, "volume", "rm", ProxyVolume).Run() })
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", ProxyContainer).Run() })
 
-	if out, err := exec.Command("/bin/sh", "-c", here(containerCommand())).CombinedOutput(); err != nil {
+	if out, err := exec.Command("/bin/sh", "-c", stood.here(containerCommand())).CombinedOutput(); err != nil {
 		t.Fatalf("the write that stands the proxy up = %v\n%s", err, out)
 	}
+	return stood
+}
+
+func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
+	stood := proxyStanding(t)
+	dir, helper := stood.dir, stood.helper
 
 	rendered, err := exec.Command("/bin/sh", "-c", containerProbe()).Output()
 	if err != nil {
@@ -94,7 +114,7 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 
 	stated := containerItem()
 	stated.Content = proxyFactsOver([]string{
-		config + ":" + proxyConfigMount + ":ro",
+		dir + ":" + proxyConfigDir + ":ro",
 		helper + ":" + ProxyHelperMount + ":ro",
 		ProxyVolume + ":" + proxyDataMount,
 	})
@@ -129,4 +149,69 @@ func compared(box, stated string) string {
 		written.WriteString(mark + "box:  " + read + "\n" + mark + "item: " + meant + "\n")
 	}
 	return written.String()
+}
+
+func (p standingProxy) drives(t *testing.T, argv ...string) string {
+	t.Helper()
+
+	run := exec.Command(dockerEngine, append([]string{"exec", ProxyContainer, ProxyHelperMount}, argv...)...)
+	said, err := run.Output()
+	if err != nil {
+		var stderr string
+		if exited, ok := err.(*exec.ExitError); ok {
+			stderr = string(exited.Stderr)
+		}
+		t.Fatalf("%v against the running proxy = %v\n%s", argv, err, stderr)
+	}
+	return string(said)
+}
+
+func TestAConfigMovedIntoPlaceIsWhatTheRunningProxyLoads(t *testing.T) {
+	stood := proxyStanding(t)
+
+	flipped := routed()
+	flipped.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	rendered, err := RenderProxyConfig(flipped)
+	if err != nil {
+		t.Fatalf("RenderProxyConfig() = %v", err)
+	}
+	write := exec.Command("/bin/sh", "-c", stood.here(stagedWrite(contentSum(proxyBaseline))))
+	write.Stdin = strings.NewReader(string(rendered))
+	if out, err := write.CombinedOutput(); err != nil {
+		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
+	}
+
+	if read := stood.drives(t, "flip", proxyConfigMount); strings.TrimSpace(read) != "" {
+		t.Logf("the flip said %q", strings.TrimSpace(read))
+	}
+
+	upstream := flipped.Routes[0].Upstream
+	if held := stood.drives(t, "config", "apps/http/servers/"+proxyServer+"/routes"); !strings.Contains(held, upstream) {
+		t.Fatalf("the running proxy holds\n%s\nafter a deploy moved a config naming %s into place: the deploy writes %s by staging beside it and renaming, and a proxy handed that file through a bind of the file itself keeps reading the inode it was started on and reloads whatever it was seeded with",
+			strings.TrimSpace(held), upstream, ProxyConfig)
+	}
+
+	ask := func(hostname string) *http.Response {
+		t.Helper()
+		request, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+proxyPort+"/", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Host = hostname
+		said, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("ask the proxy this machine is running for %q: %v", hostname, err)
+		}
+		t.Cleanup(func() { said.Body.Close() })
+		return said
+	}
+
+	if said := ask("unclaimed.example.com"); said.StatusCode != http.StatusNotFound || said.Header.Get(EdgeHeader) != EdgeName {
+		t.Errorf("a hostname nothing on this box claims was answered %d carrying %s: %q, want a 404 naming this edge: an empty 200 is what the seeded config answers everything with, and a proxy still serving the seed after a deploy looks healthy to everything that checks it",
+			said.StatusCode, EdgeHeader, said.Header.Get(EdgeHeader))
+	}
+	if said := ask(claimed); said.Header.Get(EdgeHeader) == EdgeName {
+		t.Errorf("the hostname %q claims was answered by the box's own default after the flip, want the route of the surface that claimed it: the deploy loaded a document naming %s and a proxy that answers it from the default never loaded that document",
+			surface, upstream)
+	}
 }
