@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const (
@@ -363,22 +364,56 @@ func TestAHostnameItsOwnerReleasesIsFreeForTheNextSurfaceToTake(t *testing.T) {
 	}
 }
 
-func TestAPreflightThisBoxRefusesIsWhatTheWriteFailsWith(t *testing.T) {
-	t.Parallel()
+func refusingSudo(t *testing.T) *claimBench {
+	t.Helper()
 
 	stood := claimingBox(t, routed())
 	stood.floor = providerkit.Refuse(providerkit.CodeNotReady,
 		"ada cannot run sudo without a password on ocelbox, and every write ocel makes here needs it")
+	return stood
+}
+
+func TestALoginThatCannotElevateStillWritesAProxyConfigItOwns(t *testing.T) {
+	t.Parallel()
+
+	stood := refusingSudo(t)
+	if err := stood.host().ClaimHost(context.Background(), HostClaim{Hostname: claimed, Owner: surface}); err != nil {
+		t.Fatalf("ClaimHost = %v; a deploy login that owns %s writes it without sudo, and that is how a box provisioned for a non-root login works rather than a state to refuse", err, ProxyConfig)
+	}
+
+	held, err := ReadProxyState([]byte(stood.held))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(held.Claims, HostClaim{Hostname: claimed, Owner: surface}) {
+		t.Errorf("the claims on the box are %v, want %s among them", held.Claims, claimed)
+	}
+	if at := stood.at(`cat > "$staged"`); at < 0 || strings.HasPrefix(stood.commands()[at], "sudo") {
+		t.Errorf("the write went out as %v, want one unelevated command", stood.commands())
+	}
+}
+
+func TestAWriteThisLoginCannotMakeNamesTheElevationItWasRefused(t *testing.T) {
+	t.Parallel()
+
+	stood := refusingSudo(t)
+	answering := stood.answer
+	stood.answer = func(command string) (session.Result, bool) {
+		if writesProxy(command) {
+			return session.Result{Code: 1, Stderr: "cannot create " + ProxyConfig + ".XXXXXX: Permission denied"}, true
+		}
+		return answering(command)
+	}
 
 	err := stood.host().ClaimHost(context.Background(), HostClaim{Hostname: claimed, Owner: surface})
 	if err == nil {
-		t.Fatal("a claim was written on a box whose preflight refused")
+		t.Fatal("a claim this login could neither write nor elevate to write reported success")
 	}
 	if !strings.Contains(err.Error(), "sudo") {
-		t.Errorf("the claim failed with\n%s\nwant the preflight's own refusal: swallowing it downgrades the write to an unelevated one and the user is handed a shell permission error against a root-owned file instead", err)
+		t.Errorf("the claim failed with\n%s\nand never names the elevation that was refused: a bare shell permission error against a root-owned file leaves the user nothing to fix", err)
 	}
-	if stood.at(`cat > "$staged"`) >= 0 {
-		t.Errorf("a box whose preflight refused was still written to unelevated: %v", stood.commands())
+	if !strings.Contains(err.Error(), "Permission denied") {
+		t.Errorf("the claim failed with\n%s\nand never says what the box refused", err)
 	}
 }
 
