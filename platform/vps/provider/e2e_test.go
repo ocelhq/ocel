@@ -357,6 +357,10 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		}
 	}
 
+	run.vm.runs(t, workload)
+	defer run.vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
+	decoy := run.vm.holds(t, decoyImage)
+
 	trusted, err := os.ReadFile(run.store)
 	if err != nil {
 		t.Fatal(err)
@@ -382,6 +386,12 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	}
 	if strings.TrimSpace(run.vm.ssh(t, "command -v docker >/dev/null && echo standing || echo gone")) != "standing" {
 		t.Error("the docker engine went with the destroy, and removing ocel from a host must never remove what runs on it")
+	}
+	if !run.vm.running(t, workload) {
+		t.Errorf("%s is gone after `ocel bootstrap destroy production`, and a container ocel never ran is not ocel's to take", workload)
+	}
+	if after := run.vm.inspects(t, "image", decoyImage, "{{.Id}}"); after != decoy {
+		t.Errorf("%s reads %q after the destroy where it read %q, and the images on a machine belong to whoever bought it", decoyImage, after, decoy)
 	}
 	if after, err := os.ReadFile(run.store); err != nil || !bytes.Equal(after, trusted) {
 		t.Errorf("destroy edited %s; ocel never edits the user's trust store", run.store)
