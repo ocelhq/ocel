@@ -196,6 +196,17 @@ func TestWhatIsAlreadyServingIsReadFromWhereADaemonKeepsIt(t *testing.T) {
 	}
 }
 
+func TestTheLabelsRetentionReadsRenderAgainstWhatADaemonAnswersRatherThanFailingIntoEmpty(t *testing.T) {
+	t.Parallel()
+
+	for label, wanted := range map[string]string{LabelApp: "web", LabelRef: fixtureRef} {
+		if said := rendering(t, LabelSelector(label)); said != wanted {
+			t.Errorf("a real container's %s reads as %q, want %q: a selector that will not parse is answered as the empty string, and retention would then take the image out from under a container still serving it",
+				label, said, wanted)
+		}
+	}
+}
+
 func TestAContainerNameIsDerivableAndDiffersBetweenReleases(t *testing.T) {
 	t.Parallel()
 

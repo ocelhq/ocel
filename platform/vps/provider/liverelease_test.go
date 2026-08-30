@@ -97,10 +97,10 @@ func TestLiveAReleaseServesThroughTheProxyAndNothingElseOnTheBoxCanReachIt(t *te
 	if served := servedBy(t, vm, "/"); served != "one" {
 		t.Fatalf("the proxy served %q, want the release that was just flipped onto", served)
 	}
-	if app := vm.inspects(t, "container", one.physical, "{{index .Config.Labels "+quote(host.LabelApp)+"}}"); app != liveApp {
+	if app := vm.inspects(t, "container", one.physical, host.LabelSelector(host.LabelApp)); app != liveApp {
 		t.Errorf("the container carries %q under %s, and retention is a set difference over that label", app, host.LabelApp)
 	}
-	if ref := vm.inspects(t, "container", one.physical, "{{index .Config.Labels "+quote(host.LabelRef)+"}}"); ref != fixtureAt("one") {
+	if ref := vm.inspects(t, "container", one.physical, host.LabelSelector(host.LabelRef)); ref != fixtureAt("one") {
 		t.Errorf("the container carries %q under %s, want the image ref it runs", ref, host.LabelRef)
 	}
 	if published := vm.inspects(t, "container", one.physical, "{{json .HostConfig.PortBindings}}"); published != "{}" && published != "null" {

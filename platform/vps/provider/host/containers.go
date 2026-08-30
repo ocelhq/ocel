@@ -59,8 +59,12 @@ func containerRun(spec Container) []string {
 	}
 }
 
+func LabelSelector(label string) string {
+	return "{{index .Config.Labels " + strconv.Quote(label) + "}}"
+}
+
 func servingSelectors() string {
-	return "{{.State.Status}} {{index .Config.Labels " + strconv.Quote(LabelRef) + "}}"
+	return "{{.State.Status}} " + LabelSelector(LabelRef)
 }
 
 func servingCommand(name string) string {
