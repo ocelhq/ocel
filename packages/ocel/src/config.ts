@@ -115,14 +115,19 @@ export type AppConfig =
  * neither in reach is refused rather than landing somewhere public.
  */
 export interface RegistryConfig {
-  /** The registry host, such as `ghcr.io`. */
+  /**
+   * The registry host, and the namespace images sit under where the registry
+   * wants one — `ghcr.io/acme`. A registry that takes repositories at its root
+   * takes the host alone. No scheme, and no credentials.
+   */
   server: string;
   /** The username the push authenticates as, where the registry wants one. */
   username?: string;
   /**
    * The name of the environment variable holding the password or token — not
-   * the secret itself. It is read on the machine running the deploy, at the
-   * moment of the push, so it never reaches a config file or the provider.
+   * the secret itself, and written the way an environment variable is, in
+   * upper case. It is read on the machine running the deploy, at the moment of
+   * the push, so it never reaches a config file or the provider.
    */
   password: string;
 }

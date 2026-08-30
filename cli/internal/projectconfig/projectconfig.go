@@ -53,9 +53,10 @@ type Build struct {
 }
 
 type Registry struct {
-	Server   string
-	Username string
-	Password string
+	Server    string
+	Namespace string
+	Username  string
+	Password  string
 }
 
 type Health struct {
@@ -383,12 +384,9 @@ func normalizeRegistry(raw rawConfig) (*Registry, error) {
 	if raw.Registry == nil {
 		return nil, nil
 	}
-	server := strings.TrimSpace(raw.Registry.Server)
-	if server == "" {
-		return nil, errors.New("`server` is the only field naming where images land, so a registry without one would push wherever docker defaults to")
-	}
-	if strings.Contains(server, "://") || strings.Contains(server, "/") {
-		return nil, errors.New("`server` is a registry host such as \"ghcr.io\", not a URL: drop the scheme and the path")
+	server, namespace, err := normalizeRegistryServer(strings.TrimSpace(raw.Registry.Server))
+	if err != nil {
+		return nil, err
 	}
 	password := strings.TrimSpace(raw.Registry.Password)
 	if password == "" {
@@ -398,10 +396,34 @@ func normalizeRegistry(raw rawConfig) (*Registry, error) {
 		return nil, errors.New("`password` is the name of an environment variable, not the secret itself, and this value is no variable name — write it as \"REGISTRY_TOKEN\", in upper case, and put the secret in the environment under that name")
 	}
 	return &Registry{
-		Server:   server,
-		Username: strings.TrimSpace(raw.Registry.Username),
-		Password: password,
+		Server:    server,
+		Namespace: namespace,
+		Username:  strings.TrimSpace(raw.Registry.Username),
+		Password:  password,
 	}, nil
+}
+
+func normalizeRegistryServer(server string) (string, string, error) {
+	if server == "" {
+		return "", "", errors.New("`server` is the only field naming where images land, so a registry without one would push wherever docker defaults to")
+	}
+	if strings.Contains(server, "://") {
+		return "", "", errors.New("`server` is a registry host and the namespace under it, such as \"ghcr.io/acme\", not a URL: drop the scheme")
+	}
+	if strings.Contains(server, "@") {
+		return "", "", errors.New("`server` carries credentials, and a registry password belongs in the environment `password` names, never in the config: write the host and namespace alone, such as \"ghcr.io/acme\"")
+	}
+	segments := strings.Split(server, "/")
+	host := segments[0]
+	if host == "" {
+		return "", "", errors.New("`server` starts at a registry host, such as \"ghcr.io/acme\", and this one starts at a path separator")
+	}
+	for _, segment := range segments[1:] {
+		if !naming.IsRepositorySegment(segment) {
+			return "", "", errors.New("`server` names a host and the namespace an image sits under, such as \"ghcr.io/acme\", and a namespace segment is lowercase letters, digits and single separators")
+		}
+	}
+	return host, strings.Join(segments[1:], "/"), nil
 }
 
 func normalizeLinks(raw []string) ([]string, error) {
