@@ -47,6 +47,10 @@ type DNSDescriptor struct {
 	Zone string
 }
 
+type Build struct {
+	Dockerfile string
+}
+
 type App struct {
 	Name       string
 	Path       string
@@ -54,6 +58,7 @@ type App struct {
 	Entrypoint string
 	Domains    map[string][]string
 	Compute    string
+	Build      *Build
 	Folder     string
 }
 
@@ -102,6 +107,9 @@ type rawConfig struct {
 		Entrypoint string     `json:"entrypoint"`
 		Folder     string     `json:"folder"`
 		Domains    rawDomains `json:"domains"`
+		Build      *struct {
+			Dockerfile string `json:"dockerfile"`
+		} `json:"build"`
 	} `json:"apps"`
 	Links         []string        `json:"links"`
 	Domains       rawDomains      `json:"domains"`
@@ -491,6 +499,10 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("app %q: %w", a.Name, err)
 		}
+		var build *Build
+		if a.Build != nil {
+			build = &Build{Dockerfile: strings.TrimSpace(a.Build.Dockerfile)}
+		}
 		apps = append(apps, App{
 			Name:       a.Name,
 			Path:       a.Path,
@@ -498,6 +510,7 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			Entrypoint: a.Entrypoint,
 			Domains:    domains,
 			Compute:    a.Compute,
+			Build:      build,
 			Folder:     a.Folder,
 		})
 	}
