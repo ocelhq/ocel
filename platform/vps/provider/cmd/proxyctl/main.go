@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -72,14 +73,46 @@ func run(argv []string, out, errs io.Writer) int {
 			return usage(errs)
 		}
 		return ask(socket, configPath+strings.TrimPrefix(rest[0], "/"), out, errs)
+	case "deploy":
+		return deploy(socket, rest, out, errs)
 	default:
 		return usage(errs)
 	}
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: ocel-proxyctl gate <host:port> <path> <seconds> | flip <config> | upstreams | config <path>")
+	fmt.Fprintln(errs, "usage: ocel-proxyctl gate <host:port> <path> <seconds> | flip <config> | upstreams | config <path> |")
+	fmt.Fprintln(errs, "       deploy --target <host:port> --health-check-path <path> --deploy-timeout <seconds>")
+	fmt.Fprintln(errs, "              --config <path> --drain-timeout <seconds> [--retire <host:port>]")
 	return exitRefused
+}
+
+func deploy(socket string, argv []string, out, errs io.Writer) int {
+	flags := flag.NewFlagSet("deploy", flag.ContinueOnError)
+	flags.SetOutput(errs)
+	target := flags.String("target", "", "")
+	path := flags.String("health-check-path", "", "")
+	config := flags.String("config", "", "")
+	retire := flags.String("retire", "", "")
+	deployTimeout := flags.Int("deploy-timeout", 0, "")
+	drainTimeout := flags.Int("drain-timeout", 0, "")
+	if err := flags.Parse(argv); err != nil {
+		return usage(errs)
+	}
+	if *target == "" || *path == "" || *config == "" || *deployTimeout <= 0 || *drainTimeout <= 0 {
+		return usage(errs)
+	}
+
+	if code := gating(*target, *path, time.Duration(*deployTimeout)*time.Second, out, errs); code != 0 {
+		return code
+	}
+	if code := flip(socket, *config, out, errs); code != 0 {
+		return code
+	}
+	if *retire == "" {
+		return 0
+	}
+	return draining(socket, *retire, time.Duration(*drainTimeout)*time.Second, out, errs)
 }
 
 func gate(target, path, window string, out, errs io.Writer) int {
