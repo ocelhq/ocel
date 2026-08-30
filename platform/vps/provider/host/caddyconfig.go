@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 )
@@ -24,6 +25,14 @@ const (
 	drainIdentity    = "ocel-retiring"
 	boxIdentity      = "ocel-box"
 )
+
+func previewEntryIdentity(base string) string {
+	return edge.PreviewEntryOwner + claimSeparator + base
+}
+
+func previewProbeIdentity(base string) string {
+	return edge.LivenessProbeLabel + claimSeparator + base
+}
 
 const (
 	EdgeHeader = "X-Ocel-Edge"
@@ -108,11 +117,27 @@ func Covering(pins []Pin, hostname string) string {
 }
 
 type ProxyState struct {
-	Grace    time.Duration
-	Claims   []HostClaim
-	Routes   []AppRoute
-	Pins     []Pin
-	Retiring string
+	Grace       time.Duration
+	Claims      []HostClaim
+	Routes      []AppRoute
+	Pins        []Pin
+	PreviewBase string
+	Retiring    string
+}
+
+func PreviewBaseUsable(base string) error {
+	switch {
+	case base == "":
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"the shared preview entry on this box names no base domain, and a route with no host matcher of its own receives every hostname pointed at this machine, a mistyped production hostname included")
+	case strings.ContainsAny(base, "*/: "), strings.HasPrefix(base, "."), strings.HasSuffix(base, "."),
+		!strings.Contains(base, "."):
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"%q is not a base domain this box can hang a preview catch-all under: the route matches %s and nothing else, so the base is the dotted name the wildcard label sits on",
+			base, edge.PreviewWildcard(base))
+	default:
+		return nil
+	}
 }
 
 func Claiming(claims []HostClaim, taken HostClaim) ([]HostClaim, error) {
@@ -154,6 +179,7 @@ type caddyApps struct {
 
 type caddyTLS struct {
 	Certificates caddyCertificates `json:"certificates"`
+	Automation   json.RawMessage   `json:"automation,omitempty"`
 }
 
 type caddyCertificates struct {
@@ -172,9 +198,14 @@ type caddyHTTP struct {
 }
 
 type caddyServer struct {
-	Listen []string        `json:"listen"`
-	Logs   json.RawMessage `json:"logs,omitempty"`
-	Routes []caddyRoute    `json:"routes"`
+	Listen    []string        `json:"listen"`
+	Logs      json.RawMessage `json:"logs,omitempty"`
+	Automatic *caddyAutomatic `json:"automatic_https,omitempty"`
+	Routes    []caddyRoute    `json:"routes"`
+}
+
+type caddyAutomatic struct {
+	SkipCertificates []string `json:"skip_certificates"`
 }
 
 type caddyRoute struct {
@@ -229,6 +260,26 @@ func refusing(identity string) caddyRoute {
 			Headers: map[string][]string{EdgeHeader: {EdgeName}},
 		}},
 	}
+}
+
+func refusingHost(identity, hostname string) caddyRoute {
+	route := refusing(identity)
+	route.Match = []caddyMatch{{Host: []string{hostname}}}
+	return route
+}
+
+func previewRoutes(base string) ([]caddyRoute, error) {
+	if base == "" {
+		return nil, nil
+	}
+	if err := PreviewBaseUsable(base); err != nil {
+		return nil, err
+	}
+	wildcard := edge.PreviewWildcard(base)
+	return []caddyRoute{
+		refusingHost(previewProbeIdentity(base), edge.ProbeHostname(wildcard)),
+		refusingHost(previewEntryIdentity(base), wildcard),
+	}, nil
 }
 
 func matching(identity string, hostnames []string, upstream string) caddyRoute {
@@ -293,10 +344,16 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 		}
 		routes = append(routes, matching(route.identity(), hostnames, route.Upstream))
 	}
+	entry, err := previewRoutes(state.PreviewBase)
+	if err != nil {
+		return nil, err
+	}
+	routes = append(routes, entry...)
 	routes = append(routes, refusing(boxIdentity))
 
 	live := seeded.Apps.HTTP.Servers[proxyServer]
 	live.Routes = routes
+	live.Automatic = skipping(state.PreviewBase)
 	pinned, err := loadFiles(state.Pins)
 	if err != nil {
 		return nil, err
@@ -319,6 +376,13 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 		}
 	}
 	return json.Marshal(rendered)
+}
+
+func skipping(base string) *caddyAutomatic {
+	if base == "" {
+		return nil
+	}
+	return &caddyAutomatic{SkipCertificates: []string{edge.PreviewWildcard(base)}}
 }
 
 func loadFiles(pins []Pin) (*caddyTLS, error) {
@@ -378,6 +442,67 @@ func validPin(pin Pin) error {
 	return nil
 }
 
+func previewRouteOf(route caddyRoute) (base, named string) {
+	for _, label := range []string{edge.PreviewEntryOwner, edge.LivenessProbeLabel} {
+		if rest, mine := strings.CutPrefix(route.Identity, label+claimSeparator); mine {
+			return rest, label
+		}
+	}
+	return "", ""
+}
+
+func previewRouteRead(route caddyRoute, base, named string) error {
+	if err := PreviewBaseUsable(base); err != nil {
+		return err
+	}
+	wildcard := edge.PreviewWildcard(base)
+	hostname := wildcard
+	if named == edge.LivenessProbeLabel {
+		hostname = edge.ProbeHostname(wildcard)
+	}
+	if want := refusingHost(route.Identity, hostname); !routeEqual(route, want) {
+		return unwritten("route", route.Identity)
+	}
+	return nil
+}
+
+func routeEqual(held, want caddyRoute) bool {
+	written, err := json.Marshal([]caddyRoute{held, want})
+	if err != nil {
+		return false
+	}
+	var pair []json.RawMessage
+	if err := json.Unmarshal(written, &pair); err != nil || len(pair) != 2 {
+		return false
+	}
+	return string(pair[0]) == string(pair[1])
+}
+
+func previewBaseRead(read caddyConfig, entry map[string]string) (string, error) {
+	base := entry[edge.PreviewEntryOwner]
+	if probe := entry[edge.LivenessProbeLabel]; probe != base {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"%s carries a preview catch-all for %q and a liveness probe route for %q, and the two are installed and taken down together: the probe hostname is what `ocel domain use --preview` reads the edge header off, and a catch-all standing without it settles for nobody",
+			ProxyConfig, base, probe)
+	}
+	held := read.Apps.HTTP.Servers[proxyServer].Automatic
+	var skipped []string
+	if held != nil {
+		skipped = held.SkipCertificates
+	}
+	want := skipping(base)
+	var wanted []string
+	if want != nil {
+		wanted = want.SkipCertificates
+	}
+	if !slices.Equal(skipped, wanted) {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"%s keeps %v out of the automatic-https subject collection, and this box's preview entry needs exactly %v out of it: %s is a subject caddy would order a wildcard certificate for, and no dns-01 module on this box can answer that challenge",
+			ProxyConfig, skipped, wanted, edge.PreviewWildcard(base))
+	}
+	return base, nil
+}
+
 func pinnedBy(read caddyConfig) ([]Pin, error) {
 	if read.Apps.TLS == nil {
 		return nil, nil
@@ -416,9 +541,22 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 	if err != nil {
 		return ProxyState{}, err
 	}
+	if read.Apps.TLS != nil && len(read.Apps.TLS.Automation) > 0 {
+		return ProxyState{}, providerkit.Refuse(providerkit.CodeInvalid,
+			"%s declares a tls automation policy, and ocel writes none: this box knows every hostname it serves at deploy time, so nothing here needs on-demand issuance, and a catch-all beside an on-demand policy is an unauthenticated acme trigger a stranger drives with a junk subdomain until the box is locked out of its own tls. Caddy only warns about an on-demand policy carrying no permission module and serves anyway, so this is asserted here rather than trusted to be refused",
+			ProxyConfig)
+	}
 	state := ProxyState{Grace: grace, Pins: pins}
+	entry := map[string]string{}
 	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
 		if route.Identity == boxIdentity {
+			continue
+		}
+		if base, named := previewRouteOf(route); named != "" {
+			if err := previewRouteRead(route, base, named); err != nil {
+				return ProxyState{}, err
+			}
+			entry[named] = base
 			continue
 		}
 		if claim, mine := strings.CutPrefix(route.Identity, claimIdentity); mine {
@@ -447,6 +585,11 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 			Upstream: upstream,
 		})
 	}
+	base, err := previewBaseRead(read, entry)
+	if err != nil {
+		return ProxyState{}, err
+	}
+	state.PreviewBase = base
 	return state, nil
 }
 
