@@ -71,6 +71,19 @@ export interface BuildConfig {
   dockerfile?: string;
 }
 
+/**
+ * How a container app is checked before it is served. A release is held
+ * until the new process answers, and rolled back rather than served if it
+ * never does.
+ */
+export interface HealthConfig {
+  /**
+   * The path the check requests, off the app's own root. Any 2xx answer means
+   * up. Left off, the check requests `/`.
+   */
+  path?: string;
+}
+
 interface AppFields {
   name: string;
   path: string;
@@ -88,7 +101,12 @@ interface AppFields {
  */
 export type AppConfig =
   | (AppFields & { compute?: "serverless"; framework: Framework })
-  | (AppFields & { compute: "container"; framework?: Framework; build?: BuildConfig });
+  | (AppFields & {
+      compute: "container";
+      framework?: Framework;
+      build?: BuildConfig;
+      health?: HealthConfig;
+    });
 
 export interface OcelConfig {
   slug: string;

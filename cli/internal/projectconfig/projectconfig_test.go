@@ -335,6 +335,37 @@ export default {
 			},
 		},
 		{
+			name: "reads the health path a container app names",
+			config: `
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: "services/api", compute: "container", health: { path: "/healthz" } }],
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.Apps[0].Health == nil {
+					t.Fatalf("Apps[0].Health = nil, want the health check the config writes")
+				}
+				if got, want := cfg.Apps[0].Health.Path, "/healthz"; got != want {
+					t.Fatalf("Apps[0].Health.Path = %q, want %q", got, want)
+				}
+			},
+		},
+		{
+			name: "leaves an app that writes no health check without one",
+			config: `
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: "services/api", compute: "container" }],
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if cfg.Apps[0].Health != nil {
+					t.Fatalf("Apps[0].Health = %+v, want nil where the app configures no health check", cfg.Apps[0].Health)
+				}
+			},
+		},
+		{
 			name: "leaves an app that writes no build without one",
 			config: `
 export default {
@@ -661,6 +692,16 @@ export default {
 };
 `,
 			wantErr: []string{`app "api"`, "build.dockerfile"},
+		},
+		{
+			name: "rejects a health.path that is not a path off the app's root",
+			config: `
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: "services/api", compute: "container", health: { path: "healthz" } }],
+};
+`,
+			wantErr: []string{`app "api"`, "health.path"},
 		},
 		{
 			name: "rejects an app with no path",
