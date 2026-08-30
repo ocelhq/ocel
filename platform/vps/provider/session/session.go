@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -79,6 +80,13 @@ func (s *Session) Run(ctx context.Context, command string) (string, error) {
 }
 
 func (s *Session) Exec(ctx context.Context, command string, stdin []byte) (Result, error) {
+	if stdin == nil {
+		return s.Stream(ctx, command, nil)
+	}
+	return s.Stream(ctx, command, bytes.NewReader(stdin))
+}
+
+func (s *Session) Stream(ctx context.Context, command string, stdin io.Reader) (Result, error) {
 	stdout, stderr, code, err := run(ctx, stdin, "ssh", append(s.args(), s.dest.Written, command)...)
 	if err == nil && code != transportFailure {
 		return Result{Stdout: stdout, Stderr: stderr, Code: code}, nil
@@ -148,12 +156,12 @@ func output(ctx context.Context, name string, args ...string) (string, error) {
 	return stdout, nil
 }
 
-func run(ctx context.Context, stdin []byte, name string, args ...string) (string, string, int, error) {
+func run(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, int, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if stdin != nil {
-		cmd.Stdin = bytes.NewReader(stdin)
+		cmd.Stdin = stdin
 	}
 	err := cmd.Run()
 	var exit *exec.ExitError
