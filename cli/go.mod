@@ -6,6 +6,7 @@ require (
 	charm.land/huh/v2 v2.0.3
 	connectrpc.com/connect v1.20.0
 	connectrpc.com/validate v0.6.0
+	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/creack/pty v1.1.24
 	github.com/evanw/esbuild v0.28.1
@@ -42,7 +43,6 @@ require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
-	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29 // indirect
 	github.com/air-verse/air v1.65.3 // indirect
 	github.com/alexflint/go-filemutex v1.3.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect

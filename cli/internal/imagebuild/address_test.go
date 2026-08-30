@@ -11,14 +11,35 @@ func TestWithNoDockerHostSetTheDaemonIsThePlatformsOwnSocket(t *testing.T) {
 
 	d, err := openDaemon()
 	if err != nil {
-		t.Fatalf("openDaemon() with no %s set = %v", DockerHostEnv, err)
+		t.Fatalf("openDaemon() with no %s set = %v, so ocel rejects the address it chose for itself", DockerHostEnv, err)
 	}
-	want := "unix:///var/run/docker.sock"
+	want, network := "unix:///var/run/docker.sock", "unix"
 	if runtime.GOOS == "windows" {
-		want = "npipe:////./pipe/docker_engine"
+		want, network = "npipe:////./pipe/docker_engine", pipeNetwork
 	}
 	if d.address != want {
 		t.Errorf("openDaemon() falls back to %q, want %q, the socket a default install of docker listens on", d.address, want)
+	}
+	if d.network != network {
+		t.Errorf("openDaemon() dials its own default over %q, want %q", d.network, network)
+	}
+}
+
+func TestAWindowsPipeIsDialledOnWindowsAndRefusedWhereThereIsNoPipe(t *testing.T) {
+	t.Setenv(DockerHostEnv, "npipe:////./pipe/docker_engine")
+
+	d, err := openDaemon()
+	if runtime.GOOS != "windows" {
+		if err == nil {
+			t.Fatalf("openDaemon() accepted a named pipe on %s, where nothing can dial one", runtime.GOOS)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("openDaemon() = %v, want the pipe docker for windows listens on", err)
+	}
+	if d.network != pipeNetwork || d.target != "//./pipe/docker_engine" {
+		t.Errorf("openDaemon() dials %s %q, want the pipe %s names", d.network, d.target, DockerHostEnv)
 	}
 }
 

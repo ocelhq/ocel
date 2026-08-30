@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -27,6 +26,8 @@ const (
 	buildPath   = "/grpc"
 	sessionPath = "/session"
 	upgradeTo   = "h2c"
+
+	pipeNetwork = "npipe"
 
 	snapshotterLabel = "org.mobyproject.buildkit.worker.snapshotter"
 
@@ -56,8 +57,12 @@ func openDaemon() (daemon, error) {
 			return daemon{}, fmt.Errorf("%s asks for a tls connection to the daemon at %s, and ocel speaks none: it would send the whole build context — your source tree — over plain tcp, where it can be read and the image it builds substituted: unset %s to accept that, or run the build on the machine the daemon is on", stated, host, stated)
 		}
 		return daemon{address: host, network: "tcp", target: strings.TrimSuffix(rest, "/")}, nil
+	case pipeNetwork:
+		if d, ok := pipeDaemon(host, rest); ok {
+			return d, nil
+		}
 	}
-	return daemon{}, fmt.Errorf("%s is %q, and ocel builds images over unix:// and tcp:// only: set %s to one of those, or run the build where the daemon is", DockerHostEnv, host, DockerHostEnv)
+	return daemon{}, fmt.Errorf("%s is %q, and ocel builds images over unix://, tcp://, and npipe:// on windows: set %s to one of those, or run the build where the daemon is", DockerHostEnv, host, DockerHostEnv)
 }
 
 func statedTLS() string {
@@ -69,15 +74,8 @@ func statedTLS() string {
 	return ""
 }
 
-func platformAddress() string {
-	if runtime.GOOS == "windows" {
-		return "npipe:////./pipe/docker_engine"
-	}
-	return "unix:///var/run/docker.sock"
-}
-
 func (d daemon) hijack(ctx context.Context, path, proto string, meta map[string][]string) (net.Conn, error) {
-	conn, err := (&net.Dialer{}).DialContext(ctx, d.network, d.target)
+	conn, err := dial(ctx, d.network, d.target)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +174,7 @@ func (d daemon) tag(ctx context.Context, image Image) error {
 func (d daemon) client() *http.Client {
 	return &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, d.network, d.target)
+			return dial(ctx, d.network, d.target)
 		},
 	}}
 }
