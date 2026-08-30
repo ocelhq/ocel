@@ -15,9 +15,9 @@ const DefaultHealthCheckPath = "/"
 var pinnedRef = regexp.MustCompile(`^[^@:\s]+@sha256:[0-9a-f]{64}$`)
 
 func buildContainers(manifestApps []*contractv1.ManifestApp, apps []App, functions []Function) ([]*contractv1.ManifestContainer, error) {
-	configured := make(map[string]App, len(apps))
+	byName := make(map[string]App, len(apps))
 	for _, a := range apps {
-		configured[a.Name] = a
+		byName[a.Name] = a
 	}
 	packed := make(map[string]bool, len(functions))
 	for _, f := range functions {
@@ -30,7 +30,7 @@ func buildContainers(manifestApps []*contractv1.ManifestApp, apps []App, functio
 			continue
 		}
 		name := a.GetName()
-		configured, named := configured[name]
+		configured, named := byName[name]
 		if !named {
 			return nil, fmt.Errorf("manifestbuilder: app %q runs on container compute and this project's config does not name it, so there is no directory to build its image from: give %q a name and a path under `apps`", name, name)
 		}
