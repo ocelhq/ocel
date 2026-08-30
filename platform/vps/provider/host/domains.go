@@ -29,18 +29,18 @@ func (h *Host) Serving(ctx context.Context, key RouteKey) (string, error) {
 }
 
 func (h *Host) UnroutePointer(ctx context.Context, owner, pointer string) error {
-	return h.reshape(ctx, func(state ProxyState) ProxyState {
+	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
 		state.Routes = Unrouting(state.Routes, func(route AppRoute) bool {
 			return route.Owner == owner && route.Pointer == pointer
 		})
-		return state
+		return state, nil
 	})
 }
 
 func (h *Host) UnrouteSurface(ctx context.Context, owner string) error {
-	return h.reshape(ctx, func(state ProxyState) ProxyState {
+	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
 		state.Routes = Unrouting(state.Routes, func(route AppRoute) bool { return route.Owner == owner })
-		return state
+		return state, nil
 	})
 }
 
@@ -48,16 +48,20 @@ func (h *Host) ClaimHost(ctx context.Context, claim HostClaim) error {
 	if err := validClaim(claim); err != nil {
 		return err
 	}
-	return h.reshape(ctx, func(state ProxyState) ProxyState {
-		state.Claims = Claiming(state.Claims, claim)
-		return state
+	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
+		taken, err := Claiming(state.Claims, claim)
+		if err != nil {
+			return ProxyState{}, err
+		}
+		state.Claims = taken
+		return state, nil
 	})
 }
 
-func (h *Host) DisclaimHost(ctx context.Context, hostname string) error {
-	return h.reshape(ctx, func(state ProxyState) ProxyState {
-		state.Claims = Disclaiming(state.Claims, hostname)
-		return state
+func (h *Host) DisclaimHost(ctx context.Context, hostname, owner string) error {
+	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
+		state.Claims = Disclaiming(state.Claims, hostname, owner)
+		return state, nil
 	})
 }
 
@@ -73,7 +77,7 @@ func (h *Host) proxyState(ctx context.Context) (ProxyState, proxyDocument, error
 	return state, held, nil
 }
 
-func (h *Host) reshape(ctx context.Context, change func(ProxyState) ProxyState) error {
+func (h *Host) reshape(ctx context.Context, change func(ProxyState) (ProxyState, error)) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
@@ -86,7 +90,11 @@ func (h *Host) reshape(ctx context.Context, change func(ProxyState) ProxyState) 
 	if err != nil {
 		return err
 	}
-	next, err := RenderProxyConfig(change(state))
+	changed, err := change(state)
+	if err != nil {
+		return err
+	}
+	next, err := RenderProxyConfig(changed)
 	if err != nil {
 		return err
 	}

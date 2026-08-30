@@ -148,7 +148,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 }
 
 func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
-	if err := s.e.machine.DisclaimHost(ctx, hostname); err != nil {
+	if err := s.e.machine.DisclaimHost(ctx, hostname, s.surface()); err != nil {
 		return err
 	}
 	s.state.Release(hostname)

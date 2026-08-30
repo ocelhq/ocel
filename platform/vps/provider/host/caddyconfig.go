@@ -60,13 +60,20 @@ type ProxyState struct {
 	Retiring string
 }
 
-func Claiming(claims []HostClaim, taken HostClaim) []HostClaim {
+func Claiming(claims []HostClaim, taken HostClaim) ([]HostClaim, error) {
+	if at := slices.IndexFunc(claims, func(claim HostClaim) bool { return claim.Hostname == taken.Hostname }); at >= 0 && claims[at].Owner != taken.Owner {
+		return nil, providerkit.Refuse(providerkit.CodeBusy,
+			"%s is claimed on this box by %s, and one hostname answers for one surface: unbind it there before %s binds it, or this bind would take a live site off the air with nothing telling the project that lost it",
+			taken.Hostname, claims[at].Owner, taken.Owner)
+	}
 	kept := slices.DeleteFunc(slices.Clone(claims), func(claim HostClaim) bool { return claim.Hostname == taken.Hostname })
-	return append(kept, taken)
+	return append(kept, taken), nil
 }
 
-func Disclaiming(claims []HostClaim, hostname string) []HostClaim {
-	return slices.DeleteFunc(slices.Clone(claims), func(claim HostClaim) bool { return claim.Hostname == hostname })
+func Disclaiming(claims []HostClaim, hostname, owner string) []HostClaim {
+	return slices.DeleteFunc(slices.Clone(claims), func(claim HostClaim) bool {
+		return claim.Hostname == hostname && claim.Owner == owner
+	})
 }
 
 func Routing(routes []AppRoute, taken AppRoute) []AppRoute {

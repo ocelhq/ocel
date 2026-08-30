@@ -88,13 +88,17 @@ func (m *machine) Claims(context.Context) ([]host.HostClaim, error) {
 
 func (m *machine) ClaimHost(_ context.Context, claim host.HostClaim) error {
 	m.calls = append(m.calls, "claim "+claim.Hostname)
-	m.claims = host.Claiming(m.claims, claim)
+	taken, err := host.Claiming(m.claims, claim)
+	if err != nil {
+		return err
+	}
+	m.claims = taken
 	return nil
 }
 
-func (m *machine) DisclaimHost(_ context.Context, hostname string) error {
+func (m *machine) DisclaimHost(_ context.Context, hostname, owner string) error {
 	m.calls = append(m.calls, "disclaim "+hostname)
-	m.claims = host.Disclaiming(m.claims, hostname)
+	m.claims = host.Disclaiming(m.claims, hostname, owner)
 	return nil
 }
 
