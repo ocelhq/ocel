@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -58,6 +59,8 @@ const (
 const FakeFlipBoundEnvVar = "OCEL_TEST_FAKE_FLIP_BOUND"
 
 const FakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
+
+const FakeComputesEnvVar = "OCEL_TEST_FAKE_COMPUTES"
 
 const FakePublishedLinksEnvVar = "OCEL_TEST_FAKE_PUBLISHED_LINKS"
 
@@ -238,6 +241,12 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 		}
 	}
 
+	for _, c := range req.GetManifest().GetContainers() {
+		if err := stream.Send(fakeProgress("CONTAINER " + describeContainer(c))); err != nil {
+			return err
+		}
+	}
+
 	for _, message := range consumeFakeLinks(req.GetManifest()) {
 		if err := stream.Send(fakeProgress(message)); err != nil {
 			return err
@@ -323,6 +332,13 @@ func fakeDeployPlan(req *contractv1.DeployRequest) *planv1.ChangePlan {
 			group.Changes = append(group.Changes,
 				&planv1.Change{Kind: "artifact", Name: fn.GetLogicalName(), Action: planv1.Change_ACTION_CREATE},
 				&planv1.Change{Kind: "function", Name: fn.GetLogicalName(), Action: planv1.Change_ACTION_CREATE})
+		}
+		for _, c := range manifest.GetContainers() {
+			if c.GetApp() != app.GetName() {
+				continue
+			}
+			group.Changes = append(group.Changes,
+				&planv1.Change{Kind: "container", Name: c.GetImage(), Action: planv1.Change_ACTION_CREATE})
 		}
 		plan.Groups = append(plan.Groups, group)
 		promotion.Changes = append(promotion.Changes,
@@ -721,7 +737,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 	s.recordPreflight(req.GetSlug(), req.GetDomains(), req.GetRequiredTier())
 	journalPreflight(req)
 	resp := &contractv1.PreflightResponse{
-		Computes:              []string{"serverless"},
+		Computes:              fakeComputes(),
 		InfraTier:             parseInfraTier(os.Getenv(FakeInfraTierEnvVar)),
 		InfrastructurePresent: os.Getenv(FakeInfraPresentEnvVar) != "0",
 		Identity: &contractv1.Identity{
@@ -1361,6 +1377,24 @@ func productionHostnames(domains []*contractv1.TierDomains) []string {
 	return nil
 }
 
+func fakeComputes() []string {
+	named := strings.Split(os.Getenv(FakeComputesEnvVar), ",")
+	var computes []string
+	for _, compute := range named {
+		if compute = strings.TrimSpace(compute); compute != "" {
+			computes = append(computes, compute)
+		}
+	}
+	if len(computes) == 0 {
+		return []string{"serverless"}
+	}
+	return computes
+}
+
+func describeContainer(c *contractv1.ManifestContainer) string {
+	return fmt.Sprintf("app=%s image=%s health=%s", c.GetApp(), c.GetImage(), c.GetHealthCheckPath())
+}
+
 func describeApp(a *contractv1.ManifestApp) string {
 	keys := make([]string, 0, len(a.GetVariables()))
 	for _, v := range a.GetVariables() {
@@ -1381,6 +1415,46 @@ func parseInfraTier(s string) environmentv1.Tier {
 	}
 }
 
+var pinnedImage = regexp.MustCompile(`^[^@:\s]+@sha256:[0-9a-f]{64}$`)
+
+func validateFixtureContainers(m *contractv1.Manifest) error {
+	compute := map[string]string{}
+	for _, a := range m.GetApps() {
+		compute[a.GetName()] = a.GetCompute()
+	}
+	served := map[string]bool{}
+	for _, c := range m.GetContainers() {
+		app := c.GetApp()
+		if _, ok := compute[app]; !ok {
+			return fmt.Errorf("container names the app %q, which this manifest does not declare", app)
+		}
+		if compute[app] != string(providerkit.ComputeContainer) {
+			return fmt.Errorf("container names the app %q, which this manifest says runs on %q", app, compute[app])
+		}
+		if served[app] {
+			return fmt.Errorf("app %s carries two containers, and an app is served by one process", app)
+		}
+		served[app] = true
+		if !pinnedImage.MatchString(c.GetImage()) {
+			return fmt.Errorf("container for %s carries image %q, and a release pins one repository at one digest", app, c.GetImage())
+		}
+		if !strings.HasPrefix(c.GetHealthCheckPath(), "/") {
+			return fmt.Errorf("container for %s carries health_check_path %q, and a provider is never left to resolve one of its own", app, c.GetHealthCheckPath())
+		}
+	}
+	for app, kind := range compute {
+		if kind == string(providerkit.ComputeContainer) && !served[app] {
+			return fmt.Errorf("app %s runs on container compute and this manifest carries no container for it", app)
+		}
+	}
+	for _, fn := range m.GetFunctions() {
+		if served[fn.GetApp()] {
+			return fmt.Errorf("app %s is served by a container and function %s as well, so a request has two answers", fn.GetApp(), fn.GetLogicalName())
+		}
+	}
+	return nil
+}
+
 func validateFixtureManifest(m *contractv1.Manifest) error {
 	if m.GetSchemaVersion() == "" {
 		return errors.New("manifest missing schema_version")
@@ -1392,6 +1466,9 @@ func validateFixtureManifest(m *contractv1.Manifest) error {
 		if !providerkit.KnownCompute(a.GetCompute()) {
 			return fmt.Errorf("app %s carries compute %q, and a provider only runs %v", a.GetName(), a.GetCompute(), providerkit.ComputeNames(providerkit.Computes()))
 		}
+	}
+	if err := validateFixtureContainers(m); err != nil {
+		return err
 	}
 	declared := map[string]bool{}
 	for _, r := range m.GetResources() {

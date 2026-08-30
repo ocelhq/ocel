@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -23,7 +24,7 @@ func preflightPreview(ctx context.Context, ui *runui.Session, runner *provider.R
 	return preflight.Tier(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
 }
 
-func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) ([]string, string, error) {
+func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) ([]string, string, error) {
 	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Hostnames(cfg, "preview"), preflight.Frameworks(cfg), "ocel bootstrap preview")
 	if err != nil {
 		return nil, "", err
@@ -32,7 +33,7 @@ func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider
 	if err != nil {
 		return nil, "", err
 	}
-	if err := preflight.RequireBuilder(ctx, ui, cfg); err != nil {
+	if err := deps.RequireImageBuilder(ctx, ui, cfg); err != nil {
 		return nil, "", err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
@@ -47,7 +48,7 @@ func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider
 	return resp.GetKnownSlugs(), compute, nil
 }
 
-func preflightDeploy(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) ([]string, string, error) {
+func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) ([]string, string, error) {
 	domains := preflight.Hostnames(cfg, "production")
 	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(ui, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
 	if err != nil {
@@ -57,7 +58,7 @@ func preflightDeploy(ctx context.Context, ui *runui.Session, runner *provider.Ru
 	if err != nil {
 		return nil, "", err
 	}
-	if err := preflight.RequireBuilder(ctx, ui, cfg); err != nil {
+	if err := deps.RequireImageBuilder(ctx, ui, cfg); err != nil {
 		return nil, "", err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {

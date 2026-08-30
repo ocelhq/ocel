@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/appimages"
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/deploy"
@@ -96,6 +97,8 @@ func newDeps() cmddeps.Deps {
 		LoadCredentials:     credentials.Load,
 		FetchAccount:        resolve.StubAccount,
 		BuildApp:            appbuilder.Build,
+		RequireImageBuilder: appimages.RequireBuilder,
+		BuildAppImages:      appimages.Build,
 		CollectAppFunctions: appbuilder.CollectFunctions,
 		DeploymentID:        appbuilder.DeploymentID,
 		CollectDeclarations: deploycollector.Collect,
