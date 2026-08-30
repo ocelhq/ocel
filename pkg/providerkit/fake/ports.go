@@ -248,6 +248,7 @@ type Releaser struct {
 	mu      sync.Mutex
 	stacks  map[string]providerkit.StackResult
 	plans   []providerkit.StackPlan
+	taken   []string
 	entered func(providerkit.StackPlan) error
 }
 
@@ -302,24 +303,8 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 			Grants:     r.Grants,
 		})
 	}
-	if plan.App != nil {
-		for _, function := range plan.App.Functions {
-			physical := plan.Ref.Name.String() + "-" + function.Name
-			result.Functions = append(result.Functions, providerkit.Function{
-				Name:     function.Name,
-				Physical: physical,
-				URL:      "https://" + physical + ".fn.fake.invalid",
-			})
-		}
-		if plan.App.Compute == providerkit.ComputeContainer {
-			physical := plan.Ref.Name.String() + "-" + plan.App.App
-			result.Containers = append(result.Containers, providerkit.AppContainer{
-				Name:     plan.App.App,
-				Physical: physical,
-				URL:      "https://" + physical + ".ctr.fake.invalid",
-			})
-		}
-	}
+	result.Functions = StoodUpFunctions(plan)
+	result.Containers = StoodUpContainers(plan)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.plans = append(r.plans, plan)
@@ -345,6 +330,49 @@ func (r *Releaser) State(ref providerkit.StackRef) providerkit.StackState {
 	defer r.mu.Unlock()
 	result, present := r.stacks[stackKey(ref)]
 	return providerkit.StackState{Present: present, Result: result}
+}
+
+func StoodUpFunctions(plan providerkit.StackPlan) []providerkit.Function {
+	if plan.App == nil {
+		return nil
+	}
+	standing := make([]providerkit.Function, 0, len(plan.App.Functions))
+	for _, function := range plan.App.Functions {
+		physical := plan.Ref.Name.String() + "-" + function.Name
+		standing = append(standing, providerkit.Function{
+			Name:     function.Name,
+			Physical: physical,
+			URL:      "https://" + physical + ".fn.fake.invalid",
+		})
+	}
+	if len(standing) == 0 {
+		return nil
+	}
+	return standing
+}
+
+func StoodUpContainers(plan providerkit.StackPlan) []providerkit.AppContainer {
+	if plan.App == nil || plan.App.Compute != providerkit.ComputeContainer {
+		return nil
+	}
+	physical := plan.Ref.Name.String() + "-" + plan.App.App
+	return []providerkit.AppContainer{{
+		Name:     plan.App.App,
+		Physical: physical,
+		URL:      "https://" + physical + ".ctr.fake.invalid",
+	}}
+}
+
+func (r *Releaser) tookDown(names ...string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.taken = append(r.taken, names...)
+}
+
+func (r *Releaser) TakenDown() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.taken)
 }
 
 func stackKey(ref providerkit.StackRef) string {
