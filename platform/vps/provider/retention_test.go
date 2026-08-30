@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -57,6 +58,37 @@ func TestAReleaseThatNeverStoodUpRecordsNothing(t *testing.T) {
 	}
 	if called := helperCalls(machine, "promote"); len(called) != 0 {
 		t.Errorf("a release that never stood up recorded %v, and a failed release is never what the box most recently served", called)
+	}
+}
+
+func TestTheWindowIsWrittenUnderNoElevationAtAll(t *testing.T) {
+	t.Parallel()
+
+	for name, run := range map[string]func(*vps.Provider, providerkit.StackRef) error{
+		"promote": func(p *vps.Provider, ref providerkit.StackRef) error {
+			_, err := p.ProvisionContainers(context.Background(), aStack(t, anApp()), nil)
+			return err
+		},
+		"forget": func(p *vps.Provider, ref providerkit.StackRef) error {
+			return p.ForgetReleases(context.Background(), ref, "web", nil)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			machine := &box{unsocket: true}
+			ref := aStack(t, anApp()).Ref
+			if err := run(over(machine), ref); err != nil {
+				t.Fatalf("%s over a login outside the docker group = %v", name, err)
+			}
+			called := helperCalls(machine, name)
+			if len(called) != 1 {
+				t.Fatalf("the %s ran %d times, want one", name, len(called))
+			}
+			if strings.Contains(called[0], "sudo") {
+				t.Errorf("the %s ran as %q: it touches no daemon, and a window root writes is a window the deploy login can no longer rewrite", name, called[0])
+			}
+		})
 	}
 }
 
