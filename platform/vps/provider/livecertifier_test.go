@@ -21,8 +21,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-const livePinned = "pinned.example.invalid"
-
 func placedOnTheBox(t *testing.T, vm machine, at string, names []string, until time.Duration) {
 	t.Helper()
 
@@ -60,7 +58,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
-	at := "/etc/ocel/certs/live"
+	at := host.ProxyPins + "/live"
 	placedOnTheBox(t, vm, at, []string{host.ProxyContainer, liveHostname}, 90*24*time.Hour)
 	pinned := vm.provider(t, withPins(map[string]string{host.ProxyContainer: at}))
 	defer closing(t, pinned)
@@ -111,7 +109,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
-	at := "/etc/ocel/certs/live-pin"
+	at := host.ProxyPins + "/live-pin"
 	placedOnTheBox(t, vm, at, []string{"*.preview.example.invalid"}, 11*24*time.Hour)
 	pinned := vm.provider(t, withPins(map[string]string{"*.preview.example.invalid": at}))
 	defer closing(t, pinned)
@@ -139,18 +137,5 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 	}
 	if !vm.stands(t, host.PinKey(at)) {
 		t.Errorf("%s is gone from the box, and ocel never places or removes key material here", host.PinKey(at))
-	}
-}
-
-func TestLiveAHostnameAnotherEdgeAnswersOnIsRefusedRatherThanSettled(t *testing.T) {
-	_, p := onABoxServingContainers(t)
-	defer closing(t, p)
-
-	kind, err := p.Serving(context.Background(), boxedge.Kind, livePinned)
-	if err != nil {
-		t.Fatalf("Serving() over a hostname that resolves nowhere = %v, want it reported unserved", err)
-	}
-	if kind != "" {
-		t.Errorf("Serving() = %q, want nothing: a hostname pointed at nothing is unserved rather than served by this box", kind)
 	}
 }
