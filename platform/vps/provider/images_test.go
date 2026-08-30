@@ -1,4 +1,4 @@
-package vps
+package vps_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -77,8 +78,10 @@ func (b *box) carried() []string {
 
 func standing(t *testing.T, machine *box) providerkit.ImageStore {
 	t.Helper()
-	p := NewProvider(Options{SSH: Target{Host: "box.invalid", User: "ada"}})
-	p.host = host.New(func(context.Context) (host.Conn, error) { return machine, nil }, host.Keys{})
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
 	store, err := p.DirectImages(context.Background())
 	if err != nil {
 		t.Fatal(err)
