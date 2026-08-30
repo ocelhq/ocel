@@ -74,6 +74,7 @@ func queuedAppRequest(apps []string) *contractv1.DeployRequest {
 		manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
 			Name:         app,
 			Framework:    "next",
+			Compute:      string(providerkit.ComputeServerless),
 			DeploymentId: fmt.Sprintf("%032x", slot+1),
 		})
 		manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{

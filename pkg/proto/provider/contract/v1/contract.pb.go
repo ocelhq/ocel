@@ -1010,6 +1010,7 @@ type ManifestApp struct {
 	Variables     []*ManifestVariable    `protobuf:"bytes,4,rep,name=variables,proto3" json:"variables,omitempty"`
 	Folder        string                 `protobuf:"bytes,5,opt,name=folder,proto3" json:"folder,omitempty"`
 	DeploymentId  string                 `protobuf:"bytes,6,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	Compute       string                 `protobuf:"bytes,7,opt,name=compute,proto3" json:"compute,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1082,6 +1083,13 @@ func (x *ManifestApp) GetFolder() string {
 func (x *ManifestApp) GetDeploymentId() string {
 	if x != nil {
 		return x.DeploymentId
+	}
+	return ""
+}
+
+func (x *ManifestApp) GetCompute() string {
+	if x != nil {
+		return x.Compute
 	}
 	return ""
 }
@@ -2643,6 +2651,7 @@ type PreflightResponse struct {
 	DomainClaims          []*DomainClaim         `protobuf:"bytes,6,rep,name=domain_claims,json=domainClaims,proto3" json:"domain_claims,omitempty"`
 	PreviewWildcard       *PreviewWildcard       `protobuf:"bytes,7,opt,name=preview_wildcard,json=previewWildcard,proto3" json:"preview_wildcard,omitempty"`
 	Bootstrap             *BootstrapStatus       `protobuf:"bytes,8,opt,name=bootstrap,proto3" json:"bootstrap,omitempty"`
+	Computes              []string               `protobuf:"bytes,9,rep,name=computes,proto3" json:"computes,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -2729,6 +2738,13 @@ func (x *PreflightResponse) GetPreviewWildcard() *PreviewWildcard {
 func (x *PreflightResponse) GetBootstrap() *BootstrapStatus {
 	if x != nil {
 		return x.Bootstrap
+	}
+	return nil
+}
+
+func (x *PreflightResponse) GetComputes() []string {
+	if x != nil {
+		return x.Computes
 	}
 	return nil
 }
@@ -3704,14 +3720,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\vTierDomains\x12;\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04tier\x12\x1c\n" +
-	"\thostnames\x18\x02 \x03(\tR\thostnames\"\x9d\x02\n" +
+	"\thostnames\x18\x02 \x03(\tR\thostnames\"\xb7\x02\n" +
 	"\vManifestApp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tframework\x18\x02 \x01(\tR\tframework\x12;\n" +
 	"\adomains\x18\x03 \x03(\v2!.provider.contract.v1.TierDomainsR\adomains\x12D\n" +
 	"\tvariables\x18\x04 \x03(\v2&.provider.contract.v1.ManifestVariableR\tvariables\x124\n" +
 	"\x06folder\x18\x05 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12#\n" +
-	"\rdeployment_id\x18\x06 \x01(\tR\fdeploymentId\"\xeb\x01\n" +
+	"\rdeployment_id\x18\x06 \x01(\tR\fdeploymentId\x12\x18\n" +
+	"\acompute\x18\a \x01(\tR\acompute\"\xeb\x01\n" +
 	"\x10ManifestVariable\x12+\n" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12?\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12\x19\n" +
@@ -3836,7 +3853,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x1e\n" +
 	"\n" +
 	"frameworks\x18\x06 \x03(\tR\n" +
-	"frameworks\"\x9c\x04\n" +
+	"frameworks\"\xb8\x04\n" +
 	"\x11PreflightResponse\x12:\n" +
 	"\n" +
 	"infra_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\tinfraTier\x125\n" +
@@ -3847,7 +3864,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"knownSlugs\x12F\n" +
 	"\rdomain_claims\x18\x06 \x03(\v2!.provider.contract.v1.DomainClaimR\fdomainClaims\x12P\n" +
 	"\x10preview_wildcard\x18\a \x01(\v2%.provider.contract.v1.PreviewWildcardR\x0fpreviewWildcard\x12C\n" +
-	"\tbootstrap\x18\b \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\"\x86\x02\n" +
+	"\tbootstrap\x18\b \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\x12\x1a\n" +
+	"\bcomputes\x18\t \x03(\tR\bcomputes\"\x86\x02\n" +
 	"\x0fPreviewWildcard\x12\x1f\n" +
 	"\vbase_domain\x18\x01 \x01(\tR\n" +
 	"baseDomain\x12\x1d\n" +

@@ -82,6 +82,10 @@ func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
 
 func (p *Provider) Serves() []providerkit.LinkType { return deploy.Serves() }
 
+func (p *Provider) Computes() []providerkit.Compute {
+	return []providerkit.Compute{providerkit.ComputeServerless}
+}
+
 func (p *Provider) Region() string { return p.aws.Region }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
