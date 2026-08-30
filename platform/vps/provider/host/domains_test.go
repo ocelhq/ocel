@@ -220,7 +220,7 @@ func TestDisclaimingAHostnameTakesTheClaimAndLeavesTheRest(t *testing.T) {
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}, {Hostname: "other.example.com", Owner: surface}}
 	stood := claimingBox(t, state)
-	if err := stood.host().DisclaimHost(context.Background(), claimed); err != nil {
+	if err := stood.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
 		t.Fatalf("DisclaimHost() = %v", err)
 	}
 
@@ -230,6 +230,49 @@ func TestDisclaimingAHostnameTakesTheClaimAndLeavesTheRest(t *testing.T) {
 	}
 	if !slices.Equal(held.Claims, []HostClaim{{Hostname: "other.example.com", Owner: surface}}) {
 		t.Errorf("the claims left are %v, want the one the disclaim never named", held.Claims)
+	}
+}
+
+func TestAHostnameAnotherSurfaceHoldsIsRefusedRatherThanTakenOffIt(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	stood := claimingBox(t, state)
+	standing := stood.held
+
+	err := stood.host().ClaimHost(context.Background(), HostClaim{Hostname: claimed, Owner: otherSurface})
+	if err == nil {
+		t.Fatal("a second project bound a hostname the first one already holds, and the first project's site then answers nothing with no deploy of its own having failed")
+	}
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
+		t.Errorf("the second claim failed with %v, want %s naming who holds it", err, providerkit.CodeBusy)
+	}
+	if !strings.Contains(err.Error(), surface) {
+		t.Errorf("the second claim is refused with\n%s\nand never names the surface that already holds %s, which is where the user has to unbind it", err, claimed)
+	}
+	if stood.held != standing {
+		t.Errorf("%s was rewritten by a claim that was refused:\n%s", ProxyConfig, stood.held)
+	}
+}
+
+func TestUnbindingAHostnameAnotherSurfaceNowHoldsLeavesItWhereItIs(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: otherSurface}}
+	stood := claimingBox(t, state)
+
+	if err := stood.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
+		t.Fatalf("DisclaimHost() = %v", err)
+	}
+	held, err := ReadProxyState([]byte(stood.held))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(held.Claims, state.Claims) {
+		t.Errorf("the claims left are %v, want %v: %s was rebound to another project since, and an unbind or a destroy here takes that project's hostname off the box", held.Claims, state.Claims, claimed)
 	}
 }
 

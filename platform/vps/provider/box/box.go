@@ -25,7 +25,7 @@ type Machine interface {
 	UnrouteSurface(ctx context.Context, owner string) error
 	Claims(ctx context.Context) ([]host.HostClaim, error)
 	ClaimHost(ctx context.Context, claim host.HostClaim) error
-	DisclaimHost(ctx context.Context, hostname string) error
+	DisclaimHost(ctx context.Context, hostname, owner string) error
 }
 
 type Edge struct {
