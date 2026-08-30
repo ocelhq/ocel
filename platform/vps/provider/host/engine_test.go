@@ -23,7 +23,6 @@ func engineOrSkip(t *testing.T) {
 	for _, held := range [][]string{
 		{"container", "inspect", ProxyContainer},
 		{"network", "inspect", ProxyNetwork},
-		{"volume", "inspect", ProxyVolume},
 	} {
 		if exec.Command(dockerEngine, append([]string{held[0]}, held[1:]...)...).Run() == nil {
 			t.Skipf("this machine already carries the %s ocel writes, and the test will not take something it did not create", held[0])
@@ -79,6 +78,9 @@ func proxyStanding(t *testing.T) standingProxy {
 	if err := os.WriteFile(helper, proxyHelper(arch), 0o750); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	stood := standingProxy{dir: dir, helper: helper, here: func(written string) string {
 		return strings.ReplaceAll(strings.ReplaceAll(written, proxyRoot, dir), ProxyHelper, helper)
 	}}
@@ -87,10 +89,6 @@ func proxyStanding(t *testing.T) standingProxy {
 		t.Fatalf("create the network every deploy resolves across: %v\n%s", err, out)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "network", "rm", ProxyNetwork).Run() })
-	if out, err := exec.Command(dockerEngine, "volume", "create", ProxyVolume).CombinedOutput(); err != nil {
-		t.Fatalf("create the volume the proxy persists into: %v\n%s", err, out)
-	}
-	t.Cleanup(func() { exec.Command(dockerEngine, "volume", "rm", ProxyVolume).Run() })
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", ProxyContainer).Run() })
 
 	if out, err := exec.Command("/bin/sh", "-c", stood.here(containerCommand())).CombinedOutput(); err != nil {
@@ -116,7 +114,7 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 	stated.Content = proxyFactsOver([]string{
 		dir + ":" + proxyConfigDir + ":ro",
 		helper + ":" + ProxyHelperMount + ":ro",
-		ProxyVolume + ":" + proxyDataMount,
+		filepath.Join(dir, "data") + ":" + proxyDataMount,
 	})
 	if observed[stated.ID()] != stated.Digest() {
 		box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", ProxyFactTemplate, ProxyContainer).Output()

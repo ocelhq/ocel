@@ -12,7 +12,6 @@ import (
 
 const (
 	KindNetwork     = "docker:network"
-	KindVolume      = "docker:volume"
 	KindContainer   = "docker:container"
 	KindProxyConfig = "ocel:proxy-config"
 )
@@ -21,7 +20,6 @@ const ProxyImage = "docker.io/library/caddy@sha256:df7f1c2fb114453b951de51a98efc
 
 const (
 	ProxyNetwork   = "ocel"
-	ProxyVolume    = "ocel-proxy-data"
 	ProxyContainer = "ocel-proxy"
 	proxyRestart   = "unless-stopped"
 	proxyPort      = "80"
@@ -32,6 +30,7 @@ const (
 	ProxyHelper = helperRoot + "/" + proxyHelperName
 	proxyRoot   = stateRoot + "/proxy"
 	ProxyConfig = proxyRoot + "/" + proxyConfigName
+	ProxyData   = proxyRoot + "/data"
 )
 
 const (
@@ -53,7 +52,6 @@ const proxyRising = 30
 
 const (
 	networkFact = "network=present"
-	volumeFact  = "volume=present"
 	networkHeld = "network=held"
 )
 
@@ -100,8 +98,8 @@ func ProxyItems(arch string) []Item {
 			Note: "gates a target, flips the proxy and reads what is still in flight"},
 		dir(proxyRoot, 0o750, stateOwner, "what the proxy serves"),
 		proxyConfigItem(),
+		dir(ProxyData, 0o700, rootOwner, "the proxy's certificates, their private keys and the acme account key that issues for every one of them"),
 		networkItem(),
-		volumeItem(),
 		containerItem(),
 	}
 }
@@ -161,16 +159,6 @@ func networkItem() Item {
 	}
 }
 
-func volumeItem() Item {
-	return Item{
-		Kind:    KindVolume,
-		Name:    ProxyVolume,
-		Owner:   rootOwner,
-		Content: []byte(volumeFact + "\n"),
-		Note:    "holds the proxy's autosaved config and the certificates it will one day issue, and is reachable from nowhere but the proxy",
-	}
-}
-
 func containerItem() Item {
 	return Item{
 		Kind:    KindContainer,
@@ -204,7 +192,7 @@ func proxyBinds() []string {
 	return []string{
 		proxyRoot + ":" + proxyConfigDir + ":ro",
 		ProxyHelper + ":" + ProxyHelperMount + ":ro",
-		ProxyVolume + ":" + proxyDataMount,
+		ProxyData + ":" + proxyDataMount,
 	}
 }
 
@@ -225,11 +213,6 @@ func marshalled(value any) string {
 func networkCommand() string {
 	return "docker network inspect " + quoted(ProxyNetwork) + " >/dev/null 2>&1 || " +
 		"docker network create " + quoted(ProxyNetwork) + " >/dev/null"
-}
-
-func volumeCommand() string {
-	return "docker volume inspect " + quoted(ProxyVolume) + " >/dev/null 2>&1 || " +
-		"docker volume create " + quoted(ProxyVolume) + " >/dev/null"
 }
 
 func containerCommand() string { return containerWriting(proxyRising, proxyFiles()) }
@@ -283,11 +266,6 @@ func networkProbe() string {
 		"docker network inspect "+quoted(ProxyNetwork)+" >/dev/null 2>&1", networkFact)
 }
 
-func volumeProbe() string {
-	return standingProbe(KindVolume, ProxyVolume,
-		"docker volume inspect "+quoted(ProxyVolume)+" >/dev/null 2>&1", volumeFact)
-}
-
 func containerProbe() string {
 	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1 && " +
 		"facts=$(docker inspect --type container --format " + quoted(ProxyFactTemplate) + " " + quoted(ProxyContainer) + " 2>/dev/null); then\n" +
@@ -298,7 +276,7 @@ func containerProbe() string {
 func proxyRemovals() []removal {
 	return []removal{
 		taking(KindContainer, ProxyContainer, "the proxy ocel runs, and nothing else this engine carries"),
-		taking(KindVolume, ProxyVolume, "the proxy's autosaved config and every certificate it issued, which no other machine holds"),
+		taking(KindDir, ProxyData, "the proxy's certificates, their private keys and the acme account key that issues for every hostname on it, which no other machine holds"),
 		taking(KindNetwork, ProxyNetwork,
 			"the network ocel's deploys resolve across, which stays as long as anything this host runs is still attached to it"),
 		taking(KindProxyConfig, ProxyConfig,

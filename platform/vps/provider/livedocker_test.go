@@ -181,7 +181,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("an idle daemon plans %q for %s, want the unit enabled", unit.Action, unitName)
 	}
 	for _, change := range waking.Changes {
-		if change.Kind == host.KindNetwork || change.Kind == host.KindVolume || change.Kind == host.KindContainer || change.Name == unitName {
+		if change.Kind == host.KindNetwork || change.Kind == host.KindContainer || change.Name == unitName {
 			continue
 		}
 		if change.Action != providerkit.ActionKeep {
