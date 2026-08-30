@@ -29,6 +29,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	if err := p.host.StandUp(ctx, host.Container{Name: physical, App: app.App, Image: app.Image}); err != nil {
 		return nil, err
 	}
+	if err := p.host.Promote(ctx, plan.Ref.Class, app.App, app.Image); err != nil {
+		return nil, err
+	}
 	return []providerkit.AppContainer{{
 		Name:     app.App,
 		Physical: physical,
