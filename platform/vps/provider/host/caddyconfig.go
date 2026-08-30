@@ -76,7 +76,7 @@ func (p Pin) Covers(hostname string) bool {
 func Covering(pins []Pin, hostname string) string {
 	for _, exact := range []bool{true, false} {
 		at := slices.IndexFunc(pins, func(pin Pin) bool {
-			return exact == (pin.Hostname == hostname) && pin.Covers(hostname)
+			return exact == (pin.Hostname == hostname) && pin.Covers(hostname) && validPin(pin) == nil
 		})
 		if at >= 0 {
 			return pins[at].Path
