@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"slices"
@@ -258,5 +259,64 @@ func TestARealProxyOrdersForThePreviewProbeAndNeverForTheWildcardBesideIt(t *tes
 	}
 	if strings.Contains(logs, acmeDirectory) {
 		t.Errorf("the proxy reached a public CA from a package-level `go test`:\n%s", logs)
+	}
+}
+
+func TestInstallingThePreviewEntryLoadsItOntoTheRunningProxyAndTakingItDownUnloadsIt(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	stood := claimingBox(t, routed())
+	if err := stood.host().InstallPreviewEntry(ctx, previewBase); err != nil {
+		t.Fatalf("InstallPreviewEntry() = %v", err)
+	}
+	held, err := ReadProxyState([]byte(stood.held))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if held.PreviewBase != previewBase {
+		t.Fatalf("%s answers previews on %q after the install, want %q", ProxyConfig, held.PreviewBase, previewBase)
+	}
+	if !slices.ContainsFunc(stood.commands(), func(command string) bool {
+		return strings.Contains(command, quoted("flip"))
+	}) {
+		t.Errorf("the preview entry was written and never loaded, so the running proxy answers no preview hostname at all: %v", stood.commands())
+	}
+
+	if err := stood.host().RemovePreviewEntry(ctx, previewBase); err != nil {
+		t.Fatalf("RemovePreviewEntry() = %v", err)
+	}
+	if held, err = ReadProxyState([]byte(stood.held)); err != nil {
+		t.Fatal(err)
+	}
+	if held.PreviewBase != "" {
+		t.Errorf("%s still answers previews on %q after the release", ProxyConfig, held.PreviewBase)
+	}
+}
+
+func TestInstallingThePreviewEntryTwiceWritesTheProxyOnce(t *testing.T) {
+	t.Parallel()
+
+	stood := claimingBox(t, previewing())
+	if err := stood.host().InstallPreviewEntry(context.Background(), previewBase); err != nil {
+		t.Fatalf("InstallPreviewEntry() = %v", err)
+	}
+	for _, command := range stood.commands() {
+		if writesProxy(command) || strings.Contains(command, quoted("flip")) {
+			t.Errorf("a preview entry already standing rewrote and reloaded the proxy (%q); every reload is a whole-box config post", command)
+		}
+	}
+}
+
+func TestABoxServingOnePreviewBaseRefusesASecondByName(t *testing.T) {
+	t.Parallel()
+
+	stood := claimingBox(t, previewing())
+	err := stood.host().InstallPreviewEntry(context.Background(), "previews.example.org")
+	if err == nil {
+		t.Fatal("a second preview base was installed over the first, and every live preview on this box is a hostname under the base it was raised on")
+	}
+	if !strings.Contains(err.Error(), edge.PreviewWildcard(previewBase)) {
+		t.Errorf("the refusal reads %q and never names the wildcard already standing", err)
 	}
 }
