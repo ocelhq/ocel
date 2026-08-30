@@ -2,7 +2,6 @@ package manifestbuilder
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -11,8 +10,6 @@ import (
 )
 
 const DefaultHealthCheckPath = "/"
-
-var pinnedRef = regexp.MustCompile(`^[^@:\s]+@sha256:[0-9a-f]{64}$`)
 
 func buildContainers(manifestApps []*contractv1.ManifestApp, apps []App, functions []Function) ([]*contractv1.ManifestContainer, error) {
 	byName := make(map[string]App, len(apps))
@@ -37,7 +34,7 @@ func buildContainers(manifestApps []*contractv1.ManifestApp, apps []App, functio
 		if configured.Image == "" {
 			return nil, fmt.Errorf("manifestbuilder: app %q runs on container compute and carries no image, so the manifest would hand a provider an app with nothing to run", name)
 		}
-		if !pinnedRef.MatchString(configured.Image) {
+		if !providerkit.PinnedImage(configured.Image) {
 			return nil, fmt.Errorf("manifestbuilder: app %q carries image %q, and a release pins one repository at one digest: a tag repoints under a running release, so it never rides in the identity", name, configured.Image)
 		}
 		if packed[name] {
