@@ -115,15 +115,26 @@ func TestAPromoteRenamesAndLeavesNothingHalfWritten(t *testing.T) {
 	t.Parallel()
 
 	root := releasesDir(t)
+	file := filepath.Join(root, "web", "production")
 	promote(t, root, "web", "production", "ocel/web:one")
-	entries, err := os.ReadDir(filepath.Join(root, "web"))
+	first, err := os.Stat(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, entry := range entries {
-		if entry.Name() != "production" {
-			t.Errorf("%s stands beside the window, and a write that renames leaves nothing behind", entry.Name())
-		}
+	promote(t, root, "web", "production", "ocel/web:two")
+	second, err := os.Stat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if os.SameFile(first, second) {
+		t.Error("the window was rewritten in place, and a reader between the truncate and the write reads a window naming nothing: a sweep that reads it there removes every image the app is serving")
+	}
+	staged, err := filepath.Glob(filepath.Join(root, ".staging.*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(staged) != 0 {
+		t.Errorf("%v stands where the helper stages, and a write that renames leaves nothing behind", staged)
 	}
 }
 
