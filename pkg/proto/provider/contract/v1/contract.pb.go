@@ -468,6 +468,7 @@ type HostnameRequest struct {
 	Configured    []string               `protobuf:"bytes,2,rep,name=configured,proto3" json:"configured,omitempty"`
 	Host          string                 `protobuf:"bytes,3,opt,name=host,proto3" json:"host,omitempty"`
 	Edge          *EdgeSelection         `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
+	Probe         bool                   `protobuf:"varint,5,opt,name=probe,proto3" json:"probe,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -528,6 +529,13 @@ func (x *HostnameRequest) GetEdge() *EdgeSelection {
 		return x.Edge
 	}
 	return nil
+}
+
+func (x *HostnameRequest) GetProbe() bool {
+	if x != nil {
+		return x.Probe
+	}
+	return false
 }
 
 type GetHostnameStatusResponse struct {
@@ -3937,14 +3945,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"{\n" +
 	"\x1aGetPreviewWildcardResponse\x12A\n" +
 	"\bwildcard\x18\x01 \x01(\v2%.provider.contract.v1.PreviewWildcardR\bwildcard\x12\x1a\n" +
-	"\bprojects\x18\x02 \x03(\tR\bprojects\"\xb5\x01\n" +
+	"\bprojects\x18\x02 \x03(\tR\bprojects\"\xcb\x01\n" +
 	"\x0fHostnameRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x1e\n" +
 	"\n" +
 	"configured\x18\x02 \x03(\tR\n" +
 	"configured\x12\x12\n" +
 	"\x04host\x18\x03 \x01(\tR\x04host\x127\n" +
-	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\xc5\x01\n" +
+	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x14\n" +
+	"\x05probe\x18\x05 \x01(\bR\x05probe\"\xc5\x01\n" +
 	"\x19GetHostnameStatusResponse\x12F\n" +
 	"\thostnames\x18\x01 \x03(\v2(.provider.contract.v1.ProductionHostnameR\thostnames\x12\x14\n" +
 	"\x05ready\x18\x02 \x01(\bR\x05ready\x12'\n" +

@@ -499,6 +499,7 @@ func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts do
 			Slug:       cfg.Slug,
 			Configured: configured,
 			Edge:       edgewire.Selection(cfg),
+			Probe:      true,
 		}
 		resp, err := awaitDomainStatus(ctx, client, req, opts.wait, deps.Presentation(stdout), stdout)
 		if err != nil {

@@ -585,3 +585,45 @@ func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) 
 		t.Errorf("pending = %q, want a hostname whose certificate is not issued held back", row.GetPending())
 	}
 }
+
+func TestGetHostnameStatusReadsTheRecordedProbeUnlessAskedToCheckLive(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
+		Edge: edge.StackState{
+			Slug:     "shop",
+			Class:    providerkit.ClassProduction,
+			Endpoint: "https://shop.fake.invalid",
+			Bound:    []string{"app.acme.com"},
+			Fronts:   map[string]string{"app.acme.com": "shop.relay.fake.invalid"},
+		},
+		Hosts: map[string]providerkit.Settled{
+			"app.acme.com": {Probe: providerkit.Probe{At: 1755500000, OK: true, Edge: fake.KindRelay}},
+		},
+	})
+
+	listed, err := client.GetHostnameStatus(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []string{"app.acme.com"},
+		Edge:       zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("GetHostnameStatus() error = %v", err)
+	}
+	if at := listed.GetHostnames()[0].GetCertificate().GetLastProbeAt(); at != 1755500000 {
+		t.Errorf("last probe on a listing = %d, want the recorded %d: a listing reads what the last settle wrote, and reaching for every declared hostname over the network turns `ocel domain ls` into a wait as long as the timeout times the hostnames", at, 1755500000)
+	}
+
+	checked, err := client.GetHostnameStatus(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: []string{"app.acme.com"},
+		Edge:       zoned("acme.com"),
+		Probe:      true,
+	})
+	if err != nil {
+		t.Fatalf("GetHostnameStatus() error = %v", err)
+	}
+	if at := checked.GetHostnames()[0].GetCertificate().GetLastProbeAt(); at == 1755500000 {
+		t.Errorf("last probe when the caller asked to check live = %d, want a fresh reading: `ocel domain status` is the acceptance test for a bind and answering it from the record would report a hostname as serving long after it stopped", at)
+	}
+}
