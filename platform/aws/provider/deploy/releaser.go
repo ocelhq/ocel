@@ -383,6 +383,10 @@ func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, report p
 }
 
 func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (providerkit.StackPlan, *appWork, error) {
+	if len(plan.Images.Pushes) > 0 {
+		return providerkit.StackPlan{}, nil, providerkit.Refuse(providerkit.CodeInvalid,
+			"this provider runs no container app, so it has nowhere to push an image: %s declares %d", plan.Ref.Name, len(plan.Images.Pushes))
+	}
 	if plan.Options != nil {
 		return plan, nil, nil
 	}
