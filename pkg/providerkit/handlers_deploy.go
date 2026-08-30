@@ -161,7 +161,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		dry:           req.GetDry(),
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
 	}
-	if err := run.openRegistry(ctx, req.GetImageRegistry()); err != nil {
+	if err := run.openImages(ctx, req.GetImageRegistry()); err != nil {
 		return nil, err
 	}
 	run.published = &publishedLinks{store: run.values, scope: run.scope, environment: plan.linkEnvironment()}
@@ -1152,10 +1152,7 @@ func linkOf(message *linksv1.Link) Link {
 	return link
 }
 
-func (r *deployRun) openRegistry(ctx context.Context, wired *contractv1.ImageRegistry) error {
-	if wired.GetServer() == "" {
-		return nil
-	}
+func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegistry) error {
 	r.registry = RegistryTarget{
 		Server:    wired.GetServer(),
 		Namespace: wired.GetNamespace(),
