@@ -117,9 +117,13 @@ func (w *dnsWriter) ensure(ctx context.Context, zone edge.Zone, want edge.Record
 		}
 		return false, nil
 	}
+	body, err := recordBody(want)
+	if err != nil {
+		return false, err
+	}
 	if _, err := w.records.New(ctx, dns.RecordNewParams{
 		ZoneID: cf.F(zone.ID),
-		Body:   recordBody(want),
+		Body:   body,
 	}); err != nil {
 		return false, fmt.Errorf("write DNS record %s in zone %s: %w", want, zone.Name, err)
 	}
@@ -141,9 +145,13 @@ func foreignRecordWarning(want edge.Record, rec dns.RecordResponse) string {
 }
 
 func (w *dnsWriter) replace(ctx context.Context, zoneID, recordID string, want edge.Record) error {
+	body, err := recordBody(want)
+	if err != nil {
+		return err
+	}
 	if _, err := w.records.Update(ctx, recordID, dns.RecordUpdateParams{
 		ZoneID: cf.F(zoneID),
-		Body:   recordBody(want),
+		Body:   body,
 	}); err != nil {
 		return fmt.Errorf("repoint DNS record %s: %w", want, err)
 	}
@@ -155,7 +163,7 @@ type recordParam interface {
 	dns.RecordUpdateParamsBodyUnion
 }
 
-func recordBody(want edge.Record) recordParam {
+func recordBody(want edge.Record) (recordParam, error) {
 	switch want.Type {
 	case edge.RecordTypeCNAME:
 		return dns.CNAMERecordParam{
@@ -165,7 +173,7 @@ func recordBody(want edge.Record) recordParam {
 			Proxied: cf.F(want.Proxied),
 			TTL:     cf.F(dns.TTL(1)),
 			Comment: cf.F(recordComment),
-		}
+		}, nil
 	case edge.RecordTypeA:
 		return dns.ARecordParam{
 			Name:    cf.F(want.Name),
@@ -174,8 +182,8 @@ func recordBody(want edge.Record) recordParam {
 			Proxied: cf.F(want.Proxied),
 			TTL:     cf.F(dns.TTL(1)),
 			Comment: cf.F(recordComment),
-		}
-	default:
+		}, nil
+	case edge.RecordTypeAAAA:
 		return dns.AAAARecordParam{
 			Name:    cf.F(want.Name),
 			Type:    cf.F(dns.AAAARecordTypeAAAA),
@@ -183,8 +191,9 @@ func recordBody(want edge.Record) recordParam {
 			Proxied: cf.F(want.Proxied),
 			TTL:     cf.F(dns.TTL(1)),
 			Comment: cf.F(recordComment),
-		}
+		}, nil
 	}
+	return nil, fmt.Errorf("write DNS record %s: %q is no record type this writer knows", want, want.Type)
 }
 
 func (w *dnsWriter) DeleteRecords(ctx context.Context, records []edge.Record) error {

@@ -111,6 +111,41 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses a record type it does not know rather than writing it as AAAA", func(t *testing.T) {
+		t.Parallel()
+
+		records := &fakeRecords{}
+		w, _ := newTestWriter(records, testZones, "")
+		want := edge.Record{Name: "shop.app.com", Type: "MX", Value: "mail.example.net"}
+		_, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil)
+		if err == nil {
+			t.Fatal("EnsureRecords error = nil, want a refusal: the state is deserialised, so any string can name the type")
+		}
+		if !strings.Contains(err.Error(), "MX") {
+			t.Errorf("err = %q, want it to name the type it refused", err)
+		}
+		if len(records.created) != 0 {
+			t.Errorf("created = %v, want nothing written", records.created)
+		}
+	})
+
+	t.Run("refuses a record type it does not know rather than repointing one to it", func(t *testing.T) {
+		t.Parallel()
+
+		records := &fakeRecords{existing: map[string][]dns.RecordResponse{
+			"zone-app|shop.app.com": {{ID: "rec-1", Type: dns.RecordResponseTypeAAAA, Content: "2001:db8::1", Comment: recordComment}},
+		}}
+		w, _ := newTestWriter(records, testZones, "")
+		want := edge.Record{Name: "shop.app.com", Type: "MX", Value: "mail.example.net"}
+		_, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil)
+		if err == nil {
+			t.Fatal("EnsureRecords error = nil, want a refusal on the repoint too")
+		}
+		if len(records.updated) != 0 {
+			t.Errorf("updated = %v, want nothing repointed", records.updated)
+		}
+	})
+
 	t.Run("writes a grey-cloud CNAME to the front", func(t *testing.T) {
 		t.Parallel()
 
