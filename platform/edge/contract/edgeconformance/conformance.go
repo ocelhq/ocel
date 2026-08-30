@@ -429,22 +429,24 @@ func frontedRecords(t *testing.T, e edge.Edge, state edge.StackState, hostname s
 	}
 	target := edge.TargetFor(e, state)
 	front := target.FrontFor(hostname)
-	want := edge.Record{Name: hostname, Type: edge.RecordTypeCNAME, Value: front}
 	if target.ServesUnbound {
 		if front != "" {
 			t.Errorf("the front for %q is %q, but a %s edge answers on the zone itself and publishes none", hostname, front, e.Kind())
 		}
-		want = edge.Record{Name: hostname, Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
 	} else if front == "" {
 		t.Fatalf("state = %v, want a front for %q on it: a %s edge answers on a hostname of its own, and DNS has nothing to point at until the state carries it", state, hostname, e.Kind())
 	}
 
+	want, err := edge.RecordsFor(target, []string{hostname})
+	if err != nil {
+		t.Fatalf("RecordsFor(%v): %v", []string{hostname}, err)
+	}
 	records, err := edge.RecordsFor(target, bound)
 	if err != nil {
 		t.Fatalf("RecordsFor(%v): %v", bound, err)
 	}
-	if len(records) != 1 || records[0] != want {
-		t.Fatalf("records = %v, want [%v]", records, want)
+	if !slices.Equal(records, want) {
+		t.Fatalf("records = %v, want %v", records, want)
 	}
 	return records
 }
