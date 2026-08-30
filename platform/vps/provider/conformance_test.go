@@ -16,6 +16,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 )
 
 func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
@@ -75,6 +76,11 @@ func TestVPSProvider(t *testing.T) {
 		Spec:    providerkit.Spec{Version: "test", New: vps.New},
 		Options: providerkit.Options{"ssh": map[string]any{"host": "203.0.113.10"}},
 		Binary:  buildProvider(t),
+		Certifier: &conformance.CertifierChecks{
+			Kind:      boxedge.Kind,
+			Hostnames: []string{"shop.example.com", "www.shop.example.com"},
+			Handle:    certs.ProxyHandle,
+		},
 	})
 }
 
@@ -100,11 +106,13 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 		"DeployPreflighter": held[providerkit.DeployPreflighter](root),
 		"MembraneSource":    held[providerkit.MembraneSource](root),
 		"ArtifactPacker":    held[providerkit.ArtifactPacker](root),
-		"Certifier":         held[providerkit.Certifier](root),
 	} {
 		if held {
 			t.Errorf("the root carries %s, which the optional-set tier must be told to expect on it", name)
 		}
+	}
+	if !held[providerkit.Certifier](root) {
+		t.Error("the root carries no Certifier, and a provider without one blanks the certificate and renewal lines in `ocel domain status` entirely, which reads as no tls rather than tls you do not manage")
 	}
 	if !held[providerkit.Prober](root) {
 		t.Error("the root carries no Prober, and the settle then answers from what it just bound rather than from what the hostname serves")
