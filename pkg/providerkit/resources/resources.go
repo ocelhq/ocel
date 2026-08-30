@@ -163,32 +163,32 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 	if plan.App == nil {
 		return result, nil
 	}
-	if err := f.standUpApp(ctx, plan, report, &result); err != nil {
+	stood, err := f.standUpApp(ctx, plan, report)
+	if err != nil {
 		return providerkit.StackResult{}, err
 	}
+	result.Functions, result.Containers = stood.Functions, stood.Containers
 	return result, nil
 }
 
-func (f *fanout) standUpApp(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter, result *providerkit.StackResult) error {
+func (f *fanout) standUpApp(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
 	switch plan.App.Compute {
 	case providerkit.ComputeServerless:
 		functions, serves := f.impl.(Functions)
 		if !serves {
-			return lacking(plan.App, FunctionsPrimitive)
+			return providerkit.StackResult{}, lacking(plan.App, FunctionsPrimitive)
 		}
 		standing, err := functions.ProvisionFunctions(ctx, plan, report)
-		result.Functions = standing
-		return err
+		return providerkit.StackResult{Functions: standing}, err
 	case providerkit.ComputeContainer:
 		containers, serves := f.impl.(AppContainers)
 		if !serves {
-			return lacking(plan.App, AppContainersPrimitive)
+			return providerkit.StackResult{}, lacking(plan.App, AppContainersPrimitive)
 		}
 		standing, err := containers.ProvisionContainers(ctx, plan, report)
-		result.Containers = standing
-		return err
+		return providerkit.StackResult{Containers: standing}, err
 	default:
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return providerkit.StackResult{}, providerkit.Refuse(providerkit.CodeInvalid,
 			"app %s names the compute %q, and a stack is stood up by the primitive its compute names; the computes are %v",
 			plan.App.App, plan.App.Compute, providerkit.ComputeNames(providerkit.Computes()))
 	}
