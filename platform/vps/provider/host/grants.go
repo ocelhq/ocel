@@ -46,7 +46,7 @@ func grants(class providerkit.Class, arch string) []Grant {
 	if helper := written(items, KindFile, releasesHelper); helper.Name != "" {
 		grants = append(grants, Grant{
 			Name:   "runs " + helper.Name,
-			Detail: fmt.Sprintf("root's own file at %04o, run under no sudo line at all: %s executes it to name what each app most recently served and to remove the images no window and no running container names. It removes nothing by force and prunes nothing, so an image this host holds for its own reasons is never ocel's to take", helper.Mode, held.name),
+			Detail: fmt.Sprintf("root's own file at %04o, run under no sudo line at all: %s executes it to name what each app most recently served, to drop that record when a stack is torn down, and to remove the images no window and no running container names. It removes nothing by force and prunes nothing, so an image this host holds for its own reasons is never ocel's to take", helper.Mode, held.name),
 		})
 	}
 	grants = append(grants, sealing(items, class, held)...)

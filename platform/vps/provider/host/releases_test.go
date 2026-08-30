@@ -127,6 +127,44 @@ func TestAPromoteRenamesAndLeavesNothingHalfWritten(t *testing.T) {
 	}
 }
 
+func TestForgettingAClassLeavesTheBoxAsItStoodBeforeTheFirstPromote(t *testing.T) {
+	t.Parallel()
+
+	root := releasesDir(t)
+	promote(t, root, "web", "production", "ocel/web:one")
+	if _, code := releases(t, root, "", "web", "forget", "production"); code != 0 {
+		t.Fatalf("forget exited %d", code)
+	}
+	if _, err := os.Stat(filepath.Join(root, "web")); !os.IsNotExist(err) {
+		t.Errorf("the app directory stands after its last class was forgotten (%v), and a teardown reclaims the bytes its own deploys wrote", err)
+	}
+}
+
+func TestForgettingOneClassLeavesTheOthersStanding(t *testing.T) {
+	t.Parallel()
+
+	root := releasesDir(t)
+	promote(t, root, "web", "production", "ocel/web:live")
+	promote(t, root, "web", "preview", "ocel/web:branch")
+	if _, code := releases(t, root, "", "web", "forget", "preview"); code != 0 {
+		t.Fatalf("forget exited %d", code)
+	}
+	if held := window(t, root, "web", "production"); len(held) != 1 || held[0] != "ocel/web:live" {
+		t.Errorf("forgetting preview left production holding %v, and one class's teardown is never another's", held)
+	}
+}
+
+func TestForgettingAClassTheHostNeverServedIsRefused(t *testing.T) {
+	t.Parallel()
+
+	root := releasesDir(t)
+	for _, class := range []string{"", "../../etc", "PRODUCTION", "prod;rm -rf /"} {
+		if _, code := releases(t, root, "", "web", "forget", class); code != 2 {
+			t.Errorf("forget %q exited %d, want a refusal", class, code)
+		}
+	}
+}
+
 func TestTheHelperRefusesAnAppNameItCannotName(t *testing.T) {
 	t.Parallel()
 

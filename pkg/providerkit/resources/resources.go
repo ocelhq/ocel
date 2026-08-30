@@ -56,6 +56,8 @@ type AppContainers interface {
 
 type ImageRetention interface {
 	ReconcileImages(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) error
+
+	ForgetReleases(ctx context.Context, ref providerkit.StackRef, app string, report providerkit.Reporter) error
 }
 
 func Serves(impl any) []providerkit.LinkType {
@@ -273,9 +275,22 @@ func (f *fanout) Destroy(ctx context.Context, ref providerkit.StackRef, report p
 		return err
 	}
 	for _, held := range recorded.Containers {
+		f.forget(ctx, ref, held.Name, report)
+	}
+	for _, held := range recorded.Containers {
 		f.reconcile(ctx, ref, held.Name, held.Image, report)
 	}
 	return nil
+}
+
+func (f *fanout) forget(ctx context.Context, ref providerkit.StackRef, app string, report providerkit.Reporter) {
+	retention, sweeps := f.impl.(ImageRetention)
+	if !sweeps {
+		return
+	}
+	if err := retention.ForgetReleases(ctx, ref, app, report); err != nil && report != nil {
+		report.Detail(fmt.Sprintf("Left %s's release window standing: %v", app, err))
+	}
 }
 
 func (f *fanout) reconcile(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) {

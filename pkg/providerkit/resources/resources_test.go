@@ -863,10 +863,25 @@ func TestAReleaseWhoseImageCannotBePushedStandsNothingUp(t *testing.T) {
 
 type retaining struct {
 	*buckets
-	swept  []string
-	stood  func() error
-	served func(resources.Instruction) error
+	swept   []string
+	window  map[string][]string
+	holding map[string]bool
+	stood   func() error
+	served  func(resources.Instruction) error
 }
+
+func (r *retaining) promote(app, coordinate string) {
+	if r.window == nil {
+		r.window = map[string][]string{}
+	}
+	if r.holding == nil {
+		r.holding = map[string]bool{}
+	}
+	r.window[app] = append([]string{coordinate}, r.window[app]...)
+	r.holding[coordinate] = true
+}
+
+func (r *retaining) holds(coordinate string) bool { return r.holding[coordinate] }
 
 func (r *retaining) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.AppContainer, error) {
 	if r.stood != nil {
@@ -874,6 +889,7 @@ func (r *retaining) ProvisionContainers(_ context.Context, plan providerkit.Stac
 			return nil, err
 		}
 	}
+	r.promote(plan.App.App, plan.App.Image)
 	return []providerkit.AppContainer{{Name: plan.App.App, Physical: plan.Ref.Name.String() + "-" + plan.App.App, Image: plan.App.Image}}, nil
 }
 
@@ -892,6 +908,16 @@ func (r *retaining) Bucket(ctx context.Context, in resources.Instruction, report
 
 func (r *retaining) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, coordinate string, _ providerkit.Reporter) error {
 	r.swept = append(r.swept, app+" "+coordinate)
+	for held := range r.holding {
+		if !slices.Contains(r.window[app], held) {
+			delete(r.holding, held)
+		}
+	}
+	return nil
+}
+
+func (r *retaining) ForgetReleases(_ context.Context, _ providerkit.StackRef, app string, _ providerkit.Reporter) error {
+	delete(r.window, app)
 	return nil
 }
 
@@ -980,12 +1006,16 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasHolding(t *testing.T) {
 	}
 
 	own := &retaining{buckets: &buckets{}}
+	own.promote("web", testImage)
 	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
 	if err := releaser.Destroy(ctx, ref, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.swept) != 1 || own.swept[0] != "web "+testImage {
 		t.Fatalf("the teardown swept %v, want the image the container it took down was the last thing holding", own.swept)
+	}
+	if own.holds(testImage) {
+		t.Error("the teardown left " + testImage + " on the box, and a stack that names itself in the window it never rewrites is swept by nothing that comes after it")
 	}
 }
 
