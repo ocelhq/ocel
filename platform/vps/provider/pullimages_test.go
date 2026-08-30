@@ -1,0 +1,333 @@
+package vps_test
+
+import (
+	"context"
+	"encoding/base64"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
+)
+
+const (
+	pullUsername = "acme-bot"
+	pullPassword = "hunter2"
+	pullDigest   = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	pullTag      = "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+)
+
+type registryLog struct {
+	mu     sync.Mutex
+	asked  []string
+	basics []string
+	holds  bool
+}
+
+func (r *registryLog) held(holds bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.holds = holds
+}
+
+func (r *registryLog) reads() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.asked...)
+}
+
+func (r *registryLog) presented() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.basics...)
+}
+
+func standingRegistry(t *testing.T) (string, *registryLog) {
+	t.Helper()
+	log := &registryLog{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorization := r.Header.Get("Authorization")
+		if authorization == "" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="ocel"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		log.mu.Lock()
+		log.asked = append(log.asked, r.URL.Path)
+		log.basics = append(log.basics, authorization)
+		holds := log.holds
+		log.mu.Unlock()
+		if !holds {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Docker-Content-Digest", pullDigest)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	return strings.TrimPrefix(server.URL, "http://"), log
+}
+
+type daemonLog struct {
+	mu     sync.Mutex
+	named  []string
+	pushed []string
+}
+
+func (d *daemonLog) pushes() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]string(nil), d.pushed...)
+}
+
+func standingDaemon(t *testing.T) *daemonLog {
+	t.Helper()
+	log := &daemonLog{}
+	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		log.mu.Lock()
+		switch {
+		case strings.HasSuffix(path, "/tag"):
+			log.named = append(log.named, path)
+		case strings.HasSuffix(path, "/push"):
+			log.pushed = append(log.pushed, path)
+		}
+		log.mu.Unlock()
+		switch {
+		case strings.HasSuffix(path, "/tag"):
+			w.WriteHeader(http.StatusCreated)
+		case strings.HasSuffix(path, "/push"):
+			_, _ = io.WriteString(w, `{"status":"Pushed"}`)
+		case r.Method == http.MethodDelete:
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(daemon.Close)
+	t.Setenv(providerkit.DockerTLSVerifyEnv, "")
+	t.Setenv(providerkit.DockerCertPathEnv, "")
+	t.Setenv(providerkit.DockerHostEnv, "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
+	return log
+}
+
+func pulling(t *testing.T, machine *box, target providerkit.RegistryTarget) providerkit.ImageStore {
+	t.Helper()
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	store, err := p.Images(context.Background(), target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
+
+func aTarget(server string) providerkit.RegistryTarget {
+	return providerkit.RegistryTarget{
+		Server:    server,
+		Namespace: "acme",
+		Username:  pullUsername,
+		Password:  pullPassword,
+	}
+}
+
+func aPull(target providerkit.RegistryTarget) providerkit.ImagePush {
+	return providerkit.ImagePush{
+		App:    "web",
+		Source: "ocel/web@" + pullDigest,
+		Target: target.Coordinate("web", pullTag),
+		Digest: pullDigest,
+	}
+}
+
+func TestARegistryTurnsTheTransferIntoAPullTheMachineMakes(t *testing.T) {
+	standingDaemon(t)
+	server, _ := standingRegistry(t)
+	machine := &box{}
+	target := aTarget(server)
+	push := aPull(target)
+
+	if err := pulling(t, machine, target).Push(context.Background(), push, nil); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+
+	commands := strings.Join(machine.commands(), "\n")
+	if !strings.Contains(commands, "docker pull "+quotedIn(push.Target)) {
+		t.Errorf("the machine ran %q, want it to pull %s", commands, push.Target)
+	}
+	if strings.Contains(commands, "docker load") {
+		t.Errorf("the machine ran %q: a registry is named, so nothing is streamed onto the box", commands)
+	}
+	for _, carried := range machine.carried() {
+		if strings.Contains(carried, "tar") {
+			t.Errorf("the machine was fed %q where it was told to pull", carried)
+		}
+	}
+}
+
+func TestTheLoginTakesThePasswordOnStdinAndLogsOutInTheSameSession(t *testing.T) {
+	standingDaemon(t)
+	server, _ := standingRegistry(t)
+	machine := &box{}
+	target := aTarget(server)
+
+	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+
+	pulled := sessionThatPulls(t, machine)
+	if !strings.Contains(pulled, "--password-stdin") {
+		t.Errorf("the pull ran %q, want the login to take the password on stdin", pulled)
+	}
+	if strings.Contains(pulled, pullPassword) {
+		t.Errorf("the pull ran %q, and the password is written into a command line every process on the machine can read", pulled)
+	}
+	if !strings.Contains(pulled, "docker logout "+quotedIn(server)) {
+		t.Errorf("the pull ran %q, want the login given back before the session ends", pulled)
+	}
+	if fed := strings.Join(machine.carried(), ""); fed != pullPassword {
+		t.Errorf("the machine was fed %q, want the registry password and nothing else", fed)
+	}
+}
+
+func TestNoCredentialFileIsLeftBehindOnTheMachine(t *testing.T) {
+	standingDaemon(t)
+	server, _ := standingRegistry(t)
+	machine := &box{}
+	target := aTarget(server)
+
+	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+
+	pulled := sessionThatPulls(t, machine)
+	if !strings.Contains(pulled, "DOCKER_CONFIG=") {
+		t.Errorf("the pull ran %q, so the login lands in the deploy login's own docker config and stays there", pulled)
+	}
+	if !strings.Contains(pulled, "mktemp -d") || !strings.Contains(pulled, "rm -rf") {
+		t.Errorf("the pull ran %q, want the config it writes made and taken away within the session", pulled)
+	}
+}
+
+func TestAPulledImageAnswersToTheCoordinateTheCliOwns(t *testing.T) {
+	standingDaemon(t)
+	server, _ := standingRegistry(t)
+	machine := &box{}
+	target := aTarget(server)
+	push := aPull(target)
+	store := pulling(t, machine, target)
+
+	if err := store.Push(context.Background(), push, nil); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+	held, err := store.Has(context.Background(), push)
+	if err != nil {
+		t.Fatalf("Has() = %v", err)
+	}
+	if !held {
+		t.Fatal("the machine answers to no coordinate after a pull, so release, rollback and retention have nothing to pin")
+	}
+	if !strings.Contains(strings.Join(machine.commands(), "\n"), quotedIn(push.Target)) {
+		t.Errorf("the machine was never asked about %s, and a loaded image answers to that coordinate verbatim", push.Target)
+	}
+}
+
+func TestADigestTheMachineAlreadyHoldsIsNeitherPushedNorPulledAgain(t *testing.T) {
+	daemon := standingDaemon(t)
+	server, registry := standingRegistry(t)
+	machine := &box{holds: true}
+	target := aTarget(server)
+	plan := providerkit.ImagePlan{
+		Store:  pulling(t, machine, target),
+		Pushes: []providerkit.ImagePush{aPull(target)},
+	}
+
+	if err := plan.Ship(context.Background(), nil); err != nil {
+		t.Fatalf("Ship() = %v", err)
+	}
+	if pushed := daemon.pushes(); len(pushed) != 0 {
+		t.Errorf("the deploy pushed %v for an image the machine already holds", pushed)
+	}
+	if commands := strings.Join(machine.commands(), "\n"); strings.Contains(commands, "docker pull") {
+		t.Errorf("the machine ran %q over a digest it already holds", commands)
+	}
+	if len(registry.reads()) != 0 {
+		t.Errorf("the registry was read %v answering a question the machine answers", registry.reads())
+	}
+}
+
+func TestAMachineMissingADigestTheRegistryHoldsPullsWithoutASecondPush(t *testing.T) {
+	daemon := standingDaemon(t)
+	server, registry := standingRegistry(t)
+	registry.held(true)
+	machine := &box{}
+	target := aTarget(server)
+	push := aPull(target)
+
+	if err := pulling(t, machine, target).Push(context.Background(), push, nil); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+	if pushed := daemon.pushes(); len(pushed) != 0 {
+		t.Errorf("the deploy pushed %v that the registry already holds", pushed)
+	}
+	if !strings.Contains(strings.Join(machine.commands(), "\n"), "docker pull") {
+		t.Error("the registry held the digest and the machine was never told to pull it, so the box serves an image it does not have")
+	}
+	if presented := registry.presented(); len(presented) == 0 || presented[0] != basicFor(pullUsername, pullPassword) {
+		t.Errorf("the registry was read as %v, want the deploy's own credentials", presented)
+	}
+}
+
+func TestAPasswordWithNoLoginNameIsRefusedRatherThanPulledAnonymously(t *testing.T) {
+	standingDaemon(t)
+	server, _ := standingRegistry(t)
+	machine := &box{}
+	target := aTarget(server)
+	target.Username = ""
+
+	err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil)
+	if err == nil {
+		t.Fatal("Push() = nil over a registry password no login name goes with, so the machine pulled anonymously from a private registry")
+	}
+	if !strings.Contains(err.Error(), "username") {
+		t.Errorf("Push() = %v, want the missing login name named", err)
+	}
+}
+
+func TestThePullNamesTheMachineRatherThanTheRegistry(t *testing.T) {
+	standingDaemon(t)
+	server, _ := standingRegistry(t)
+	store := pulling(t, &box{}, aTarget(server))
+
+	named, says := store.(providerkit.ImageDestination)
+	if !says {
+		t.Fatal("the pulling store does not say where the image lands, so a deploy reports the registry as though it were the destination")
+	}
+	if got := named.ImageDestination(); got != "box.invalid" {
+		t.Errorf("ImageDestination() = %q, want the machine the image lands on", got)
+	}
+}
+
+func basicFor(username, password string) string {
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(username+":"+password))
+}
+
+func quotedIn(arg string) string { return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'" }
+
+func sessionThatPulls(t *testing.T, machine *box) string {
+	t.Helper()
+	for _, command := range machine.commands() {
+		if strings.Contains(command, "docker pull") {
+			return command
+		}
+	}
+	t.Fatal("the machine was never told to pull")
+	return ""
+}
