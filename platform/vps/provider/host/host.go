@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"sync"
 
@@ -11,7 +12,7 @@ import (
 )
 
 type Conn interface {
-	Exec(ctx context.Context, command string, stdin []byte) (session.Result, error)
+	Stream(ctx context.Context, command string, stdin io.Reader) (session.Result, error)
 	Run(ctx context.Context, command string) (string, error)
 	Preflight(ctx context.Context) (session.Facts, error)
 	Destination() session.Destination
@@ -168,7 +169,7 @@ func (h *Host) rootOrSudo(ctx context.Context, live Conn) (string, error) {
 	return h.prefix, nil
 }
 
-func (h *Host) exec(ctx context.Context, command string, stdin []byte, elevation string) (session.Result, error) {
+func (h *Host) stream(ctx context.Context, command string, stdin io.Reader, elevation string) (session.Result, error) {
 	live, err := h.dial(ctx)
 	if err != nil {
 		return session.Result{}, err
@@ -177,10 +178,10 @@ func (h *Host) exec(ctx context.Context, command string, stdin []byte, elevation
 	if elevation != "" {
 		command = elevation + "sh -c " + quoted(command)
 	}
-	return live.Exec(ctx, command, stdin)
+	return live.Stream(ctx, command, stdin)
 }
 
-func (h *Host) granted(ctx context.Context, what string, argv []string, stdin []byte) (string, error) {
+func (h *Host) granted(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
 	live, err := h.dial(ctx)
 	if err != nil {
 		return "", err
@@ -190,7 +191,7 @@ func (h *Host) granted(ctx context.Context, what string, argv []string, stdin []
 	if err != nil {
 		return "", err
 	}
-	result, err := live.Exec(ctx, elevation+words(argv), stdin)
+	result, err := live.Stream(ctx, elevation+words(argv), stdin)
 	if err != nil {
 		return "", err
 	}
@@ -208,7 +209,7 @@ func words(argv []string) string {
 	return strings.Join(written, " ")
 }
 
-type asking func(ctx context.Context, what, command string, stdin []byte) (string, error)
+type asking func(ctx context.Context, what, command string, stdin io.Reader) (string, error)
 
 type drawing struct {
 	ask   asking
@@ -222,7 +223,7 @@ func (d drawing) survey(items []Item, also ...string) string {
 	return survey(items, also...)
 }
 
-func (h *Host) run(ctx context.Context, what, command string, stdin []byte) (string, error) {
+func (h *Host) run(ctx context.Context, what, command string, stdin io.Reader) (string, error) {
 	elevation, err := h.elevate(ctx)
 	if err != nil {
 		return "", err
@@ -230,12 +231,12 @@ func (h *Host) run(ctx context.Context, what, command string, stdin []byte) (str
 	return h.ran(ctx, what, command, stdin, elevation)
 }
 
-func (h *Host) reach(ctx context.Context, what, command string, stdin []byte) (string, error) {
+func (h *Host) reach(ctx context.Context, what, command string, stdin io.Reader) (string, error) {
 	return h.ran(ctx, what, command, stdin, h.reaching(ctx))
 }
 
-func (h *Host) ran(ctx context.Context, what, command string, stdin []byte, elevation string) (string, error) {
-	result, err := h.exec(ctx, command, stdin, elevation)
+func (h *Host) ran(ctx context.Context, what, command string, stdin io.Reader, elevation string) (string, error) {
+	result, err := h.stream(ctx, command, stdin, elevation)
 	if err != nil {
 		return "", err
 	}

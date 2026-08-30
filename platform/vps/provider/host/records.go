@@ -1,10 +1,12 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -74,7 +76,7 @@ func (r *Records) Write(ctx context.Context, record providerkit.Record) (provide
 	if !stood {
 		return "", unbootstrapped(class)
 	}
-	rendered, err := r.helper(ctx, class, body(record), "write", encoded, string(record.Revision))
+	rendered, err := r.helper(ctx, class, bytes.NewReader(body(record)), "write", encoded, string(record.Revision))
 	if err != nil {
 		return "", err
 	}
@@ -99,7 +101,7 @@ func (r *Records) WritePair(ctx context.Context, first, second providerkit.Recor
 		return unbootstrapped(class)
 	}
 	fed := append(body(first), body(second)...)
-	rendered, err := r.helper(ctx, class, fed, "pair", one, string(first.Revision), two, string(second.Revision))
+	rendered, err := r.helper(ctx, class, bytes.NewReader(fed), "pair", one, string(first.Revision), two, string(second.Revision))
 	if err != nil {
 		return err
 	}
@@ -169,7 +171,7 @@ func (r *Records) List(ctx context.Context, under providerkit.RecordName) ([]pro
 	return held, nil
 }
 
-func (r *Records) helper(ctx context.Context, class providerkit.Class, stdin []byte, args ...string) (string, error) {
+func (r *Records) helper(ctx context.Context, class providerkit.Class, stdin io.Reader, args ...string) (string, error) {
 	command := quoted(recordsHelper) + " " + quoted(string(class))
 	for _, arg := range args {
 		command += " " + quoted(arg)
@@ -178,7 +180,7 @@ func (r *Records) helper(ctx context.Context, class providerkit.Class, stdin []b
 	if err != nil {
 		return "", err
 	}
-	result, err := r.host.exec(ctx, command, stdin, elevation)
+	result, err := r.host.stream(ctx, command, stdin, elevation)
 	if err != nil {
 		return "", err
 	}

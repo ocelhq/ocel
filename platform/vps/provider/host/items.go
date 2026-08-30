@@ -1,9 +1,11 @@
 package host
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"io/fs"
 	"slices"
 	"strconv"
@@ -92,9 +94,9 @@ func dir(name string, mode fs.FileMode, owner string, note string) Item {
 
 func (i Item) ID() string { return i.Kind + " " + i.Name }
 
-func (i Item) stdin() []byte {
+func (i Item) stdin() io.Reader {
 	if i.Kind == KindFile || i.Kind == KindProxyConfig {
-		return i.Content
+		return bytes.NewReader(i.Content)
 	}
 	return nil
 }

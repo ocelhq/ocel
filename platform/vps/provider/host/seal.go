@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/base64"
@@ -61,7 +62,7 @@ func (s *Sealer) through(ctx context.Context, verb string, at providerkit.Coordi
 		return nil, err
 	}
 	fed := append([]byte(base64.StdEncoding.EncodeToString(body)), '\n')
-	rendered, err := s.host.granted(ctx, verb+" a value at "+at.Name, argv, fed)
+	rendered, err := s.host.granted(ctx, verb+" a value at "+at.Name, argv, bytes.NewReader(fed))
 	if err != nil {
 		return nil, err
 	}

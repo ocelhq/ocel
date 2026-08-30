@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +19,7 @@ type bench struct {
 	facts  session.Facts
 	stands map[providerkit.Class][]Item
 	ran    []string
+	fed    []string
 	dials  int
 	dead   error
 	floor  error
@@ -49,6 +51,14 @@ func (b *bench) dial(context.Context) (Conn, error) {
 		return nil, b.dead
 	}
 	return wire{b}, nil
+}
+
+func drained(stdin io.Reader) (string, error) {
+	if stdin == nil {
+		return "", nil
+	}
+	raw, err := io.ReadAll(stdin)
+	return string(raw), err
 }
 
 func (b *bench) commands() []string {
@@ -85,7 +95,7 @@ func (w wire) Destination() session.Destination { return w.b.dest }
 func (w wire) Preflight(context.Context) (session.Facts, error) { return w.b.facts, w.b.floor }
 
 func (w wire) Run(ctx context.Context, command string) (string, error) {
-	result, err := w.Exec(ctx, command, nil)
+	result, err := w.Stream(ctx, command, nil)
 	if err != nil {
 		return "", err
 	}
@@ -95,10 +105,15 @@ func (w wire) Run(ctx context.Context, command string) (string, error) {
 	return result.Stdout, nil
 }
 
-func (w wire) Exec(_ context.Context, command string, _ []byte) (session.Result, error) {
+func (w wire) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
 	b := w.b
+	fed, err := drained(stdin)
+	if err != nil {
+		return session.Result{}, err
+	}
 	b.mu.Lock()
 	b.ran = append(b.ran, command)
+	b.fed = append(b.fed, fed)
 	answer, hook := b.answer, b.after
 	b.mu.Unlock()
 

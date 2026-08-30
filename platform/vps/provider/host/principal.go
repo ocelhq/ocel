@@ -165,7 +165,7 @@ func (h *Host) resolve(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := live.Exec(ctx, "cat ~/.ssh/authorized_keys 2>/dev/null", nil)
+	result, err := live.Stream(ctx, "cat ~/.ssh/authorized_keys 2>/dev/null", nil)
 	if err != nil {
 		return nil, err
 	}

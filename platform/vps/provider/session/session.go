@@ -68,7 +68,7 @@ type Result struct {
 }
 
 func (s *Session) Run(ctx context.Context, command string) (string, error) {
-	result, err := s.Exec(ctx, command, nil)
+	result, err := s.Stream(ctx, command, nil)
 	if err != nil {
 		return "", err
 	}
@@ -77,13 +77,6 @@ func (s *Session) Run(ctx context.Context, command string) (string, error) {
 			"%s over ssh: %s", s.dest.Principal(), terse(result.problem(command)))
 	}
 	return result.Stdout, nil
-}
-
-func (s *Session) Exec(ctx context.Context, command string, stdin []byte) (Result, error) {
-	if stdin == nil {
-		return s.Stream(ctx, command, nil)
-	}
-	return s.Stream(ctx, command, bytes.NewReader(stdin))
 }
 
 func (s *Session) Stream(ctx context.Context, command string, stdin io.Reader) (Result, error) {
