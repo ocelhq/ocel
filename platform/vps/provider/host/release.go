@@ -66,7 +66,7 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		flipping.Retiring = ""
 	}
 	if err := h.writeProxyConfig(ctx, flipping); err != nil {
-		return err
+		return h.stranded(ctx, rel, previous, err)
 	}
 
 	say(report, "Gating "+rel.Target+rel.HealthPath+", then flipping the proxy onto it")
@@ -150,6 +150,20 @@ func releaseCommand(rel Release) []string {
 
 func seconds(window time.Duration) string {
 	return strconv.Itoa(int(window.Round(time.Second).Seconds()))
+}
+
+func (h *Host) stranded(ctx context.Context, rel Release, previous string, why error) error {
+	rolled := ProxyConfig + " was put back as it was"
+	if err := h.writeProxyDocument(ctx, previous); err != nil {
+		rolled = fmt.Sprintf("%s could not be put back either and may be left truncated, which is what a restarted proxy would then serve: %v", ProxyConfig, err)
+	}
+	left := rel.targetName() + " was removed"
+	if err := h.RemoveContainer(ctx, rel.targetName()); err != nil {
+		left = fmt.Sprintf("%s is left standing and serving nothing: %v", rel.targetName(), err)
+	}
+	return providerkit.Refuse(providerkit.CodeNotReady,
+		"release %s onto %s: %s could not be written, so the proxy was never asked to flip and serves what it served before: %v\n%s\n%s",
+		rel.App, h.named(), ProxyConfig, why, rolled, left)
 }
 
 func (h *Host) evidence(ctx context.Context, rel Release, outcome, verdict, previous, elevation string) error {
