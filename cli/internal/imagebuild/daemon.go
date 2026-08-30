@@ -17,7 +17,11 @@ import (
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
 )
 
-const DockerHostEnv = "DOCKER_HOST"
+const (
+	DockerHostEnv      = "DOCKER_HOST"
+	DockerTLSVerifyEnv = "DOCKER_TLS_VERIFY"
+	DockerCertPathEnv  = "DOCKER_CERT_PATH"
+)
 
 const (
 	buildPath   = "/grpc"
@@ -48,9 +52,21 @@ func openDaemon() (daemon, error) {
 	case "unix":
 		return daemon{address: host, network: "unix", target: rest}, nil
 	case "tcp", "http":
+		if stated := statedTLS(); stated != "" {
+			return daemon{}, fmt.Errorf("%s asks for a tls connection to the daemon at %s, and ocel speaks none: it would send the whole build context — your source tree — over plain tcp, where it can be read and the image it builds substituted: unset %s to accept that, or run the build on the machine the daemon is on", stated, host, stated)
+		}
 		return daemon{address: host, network: "tcp", target: strings.TrimSuffix(rest, "/")}, nil
 	}
 	return daemon{}, fmt.Errorf("%s is %q, and ocel builds images over unix:// and tcp:// only: set %s to one of those, or run the build where the daemon is", DockerHostEnv, host, DockerHostEnv)
+}
+
+func statedTLS() string {
+	for _, name := range []string{DockerTLSVerifyEnv, DockerCertPathEnv} {
+		if os.Getenv(name) != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 func platformAddress() string {
