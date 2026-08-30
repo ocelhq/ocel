@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -179,7 +180,11 @@ func (p *Provider) Sealer() providerkit.Sealer { return p.sealer }
 
 func (p *Provider) Credentials() providerkit.Credentials { return credentials{p} }
 
-func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{} }
+func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{p} }
+
+func (p *Provider) box() *box.Edge {
+	return box.New(p.host, p.records, p.options.SSH.session().Destination())
+}
 
 func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
 

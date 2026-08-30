@@ -102,6 +102,19 @@ func (h *Host) Principal(ctx context.Context) (string, error) {
 	return principal, nil
 }
 
+func (h *Host) Address(ctx context.Context) (string, error) {
+	live, err := h.dial(ctx)
+	if err != nil {
+		return "", err
+	}
+	address := live.Destination().Address
+	if address == "" {
+		return "", providerkit.Refuse(providerkit.CodeNotReady,
+			"%s resolves to no address, and DNS for a hostname served here points at the box itself rather than at a name", h.named())
+	}
+	return address, nil
+}
+
 func (h *Host) forgetting(ctx context.Context) (string, error) {
 	live, err := h.dial(ctx)
 	if err != nil {

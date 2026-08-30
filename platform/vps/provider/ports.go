@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -73,14 +74,18 @@ func (c credentials) login() string {
 	return anyLogin
 }
 
-type edges struct{}
+type edges struct{ provider *Provider }
 
-func (edges) Supported() []edge.Kind { return nil }
+func (edges) Supported() []edge.Kind { return []edge.Kind{box.Kind} }
 
-func (edges) Default() edge.Kind { return "" }
+func (edges) Default() edge.Kind { return box.Kind }
 
-func (edges) Open(kind edge.Kind) (edge.Edge, error) {
-	return nil, providerkit.Refuse(providerkit.CodeInvalid, "the vps provider serves no edge %q", kind)
+func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
+	if kind != box.Kind {
+		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			"this provider serves no edge %q; a machine is fronted by the proxy ocel puts on it, which is the %q edge", kind, box.Kind)
+	}
+	return e.provider.box(), nil
 }
 
 type dns struct{}

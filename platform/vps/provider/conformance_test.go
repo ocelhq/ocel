@@ -13,7 +13,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 )
 
 func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
@@ -39,6 +41,30 @@ func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 	}
 	if !strings.Contains(refusal.Message, "cloudflare") {
 		t.Errorf("Open(route53) refusal = %q, want it to name the writers this provider has", refusal.Message)
+	}
+}
+
+func TestTheEdgeRegistryOpensTheBoxEdge(t *testing.T) {
+	t.Parallel()
+
+	registry := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).Edges()
+
+	conformance.RunEdgeRegistry(t, registry)
+
+	if got := registry.Supported(); !slices.Equal(got, []edge.Kind{boxedge.Kind}) {
+		t.Errorf("Supported() = %v, want %q alone: a machine is fronted by the proxy ocel puts on it", got, boxedge.Kind)
+	}
+	if got := registry.Default(); got != boxedge.Kind {
+		t.Errorf("Default() = %q, want %q: a deploy that names no edge reaches the box's own proxy", got, boxedge.Kind)
+	}
+
+	var refusal providerkit.Refusal
+	opened, err := registry.Open("cloudflare")
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Open(cloudflare) = %v, %v, want an invalid refusal", opened, err)
+	}
+	if !strings.Contains(refusal.Message, "cloudflare") || !strings.Contains(refusal.Message, string(boxedge.Kind)) {
+		t.Errorf("Open(cloudflare) refused with %q, want it to name the edge asked for and the one this provider serves", refusal.Message)
 	}
 }
 
