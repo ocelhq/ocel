@@ -124,12 +124,17 @@ func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	stacks := 0
 	for _, entry := range entries {
 		if entry.Kind != providerkit.StackApp {
 			continue
 		}
+		stacks++
 		if len(entry.Containers) != 1 || entry.Containers[0].Name != "web" {
 			t.Fatalf("%s recorded %v, want the container it stood the app up as: nothing can take down what was never written", entry.Name, entry.Containers)
 		}
+	}
+	if stacks == 0 {
+		t.Fatalf("the deploy wrote no app stack at all among %d entries, so the container it stood up was recorded nowhere", len(entries))
 	}
 }
