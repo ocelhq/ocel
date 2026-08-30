@@ -303,7 +303,7 @@ func TestLiveAReleaseThatCannotPassItsGateLeavesThePreviousOneServing(t *testing
 		}
 	}
 	if !strings.Contains(refusals["hung"], "never answered") {
-		t.Errorf("an app that binds nothing is refused with\n%s\nand answered-with-N is a different bug from never-answered", refusals["hung"])
+		t.Errorf("an app that accepts and never answers is refused with\n%s\nand answered-with-N is a different bug from never-answered", refusals["hung"])
 	}
 	if !strings.Contains(refusals["hung"], "Status=running") || !strings.Contains(refusals["hung"], "RestartCount=0") {
 		t.Errorf("a hung app is refused with\n%s\nand never says it is up and never restarted", refusals["hung"])
