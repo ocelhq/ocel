@@ -32,6 +32,17 @@ type Target struct {
 	IdentityFile string `json:"identityFile"`
 }
 
+func (t Target) session() session.Target {
+	return session.Target{
+		Alias:        t.Alias,
+		Config:       t.Config,
+		Host:         t.Host,
+		Port:         t.Port,
+		User:         t.User,
+		IdentityFile: t.IdentityFile,
+	}
+}
+
 func (t *Target) UnmarshalJSON(data []byte) error {
 	trimmed := bytes.TrimSpace(data)
 	switch {
@@ -85,14 +96,7 @@ func (p *Provider) Session(ctx context.Context) (*session.Session, error) {
 	if p.live != nil {
 		return p.live, nil
 	}
-	live, err := session.Open(ctx, session.Target{
-		Alias:        p.options.SSH.Alias,
-		Config:       p.options.SSH.Config,
-		Host:         p.options.SSH.Host,
-		Port:         p.options.SSH.Port,
-		User:         p.options.SSH.User,
-		IdentityFile: p.options.SSH.IdentityFile,
-	})
+	live, err := session.Open(ctx, p.options.SSH.session())
 	if err != nil {
 		return nil, err
 	}

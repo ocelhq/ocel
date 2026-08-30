@@ -3,7 +3,6 @@ package vps
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -15,14 +14,7 @@ type loaded struct {
 }
 
 func (p *Provider) DirectImages(context.Context) (providerkit.ImageStore, error) {
-	return loaded{host: p.host, at: p.options.SSH.named()}, nil
-}
-
-func (t Target) named() string {
-	if alias := strings.TrimSpace(t.Alias); alias != "" {
-		return alias
-	}
-	return t.Host
+	return loaded{host: p.host, at: p.options.SSH.session().Destination()}, nil
 }
 
 func (l loaded) String() string { return "images loaded onto " + l.at }
