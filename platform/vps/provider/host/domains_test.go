@@ -146,6 +146,39 @@ func TestARouteNamingASurfaceAndNoHostIsNotOneOcelWrote(t *testing.T) {
 	}
 }
 
+func TestAServerNoDeployWroteIsRefusedTheWayARouteNoDeployWroteIs(t *testing.T) {
+	t.Parallel()
+
+	document := strings.Replace(string(mustRender(t, routed())),
+		`"servers":{"`+proxyServer+`"`,
+		`"servers":{"someone_elses":{"listen":[":8443"],"routes":[]},"`+proxyServer+`"`, 1)
+	if !strings.Contains(document, "someone_elses") {
+		t.Fatalf("this test never planted the server it is about:\n%s", document)
+	}
+
+	_, err := ReadProxyState([]byte(document))
+	if err == nil {
+		t.Fatal("a server ocel never wrote reads back as nothing at all, and the next deploy renders this file whole from the ocel server alone: whatever else the box was serving is gone with no row naming it")
+	}
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Errorf("the read failed with %v, want %s: an unwritten route is refused here and an unwritten server is the same file being taken over", err, providerkit.CodeInvalid)
+	}
+	if !strings.Contains(err.Error(), "someone_elses") {
+		t.Errorf("the read is refused with\n%s\nand never names the server it will not rewrite over", err)
+	}
+}
+
+func TestTheDrainServerADeployWritesReadsBackAsOcelsOwn(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	state.Retiring = "shop-web-1111:" + AppPort
+	if _, err := ReadProxyState(mustRender(t, state)); err != nil {
+		t.Fatalf("ReadProxyState(a config mid-flip) = %v: the drain server is one this deploy just wrote, and refusing it strands every release between the flip and the steady state", err)
+	}
+}
+
 func TestASurfaceNamedWithTheSeparatorIsRefusedRatherThanRenderedAmbiguously(t *testing.T) {
 	t.Parallel()
 

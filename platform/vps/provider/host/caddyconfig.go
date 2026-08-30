@@ -3,6 +3,7 @@ package host
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -216,6 +217,11 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 			"%s declares its grace period as %q, and the deploy's drain ceiling and the proxy's are one number",
 			ProxyConfig, read.Apps.HTTP.GracePeriod)
 	}
+	for _, named := range slices.Sorted(maps.Keys(read.Apps.HTTP.Servers)) {
+		if named != proxyServer && named != proxyDrainServer {
+			return ProxyState{}, unwritten("server", named)
+		}
+	}
 	state := ProxyState{Grace: grace}
 	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
 		if route.Identity == boxIdentity {
@@ -224,7 +230,7 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 		if claim, mine := strings.CutPrefix(route.Identity, claimIdentity); mine {
 			owner, hostname, split := strings.Cut(claim, claimSeparator)
 			if !split || !claimsOnly(route, hostname) {
-				return ProxyState{}, unwritten(route.Identity)
+				return ProxyState{}, unwritten("route", route.Identity)
 			}
 			state.Claims = append(state.Claims, HostClaim{Hostname: hostname, Owner: owner})
 			continue
@@ -232,7 +238,7 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 		named, keyed := strings.CutPrefix(route.Identity, routeIdentity)
 		fields := strings.Split(named, claimSeparator)
 		if !keyed || len(fields) != 3 || len(route.Handle) == 0 || len(route.Handle[0].Upstreams) == 0 {
-			return ProxyState{}, unwritten(route.Identity)
+			return ProxyState{}, unwritten("route", route.Identity)
 		}
 		state.Routes = append(state.Routes, AppRoute{
 			RouteKey: RouteKey{Owner: fields[0], Pointer: fields[1], App: fields[2]},
@@ -264,10 +270,10 @@ func validRoute(route AppRoute) error {
 	return nil
 }
 
-func unwritten(identity string) error {
+func unwritten(what, named string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s carries a route ocel did not write (%q), and a deploy that rewrites this file whole would take it with it",
-		ProxyConfig, identity)
+		"%s carries a %s ocel did not write (%q), and a deploy that rewrites this file whole would take it with it",
+		ProxyConfig, what, named)
 }
 
 func claimsOnly(route caddyRoute, hostname string) bool {
