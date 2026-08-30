@@ -136,3 +136,22 @@ func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 		t.Errorf("the box was asked for the pinned certificate %d times over three claims, want once: a pin is fixed for the life of this provider and every read of it is a round trip a deploy waits on", reads)
 	}
 }
+
+func TestAPinTheProxyCouldNotOpenCoversNothingRatherThanNamingAHandle(t *testing.T) {
+	t.Parallel()
+
+	for what, pin := range map[string]Pin{
+		"a pair the operator kept elsewhere": {Hostname: wildcard, Path: "/srv/certs/wildcard"},
+		"a pair nested under the root":       {Hostname: wildcard, Path: ProxyPins + "/preview/wildcard"},
+		"a pair reached by climbing out":     {Hostname: wildcard, Path: ProxyPins + "/.."},
+	} {
+		if at := Covering([]Pin{pin}, "shop.preview.example.com"); at != "" {
+			t.Errorf("%s at %q covers the hostname as %q, and a status naming a handle no reshape will ever bind sends an operator looking for a pin that cannot exist",
+				what, pin.Path, at)
+		}
+	}
+	held := Pin{Hostname: wildcard, Path: ProxyPins + "/wildcard"}
+	if at := Covering([]Pin{held}, "shop.preview.example.com"); at != held.Path {
+		t.Errorf("Covering() over a pair the proxy loads = %q, want %q", at, held.Path)
+	}
+}
