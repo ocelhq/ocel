@@ -26,10 +26,11 @@ esac
 root="${OCEL_RELEASES_ROOT:-/var/lib/ocel/releases}"
 [ -d "$root" ] || abort "$root stands as no release window, and ocel bootstrap is what writes one"
 
-lock="$root/.lock"
-: >>"$lock"
-exec 9>"$lock"
-flock -x 9
+hold() {
+	mkdir -p "$root/$app"
+	exec 9<"$root/$app"
+	flock -x 9
+}
 
 coordinate() {
 	case $1 in
@@ -64,7 +65,7 @@ promote)
 	'' | *[!a-z0-9-]*) abort "$class is no class this host serves" ;;
 	esac
 	coordinate "$ref"
-	mkdir -p "$root/$app"
+	hold
 	file="$root/$app/$class"
 	: >>"$file"
 	{
@@ -79,6 +80,7 @@ forget)
 	case $class in
 	'' | *[!a-z0-9-]*) abort "$class is no class this host serves" ;;
 	esac
+	hold
 	rm -f "$root/$app/$class"
 	rmdir "$root/$app" 2>/dev/null || true
 	;;
