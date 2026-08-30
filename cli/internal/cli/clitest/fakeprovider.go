@@ -720,6 +720,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 	s.recordPreflight(req.GetSlug(), req.GetDomains(), req.GetRequiredTier())
 	journalPreflight(req)
 	resp := &contractv1.PreflightResponse{
+		Computes:              []string{"serverless"},
 		InfraTier:             parseInfraTier(os.Getenv(FakeInfraTierEnvVar)),
 		InfrastructurePresent: os.Getenv(FakeInfraPresentEnvVar) != "0",
 		Identity: &contractv1.Identity{

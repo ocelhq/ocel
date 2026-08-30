@@ -202,7 +202,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	spec.Dry = opts.dry
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		knownSlugs, err := preflightPreviewUp(ctx, ui, runner, cfg, env.GetIdentity(), stdout, stdin)
+		knownSlugs, compute, err := preflightPreviewUp(ctx, ui, runner, cfg, env.GetIdentity(), stdout, stdin)
 		if err != nil {
 			return err
 		}
@@ -225,6 +225,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 					Tier:   environmentv1.Tier_TIER_PREVIEW,
 				}, envwire.Scope(cfg, true, env.GetIdentity()))
 			},
+			compute: compute,
 			ui:      ui,
 			enabled: !opts.dry && canOpenVarsUI(deps, stdin),
 		}

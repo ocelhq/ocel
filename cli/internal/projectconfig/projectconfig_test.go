@@ -290,7 +290,7 @@ export default {
 			},
 		},
 		{
-			name: "defaults app compute to serverless",
+			name: "leaves an unset app compute for the provider to resolve",
 			config: `
 export default {
   slug: "test-app",
@@ -298,22 +298,22 @@ export default {
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if cfg.Apps[0].Compute != "serverless" {
-					t.Fatalf("Apps[0].Compute = %q, want %q", cfg.Apps[0].Compute, "serverless")
+				if cfg.Apps[0].Compute != "" {
+					t.Fatalf("Apps[0].Compute = %q, want it empty until the provider names its computes", cfg.Apps[0].Compute)
 				}
 			},
 		},
 		{
-			name: "does not let the config set app compute",
+			name: "reads the app compute the config writes",
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", framework: "express", compute: "vm" }],
+  apps: [{ name: "api", path: "services/api", framework: "express", compute: "container" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if cfg.Apps[0].Compute != "serverless" {
-					t.Fatalf("Apps[0].Compute = %q, want %q — compute must not be user-settable", cfg.Apps[0].Compute, "serverless")
+				if cfg.Apps[0].Compute != "container" {
+					t.Fatalf("Apps[0].Compute = %q, want %q", cfg.Apps[0].Compute, "container")
 				}
 			},
 		},
