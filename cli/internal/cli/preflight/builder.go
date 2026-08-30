@@ -12,13 +12,11 @@ import (
 )
 
 func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.Config) error {
-	var containers []string
 	var chosen []imagebuild.Choice
 	for _, app := range cfg.Apps {
 		if app.Compute != string(providerkit.ComputeContainer) {
 			continue
 		}
-		containers = append(containers, app.Name)
 		choice, err := imagebuild.Choose(imagebuild.App{
 			Name:       app.Name,
 			Dir:        filepath.Join(cfg.Dir, app.Path),
@@ -29,10 +27,12 @@ func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.
 		}
 		chosen = append(chosen, choice)
 	}
-	if len(containers) == 0 {
+	if len(chosen) == 0 {
 		return nil
 	}
-	for _, choice := range chosen {
+	containers := make([]string, len(chosen))
+	for i, choice := range chosen {
+		containers[i] = choice.App.Name
 		if notice := choice.Notice(); notice != "" {
 			rep.Diagnostic(notice)
 		}
