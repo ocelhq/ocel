@@ -3,6 +3,7 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,7 +11,78 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
+
+func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func() bool) {
+	t.Helper()
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	clitest.StubBuild(&deps, nil)
+	clitest.StubAppImages(&deps, "api")
+	built := false
+	deps.BuildAppImages = func(context.Context, *projectconfig.Config, io.Writer) (map[string]string, error) {
+		built = true
+		return map[string]string{"api": clitest.FixtureImage("api")}, nil
+	}
+
+	root, _ := clitest.SetUpDeployFixture(t)
+	t.Setenv(clitest.FakeComputesEnvVar, "container,serverless")
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { preview: "*.preview.acme.com" },
+  apps: [{ name: "api", path: "apps/api", compute: "container" }],`+registry+`
+};
+`)
+	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export {};\n")
+	return deps, root, func() bool { return built }
+}
+
+func TestARegistryWhoseVariableIsUnsetStopsTheDeployBeforeAnythingIsBuilt(t *testing.T) {
+	deps, root, built := registryProject(t, `
+  registry: { server: "ghcr.io", password: "OCEL_TEST_REGISTRY_TOKEN" },`)
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy() built and deployed a project whose registry password is nowhere to be read, want it refused at the plan")
+	}
+	said := err.Error() + stdout.String() + stderr.String()
+	for _, want := range []string{"OCEL_TEST_REGISTRY_TOKEN", "ghcr.io"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("runDeploy() failed with %q, want it to mention %q", said, want)
+		}
+	}
+	if built() {
+		t.Error("the image was built before the deploy discovered it had nowhere to push it")
+	}
+}
+
+func TestARegistryWhoseVariableIsSetDeploysAsUsual(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	deps, root, _ := registryProject(t, `
+  registry: { server: "ghcr.io", password: "OCEL_TEST_REGISTRY_TOKEN" },`)
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if said := stdout.String() + stderr.String(); strings.Contains(said, "hunter2") {
+		t.Errorf("the deploy said %q, and the registry password reached the terminal", said)
+	}
+}
+
+func TestAProjectThatNamesNoRegistryDemandsNoSecret(t *testing.T) {
+	deps, root, _ := registryProject(t, "")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+}
 
 func containerProject(t *testing.T, health string) (cmddeps.Deps, string, string) {
 	t.Helper()

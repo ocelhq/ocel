@@ -327,6 +327,21 @@ export default {
 			},
 		},
 		{
+			name: "keeps the registry out of what the provider is configured with",
+			config: `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: { region: "eu-west-2" } },
+  registry: { server: "ghcr.io", password: "GHCR_TOKEN" },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if got := string(cfg.Provider.Options); strings.Contains(got, "registry") || strings.Contains(got, "ghcr.io") {
+					t.Errorf("the provider is configured with %s, and the registry the project chose for itself crossed the provider boundary", got)
+				}
+			},
+		},
+		{
 			name: "leaves apps absent by default",
 			config: `
 export default {

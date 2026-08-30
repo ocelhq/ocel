@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/appregistry"
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
@@ -33,6 +34,9 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Sessio
 	if err != nil {
 		return nil, "", err
 	}
+	if err := appregistry.RequireSecret(cfg); err != nil {
+		return nil, "", err
+	}
 	if err := deps.RequireImageBuilder(ctx, ui, cfg); err != nil {
 		return nil, "", err
 	}
@@ -56,6 +60,9 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, 
 	}
 	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Package())
 	if err != nil {
+		return nil, "", err
+	}
+	if err := appregistry.RequireSecret(cfg); err != nil {
 		return nil, "", err
 	}
 	if err := deps.RequireImageBuilder(ctx, ui, cfg); err != nil {
