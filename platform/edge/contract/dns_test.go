@@ -136,6 +136,11 @@ func TestRecordsForReadsTheTypeOutOfTheFront(t *testing.T) {
 			front: "front.example.net",
 			want:  Record{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "front.example.net"},
 		},
+		{
+			name:  "a zoned literal takes a CNAME, because no DNS API accepts a scope identifier",
+			front: "fe80::1%eth0",
+			want:  Record{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "fe80::1%eth0"},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -169,6 +174,10 @@ func TestRecordInstruction(t *testing.T) {
 		{
 			record: Record{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "front.example.net"},
 			want:   "add a CNAME record at shop.app.com pointing to front.example.net",
+		},
+		{
+			record: Record{Name: "shop.app.com", Type: "MX", Value: "mail.example.net"},
+			want:   "add MX record at shop.app.com pointing to mail.example.net",
 		},
 	} {
 		t.Run(string(tc.record.Type), func(t *testing.T) {

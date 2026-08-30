@@ -35,14 +35,19 @@ func (r Record) Instruction() string {
 	if r.Proxied {
 		return fmt.Sprintf("add a proxied (orange cloud) DNS record at %s", r.Name)
 	}
-	return fmt.Sprintf("add %s %s record at %s pointing to %s", article(string(r.Type)), r.Type, r.Name, r.Value)
+	return fmt.Sprintf("add %s at %s pointing to %s", recordPhrase(r.Type), r.Name, r.Value)
 }
 
-func article(word string) string {
-	if word == "" || !strings.ContainsRune("AEIOUaeiou", rune(word[0])) {
-		return "a"
+func recordPhrase(t RecordType) string {
+	switch t {
+	case RecordTypeA:
+		return "an A record"
+	case RecordTypeAAAA:
+		return "an AAAA record"
+	case RecordTypeCNAME:
+		return "a CNAME record"
 	}
-	return "an"
+	return string(t) + " record"
 }
 
 func (r Record) ApexNote(zone string) string {
@@ -155,7 +160,7 @@ func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 
 func addressRecord(host, front string) Record {
 	addr, err := netip.ParseAddr(front)
-	if err != nil {
+	if err != nil || addr.Zone() != "" {
 		return Record{Name: host, Type: RecordTypeCNAME, Value: front}
 	}
 	addr = addr.Unmap()
