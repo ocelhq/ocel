@@ -408,7 +408,7 @@ func TestWhatTheDeployLoopWritesOverTheProxysConfigIsNeverCalledDrift(t *testing
 		t.Errorf("the survey hashes what the proxy serves:\n%s", proxyConfigProbe(proxyConfigItem()))
 	}
 	seeding := proxyConfigCommand(proxyConfigItem())
-	if !strings.Contains(seeding, "if [ -e "+quoted(ProxyConfig)+" ]") {
+	if !strings.Contains(seeding, "if [ -f "+quoted(ProxyConfig)+" ]") {
 		t.Errorf("the write of %s replaces what stands there rather than seeding what does not:\n%s", ProxyConfig, seeding)
 	}
 	if !strings.Contains(seeding, "chown "+stateOwner+":"+stateOwner) || !strings.Contains(seeding, "chmod 0640") {
@@ -708,6 +708,21 @@ func engineStub(t *testing.T, upAt int) string {
 	return dir
 }
 
+func boundFiles(t *testing.T) []string {
+	t.Helper()
+
+	dir := t.TempDir()
+	var files []string
+	for _, name := range []string{"caddy.json", proxyHelperName} {
+		at := filepath.Join(dir, name)
+		if err := os.WriteFile(at, []byte("what the proxy is started against"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, at)
+	}
+	return files
+}
+
 func asked(t *testing.T, dir string) int {
 	t.Helper()
 
@@ -736,7 +751,7 @@ func TestTheContainerWriteWaitsForTheProxyItJustCreatedToComeUp(t *testing.T) {
 	t.Parallel()
 
 	dir := engineStub(t, 2)
-	said, err := writing(t, dir, containerWriting(5))
+	said, err := writing(t, dir, containerWriting(5, boundFiles(t)))
 	if err != nil {
 		t.Fatalf("the write of a proxy that reported created before it reported running = %v\n%s", err, said)
 	}
@@ -749,7 +764,7 @@ func TestAProxyThatNeverComesUpFailsTheWriteWithWhatTheEngineSaysAboutIt(t *test
 	t.Parallel()
 
 	dir := engineStub(t, 0)
-	said, err := writing(t, dir, containerWriting(2))
+	said, err := writing(t, dir, containerWriting(2, boundFiles(t)))
 	if err == nil {
 		t.Fatalf("the write of a proxy that never came up landed, and the stamp then records a state the box does not hold:\n%s", said)
 	}
@@ -795,5 +810,50 @@ func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 	if at := report.at("wrote " + KindContainer + " " + ProxyContainer); at < 0 {
 		t.Errorf("the apply installed the engine, the proxy went down under it, and the apply still called the container current:\n%s",
 			strings.Join(report.lines, "\n"))
+	}
+}
+
+func TestSomethingOtherThanTheProxysConfigStandingAtItsPathIsRefusedRatherThanChowned(t *testing.T) {
+	t.Parallel()
+
+	at := filepath.Join(t.TempDir(), "caddy.json")
+	if err := os.Mkdir(at, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	item := proxyConfigItem()
+	item.Name = at
+
+	said, err := writing(t, t.TempDir(), proxyConfigCommand(item))
+	if err == nil {
+		t.Fatalf("the write over a directory where the config belongs landed, and the probe reads that path with -f: "+
+			"the write would call it present forever, the survey would call it absent forever, and every apply would report success over a proxy that never serves:\n%s", said)
+	}
+	if !strings.Contains(said, at) {
+		t.Errorf("the write said %q, want it to name %s as what stands there", said, at)
+	}
+	held, err := os.Stat(at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if held.Mode().Perm() != 0o755 {
+		t.Errorf("the write left %s at %v, and it chmodded what it could not write rather than refusing over it", at, held.Mode().Perm())
+	}
+}
+
+func TestTheProxyIsNeverStartedAgainstABindSourceDockerWouldInvent(t *testing.T) {
+	t.Parallel()
+
+	gone := filepath.Join(t.TempDir(), "caddy.json")
+	dir := engineStub(t, 1)
+	said, err := writing(t, dir, containerWriting(2, []string{gone}))
+	if err == nil {
+		t.Fatalf("the proxy was started against a bind source that does not stand, and docker answers a missing source by "+
+			"creating a root-owned directory there, which caddy cannot read and no later apply repairs:\n%s", said)
+	}
+	if !strings.Contains(said, gone) {
+		t.Errorf("the write said %q, want it to name %s", said, gone)
+	}
+	if at := asked(t, dir); at != 0 {
+		t.Errorf("the write reached the engine %d times over a bind source that does not stand, want it refused before docker is asked for anything", at)
 	}
 }

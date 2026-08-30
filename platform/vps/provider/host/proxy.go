@@ -114,11 +114,29 @@ func proxyConfigItem() Item {
 }
 
 func proxyConfigCommand(item Item) string {
-	seed := fmt.Sprintf("install -m %04o -o %s -g %s /dev/stdin %s", item.Mode, item.Owner, item.Owner, quoted(item.Name))
+	at := quoted(item.Name)
+	seed := fmt.Sprintf("install -m %04o -o %s -g %s /dev/stdin %s", item.Mode, item.Owner, item.Owner, at)
 	return "set -e\n" +
-		"if [ -e " + quoted(item.Name) + " ]; then cat >/dev/null; else " + seed + "; fi\n" +
-		fmt.Sprintf("chown %s:%s %s\n", item.Owner, item.Owner, quoted(item.Name)) +
-		fmt.Sprintf("chmod %04o %s", item.Mode, quoted(item.Name))
+		"if [ -f " + at + " ]; then cat >/dev/null\n" +
+		"elif [ -e " + at + " ]; then cat >/dev/null; " + notAFile(item.Name) + "\n" +
+		"else " + seed + "; fi\n" +
+		fmt.Sprintf("chown %s:%s %s\n", item.Owner, item.Owner, at) +
+		fmt.Sprintf("chmod %04o %s", item.Mode, at)
+}
+
+func notAFile(name string) string {
+	return "printf '%s\\n' " + quoted(name+" stands as something other than a regular file, and the proxy reads"+
+		" the whole of what it serves from it. Take whatever is there and re-run") + " >&2; exit 1"
+}
+
+func proxyFiles() []string { return []string{ProxyConfig, ProxyHelper} }
+
+func bindsStanding(files []string) string {
+	var written string
+	for _, name := range files {
+		written += "if [ ! -f " + quoted(name) + " ]; then " + notAFile(name) + "; fi\n"
+	}
+	return written
 }
 
 func proxyConfigProbe(item Item) string {
@@ -197,9 +215,9 @@ func volumeCommand() string {
 		"docker volume create " + quoted(ProxyVolume) + " >/dev/null"
 }
 
-func containerCommand() string { return containerWriting(proxyRising) }
+func containerCommand() string { return containerWriting(proxyRising, proxyFiles()) }
 
-func containerWriting(attempts int) string {
+func containerWriting(attempts int, files []string) string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", ProxyContainer,
 		"--restart", proxyRestart,
@@ -213,6 +231,7 @@ func containerWriting(attempts int) string {
 	}
 	argv = append(argv, ProxyImage, "caddy", "run", "--config", proxyConfigMount)
 	return "set -e\n" +
+		bindsStanding(files) +
 		"docker rm --force " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
 		words(argv) + " >/dev/null\n" +
 		containerRising(attempts)

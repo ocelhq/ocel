@@ -113,7 +113,8 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		t.Fatalf("Describe() after Apply() = %v", err)
 	}
 	if !standing.Present || !standing.Stacks[0].DigestCurrent {
-		t.Fatalf("Describe() after Apply() = %+v, want a present bootstrap standing at the digest applied", standing.Stacks)
+		t.Fatalf("Describe() after Apply() = %+v, want a present bootstrap standing at the digest applied, %s\n%s",
+			standing.Stacks, stillMoving(t, bootstrapper, class, standing.Held), vm.proxySaid(t))
 	}
 	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: standing.Held})
 	if err != nil {
@@ -257,6 +258,18 @@ func onlyGroup(t *testing.T, plan providerkit.Plan) providerkit.ChangeGroup {
 		t.Fatalf("the plan carries %d groups, want the one core group this provider stands up", len(plan.Groups))
 	}
 	return plan.Groups[0]
+}
+
+func (vm machine) proxySaid(t *testing.T) string {
+	t.Helper()
+
+	state := vm.inspects(t, "container", host.ProxyContainer,
+		"{{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} error={{.State.Error}}")
+	if state == "" {
+		return host.ProxyContainer + " stands on this host as nothing the engine knows about"
+	}
+	return host.ProxyContainer + " is " + state + ", and it said:\n" +
+		vm.ssh(t, "sudo docker logs --tail 15 "+host.ProxyContainer+" 2>&1 || true")
 }
 
 func planFor(group providerkit.ChangeGroup, name string) providerkit.Change {
