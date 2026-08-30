@@ -319,6 +319,30 @@ func TestUnbindingAHostnameAnotherSurfaceNowHoldsLeavesItWhereItIs(t *testing.T)
 	}
 }
 
+func TestAHostnameItsOwnerReleasesIsFreeForTheNextSurfaceToTake(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	stood := claimingBox(t, state)
+	ctx := context.Background()
+
+	if err := stood.host().DisclaimHost(ctx, claimed, surface); err != nil {
+		t.Fatalf("DisclaimHost() = %v", err)
+	}
+	if err := stood.host().ClaimHost(ctx, HostClaim{Hostname: claimed, Owner: otherSurface}); err != nil {
+		t.Fatalf("ClaimHost() by the surface it was released for = %v: a hostname one project unbinds is a hostname another can bind, and a box that keeps refusing it has taken the name out of circulation for good", err)
+	}
+
+	held, err := ReadProxyState([]byte(stood.held))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(held.Claims, []HostClaim{{Hostname: claimed, Owner: otherSurface}}) {
+		t.Errorf("the claims left are %v, want %s held by %s alone", held.Claims, claimed, otherSurface)
+	}
+}
+
 func TestAPreflightThisBoxRefusesIsWhatTheWriteFailsWith(t *testing.T) {
 	t.Parallel()
 
