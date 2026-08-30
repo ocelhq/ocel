@@ -250,3 +250,15 @@ func TestTagsDropEmptyFacts(t *testing.T) {
 		t.Errorf("ocel:stack = %q, want %q", tags["ocel:stack"], c.Stack().String())
 	}
 }
+
+func TestADigestBecomesATagUnderOneRule(t *testing.T) {
+	if got, want := DigestTag("sha256:abc"), "sha256-abc"; got != want {
+		t.Errorf("DigestTag() = %q, want %q", got, want)
+	}
+	if got, want := RepositorySegment("ocel/web"), "web"; got != want {
+		t.Errorf("RepositorySegment() = %q, want %q", got, want)
+	}
+	if got, want := RepositorySegment("web"), "web"; got != want {
+		t.Errorf("RepositorySegment() = %q, want %q", got, want)
+	}
+}

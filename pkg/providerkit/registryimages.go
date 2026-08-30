@@ -251,28 +251,10 @@ func (r registryImages) Push(ctx context.Context, push ImagePush, report Reporte
 		return err
 	}
 	named := server + "/" + repository
-	if err := r.name(ctx, client, host, push.Source, named, tag); err != nil {
+	if err := host.Tag(ctx, client, push.Source, named, tag); err != nil {
 		return err
 	}
 	return r.upload(ctx, client, host, named, tag, report)
-}
-
-func (r registryImages) name(ctx context.Context, client *http.Client, host DockerHost, source, named, tag string) error {
-	endpoint := "http://docker/images/" + source + "/tag?" + url.Values{"repo": {named}, "tag": {tag}}.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("name %s as %s:%s in the daemon at %s: %w", source, named, tag, host.Address, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("the daemon at %s answered %q naming %s as %s:%s: %s",
-			host.Address, resp.Status, source, named, tag, said(resp.Body))
-	}
-	return nil
 }
 
 func (r registryImages) upload(ctx context.Context, client *http.Client, host DockerHost, named, tag string, report Reporter) error {

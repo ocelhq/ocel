@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -67,4 +68,22 @@ func (d DockerHost) Transport() *http.Transport {
 			return dialDocker(ctx, d.Network, d.Target)
 		},
 	}
+}
+
+func (d DockerHost) Tag(ctx context.Context, client *http.Client, source, repository, tag string) error {
+	endpoint := "http://docker/images/" + source + "/tag?" + url.Values{"repo": {repository}, "tag": {tag}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("name %s as %s:%s in the daemon at %s: %w", source, repository, tag, d.Address, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("the daemon at %s answered %q naming %s as %s:%s, so the image cannot be reached by the coordinate it is released under: %s",
+			d.Address, resp.Status, source, repository, tag, said(resp.Body))
+	}
+	return nil
 }

@@ -11,11 +11,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func awayFromAnyDaemon(t *testing.T) {
 	t.Helper()
-	t.Setenv(imagebuild.DockerHostEnv, "unix://"+filepath.Join(t.TempDir(), "absent.sock"))
+	t.Setenv(providerkit.DockerHostEnv, "unix://"+filepath.Join(t.TempDir(), "absent.sock"))
 }
 
 func TestAContainerAppWithNoDaemonToBuildItIsRefusedBeforeAnythingIsBuilt(t *testing.T) {
@@ -31,7 +32,7 @@ func TestAContainerAppWithNoDaemonToBuildItIsRefusedBeforeAnythingIsBuilt(t *tes
 	if !strings.Contains(err.Error(), "web") {
 		t.Errorf("RequireBuilder() = %v, and the reader never learns which app needs a daemon", err)
 	}
-	if !strings.Contains(err.Error(), imagebuild.DockerHostEnv) {
+	if !strings.Contains(err.Error(), providerkit.DockerHostEnv) {
 		t.Errorf("RequireBuilder() = %v, and the reader is never told which variable points ocel at a daemon", err)
 	}
 }
@@ -116,7 +117,7 @@ func TestABuildDockerfileNamingNothingStopsTheDeployBeforeTheDaemonIsAsked(t *te
 	if !strings.Contains(err.Error(), "build.dockerfile") || !strings.Contains(err.Error(), "web") {
 		t.Errorf("RequireBuilder() = %v, want the app and the key it got wrong named", err)
 	}
-	if strings.Contains(err.Error(), imagebuild.DockerHostEnv) {
+	if strings.Contains(err.Error(), providerkit.DockerHostEnv) {
 		t.Errorf("RequireBuilder() = %v, and a config the deploy can never act on is reported as a docker problem", err)
 	}
 }

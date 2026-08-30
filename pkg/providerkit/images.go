@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const ImageKind = "image"
@@ -79,11 +81,10 @@ func imagePush(app, ref string, target RegistryTarget) (ImagePush, error) {
 		return ImagePush{}, Refuse(CodeInvalid,
 			"app %s carries the image %q, which pins no digest, so there is nothing to push under a coordinate", app, ref)
 	}
-	name := repository[strings.LastIndex(repository, "/")+1:]
 	return ImagePush{
 		App:    app,
 		Source: ref,
-		Target: target.Coordinate(name, strings.Replace(digest, ":", "-", 1)),
+		Target: target.Coordinate(naming.RepositorySegment(repository), naming.DigestTag(digest)),
 		Digest: digest,
 	}, nil
 }

@@ -7,8 +7,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/moby/buildkit/client"
@@ -16,8 +14,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
-
-const DockerHostEnv = providerkit.DockerHostEnv
 
 const (
 	buildPath   = "/grpc"
@@ -127,38 +123,21 @@ func (d daemon) addressable(workers []*client.WorkerInfo) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under, and where buildkit additionally refuses the merge operations a railpack plan is assembled from: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.Address, DockerHostEnv)
+	return fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under, and where buildkit additionally refuses the merge operations a railpack plan is assembled from: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.Address, providerkit.DockerHostEnv)
 }
 
 func (d daemon) tag(ctx context.Context, image Image) error {
-	endpoint := "http://docker/images/" + url.PathEscape(image.Digest) + "/tag?" + url.Values{
-		"repo": {image.Repository},
-		"tag":  {image.Tag},
-	}.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
-	if err != nil {
-		return err
-	}
 	transport := d.Transport()
 	defer transport.CloseIdleConnections()
-	resp, err := (&http.Client{Transport: transport}).Do(req)
-	if err != nil {
-		return fmt.Errorf("name %s in the daemon at %s: %w", image.Ref, d.Address, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusCreated {
-		said, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("the daemon at %s answered %q naming %s, so the image it just built cannot be reached by the ref a release pins: %s", d.Address, resp.Status, image.Ref, strings.TrimSpace(string(said)))
-	}
-	return nil
+	return d.Tag(ctx, &http.Client{Transport: transport}, image.Digest, image.Repository, image.Tag)
 }
 
 func (d daemon) unreachable(err error) error {
-	return fmt.Errorf("no docker daemon answers at %s, and a container app's image is built by the one on this machine: start docker, or set %s to a daemon that is running\n    %v", d.Address, DockerHostEnv, err)
+	return fmt.Errorf("no docker daemon answers at %s, and a container app's image is built by the one on this machine: start docker, or set %s to a daemon that is running\n    %v", d.Address, providerkit.DockerHostEnv, err)
 }
 
 func (d daemon) noBuilder(err error) error {
-	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %v", d.Address, DockerHostEnv, err)
+	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %v", d.Address, providerkit.DockerHostEnv, err)
 }
 
 func Reachable(ctx context.Context) error {

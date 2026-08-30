@@ -3,7 +3,6 @@ package imagebuild
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 )
@@ -42,7 +41,7 @@ func imageFor(app, digest string) (Image, error) {
 	return Image{
 		Name:       name,
 		Repository: repository,
-		Tag:        strings.Replace(digest, ":", "-", 1),
+		Tag:        naming.DigestTag(digest),
 		Digest:     digest,
 		Ref:        repository + "@" + digest,
 	}, nil
