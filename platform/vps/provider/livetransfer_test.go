@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -46,7 +47,40 @@ func localDaemon(t *testing.T) (providerkit.DockerHost, *http.Client) {
 	}
 	transport := daemon.Transport()
 	t.Cleanup(transport.CloseIdleConnections)
-	return daemon, &http.Client{Transport: transport}
+	client := &http.Client{Transport: transport}
+	keepsImagesInContainerd(t, daemon, client)
+	return daemon, client
+}
+
+func keepsImagesInContainerd(t *testing.T, daemon providerkit.DockerHost, client *http.Client) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://docker/info", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("the daemon at %s did not say which store it keeps images in: %v", daemon.Address, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var info struct {
+		Driver       string     `json:"Driver"`
+		DriverStatus [][]string `json:"DriverStatus"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range info.DriverStatus {
+		if len(row) == 2 && row[0] == "driver-type" && strings.Contains(row[1], "containerd.snapshotter") {
+			return
+		}
+	}
+	t.Fatalf("the daemon at %s keeps images in its %s store, and a build the cli accepts always comes out of a containerd one: "+
+		"exporting from a classic store here carries an archive production never carries, and the load onto the machine's own classic store "+
+		"would prove a transition that never happens: turn the containerd image store on (\"features\": {\"containerd-snapshotter\": true} "+
+		"in /etc/docker/daemon.json) or point %s at a daemon that has it",
+		daemon.Address, info.Driver, providerkit.DockerHostEnv)
 }
 
 func imported(t *testing.T) *http.Client {
