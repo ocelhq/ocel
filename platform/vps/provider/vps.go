@@ -175,7 +175,53 @@ func (p *Provider) Computes() []providerkit.Compute {
 }
 
 func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
-	return host.Bootstrap(p.host), nil
+	return elevating{Bootstrapper: host.Bootstrap(p.host), elevated: p.elevated}, nil
+}
+
+func (p *Provider) elevated(ctx context.Context) error {
+	live, err := p.Session(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = live.Preflight(ctx)
+	return err
+}
+
+type elevating struct {
+	providerkit.Bootstrapper
+	elevated func(context.Context) error
+}
+
+func (e elevating) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
+	if !req.Heal {
+		if err := e.elevated(ctx); err != nil {
+			return providerkit.Plan{}, err
+		}
+	}
+	return e.Bootstrapper.Plan(ctx, req)
+}
+
+func (e elevating) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+	if !req.Heal {
+		if err := e.elevated(ctx); err != nil {
+			return err
+		}
+	}
+	return e.Bootstrapper.Apply(ctx, req, report)
+}
+
+func (e elevating) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
+	if err := e.elevated(ctx); err != nil {
+		return providerkit.Plan{}, err
+	}
+	return e.Bootstrapper.PlanRemoval(ctx, class)
+}
+
+func (e elevating) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
+	if err := e.elevated(ctx); err != nil {
+		return err
+	}
+	return e.Bootstrapper.Remove(ctx, class, report)
 }
 
 func (p *Provider) Releases() providerkit.Releaser {
