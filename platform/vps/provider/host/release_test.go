@@ -469,7 +469,10 @@ func TestExitedRestartingAndHungReadAsThreeDifferentThings(t *testing.T) {
 				t.Errorf("%s and %s are refused with the same words, and the restart policy makes a crash loop invisible without them", what, other)
 			}
 		}
-		if !strings.Contains(said, "Status="+strings.TrimSuffix(what, "hung")) && what != "hung" {
+		if what == "hung" {
+			continue
+		}
+		if !strings.Contains(said, "Status="+what) {
 			t.Errorf("%s is refused with\n%s\nand never names the status it was found in", what, said)
 		}
 	}
