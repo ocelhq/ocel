@@ -399,7 +399,7 @@ func drainPush(body io.Reader, report Reporter) error {
 			return fmt.Errorf("read the daemon's push progress: %w", err)
 		}
 		if line.Error != "" {
-			return registryRefusal{said: line.Error, again: throttled(line.Error)}
+			return registryRefusal{said: line.Error, again: Throttled(line.Error)}
 		}
 		if report != nil && line.Status != "" {
 			report.Detail(line.Status)
@@ -407,7 +407,7 @@ func drainPush(body io.Reader, report Reporter) error {
 	}
 }
 
-func throttled(said string) bool {
+func Throttled(said string) bool {
 	lowered := strings.ToLower(said)
 	for _, refusal := range []string{"unauthorized", "authentication required", "denied", "forbidden"} {
 		if strings.Contains(lowered, refusal) {
