@@ -704,6 +704,26 @@ export default {
 			wantErr: []string{`app "api"`, "health.path"},
 		},
 		{
+			name: "rejects a health.path carrying a query the wire would refuse",
+			config: `
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: "services/api", compute: "container", health: { path: "/up?ready=1" } }],
+};
+`,
+			wantErr: []string{`app "api"`, "health.path", "?"},
+		},
+		{
+			name: "rejects a health.path carrying a fragment the wire would refuse",
+			config: `
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: "services/api", compute: "container", health: { path: "/up#ready" } }],
+};
+`,
+			wantErr: []string{`app "api"`, "health.path", "#"},
+		},
+		{
 			name: "rejects an app with no path",
 			config: `
 export default {

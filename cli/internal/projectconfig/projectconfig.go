@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -520,6 +521,9 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			path := strings.TrimSpace(a.Health.Path)
 			if path != "" && !strings.HasPrefix(path, "/") {
 				return nil, fmt.Errorf("app %q sets health.path to %q, which is not a path off the app's root: give it one starting with %q, or drop health.path to have %q probed at %q", a.Name, a.Health.Path, "/", a.Name, "/")
+			}
+			if path != "" && !providerkit.HealthCheckPath(path) {
+				return nil, fmt.Errorf("app %q sets health.path to %q, and a probe asks one path of the process: give %q a path carrying no %q, %q, whitespace or control character, since a query or fragment names nothing the process is asked for", a.Name, a.Health.Path, a.Name, "?", "#")
 			}
 			health = &Health{Path: path}
 		}
