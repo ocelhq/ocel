@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -72,13 +71,12 @@ func spelledProblem(err error) string {
 }
 
 type Provider struct {
-	options   Options
-	host      *host.Host
-	records   *host.Records
-	artifacts *fake.Artifacts
-	sealer    *host.Sealer
-	dial      sync.Mutex
-	live      *session.Session
+	options Options
+	host    *host.Host
+	records *host.Records
+	sealer  *host.Sealer
+	dial    sync.Mutex
+	live    *session.Session
 }
 
 func (p *Provider) Session(ctx context.Context) (*session.Session, error) {
@@ -136,10 +134,7 @@ func New(_ context.Context, options providerkit.Options) (providerkit.Provider, 
 }
 
 func NewProvider(options Options) *Provider {
-	p := &Provider{
-		options:   options,
-		artifacts: fake.NewArtifacts(),
-	}
+	p := &Provider{options: options}
 	p.host = host.New(p.conn, host.Keys{Path: options.DeployKey})
 	p.records = host.NewRecords(p.host)
 	p.sealer = host.NewSealer(p.host)
@@ -161,10 +156,10 @@ func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
 }
 
 func (p *Provider) Releases() providerkit.Releaser {
-	return resources.Releaser(p.records, p.artifacts, p)
+	return resources.Releaser(p.records, p.Artifacts(), p)
 }
 
-func (p *Provider) Artifacts() providerkit.ArtifactStore { return p.artifacts }
+func (p *Provider) Artifacts() providerkit.ArtifactStore { return providerkit.NoArtifacts{} }
 
 func (p *Provider) Records() providerkit.RecordStore { return p.records }
 
