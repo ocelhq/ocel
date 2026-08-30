@@ -657,7 +657,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 					Deployment:      entry.Build.DeploymentID(),
 					Compute:         entry.Compute(),
 					Functions:       r.functionSpecs(entry),
-					Image:           entry.Image,
+					Image:           runs(images, entry),
 					HealthCheckPath: entry.HealthCheckPath,
 					Values:          values,
 					Grants:          grants,
@@ -910,6 +910,10 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, functions []Funct
 	for _, fn := range functions {
 		urls[fn.Name] = fn.URL
 	}
+	images, err := r.imagePlan(entry)
+	if err != nil {
+		return err
+	}
 	coordinate := r.plan.coordinate(entry.App, entry.Build.Release())
 	record := edge.DeploymentRecord{
 		App:              entry.App,
@@ -917,6 +921,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, functions []Funct
 		Identity:         entry.Build.String(),
 		DeploymentID:     entry.Build.DeploymentID(),
 		Entry:            entryFunction(r.manifest, entry.App),
+		Image:            images.Coordinate(entry.App),
 		FunctionURLs:     urls,
 		AssetPrefix:      coordinate.AssetKey(""),
 		IsrPrefix:        coordinate.ISRPrefix(),
@@ -1165,6 +1170,13 @@ func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegis
 	}
 	r.images = store
 	return nil
+}
+
+func runs(images ImagePlan, entry AppEntry) string {
+	if pushed := images.Coordinate(entry.App); pushed != "" {
+		return pushed
+	}
+	return entry.Image
 }
 
 func (r *deployRun) imagePlan(entry AppEntry) (ImagePlan, error) {

@@ -143,6 +143,9 @@ func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
 		if len(entry.Containers) != 1 || entry.Containers[0].Name != "web" {
 			t.Fatalf("%s recorded %v, want the container it stood the app up as: nothing can take down what was never written", entry.Name, entry.Containers)
 		}
+		if entry.Containers[0].Image != containerTestImage {
+			t.Errorf("%s recorded the container running %q, want %q: a teardown that cannot say what a container ran cannot sweep the image it held", entry.Name, entry.Containers[0].Image, containerTestImage)
+		}
 	}
 	if stacks == 0 {
 		t.Fatalf("the deploy wrote no app stack at all among %d entries, so the container it stood up was recorded nowhere", len(entries))

@@ -85,6 +85,15 @@ func (p ImagePlan) Ship(ctx context.Context, report Reporter) error {
 	return nil
 }
 
+func (p ImagePlan) Coordinate(app string) string {
+	for _, push := range p.Pushes {
+		if push.App == app {
+			return push.Target
+		}
+	}
+	return ""
+}
+
 func (p ImagePlan) destination(push ImagePush) string {
 	if named, says := p.Store.(ImageDestination); says {
 		return named.ImageDestination()
