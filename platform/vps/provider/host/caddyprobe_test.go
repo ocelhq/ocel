@@ -132,8 +132,10 @@ func TestARealProxyForwardsAClaimedHostnameToTheProjectThatClaimedIt(t *testing.
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
 	ask := probing(t, state)
 
-	if said := ask(claimed); said.status == http.StatusNotFound || said.edge == EdgeName {
+	if said := ask(claimed); said.status == http.StatusNotFound {
 		t.Errorf("the claimed hostname %q was answered %d by the box's own default, want the route of the surface that claimed it: the default stands behind every route ocel writes and never in front of one", claimed, said.status)
+	} else if said.edge != EdgeName {
+		t.Errorf("the surface's route answered %q with %s: %q, want %q: the probe a bind waits on reads this header off the hostname itself, so a route that forwards without naming the edge leaves every hostname the box actually serves reported as served by nothing", claimed, EdgeHeader, said.edge, EdgeName)
 	}
 	if said := ask("blog.example.com"); said.status != http.StatusNotFound || said.edge != EdgeName {
 		t.Errorf("a hostname the other project never claimed was answered %d by %q, want the box's own 404", said.status, said.edge)
@@ -147,8 +149,13 @@ func TestARealProxyAnswersEveryHostnameOneSurfaceClaimsOnTheAppItRuns(t *testing
 	ask := probing(t, state)
 
 	for _, hostname := range []string{claimed, second} {
-		if said := ask(hostname); said.status == http.StatusNotFound || said.edge == EdgeName {
+		said := ask(hostname)
+		if said.status == http.StatusNotFound {
 			t.Errorf("%q was answered %d by the box's own default, want the one app its surface runs: a project binds a second domain without giving up the first, and the route this renders carries every hostname the surface claims", hostname, said.status)
+			continue
+		}
+		if said.edge != EdgeName {
+			t.Errorf("%q is served by the surface's own route and answers %s: %q, want %q: every response this box emits names the box, or the bind's probe reads the app's answer as nobody's", hostname, EdgeHeader, said.edge, EdgeName)
 		}
 	}
 }

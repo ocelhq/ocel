@@ -3,17 +3,20 @@ package vps_test
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 func probingAt(t *testing.T, header string) *vps.Provider {
@@ -202,5 +205,107 @@ func TestAHostnameNothingAnswersIsNotAnErrorTheSettleGivesUpOn(t *testing.T) {
 	}
 	if kind != "" {
 		t.Errorf("Serving() = %q, want nothing", kind)
+	}
+}
+
+func edgeNamed(t *testing.T, rendered []byte, hostname string) http.Header {
+	t.Helper()
+
+	var read struct {
+		Apps struct {
+			HTTP struct {
+				Servers map[string]struct {
+					Routes []struct {
+						Match []struct {
+							Host []string `json:"host"`
+						} `json:"match"`
+						Handle []struct {
+							Handler   string `json:"handler"`
+							Upstreams []struct {
+								Dial string `json:"dial"`
+							} `json:"upstreams"`
+							Response struct {
+								Set map[string][]string `json:"set"`
+							} `json:"response"`
+						} `json:"handle"`
+					} `json:"routes"`
+				} `json:"servers"`
+			} `json:"http"`
+		} `json:"apps"`
+	}
+	if err := json.Unmarshal(rendered, &read); err != nil {
+		t.Fatal(err)
+	}
+	said := http.Header{}
+	for _, server := range read.Apps.HTTP.Servers {
+		for _, route := range server.Routes {
+			forwards := false
+			for _, handled := range route.Handle {
+				forwards = forwards || len(handled.Upstreams) > 0
+			}
+			matches := false
+			for _, match := range route.Match {
+				matches = matches || slices.Contains(match.Host, hostname)
+			}
+			if !forwards || !matches {
+				continue
+			}
+			for _, handled := range route.Handle {
+				for name, values := range handled.Response.Set {
+					for _, value := range values {
+						said.Add(name, value)
+					}
+				}
+			}
+		}
+	}
+	return said
+}
+
+func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testing.T) {
+	t.Parallel()
+
+	const hostname = "shop.example.com"
+	const owner = "ocel--shop--production"
+	rendered, err := host.RenderProxyConfig(host.ProxyState{
+		Grace:  host.DrainWindow,
+		Claims: []host.HostClaim{{Hostname: hostname, Owner: owner}},
+		Routes: []host.AppRoute{{
+			RouteKey: host.RouteKey{Owner: owner, Pointer: "@production", App: "web"},
+			Upstream: "shop-web-2222:" + host.AppPort,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("RenderProxyConfig() = %v", err)
+	}
+
+	served := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for name, values := range edgeNamed(t, rendered, hostname) {
+			for _, value := range values {
+				w.Header().Add(name, value)
+			}
+		}
+		_, _ = w.Write([]byte("the body of the app the project runs"))
+	}))
+	t.Cleanup(served.Close)
+
+	at, err := url.Parse(served.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p.Probing(&http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, network, at.Host)
+		},
+	}})
+
+	kind, err := p.Serving(context.Background(), boxedge.Kind, hostname)
+	if err != nil {
+		t.Fatalf("Serving() = %v", err)
+	}
+	if kind != boxedge.Kind {
+		t.Errorf("Serving() over a hostname a project on the box claims and routes = %q, want %q: the box names the edge only on the route nothing claims, so the first bind on a project already deployed probes its own app, reads no header and burns every attempt before refusing", kind, boxedge.Kind)
 	}
 }

@@ -559,7 +559,7 @@ func TestAppRoutesAreReachedByTheHostnamesTheirOwnSurfaceClaims(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
-		if len(route.Handle) == 0 || len(route.Handle[0].Upstreams) == 0 {
+		if forwardedTo(route) == "" {
 			continue
 		}
 		if len(route.Match) != 1 {
