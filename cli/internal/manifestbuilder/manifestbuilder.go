@@ -24,12 +24,14 @@ type Declaration struct {
 }
 
 type App struct {
-	Name      string
-	Framework string
-	Compute   string
-	Domains   map[string][]string
-	Folder    string
-	Usages    []Usage
+	Name            string
+	Framework       string
+	Compute         string
+	Domains         map[string][]string
+	Folder          string
+	Usages          []Usage
+	Image           string
+	HealthCheckPath string
 }
 
 type Usage struct {
@@ -260,6 +262,11 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 		return nil, err
 	}
 
+	containers, err := buildContainers(manifestApps, apps)
+	if err != nil {
+		return nil, err
+	}
+
 	return &contractv1.Manifest{
 		SchemaVersion: ContractVersion,
 		Slug:          slug,
@@ -268,6 +275,7 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 		Domains:       projectDomains,
 		Apps:          manifestApps,
 		Usages:        usages,
+		Containers:    containers,
 	}, nil
 }
 

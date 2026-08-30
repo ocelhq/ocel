@@ -556,7 +556,7 @@ func TestBuild(t *testing.T) {
 	t.Run("a configured app with no functions still appears", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express", Compute: "container"}}, "serverless", nil, nil, nil, nil)
+		manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express", Compute: "container", Image: "ocel/web@" + fakeDigest}}, "serverless", nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -571,7 +571,7 @@ func TestBuild(t *testing.T) {
 	t.Run("a configured app that names no compute takes the resolved one", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express"}}, "container", nil, nil, nil, nil)
+		manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express", Image: "ocel/web@" + fakeDigest}}, "container", nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
