@@ -178,12 +178,21 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 		})
 		claimed[claim.Owner] = append(claimed[claim.Owner], claim.Hostname)
 	}
-	surfaced := slices.SortedFunc(slices.Values(state.Routes), byKey)
-	for _, route := range surfaced {
+	answering := map[string]AppRoute{}
+	for _, route := range slices.SortedFunc(slices.Values(state.Routes), byKey) {
 		if err := validRoute(route); err != nil {
 			return nil, err
 		}
-		routes = append(routes, matching(route.identity(), claimed[route.Owner], route.Upstream))
+		hostnames := claimed[route.Owner]
+		if len(hostnames) > 0 {
+			if held, taken := answering[route.Owner]; taken {
+				return nil, providerkit.Refuse(providerkit.CodeInvalid,
+					"%s claims %s on this box and would forward it to %s and %s alike: a reverse proxy handler is terminal and these routes are written in name order, so %s answers every hostname this surface claims and %s is configuration nothing reaches. A box points a hostname at one app; give each app a domain of its own, or split them into a project each",
+					route.Owner, strings.Join(hostnames, ", "), held.App, route.App, held.App, route.App)
+			}
+			answering[route.Owner] = route
+		}
+		routes = append(routes, matching(route.identity(), hostnames, route.Upstream))
 	}
 	routes = append(routes, refusing(boxIdentity))
 
