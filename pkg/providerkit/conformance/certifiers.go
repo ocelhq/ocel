@@ -61,7 +61,7 @@ func RunCertifier(t *testing.T, certifier providerkit.Certifier, checks Certifie
 	})
 
 	t.Run("a held handle names what it terminates and who renews it", func(t *testing.T) {
-		for _, hostname := range checks.Hostnames {
+		for _, hostname := range certified(t, checks) {
 			cert := held(t, ctx, certifier, checks, hostname)
 			health, err := certifier.InspectCertificate(ctx, checks.Kind, hostname, cert)
 			if !health.Terminates {
@@ -76,7 +76,7 @@ func RunCertifier(t *testing.T, certifier providerkit.Certifier, checks Certifie
 	})
 
 	t.Run("a certificate ocel never requested is never ocel's to discard", func(t *testing.T) {
-		for _, hostname := range checks.Hostnames {
+		for _, hostname := range certified(t, checks) {
 			cert := held(t, ctx, certifier, checks, hostname)
 			if cert.Requested {
 				t.Errorf("Certificate(%s).Requested = true: Requested is a claim of delete authority and not a record of who did the work, and a provider that places no key material holds authority to remove none",
@@ -93,7 +93,7 @@ func RunCertifier(t *testing.T, certifier providerkit.Certifier, checks Certifie
 		if checks.Handle == nil {
 			t.Skip("this provider states no handle for a hostname, so there is nothing to compare against")
 		}
-		for _, hostname := range checks.Hostnames {
+		for _, hostname := range certified(t, checks) {
 			cert := held(t, ctx, certifier, checks, hostname)
 			if want := checks.Handle(hostname); cert.ID != want {
 				t.Errorf("Certificate(%s).ID = %q, want %q: nothing in the kit parses a handle, so it is the provider's own and must be the one it states",
@@ -106,6 +106,14 @@ func RunCertifier(t *testing.T, certifier providerkit.Certifier, checks Certifie
 		}
 	})
 
+}
+
+func certified(t *testing.T, checks CertifierChecks) []string {
+	t.Helper()
+	if len(checks.Hostnames) == 0 {
+		t.Skip("this suite names no hostname to mint a handle for, and a loop over none of them reports a pass having held this provider to nothing")
+	}
+	return checks.Hostnames
 }
 
 func held(t *testing.T, ctx context.Context, certifier providerkit.Certifier, checks CertifierChecks, hostname string) providerkit.Certificate {
