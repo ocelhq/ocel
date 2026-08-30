@@ -120,13 +120,17 @@ func standingDaemon(t *testing.T) *daemonLog {
 	return log
 }
 
-func pulling(t *testing.T, machine *box, target providerkit.RegistryTarget) providerkit.ImageStore {
+func provisioning(t *testing.T, machine *box) *vps.Provider {
 	t.Helper()
-	p := vps.ProviderOver(
+	return vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
-	store, err := p.Images(context.Background(), target)
+}
+
+func pulling(t *testing.T, machine *box, target providerkit.RegistryTarget) providerkit.ImageStore {
+	t.Helper()
+	store, err := provisioning(t, machine).Images(context.Background(), target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,19 +371,29 @@ func TestAMachineMissingADigestTheRegistryHoldsPullsWithoutASecondPush(t *testin
 	}
 }
 
-func TestAPasswordWithNoLoginNameIsRefusedRatherThanPulledAnonymously(t *testing.T) {
-	standingDaemon(t)
-	server, _ := standingRegistry(t)
+func TestAPasswordWithNoLoginNameIsRefusedBeforeTheImageIsPublished(t *testing.T) {
+	daemon := standingDaemon(t)
+	server, registry := standingRegistry(t)
 	machine := &box{}
 	target := aTarget(server)
 	target.Username = ""
 
-	err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil)
+	ctx := context.Background()
+	store, err := provisioning(t, machine).Images(ctx, target)
 	if err == nil {
-		t.Fatal("Push() = nil over a registry password no login name goes with, so the machine pulled anonymously from a private registry")
+		err = store.Push(ctx, aPull(target), nil)
+	}
+	if err == nil {
+		t.Fatal("the deploy took a registry password no login name goes with, so the machine pulled anonymously from a private registry")
 	}
 	if !strings.Contains(err.Error(), "username") {
-		t.Errorf("Push() = %v, want the missing login name named", err)
+		t.Errorf("the refusal reads %v, want the missing login name named", err)
+	}
+	if pushed := daemon.pushes(); len(pushed) != 0 {
+		t.Errorf("the deploy published %v and refused afterwards, so the image stands in a registry over a credential ocel would not use", pushed)
+	}
+	if reads := registry.reads(); len(reads) != 0 {
+		t.Errorf("the registry was reached as %v under a password with no login name to present it under", reads)
 	}
 }
 
