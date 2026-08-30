@@ -238,6 +238,18 @@ message DeployRequest {
   EdgeSelection edge = 4;
 
   bool dry = 5;
+
+  ImageRegistry image_registry = 6;
+}
+
+message ImageRegistry {
+  string server = 1;
+
+  string namespace = 2;
+
+  string username = 3;
+
+  string password = 4 [debug_redact = true];
 }
 
 message BootstrapRequest {
