@@ -21,14 +21,17 @@ const (
 )
 
 const (
-	exitRefused   = 2
-	exitUnhealthy = 3
-	exitSilent    = 4
+	exitRefused        = 2
+	exitUnhealthy      = 3
+	exitSilent         = 4
+	exitUnattributable = 5
 )
 
 const (
-	gateInterval = 250 * time.Millisecond
-	gateAttempt  = 2 * time.Second
+	gateInterval  = 250 * time.Millisecond
+	gateAttempt   = 2 * time.Second
+	drainInterval = 250 * time.Millisecond
+	drainExpired  = "drain-expired"
 )
 
 const (
@@ -119,6 +122,50 @@ func gating(target, path string, window time.Duration, out, errs io.Writer) int 
 	fmt.Fprintln(out, status)
 	fmt.Fprintf(errs, "%s answered %s with status %d and never with a 2xx within %s\n", target, path, status, window)
 	return exitUnhealthy
+}
+
+type upstream struct {
+	Address     string `json:"address"`
+	NumRequests int    `json:"num_requests"`
+}
+
+func draining(socket, address string, window time.Duration, out, errs io.Writer) int {
+	deadline := time.Now().Add(window)
+	inFlight := 0
+	for {
+		var read strings.Builder
+		if code := ask(socket, upstreamsPath, &read, errs); code != 0 {
+			return code
+		}
+		var pool []upstream
+		if err := json.Unmarshal([]byte(read.String()), &pool); err != nil {
+			fmt.Fprintf(errs, "ocel-proxyctl: the proxy's upstreams read as %q rather than the pool a drain is counted from: %v\n",
+				strings.TrimSpace(read.String()), err)
+			return exitUnattributable
+		}
+		held := -1
+		for _, up := range pool {
+			if up.Address == address {
+				held = up.NumRequests
+			}
+		}
+		if held < 0 {
+			fmt.Fprintf(errs, "ocel-proxyctl: %s carries no upstream %s, so nothing here can say whether it is still serving; "+
+				"the retired upstream is declared on the drain server precisely so its count stays readable, and a proxy that drops it from the pool before it is free has changed when an upstream leaves\n",
+				upstreamsPath, address)
+			return exitUnattributable
+		}
+		if held == 0 {
+			return 0
+		}
+		inFlight = held
+		if time.Now().Add(drainInterval).After(deadline) {
+			break
+		}
+		time.Sleep(drainInterval)
+	}
+	fmt.Fprintf(out, "%s %s %d\n", drainExpired, address, inFlight)
+	return 0
 }
 
 func flip(socket, path string, out, errs io.Writer) int {
