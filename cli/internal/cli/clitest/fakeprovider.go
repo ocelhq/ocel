@@ -796,7 +796,19 @@ func journalHostnames(req *contractv1.HostnameRequest) {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "slug=%s configured=%s probe=%v\n", req.GetSlug(), strings.Join(req.GetConfigured(), ","), req.GetProbe())
+	fmt.Fprintf(f, "slug=%s configured=%s probe=%v\n", req.GetSlug(), strings.Join(journalledHosts(req.GetConfigured()), ","), req.GetProbe())
+}
+
+func journalledHosts(configured []*contractv1.ConfiguredHostname) []string {
+	named := make([]string, 0, len(configured))
+	for _, host := range configured {
+		if host.GetApp() == "" {
+			named = append(named, host.GetHostname())
+			continue
+		}
+		named = append(named, host.GetHostname()+"@"+host.GetApp())
+	}
+	return named
 }
 
 func journalPreflight(req *contractv1.PreflightRequest) {
