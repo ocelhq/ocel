@@ -14,30 +14,33 @@ type CertifierChecks struct {
 	Hostnames []string
 
 	Handle func(hostname string) string
-
-	Requests bool
 }
 
 func runCertifier(t *testing.T, suite Suite) {
 	t.Helper()
 
-	if suite.Certifier == nil {
-		t.Skip("this provider declares no certifier behaviour, so there is nothing here to hold it to")
-	}
 	construct := suite.New
 	if construct == nil {
 		construct = suite.Spec.New
 	}
 	if construct == nil {
+		if suite.Certifier == nil {
+			t.Skip("this suite carries no constructor and declares no certifier behaviour, so there is nothing here to hold anything to")
+		}
 		t.Fatal("the suite declares certifier behaviour and carries no constructor, so there is no provider to run it against")
 	}
 	provider, err := construct(context.Background(), suite.Options)
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider", err)
 	}
-	certifier, ok := provider.(providerkit.Certifier)
-	if !ok {
+	certifier, held := provider.(providerkit.Certifier)
+	switch {
+	case !held && suite.Certifier == nil:
+		t.Skip("this provider implements no Certifier and the suite declares none, so there is nothing here to hold it to")
+	case !held:
 		t.Fatal("the suite declares certifier behaviour and the provider implements no Certifier, so `ocel domain status` blanks the certificate and renewal lines on it")
+	case suite.Certifier == nil:
+		t.Fatal("this provider implements Certifier and the suite states no checks for it, so the only tier that holds a certifier to anything skips over it. A provider opts out by certifying nothing, never by leaving the field off")
 	}
 	RunCertifier(t, certifier, *suite.Certifier)
 }
@@ -57,7 +60,7 @@ func RunCertifier(t *testing.T, certifier providerkit.Certifier, checks Certifie
 		}
 	})
 
-	t.Run("nothing about a handle is decided by asking the edge", func(t *testing.T) {
+	t.Run("a held handle names what it terminates and who renews it", func(t *testing.T) {
 		for _, hostname := range checks.Hostnames {
 			cert := held(t, ctx, certifier, checks, hostname)
 			health, err := certifier.InspectCertificate(ctx, checks.Kind, hostname, cert)
@@ -75,12 +78,9 @@ func RunCertifier(t *testing.T, certifier providerkit.Certifier, checks Certifie
 	t.Run("a certificate ocel never requested is never ocel's to discard", func(t *testing.T) {
 		for _, hostname := range checks.Hostnames {
 			cert := held(t, ctx, certifier, checks, hostname)
-			if cert.Requested != checks.Requests {
-				t.Errorf("Certificate(%s).Requested = %v, want %v: Requested is a claim of delete authority and not a record of who did the work",
-					hostname, cert.Requested, checks.Requests)
-			}
-			if checks.Requests {
-				continue
+			if cert.Requested {
+				t.Errorf("Certificate(%s).Requested = true: Requested is a claim of delete authority and not a record of who did the work, and a provider that places no key material holds authority to remove none",
+					hostname)
 			}
 			if err := certifier.DiscardCertificate(ctx, cert, edge.DiscardReporter()); err != nil {
 				t.Errorf("DiscardCertificate(%s) = %v, want nil: the kit short-circuits on Requested, so this is unreachable and must not refuse if it is ever reached",
