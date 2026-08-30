@@ -479,6 +479,25 @@ func TestAnAppPlanNamesTheCoordinateTheProviderWillHoldRatherThanTheOneTheBuildL
 	}
 }
 
+func TestAnAppPlanNamesTheTaggedCoordinateADirectTransferLanded(t *testing.T) {
+	builtProject(t)
+	client, provider := loadServed(t)
+
+	result, _ := deploy(t, client, containerDeployRequest("/"))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	plans := provider.Releases().(*fake.Releaser).Plans()
+	app := plans[len(plans)-1].App
+	if app == nil {
+		t.Fatal("the last plan the releaser saw stands up no app")
+	}
+	if app.Image != loadedCoordinate {
+		t.Errorf("Image = %q, want %q: a box takes the image under the tag the transfer landed, and the digest ref the build left names nothing the box can list, run or hold in a window", app.Image, loadedCoordinate)
+	}
+}
+
 func TestTheStagedRecordNamesTheImageThatReleaseRuns(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
