@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -84,12 +85,20 @@ func (edges) Open(kind edge.Kind) (edge.Edge, error) {
 
 type dns struct{}
 
-func (dns) Supported() []providerkit.DNSKind { return nil }
+const dnsCloudflare = providerkit.DNSKind(cloudflare.Kind)
+
+func (dns) Supported() []providerkit.DNSKind {
+	return []providerkit.DNSKind{dnsCloudflare}
+}
 
 func (dns) Default() providerkit.DNSKind { return "" }
 
-func (dns) Open(kind providerkit.DNSKind, _ string) (edge.DNSWriter, error) {
-	return nil, providerkit.Refuse(providerkit.CodeInvalid, "the vps provider writes no dns %q", kind)
+func (dns) Open(kind providerkit.DNSKind, zone string) (edge.DNSWriter, error) {
+	if kind != dnsCloudflare {
+		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			"this provider cannot write DNS records with %q; it writes them with %s", kind, dnsCloudflare)
+	}
+	return cloudflare.NewDNS(zone)
 }
 
 var (
