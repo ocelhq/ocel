@@ -73,6 +73,8 @@ func closing(t *testing.T, p *vps.Provider) {
 }
 
 func TestLiveTheMachineAnswersEveryPortTheConformanceSuiteAsks(t *testing.T) {
+	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
+
 	p := live(t).provider(t)
 	defer closing(t, p)
 
