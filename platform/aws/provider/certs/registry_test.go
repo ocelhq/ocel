@@ -10,12 +10,6 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const (
-	unboundEdgeKind      edge.Kind = "unbound-edge"
-	frontedEdgeKind      edge.Kind = "fronted-edge"
-	otherFrontedEdgeKind edge.Kind = "other-fronted-edge"
-)
-
 type uncertifiedEdge struct{ edge.Edge }
 
 type certifyingEdge struct {
