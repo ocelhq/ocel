@@ -294,6 +294,6 @@ func proxyRemovals() []removal {
 		taking(KindProxyConfig, ProxyConfig,
 			"the routes every app deployed onto this host is reached through, which no deploy renders again"),
 		taking(KindDir, proxyRoot, "what the proxy serves"),
-		sharing(ProxyPins),
+		sharing(ProxyPins, "the one directory a certificate pair pinned by an operator is loaded from, reclaimed only if it is empty: any pair you placed there stays, because ocel never placed one"),
 	}
 }

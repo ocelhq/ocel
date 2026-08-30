@@ -415,8 +415,8 @@ func taking(kind, path, reason string) removal {
 	return removal{kind: kind, path: path, reason: reason, action: providerkit.ActionDelete}
 }
 
-func sharing(path string) removal {
-	return removal{kind: KindDir, path: path, action: providerkit.ActionDelete, shared: true}
+func sharing(path, reason string) removal {
+	return removal{kind: KindDir, path: path, reason: reason, action: providerkit.ActionDelete, shared: true}
 }
 
 func (r removal) command() string {
@@ -461,16 +461,16 @@ func removing(read, sibling Reading) []removal {
 		beneath = append(beneath,
 			taking(KindDir, sshDir, "the deploy login's own key store, which nothing but ocel ever wrote"),
 			taking(KindDir, releasesRoot, "the window naming which images this host still owes a rollback to; the images themselves stay, because what this host runs stays when ocel goes"),
-			sharing(stateRoot),
+			sharing(stateRoot, ""),
 			taking(KindUser, deployUser, "the login every deploy onto this host runs as"),
 			taking(KindFile, sudoersSeal, ""),
 			taking(KindFile, recordsHelper, ""),
 			taking(KindFile, releasesHelper, ""),
 			taking(KindFile, SealHelper, ""),
 			taking(KindFile, ProxyHelper, ""),
-			sharing(helperRoot),
+			sharing(helperRoot, ""),
 		)
-		above = []removal{sharing(classRoot)}
+		above = []removal{sharing(classRoot, "")}
 	}
 	ordered := slices.Concat(beneath, stamp, above)
 
