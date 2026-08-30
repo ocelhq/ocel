@@ -24,7 +24,7 @@ func aContainer() Container {
 
 func imaging(b *bench, held string) {
 	b.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, "State.Running") {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, quoted(servingSelectors())) {
 			return session.Result{Stdout: held + "\n"}, true
 		}
 		return session.Result{}, false
@@ -86,7 +86,7 @@ func TestNoPortIsPublishedForAnAppContainerAndNoListenerIsAddedAnywhere(t *testi
 func TestAContainerAlreadyServingTheReleasesImageIsKeptRatherThanRecreated(t *testing.T) {
 	t.Parallel()
 
-	stand := stood(t, "true "+appImage)
+	stand := stood(t, "running "+appImage)
 	for _, command := range stand.commands() {
 		if strings.Contains(command, quoted("run")+" "+quoted("--detach")) {
 			t.Errorf("a redeploy of a release already standing ran %q, and the container serving live traffic is torn down for one that is the same", command)
@@ -97,7 +97,7 @@ func TestAContainerAlreadyServingTheReleasesImageIsKeptRatherThanRecreated(t *te
 func TestAContainerStandingUnderAnotherImageIsReplacedRatherThanLeftServing(t *testing.T) {
 	t.Parallel()
 
-	stand := stood(t, "true ocel/web:sha256-older")
+	stand := stood(t, "running ocel/web:sha256-older")
 	command := ranContainer(t, stand)
 	if !strings.Contains(command, "docker rm --force "+quoted(physical)) && !strings.Contains(strings.Join(stand.commands(), "\n"), "docker rm --force "+quoted(physical)) {
 		t.Errorf("the name was reused without taking the container holding it: %v", stand.commands())
@@ -187,8 +187,12 @@ func TestWhatIsAlreadyServingIsReadFromWhereADaemonKeepsIt(t *testing.T) {
 	if !strings.Contains(servingCommand(physical), quoted(servingSelectors())) {
 		t.Fatalf("the serving check reads %q and no longer asks the daemon for the format it reads", servingCommand(physical))
 	}
-	if said := rendering(t, servingSelectors()); said != "true "+fixtureRef {
-		t.Errorf("a running container labelled %s reads as %q, and a release would stand a second copy of what is already up", fixtureRef, said)
+	said := rendering(t, servingSelectors())
+	if !strings.HasSuffix(said, " "+fixtureRef) {
+		t.Errorf("a container labelled %s reads as %q, and a redeploy of the image already up would tear it down for the same one", fixtureRef, said)
+	}
+	if said == "running "+fixtureRef {
+		t.Errorf("a crash-looping container reads as %q, and a redeploy is kept off a container that serves nothing", said)
 	}
 }
 
