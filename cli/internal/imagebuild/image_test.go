@@ -24,6 +24,25 @@ func TestTheImageIsNamedAfterTheAppAndAddressedByItsDigest(t *testing.T) {
 	}
 }
 
+func TestAnAppNameNoRepositoryCanBeDerivedFromIsRefusedAtTheCoordinate(t *testing.T) {
+	if _, err := imageFor(strings.Repeat("a", maxRepository), someDigest); err == nil {
+		t.Error("imageFor() named a repository longer than docker holds, so the build fails at the daemon rather than at the coordinate")
+	}
+}
+
+func TestAnAppNamedInSymbolsAloneIsStillGivenARepository(t *testing.T) {
+	for _, app := range []string{"", "***", "-", "9lives"} {
+		image, err := imageFor(app, someDigest)
+		if err != nil {
+			t.Errorf("imageFor(%q) = %v, want a repository derived from what the name leaves", app, err)
+			continue
+		}
+		if !namePattern.MatchString(strings.TrimPrefix(image.Repository, repositoryPrefix)) {
+			t.Errorf("imageFor(%q) named %q, which is no repository docker can hold", app, image.Repository)
+		}
+	}
+}
+
 func TestAnImageWithNoDigestIsRefusedRatherThanNamedAfterNothing(t *testing.T) {
 	for _, digest := range []string{"", "latest", "sha256:short", "md5:30b585f5c19dd011bedba3bd1ca35d5b53d9db693b3f36295a09fa0a8d77c239"} {
 		if _, err := imageFor("web", digest); err == nil {
