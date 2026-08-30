@@ -7,7 +7,10 @@ import (
 	"testing"
 )
 
-const dnsWriter = "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+const (
+	repo      = "github.com/ocelhq/ocel/"
+	dnsWriter = repo + "platform/edge/cloudflare/deploy"
+)
 
 var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/platform/vps/provider":  true,
@@ -38,7 +41,9 @@ func TestTheProviderReachesNoCloudAndNoGoSSHStackOfItsOwn(t *testing.T) {
 	t.Parallel()
 
 	writers := depsOf(t, dnsWriter)
-	own := slices.DeleteFunc(depsOf(t, "./..."), func(pkg string) bool { return slices.Contains(writers, pkg) })
+	own := slices.DeleteFunc(depsOf(t, "./..."), func(pkg string) bool {
+		return !strings.HasPrefix(pkg, repo) && slices.Contains(writers, pkg)
+	})
 
 	for _, pkg := range own {
 		if module, ok := ocelModuleOf(pkg); ok && !reachable[module] {
@@ -88,7 +93,6 @@ func depsOf(t *testing.T, pattern string) []string {
 }
 
 func ocelModuleOf(pkg string) (string, bool) {
-	const repo = "github.com/ocelhq/ocel/"
 	if !strings.HasPrefix(pkg, repo) {
 		return "", false
 	}
