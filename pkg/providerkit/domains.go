@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -163,18 +164,32 @@ func (s *EdgeStackState) Forget(hostname string) {
 	}
 }
 
-func productionHosts(hosts []string) ([]string, error) {
-	var out []string
+type ConfiguredHost struct {
+	Hostname string
+	App      string
+}
+
+func productionHosts(hosts []*contractv1.ConfiguredHostname) ([]ConfiguredHost, error) {
+	var out []ConfiguredHost
 	for _, raw := range hosts {
-		host, err := productionHost(raw)
+		host, err := productionHost(raw.GetHostname())
 		if err != nil {
 			return nil, err
 		}
-		if host != "" && !slices.Contains(out, host) {
-			out = append(out, host)
+		if host == "" || slices.ContainsFunc(out, func(held ConfiguredHost) bool { return held.Hostname == host }) {
+			continue
 		}
+		out = append(out, ConfiguredHost{Hostname: host, App: raw.GetApp()})
 	}
 	return out, nil
+}
+
+func hostnamesOf(hosts []ConfiguredHost) []string {
+	named := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		named = append(named, host.Hostname)
+	}
+	return named
 }
 
 func productionHost(raw string) (string, error) {

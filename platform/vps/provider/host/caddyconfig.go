@@ -53,6 +53,22 @@ type AppRoute struct {
 type HostClaim struct {
 	Hostname string
 	Owner    string
+	App      string
+}
+
+type claimKey struct {
+	Owner string
+	App   string
+}
+
+func (c HostClaim) key() claimKey { return claimKey{Owner: c.Owner, App: c.App} }
+
+func (c HostClaim) identity() string {
+	fields := []string{c.Owner, c.Hostname}
+	if c.App != "" {
+		fields = append(fields, c.App)
+	}
+	return claimIdentity + strings.Join(fields, claimSeparator)
 }
 
 type Pin struct {
@@ -221,7 +237,7 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 		return nil, err
 	}
 	routes := make([]caddyRoute, 0, len(state.Claims)+len(state.Routes)+1)
-	claimed := map[string][]string{}
+	claimed := map[claimKey][]string{}
 	for _, claim := range slices.SortedFunc(slices.Values(state.Claims), func(a, b HostClaim) int {
 		return strings.Compare(a.Hostname, b.Hostname)
 	}) {
@@ -229,25 +245,45 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 			return nil, err
 		}
 		routes = append(routes, caddyRoute{
-			Identity: claimIdentity + claim.Owner + claimSeparator + claim.Hostname,
+			Identity: claim.identity(),
 			Match:    []caddyMatch{{Host: []string{claim.Hostname}}},
 			Handle:   []caddyForward{},
 		})
-		claimed[claim.Owner] = append(claimed[claim.Owner], claim.Hostname)
+		claimed[claim.key()] = append(claimed[claim.key()], claim.Hostname)
 	}
-	answering := map[string]AppRoute{}
-	for _, route := range slices.SortedFunc(slices.Values(state.Routes), byKey) {
+	standing := slices.SortedFunc(slices.Values(state.Routes), byKey)
+	running := map[string][]string{}
+	for _, route := range standing {
 		if err := validRoute(route); err != nil {
 			return nil, err
 		}
-		hostnames := claimed[route.Owner]
-		if len(hostnames) > 0 {
-			if held, taken := answering[route.Owner]; taken {
+		if !slices.Contains(running[route.Owner], route.App) {
+			running[route.Owner] = append(running[route.Owner], route.App)
+		}
+	}
+	for _, owner := range slices.Sorted(maps.Keys(running)) {
+		wide := claimed[claimKey{Owner: owner}]
+		if len(wide) == 0 || len(running[owner]) == 1 {
+			continue
+		}
+		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			"%s claims %s on this box and runs %s: a reverse proxy handler is terminal, so whichever app sorted first would answer every one of those hostnames and the rest would be configuration nothing reaches. Declare the hostname under the app that serves it — domains.production on the app rather than on the project — and run this again",
+			owner, strings.Join(wide, ", "), strings.Join(running[owner], " and "))
+	}
+	answering := map[string]AppRoute{}
+	for _, route := range standing {
+		hostnames := claimed[claimKey{Owner: route.Owner, App: route.App}]
+		if len(running[route.Owner]) == 1 {
+			hostnames = append(slices.Clone(hostnames), claimed[claimKey{Owner: route.Owner}]...)
+		}
+		slices.Sort(hostnames)
+		for _, hostname := range hostnames {
+			if held, taken := answering[hostname]; taken {
 				return nil, providerkit.Refuse(providerkit.CodeInvalid,
-					"%s claims %s on this box and would forward it to %s and %s alike: a reverse proxy handler is terminal and these routes are written in name order, so %s answers every hostname this surface claims and %s is configuration nothing reaches. A box points a hostname at one app; give each app a domain of its own, or split them into a project each",
-					route.Owner, strings.Join(hostnames, ", "), held.App, route.App, held.App, route.App)
+					"%s is claimed on this box and would be forwarded by %s and %s alike: a reverse proxy handler is terminal, so the second of those routes is configuration nothing reaches",
+					hostname, held.identity(), route.identity())
 			}
-			answering[route.Owner] = route
+			answering[hostname] = route
 		}
 		routes = append(routes, matching(route.identity(), hostnames, route.Upstream))
 	}
@@ -380,11 +416,15 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 			continue
 		}
 		if claim, mine := strings.CutPrefix(route.Identity, claimIdentity); mine {
-			owner, hostname, split := strings.Cut(claim, claimSeparator)
-			if !split || !claimsOnly(route, hostname) {
+			fields := strings.Split(claim, claimSeparator)
+			if len(fields) < 2 || len(fields) > 3 || slices.Contains(fields, "") || !claimsOnly(route, fields[1]) {
 				return ProxyState{}, unwritten("route", route.Identity)
 			}
-			state.Claims = append(state.Claims, HostClaim{Hostname: hostname, Owner: owner})
+			held := HostClaim{Hostname: fields[1], Owner: fields[0]}
+			if len(fields) == 3 {
+				held.App = fields[2]
+			}
+			state.Claims = append(state.Claims, held)
 			continue
 		}
 		named, keyed := strings.CutPrefix(route.Identity, routeIdentity)
@@ -448,10 +488,10 @@ func validClaim(claim HostClaim) error {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"a hostname claim on this box names host %q and surface %q, and %s answers which surface claims a host out of both",
 			claim.Hostname, claim.Owner, ProxyConfig)
-	case strings.Contains(claim.Owner, claimSeparator) || strings.Contains(claim.Hostname, claimSeparator):
+	case strings.Contains(claim.Owner, claimSeparator) || strings.Contains(claim.Hostname, claimSeparator) || strings.Contains(claim.App, claimSeparator):
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the claim of %q by %q carries %q, which is what separates the surface from the host it claims",
-			claim.Hostname, claim.Owner, claimSeparator)
+			"the claim of %q by %q under app %q carries %q, which is what separates the surface, the host it claims and the app it was declared under",
+			claim.Hostname, claim.Owner, claim.App, claimSeparator)
 	}
 	return nil
 }

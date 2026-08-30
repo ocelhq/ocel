@@ -69,7 +69,7 @@ func TestAddHostnameBindsWritesAndRecordsTheProbe(t *testing.T) {
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -106,7 +106,7 @@ func TestAddHostnameOwesTheRecordsWhenNoWriterIsSelected(t *testing.T) {
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 	})
 	if err != nil {
 		t.Fatalf("AddHostname() error = %v", err)
@@ -139,7 +139,7 @@ func TestAddHostnameRefusesAHostTheProjectDoesNotDeclare(t *testing.T) {
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Host:       "other.acme.com",
 	})
 	if err != nil {
@@ -156,7 +156,7 @@ func TestAddHostnameRefusesAProjectWithNoProductionDeploy(t *testing.T) {
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 	})
 	if err != nil {
 		t.Fatalf("AddHostname() error = %v", err)
@@ -177,7 +177,7 @@ func TestGetHostnameStatusReportsWhatIsPending(t *testing.T) {
 
 	before, err := client.GetHostnameStatus(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 	})
 	if err != nil {
 		t.Fatalf("GetHostnameStatus() error = %v", err)
@@ -191,7 +191,7 @@ func TestGetHostnameStatusReportsWhatIsPending(t *testing.T) {
 
 	settle, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -203,7 +203,7 @@ func TestGetHostnameStatusReportsWhatIsPending(t *testing.T) {
 
 	after, err := client.GetHostnameStatus(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -228,7 +228,7 @@ func TestRemoveHostnameUnbindsAndReleasesItsRecords(t *testing.T) {
 
 	add, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -291,7 +291,7 @@ func TestAddHostnameBindsTheCertificateItsProviderSettles(t *testing.T) {
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -318,7 +318,7 @@ func TestAddHostnameRefusesWhenNoCertificateCanBeSettled(t *testing.T) {
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -350,7 +350,7 @@ func TestAddHostnameSettlesTheValidationRecordsItsProviderProves(t *testing.T) {
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -397,7 +397,7 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -425,7 +425,7 @@ func addHostname(t *testing.T, client contractv1connect.ProviderServiceClient) *
 	t.Helper()
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -522,7 +522,7 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -568,7 +568,7 @@ func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) 
 
 	status, err := client.GetHostnameStatus(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -604,7 +604,7 @@ func TestGetHostnameStatusReadsTheRecordedProbeUnlessAskedToCheckLive(t *testing
 
 	listed, err := client.GetHostnameStatus(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 	})
 	if err != nil {
@@ -616,7 +616,7 @@ func TestGetHostnameStatusReadsTheRecordedProbeUnlessAskedToCheckLive(t *testing
 
 	checked, err := client.GetHostnameStatus(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: []string{"app.acme.com"},
+		Configured: configuredHosts("app.acme.com"),
 		Edge:       zoned("acme.com"),
 		Probe:      true,
 	})
@@ -626,4 +626,12 @@ func TestGetHostnameStatusReadsTheRecordedProbeUnlessAskedToCheckLive(t *testing
 	if at := checked.GetHostnames()[0].GetCertificate().GetLastProbeAt(); at == 1755500000 {
 		t.Errorf("last probe when the caller asked to check live = %d, want a fresh reading: `ocel domain status` is the acceptance test for a bind and answering it from the record would report a hostname as serving long after it stopped", at)
 	}
+}
+
+func configuredHosts(named ...string) []*contractv1.ConfiguredHostname {
+	wired := make([]*contractv1.ConfiguredHostname, 0, len(named))
+	for _, host := range named {
+		wired = append(wired, &contractv1.ConfiguredHostname{Hostname: host})
+	}
+	return wired
 }

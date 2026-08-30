@@ -73,23 +73,44 @@ func Frameworks(cfg *projectconfig.Config) []string {
 	return slices.Compact(frameworks)
 }
 
-func Hostnames(cfg *projectconfig.Config, class string) []string {
-	var hosts []string
+type Hostname struct {
+	Name string
+	App  string
+}
+
+func Hostnames(cfg *projectconfig.Config, class string) []Hostname {
+	var hosts []Hostname
 	seen := map[string]bool{}
-	add := func(domains map[string][]string) {
+	add := func(domains map[string][]string, app string) {
 		for _, host := range domains[class] {
 			if seen[host] {
 				continue
 			}
 			seen[host] = true
-			hosts = append(hosts, host)
+			hosts = append(hosts, Hostname{Name: host, App: app})
 		}
 	}
-	add(cfg.Domains)
+	add(cfg.Domains, "")
 	for _, app := range cfg.Apps {
-		add(app.Domains)
+		add(app.Domains, app.Name)
 	}
 	return hosts
+}
+
+func Names(hosts []Hostname) []string {
+	named := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		named = append(named, host.Name)
+	}
+	return named
+}
+
+func Configured(hosts []Hostname) []*contractv1.ConfiguredHostname {
+	wired := make([]*contractv1.ConfiguredHostname, 0, len(hosts))
+	for _, host := range hosts {
+		wired = append(wired, &contractv1.ConfiguredHostname{Hostname: host.Name, App: host.App})
+	}
+	return wired
 }
 
 func checkTier(infra, required environmentv1.Tier) error {

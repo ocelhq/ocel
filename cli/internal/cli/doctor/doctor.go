@@ -154,7 +154,7 @@ func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io
 
 	hosts := map[environmentv1.Tier][]string{}
 	for _, tier := range tiers {
-		hosts[tier] = preflight.Hostnames(cfg, bootstrap.Name(tier))
+		hosts[tier] = preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier)))
 	}
 	if len(hosts[environmentv1.Tier_TIER_PREVIEW]) == 0 {
 		project.warn("no preview domain declared", "add `domains: { preview: \"*.preview.example.com\" }` to your config")
@@ -289,7 +289,7 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 			resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
 				RequiredTier: tier,
 				Slug:         cfg.Slug,
-				Domains:      preflight.Hostnames(cfg, bootstrap.Name(tier)),
+				Domains:      preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))),
 				Frameworks:   preflight.Frameworks(cfg),
 				Edge:         edgewire.Selection(cfg),
 			})
