@@ -36,6 +36,9 @@ func fronting(t *testing.T, p *vps.Provider, slug string) (edge.Edge, edge.EdgeS
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: host.ProxyContainer}); err != nil {
+		t.Fatalf("BindDomain(%s): %v", host.ProxyContainer, err)
+	}
 	return front, stack
 }
 
@@ -150,6 +153,10 @@ func TestLiveAClaimedHostnameIsLoadedOntoTheProxyAndChangesNothingItServes(t *te
 	}
 	if served := servedBy(t, vm, "/"); served != "one" {
 		t.Errorf("the proxy served %q for every other hostname after the claim, want the release it served before it", served)
+	}
+	refused := vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: unclaimed.example.invalid")+" http://"+host.ProxyContainer+"/")
+	if !strings.Contains(refused, "404") || !strings.Contains(strings.ToLower(refused), strings.ToLower(host.EdgeHeader)+": "+host.EdgeName) {
+		t.Errorf("a hostname nothing on this box claims was answered with\n%s\nwant a bare 404 carrying %s: %s, because an empty 200 reads as healthy to everything that checks it", refused, host.EdgeHeader, host.EdgeName)
 	}
 
 	unclaimed, err := front.DomainOwner(ctx, "unclaimed.example.invalid")
