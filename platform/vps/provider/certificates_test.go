@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"math/big"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -195,8 +196,16 @@ func TestAnUnpinnedHostnameGetsTheProxysOwnHandleAndAsksNothingOfTheBox(t *testi
 	if len(cert.Written) != 0 || len(cert.Owed) != 0 {
 		t.Errorf("Certificate() owes records %v/%v, and an http-01 hostname owes no validation record", cert.Written, cert.Owed)
 	}
-	if len(machine.commands()) != 0 {
-		t.Errorf("minting a handle reached the box with %v, and a handle names a slot rather than a certificate that exists", machine.commands())
+	for _, command := range machine.commands() {
+		if strings.Contains(command, "docker logs") || strings.Contains(command, "docker version") {
+			continue
+		}
+		t.Errorf("minting a handle reached the box with %q: a handle names a slot rather than a certificate that exists, and the one thing the box is asked is what its own proxy was told by the CA", command)
+	}
+	if !slices.ContainsFunc(machine.commands(), func(command string) bool {
+		return strings.Contains(command, "docker logs") && strings.Contains(command, host.ProxyContainer)
+	}) {
+		t.Errorf("minting a handle asked the proxy nothing (%v), so a box the CA has already refused for this registered domain names a slot it knows will stay empty and the user is told when the browser tells them", machine.commands())
 	}
 	if err := p.DiscardCertificate(context.Background(), cert, edge.DiscardReporter()); err != nil {
 		t.Errorf("DiscardCertificate() = %v, want nil", err)

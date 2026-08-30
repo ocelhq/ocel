@@ -190,3 +190,23 @@ func managed(logs, managing, hostname string) bool {
 	}
 	return false
 }
+
+func TestAHostnameClaimedBeforeAnythingServesItIsOrderedForAllTheSame(t *testing.T) {
+	state := ProxyState{Grace: DrainWindow, Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}}
+	probingConfig(t, issuedByNobody(t, mustRender(t, state)))
+
+	const managing = "enabling automatic TLS certificate management"
+	var logs string
+	for range 100 {
+		if logs = logsOf(probeName(t)); managed(logs, managing, claimed) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !managed(logs, managing, claimed) {
+		t.Errorf("a hostname claimed on this box with nothing yet serving it is outside the automatic-https subject collection, so a project that binds a domain before its first deploy never gets a certificate and `ocel domain add` waits on a name that will never terminate tls:\n%s", logs)
+	}
+	if strings.Contains(logs, acmeDirectory) {
+		t.Errorf("the proxy reached a public CA from a package-level `go test`:\n%s", logs)
+	}
+}

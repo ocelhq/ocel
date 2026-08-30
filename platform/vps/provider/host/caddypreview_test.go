@@ -349,3 +349,48 @@ func TestAPreviewBaseNoPublicCaWillIssueForIsManagedInternallyAndReachesNoCaAtAl
 		t.Errorf("the proxy names the wildcard in its own log even where the exclusion holds:\n%s", logs)
 	}
 }
+
+func onDemandOn(t *testing.T, state ProxyState) string {
+	t.Helper()
+
+	var read map[string]any
+	if err := json.Unmarshal(mustRender(t, state), &read); err != nil {
+		t.Fatal(err)
+	}
+	read["apps"].(map[string]any)["tls"] = map[string]any{"automation": map[string]any{
+		"on_demand": map[string]any{"ask": "http://127.0.0.1:9/ask"},
+	}}
+	written, err := json.Marshal(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(written)
+}
+
+func TestDescribingABoxAssertsItsProxyDeclaresNoOnDemandTls(t *testing.T) {
+	t.Parallel()
+
+	for what, held := range map[string]string{
+		"a proxy ocel wrote":               string(mustRender(t, previewing())),
+		"a proxy somebody added on-demand": onDemandOn(t, previewing()),
+	} {
+		stood := &claimBench{bench: machine(nil), held: held}
+		stood.answer = servesProxy(stood.bench, &stood.held)
+		_, err := Bootstrap(stood.host()).described(context.Background(), standingHost())
+		if refused := err != nil; refused != strings.Contains(held, "on_demand") {
+			t.Errorf("describing %s = %v: caddy only warns about an on-demand policy carrying no permission module and serves anyway, so `ocel doctor` and the bootstrap assert its absence rather than trusting a refusal that never comes", what, err)
+		}
+	}
+}
+
+func TestABaseTheOperatorTypedIsTheBaseTheyGet(t *testing.T) {
+	t.Parallel()
+
+	for _, base := range []string{"203.0.113.10.sslip.io", "nip.io", "preview.acme.co.uk", "internal"} {
+		usable := PreviewBaseUsable(base)
+		if strings.Contains(base, ".") != (usable == nil) {
+			t.Errorf("PreviewBaseUsable(%q) = %v: a base off the public suffix list shares a cookie origin with everything else under it, and that is a trade an operator makes knowingly by typing it — there is no vendor named here, no allowlist and no warning that ages",
+				base, usable)
+		}
+	}
+}
