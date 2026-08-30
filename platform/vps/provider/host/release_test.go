@@ -261,6 +261,36 @@ func TestAFirstDeployThatFailsLeavesNothingServingAndIsNotAPathOfItsOwn(t *testi
 	}
 }
 
+func TestAReleaseCarryingNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing.T) {
+	t.Parallel()
+
+	for what, path := range map[string]string{"an empty path": "", "a path of blanks": "  "} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			blank := aRelease()
+			blank.HealthPath = path
+			stood, err := released(t, blank, session.Result{}, nil)
+			if err == nil {
+				t.Fatalf("a release carrying %s released successfully", what)
+			}
+			var refusal providerkit.Refusal
+			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+				t.Errorf("a release carrying %s failed with %v, want the seam to name what is missing rather than the helper's usage error", what, err)
+			}
+			if !strings.Contains(err.Error(), healthKey) {
+				t.Errorf("a release carrying %s is refused with\n%s\nwhich never names the key that sets it", what, err)
+			}
+			if stood.at(quoted("deploy")) >= 0 {
+				t.Errorf("a release carrying %s reached the helper: %v", what, stood.commands())
+			}
+			if stood.at("cat > "+quoted(ProxyConfig)) >= 0 {
+				t.Errorf("a release carrying %s rewrote %s before it was refused: %v", what, ProxyConfig, stood.commands())
+			}
+		})
+	}
+}
+
 func TestAReleaseWithNothingToRetireNeverAsksForADrain(t *testing.T) {
 	t.Parallel()
 

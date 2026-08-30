@@ -40,6 +40,11 @@ func (r Release) retiredName() string {
 }
 
 func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Reporter) error {
+	if strings.TrimSpace(rel.HealthPath) == "" {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"release %s onto %s: nothing here names a health check path, and up means a 2xx on the path the wire named rather than on one this provider chose; set %q in your project configuration",
+			rel.App, h.named(), healthKey)
+	}
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
