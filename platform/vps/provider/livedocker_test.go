@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 const (
@@ -178,8 +179,11 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("an idle daemon plans %q for %s, want the unit enabled", unit.Action, unitName)
 	}
 	for _, change := range waking.Changes {
-		if change.Name != unitName && change.Action != providerkit.ActionKeep {
-			t.Errorf("stopping the daemon re-planned %s as %q, and nothing but the unit moved", change.Name, change.Action)
+		if change.Kind == host.KindNetwork || change.Kind == host.KindVolume || change.Kind == host.KindContainer || change.Name == unitName {
+			continue
+		}
+		if change.Action != providerkit.ActionKeep {
+			t.Errorf("stopping the daemon re-planned %s as %q, and nothing but the unit and what the daemon answers for moved", change.Name, change.Action)
 		}
 	}
 

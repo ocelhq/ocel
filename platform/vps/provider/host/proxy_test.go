@@ -155,7 +155,7 @@ func TestAProxyThatIsGoneIsPlannedBackAndAStandingOneIsLeftAlone(t *testing.T) {
 	}
 
 	stopped := digests(Items(class, keys))
-	stopped[containerItem().ID()] = digest(KindContainer, proxyContainer, 0, rootOwner,
+	stopped[containerItem().ID()] = digest(KindContainer, ProxyContainer, 0, rootOwner,
 		contentSum([]byte(strings.Replace(string(containerItem().Content), "state=running", "state=exited", 1))))
 	idle := Reading{Class: class, Keys: keys, Observed: stopped}
 	if idle.current(containerItem()) {
@@ -169,22 +169,22 @@ func TestAProxyThatIsGoneIsPlannedBackAndAStandingOneIsLeftAlone(t *testing.T) {
 func TestTheProxyIsPinnedByDigestAndNamedByNoTagAnywhere(t *testing.T) {
 	t.Parallel()
 
-	repo, hashed, split := strings.Cut(proxyImage, "@sha256:")
+	repo, hashed, split := strings.Cut(ProxyImage, "@sha256:")
 	if !split || len(hashed) != 64 || strings.Trim(hashed, "0123456789abcdef") != "" {
-		t.Fatalf("the proxy is pulled as %q, want a repository and a sha256 digest: a tag is a name its owner can repoint", proxyImage)
+		t.Fatalf("the proxy is pulled as %q, want a repository and a sha256 digest: a tag is a name its owner can repoint", ProxyImage)
 	}
 	if strings.Contains(repo, ":") {
-		t.Errorf("the proxy is pulled as %q, and the tag in it is what the digest was written to replace", proxyImage)
+		t.Errorf("the proxy is pulled as %q, and the tag in it is what the digest was written to replace", ProxyImage)
 	}
 	for what, written := range map[string]string{
 		"the run command":  containerCommand(),
 		"the item's facts": string(containerItem().Content),
 		"the plan's note":  containerItem().Note,
 	} {
-		if strings.Count(written, proxyImage) == 0 {
-			t.Errorf("%s never names %s", what, proxyImage)
+		if strings.Count(written, ProxyImage) == 0 {
+			t.Errorf("%s never names %s", what, ProxyImage)
 		}
-		if strings.Contains(strings.ReplaceAll(written, proxyImage, ""), "caddy:") {
+		if strings.Contains(strings.ReplaceAll(written, ProxyImage, ""), "caddy:") {
 			t.Errorf("%s carries a tag reference beside the digest:\n%s", what, written)
 		}
 	}
@@ -196,20 +196,20 @@ func TestTheProxyIsRestartedUnlessSomebodyStopsItAndSitsOnTheOneSharedNetwork(t 
 	command := containerCommand()
 	for _, flag := range []string{
 		quoted("--restart") + " " + quoted(proxyRestart),
-		quoted("--network") + " " + quoted(proxyNetwork),
+		quoted("--network") + " " + quoted(ProxyNetwork),
 	} {
 		if !strings.Contains(command, flag) {
 			t.Errorf("the proxy is run without %s:\n%s", flag, command)
 		}
 	}
 	facts := string(containerItem().Content)
-	for _, fact := range []string{"restart=" + proxyRestart, "networks=" + proxyNetwork + " ", "state=running"} {
+	for _, fact := range []string{"restart=" + proxyRestart, "networks=" + ProxyNetwork + " ", "state=running"} {
 		if !strings.Contains(facts, fact) {
 			t.Errorf("the proxy is surveyed without %q, so a host that lost it would never be told:\n%s", fact, facts)
 		}
 	}
-	if network := proxyItem(KindNetwork); network.Name != proxyNetwork {
-		t.Errorf("the network every target resolves across is %q, want %q written as state of its own", network.Name, proxyNetwork)
+	if network := proxyItem(KindNetwork); network.Name != ProxyNetwork {
+		t.Errorf("the network every target resolves across is %q, want %q written as state of its own", network.Name, ProxyNetwork)
 	}
 }
 
@@ -323,10 +323,10 @@ func TestTheHelperIsAFileTheProxyMayReadAndNothingThereMayWrite(t *testing.T) {
 	if helper.Mode&0o100 == 0 {
 		t.Errorf("%s is written %04o and nothing may execute it", ProxyHelper, helper.Mode)
 	}
-	if !slices.Contains(proxyBinds(), ProxyHelper+":"+proxyHelperMount+":ro") {
+	if !slices.Contains(proxyBinds(), ProxyHelper+":"+ProxyHelperMount+":ro") {
 		t.Errorf("%s is bound into the proxy as something other than a read-only file: %v", ProxyHelper, proxyBinds())
 	}
-	for _, serving := range []string{"file_server", proxyHelperMount, "\"root\""} {
+	for _, serving := range []string{"file_server", ProxyHelperMount, "\"root\""} {
 		if strings.Contains(string(proxyBaseline), serving) {
 			t.Errorf("the proxy config names %q, and the helper must sit outside anything the proxy would ever serve or execute from:\n%s", serving, proxyBaseline)
 		}
@@ -361,8 +361,8 @@ func TestAnUnattendedApplyWritesOcelsOwnProxyBackWithoutAsking(t *testing.T) {
 	class := providerkit.ClassProduction
 	keys := []byte(aKey + "\n")
 	observed := digests(Items(class, keys))
-	observed[containerItem().ID()] = digest(KindContainer, proxyContainer, 0, rootOwner, contentSum([]byte("state=exited\n")))
-	observed[networkItem().ID()] = digest(KindNetwork, proxyNetwork, 0, rootOwner, contentSum([]byte("moved\n")))
+	observed[containerItem().ID()] = digest(KindContainer, ProxyContainer, 0, rootOwner, contentSum([]byte("state=exited\n")))
+	observed[networkItem().ID()] = digest(KindNetwork, ProxyNetwork, 0, rootOwner, contentSum([]byte("moved\n")))
 
 	read := Reading{Class: class, Keys: keys, Observed: observed}
 	if err := refuseReplacements(read, Items(class, keys)); err != nil {
@@ -377,7 +377,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	keys := []byte(aKey + "\n")
 	standing := Reading{Class: production, Keys: keys, Observed: digests(Items(production, keys))}
 	beside := Reading{Class: preview, Keys: keys, Observed: digests(Items(preview, keys))}
-	proxied := []string{proxyContainer, proxyVolume, proxyNetwork, proxyRoot, ProxyHelper}
+	proxied := []string{ProxyContainer, ProxyVolume, ProxyNetwork, proxyRoot, ProxyHelper}
 
 	for _, taken := range removing(standing, beside) {
 		if slices.Contains(proxied, taken.path) && taken.action == providerkit.ActionDelete {
@@ -392,14 +392,14 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 			t.Errorf("destroying the last class plans %s as %q, want it taken: what ocel wrote is what ocel takes back", path, gone.action)
 		}
 	}
-	if reason := removalOf(last, proxyContainer).reason; reason == "" {
+	if reason := removalOf(last, ProxyContainer).reason; reason == "" {
 		t.Error("the proxy is taken with no reason, and the typed confirmation must name what goes before a user types")
 	}
-	if reason := removalOf(last, proxyVolume).reason; reason == "" {
+	if reason := removalOf(last, ProxyVolume).reason; reason == "" {
 		t.Error("the proxy's volume is taken with no reason, and every certificate it holds goes with it")
 	}
-	container := slices.IndexFunc(last, func(r removal) bool { return r.path == proxyContainer })
-	for _, after := range []string{proxyVolume, proxyNetwork, proxyRoot} {
+	container := slices.IndexFunc(last, func(r removal) bool { return r.path == ProxyContainer })
+	for _, after := range []string{ProxyVolume, ProxyNetwork, proxyRoot} {
 		if at := slices.IndexFunc(last, func(r removal) bool { return r.path == after }); at < container {
 			t.Errorf("%s is taken at %d and the container using it at %d, and nothing takes what a running container holds", after, at, container)
 		}
@@ -426,7 +426,7 @@ func TestRemovingTheProxyNamesOcelsOwnContainerAndNeverAsksTheEngineWhatElseItRu
 			}
 		}
 	}
-	if command := (removal{kind: KindNetwork, path: proxyNetwork}).command(); !strings.HasSuffix(command, "|| true") {
+	if command := (removal{kind: KindNetwork, path: ProxyNetwork}).command(); !strings.HasSuffix(command, "|| true") {
 		t.Errorf("the network is taken by %q, and a destroy fails on a host still running something attached to it", command)
 	}
 }
