@@ -210,6 +210,18 @@ func words(argv []string) string {
 
 type asking func(ctx context.Context, what, command string, stdin []byte) (string, error)
 
+type drawing struct {
+	ask   asking
+	owner bool
+}
+
+func (d drawing) survey(items []Item, also ...string) string {
+	if d.owner {
+		return surveyOwned(items, also...)
+	}
+	return survey(items, also...)
+}
+
 func (h *Host) run(ctx context.Context, what, command string, stdin []byte) (string, error) {
 	elevation, err := h.elevate(ctx)
 	if err != nil {
@@ -322,7 +334,7 @@ func (h *Host) Read(ctx context.Context, class providerkit.Class) (Reading, erro
 	if err != nil {
 		return Reading{}, err
 	}
-	return h.read(ctx, class, keys, h.run)
+	return h.read(ctx, class, keys, drawing{ask: h.run})
 }
 
 func (h *Host) Own(ctx context.Context, class providerkit.Class) (Reading, error) {
@@ -330,31 +342,31 @@ func (h *Host) Own(ctx context.Context, class providerkit.Class) (Reading, error
 	if err != nil {
 		return Reading{}, err
 	}
-	return h.read(ctx, class, keys, h.reach)
+	return h.read(ctx, class, keys, drawing{ask: h.reach, owner: true})
 }
 
 func (h *Host) Survey(ctx context.Context, class providerkit.Class) (Reading, error) {
-	return h.observing(ctx, class, nil, h.run)
+	return h.observing(ctx, class, nil, drawing{ask: h.run})
 }
 
-func (h *Host) observing(ctx context.Context, class providerkit.Class, keys []byte, ask asking) (Reading, error) {
+func (h *Host) observing(ctx context.Context, class providerkit.Class, keys []byte, drawn drawing) (Reading, error) {
 	arch, err := h.arch(ctx)
 	if err != nil {
 		arch = ArchAMD64
 	}
-	return h.surveyed(ctx, class, keys, arch, ask)
+	return h.surveyed(ctx, class, keys, arch, drawn)
 }
 
-func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte, ask asking) (Reading, error) {
+func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte, drawn drawing) (Reading, error) {
 	arch, err := h.arch(ctx)
 	if err != nil {
 		return Reading{}, err
 	}
-	return h.surveyed(ctx, class, keys, arch, ask)
+	return h.surveyed(ctx, class, keys, arch, drawn)
 }
 
-func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byte, arch string, ask asking) (Reading, error) {
-	rendered, err := ask(ctx, "survey what "+string(class)+" holds", survey(Items(class, keys, arch), StampPath(class)), nil)
+func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byte, arch string, drawn drawing) (Reading, error) {
+	rendered, err := drawn.ask(ctx, "survey what "+string(class)+" holds", drawn.survey(Items(class, keys, arch), StampPath(class)), nil)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -365,15 +377,15 @@ func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byt
 	return Reading{Class: class, Keys: keys, Arch: arch, Seal: held, Observed: observed}, nil
 }
 
-func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte, ask asking) (Reading, error) {
-	read, err := h.observe(ctx, class, keys, ask)
+func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte, drawn drawing) (Reading, error) {
+	read, err := h.observe(ctx, class, keys, drawn)
 	if err != nil {
 		return Reading{}, err
 	}
 	if _, stamped := read.Observed[KindFile+" "+StampPath(class)]; !stamped {
 		return read, nil
 	}
-	stamp, err := h.readStamp(ctx, class, ask)
+	stamp, err := h.readStamp(ctx, class, drawn.ask)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -403,6 +415,14 @@ func (h *Host) Stamp(ctx context.Context, class providerkit.Class, stamp Stamp) 
 }
 
 func survey(items []Item, also ...string) string {
+	return surveying(`[ -f "$p" ]`, items, also...)
+}
+
+func surveyOwned(items []Item, also ...string) string {
+	return surveying(`[ -f "$p" ] && [ -r "$p" ]`, items, also...)
+}
+
+func surveying(file string, items []Item, also ...string) string {
 	var probes, script strings.Builder
 	script.WriteString("for p in")
 	for _, item := range items {
@@ -419,7 +439,7 @@ func survey(items []Item, also ...string) string {
 	script.WriteString(`; do
 if [ -h "$p" ]; then ` + reports(quoted(kindLink), `"$p"`, `0`, `''`, `"$(readlink "$p")"`) + `
 elif [ -d "$p" ]; then ` + reports(quoted(KindDir), `"$p"`, stated, held, `''`) + `
-elif [ -f "$p" ] && [ -r "$p" ]; then ` + reports(quoted(KindFile), `"$p"`, stated, held, `"$(sha256sum "$p" | cut -d' ' -f1)"`) + `
+elif ` + file + `; then ` + reports(quoted(KindFile), `"$p"`, stated, held, `"$(sha256sum "$p" | cut -d' ' -f1)"`) + `
 fi
 done`)
 	return probes.String() + script.String()

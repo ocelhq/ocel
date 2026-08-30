@@ -282,22 +282,19 @@ func TestAKeyPathRelativeToNothingIsRefusedRatherThanGuessedAt(t *testing.T) {
 	}
 }
 
-func TestASurveyReportsNothingForAFileTheLoginDrawingItCannotRead(t *testing.T) {
+func TestOnlyTheOwnerDrawnSurveyPassesOverAFileItCannotRead(t *testing.T) {
 	t.Parallel()
 
 	if os.Geteuid() == 0 {
-		t.Skip("this test runs as root, which reads every mode, and the login a heal runs as is not root")
+		t.Skip("this test runs as root, which reads every mode, and the login a heal is drawn as is not root")
 	}
 	root := t.TempDir()
 	readable := filepath.Join(root, "records")
 	if err := os.WriteFile(readable, []byte("what every login may hash\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	sealed := filepath.Join(root, "ocel-proxyctl")
+	sealed := filepath.Join(root, proxyHelperName)
 	if err := os.WriteFile(sealed, []byte("what root alone may hash\n"), 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chown(sealed, os.Geteuid(), os.Getegid()); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(sealed, 0o000); err != nil {
@@ -308,16 +305,27 @@ func TestASurveyReportsNothingForAFileTheLoginDrawingItCannotRead(t *testing.T) 
 		{Kind: KindFile, Name: readable, Mode: 0o644, Owner: stateOwner},
 		{Kind: KindFile, Name: sealed, Mode: 0o750, Owner: rootOwner},
 	}
-	observed, _, err := readSurvey(sh(t, root, survey(items)))
+	whole, _, err := readSurvey(sh(t, root, survey(items)))
 	if err != nil {
-		t.Fatalf("readSurvey() over a tier holding a file this login may not read = %v", err)
+		t.Fatalf("the survey every write is planned against = %v over a tier holding a file this login may not read", err)
 	}
-	if _, held := observed[KindFile+" "+readable]; !held {
+	if _, held := whole[KindFile+" "+readable]; !held {
 		t.Fatalf("the survey read nothing at all for %s, so what it says about %s means nothing", readable, sealed)
 	}
-	if reported, held := observed[KindFile+" "+sealed]; held {
-		t.Errorf("the survey reports %s as %q, and a file it could not hash reads as one that moved: heal denies the whole set over a helper root owns and nothing else may read",
-			sealed, reported)
+	if reported := whole[KindFile+" "+sealed]; reported == items[1].Digest() {
+		t.Fatalf("the survey hashed %s without reading it, so this machine is not the one this test needs", sealed)
+	}
+	if _, held := whole[KindFile+" "+sealed]; !held {
+		t.Errorf("the survey every write is planned against reports nothing for %s, and absence is a lie on the reading a plan is drawn from: what it cannot read is drift it must name, not a path that is gone",
+			sealed)
+	}
+	owned, _, err := readSurvey(sh(t, root, surveyOwned(items)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, held := owned[KindFile+" "+sealed]; held {
+		t.Errorf("the survey a heal draws reports %s, and a file the drawing login could not hash reads as one that moved: heal denies the whole set over a helper root owns and nothing else may read",
+			sealed)
 	}
 }
 
