@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"net/netip"
 	"slices"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 type RecordType string
 
 const (
+	RecordTypeA     RecordType = "A"
 	RecordTypeAAAA  RecordType = "AAAA"
 	RecordTypeCNAME RecordType = "CNAME"
 )
@@ -33,7 +35,14 @@ func (r Record) Instruction() string {
 	if r.Proxied {
 		return fmt.Sprintf("add a proxied (orange cloud) DNS record at %s", r.Name)
 	}
-	return fmt.Sprintf("add a %s record at %s pointing to %s", r.Type, r.Name, r.Value)
+	return fmt.Sprintf("add %s %s record at %s pointing to %s", article(string(r.Type)), r.Type, r.Name, r.Value)
+}
+
+func article(word string) string {
+	if word == "" || !strings.ContainsRune("AEIOUaeiou", rune(word[0])) {
+		return "a"
+	}
+	return "an"
 }
 
 func (r Record) ApexNote(zone string) string {
@@ -139,9 +148,21 @@ func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 		if front == "" {
 			return nil, fmt.Errorf("nothing to point %s at: the %s edge published no hostname for this deployment", host, target.Kind)
 		}
-		records = append(records, Record{Name: host, Type: RecordTypeCNAME, Value: front})
+		records = append(records, addressRecord(host, front))
 	}
 	return records, nil
+}
+
+func addressRecord(host, front string) Record {
+	addr, err := netip.ParseAddr(front)
+	if err != nil {
+		return Record{Name: host, Type: RecordTypeCNAME, Value: front}
+	}
+	addr = addr.Unmap()
+	if addr.Is4() {
+		return Record{Name: host, Type: RecordTypeA, Value: addr.String()}
+	}
+	return Record{Name: host, Type: RecordTypeAAAA, Value: addr.String()}
 }
 
 type Zone struct {

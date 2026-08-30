@@ -108,6 +108,79 @@ func TestRecordsFor(t *testing.T) {
 	})
 }
 
+func TestRecordsForReadsTheTypeOutOfTheFront(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		front string
+		want  Record
+	}{
+		{
+			name:  "an ipv4 literal takes an A record",
+			front: "203.0.113.10",
+			want:  Record{Name: "shop.app.com", Type: RecordTypeA, Value: "203.0.113.10"},
+		},
+		{
+			name:  "an ipv4-mapped ipv6 literal takes an A record at the unmapped address",
+			front: "::ffff:203.0.113.10",
+			want:  Record{Name: "shop.app.com", Type: RecordTypeA, Value: "203.0.113.10"},
+		},
+		{
+			name:  "an ipv6 literal takes an AAAA record",
+			front: "2001:db8::1",
+			want:  Record{Name: "shop.app.com", Type: RecordTypeAAAA, Value: "2001:db8::1"},
+		},
+		{
+			name:  "a hostname takes a CNAME",
+			front: "front.example.net",
+			want:  Record{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "front.example.net"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := RecordsFor(DNSTarget{Kind: frontedKind, Front: tc.front}, []string{"shop.app.com"})
+			if err != nil {
+				t.Fatalf("RecordsFor error = %v", err)
+			}
+			if len(got) != 1 || got[0] != tc.want {
+				t.Errorf("RecordsFor = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRecordInstruction(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		record Record
+		want   string
+	}{
+		{
+			record: Record{Name: "shop.app.com", Type: RecordTypeA, Value: "203.0.113.10"},
+			want:   "add an A record at shop.app.com pointing to 203.0.113.10",
+		},
+		{
+			record: Record{Name: "shop.app.com", Type: RecordTypeAAAA, Value: "2001:db8::1"},
+			want:   "add an AAAA record at shop.app.com pointing to 2001:db8::1",
+		},
+		{
+			record: Record{Name: "shop.app.com", Type: RecordTypeCNAME, Value: "front.example.net"},
+			want:   "add a CNAME record at shop.app.com pointing to front.example.net",
+		},
+	} {
+		t.Run(string(tc.record.Type), func(t *testing.T) {
+			t.Parallel()
+
+			if got := tc.record.Instruction(); got != tc.want {
+				t.Errorf("Instruction() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestWrittenRecords(t *testing.T) {
 	t.Parallel()
 
@@ -156,6 +229,8 @@ func TestRecordApexNote(t *testing.T) {
 		{name: "a host under the zone", record: Record{Name: "shop.app.com", Type: RecordTypeCNAME}, zone: "app.com"},
 		{name: "a two-label host under a two-label zone", record: Record{Name: "foo.internal", Type: RecordTypeCNAME}, zone: "bar.internal"},
 		{name: "an address record at the zone", record: Record{Name: "app.com", Type: RecordTypeAAAA}, zone: "app.com"},
+		{name: "an A record at the zone, which sits beside NS and SOA as it is", record: Record{Name: "app.com", Type: RecordTypeA, Value: "203.0.113.10"}, zone: "app.com"},
+		{name: "an A record at the zone with no zone in hand", record: Record{Name: "app.com", Type: RecordTypeA, Value: "203.0.113.10"}},
 		{name: "no zone in hand falls back to the label count", record: Record{Name: "app.com", Type: RecordTypeCNAME}, apex: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
