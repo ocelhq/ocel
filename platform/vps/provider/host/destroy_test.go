@@ -267,6 +267,30 @@ func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	}
 }
 
+func TestEverySingletonIsNamedByThePlanThatTakesTheLastClassAndByNoOther(t *testing.T) {
+	t.Parallel()
+
+	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	keys := []byte(aKey + "\n")
+	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
+	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))}
+	singletons := []string{
+		stateRoot, helperRoot, recordsHelper, SealHelper, ProxyHelper, ProxyConfig, sudoersSeal, sshDir, classRoot, deployUser,
+	}
+
+	for _, singleton := range singletons {
+		if kept := removalOf(removing(standing, beside), singleton); kept.action == providerkit.ActionDelete {
+			t.Errorf("destroying one class takes %s, and the sibling class still standing on this host deploys through it", singleton)
+		}
+	}
+	last := removing(standing, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}})
+	for _, singleton := range singletons {
+		if gone := removalOf(last, singleton); gone.action != providerkit.ActionDelete {
+			t.Errorf("destroying the last class plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, gone.action)
+		}
+	}
+}
+
 func TestPlanRemovalOfAHostCarryingNothingPlansNothing(t *testing.T) {
 	t.Parallel()
 
