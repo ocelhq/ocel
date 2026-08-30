@@ -717,3 +717,51 @@ func TestDestroyRefusesByNameWhenNothingCanTakeTheRecordedContainerDown(t *testi
 		t.Fatalf("Destroy() of a recorded container nothing stands up = %v, want a refusal naming %s", err, resources.AppContainersPrimitive)
 	}
 }
+
+func TestAnAppMovingToAComputeThisProviderLacksIsRefusedBeforeItsFunctionsAreTakenDown(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := appRef()
+	recordFunctions(t, records, ref, "api")
+
+	own := &withFunctions{buckets: &buckets{}}
+
+	_, err := resources.Releaser(records, fake.NewArtifacts(), own).Provision(ctx, providerkit.StackPlan{
+		Ref:  ref,
+		Kind: providerkit.StackApp,
+		App:  containerApp("web"),
+	}, nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, resources.AppContainersPrimitive) {
+		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want a refusal naming %s", err, resources.AppContainersPrimitive)
+	}
+	if len(own.removed) != 0 {
+		t.Fatalf("the fan-out took down %v on a release it then refused, leaving the app down with nothing standing in its place", own.removed)
+	}
+}
+
+func TestAnAppNamingNoComputeIsRefusedBeforeItsContainerIsTakenDown(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := appRef()
+	recordContainers(t, records, ref, "web")
+
+	own := &withContainers{buckets: &buckets{}}
+
+	_, err := resources.Releaser(records, fake.NewArtifacts(), own).Provision(ctx, providerkit.StackPlan{
+		Ref:  ref,
+		Kind: providerkit.StackApp,
+		App:  &providerkit.AppPlan{App: "web"},
+	}, nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Provision() of an app naming no compute = %v, want an invalid refusal", err)
+	}
+	if len(own.removed) != 0 {
+		t.Fatalf("the fan-out took down %v on a release it then refused, leaving the app down with nothing standing in its place", own.removed)
+	}
+}
