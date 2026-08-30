@@ -29,6 +29,14 @@ func IsRepositorySegment(value string) bool {
 	return repositoryPattern.MatchString(value)
 }
 
+func RepositorySegment(repository string) string {
+	return repository[strings.LastIndex(repository, PathSeparator)+1:]
+}
+
+func DigestTag(digest string) string {
+	return strings.Replace(digest, ":", WordSeparator, 1)
+}
+
 func Validate(field, value string) error {
 	switch {
 	case value == "":
