@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"strings"
@@ -22,6 +23,8 @@ const (
 	buildPath   = "/grpc"
 	sessionPath = "/session"
 	upgradeTo   = "h2c"
+
+	snapshotterLabel = "org.mobyproject.buildkit.worker.snapshotter"
 
 	handshakeTimeout = 10 * time.Second
 )
@@ -118,6 +121,48 @@ func (d daemon) builder(ctx context.Context) (*client.Client, error) {
 			return d.hijack(ctx, sessionPath, proto, meta)
 		}),
 	)
+}
+
+func (d daemon) mergeable(ctx context.Context, builder *client.Client) error {
+	workers, err := builder.ListWorkers(ctx)
+	if err != nil {
+		return d.unreachable(err)
+	}
+	for _, worker := range workers {
+		if worker.Labels[snapshotterLabel] != "" {
+			return nil
+		}
+	}
+	return fmt.Errorf("the docker daemon at %s keeps images in its classic store, where buildkit refuses the merge operations every railpack build is made of: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.address, DockerHostEnv)
+}
+
+func (d daemon) tag(ctx context.Context, image Image) error {
+	endpoint := "http://docker/images/" + url.PathEscape(image.Digest) + "/tag?" + url.Values{
+		"repo": {image.Repository},
+		"tag":  {image.Tag},
+	}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := d.client().Do(req)
+	if err != nil {
+		return fmt.Errorf("name %s in the daemon at %s: %w", image.Ref, d.address, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		said, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("the daemon at %s answered %q naming %s, so the image it just built cannot be reached by the ref a release pins: %s", d.address, resp.Status, image.Ref, strings.TrimSpace(string(said)))
+	}
+	return nil
+}
+
+func (d daemon) client() *http.Client {
+	return &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, d.network, d.target)
+		},
+	}}
 }
 
 func (d daemon) unreachable(err error) error {
