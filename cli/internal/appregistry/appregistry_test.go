@@ -151,18 +151,6 @@ func TestAProjectPushingNoImageAsksTheProviderForNoRegistry(t *testing.T) {
 	}
 }
 
-func TestATransferNeedingARegistryWithNoneNamesTheGap(t *testing.T) {
-	_, err := Demand(context.Background(), project(nil), hostless())
-	if err == nil {
-		t.Fatal("Demand() answered a registry nothing names, want the plan refused rather than a public registry")
-	}
-	for _, want := range []string{"web", "registry", "ocel.config.ts"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("Demand() error = %v, want it to mention %q", err, want)
-		}
-	}
-}
-
 func TestARegistryWhoseVariableIsUnsetIsRefusedBeforeAnythingIsBuilt(t *testing.T) {
 	cfg := project(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
 

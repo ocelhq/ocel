@@ -1168,8 +1168,15 @@ func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegis
 }
 
 func (r *deployRun) imagePlan(entry AppEntry) (ImagePlan, error) {
-	if r.images == nil || entry.Compute() != ComputeContainer || entry.Image == "" {
+	if entry.Compute() != ComputeContainer || entry.Image == "" {
 		return ImagePlan{}, nil
+	}
+	if r.images == nil {
+		return ImagePlan{}, Refuse(CodeInvalid,
+			"%s runs as a container, and this provider is served by pulling its image from a registry rather than being handed one: "+
+				"nothing names a registry, so the image has nowhere to go and the machine has nowhere to pull it from.\n"+
+				"    → name a `registry` in the project config, with `password` set to the name of the environment variable holding the token",
+			entry.App)
 	}
 	push, err := imagePush(entry.App, entry.Image, r.registry)
 	if err != nil {

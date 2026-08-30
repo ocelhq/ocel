@@ -25,11 +25,21 @@ func containerDeployRequest(probe string) *contractv1.DeployRequest {
 	return req
 }
 
+func namingARegistry(req *contractv1.DeployRequest) *contractv1.DeployRequest {
+	req.ImageRegistry = &contractv1.ImageRegistry{
+		Server:    "ghcr.io",
+		Namespace: "acme",
+		Username:  "acme-bot",
+		Password:  "hunter2",
+	}
+	return req
+}
+
 func TestTheWireAcceptsAnAppNamingContainer(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
-	req := containerDeployRequest("/")
+	req := namingARegistry(containerDeployRequest("/"))
 
 	result, _, err := deployStream(t, client, req)
 	if err != nil {
@@ -69,7 +79,7 @@ func TestTheAppPlanCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.
 	provider := fake.NewProvider(fake.Options{})
 	client := servedBy(t, provider)
 
-	result, _ := deploy(t, client, containerDeployRequest("/healthz"))
+	result, _ := deploy(t, client, namingARegistry(containerDeployRequest("/healthz")))
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
@@ -115,7 +125,7 @@ func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
 	provider := fake.NewProvider(fake.Options{})
 	client := servedBy(t, provider)
 
-	result, _ := deploy(t, client, containerDeployRequest("/"))
+	result, _ := deploy(t, client, namingARegistry(containerDeployRequest("/")))
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
