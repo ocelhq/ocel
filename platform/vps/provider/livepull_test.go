@@ -12,15 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const (
-	liveRegistryName  = "ocel-live-registry"
 	liveRegistryImage = "registry:2.8.3"
-	liveRegistryDir   = "/tmp/ocel-live-registry"
+	liveHtpasswdImage = "httpd:2.4-alpine"
 	liveRegistryLogin = "ocel-live"
 	pullRepository    = "live-pull"
 	pullNamespace     = "live"
@@ -52,28 +49,39 @@ func shellQuoted(arg string) string {
 	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
 }
 
+func (vm machine) hashed(t *testing.T, password string) string {
+	t.Helper()
+	rendered, err := vm.feeding(vm.user, password+"\n",
+		"sudo docker run --rm -i --entrypoint htpasswd "+liveHtpasswdImage+" -niB "+liveRegistryLogin)
+	if err != nil {
+		t.Fatalf("hash the registry password on the machine: %v", err)
+	}
+	line := strings.TrimSpace(rendered)
+	if !strings.HasPrefix(line, liveRegistryLogin+":$2") {
+		t.Fatalf("htpasswd answered %q, want a bcrypt line for %s: the registry reads no other hash", line, liveRegistryLogin)
+	}
+	return line
+}
+
 func (vm machine) registry(t *testing.T) providerkit.RegistryTarget {
 	t.Helper()
 	port := freePort(t)
 	password := secretOf(t)
-	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		t.Fatal(err)
-	}
+	run := secretOf(t)
+	name, dir := "ocel-live-registry-"+run, "/tmp/ocel-live-registry-"+run
+	hashed := vm.hashed(t, password)
 
-	vm.ssh(t, "sudo docker rm -f "+liveRegistryName+" >/dev/null 2>&1 || true")
 	t.Cleanup(func() {
-		vm.ssh(t, "sudo docker rm -f "+liveRegistryName+" >/dev/null 2>&1 || true; sudo rm -rf "+liveRegistryDir)
+		vm.ssh(t, "sudo docker rm -f "+name+" >/dev/null 2>&1 || true; sudo rm -rf "+dir)
 	})
 	vm.ssh(t, strings.Join([]string{
 		"set -e",
-		"sudo rm -rf " + liveRegistryDir,
-		"mkdir -p " + liveRegistryDir,
-		"printf '%s\\n' " + shellQuoted(liveRegistryLogin+":"+string(hashed)) + " > " + liveRegistryDir + "/htpasswd",
-		"chmod 644 " + liveRegistryDir + "/htpasswd",
+		"mkdir -p " + dir,
+		"printf '%s\\n' " + shellQuoted(hashed) + " > " + dir + "/htpasswd",
+		"chmod 644 " + dir + "/htpasswd",
 		fmt.Sprintf("sudo docker run -d --name %s -p 127.0.0.1:%d:5000 -v %s:/auth "+
 			"-e REGISTRY_AUTH=htpasswd -e REGISTRY_AUTH_HTPASSWD_REALM=ocel -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd %s >/dev/null",
-			liveRegistryName, port, liveRegistryDir, liveRegistryImage),
+			name, port, dir, liveRegistryImage),
 	}, "\n"))
 
 	vm.forwarding(t, port)
@@ -207,7 +215,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 			t.Errorf("%s/.docker/config.json stands after the pull, so the registry credential is resident on the machine", home)
 		}
 	}
-	held, err := vm.attempt(vm.user, "sudo grep -rl "+shellQuoted(target.Password)+" /tmp /home /root 2>/dev/null")
+	held, err := vm.feeding(vm.user, target.Password+"\n", "sudo grep -rlF -f - /tmp /home /root /var/log 2>/dev/null")
 	if strings.TrimSpace(held) != "" {
 		t.Errorf("the registry password is written into %q on the machine", strings.TrimSpace(held))
 	} else if err == nil {
