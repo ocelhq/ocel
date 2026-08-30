@@ -126,6 +126,36 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		}
 	})
 
+	t.Run("writes an A record at the address the front carries", func(t *testing.T) {
+		t.Parallel()
+
+		records := &fakeRecords{}
+		w, _ := newTestWriter(records, testZones, "")
+		want := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeA, Value: "203.0.113.10"}
+		if _, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil); err != nil {
+			t.Fatalf("EnsureRecords: %v", err)
+		}
+		body := createdBody(t, records.created[0])
+		if body["type"] != "A" || body["content"] != "203.0.113.10" || body["proxied"] != false {
+			t.Errorf("created record = %v, want a grey-cloud A record", body)
+		}
+	})
+
+	t.Run("writes an AAAA record at the address the front carries", func(t *testing.T) {
+		t.Parallel()
+
+		records := &fakeRecords{}
+		w, _ := newTestWriter(records, testZones, "")
+		want := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: "2001:db8::1"}
+		if _, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil); err != nil {
+			t.Fatalf("EnsureRecords: %v", err)
+		}
+		body := createdBody(t, records.created[0])
+		if body["type"] != "AAAA" || body["content"] != "2001:db8::1" {
+			t.Errorf("created record = %v, want a AAAA record", body)
+		}
+	})
+
 	t.Run("writes into the named zone", func(t *testing.T) {
 		t.Parallel()
 
