@@ -12,12 +12,15 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
+
+const probeCeiling = 15 * time.Second
 
 func probingAt(t *testing.T, header string) *vps.Provider {
 	t.Helper()
@@ -183,7 +186,7 @@ func TestAProbeTheRunGaveUpOnSaysSoRatherThanReportingTheHostnameUnserved(t *tes
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	p.Probing(&http.Client{Transport: &http.Transport{}})
+	p.Probing(&http.Client{Timeout: probeCeiling, Transport: &http.Transport{}})
 
 	ctx, stop := context.WithCancel(context.Background())
 	stop()
@@ -197,7 +200,7 @@ func TestAHostnameNothingAnswersIsNotAnErrorTheSettleGivesUpOn(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	p.Probing(&http.Client{Transport: &http.Transport{}})
+	p.Probing(&http.Client{Timeout: probeCeiling, Transport: &http.Transport{}})
 
 	kind, err := p.Serving(context.Background(), boxedge.Kind, "nothing.invalid")
 	if err != nil {
