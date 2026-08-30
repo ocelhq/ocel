@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const (
@@ -72,10 +71,10 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	}
 	result, err := h.stream(ctx, words(releaseCommand(rel)), nil, elevation)
 	if err != nil {
-		return err
+		return h.evidence(ctx, rel, "never came back with an exit code", err.Error(), previous, elevation)
 	}
 	if result.Code != 0 {
-		return h.evidence(ctx, rel, result, previous, elevation)
+		return h.evidence(ctx, rel, fmt.Sprintf("exited %d", result.Code), strings.TrimSpace(result.Stderr), previous, elevation)
 	}
 	if flipping.Retiring != "" {
 		say(report, "Stopping "+rel.retiredName())
@@ -148,8 +147,7 @@ func seconds(window time.Duration) string {
 	return strconv.Itoa(int(window.Round(time.Second).Seconds()))
 }
 
-func (h *Host) evidence(ctx context.Context, rel Release, result session.Result, previous, elevation string) error {
-	verdict := strings.TrimSpace(result.Stderr)
+func (h *Host) evidence(ctx context.Context, rel Release, outcome, verdict, previous, elevation string) error {
 	if verdict == "" {
 		verdict = "it said nothing about why"
 	}
@@ -162,12 +160,12 @@ func (h *Host) evidence(ctx context.Context, rel Release, result session.Result,
 	unwound := h.unwind(ctx, rel, previous, elevation)
 
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"release %s onto %s: the proxy's flip helper exited %d and the previous release is still the live upstream\n"+
+		"release %s onto %s: the proxy's flip helper %s and the previous release is still the live upstream\n"+
 			"%s\n"+
 			"gate: http://%s%s, %s to answer 2xx; the path is %q in your project configuration\n"+
 			"state: %s\n"+
 			"logs (last %s lines): %s",
-		rel.App, h.named(), result.Code, verdict,
+		rel.App, h.named(), outcome, verdict,
 		rel.Target, rel.HealthPath, rel.DeployTimeout, healthKey,
 		state, appLogTail, logs+unwound)
 }

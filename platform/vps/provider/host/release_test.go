@@ -58,6 +58,12 @@ type flipped struct {
 
 func released(t *testing.T, rel Release, helper session.Result, report providerkit.Reporter) (*flipped, error) {
 	t.Helper()
+	stood := benched(t, helper)
+	return stood, stood.host().Release(context.Background(), rel, report)
+}
+
+func benched(t *testing.T, helper session.Result) *flipped {
+	t.Helper()
 	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
 	stood.answer = func(command string) (session.Result, bool) {
 		switch {
@@ -74,7 +80,7 @@ func released(t *testing.T, rel Release, helper session.Result, report providerk
 			return session.Result{}, false
 		}
 	}
-	return stood, stood.host().Release(context.Background(), rel, report)
+	return stood
 }
 
 func (f *flipped) at(fragment string) int {
@@ -192,6 +198,49 @@ func TestAFailureThePostCanOnlyReachAfterItLandedPutsThePreviousConfigBackOnTheP
 				t.Errorf("%s removed %s before the proxy was put back onto %s: %v", what, physical, retired, stood.commands())
 			}
 		})
+	}
+}
+
+func TestACallThatNeverReturnedAnExitCodeEndsWhereANonZeroOneDoes(t *testing.T) {
+	t.Parallel()
+
+	stood := benched(t, session.Result{})
+	stood.broke = func(command string) error {
+		if strings.Contains(command, quoted("deploy")) {
+			return errors.New("ssh: connection reset by peer")
+		}
+		return nil
+	}
+	err := stood.host().Release(context.Background(), aRelease(), nil)
+	if err == nil {
+		t.Fatal("a call that never came back released successfully")
+	}
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) {
+		t.Errorf("a call that never came back failed with %T, want the refusal every other failure renders", err)
+	}
+	if !strings.Contains(err.Error(), "connection reset by peer") {
+		t.Errorf("a call that never came back is refused with\n%s\nand never names what went wrong", err)
+	}
+	if stood.at("docker stop "+quoted(retiring)) >= 0 {
+		t.Errorf("a call that never came back stopped the retired container: %v", stood.commands())
+	}
+	if stood.at("docker rm --force "+quoted(physical)) < 0 {
+		t.Errorf("a call that never came back left the new container standing: %v", stood.commands())
+	}
+	if !strings.Contains(stood.held, retired) {
+		t.Errorf("a call that never came back left %s naming an upstream nothing here saw the proxy accept:\n%s", ProxyConfig, stood.held)
+	}
+	called := stood.at(quoted("deploy"))
+	posted := -1
+	for at, command := range stood.commands() {
+		if at > called && strings.Contains(command, quoted("flip")) {
+			posted = at
+			break
+		}
+	}
+	if posted < 0 {
+		t.Errorf("a call that never came back never re-posted the previous configuration, and it may have flipped before the connection died: %v", stood.commands())
 	}
 }
 
