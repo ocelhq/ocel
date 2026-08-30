@@ -11,7 +11,7 @@ import (
 )
 
 func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
-	path := p.pinCovering(req.Hostname)
+	path := p.host.PinFor(req.Hostname)
 	if path == "" {
 		return providerkit.Certificate{ID: certs.ProxyHandle(req.Hostname)}, nil
 	}
@@ -26,34 +26,25 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 }
 
 func (p *Provider) InspectCertificate(ctx context.Context, _ edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
-	health := providerkit.CertificateHealth{Terminates: true, Renewal: certs.Renewal(cert.ID)}
+	health := providerkit.CertificateHealth{Terminates: true}
 	if !cert.Held() {
 		return health, nil
 	}
+	health.Renewal = certs.Renewal(cert.ID)
 	if path, pinned := certs.Pinned(cert.ID); pinned {
 		return p.pinnedHealth(ctx, path, hostname, health)
 	}
 	served, ok := certs.Serving(cert.ID)
 	if !ok {
-		served = hostname
+		return providerkit.CertificateHealth{}, providerkit.Refuse(providerkit.CodeInvalid,
+			"%s is bound to %q, and a certificate on this box is either %s<hostname> the proxy obtained or %s<path> you pinned: reading a handle this box never minted as one it did would report on whatever the proxy happens to serve",
+			hostname, cert.ID, certs.ProxyScheme, certs.PinScheme)
 	}
 	return p.servedHealth(ctx, served, hostname, health)
 }
 
 func (p *Provider) DiscardCertificate(context.Context, providerkit.Certificate, providerkit.Reporter) error {
 	return nil
-}
-
-func (p *Provider) pinCovering(hostname string) string {
-	if path := p.host.PinFor(hostname); path != "" {
-		return path
-	}
-	for _, pin := range p.host.Pins() {
-		if (certs.Leaf{Domains: []string{pin.Hostname}}).Covers(hostname) {
-			return pin.Path
-		}
-	}
-	return ""
 }
 
 func (p *Provider) pinnedLeaf(ctx context.Context, path string) (certs.Leaf, error) {
