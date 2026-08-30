@@ -189,6 +189,16 @@ func TestASurfaceNamedWithTheSeparatorIsRefusedRatherThanRenderedAmbiguously(t *
 	}
 }
 
+func TestAHostnameNamedWithTheSeparatorIsRefusedTheWayASurfaceIs(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	state.Claims = []HostClaim{{Hostname: "shop.example.com" + claimSeparator + surface, Owner: surface}}
+	if _, err := RenderProxyConfig(state); err == nil {
+		t.Errorf("a hostname carrying %q renders a claim whose identity reads back as a different surface and host; the surface half of the same identity is already refused for it", claimSeparator)
+	}
+}
+
 func TestClaimingAHostnameLoadsItOntoTheRunningProxy(t *testing.T) {
 	t.Parallel()
 

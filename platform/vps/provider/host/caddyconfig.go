@@ -286,10 +286,10 @@ func validClaim(claim HostClaim) error {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"a hostname claim on this box names host %q and surface %q, and %s answers which surface claims a host out of both",
 			claim.Hostname, claim.Owner, ProxyConfig)
-	case strings.Contains(claim.Owner, claimSeparator):
+	case strings.Contains(claim.Owner, claimSeparator) || strings.Contains(claim.Hostname, claimSeparator):
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the surface %q claiming %s carries %q, which separates the surface from the host it claims",
-			claim.Owner, claim.Hostname, claimSeparator)
+			"the claim of %q by %q carries %q, which is what separates the surface from the host it claims",
+			claim.Hostname, claim.Owner, claimSeparator)
 	}
 	return nil
 }
