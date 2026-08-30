@@ -194,3 +194,43 @@ func TestTheSettleReportsTheTimeItSpentRatherThanTheTimeItPlannedTo(t *testing.T
 			refusal.Message)
 	}
 }
+
+type stopped struct {
+	cause string
+}
+
+func (stopped) Serving(context.Context, string) (edge.Kind, error) { return "", nil }
+
+func (s stopped) Unreached(string) string { return s.cause }
+
+func TestAHostnameNothingAnsweredForNamesWhatStoppedTheLastAttempt(t *testing.T) {
+	t.Parallel()
+
+	cause := "dial tcp 203.0.113.10:443: connect: connection refused"
+	settle, _ := waiting(stopped{cause: cause}, 2)
+
+	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	var refusal Refusal
+	if !errors.As(err, &refusal) || refusal.Code != CodeNotReady {
+		t.Fatalf("await() = %v, want a not-ready refusal", err)
+	}
+	if !strings.Contains(refusal.Message, cause) {
+		t.Errorf("await() refused with %q, and it never says what stopped the probe: a firewalled port and a certificate that has not been issued yet read identically after a full minute of waiting",
+			refusal.Message)
+	}
+}
+
+func TestAResolverThatDiagnosesNothingStillRefusesInOneSentence(t *testing.T) {
+	t.Parallel()
+
+	settle, _ := waiting(&answering{kind: "relay", after: 99}, 2)
+
+	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	var refusal Refusal
+	if !errors.As(err, &refusal) {
+		t.Fatalf("await() = %v, want a refusal", err)
+	}
+	if strings.Contains(refusal.Message, "ended in") {
+		t.Errorf("await() refused with %q, want no dangling clause where a resolver carries no cause to name", refusal.Message)
+	}
+}
