@@ -97,6 +97,8 @@ message HostnameRequest {
   string host = 3;
 
   EdgeSelection edge = 4;
+
+  bool probe = 5;
 }
 
 message GetHostnameStatusResponse {

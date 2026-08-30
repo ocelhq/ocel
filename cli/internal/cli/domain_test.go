@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -832,4 +833,43 @@ func TestDomainLsListsThisProjectsOwnHostnamesWithoutPreview(t *testing.T) {
 		}
 	}
 	clitest.WaitForNoStaleSocket(t, sockPath)
+}
+
+func TestDomainLsReadsStateWhileStatusChecksTheEdgeLive(t *testing.T) {
+	root, sockPath := clitest.SetUpDeployFixture(t)
+	writeProductionConfig(t, root)
+	journal := filepath.Join(t.TempDir(), "hostname.journal")
+	t.Setenv(clitest.FakeHostnameJournalEnvVar, journal)
+	deps := newDeps()
+	clitest.SetLoggedIn(&deps)
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDomainLs(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runDomainLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if asked := readJournal(t, journal); len(asked) != 1 || !strings.Contains(asked[0], "probe=false") {
+		t.Errorf("`ocel domain ls` asked %q, want it to read state: a probe reaches every declared hostname over the network on a timeout each, so listing waits as long as the project has hostnames", asked)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	asked := readJournal(t, journal)
+	if len(asked) != 2 || !strings.Contains(asked[1], "probe=true") {
+		t.Errorf("`ocel domain status` asked %q, want it to check the edge live: it is the acceptance test for a bind, and a hostname that stopped answering looks served in the record until something asks", asked)
+	}
+	clitest.WaitForNoStaleSocket(t, sockPath)
+}
+
+func readJournal(t *testing.T, path string) []string {
+	t.Helper()
+	read, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read the journal the fake provider wrote: %v", err)
+	}
+	return strings.Split(strings.TrimSpace(string(read)), "\n")
 }

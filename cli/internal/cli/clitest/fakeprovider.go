@@ -66,6 +66,8 @@ const FakePublishedLinksEnvVar = "OCEL_TEST_FAKE_PUBLISHED_LINKS"
 
 const FakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
 
+const FakeHostnameJournalEnvVar = "OCEL_TEST_FAKE_HOSTNAME_JOURNAL"
+
 const fakeEdgeJournalEnvVar = "OCEL_TEST_FAKE_EDGE_JOURNAL"
 
 const FakeConfigureJournalEnvVar = "OCEL_TEST_FAKE_CONFIGURE_JOURNAL"
@@ -783,6 +785,20 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 	return resp, nil
 }
 
+func journalHostnames(req *contractv1.HostnameRequest) {
+	path := os.Getenv(FakeHostnameJournalEnvVar)
+	if path == "" {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider: hostname journal:", err)
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "slug=%s configured=%s probe=%v\n", req.GetSlug(), strings.Join(req.GetConfigured(), ","), req.GetProbe())
+}
+
 func journalPreflight(req *contractv1.PreflightRequest) {
 	path := os.Getenv(FakePreflightJournalEnvVar)
 	if path == "" {
@@ -1137,6 +1153,7 @@ const (
 )
 
 func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *contractv1.HostnameRequest) (*contractv1.GetHostnameStatusResponse, error) {
+	journalHostnames(req)
 	s.mu.Lock()
 	s.domainStatusCalls++
 	call := s.domainStatusCalls

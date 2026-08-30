@@ -19,6 +19,7 @@ type hostnames struct {
 	*stackSession
 	configured []string
 	host       string
+	live       bool
 }
 
 func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameRequest) (*hostnames, error) {
@@ -34,7 +35,7 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 	if err != nil {
 		return nil, err
 	}
-	return &hostnames{stackSession: session, configured: configured, host: host}, nil
+	return &hostnames{stackSession: session, configured: configured, host: host, live: req.GetProbe()}, nil
 }
 
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
@@ -281,7 +282,7 @@ func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.Prod
 	}
 
 	probe := settled.Probe
-	if bound {
+	if bound && d.live {
 		probe = d.probe(ctx, host)
 	}
 	health, err := inspectCertificate(ctx, d.provider, d.settle.kind, host, settled.Certificate)
