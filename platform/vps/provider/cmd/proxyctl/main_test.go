@@ -317,3 +317,89 @@ func TestARetiredUpstreamAbsentFromThePoolIsABrokenCompositionRatherThanADrain(t
 		t.Errorf("the drain failed with %q, want it to name the address the pool never carried", errs.String())
 	}
 }
+
+func loads(asked []string) int {
+	count := 0
+	for _, one := range asked {
+		if one == "POST "+loadPath {
+			count++
+		}
+	}
+	return count
+}
+
+func TestTheComposedCallGatesBeforeItEverReachesTheProxy(t *testing.T) {
+	held, socket := served(t)
+	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET"}}`)
+
+	code, _, errs := ran(t, "deploy", "--target", "127.0.0.1:1", "--health-check-path", "/up",
+		"--deploy-timeout", "1", "--drain-timeout", "1", "--config", config, "--retire", "old:8080")
+	if code != exitSilent {
+		t.Fatalf("deploying against a target that never answered = %d, want %d: %q", code, exitSilent, errs)
+	}
+	if asked := held.asked(); len(asked) != 0 {
+		t.Errorf("a failed gate still reached the proxy with %v, and no flip is attempted when the gate does not pass", asked)
+	}
+}
+
+func TestAConfigTheProxyRejectsFailsTheComposedCallWithWhatTheProxySaid(t *testing.T) {
+	held, socket := served(t)
+	held.status, held.body = http.StatusBadRequest, "loading config: unknown module http.handlers.nonsense"
+	target := refusing(t, 0)
+	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET"}}`)
+
+	code, _, errs := ran(t, "deploy", "--target", target, "--health-check-path", "/up",
+		"--deploy-timeout", "5", "--drain-timeout", "1", "--config", config, "--retire", "old:8080")
+	if code != exitRefused {
+		t.Fatalf("deploying a config the proxy rejected = %d, want %d", code, exitRefused)
+	}
+	if !strings.Contains(errs, "http.handlers.nonsense") {
+		t.Errorf("the composed call failed with %q, and caddy's 400 names the offending field", errs)
+	}
+	if asked := held.asked(); loads(asked) != 1 || len(asked) != 1 {
+		t.Errorf("the composed call asked %v, want the load and nothing after it: a rejected config drains nothing", asked)
+	}
+}
+
+func TestOneCallGatesFlipsAndDrainsAndItsExitCodeIsTheWholeAnswer(t *testing.T) {
+	held, socket := served(t)
+	held.queue = []string{
+		`[{"address":"old:8080","num_requests":1}]`,
+		`[{"address":"old:8080","num_requests":0}]`,
+	}
+	target := refusing(t, 2)
+	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET"}}`)
+
+	code, out, errs := ran(t, "deploy", "--target", target, "--health-check-path", "/up",
+		"--deploy-timeout", "10", "--drain-timeout", "10", "--config", config, "--retire", "old:8080")
+	if code != 0 {
+		t.Fatalf("deploy = %d, %q %q", code, out, errs)
+	}
+	asked := held.asked()
+	if len(asked) < 2 || asked[0] != "POST "+loadPath {
+		t.Fatalf("the composed call asked %v, want the flip first: the drain reads the pool the flip installed", asked)
+	}
+	if loads(asked) != 1 {
+		t.Errorf("the composed call posted %d configs, want exactly one", loads(asked))
+	}
+	for _, after := range asked[1:] {
+		if after != "GET "+upstreamsPath {
+			t.Errorf("the composed call asked %q after the flip, want nothing but the drain read", after)
+		}
+	}
+}
+
+func TestAFirstDeployWithNothingToRetireDrainsNothingAtAll(t *testing.T) {
+	held, socket := served(t)
+	target := refusing(t, 0)
+	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET"}}`)
+
+	code, _, errs := ran(t, "deploy", "--target", target, "--health-check-path", "/up",
+		"--deploy-timeout", "5", "--drain-timeout", "5", "--config", config)
+	if code != 0 {
+		t.Fatalf("deploying with nothing to retire = %d, %q", code, errs)
+	}
+	if asked := held.asked(); len(asked) != 1 || asked[0] != "POST "+loadPath {
+		t.Errorf("a first deploy asked %v, want the flip alone: there is no retired upstream to count", asked)
+	}
+}
