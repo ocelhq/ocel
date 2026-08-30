@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -53,11 +52,6 @@ func run(argv []string, out, errs io.Writer) int {
 	}
 	rest := argv[1:]
 	switch argv[0] {
-	case "gate":
-		if len(rest) != 3 {
-			return usage(errs)
-		}
-		return gate(rest[0], rest[1], rest[2], out, errs)
 	case "flip":
 		if len(rest) != 1 {
 			return usage(errs)
@@ -81,7 +75,7 @@ func run(argv []string, out, errs io.Writer) int {
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: ocel-proxyctl gate <host:port> <path> <seconds> | flip <config> | upstreams | config <path> |")
+	fmt.Fprintln(errs, "usage: ocel-proxyctl flip <config> | upstreams | config <path> |")
 	fmt.Fprintln(errs, "       deploy --target <host:port> --health-check-path <path> --deploy-timeout <seconds>")
 	fmt.Fprintln(errs, "              --config <path> --drain-timeout <seconds> [--retire <host:port>]")
 	return exitRefused
@@ -113,15 +107,6 @@ func deploy(socket string, argv []string, out, errs io.Writer) int {
 		return 0
 	}
 	return draining(socket, *retire, time.Duration(*drainTimeout)*time.Second, out, errs)
-}
-
-func gate(target, path, window string, out, errs io.Writer) int {
-	seconds, err := strconv.Atoi(window)
-	if err != nil || seconds <= 0 {
-		fmt.Fprintf(errs, "ocel-proxyctl: %q is no number of seconds to wait\n", window)
-		return exitRefused
-	}
-	return gating(target, path, time.Duration(seconds)*time.Second, out, errs)
 }
 
 func gating(target, path string, window time.Duration, out, errs io.Writer) int {

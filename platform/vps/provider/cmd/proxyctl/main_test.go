@@ -66,6 +66,11 @@ func (a *admin) asked() []string {
 	return append([]string(nil), a.seen...)
 }
 
+func gated(target, path string, window time.Duration) (int, string, string) {
+	var out, errs strings.Builder
+	return gating(target, path, window, &out, &errs), out.String(), errs.String()
+}
+
 func ran(t *testing.T, argv ...string) (int, string, string) {
 	t.Helper()
 	var out, errs strings.Builder
@@ -101,10 +106,17 @@ func TestTheDrainReadAsksTheOneEndpointThatCountsWhatIsStillInFlight(t *testing.
 func TestTheDrainReadIsAVerbTheHelperCarriesRatherThanOneTheCallerSpells(t *testing.T) {
 	_, _ = served(t)
 
-	if code, _, errs := ran(t, "drain"); code == 0 {
-		t.Fatal("the helper answered a verb it does not carry")
-	} else if !strings.Contains(errs, "upstreams") {
-		t.Errorf("the helper's usage is %q and never names the drain read: a verb nothing names is one a contributor deletes", errs)
+	for _, verb := range []string{"drain", "gate"} {
+		code, _, errs := ran(t, verb, "127.0.0.1:1", "/up", "1")
+		if code == 0 {
+			t.Errorf("the helper answered %q, a verb no host code spells", verb)
+		}
+		if strings.Contains(errs, verb+" <") {
+			t.Errorf("the helper's usage still offers %q: %q", verb, errs)
+		}
+		if !strings.Contains(errs, "upstreams") {
+			t.Errorf("the helper's usage is %q and never names the drain read: a verb nothing names is one a contributor deletes", errs)
+		}
 	}
 }
 
@@ -119,17 +131,17 @@ func TestTheGateCallsATargetUpOnlyOnATwoHundred(t *testing.T) {
 	defer backend.Close()
 	target := strings.TrimPrefix(backend.URL, "http://")
 
-	if code, out, errs := ran(t, "gate", target, "/up", "5"); code != 0 {
+	if code, out, errs := gated(target, "/up", 5*time.Second); code != 0 {
 		t.Errorf("gating a target answering 204 = %d, %q %q: up means a 2xx on the health path", code, out, errs)
 	} else if strings.TrimSpace(out) != "204" {
 		t.Errorf("the gate printed %q, want the status it read", out)
 	}
-	if code, out, _ := ran(t, "gate", target, "/down", "1"); code != exitUnhealthy {
+	if code, out, _ := gated(target, "/down", time.Second); code != exitUnhealthy {
 		t.Errorf("gating a target answering 502 = %d, want %d: forcing past the gate is rejected", code, exitUnhealthy)
 	} else if strings.TrimSpace(out) != "502" {
 		t.Errorf("the gate printed %q, and answered-with-N is a different bug from never-answered", out)
 	}
-	if code, _, errs := ran(t, "gate", "127.0.0.1:1", "/up", "1"); code != exitSilent {
+	if code, _, errs := gated("127.0.0.1:1", "/up", time.Second); code != exitSilent {
 		t.Errorf("gating a target that answers nothing = %d, want %d: %q", code, exitSilent, errs)
 	}
 }
@@ -234,7 +246,7 @@ func refusing(t *testing.T, refusals int) string {
 func TestTheGateKeepsAskingUntilTheWindowCloses(t *testing.T) {
 	target := refusing(t, 3)
 
-	code, out, errs := ran(t, "gate", target, "/up", "10")
+	code, out, errs := gated(target, "/up", 10*time.Second)
 	if code != 0 {
 		t.Fatalf("gating a target that warms up over its first answers = %d, %q %q: a container still binding its port refuses in milliseconds and the window is what it is given",
 			code, out, errs)
@@ -247,7 +259,7 @@ func TestTheGateKeepsAskingUntilTheWindowCloses(t *testing.T) {
 func TestAGateThatExpiresSaysWhetherTheTargetAnsweredAtAllAndDoesNotConflateTheTwo(t *testing.T) {
 	answering := refusing(t, 1<<30)
 
-	code, out, said := ran(t, "gate", answering, "/up", "1")
+	code, out, said := gated(answering, "/up", time.Second)
 	if code != exitUnhealthy {
 		t.Fatalf("gating a target that answers 503 throughout = %d, want %d: %q", code, exitUnhealthy, said)
 	}
@@ -255,7 +267,7 @@ func TestAGateThatExpiresSaysWhetherTheTargetAnsweredAtAllAndDoesNotConflateTheT
 		t.Errorf("the gate printed %q, want the last status it read", out)
 	}
 
-	silentCode, _, silent := ran(t, "gate", "127.0.0.1:1", "/up", "1")
+	silentCode, _, silent := gated("127.0.0.1:1", "/up", time.Second)
 	if silentCode != exitSilent {
 		t.Fatalf("gating a target that answers nothing = %d, want %d", silentCode, exitSilent)
 	}
