@@ -108,6 +108,25 @@ export type AppConfig =
       health?: HealthConfig;
     });
 
+/**
+ * The registry a project's container images are pushed to, and pulled from.
+ * Naming one overrides whatever registry the provider offers natively; leaving
+ * it off uses the provider's own, and a deploy that needs a registry with
+ * neither in reach is refused rather than landing somewhere public.
+ */
+export interface RegistryConfig {
+  /** The registry host, such as `ghcr.io`. */
+  server: string;
+  /** The username the push authenticates as, where the registry wants one. */
+  username?: string;
+  /**
+   * The name of the environment variable holding the password or token — not
+   * the secret itself. It is read on the machine running the deploy, at the
+   * moment of the push, so it never reaches a config file or the provider.
+   */
+  password: string;
+}
+
 export interface OcelConfig {
   slug: string;
   /**
@@ -137,6 +156,8 @@ export interface OcelConfig {
   allowDegraded?: Need[];
   apps?: AppConfig[];
   domains?: ProjectDomainConfig;
+  /** Where this project's container images are pushed. */
+  registry?: RegistryConfig;
 }
 
 export function defineConfig(config: OcelConfig): OcelConfig {

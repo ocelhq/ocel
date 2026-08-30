@@ -75,3 +75,58 @@ describe("an app's build", () => {
     });
   });
 });
+
+describe("a project's registry", () => {
+  it("is left off by a project that pushes nowhere of its own", () => {
+    defineConfig({ slug: "shop" });
+  });
+
+  it("names a server, and takes a username and the name of a password variable", () => {
+    defineConfig({
+      slug: "shop",
+      registry: {
+        server: "ghcr.io",
+        username: "acme-bot",
+        password: "GHCR_TOKEN",
+      },
+    });
+  });
+
+  it("takes no username, for a registry that authenticates on the token alone", () => {
+    defineConfig({
+      slug: "shop",
+      registry: { server: "registry.fly.io", password: "FLY_TOKEN" },
+    });
+  });
+
+  it("is refused without a server, which is the only thing naming where images land", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error a registry with no server names nowhere to push to
+      registry: { password: "GHCR_TOKEN" },
+    });
+  });
+
+  it("is refused without a password, so nothing falls back to an anonymous push", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error the push authenticates, and the variable holding its secret is named here
+      registry: { server: "ghcr.io" },
+    });
+  });
+
+  it("is a project's, never an app's", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [
+        {
+          name: "api",
+          path: "services/api",
+          compute: "container",
+          // @ts-expect-error one project pushes to one registry
+          registry: { server: "ghcr.io", password: "GHCR_TOKEN" },
+        },
+      ],
+    });
+  });
+});
