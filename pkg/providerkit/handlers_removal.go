@@ -174,7 +174,7 @@ func certificateGroup(cert Certificate) *planv1.ChangeGroup {
 			Kind:   "certificate",
 			Name:   cert.ID,
 			Action: planv1.Change_ACTION_KEEP,
-			Reason: "you pinned it; ocel never requested it, so it is not ocel's to delete",
+			Reason: "ocel never requested it, so it is not ocel's to delete: whoever placed it is who removes it",
 		}
 	}
 	return &planv1.ChangeGroup{
