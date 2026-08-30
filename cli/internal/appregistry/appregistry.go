@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	connect "connectrpc.com/connect"
 
@@ -14,28 +13,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
-
-type Target struct {
-	Server    string
-	Namespace string
-	Username  string
-	Password  string
-}
-
-func (t Target) String() string {
-	return fmt.Sprintf("registry %s namespace %q username %q password [redacted]", t.Server, t.Namespace, t.Username)
-}
-
-func (t Target) GoString() string { return t.String() }
-
-func (t Target) Coordinate(repository, tag string) string {
-	parts := []string{t.Server}
-	if t.Namespace != "" {
-		parts = append(parts, strings.Trim(t.Namespace, "/"))
-	}
-	return strings.Join(append(parts, repository), "/") + ":" + tag
-}
 
 type Host interface {
 	ResolveImageRegistry(ctx context.Context, req *contractv1.ResolveImageRegistryRequest) (*contractv1.ResolveImageRegistryResponse, error)
@@ -62,13 +41,13 @@ func RequireSecret(cfg *projectconfig.Config) error {
 	return err
 }
 
-func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host) (Target, bool, error) {
+func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host) (providerkit.RegistryTarget, bool, error) {
 	if cfg.Registry != nil {
 		password, err := secret(cfg.Registry)
 		if err != nil {
-			return Target{}, false, err
+			return providerkit.RegistryTarget{}, false, err
 		}
-		return Target{
+		return providerkit.RegistryTarget{
 			Server:    cfg.Registry.Server,
 			Namespace: cfg.Registry.Namespace,
 			Username:  cfg.Registry.Username,
@@ -77,19 +56,19 @@ func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host) (Target,
 	}
 	pushing, err := repositories(cfg)
 	if err != nil {
-		return Target{}, false, err
+		return providerkit.RegistryTarget{}, false, err
 	}
 	if len(pushing) == 0 {
-		return Target{}, false, nil
+		return providerkit.RegistryTarget{}, false, nil
 	}
 	resp, err := host.ResolveImageRegistry(ctx, &contractv1.ResolveImageRegistryRequest{Repositories: pushing})
 	if connect.CodeOf(err) == connect.CodeUnimplemented {
-		return Target{}, false, nil
+		return providerkit.RegistryTarget{}, false, nil
 	}
 	if err != nil {
-		return Target{}, false, fmt.Errorf("resolve the registry this provider hosts: %w", err)
+		return providerkit.RegistryTarget{}, false, fmt.Errorf("resolve the registry this provider hosts: %w", err)
 	}
-	return Target{
+	return providerkit.RegistryTarget{
 		Server:    resp.GetServer(),
 		Namespace: resp.GetNamespace(),
 		Username:  resp.GetUsername(),
@@ -97,19 +76,19 @@ func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host) (Target,
 	}, true, nil
 }
 
-func Demand(ctx context.Context, cfg *projectconfig.Config, host Host) (Target, error) {
+func Demand(ctx context.Context, cfg *projectconfig.Config, host Host) (providerkit.RegistryTarget, error) {
 	target, named, err := Resolve(ctx, cfg, host)
 	if err != nil {
-		return Target{}, err
+		return providerkit.RegistryTarget{}, err
 	}
 	if named {
 		return target, nil
 	}
 	pushing, err := repositories(cfg)
 	if err != nil {
-		return Target{}, err
+		return providerkit.RegistryTarget{}, err
 	}
-	return Target{}, missing(cfg, pushing)
+	return providerkit.RegistryTarget{}, missing(cfg, pushing)
 }
 
 func missing(cfg *projectconfig.Config, pushing []string) error {
