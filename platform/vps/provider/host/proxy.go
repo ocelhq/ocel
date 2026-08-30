@@ -100,7 +100,7 @@ func ProxyItems(arch string) []Item {
 		{Kind: KindFile, Name: ProxyHelper, Mode: 0o750, Owner: rootOwner, Content: proxyHelper(arch),
 			Note: "gates a target, flips the proxy and reads what is still in flight"},
 		dir(proxyRoot, 0o750, stateOwner, "what the proxy serves"),
-		dir(ProxyPins, 0o755, rootOwner, "the one directory a certificate pair pinned by an operator is loaded from, which a destroy leaves where it found it"),
+		dir(ProxyPins, 0o700, rootOwner, "the one directory a certificate pair pinned by an operator is loaded from, which a destroy leaves where it found it"),
 		proxyConfigItem(),
 		dir(ProxyData, 0o700, rootOwner, "the proxy's certificates, their private keys and the acme account key that issues for every one of them"),
 		networkItem(),
