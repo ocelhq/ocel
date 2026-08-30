@@ -91,13 +91,23 @@ func (m *machine) Claims(context.Context) ([]host.HostClaim, error) {
 	return slices.Clone(m.claims), nil
 }
 
-func (m *machine) ClaimHost(_ context.Context, claim host.HostClaim) error {
-	m.calls = append(m.calls, "claim "+claim.Hostname)
-	taken, err := host.Claiming(m.claims, claim)
-	if err != nil {
-		return err
+func (m *machine) ClaimHosts(_ context.Context, claims []host.HostClaim) error {
+	for _, claim := range claims {
+		m.calls = append(m.calls, "claim "+claim.Hostname)
+		taken, err := host.Claiming(m.claims, claim)
+		if err != nil {
+			return err
+		}
+		m.claims = taken
 	}
-	m.claims = taken
+	return nil
+}
+
+func (m *machine) DisclaimPointer(_ context.Context, owner, pointer string) error {
+	m.calls = append(m.calls, "disclaim "+owner+"/"+pointer)
+	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool {
+		return claim.Owner == owner && claim.Pointer == pointer
+	})
 	return nil
 }
 
@@ -833,7 +843,7 @@ func TestABindNamingAnAppClaimsTheHostnameForThatAppAndTheSurfaceStillOwnsIt(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := host.HostClaim{Hostname: hostname, Owner: box.Surface(slug, edge.ClassProduction), App: "api"}
+	want := host.HostClaim{Hostname: hostname, Owner: box.Surface(slug, edge.ClassProduction), Pointer: edge.DefaultPointer, App: "api"}
 	if len(claims) != 1 || claims[0] != want {
 		t.Errorf("the box holds %v, want %v: a project running two apps binds a hostname to one of them, and a claim that drops the app leaves the render unable to tell which route answers it", claims, want)
 	}

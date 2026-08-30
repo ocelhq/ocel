@@ -60,6 +60,9 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err := s.ledger().Promote(ctx, promotion, pointer, report); err != nil {
 		return err
 	}
+	if err := s.e.machine.ClaimHosts(ctx, s.previewClaims(pointer, slices.Sorted(maps.Keys(promotion.Builds)))); err != nil {
+		return err
+	}
 	for _, held := range ready {
 		if err := s.serve(ctx, held, report); err != nil {
 			return err
@@ -124,7 +127,36 @@ func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) 
 	}, report)
 }
 
+func (s *stack) previewSite() edge.PreviewSite {
+	if s.state.Class != edge.ClassPreview {
+		return edge.PreviewSite{}
+	}
+	return edge.SharedPreview(s.state.Slug, s.state.GlobalPreview)
+}
+
+func (s *stack) previewClaims(pointer string, apps []string) []host.HostClaim {
+	site := s.previewSite()
+	if !site.Serves() || len(apps) == 0 || named(pointer) == edge.DefaultPointer {
+		return nil
+	}
+	if len(apps) < 2 {
+		apps = []string{""}
+	}
+	claims := make([]host.HostClaim, 0, len(apps))
+	for _, app := range apps {
+		if hostname := site.Host(pointer, app); hostname != "" {
+			claims = append(claims, host.HostClaim{
+				Hostname: hostname, Owner: s.surface(), Pointer: pointer, App: app,
+			})
+		}
+	}
+	return claims
+}
+
 func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error) {
+	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), named(pointer)); err != nil {
+		return edge.PruneResult{}, err
+	}
 	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
 	}
@@ -139,7 +171,9 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err != nil {
 		return err
 	}
-	if err := s.e.machine.ClaimHost(ctx, host.HostClaim{Hostname: binding.Hostname, Owner: s.surface(), App: binding.App}); err != nil {
+	if err := s.e.machine.ClaimHosts(ctx, []host.HostClaim{{
+		Hostname: binding.Hostname, Owner: s.surface(), Pointer: edge.DefaultPointer, App: binding.App,
+	}}); err != nil {
 		return err
 	}
 	s.state.Bind(binding.Hostname)

@@ -45,16 +45,23 @@ func (h *Host) UnrouteSurface(ctx context.Context, owner string) error {
 	})
 }
 
-func (h *Host) ClaimHost(ctx context.Context, claim HostClaim) error {
-	if err := validClaim(claim); err != nil {
-		return err
+func (h *Host) ClaimHosts(ctx context.Context, claims []HostClaim) error {
+	for _, claim := range claims {
+		if err := validClaim(claim); err != nil {
+			return err
+		}
+	}
+	if len(claims) == 0 {
+		return nil
 	}
 	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
-		taken, err := Claiming(state.Claims, claim)
-		if err != nil {
-			return ProxyState{}, err
+		for _, claim := range claims {
+			taken, err := Claiming(state.Claims, claim)
+			if err != nil {
+				return ProxyState{}, err
+			}
+			state.Claims = taken
 		}
-		state.Claims = taken
 		return state, nil
 	})
 }
@@ -63,6 +70,15 @@ func (h *Host) DisclaimHost(ctx context.Context, hostname, owner string) error {
 	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
 		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool {
 			return claim.Hostname == hostname && claim.Owner == owner
+		})
+		return state, nil
+	})
+}
+
+func (h *Host) DisclaimPointer(ctx context.Context, owner, pointer string) error {
+	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
+		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool {
+			return claim.Owner == owner && claim.Pointer == pointer
 		})
 		return state, nil
 	})

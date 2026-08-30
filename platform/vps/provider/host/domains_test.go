@@ -60,7 +60,7 @@ func TestAClaimedHostnameReadsBackAsTheSurfaceThatClaimedIt(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	rendered, err := RenderProxyConfig(state)
 	if err != nil {
 		t.Fatalf("RenderProxyConfig() = %v", err)
@@ -81,7 +81,7 @@ func TestAHostnameClaimForwardsNothingAndIsReachedBeforeTheAppItSitsBeside(t *te
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	rendered, err := RenderProxyConfig(state)
 	if err != nil {
 		t.Fatalf("RenderProxyConfig() = %v", err)
@@ -238,7 +238,7 @@ func TestASurfaceNamedWithTheSeparatorIsRefusedRatherThanRenderedAmbiguously(t *
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: "ocel" + claimSeparator + "shop"}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: "ocel" + claimSeparator + "shop", Pointer: pointed}}
 	if _, err := RenderProxyConfig(state); err == nil {
 		t.Errorf("a surface named with %q renders a claim that reads back naming a different surface", claimSeparator)
 	}
@@ -248,7 +248,7 @@ func TestAHostnameNamedWithTheSeparatorIsRefusedTheWayASurfaceIs(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: "shop.example.com" + claimSeparator + surface, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: "shop.example.com" + claimSeparator + surface, Owner: surface, Pointer: pointed}}
 	if _, err := RenderProxyConfig(state); err == nil {
 		t.Errorf("a hostname carrying %q renders a claim whose identity reads back as a different surface and host; the surface half of the same identity is already refused for it", claimSeparator)
 	}
@@ -258,15 +258,15 @@ func TestClaimingAHostnameLoadsItOntoTheRunningProxy(t *testing.T) {
 	t.Parallel()
 
 	stood := claimingBox(t, routed())
-	if err := stood.host().ClaimHost(context.Background(), HostClaim{Hostname: claimed, Owner: surface}); err != nil {
-		t.Fatalf("ClaimHost() = %v", err)
+	if err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+		t.Fatalf("ClaimHosts() = %v", err)
 	}
 
 	held, err := ReadProxyState([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(held.Claims, []HostClaim{{Hostname: claimed, Owner: surface}}) {
+	if !slices.Equal(held.Claims, []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}) {
 		t.Errorf("%s holds claims %v after the claim, want %q claimed by %q", ProxyConfig, held.Claims, claimed, surface)
 	}
 	if !slices.ContainsFunc(stood.commands(), func(command string) bool {
@@ -280,10 +280,10 @@ func TestClaimingAHostnameTwiceWritesTheProxyOnce(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	stood := claimingBox(t, state)
-	if err := stood.host().ClaimHost(context.Background(), HostClaim{Hostname: claimed, Owner: surface}); err != nil {
-		t.Fatalf("ClaimHost() = %v", err)
+	if err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+		t.Fatalf("ClaimHosts() = %v", err)
 	}
 	for _, command := range stood.commands() {
 		if writesProxy(command) || strings.Contains(command, quoted("flip")) {
@@ -304,8 +304,8 @@ func TestAClaimTheProxyRefusesLeavesTheFileTheProxyWouldRestartOnto(t *testing.T
 		return nil
 	}
 
-	if err := stood.host().ClaimHost(context.Background(), HostClaim{Hostname: claimed, Owner: surface}); err == nil {
-		t.Fatal("ClaimHost() succeeded against a proxy that refused the config")
+	if err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err == nil {
+		t.Fatal("ClaimHosts() succeeded against a proxy that refused the config")
 	}
 	if stood.held != previous {
 		t.Errorf("%s was left carrying a config the running proxy refused, and this host restarts its proxy onto this file rather than onto what it last loaded:\n%s", ProxyConfig, stood.held)
@@ -316,7 +316,7 @@ func TestDisclaimingAHostnameTakesTheClaimAndLeavesTheRest(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}, {Hostname: "other.example.com", Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, {Hostname: "other.example.com", Owner: surface, Pointer: pointed}}
 	stood := claimingBox(t, state)
 	if err := stood.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
 		t.Fatalf("DisclaimHost() = %v", err)
@@ -326,7 +326,7 @@ func TestDisclaimingAHostnameTakesTheClaimAndLeavesTheRest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(held.Claims, []HostClaim{{Hostname: "other.example.com", Owner: surface}}) {
+	if !slices.Equal(held.Claims, []HostClaim{{Hostname: "other.example.com", Owner: surface, Pointer: pointed}}) {
 		t.Errorf("the claims left are %v, want the one the disclaim never named", held.Claims)
 	}
 }
@@ -335,8 +335,8 @@ func TestDisclaimingASurfaceTakesEveryHostnameItHoldsAndNoOneElses(t *testing.T)
 	t.Parallel()
 
 	state := routed()
-	kept := HostClaim{Hostname: "kept.example.com", Owner: otherSurface}
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}, kept, {Hostname: "other.example.com", Owner: surface}}
+	kept := HostClaim{Hostname: "kept.example.com", Owner: otherSurface, Pointer: pointed}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, kept, {Hostname: "other.example.com", Owner: surface, Pointer: pointed}}
 	stood := claimingBox(t, state)
 	if err := stood.host().DisclaimSurface(context.Background(), surface); err != nil {
 		t.Fatalf("DisclaimSurface() = %v", err)
@@ -355,11 +355,11 @@ func TestAHostnameAnotherSurfaceHoldsIsRefusedRatherThanTakenOffIt(t *testing.T)
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	stood := claimingBox(t, state)
 	standing := stood.held
 
-	err := stood.host().ClaimHost(context.Background(), HostClaim{Hostname: claimed, Owner: otherSurface})
+	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}})
 	if err == nil {
 		t.Fatal("a second project bound a hostname the first one already holds, and the first project's site then answers nothing with no deploy of its own having failed")
 	}
@@ -379,7 +379,7 @@ func TestUnbindingAHostnameAnotherSurfaceNowHoldsLeavesItWhereItIs(t *testing.T)
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: otherSurface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}
 	stood := claimingBox(t, state)
 
 	if err := stood.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
@@ -398,22 +398,22 @@ func TestAHostnameItsOwnerReleasesIsFreeForTheNextSurfaceToTake(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	stood := claimingBox(t, state)
 	ctx := context.Background()
 
 	if err := stood.host().DisclaimHost(ctx, claimed, surface); err != nil {
 		t.Fatalf("DisclaimHost() = %v", err)
 	}
-	if err := stood.host().ClaimHost(ctx, HostClaim{Hostname: claimed, Owner: otherSurface}); err != nil {
-		t.Fatalf("ClaimHost() by the surface it was released for = %v: a hostname one project unbinds is a hostname another can bind, and a box that keeps refusing it has taken the name out of circulation for good", err)
+	if err := stood.host().ClaimHosts(ctx, []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}); err != nil {
+		t.Fatalf("ClaimHosts() by the surface it was released for = %v: a hostname one project unbinds is a hostname another can bind, and a box that keeps refusing it has taken the name out of circulation for good", err)
 	}
 
 	held, err := ReadProxyState([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(held.Claims, []HostClaim{{Hostname: claimed, Owner: otherSurface}}) {
+	if !slices.Equal(held.Claims, []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}) {
 		t.Errorf("the claims left are %v, want %s held by %s alone", held.Claims, claimed, otherSurface)
 	}
 }
@@ -431,15 +431,15 @@ func TestALoginThatCannotElevateStillWritesAProxyConfigItOwns(t *testing.T) {
 	t.Parallel()
 
 	stood := refusingSudo(t)
-	if err := stood.host().ClaimHost(context.Background(), HostClaim{Hostname: claimed, Owner: surface}); err != nil {
-		t.Fatalf("ClaimHost = %v; a deploy login that owns %s writes it without sudo, and that is how a box provisioned for a non-root login works rather than a state to refuse", err, ProxyConfig)
+	if err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+		t.Fatalf("ClaimHosts = %v; a deploy login that owns %s writes it without sudo, and that is how a box provisioned for a non-root login works rather than a state to refuse", err, ProxyConfig)
 	}
 
 	held, err := ReadProxyState([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(held.Claims, HostClaim{Hostname: claimed, Owner: surface}) {
+	if !slices.Contains(held.Claims, HostClaim{Hostname: claimed, Owner: surface, Pointer: pointed}) {
 		t.Errorf("the claims on the box are %v, want %s among them", held.Claims, claimed)
 	}
 	if at := stood.at(`cat > "$staged"`); at < 0 || strings.HasPrefix(stood.commands()[at], "sudo") {
@@ -459,7 +459,7 @@ func TestAWriteThisLoginCannotMakeNamesTheElevationItWasRefused(t *testing.T) {
 		return answering(command)
 	}
 
-	err := stood.host().ClaimHost(context.Background(), HostClaim{Hostname: claimed, Owner: surface})
+	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil {
 		t.Fatal("a claim this login could neither write nor elevate to write reported success")
 	}
@@ -475,7 +475,7 @@ func TestTheClaimsThisBoxHoldsAreReadFromWhatTheProxyWasGiven(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	stood := claimingBox(t, state)
 
 	read, err := stood.host().Claims(context.Background())
@@ -511,7 +511,7 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	stood := claimingBox(t, state)
 
 	rel := Release{
@@ -599,7 +599,7 @@ func TestAppRoutesAreReachedByTheHostnamesTheirOwnSurfaceClaims(t *testing.T) {
 	t.Parallel()
 
 	state := twoProjects()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}, {Hostname: "blog.example.com", Owner: otherSurface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, {Hostname: "blog.example.com", Owner: otherSurface, Pointer: pointed}}
 	rendered := mustRender(t, state)
 
 	var read struct {
@@ -643,7 +643,7 @@ func TestOneSurfacesHostnameIsNotHandedToEveryAppThatSurfaceRuns(t *testing.T) {
 	t.Parallel()
 
 	state := twoApps()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 
 	_, err := RenderProxyConfig(state)
 	if err == nil {
@@ -690,7 +690,7 @@ func TestAHostnameDeclaredUnderOneAppOfAMultiAppSurfaceReachesThatAppAlone(t *te
 	t.Parallel()
 
 	state := twoApps()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, App: "api"}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, App: "api"}}
 
 	answered := matchedBy(t, mustRender(t, state))
 	want := map[string][]string{
@@ -707,8 +707,8 @@ func TestAClaimNamingTheAppItWasDeclaredUnderReadsBackCarryingThatApp(t *testing
 
 	state := twoApps()
 	state.Claims = []HostClaim{
-		{Hostname: claimed, Owner: surface, App: "api"},
-		{Hostname: "www.example.com", Owner: surface, App: "web"},
+		{Hostname: claimed, Owner: surface, Pointer: pointed, App: "api"},
+		{Hostname: "www.example.com", Owner: surface, Pointer: pointed, App: "web"},
 	}
 
 	read, err := ReadProxyState(mustRender(t, state))
@@ -727,15 +727,15 @@ func TestAProjectWideClaimStillNamesNoAppOnTheWireItIsWrittenTo(t *testing.T) {
 	t.Parallel()
 
 	wide := routed()
-	wide.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	wide.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	rendered := mustRender(t, wide)
 
-	if want := claimIdentity + surface + claimSeparator + claimed; !strings.Contains(string(rendered), `"@id":"`+want+`"`) {
+	if want := claimIdentity + surface + claimSeparator + claimed + claimSeparator + pointed; !strings.Contains(string(rendered), `"@id":"`+want+`"`) {
 		t.Errorf("a project-wide claim renders its identity as something other than %q:\n%s", want, rendered)
 	}
 	attributed := routed()
-	attributed.Claims = []HostClaim{{Hostname: claimed, Owner: surface, App: "web"}}
-	if want := claimIdentity + surface + claimSeparator + claimed + claimSeparator + "web"; !strings.Contains(string(mustRender(t, attributed)), `"@id":"`+want+`"`) {
+	attributed.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, App: "web"}}
+	if want := claimIdentity + surface + claimSeparator + claimed + claimSeparator + pointed + claimSeparator + "web"; !strings.Contains(string(mustRender(t, attributed)), `"@id":"`+want+`"`) {
 		t.Errorf("a claim declared under an app renders its identity without the app, so nothing distinguishes it from the project-wide claim it is not")
 	}
 }
@@ -744,7 +744,7 @@ func TestAnUnattributedHostnameOnAMultiAppSurfaceIsRefusedAndNamesTheFormThatFix
 	t.Parallel()
 
 	state := twoApps()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 
 	_, err := RenderProxyConfig(state)
 	if err == nil {
@@ -873,7 +873,7 @@ func TestAConfigComposedOntoAFileAnotherDeployHasSinceRewrittenIsRefusedRatherTh
 		stood.mu.Unlock()
 	}
 
-	err := stood.host().ClaimHost(context.Background(), HostClaim{Hostname: claimed, Owner: surface})
+	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil {
 		t.Fatal("a claim composed onto a configuration another deploy had already replaced was written anyway")
 	}

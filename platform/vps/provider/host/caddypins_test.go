@@ -32,8 +32,8 @@ func pinnedBox(t *testing.T, pins []Pin, held map[string][]byte) *Host {
 
 func claiming(t *testing.T, pins []Pin, held map[string][]byte) error {
 	t.Helper()
-	return pinnedBox(t, pins, held).ClaimHost(context.Background(),
-		HostClaim{Hostname: claimed, Owner: surface})
+	return pinnedBox(t, pins, held).ClaimHosts(context.Background(),
+		[]HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 }
 
 func TestAPinIsWrittenAtThePathTheProxyOpensAndReadBackAtThePathThisHostSpells(t *testing.T) {
@@ -128,8 +128,8 @@ func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 
 	ctx := context.Background()
 	for _, hostname := range []string{claimed, "blog.example.com", "www.example.com"} {
-		if err := h.ClaimHost(ctx, HostClaim{Hostname: hostname, Owner: surface}); err != nil {
-			t.Fatalf("ClaimHost(%s) = %v", hostname, err)
+		if err := h.ClaimHosts(ctx, []HostClaim{{Hostname: hostname, Owner: surface, Pointer: pointed}}); err != nil {
+			t.Fatalf("ClaimHosts(%s) = %v", hostname, err)
 		}
 	}
 	if reads != 1 {

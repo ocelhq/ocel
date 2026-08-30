@@ -190,7 +190,7 @@ func TestAConfigMovedIntoPlaceIsWhatTheRunningProxyLoads(t *testing.T) {
 
 	flipped := routed()
 	stood.standsApp(t, flipped.Routes[0].Upstream, "the app answered")
-	flipped.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	flipped.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	rendered, err := RenderProxyConfig(flipped)
 	if err != nil {
 		t.Fatalf("RenderProxyConfig() = %v", err)

@@ -30,8 +30,9 @@ type Machine interface {
 	UnrouteSurface(ctx context.Context, owner string) error
 	Claims(ctx context.Context) ([]host.HostClaim, error)
 	Pins() []host.Pin
-	ClaimHost(ctx context.Context, claim host.HostClaim) error
+	ClaimHosts(ctx context.Context, claims []host.HostClaim) error
 	DisclaimHost(ctx context.Context, hostname, owner string) error
+	DisclaimPointer(ctx context.Context, owner, pointer string) error
 	DisclaimSurface(ctx context.Context, owner string) error
 	PreviewEntry(ctx context.Context) (string, error)
 	InstallPreviewEntry(ctx context.Context, base string) error

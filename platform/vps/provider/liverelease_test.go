@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -38,8 +39,8 @@ func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 	})
 	p := vm.deploying(t)
-	if err := p.Host().ClaimHost(context.Background(), host.HostClaim{Hostname: host.ProxyContainer, Owner: liveOwner}); err != nil {
-		t.Fatalf("ClaimHost(%s) = %v", host.ProxyContainer, err)
+	if err := p.Host().ClaimHosts(context.Background(), []host.HostClaim{{Hostname: host.ProxyContainer, Owner: liveOwner, Pointer: edge.DefaultPointer}}); err != nil {
+		t.Fatalf("ClaimHosts(%s) = %v", host.ProxyContainer, err)
 	}
 	return vm, p
 }
