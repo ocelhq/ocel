@@ -44,10 +44,19 @@ export interface ProjectDomainConfig extends AppDomainConfig {
   preview?: string;
 }
 
+/**
+ * What an app runs on. Left off, an app runs on whatever its provider names
+ * first, so a project that has only ever wanted its provider's usual shape
+ * writes nothing. A compute the provider does not run refuses the deploy by
+ * name rather than quietly landing something else.
+ */
+export type Compute = "serverless" | "container";
+
 export interface AppConfig {
   name: string;
   path: string;
   framework: "next" | "express" | "fastify" | "hono";
+  compute?: Compute;
   entrypoint?: string;
   domains?: AppDomainConfig;
   folder?: string;
