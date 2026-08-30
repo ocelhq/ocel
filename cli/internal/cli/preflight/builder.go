@@ -22,7 +22,7 @@ func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.
 		choice, err := imagebuild.Choose(imagebuild.App{
 			Name:       app.Name,
 			Dir:        filepath.Join(cfg.Dir, app.Path),
-			Dockerfile: dockerfileOf(app),
+			Configured: dockerfileOf(app),
 		})
 		if err != nil {
 			return err
