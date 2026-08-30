@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (h *Host) Claims(ctx context.Context) ([]HostClaim, error) {
@@ -70,6 +71,38 @@ func (h *Host) DisclaimHost(ctx context.Context, hostname, owner string) error {
 func (h *Host) DisclaimSurface(ctx context.Context, owner string) error {
 	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
 		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool { return claim.Owner == owner })
+		return state, nil
+	})
+}
+
+func (h *Host) PreviewEntry(ctx context.Context) (string, error) {
+	state, _, err := h.proxyState(ctx)
+	if err != nil {
+		return "", err
+	}
+	return state.PreviewBase, nil
+}
+
+func (h *Host) InstallPreviewEntry(ctx context.Context, base string) error {
+	if err := PreviewBaseUsable(base); err != nil {
+		return err
+	}
+	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
+		if state.PreviewBase != "" && state.PreviewBase != base {
+			return ProxyState{}, providerkit.Refuse(providerkit.CodeBusy,
+				"this box already answers previews on %s, and every preview hostname it serves is a name under that base: release it with `ocel domain release --preview` first, or raising %s here takes every live preview off the air with nothing telling the projects that lost them",
+				edge.PreviewWildcard(state.PreviewBase), edge.PreviewWildcard(base))
+		}
+		state.PreviewBase = base
+		return state, nil
+	})
+}
+
+func (h *Host) RemovePreviewEntry(ctx context.Context, base string) error {
+	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
+		if state.PreviewBase == base {
+			state.PreviewBase = ""
+		}
 		return state, nil
 	})
 }

@@ -25,15 +25,16 @@ const (
 )
 
 type machine struct {
-	pins     []host.Pin
-	claims   []host.HostClaim
-	upstream map[host.RouteKey]string
-	swept    map[string]bool
-	calls    []string
-	releases []host.Release
-	stood    []host.Container
-	headed   []string
-	refuse   error
+	pins        []host.Pin
+	claims      []host.HostClaim
+	upstream    map[host.RouteKey]string
+	swept       map[string]bool
+	calls       []string
+	releases    []host.Release
+	stood       []host.Container
+	headed      []string
+	previewBase string
+	refuse      error
 }
 
 func aMachine() *machine {
@@ -114,12 +115,37 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	return nil
 }
 
+func (m *machine) PreviewEntry(context.Context) (string, error) { return m.previewBase, nil }
+
+func (m *machine) InstallPreviewEntry(_ context.Context, base string) error {
+	m.calls = append(m.calls, "install preview entry "+base)
+	if m.previewBase != "" && m.previewBase != base {
+		return providerkit.Refuse(providerkit.CodeBusy,
+			"this box already answers previews on %s", edge.PreviewWildcard(m.previewBase))
+	}
+	m.previewBase = base
+	return nil
+}
+
+func (m *machine) RemovePreviewEntry(_ context.Context, base string) error {
+	m.calls = append(m.calls, "remove preview entry "+base)
+	if m.previewBase == base {
+		m.previewBase = ""
+	}
+	return nil
+}
+
 func TestTheBoxEdge(t *testing.T) {
 	edgeconformance.Run(t, edgeconformance.Suite{
 		Hostname: "shop.example.com",
 		New: func(*testing.T) (edge.Edge, edge.StackSpec) {
 			return box.New(aMachine(), fake.NewRecords(), sshScope),
 				edge.StackSpec{Version: "test", Class: edge.ClassProduction, Slug: slug}
+		},
+		Previews: func(*testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec) {
+			return box.New(aMachine(), fake.NewRecords(), sshScope),
+				edge.StackSpec{Version: "test", Class: edge.ClassPreview, Slug: slug},
+				previewSpec()
 		},
 	})
 }
@@ -462,18 +488,6 @@ func TestAHostnameAnotherProjectStillHoldsIsRefusedNamingWhoHoldsIt(t *testing.T
 	}
 	if want := box.Surface("shop", edge.ClassProduction); owner != want {
 		t.Errorf("DomainOwner(%q) = %q, want %q: a refused bind leaves the claim where it stood", hostname, owner, want)
-	}
-}
-
-func TestAPreviewWildcardIsRefusedByNameRatherThanServedWrong(t *testing.T) {
-	t.Parallel()
-
-	front := box.New(aMachine(), fake.NewRecords(), sshScope)
-	if _, err := front.ReconcilePreviewWildcard(context.Background(), edge.PreviewWildcardSpec{BaseDomain: "preview.example.com"}); err == nil {
-		t.Error("ReconcilePreviewWildcard answered a front where a box raises no wildcard")
-	}
-	if err := front.DestroyPreviewWildcard(context.Background(), "preview.example.com"); err == nil {
-		t.Error("DestroyPreviewWildcard took down a wildcard a box never raised")
 	}
 }
 

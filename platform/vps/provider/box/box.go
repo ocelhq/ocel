@@ -3,6 +3,7 @@ package box
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -32,6 +33,9 @@ type Machine interface {
 	ClaimHost(ctx context.Context, claim host.HostClaim) error
 	DisclaimHost(ctx context.Context, hostname, owner string) error
 	DisclaimSurface(ctx context.Context, owner string) error
+	PreviewEntry(ctx context.Context) (string, error)
+	InstallPreviewEntry(ctx context.Context, base string) error
+	RemovePreviewEntry(ctx context.Context, base string) error
 }
 
 type Edge struct {
@@ -88,6 +92,13 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 }
 
 func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error) {
+	if base, wild := strings.CutPrefix(hostname, "*."); wild {
+		held, err := e.machine.PreviewEntry(ctx)
+		if err != nil || held != base {
+			return "", err
+		}
+		return edge.PreviewEntryOwner, nil
+	}
 	claims, err := e.machine.Claims(ctx)
 	if err != nil {
 		return "", err
@@ -103,17 +114,22 @@ func (e *Edge) ProjectOwner(slug string, class edge.Class) string {
 	return Surface(slug, class)
 }
 
-func (e *Edge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
-	return "", e.unbuilt("serve a preview wildcard")
+func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
+	if err := host.PreviewBaseUsable(spec.BaseDomain); err != nil {
+		return "", err
+	}
+	address, err := e.machine.Address(ctx)
+	if err != nil {
+		return "", err
+	}
+	if err := e.machine.InstallPreviewEntry(ctx, spec.BaseDomain); err != nil {
+		return "", err
+	}
+	return address, nil
 }
 
-func (e *Edge) DestroyPreviewWildcard(context.Context, string) error {
-	return e.unbuilt("take a preview wildcard down")
-}
-
-func (e *Edge) unbuilt(what string) error {
-	return providerkit.Refuse(providerkit.CodeNotReady,
-		"the %q edge cannot %s yet: a box serves the hostnames it is given one at a time, and the shared preview wildcard it would answer on is not built", Kind, what)
+func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
+	return e.machine.RemovePreviewEntry(ctx, baseDomain)
 }
 
 func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
