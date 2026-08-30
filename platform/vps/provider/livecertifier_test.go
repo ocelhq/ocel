@@ -58,14 +58,15 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
+	served := fronting(t, p, "certified")
+	one := standsUp(t, p, "one")
+	promotes(t, served.stack, "p-one", "one", one, 1)
+
 	at := host.ProxyPins + "/live"
 	placedOnTheBox(t, vm, at, []string{host.ProxyContainer, liveHostname}, 90*24*time.Hour)
 	pinned := vm.provider(t, withPins(map[string]string{host.ProxyContainer: at}))
 	defer closing(t, pinned)
-
-	bound := fronting(t, pinned, "certified")
-	one := standsUp(t, pinned, "one")
-	promotes(t, bound.stack, "p-one", "one", one, 1)
+	fronting(t, pinned, "pinned")
 
 	ctx := context.Background()
 	cert, err := pinned.Certificate(ctx, providerkit.CertificateRequest{
