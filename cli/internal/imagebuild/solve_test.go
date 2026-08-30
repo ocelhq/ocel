@@ -129,6 +129,9 @@ func TestADockerfileBuildsTheAppDirectoryWhereverTheDockerfileLives(t *testing.T
 	if err := os.WriteFile(filepath.Join(shared, "Node.Dockerfile"), []byte("FROM scratch\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(appDir, "server.js"), []byte("listen()\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	opt, err := dockerfileOptions(appDir, filepath.Join(shared, "Node.Dockerfile"))
 	if err != nil {
@@ -146,6 +149,12 @@ func TestADockerfileBuildsTheAppDirectoryWhereverTheDockerfileLives(t *testing.T
 	if want := []string{contextMount, frontendMount}; !slices.Equal(mounted, want) {
 		t.Fatalf("the solve mounts %v, want %v", mounted, want)
 	}
+	own, err := opt.LocalMounts[contextMount].Open("server.js")
+	if err != nil {
+		t.Errorf("the build context holds no %q: %v — the app's own files are what the Dockerfile copies from", "server.js", err)
+	} else {
+		_ = own.Close()
+	}
 	held, err := opt.LocalMounts[contextMount].Open("Node.Dockerfile")
 	if err == nil {
 		_ = held.Close()
@@ -160,7 +169,9 @@ func TestNeitherBuilderExportsTheImageDifferently(t *testing.T) {
 	}
 	dockerfile := dockerfileSolve(t)
 
-	if !reflect.DeepEqual(railpack.Exports, dockerfile.Exports) {
-		t.Errorf("railpack exports %+v and a Dockerfile exports %+v: the digest the coordinate is derived from would come from two different places", railpack.Exports, dockerfile.Exports)
+	for builder, exported := range map[string][]client.ExportEntry{"railpack": railpack.Exports, "a Dockerfile": dockerfile.Exports} {
+		if !reflect.DeepEqual(exported, exports()) {
+			t.Errorf("%s exports %+v, want the %+v every build exports: an export described in two places is a digest read from two places", builder, exported, exports())
+		}
 	}
 }
