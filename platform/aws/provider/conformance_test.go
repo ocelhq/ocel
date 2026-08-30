@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	provider "github.com/ocelhq/ocel/platform/aws/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 )
 
 func TestAWSProvider(t *testing.T) {
@@ -19,6 +20,9 @@ func TestAWSProvider(t *testing.T) {
 		Spec:    providerkit.Spec{Version: "test", New: provider.New},
 		Options: providerkit.Options{"region": "us-east-1"},
 		Binary:  buildProvider(t),
+		Certifier: &conformance.CertifierChecks{
+			Kind: edges.DefaultKind,
+		},
 	})
 }
 
