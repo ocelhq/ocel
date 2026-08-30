@@ -5,8 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -135,6 +137,41 @@ func TestAPromoteRenamesAndLeavesNothingHalfWritten(t *testing.T) {
 	}
 	if len(staged) != 0 {
 		t.Errorf("%v stands where the helper stages, and a write that renames leaves nothing behind", staged)
+	}
+}
+
+func TestConcurrentPromotesOfOneClassLoseNoUpdate(t *testing.T) {
+	t.Parallel()
+
+	script := filepath.Join(t.TempDir(), "releases")
+	if err := os.WriteFile(script, releasesScript, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for round := range 20 {
+		root := releasesDir(t)
+		refs := []string{"ocel/web:a", "ocel/web:b", "ocel/web:c"}
+		var racing sync.WaitGroup
+		failed := make([]error, len(refs))
+		for at, ref := range refs {
+			racing.Add(1)
+			go func() {
+				defer racing.Done()
+				cmd := exec.Command("/bin/sh", script, "web", "promote", "production", ref)
+				cmd.Env = append(os.Environ(), "OCEL_RELEASES_ROOT="+root)
+				failed[at] = cmd.Run()
+			}()
+		}
+		racing.Wait()
+		for at, err := range failed {
+			if err != nil {
+				t.Fatalf("promote %s exited: %v", refs[at], err)
+			}
+		}
+		held := window(t, root, "web", "production")
+		slices.Sort(held)
+		if !slices.Equal(held, refs) {
+			t.Fatalf("round %d left the window holding %v, want all of %v: promote reads the window, prepends and renames, and two of those interleaving without the lock drops whichever landed first", round, held, refs)
+		}
 	}
 }
 
