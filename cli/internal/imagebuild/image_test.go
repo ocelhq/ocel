@@ -13,6 +13,9 @@ func TestTheImageIsNamedAfterTheAppAndAddressedByItsDigest(t *testing.T) {
 		t.Fatalf("imageFor() = %v", err)
 	}
 
+	if image.Name != "web-api" {
+		t.Errorf("the image's repository is %q, want the app's own name, which is what a registry is told to hold", image.Name)
+	}
 	if image.Repository != "ocel/web-api" {
 		t.Errorf("the image's repository is %q, want one derived from the app's own name and marked as ocel's", image.Repository)
 	}
@@ -37,7 +40,7 @@ func TestAnAppNamedInSymbolsAloneIsStillGivenARepository(t *testing.T) {
 			t.Errorf("imageFor(%q) = %v, want a repository derived from what the name leaves", app, err)
 			continue
 		}
-		if !namePattern.MatchString(strings.TrimPrefix(image.Repository, repositoryPrefix)) {
+		if !namePattern.MatchString(image.Name) {
 			t.Errorf("imageFor(%q) named %q, which is no repository docker can hold", app, image.Repository)
 		}
 	}
