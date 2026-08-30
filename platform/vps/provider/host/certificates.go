@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 )
 
@@ -48,6 +49,11 @@ func (h *Host) vouch(ctx context.Context, pin Pin) error {
 }
 
 func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, error) {
+	if !pinnedUnderProxyPins(path) {
+		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			"a pinned certificate on this box is read off %s/<name> alone, and %q is outside it: %s is the one directory bound into the proxy, so a pair anywhere else on this host is a path the proxy cannot open and one this ssh session must not open as root either",
+			ProxyPins, path, ProxyPins)
+	}
 	read, err := h.run(ctx, "read the certificate pinned at "+PinCertificate(path),
 		"cat "+quoted(PinCertificate(path)), nil)
 	if err != nil {

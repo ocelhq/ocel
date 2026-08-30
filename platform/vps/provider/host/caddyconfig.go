@@ -314,9 +314,13 @@ func pinLeaf(under string) bool {
 	return under != "" && !strings.Contains(under, "/") && under != "." && under != ".."
 }
 
+func pinnedUnderProxyPins(path string) bool {
+	under, beneath := strings.CutPrefix(path, ProxyPins+"/")
+	return beneath && pinLeaf(under)
+}
+
 func validPin(pin Pin) error {
-	under, beneath := strings.CutPrefix(pin.Path, ProxyPins+"/")
-	if pin.Hostname == "" || !beneath || !pinLeaf(under) {
+	if pin.Hostname == "" || !pinnedUnderProxyPins(pin.Path) {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"a pinned certificate on this box names host %q at %q, and the proxy loads a pair off %s/<name> alone: %s is the one directory bound into the proxy, and a pair anywhere else on this host is a path the proxy cannot open",
 			pin.Hostname, pin.Path, ProxyPins, ProxyPins)

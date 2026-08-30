@@ -301,4 +301,29 @@ func TestAProxyHandleWithNothingServedYetIsPendingRatherThanIssued(t *testing.T)
 	}
 }
 
+func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRead(t *testing.T) {
+	t.Parallel()
+
+	const elsewhere = "/etc/ocel/preview/certs/wildcard"
+	machine := &box{reads: map[string]string{
+		host.PinCertificate(elsewhere): string(selfSigned(t, []string{"*.preview.example.com"}, 90*24*time.Hour)),
+	}}
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+
+	_, err := p.InspectCertificate(context.Background(), boxedge.Kind, "pr-7.preview.example.com",
+		providerkit.Certificate{ID: certs.PinHandle(elsewhere)})
+	var refusal providerkit.Refusal
+	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, host.ProxyPins) {
+		t.Fatalf("InspectCertificate() over a pin outside %s = %v, want a refusal naming the one directory the proxy is handed", host.ProxyPins, err)
+	}
+	for _, command := range machine.commands() {
+		if strings.Contains(command, elsewhere) {
+			t.Errorf("the box ran %q as root before the refusal arrived: what may be read is decided ahead of the read, or the refusal is a report on a file this host had already opened", command)
+		}
+	}
+}
+
 func asRefusal(err error, refusal *providerkit.Refusal) bool { return errors.As(err, refusal) }
