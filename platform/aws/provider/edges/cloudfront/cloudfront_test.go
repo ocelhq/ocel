@@ -430,6 +430,32 @@ func TestPromote(t *testing.T) {
 	})
 }
 
+func TestBoundHostsTakeACNAMEAtTheDistributionDomainName(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	e := bootstrapped(t, w)
+	stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	bound(t, stack)
+
+	hosts := []string{boundHost}
+	records, err := edge.RecordsFor(edge.TargetFor(e, stack.State()), hosts)
+	if err != nil {
+		t.Fatalf("RecordsFor(%v): %v", hosts, err)
+	}
+	want := []edge.Record{{
+		Name:  boundHost,
+		Type:  edge.RecordTypeCNAME,
+		Value: w.front.named(productionDistributionName()).domain,
+	}}
+	if !slices.Equal(records, want) {
+		t.Errorf("records = %v, want %v: a distribution answers on a name, so a bound host is a CNAME at it", records, want)
+	}
+}
+
 func TestUnbindDomainTakesTheRouteAndTheAlias(t *testing.T) {
 	t.Parallel()
 

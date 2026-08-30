@@ -3,6 +3,7 @@ package edgeconformance
 import (
 	"context"
 	"encoding/json"
+	"net/netip"
 	"slices"
 	"testing"
 
@@ -437,18 +438,51 @@ func frontedRecords(t *testing.T, e edge.Edge, state edge.StackState, hostname s
 		t.Fatalf("state = %v, want a front for %q on it: a %s edge answers on a hostname of its own, and DNS has nothing to point at until the state carries it", state, hostname, e.Kind())
 	}
 
-	want, err := edge.RecordsFor(target, []string{hostname})
-	if err != nil {
-		t.Fatalf("RecordsFor(%v): %v", []string{hostname}, err)
-	}
 	records, err := edge.RecordsFor(target, bound)
 	if err != nil {
 		t.Fatalf("RecordsFor(%v): %v", bound, err)
 	}
-	if !slices.Equal(records, want) {
-		t.Fatalf("records = %v, want %v", records, want)
+	if len(records) != len(bound) {
+		t.Fatalf("records = %v, want one per bound hostname %v", records, bound)
+	}
+	at := slices.IndexFunc(records, func(rec edge.Record) bool { return rec.Name == hostname })
+	if at < 0 {
+		t.Fatalf("records = %v, want one of them at %q", records, hostname)
+	}
+	rec := records[at]
+	if rec.Proxied != target.ServesUnbound {
+		t.Errorf("record %v is proxied = %t, want %t: only an edge that answers on the zone itself takes the proxy", rec, rec.Proxied, target.ServesUnbound)
+	}
+	addr, addrErr := netip.ParseAddr(rec.Value)
+	switch rec.Type {
+	case edge.RecordTypeA:
+		if addrErr != nil || !addr.Unmap().Is4() {
+			t.Errorf("record %v is an A record, and %q is no IPv4 address a resolver would accept in one", rec, rec.Value)
+		}
+	case edge.RecordTypeAAAA:
+		if addrErr != nil || addr.Unmap().Is4() {
+			t.Errorf("record %v is an AAAA record, and %q is no IPv6 address a resolver would accept in one", rec, rec.Value)
+		}
+	}
+	if target.ServesUnbound {
+		if rec.Value != edge.ProxyPlaceholder {
+			t.Errorf("record %v points at %q, want the %q placeholder a proxied record carries", rec, rec.Value, edge.ProxyPlaceholder)
+		}
+		return records
+	}
+	if !pointsAt(rec.Value, front) {
+		t.Errorf("record %v points at %q, want the %q the %s edge published", rec, rec.Value, front, e.Kind())
 	}
 	return records
+}
+
+func pointsAt(value, front string) bool {
+	got, gotErr := netip.ParseAddr(value)
+	want, wantErr := netip.ParseAddr(front)
+	if gotErr == nil && wantErr == nil {
+		return got.Unmap() == want.Unmap()
+	}
+	return value == front
 }
 
 func roundTrip(t *testing.T, state edge.StackState) edge.StackState {
