@@ -84,7 +84,7 @@ jobs:
         run: pnpm --filter ocel build
 
       - name: go generate (embedded dist)
-        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
+        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider' || matrix.module == 'platform/vps/provider'
         run: go generate ./...
 
       - name: go generate (provider payloads the cli tests build)
