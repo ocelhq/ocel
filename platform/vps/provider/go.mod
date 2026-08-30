@@ -3,8 +3,10 @@ module github.com/ocelhq/ocel/platform/vps/provider
 go 1.27.0
 
 require (
+	connectrpc.com/connect v1.20.0
 	github.com/creack/pty v1.1.24
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
+	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
@@ -14,7 +16,6 @@ require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260709200747-435963d16310.1 // indirect
 	buf.build/go/protovalidate v1.0.0 // indirect
 	cel.dev/expr v0.24.0 // indirect
-	connectrpc.com/connect v1.20.0 // indirect
 	connectrpc.com/validate v0.6.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
@@ -32,7 +33,6 @@ require (
 	github.com/cloudflare/cloudflare-go/v4 v4.6.0 // indirect
 	github.com/google/cel-go v0.26.1 // indirect
 	github.com/ocelhq/ocel/pkg/channel v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/proto v0.0.0 // indirect
 	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
