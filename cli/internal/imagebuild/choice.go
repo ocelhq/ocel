@@ -11,7 +11,7 @@ const DockerfileName = "Dockerfile"
 type App struct {
 	Name       string
 	Dir        string
-	Dockerfile string
+	Configured string
 }
 
 type Choice struct {
@@ -20,14 +20,14 @@ type Choice struct {
 }
 
 func Choose(app App) (Choice, error) {
-	if app.Dockerfile != "" {
-		path := app.Dockerfile
+	if app.Configured != "" {
+		path := app.Configured
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(app.Dir, path)
 		}
 		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() {
-			return Choice{}, fmt.Errorf("app %q sets build.dockerfile to %q, and %s is not a file to build from: build.dockerfile resolves against the app's own directory, and may point outside it", app.Name, app.Dockerfile, path)
+			return Choice{}, fmt.Errorf("app %q sets build.dockerfile to %q, and %s is not a file to build from: build.dockerfile resolves against the app's own directory, and may point outside it", app.Name, app.Configured, path)
 		}
 		return Choice{App: app, Dockerfile: path}, nil
 	}
@@ -51,7 +51,7 @@ func (c Choice) Notice() string {
 	switch {
 	case c.Dockerfile == "":
 		return ""
-	case c.App.Dockerfile != "":
+	case c.App.Configured != "":
 		return fmt.Sprintf("%s builds from %s, the build.dockerfile it names — its build context is still %s", c.App.Name, c.Dockerfile, c.App.Dir)
 	default:
 		return fmt.Sprintf("%s builds from the %s beside it rather than with railpack — rename or remove %s to go back", c.App.Name, DockerfileName, c.Dockerfile)

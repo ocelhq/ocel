@@ -165,7 +165,7 @@ func TestAConfiguredDockerfileMayLiveOutsideTheAppItBuilds(t *testing.T) {
 	write(t, filepath.Join(appDir, "package.json"))
 	write(t, shared)
 
-	choice := chosen(t, imagebuild.App{Name: "api", Dir: appDir, Dockerfile: "../../shared/Dockerfile"})
+	choice := chosen(t, imagebuild.App{Name: "api", Dir: appDir, Configured: "../../shared/Dockerfile"})
 
 	if choice.Dockerfile != shared {
 		t.Errorf("Choose() built from %q, want the %q the app's build names, resolved against the app's directory", choice.Dockerfile, shared)
@@ -186,7 +186,7 @@ func TestAConfiguredDockerfileBeatsTheOneBesideTheApp(t *testing.T) {
 	write(t, filepath.Join(appDir, imagebuild.DockerfileName))
 	write(t, filepath.Join(root, "shared", imagebuild.DockerfileName))
 
-	choice := chosen(t, imagebuild.App{Name: "api", Dir: appDir, Dockerfile: "../shared/Dockerfile"})
+	choice := chosen(t, imagebuild.App{Name: "api", Dir: appDir, Configured: "../shared/Dockerfile"})
 
 	if want := filepath.Join(root, "shared", imagebuild.DockerfileName); choice.Dockerfile != want {
 		t.Errorf("Choose() built from %q, want the %q the app asked for", choice.Dockerfile, want)
@@ -198,7 +198,7 @@ func TestAConfiguredDockerfileThatIsNotThereRefusesTheBuildByName(t *testing.T) 
 
 	dir := t.TempDir()
 
-	_, err := imagebuild.Choose(imagebuild.App{Name: "api", Dir: dir, Dockerfile: "build/Dockerfile"})
+	_, err := imagebuild.Choose(imagebuild.App{Name: "api", Dir: dir, Configured: "build/Dockerfile"})
 	if err == nil {
 		t.Fatal("Choose() accepted a build.dockerfile naming nothing, so the deploy would reach the solve before finding out")
 	}
