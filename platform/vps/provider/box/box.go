@@ -12,7 +12,10 @@ import (
 
 const Kind edge.Kind = "box"
 
-const RouteKind = "proxy:route"
+const (
+	RouteKind       = "proxy:route"
+	CertificateKind = "proxy:certificate"
+)
 
 type Machine interface {
 	Address(ctx context.Context) (string, error)
@@ -119,7 +122,9 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 		}
 		group.Changes = append(group.Changes,
 			edge.PlanChange{Kind: RouteKind, Name: hostname, Action: edge.PlanDelete,
-				Reason: "the route on this box's proxy claiming " + hostname + " for " + Surface(scope.Slug, scope.Class)})
+				Reason: "the route on this box's proxy claiming " + hostname + " for " + Surface(scope.Slug, scope.Class)},
+			edge.PlanChange{Kind: CertificateKind, Name: hostname, Action: edge.PlanKeep,
+				Reason: "the certificate this box's proxy obtained for " + hostname + " and renews, which stays in the proxy's own store: ocel placed no key here so it removes none, and a hostname bound again inside the certificate's life is served off it rather than ordered again"})
 	}
 	if len(group.Changes) == 0 {
 		group.Action = edge.PlanKeep
