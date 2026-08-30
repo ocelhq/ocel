@@ -60,7 +60,7 @@ func containerRun(spec Container) []string {
 }
 
 func servingSelectors() string {
-	return "{{.State.Running}} {{index .Config.Labels " + strconv.Quote(LabelRef) + "}}"
+	return "{{.State.Status}} {{index .Config.Labels " + strconv.Quote(LabelRef) + "}}"
 }
 
 func servingCommand(name string) string {
@@ -74,7 +74,7 @@ func (h *Host) StandUp(ctx context.Context, spec Container) error {
 	if err != nil {
 		return err
 	}
-	if h.said(ctx, servingCommand(spec.Name), elevation) == "true "+spec.Image {
+	if h.said(ctx, servingCommand(spec.Name), elevation) == "running "+spec.Image {
 		return nil
 	}
 	if _, err := h.ran(ctx, "clear the name "+spec.Name,
