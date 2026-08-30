@@ -42,14 +42,11 @@ func (b Builder) Build(ctx context.Context, app, appDir string) (Image, error) {
 	if err != nil {
 		return Image{}, err
 	}
-	planDir, err := os.MkdirTemp("", "ocel-railpack-")
+	planDir, err := stagePlan(plan)
 	if err != nil {
 		return Image{}, err
 	}
 	defer func() { _ = os.RemoveAll(planDir) }()
-	if err := os.WriteFile(filepath.Join(planDir, PlanFileName), plan, 0o600); err != nil {
-		return Image{}, err
-	}
 
 	opt, err := solveOptions(appDir, planDir)
 	if err != nil {
@@ -76,6 +73,18 @@ func (b Builder) Build(ctx context.Context, app, appDir string) (Image, error) {
 		return Image{}, err
 	}
 	return image, nil
+}
+
+func stagePlan(plan []byte) (string, error) {
+	dir, err := os.MkdirTemp("", "ocel-railpack-")
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dir, PlanFileName), plan, 0o600); err != nil {
+		_ = os.RemoveAll(dir)
+		return "", err
+	}
+	return dir, nil
 }
 
 func solveOptions(appDir, planDir string) (client.SolveOpt, error) {
