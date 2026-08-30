@@ -59,6 +59,9 @@ type pulled struct {
 }
 
 func (p *Provider) Images(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
+	if err := host.LoginStands(target); err != nil {
+		return nil, err
+	}
 	return pulled{
 		host:   p.host,
 		at:     p.options.SSH.session().Destination(),

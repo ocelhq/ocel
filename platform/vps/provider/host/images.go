@@ -77,6 +77,15 @@ func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget,
 	return strings.TrimSpace(said), nil
 }
 
+func LoginStands(target providerkit.RegistryTarget) error {
+	if target.Password == "" || target.Username != "" {
+		return nil
+	}
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"%s is reached with a password and no username to present it under, and a docker login takes both: "+
+			"name `username` beside `password` in the project's `registry`", target.Server)
+}
+
 func pull(target providerkit.RegistryTarget, coordinate, digest string) (string, io.Reader, error) {
 	pinned, err := pinnedTo(coordinate, digest)
 	if err != nil {
@@ -85,10 +94,8 @@ func pull(target providerkit.RegistryTarget, coordinate, digest string) (string,
 	var secret io.Reader
 	steps := []string{"set -e"}
 	if target.Password != "" {
-		if target.Username == "" {
-			return "", nil, providerkit.Refuse(providerkit.CodeInvalid,
-				"%s is reached with a password and no username to present it under, and a docker login takes both: "+
-					"name `username` beside `password` in the project's `registry`", target.Server)
+		if err := LoginStands(target); err != nil {
+			return "", nil, err
 		}
 		secret = strings.NewReader(target.Password)
 		steps = append(steps,
