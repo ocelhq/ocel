@@ -12,7 +12,10 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-const workload = "ocel-live-workload"
+const (
+	workload   = "ocel-live-workload"
+	decoyImage = "busybox"
+)
 
 type said struct{ lines []string }
 
@@ -42,10 +45,19 @@ func (vm machine) running(t *testing.T, container string) bool {
 func (vm machine) runs(t *testing.T, container string) {
 	t.Helper()
 	vm.ssh(t, "sudo docker rm -f "+container+" >/dev/null 2>&1 || true")
-	vm.ssh(t, "sudo docker run -d --name "+container+" busybox sleep 900")
+	vm.ssh(t, "sudo docker run -d --name "+container+" "+decoyImage+" sleep 900")
 	if !vm.running(t, container) {
 		t.Fatalf("%s is not running, so what a destroy does to a user's workloads cannot be proven on this machine", container)
 	}
+}
+
+func (vm machine) holds(t *testing.T, image string) string {
+	t.Helper()
+	held := vm.inspects(t, "image", image, "{{.Id}}")
+	if held == "" {
+		t.Fatalf("this machine holds no %s, so what a destroy leaves of the images on it cannot be proven", image)
+	}
+	return held
 }
 
 func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testing.T) {
@@ -65,6 +77,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	}
 	vm.runs(t, workload)
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
+	decoy := vm.holds(t, decoyImage)
 
 	removal, err := bootstrapper.PlanRemoval(ctx, class)
 	if err != nil {
@@ -125,6 +138,9 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	}
 	if !vm.running(t, workload) {
 		t.Errorf("%s is gone after a destroy, and removing ocel took a container ocel never ran", workload)
+	}
+	if after := vm.inspects(t, "image", decoyImage, "{{.Id}}"); after != decoy {
+		t.Errorf("%s reads %q after a destroy where it read %q, and the images on a host are the host's rather than ocel's to prune", decoyImage, after, decoy)
 	}
 	if group := strings.TrimSpace(vm.ssh(t, "getent group docker || true")); group == "" {
 		t.Error("the docker group went with the destroy, and the group belongs to the engine that stays")
