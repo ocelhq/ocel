@@ -158,8 +158,12 @@ func TestLiveAFailedReleaseSweepsItsOwnImage(t *testing.T) {
 	plan := sweepPlan(t, "leak")
 	plan.App.HealthCheckPath = ""
 	releaser := resources.Releaser(p.Records(), p.Artifacts(), p)
-	if _, err := releaser.Provision(context.Background(), plan, nil); err == nil {
+	_, err := releaser.Provision(context.Background(), plan, nil)
+	if err == nil {
 		t.Fatal("Provision() of an app carrying no health path succeeded, and this test needs the failure path")
+	}
+	if !strings.Contains(err.Error(), "health check path") {
+		t.Fatalf("Provision() = %v, which is not the failure this test induces: a release that fell over somewhere earlier proves nothing about the release that leaked an image", err)
 	}
 
 	if strings.Contains(sweepImages(t, vm), sweepAt("leak")) {
