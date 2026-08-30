@@ -37,23 +37,23 @@ export default {
 		t.Fatalf("runDeploy --dry err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	ref := pinnedRefIn(t, stdout.String())
+	ref := pinnedRefIn(t, stdout.String(), "ocel/api")
 	if _, err := vm.Attempt("docker image inspect " + ref); err != nil {
 		t.Errorf("the plan names %s and the daemon holds no image there, so the dry run rendered a coordinate no release could be pinned to: %v", ref, err)
 	}
 	clitest.WaitForNoStaleSocket(t, sockPath)
 }
 
-func pinnedRefIn(t *testing.T, out string) string {
+func pinnedRefIn(t *testing.T, out, repository string) string {
 	t.Helper()
 	for _, field := range strings.Fields(out) {
-		repository, digest, pinned := strings.Cut(field, "@sha256:")
-		if !pinned || repository == "" || len(digest) != 64 {
+		named, digest, pinned := strings.Cut(field, "@sha256:")
+		if !pinned || named != repository || len(digest) != 64 {
 			continue
 		}
 		return field
 	}
-	t.Fatalf("the dry run rendered no digest-pinned image at all:\n%s", out)
+	t.Fatalf("the dry run rendered no image pinned at %s@sha256:<digest>:\n%s", repository, out)
 	return ""
 }
 
