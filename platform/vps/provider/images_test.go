@@ -41,6 +41,9 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 	case strings.Contains(command, "docker load"):
 		b.holds = true
 		return session.Result{Stdout: "Loaded image: " + loadedCoordinate + "\n"}, nil
+	case strings.Contains(command, "docker pull"):
+		b.holds = true
+		return session.Result{Stdout: "Status: Downloaded newer image\n"}, nil
 	case strings.Contains(command, "docker image ls"):
 		if b.holds {
 			return session.Result{Stdout: "sha256:abcdef\n"}, nil
