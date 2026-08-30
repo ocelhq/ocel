@@ -44,12 +44,33 @@ func newSettler(front edge.Edge, writer edge.DNSWriter, zone string, resolve Res
 	}
 }
 
+type Prober interface {
+	Serving(ctx context.Context, kind edge.Kind, hostname string) (edge.Kind, error)
+}
+
+func resolving(provider Provider, front edge.Edge, stand Resolver) Resolver {
+	prober, ok := provider.(Prober)
+	if !ok {
+		return stand
+	}
+	return probing{prober: prober, kind: front.Kind()}
+}
+
+type probing struct {
+	prober Prober
+	kind   edge.Kind
+}
+
+func (p probing) Serving(ctx context.Context, hostname string) (edge.Kind, error) {
+	return p.prober.Serving(ctx, p.kind, hostname)
+}
+
 func boundBy(front edge.Edge, state func() edge.StackState) Resolver {
 	return boundResolver{kind: front.Kind(), unbound: front.Facts().ServesUnbound, state: state}
 }
 
-// TODO(#390): stands in for the prober the edge lands, which asks the hostname itself
-// which edge answers on it. Until then the kit can only answer from what it just bound.
+// TODO(#390): stands in for a provider that supplies no Prober, and answers from what
+// the kit just bound rather than from what the hostname serves.
 type boundResolver struct {
 	kind    edge.Kind
 	unbound bool

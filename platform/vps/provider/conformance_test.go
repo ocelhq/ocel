@@ -106,6 +106,9 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 			t.Errorf("the root carries %s, which the optional-set tier must be told to expect on it", name)
 		}
 	}
+	if !held[providerkit.Prober](root) {
+		t.Error("the root carries no Prober, and the settle then answers from what it just bound rather than from what the hostname serves")
+	}
 }
 
 func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T) {

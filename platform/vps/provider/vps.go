@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -89,6 +90,7 @@ type Provider struct {
 	host    *host.Host
 	records *host.Records
 	sealer  *host.Sealer
+	probing *http.Client
 	dial    sync.Mutex
 	live    *session.Session
 }
@@ -200,3 +202,5 @@ func pins(configured map[string]string) []host.Pin {
 func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
 
 var _ providerkit.Provider = (*Provider)(nil)
+
+var _ providerkit.Prober = (*Provider)(nil)

@@ -59,7 +59,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	removal := &projectRemoval{
 		provider: provider,
 		front:    front,
-		settle:   newSettler(front, writer, req.GetEdge().GetDns().GetZone(), servedResolver{kind: front.Kind()}),
+		settle:   newSettler(front, writer, req.GetEdge().GetDns().GetZone(), resolving(provider, front, servedResolver{kind: front.Kind()})),
 		store:    stackStore{records: provider.Records(), name: EdgeStackRecord(class, req.GetSlug())},
 		slug:     req.GetSlug(),
 		class:    class,
