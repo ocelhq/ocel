@@ -2,7 +2,10 @@ package imagebuild_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -100,4 +103,41 @@ func TestLiveADockerfileBuildLandsTheSameCoordinateAsARailpackOne(t *testing.T) 
 	if said := serves(t, vm, image, 18081); said != "dockerfile" {
 		t.Errorf("the running image answered %q: the app's Dockerfile is what sets that, so %q was built by railpack instead", said, image.Ref)
 	}
+}
+
+const journeyFixture = "../../../examples/express-container"
+
+func TestLiveTheExpressFixtureTheBoxJourneyDeploysBuildsAndServesItsVersion(t *testing.T) {
+	vm := livemachine.Require(t)
+	vm.Engine(t)
+	vm.Forward(t)
+
+	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(),
+		imagebuild.App{Name: "web", Dir: journeyFixture})
+	if err != nil {
+		t.Fatalf("Build() of the express fixture a box journey deploys = %v", err)
+	}
+
+	want := declaredVersion(t)
+	if said := serves(t, vm, image, 18082); said != want {
+		t.Errorf("the express fixture answered %q, want %q: a redeploy is told apart by the version its package.json carries", said, want)
+	}
+}
+
+func declaredVersion(t *testing.T) string {
+	t.Helper()
+	read, err := os.ReadFile(filepath.Join(journeyFixture, "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(read, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Version == "" {
+		t.Fatalf("%s declares no version, and the fixture serves one so two releases of it can be told apart", journeyFixture)
+	}
+	return manifest.Version
 }
