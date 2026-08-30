@@ -52,6 +52,12 @@ type Build struct {
 	Dockerfile string
 }
 
+type Registry struct {
+	Server   string
+	Username string
+	Password string
+}
+
 type Health struct {
 	Path string
 }
@@ -78,6 +84,7 @@ type Config struct {
 	Apps          []App
 	Links         []string
 	Domains       map[string][]string
+	Registry      *Registry
 	Dir           string
 	Path          string
 }
@@ -125,6 +132,11 @@ type rawConfig struct {
 	Edge          json.RawMessage `json:"edge"`
 	DNS           json.RawMessage `json:"dns"`
 	AllowDegraded []string        `json:"allowDegraded"`
+	Registry      *struct {
+		Server   string `json:"server"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+	} `json:"registry"`
 }
 
 type rawDomains struct {
@@ -344,6 +356,11 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
 	}
 
+	registry, err := normalizeRegistry(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%s has an invalid \"registry\": %w", configPath, err)
+	}
+
 	return &Config{
 		Slug:          raw.Slug,
 		Discovery:     Discovery{Paths: paths},
@@ -354,8 +371,36 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 		Apps:          apps,
 		Links:         links,
 		Domains:       domains,
+		Registry:      registry,
 		Dir:           filepath.Dir(configPath),
 		Path:          configPath,
+	}, nil
+}
+
+var envVarName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func normalizeRegistry(raw rawConfig) (*Registry, error) {
+	if raw.Registry == nil {
+		return nil, nil
+	}
+	server := strings.TrimSpace(raw.Registry.Server)
+	if server == "" {
+		return nil, errors.New("`server` is the only field naming where images land, so a registry without one would push wherever docker defaults to")
+	}
+	if strings.Contains(server, "://") || strings.Contains(server, "/") {
+		return nil, fmt.Errorf("`server` is a registry host such as \"ghcr.io\", not a URL: drop the scheme and the path from %q", server)
+	}
+	password := strings.TrimSpace(raw.Registry.Password)
+	if password == "" {
+		return nil, errors.New("`password` names the environment variable holding the registry password or token, and a push authenticates, so there is no anonymous form to fall back to")
+	}
+	if !envVarName.MatchString(password) {
+		return nil, fmt.Errorf("`password` is the name of an environment variable, not the secret itself, and %q is no variable name: put the secret in the environment and name it here", password)
+	}
+	return &Registry{
+		Server:   server,
+		Username: strings.TrimSpace(raw.Registry.Username),
+		Password: password,
 	}, nil
 }
 
