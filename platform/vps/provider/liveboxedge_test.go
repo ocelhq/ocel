@@ -60,7 +60,7 @@ func promotes(t *testing.T, stack edge.EdgeStack, id, tag string, held release, 
 	}
 }
 
-func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackStartsItAgain(t *testing.T) {
+func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackRunsItAgain(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
@@ -78,13 +78,13 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackStartsItAgai
 		t.Fatalf("the proxy served %q after the second promotion, want the release it was pointed at", served)
 	}
 	if state := vm.state(t, one.physical); state != "exited" {
-		t.Fatalf("the retired container reads as %q, want it stopped and standing: a rollback the ledger still offers has nothing to start again once its container has been removed", state)
+		t.Fatalf("the retired container reads as %q, want it stopped and standing: this release loop stops what it retires and never removes it, so the release it rolled off can still be read for logs and an exit code after the flip", state)
 	}
 
 	promotes(t, stack, "p-rollback", "one", one, 3)
 
 	if state := vm.state(t, one.physical); state != "running" {
-		t.Errorf("the container the rollback re-points at reads as %q, want it running: nothing provisions on this path, so a promote that does not make the containers running is a ledger edit and not a restored site", state)
+		t.Errorf("the container the rollback re-points at reads as %q, want it running: nothing provisions on this path, so a promote that does not make the containers running is a ledger edit and not a restored site. The rollback runs the image again under that name rather than starting the container that stood there", state)
 	}
 	if served := servedBy(t, vm, "/"); served != "one" {
 		t.Errorf("the proxy served %q after the rollback, want the release it was rolled back onto", served)
@@ -94,7 +94,7 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackStartsItAgai
 	}
 }
 
-func TestLiveARollbackRunsTheImageTheBoxAlreadyHoldsAndPullsNothing(t *testing.T) {
+func TestLiveARollbackRunsTheSameImageDigestTheBoxAlreadyHeld(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
@@ -110,7 +110,7 @@ func TestLiveARollbackRunsTheImageTheBoxAlreadyHoldsAndPullsNothing(t *testing.T
 	promotes(t, stack, "p-rollback", "one", one, 3)
 
 	if again := vm.inspects(t, "image", fixtureAt("one"), "{{.Id}}"); again != held {
-		t.Errorf("the image the rollback ran is %q, want the %q this box already held: a rollback re-points at a retained digest with no rebuild and no re-transfer", again, held)
+		t.Errorf("the image the rollback ran is %q, want the %q this box already held: a rollback re-points at a retained digest, and a coordinate that resolves to a different image is one this box rebuilt or fetched behind the rollback", again, held)
 	}
 	if served := servedBy(t, vm, "/"); served != "one" {
 		t.Errorf("the proxy served %q after the rollback, want the release it was rolled back onto", served)
@@ -163,7 +163,7 @@ func TestLiveAClaimedHostnameIsLoadedOntoTheProxyAndChangesNothingItServes(t *te
 
 var liveSlug atomic.Int64
 
-func TestLiveTheBoxEdgeAnswersTheEdgeContractAgainstARealMachine(t *testing.T) {
+func TestLiveTheBoxEdgeAnswersTheEdgeContractsLedgerAndDomainObligationsAgainstARealMachine(t *testing.T) {
 	vm := live(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 	p := vm.deploying(t)
@@ -183,4 +183,32 @@ func TestLiveTheBoxEdgeAnswersTheEdgeContractAgainstARealMachine(t *testing.T) {
 			}
 		},
 	})
+}
+
+func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(t *testing.T) {
+	vm, p := onABoxServingContainers(t)
+	defer closing(t, p)
+
+	_, stack := fronting(t, p, "swept")
+
+	one := standsUp(t, p, "one")
+	promotes(t, stack, "p-one", "one", one, 1)
+	two := standsUp(t, p, "two")
+	promotes(t, stack, "p-two", "two", two, 2)
+
+	vm.ssh(t, "sudo docker rm --force "+quote(one.physical)+" >/dev/null 2>&1 || true")
+	vm.ssh(t, "sudo docker rmi "+quote(fixtureAt("one")))
+
+	err := stack.Promote(context.Background(), edge.Promotion{
+		PromotionID: "p-rollback", Ts: 3, Builds: map[string]string{liveApp: "one"},
+	}, "", edge.DiscardReporter())
+	if err == nil {
+		t.Fatal("a rollback onto an image this box no longer holds succeeded, and docker run would then reach for a registry with no credentials on this path")
+	}
+	if !strings.Contains(err.Error(), "deploy again") {
+		t.Errorf("the refusal reads %q and never says what to do instead", err)
+	}
+	if served := servedBy(t, vm, "/"); served != "two" {
+		t.Errorf("the proxy served %q after a refused rollback, want the release that was serving before it: the ensure runs before the flip, so a rollback that cannot serve moves nothing", served)
+	}
 }
