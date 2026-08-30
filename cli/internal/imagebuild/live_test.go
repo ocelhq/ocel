@@ -128,7 +128,7 @@ func TestLiveARailpackBuildLandsAWorkingImageInTheDaemon(t *testing.T) {
 	vm.forward(t)
 	t.Setenv("OCEL_LIVE_LEAK", leaked)
 
-	image, err := imagebuild.Builder{Progress: progress{t}}.Build(context.Background(), "Web API", "testdata/plainserver")
+	image, err := imagebuild.Builder{Progress: progress{t}}.Build(context.Background(), imagebuild.App{Name: "Web API", Dir: "testdata/plainserver"})
 	if err != nil {
 		t.Fatalf("Build() against a real daemon = %v", err)
 	}
