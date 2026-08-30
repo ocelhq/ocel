@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 )
 
 type admin struct {
@@ -294,6 +296,9 @@ func TestADrainThatExpiresIsNotAFailureAndCarriesTheCountStillInFlight(t *testin
 		t.Fatalf("draining past the window = %d, want it borne as a warning: the new release is serving", code)
 	}
 	printed := strings.TrimSpace(out.String())
+	if !strings.HasPrefix(printed, caddyadmin.DrainExpired+" ") {
+		t.Errorf("the expired drain printed %q, and the release loop reads that line by the prefix both sides share", printed)
+	}
 	if !strings.Contains(printed, "old:8080") || !strings.Contains(printed, "3") {
 		t.Errorf("the expired drain printed %q, want the address and the count still in flight", printed)
 	}
