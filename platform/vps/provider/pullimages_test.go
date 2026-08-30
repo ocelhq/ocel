@@ -6,6 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const (
@@ -237,6 +241,60 @@ func TestNoCredentialFileIsLeftBehindOnTheMachine(t *testing.T) {
 	}
 	if !strings.Contains(pulled, "mktemp -d") || !strings.Contains(pulled, "rm -rf") {
 		t.Errorf("the pull ran %q, want the config it writes made and taken away within the session", pulled)
+	}
+}
+
+func TestTheCredentialDirectoryGoesEvenWhereTheSessionRefuses(t *testing.T) {
+	standingDaemon(t)
+	server, registry := standingRegistry(t)
+	registry.held(true)
+	machine := &box{refuses: func(command string) (session.Result, bool) {
+		return session.Result{Code: 1, Stderr: "Error response from daemon: manifest unknown"},
+			strings.Contains(command, "docker pull")
+	}}
+	target := aTarget(server)
+
+	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil); err == nil {
+		t.Fatal("Push() = nil over a machine whose pull refused, so a release would promote an image the box was never given")
+	}
+	underShell(t, sessionThatPulls(t, machine))
+}
+
+func underShell(t *testing.T, script string) {
+	t.Helper()
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("no shell here to run the session the machine would run")
+	}
+	dir := t.TempDir()
+	bin, tmp := filepath.Join(dir, "bin"), filepath.Join(dir, "tmp")
+	for _, made := range []string{bin, tmp} {
+		if err := os.Mkdir(made, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	refusing := "#!/bin/sh\ncase \"$1\" in\n" +
+		"login) cat >/dev/null; exit 0;;\n" +
+		"pull) echo 'manifest unknown' >&2; exit 1;;\n" +
+		"logout) exit 1;;\n" +
+		"*) exit 0;;\nesac\n"
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(refusing), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	ran := exec.Command(shell, "-c", script)
+	ran.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "TMPDIR="+tmp)
+	ran.Stdin = strings.NewReader(pullPassword)
+	if err := ran.Run(); err == nil {
+		t.Fatal("the session came back clean over a pull the daemon refused")
+	}
+	left, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 0 {
+		t.Errorf("the session left %d entries under its temporary directory, and the docker config among them "+
+			"carries the registry username and password in the clear for as long as the machine stands", len(left))
 	}
 }
 

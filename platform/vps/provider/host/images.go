@@ -93,7 +93,7 @@ func pull(target providerkit.RegistryTarget, coordinate, digest string) (string,
 		secret = strings.NewReader(target.Password)
 		steps = append(steps,
 			`config=$(mktemp -d)`,
-			`trap 'docker logout `+quoted(target.Server)+` >/dev/null 2>&1; rm -rf "$config"' EXIT`,
+			`trap 'rm -rf "$config"; docker logout `+quoted(target.Server)+` >/dev/null 2>&1 || true' EXIT`,
 			`export DOCKER_CONFIG="$config"`,
 			"docker login --username "+quoted(target.Username)+" --password-stdin "+quoted(target.Server),
 		)
