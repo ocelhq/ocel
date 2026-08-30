@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 func TestARecordNameSurvivesTheNameAFileOnTheHostAnswersTo(t *testing.T) {
@@ -288,5 +290,44 @@ func TestAListingThatCannotBeReadIsNoEmptyListing(t *testing.T) {
 	rendered, code := helper(t, dir, "", "list", "conformance/production/tree")
 	if code == 0 {
 		t.Fatalf("a listing over a directory nothing can read exited 0 with %q, and a reconciler reads that as a prefix that is empty", rendered)
+	}
+}
+
+func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
+	t.Parallel()
+
+	b := machine(nil)
+	b.facts = session.Facts{Systemd: true}
+	b.floor = providerkit.Refuse(providerkit.CodeDenied,
+		"%s can neither act as root nor run sudo without a password", deployUser)
+	b.answer = func(command string) (session.Result, bool) {
+		switch {
+		case strings.Contains(command, "echo held"):
+			return session.Result{Stdout: "held\n"}, true
+		case strings.Contains(command, recordsHelper):
+			return session.Result{Stdout: "0123456789abcdef0123456789abcdef\t" + base64.StdEncoding.EncodeToString([]byte("{}")) + "\n"}, true
+		}
+		return session.Result{}, false
+	}
+
+	held, err := NewRecords(b.host()).Read(context.Background(), providerkit.ProjectRecord(providerkit.ClassProduction, "shop"))
+	if err != nil {
+		t.Fatalf("Read() as the login every deploy runs as = %v", err)
+	}
+	if string(held.Bytes) != "{}" {
+		t.Errorf("the read answered %q, want the row the helper rendered", held.Bytes)
+	}
+	reached := 0
+	for _, command := range b.commands() {
+		if !strings.Contains(command, recordsHelper) {
+			continue
+		}
+		reached++
+		if strings.Contains(command, "sudo") {
+			t.Errorf("the read ran as %q: %s holds no sudoers line beside the seal helper, so a record tier reached through sudo is a record tier no deploy ever reads", command, deployUser)
+		}
+	}
+	if reached == 0 {
+		t.Error("no command the read ran named the helper at all, so this test read nothing")
 	}
 }
