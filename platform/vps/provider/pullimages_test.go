@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -394,6 +395,49 @@ func TestAPasswordWithNoLoginNameIsRefusedBeforeTheImageIsPublished(t *testing.T
 	}
 	if reads := registry.reads(); len(reads) != 0 {
 		t.Errorf("the registry was reached as %v under a password with no login name to present it under", reads)
+	}
+}
+
+func refusingPulls(said string, times int64) (*box, *atomic.Int64) {
+	var asked atomic.Int64
+	machine := &box{}
+	machine.refuses = func(command string) (session.Result, bool) {
+		if !strings.Contains(command, "docker pull") {
+			return session.Result{}, false
+		}
+		return session.Result{Code: 1, Stderr: said}, asked.Add(1) <= times
+	}
+	return machine, &asked
+}
+
+func TestAThrottledPullIsAskedAgainRatherThanFailingTheDeploy(t *testing.T) {
+	standingDaemon(t)
+	server, registry := standingRegistry(t)
+	registry.held(true)
+	machine, asked := refusingPulls("toomanyrequests: You have reached your pull rate limit", 2)
+	target := aTarget(server)
+
+	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil); err != nil {
+		t.Fatalf("Push() = %v over a registry that throttled the first pulls and then served the image", err)
+	}
+	if got := asked.Load(); got != 3 {
+		t.Errorf("the machine was told to pull %d times, want the throttled attempts asked again: "+
+			"the same 429 is retried where ocel pushes and fatal where the machine pulls", got)
+	}
+}
+
+func TestAPullTheRegistryDeniesIsNotAskedAgain(t *testing.T) {
+	standingDaemon(t)
+	server, registry := standingRegistry(t)
+	registry.held(true)
+	machine, asked := refusingPulls("unauthorized: authentication required", 100)
+	target := aTarget(server)
+
+	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil); err == nil {
+		t.Fatal("Push() = nil over a registry that refused the machine's login")
+	}
+	if got := asked.Load(); got != 1 {
+		t.Errorf("the machine was told to pull %d times over a credential the registry refuses, want the refusal taken at its word", got)
 	}
 }
 

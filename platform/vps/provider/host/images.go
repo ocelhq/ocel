@@ -3,7 +3,9 @@ package host
 import (
 	"context"
 	"io"
+	"math/rand/v2"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -53,7 +55,7 @@ func (h *Host) HoldsImage(ctx context.Context, coordinate string) (bool, error) 
 }
 
 func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget, coordinate, digest string) (string, error) {
-	command, secret, err := pull(target, coordinate, digest)
+	command, err := pull(target, coordinate, digest)
 	if err != nil {
 		return "", err
 	}
@@ -61,7 +63,7 @@ func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget,
 	if err != nil {
 		return "", err
 	}
-	said, err := h.ran(ctx, "pull "+coordinate+" from "+target.Server, command, secret, elevation)
+	said, err := h.pulling(ctx, target, coordinate, command, elevation)
 	if err != nil {
 		return "", err
 	}
@@ -77,6 +79,48 @@ func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget,
 	return strings.TrimSpace(said), nil
 }
 
+const (
+	pullAttempts = 5
+	pullBackoff  = 250 * time.Millisecond
+	pullCeiling  = 8 * time.Second
+)
+
+func (h *Host) pulling(ctx context.Context, target providerkit.RegistryTarget, coordinate, command, elevation string) (string, error) {
+	what := "pull " + coordinate + " from " + target.Server
+	var said string
+	var err error
+	for attempt := range pullAttempts {
+		if attempt > 0 {
+			if waited := waiting(ctx, attempt); waited != nil {
+				return "", waited
+			}
+		}
+		var secret io.Reader
+		if target.Password != "" {
+			secret = strings.NewReader(target.Password)
+		}
+		if said, err = h.ran(ctx, what, command, secret, elevation); err == nil || !providerkit.Throttled(err.Error()) {
+			return said, err
+		}
+	}
+	return "", err
+}
+
+func waiting(ctx context.Context, attempt int) error {
+	wait := pullBackoff << (attempt - 1)
+	if wait > pullCeiling {
+		wait = pullCeiling
+	}
+	timer := time.NewTimer(wait/2 + time.Duration(rand.Int64N(int64(wait/2)+1)))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 func LoginStands(target providerkit.RegistryTarget) error {
 	if target.Password == "" || target.Username != "" {
 		return nil
@@ -86,18 +130,16 @@ func LoginStands(target providerkit.RegistryTarget) error {
 			"name `username` beside `password` in the project's `registry`", target.Server)
 }
 
-func pull(target providerkit.RegistryTarget, coordinate, digest string) (string, io.Reader, error) {
+func pull(target providerkit.RegistryTarget, coordinate, digest string) (string, error) {
 	pinned, err := pinnedTo(coordinate, digest)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
-	var secret io.Reader
 	steps := []string{"set -e"}
 	if target.Password != "" {
 		if err := LoginStands(target); err != nil {
-			return "", nil, err
+			return "", err
 		}
-		secret = strings.NewReader(target.Password)
 		steps = append(steps,
 			`config=$(mktemp -d)`,
 			`trap 'rm -rf "$config"; docker logout `+quoted(target.Server)+` >/dev/null 2>&1 || true' EXIT`,
@@ -109,7 +151,7 @@ func pull(target providerkit.RegistryTarget, coordinate, digest string) (string,
 		"docker pull "+quoted(pinned),
 		"docker tag "+quoted(pinned)+" "+quoted(coordinate),
 	)
-	return strings.Join(steps, "\n"), secret, nil
+	return strings.Join(steps, "\n"), nil
 }
 
 func pinnedTo(coordinate, digest string) (string, error) {
