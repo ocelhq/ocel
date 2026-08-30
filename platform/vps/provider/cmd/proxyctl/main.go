@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,6 +29,7 @@ const (
 	exitUnhealthy      = 3
 	exitSilent         = 4
 	exitUnattributable = 5
+	exitUnservable     = 6
 )
 
 const (
@@ -78,7 +80,7 @@ func run(argv []string, out, errs io.Writer) int {
 		if len(rest) != 1 {
 			return usage(errs)
 		}
-		return serving(rest[0], out, errs)
+		return serving(servingAt, rest[0], out, errs)
 	case "deploy":
 		return deploy(socket, rest, out, errs)
 	default:
@@ -93,10 +95,10 @@ func usage(errs io.Writer) int {
 	return exitRefused
 }
 
-func serving(hostname string, out, errs io.Writer) int {
-	held, err := net.DialTimeout("tcp", servingAt, servingTimeout)
+func serving(at, hostname string, out, errs io.Writer) int {
+	held, err := net.DialTimeout("tcp", at, servingTimeout)
 	if err != nil {
-		fmt.Fprintf(errs, "ocel-proxyctl: nothing answered %s from inside the proxy: %v\n", servingAt, err)
+		fmt.Fprintf(errs, "ocel-proxyctl: nothing answered %s from inside the proxy: %v\n", at, err)
 		return exitRefused
 	}
 	spoken := tls.Client(held, &tls.Config{ServerName: hostname, InsecureSkipVerify: true})
@@ -106,19 +108,28 @@ func serving(hostname string, out, errs io.Writer) int {
 		return exitRefused
 	}
 	if err := spoken.Handshake(); err != nil {
+		if !declined(err) {
+			fmt.Fprintf(errs, "ocel-proxyctl: the handshake for %s never finished: %v\n", hostname, err)
+			return exitUnservable
+		}
 		fmt.Fprintf(errs, "ocel-proxyctl: the proxy served no certificate for %s: %v\n", hostname, err)
 		return exitUnhealthy
 	}
 	chain := spoken.ConnectionState().PeerCertificates
 	if len(chain) == 0 {
 		fmt.Fprintf(errs, "ocel-proxyctl: the proxy completed a handshake for %s and presented no certificate\n", hostname)
-		return exitUnhealthy
+		return exitUnservable
 	}
 	if err := pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: chain[0].Raw}); err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
 		return exitRefused
 	}
 	return 0
+}
+
+func declined(err error) bool {
+	var refused *net.OpError
+	return errors.As(err, &refused) && refused.Op == "remote error"
 }
 
 func deploy(socket string, argv []string, out, errs io.Writer) int {

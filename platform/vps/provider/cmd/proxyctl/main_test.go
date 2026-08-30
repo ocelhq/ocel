@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -420,5 +422,53 @@ func TestAFirstDeployWithNothingToRetireDrainsNothingAtAll(t *testing.T) {
 	}
 	if asked := held.asked(); len(asked) != 1 || asked[0] != "POST "+loadPath {
 		t.Errorf("a first deploy asked %v, want the flip alone: there is no retired upstream to count", asked)
+	}
+}
+
+func listening(t *testing.T, answer func(net.Conn)) string {
+	t.Helper()
+
+	held, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { held.Close() })
+	go func() {
+		for {
+			taken, err := held.Accept()
+			if err != nil {
+				return
+			}
+			go answer(taken)
+		}
+	}()
+	return held.Addr().String()
+}
+
+func TestAHandshakeThatFailedForAnyReasonButAMissingCertificateIsNotReportedAsPending(t *testing.T) {
+	t.Parallel()
+
+	declining := listening(t, func(taken net.Conn) {
+		spoken := tls.Server(taken, &tls.Config{
+			GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+				return nil, errors.New("no certificate available for this name yet")
+			},
+		})
+		_ = spoken.Handshake()
+		spoken.Close()
+	})
+	silent := listening(t, func(taken net.Conn) { taken.Close() })
+
+	for what, at := range map[string]struct {
+		address string
+		want    int
+	}{
+		"a proxy that has not obtained one for this name": {declining, exitUnhealthy},
+		"a peer that never spoke tls at all":              {silent, exitUnservable},
+	} {
+		var out, errs strings.Builder
+		if code := serving(at.address, "shop.example.com", &out, &errs); code != at.want {
+			t.Errorf("leaf over %s = %d, want %d: %q", what, code, at.want, errs.String())
+		}
 	}
 }
