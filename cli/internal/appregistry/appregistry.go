@@ -63,9 +63,10 @@ func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host) (Target,
 			return Target{}, false, err
 		}
 		return Target{
-			Server:   cfg.Registry.Server,
-			Username: cfg.Registry.Username,
-			Password: password,
+			Server:    cfg.Registry.Server,
+			Namespace: cfg.Registry.Namespace,
+			Username:  cfg.Registry.Username,
+			Password:  password,
 		}, true, nil
 	}
 	pushing, err := repositories(cfg)
@@ -104,7 +105,7 @@ func Demand(ctx context.Context, cfg *projectconfig.Config, host Host) (Target, 
 
 func missing(cfg *projectconfig.Config, pushing []string) error {
 	return fmt.Errorf("the image for %s is served by pulling it from a registry, and nothing names one: this provider hosts none of its own, "+
-		"and %s names no `registry`.\n    → add `registry: { server: \"ghcr.io\", username: \"…\", password: \"REGISTRY_TOKEN\" }` to %s, "+
+		"and %s names no `registry`.\n    → add `registry: { server: \"ghcr.io/your-org\", username: \"…\", password: \"REGISTRY_TOKEN\" }` to %s, "+
 		"where `password` is the name of the environment variable holding the token",
 		runui.Quoted(pushing), filepath.Base(cfg.Path), filepath.Base(cfg.Path))
 }

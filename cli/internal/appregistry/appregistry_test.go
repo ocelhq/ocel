@@ -79,6 +79,21 @@ func TestAProjectRegistryIsUsedWithoutAskingTheProvider(t *testing.T) {
 	}
 }
 
+func TestAProjectRegistryCarriesTheNamespaceItsImagesLandUnder(t *testing.T) {
+	t.Setenv("GHCR_TOKEN", "hunter2")
+
+	target, _, err := Resolve(context.Background(), project(&projectconfig.Registry{
+		Server: "ghcr.io", Namespace: "acme", Password: "GHCR_TOKEN",
+	}), hosting())
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	if got, want := target.Coordinate("web", "sha256-abc"), "ghcr.io/acme/web:sha256-abc"; got != want {
+		t.Errorf("Coordinate() = %q, want %q — ghcr takes no repository at its root", got, want)
+	}
+}
+
 func TestAProviderNativeRegistryIsUsedWhenTheProjectNamesNone(t *testing.T) {
 	native := hosting()
 	cfg := project(nil)

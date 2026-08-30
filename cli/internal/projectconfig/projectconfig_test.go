@@ -297,6 +297,26 @@ export default {
 				if got, want := cfg.Registry.Password, "GHCR_TOKEN"; got != want {
 					t.Errorf("Registry.Password = %q, want %q, the name of the variable holding the secret", got, want)
 				}
+				if cfg.Registry.Namespace != "" {
+					t.Errorf("Registry.Namespace = %q, want none where the server names a host alone", cfg.Registry.Namespace)
+				}
+			},
+		},
+		{
+			name: "splits the namespace a registry server carries off the host",
+			config: `
+export default {
+  slug: "test-app",
+  registry: { server: "ghcr.io/acme/team-1", password: "GHCR_TOKEN" },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if got, want := cfg.Registry.Server, "ghcr.io"; got != want {
+					t.Errorf("Registry.Server = %q, want %q", got, want)
+				}
+				if got, want := cfg.Registry.Namespace, "acme/team-1"; got != want {
+					t.Errorf("Registry.Namespace = %q, want %q — an image lands under the owner the server names", got, want)
+				}
 			},
 		},
 		{
@@ -930,7 +950,7 @@ export default {
   registry: { server: "https://ghcr.io/acme", password: "GHCR_TOKEN" },
 };
 `,
-			wantErr: []string{`invalid "registry"`, "server", "ghcr.io"},
+			wantErr: []string{`invalid "registry"`, "server", "scheme"},
 		},
 		{
 			name: "rejects a registry server carrying credentials, without repeating them",
@@ -942,6 +962,16 @@ export default {
 `,
 			wantErr:  []string{`invalid "registry"`, "server"},
 			unspoken: []string{"ghp_16C7e42F292c6912E7710c838347Ae178B4a"},
+		},
+		{
+			name: "rejects a registry namespace no repository path can hold",
+			config: `
+export default {
+  slug: "test-app",
+  registry: { server: "ghcr.io/Acme Corp", password: "GHCR_TOKEN" },
+};
+`,
+			wantErr: []string{`invalid "registry"`, "server", "namespace"},
 		},
 		{
 			name: "rejects a registry password given as a secret rather than a variable name",
