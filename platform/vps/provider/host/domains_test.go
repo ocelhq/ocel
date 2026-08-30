@@ -276,6 +276,25 @@ func TestUnbindingAHostnameAnotherSurfaceNowHoldsLeavesItWhereItIs(t *testing.T)
 	}
 }
 
+func TestAPreflightThisBoxRefusesIsWhatTheWriteFailsWith(t *testing.T) {
+	t.Parallel()
+
+	stood := claimingBox(t, routed())
+	stood.floor = providerkit.Refuse(providerkit.CodeNotReady,
+		"ada cannot run sudo without a password on ocelbox, and every write ocel makes here needs it")
+
+	err := stood.host().ClaimHost(context.Background(), HostClaim{Hostname: claimed, Owner: surface})
+	if err == nil {
+		t.Fatal("a claim was written on a box whose preflight refused")
+	}
+	if !strings.Contains(err.Error(), "sudo") {
+		t.Errorf("the claim failed with\n%s\nwant the preflight's own refusal: swallowing it downgrades the write to an unelevated one and the user is handed a shell permission error against a root-owned file instead", err)
+	}
+	if stood.at(`cat > "$staged"`) >= 0 {
+		t.Errorf("a box whose preflight refused was still written to unelevated: %v", stood.commands())
+	}
+}
+
 func TestTheClaimsThisBoxHoldsAreReadFromWhatTheProxyWasGiven(t *testing.T) {
 	t.Parallel()
 
