@@ -34,7 +34,7 @@ func (b Builder) Build(ctx context.Context, app, appDir string) (Image, error) {
 	}
 	defer func() { _ = builder.Close() }()
 
-	if err := d.mergeable(ctx, builder); err != nil {
+	if err := d.usable(ctx, builder); err != nil {
 		return Image{}, err
 	}
 

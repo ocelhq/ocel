@@ -137,11 +137,15 @@ func (d daemon) builder(ctx context.Context) (*client.Client, error) {
 	)
 }
 
-func (d daemon) mergeable(ctx context.Context, builder *client.Client) error {
+func (d daemon) usable(ctx context.Context, builder *client.Client) error {
 	workers, err := builder.ListWorkers(ctx)
 	if err != nil {
-		return d.unreachable(err)
+		return d.noBuilder(err)
 	}
+	return d.mergeable(workers)
+}
+
+func (d daemon) mergeable(workers []*client.WorkerInfo) error {
 	for _, worker := range workers {
 		if worker.Labels[snapshotterLabel] != "" {
 			return nil
@@ -183,6 +187,10 @@ func (d daemon) unreachable(err error) error {
 	return fmt.Errorf("no docker daemon answers at %s, and a container app's image is built by the one on this machine: start docker, or set %s to a daemon that is running\n    %v", d.address, DockerHostEnv, err)
 }
 
+func (d daemon) noBuilder(err error) error {
+	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %v", d.address, DockerHostEnv, err)
+}
+
 func Reachable(ctx context.Context) error {
 	d, err := openDaemon()
 	if err != nil {
@@ -190,9 +198,10 @@ func Reachable(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
-	conn, err := d.hijack(ctx, buildPath, upgradeTo, nil)
+	builder, err := d.builder(ctx)
 	if err != nil {
 		return d.unreachable(err)
 	}
-	return conn.Close()
+	defer func() { _ = builder.Close() }()
+	return d.usable(ctx, builder)
 }
