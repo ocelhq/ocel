@@ -23,8 +23,8 @@ func TestBuildStampsTheDeploymentID(t *testing.T) {
 		cfg := &projectconfig.Config{
 			Dir: root,
 			Apps: []projectconfig.App{
-				{Name: "web", Path: "apps/web", Framework: "next", Compute: "serverless"},
-				{Name: "docs", Path: "apps/docs", Framework: "next", Compute: "serverless"},
+				{Name: "web", Path: "apps/web", Framework: "next"},
+				{Name: "docs", Path: "apps/docs", Framework: "next"},
 			},
 		}
 
