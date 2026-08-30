@@ -1,11 +1,14 @@
 package host
 
 import (
+	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 func standingHost() Reading {
@@ -132,17 +135,66 @@ func TestHealIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	read := drifted(t, standingHost(), RecordsDir(class))
+	var unread []string
 	for _, item := range Items(class, read.Keys, ArchAMD64) {
-		if item.Name == sudoersSeal || item.Kind == KindUser {
-			delete(read.Observed, item.ID())
+		hidden := item.Kind == KindFile && item.Owner == rootOwner && item.Mode&0o004 == 0
+		if !hidden && item.Kind != KindUser {
+			continue
+		}
+		unread = append(unread, item.ID())
+		delete(read.Observed, item.ID())
+	}
+	for _, hidden := range []string{KindFile + " " + sudoersSeal, KindFile + " " + ProxyHelper} {
+		if !slices.Contains(unread, hidden) {
+			t.Fatalf("%s reads as one %s can hash, and a survey drawn by that login reports nothing for it: %v", hidden, deployUser, unread)
 		}
 	}
 	work, _, err := healing(read, true)
 	if err != nil {
-		t.Fatalf("heal over a survey that could read neither %s nor the shadow database = %v, want the record tier reasserted anyway", sudoersSeal, err)
+		t.Fatalf("heal over a survey that could read none of %v = %v, want the record tier reasserted anyway", unread, err)
 	}
 	if len(work) != 1 || work[0].Name != RecordsDir(class) {
 		t.Errorf("healing() = %v, want only %s", ids(work), RecordsDir(class))
+	}
+}
+
+func TestHealAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stands := bootstrapped(t, class)
+	records := RecordsDir(class)
+	for at, item := range stands {
+		if item.Kind == KindDir && item.Name == records {
+			stands[at].Mode = 0o700
+		}
+	}
+	stood := machine(map[providerkit.Class][]Item{class: stands})
+	stood.facts = session.Facts{Arch: "x86_64"}
+	stood.floor = providerkit.Refuse(providerkit.CodeDenied,
+		"ada@ocelbox can neither act as root nor run sudo without a password, and bootstrap writes as root throughout")
+	stood.answer = func(command string) (session.Result, bool) {
+		if command != "cat ~/.ssh/authorized_keys 2>/dev/null" {
+			return session.Result{}, false
+		}
+		return session.Result{Stdout: aKey + "\n"}, true
+	}
+
+	err := Bootstrap(stood.host()).Apply(context.Background(),
+		providerkit.BootstrapRequest{Class: class, Writer: "the-suite", Heal: true, Unattended: true}, nil)
+	if err != nil {
+		t.Fatalf("heal driven by the deploy login = %v, want what that login owns reasserted without asking for root", err)
+	}
+	ran := stood.commands()
+	if !slices.ContainsFunc(ran, func(command string) bool {
+		return strings.HasPrefix(command, "install -d ") && strings.HasSuffix(command, quoted(records))
+	}) {
+		t.Errorf("heal never wrote %s back:\n%s", records, strings.Join(ran, "\n"))
+	}
+	for _, command := range ran {
+		if strings.HasPrefix(command, "sudo ") {
+			t.Errorf("heal ran %q, and the login it runs as holds no sudo at all", command)
+		}
 	}
 }
 

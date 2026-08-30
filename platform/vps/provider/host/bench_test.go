@@ -20,6 +20,7 @@ type bench struct {
 	ran    []string
 	dials  int
 	dead   error
+	floor  error
 	answer func(command string) (session.Result, bool)
 	after  func(b *bench, command string)
 }
@@ -81,7 +82,7 @@ type wire struct{ b *bench }
 
 func (w wire) Destination() session.Destination { return w.b.dest }
 
-func (w wire) Preflight(context.Context) (session.Facts, error) { return w.b.facts, nil }
+func (w wire) Preflight(context.Context) (session.Facts, error) { return w.b.facts, w.b.floor }
 
 func (w wire) Run(ctx context.Context, command string) (string, error) {
 	result, err := w.Exec(ctx, command, nil)
@@ -117,6 +118,8 @@ func (b *bench) rendered(command string) session.Result {
 	switch {
 	case strings.Contains(command, "id -u"):
 		return session.Result{Stdout: "0\n"}
+	case command == "uname -m":
+		return session.Result{Stdout: b.facts.Arch + "\n"}
 	case strings.Contains(command, "for p in"):
 		for class, items := range b.stands {
 			if strings.Contains(command, quoted(StampPath(class))) {
