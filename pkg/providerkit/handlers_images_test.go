@@ -517,6 +517,25 @@ func TestTheStagedRecordNamesTheImageThatReleaseRuns(t *testing.T) {
 	}
 }
 
+func TestTheStagedRecordNamesTheHealthPathTheReleaseIsGatedOn(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	held := staging(t, provider)
+
+	result, _ := deploy(t, client, namingARegistry(containerDeployRequest("/healthz")))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	staged := held.records()
+	if len(staged) != 1 {
+		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+	}
+	if staged[0].HealthPath != "/healthz" {
+		t.Errorf("the staged record names the health path %q, want %q: a rollback re-gates a container this deploy is not running to name the path for, and a promotion that cannot name it cannot gate at all", staged[0].HealthPath, "/healthz")
+	}
+}
+
 func TestTheStagedRecordNamesTheContainerTheReleaseStoodUp(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
