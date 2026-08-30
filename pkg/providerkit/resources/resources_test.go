@@ -860,3 +860,135 @@ func TestAReleaseWhoseImageCannotBePushedStandsNothingUp(t *testing.T) {
 		t.Fatalf("the fan-out stood up %v after the push failed", own.stood)
 	}
 }
+
+type retaining struct {
+	*buckets
+	swept  []string
+	stood  func() error
+	served func(resources.Instruction) error
+}
+
+func (r *retaining) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.AppContainer, error) {
+	if r.stood != nil {
+		if err := r.stood(); err != nil {
+			return nil, err
+		}
+	}
+	return []providerkit.AppContainer{{Name: plan.App.App, Physical: plan.Ref.Name.String() + "-" + plan.App.App, Image: plan.App.Image}}, nil
+}
+
+func (r *retaining) RemoveContainers(context.Context, providerkit.StackRef, []providerkit.AppContainer, providerkit.Reporter) error {
+	return nil
+}
+
+func (r *retaining) Bucket(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Link, error) {
+	if r.served != nil {
+		if err := r.served(in); err != nil {
+			return providerkit.Link{}, err
+		}
+	}
+	return r.buckets.Bucket(ctx, in, report)
+}
+
+func (r *retaining) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, coordinate string, _ providerkit.Reporter) error {
+	r.swept = append(r.swept, app+" "+coordinate)
+	return nil
+}
+
+type refusingImages struct{ err error }
+
+func (r refusingImages) Has(context.Context, providerkit.ImagePush) (bool, error) { return false, nil }
+
+func (r refusingImages) Push(context.Context, providerkit.ImagePush, providerkit.Reporter) error {
+	return r.err
+}
+
+func refusingPlan(err error) providerkit.ImagePlan {
+	return providerkit.ImagePlan{
+		Store:  refusingImages{err: err},
+		Pushes: []providerkit.ImagePush{{App: "web", Target: testImage}},
+	}
+}
+
+func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testing.T) {
+	t.Parallel()
+
+	refused := errors.New("refused")
+	for name, breaking := range map[string]func(*retaining) providerkit.StackPlan{
+		"the image never lands": func(own *retaining) providerkit.StackPlan {
+			plan := containerPlan()
+			plan.Images = refusingPlan(refused)
+			return plan
+		},
+		"a resource never provisions": func(own *retaining) providerkit.StackPlan {
+			own.served = func(resources.Instruction) error { return refused }
+			plan := containerPlan()
+			plan.Resources = []providerkit.Resource{{Name: "store", Type: providerkit.LinkBucket}}
+			return plan
+		},
+		"the container never stands": func(own *retaining) providerkit.StackPlan {
+			own.stood = func() error { return refused }
+			return containerPlan()
+		},
+		"the release succeeds": func(own *retaining) providerkit.StackPlan {
+			return containerPlan()
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			own := &retaining{buckets: &buckets{}}
+			plan := breaking(own)
+			releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+
+			_, err := releaser.Provision(context.Background(), plan, nil)
+			if name != "the release succeeds" && err == nil {
+				t.Fatal("Provision() succeeded, and this case is the failure path")
+			}
+			if len(own.swept) != 1 || own.swept[0] != "web "+testImage {
+				t.Fatalf("the release swept %v, want one reconcile of web: the box is agentless, so a deploy that fails and is never retried must not leave it dirtier than it found it", own.swept)
+			}
+		})
+	}
+}
+
+func TestAServerlessReleaseReconcilesNoImages(t *testing.T) {
+	t.Parallel()
+
+	own := &retaining{buckets: &buckets{}}
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+
+	plan := containerPlan()
+	plan.App = nil
+	if _, err := releaser.Provision(context.Background(), plan, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(own.swept) != 0 {
+		t.Errorf("the release swept %v over a plan that runs no image at all", own.swept)
+	}
+}
+
+func TestATeardownSweepsTheImageTheContainerItTookDownWasHolding(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := appRef()
+	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
+		Kind:       providerkit.StackApp,
+		Containers: []providerkit.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	own := &retaining{buckets: &buckets{}}
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+	if err := releaser.Destroy(ctx, ref, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if len(own.swept) != 1 || own.swept[0] != "web "+testImage {
+		t.Fatalf("the teardown swept %v, want the image the container it took down was the last thing holding", own.swept)
+	}
+}
+
+func containerPlan() providerkit.StackPlan {
+	return providerkit.StackPlan{Ref: appRef(), Kind: providerkit.StackApp, App: containerApp("web")}
+}

@@ -54,6 +54,10 @@ type AppContainers interface {
 	RemoveContainers(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, report providerkit.Reporter) error
 }
 
+type ImageRetention interface {
+	ReconcileImages(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) error
+}
+
 func Serves(impl any) []providerkit.LinkType {
 	var served []providerkit.LinkType
 	for _, primitive := range primitives {
@@ -148,6 +152,9 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 	}
 	if err := f.removeOrphans(ctx, plan, recorded, report); err != nil {
 		return providerkit.StackResult{}, err
+	}
+	if plan.App != nil {
+		defer f.reconcile(ctx, plan.Ref, plan.App.App, plan.App.Image, report)
 	}
 	if err := plan.Images.Ship(ctx, report); err != nil {
 		return providerkit.StackResult{}, err
@@ -262,7 +269,23 @@ func (f *fanout) Destroy(ctx context.Context, ref providerkit.StackRef, report p
 	if err := f.removeFunctions(ctx, ref, recorded.Functions, torn, report); err != nil {
 		return err
 	}
-	return f.removeContainers(ctx, ref, recorded.Containers, torn, report)
+	if err := f.removeContainers(ctx, ref, recorded.Containers, torn, report); err != nil {
+		return err
+	}
+	for _, held := range recorded.Containers {
+		f.reconcile(ctx, ref, held.Name, held.Image, report)
+	}
+	return nil
+}
+
+func (f *fanout) reconcile(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) {
+	retention, sweeps := f.impl.(ImageRetention)
+	if !sweeps || coordinate == "" {
+		return
+	}
+	if err := retention.ReconcileImages(ctx, ref, app, coordinate, report); err != nil && report != nil {
+		report.Detail(fmt.Sprintf("Left %s's unreferenced images where they stand: %v", app, err))
+	}
 }
 
 const (
