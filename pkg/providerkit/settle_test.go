@@ -157,3 +157,40 @@ func TestTheSettleRefusesAHostnameAnotherEdgeAnswersOn(t *testing.T) {
 		t.Errorf("the provider's probe was asked %d time(s), want every attempt the settle makes", len(provider.asked))
 	}
 }
+
+type slowly struct {
+	clock *time.Time
+	cost  time.Duration
+}
+
+func (s slowly) Serving(context.Context, string) (edge.Kind, error) {
+	*s.clock = s.clock.Add(s.cost)
+	return "", nil
+}
+
+func TestTheSettleReportsTheTimeItSpentRatherThanTheTimeItPlannedTo(t *testing.T) {
+	t.Parallel()
+
+	clock := time.Unix(1700000000, 0)
+	settle := settler{
+		kind:     "box",
+		resolve:  slowly{clock: &clock, cost: 15 * time.Second},
+		attempts: 4,
+		wait:     5 * time.Second,
+		now:      func() time.Time { return clock },
+		sleep: func(_ context.Context, d time.Duration) error {
+			clock = clock.Add(d)
+			return nil
+		},
+	}
+
+	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	var refusal Refusal
+	if !errors.As(err, &refusal) {
+		t.Fatalf("await() = %v, want a refusal", err)
+	}
+	if !strings.Contains(refusal.Message, "1m15s") {
+		t.Errorf("await() refused with %q, want the 1m15s it actually spent: a resolver that reaches the hostname costs a request per attempt, and the sleeps between them are no longer the whole of the wait",
+			refusal.Message)
+	}
+}
