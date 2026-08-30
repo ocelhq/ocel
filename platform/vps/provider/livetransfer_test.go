@@ -47,9 +47,7 @@ func localDaemon(t *testing.T) (providerkit.DockerHost, *http.Client) {
 	}
 	transport := daemon.Transport()
 	t.Cleanup(transport.CloseIdleConnections)
-	client := &http.Client{Transport: transport}
-	keepsImagesInContainerd(t, daemon, client)
-	return daemon, client
+	return daemon, &http.Client{Transport: transport}
 }
 
 func keepsImagesInContainerd(t *testing.T, daemon providerkit.DockerHost, client *http.Client) {
@@ -83,7 +81,7 @@ func keepsImagesInContainerd(t *testing.T, daemon providerkit.DockerHost, client
 		daemon.Address, info.Driver, providerkit.DockerHostEnv)
 }
 
-func imported(t *testing.T) *http.Client {
+func imported(t *testing.T) (providerkit.DockerHost, *http.Client) {
 	t.Helper()
 	daemon, client := localDaemon(t)
 
@@ -107,7 +105,7 @@ func imported(t *testing.T) *http.Client {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { forget(client) })
-	return client
+	return daemon, client
 }
 
 func forget(client *http.Client) {
@@ -135,7 +133,8 @@ func transferPush() providerkit.ImagePush {
 func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *testing.T) {
 	vm := live(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
-	imported(t)
+	daemon, client := imported(t)
+	keepsImagesInContainerd(t, daemon, client)
 
 	coordinate := transferCoordinate()
 	vm.ssh(t, "sudo docker image rm -f "+coordinate+" >/dev/null 2>&1 || true")
@@ -174,7 +173,8 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) {
 	vm := live(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
-	client := imported(t)
+	daemon, client := imported(t)
+	keepsImagesInContainerd(t, daemon, client)
 
 	coordinate := transferCoordinate()
 	vm.ssh(t, "sudo docker image rm -f "+coordinate+" >/dev/null 2>&1 || true")
