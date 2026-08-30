@@ -1,6 +1,7 @@
 package host
 
 import (
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -170,10 +171,25 @@ func (p standingProxy) drives(t *testing.T, argv ...string) string {
 	return string(said)
 }
 
+func (p standingProxy) standsApp(t *testing.T, upstream, body string) {
+	t.Helper()
+
+	name, _, _ := strings.Cut(upstream, ":")
+	exec.Command(dockerEngine, "rm", "--force", name).Run()
+	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
+		"--network", ProxyNetwork, ProxyImage,
+		"caddy", "respond", "--listen", ":"+AppPort, body).CombinedOutput()
+	if err != nil {
+		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
+	}
+	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
+}
+
 func TestAConfigMovedIntoPlaceIsWhatTheRunningProxyLoads(t *testing.T) {
 	stood := proxyStanding(t)
 
 	flipped := routed()
+	stood.standsApp(t, flipped.Routes[0].Upstream, "the app answered")
 	flipped.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
 	rendered, err := RenderProxyConfig(flipped)
 	if err != nil {
@@ -214,10 +230,16 @@ func TestAConfigMovedIntoPlaceIsWhatTheRunningProxyLoads(t *testing.T) {
 		t.Errorf("a hostname nothing on this box claims was answered %d carrying %s: %q, want a 404 naming this edge: an empty 200 is what the seeded config answers everything with, and a proxy still serving the seed after a deploy looks healthy to everything that checks it",
 			said.StatusCode, EdgeHeader, said.Header.Get(EdgeHeader))
 	}
-	if said := ask(claimed); said.StatusCode == http.StatusNotFound {
-		t.Errorf("the hostname %q claims was answered by the box's own default after the flip, want the route of the surface that claimed it: the deploy loaded a document naming %s and a proxy that answers it from the default never loaded that document",
-			surface, upstream)
-	} else if said.Header.Get(EdgeHeader) != EdgeName {
+	said := ask(claimed)
+	read, err := io.ReadAll(io.LimitReader(said.Body, 1<<12))
+	if err != nil {
+		t.Fatalf("read what the proxy answered for %q: %v", claimed, err)
+	}
+	if said.StatusCode != http.StatusOK || string(read) != "the app answered" {
+		t.Errorf("the hostname %q claims was answered %d %q, want the body of the app standing on %s: a route that reaches no upstream answers a 502 that proves only the shape of the failure, and the box's own default answers a 404, so neither says the deploy loaded the document naming that upstream",
+			surface, said.StatusCode, read, upstream)
+	}
+	if said.Header.Get(EdgeHeader) != EdgeName {
 		t.Errorf("the surface's own route answered %s: %q, want %q: the bind's probe reads this header off the hostname itself and a route that forwards without it reports the box as serving nothing",
 			EdgeHeader, said.Header.Get(EdgeHeader), EdgeName)
 	}
