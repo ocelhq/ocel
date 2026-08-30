@@ -501,7 +501,11 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 		}
 		var build *Build
 		if a.Build != nil {
-			build = &Build{Dockerfile: strings.TrimSpace(a.Build.Dockerfile)}
+			dockerfile := strings.TrimSpace(a.Build.Dockerfile)
+			if dockerfile == "" && a.Build.Dockerfile != "" {
+				return nil, fmt.Errorf("app %q sets build.dockerfile to %q, which names no file: give it the path to a Dockerfile, or drop build.dockerfile to build %q from the Dockerfile beside it or from no configuration at all", a.Name, a.Build.Dockerfile, a.Name)
+			}
+			build = &Build{Dockerfile: dockerfile}
 		}
 		apps = append(apps, App{
 			Name:       a.Name,

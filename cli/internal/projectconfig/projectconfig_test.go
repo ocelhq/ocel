@@ -653,6 +653,16 @@ export default {
 			wantErr: []string{"api"},
 		},
 		{
+			name: "rejects a build.dockerfile that is only whitespace",
+			config: `
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: "services/api", compute: "container", build: { dockerfile: "   " } }],
+};
+`,
+			wantErr: []string{`app "api"`, "build.dockerfile"},
+		},
+		{
 			name: "rejects an app with no path",
 			config: `
 export default {
