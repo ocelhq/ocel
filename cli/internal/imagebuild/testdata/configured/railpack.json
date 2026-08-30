@@ -1,0 +1,5 @@
+{
+  "deploy": {
+    "startCommand": "node server.js --from-railpack-json"
+  }
+}
