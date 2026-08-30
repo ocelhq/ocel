@@ -174,3 +174,80 @@ func TestPreflightRefusesABootstrapThisBuildCannotRead(t *testing.T) {
 		t.Fatalf("Preflight() over a newer bootstrap: code = %v, want %v (%v)", got, connect.CodeFailedPrecondition, err)
 	}
 }
+
+func TestPreflightNamesWhoAlreadyServesEachHostnameThisProjectDeclares(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-other-production")
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+		Domains:      []string{"acme.com", "free.example.com"},
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+
+	claims := resp.GetDomainClaims()
+	if len(claims) != 2 {
+		t.Fatalf("Preflight() reported %d claims for two hostnames: %+v", len(claims), claims)
+	}
+	if claims[0].GetHostname() != "acme.com" || claims[0].GetStatus() != contractv1.DomainClaim_STATUS_CLAIMED {
+		t.Errorf("claim for the served hostname = %+v, want it claimed", claims[0])
+	}
+	if claims[0].GetOwner() != "ocel-other-production" {
+		t.Errorf("claim owner = %q, want the surface the edge says serves it", claims[0].GetOwner())
+	}
+	if claims[1].GetHostname() != "free.example.com" || claims[1].GetStatus() != contractv1.DomainClaim_STATUS_UNCLAIMED {
+		t.Errorf("claim for the hostname nothing serves = %+v, want it unclaimed and owned by nobody", claims[1])
+	}
+}
+
+func TestPreflightDoesNotReportThisProjectsOwnHostnameAsSomeoneElsesClaim(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
+		Edge: edge.StackState{Slug: "shop", Class: providerkit.ClassProduction, Bound: []string{"acme.com"}},
+	})
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+		Domains:      []string{"acme.com"},
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	claims := resp.GetDomainClaims()
+	if len(claims) != 1 || claims[0].GetStatus() != contractv1.DomainClaim_STATUS_UNCLAIMED {
+		t.Fatalf("Preflight() reported %+v for a hostname this project already serves, want it unclaimed: a redeploy would otherwise be refused for holding its own domain", claims)
+	}
+}
+
+func TestPreflightTreatsTheSharedPreviewEntryAsNobodysClaim(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
+	wildcard := edge.PreviewWildcard("previews.example.com")
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns(wildcard, edge.PreviewEntryOwner)
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PREVIEW,
+		Slug:         "shop",
+		Domains:      []string{wildcard},
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	claims := resp.GetDomainClaims()
+	if len(claims) != 1 || claims[0].GetStatus() != contractv1.DomainClaim_STATUS_UNCLAIMED {
+		t.Fatalf("Preflight() reported %+v for the wildcard every project's previews share, want it unclaimed", claims)
+	}
+}
