@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 usage() {
-	echo "usage: releases <app> promote <class> <ref> | <app> reconcile <repository>" >&2
+	echo "usage: releases <app> promote <class> <ref> | <app> forget <class> | <app> reconcile <repository>" >&2
 	exit 2
 }
 
@@ -57,6 +57,15 @@ promote)
 		grep -F -x -v -e "$ref" "$file" || true
 	} | head -n $keep >"$scratch".staged
 	mv -f "$scratch".staged "$file"
+	;;
+forget)
+	[ $# -eq 1 ] || usage
+	class=$1
+	case $class in
+	'' | *[!a-z0-9-]*) abort "$class is no class this host serves" ;;
+	esac
+	rm -f "$root/$app/$class"
+	rmdir "$root/$app" 2>/dev/null || true
 	;;
 reconcile)
 	[ $# -eq 1 ] || usage

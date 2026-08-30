@@ -25,6 +25,12 @@ func (h *Host) Promote(ctx context.Context, class providerkit.Class, app, coordi
 	return err
 }
 
+func (h *Host) Forget(ctx context.Context, class providerkit.Class, app string) error {
+	_, err := h.releases(ctx, "drop the window "+app+" was served from",
+		app, "forget", string(class))
+	return err
+}
+
 func (h *Host) Reconcile(ctx context.Context, app, coordinate string, report providerkit.Reporter) error {
 	repository, named := Repository(coordinate)
 	if !named {

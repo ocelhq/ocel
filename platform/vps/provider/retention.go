@@ -12,6 +12,10 @@ func (p *Provider) ReconcileImages(ctx context.Context, _ providerkit.StackRef, 
 	return p.host.Reconcile(ctx, app, coordinate, report)
 }
 
+func (p *Provider) ForgetReleases(ctx context.Context, ref providerkit.StackRef, app string, _ providerkit.Reporter) error {
+	return p.host.Forget(ctx, ref.Class, app)
+}
+
 func (p *Provider) EnsureRelease(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) error {
 	held, err := p.host.HoldsImage(ctx, coordinate)
 	if err != nil {

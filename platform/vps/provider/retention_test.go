@@ -60,6 +60,25 @@ func TestAReleaseThatNeverStoodUpRecordsNothing(t *testing.T) {
 	}
 }
 
+func TestATeardownDropsTheWindowBeforeAnythingSweepsAgainstIt(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	ref := aStack(t, anApp()).Ref
+	if err := over(machine).ForgetReleases(context.Background(), ref, "web", nil); err != nil {
+		t.Fatalf("ForgetReleases() = %v", err)
+	}
+	called := helperCalls(machine, "forget")
+	if len(called) != 1 {
+		t.Fatalf("the teardown ran %d forgets, want the one that drops the window the torn-down stack wrote", len(called))
+	}
+	for _, want := range []string{"'web'", "'production'"} {
+		if !strings.Contains(called[0], want) {
+			t.Errorf("the forget ran as %q and never names %s", called[0], want)
+		}
+	}
+}
+
 func TestASweepListsOneRepositoryAndNeverForces(t *testing.T) {
 	t.Parallel()
 
