@@ -3783,10 +3783,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x06usages\x18\a \x03(\v2#.provider.contract.v1.ManifestUsageR\x06usages\x12G\n" +
 	"\n" +
 	"containers\x18\b \x03(\v2'.provider.contract.v1.ManifestContainerR\n" +
-	"containers\"\xc2\x01\n" +
+	"containers\"\xf5\x01\n" +
 	"\x11ManifestContainer\x12\x19\n" +
-	"\x03app\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03app\x12B\n" +
-	"\x05image\x18\x02 \x01(\tB,\xbaH)r'2%^[^@:[:space:]]+@sha256:[0-9a-f]{64}$R\x05image\x12N\n" +
+	"\x03app\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03app\x12u\n" +
+	"\x05image\x18\x02 \x01(\tB_\xbaH\\rZ2X^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$R\x05image\x12N\n" +
 	"\x11health_check_path\x18\x03 \x01(\tB\"\xbaH\x1fr\x1d2\x1b^/[^#?[:space:][:cntrl:]]*$R\x0fhealthCheckPath\"S\n" +
 	"\rManifestUsage\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x12\x1a\n" +
