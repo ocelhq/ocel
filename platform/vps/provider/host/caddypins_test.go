@@ -155,3 +155,40 @@ func TestAPinTheProxyCouldNotOpenCoversNothingRatherThanNamingAHandle(t *testing
 		t.Errorf("Covering() over a pair the proxy loads = %q, want %q", at, held.Path)
 	}
 }
+
+func TestOneCertificateCoveringTwoHostnamesIsHandedToTheProxyOnce(t *testing.T) {
+	t.Parallel()
+
+	at := ProxyPins + "/pair"
+	state := routed()
+	state.Pins = []Pin{{Hostname: "shop.example.com", Path: at}, {Hostname: "blog.example.com", Path: at}}
+	rendered, err := RenderProxyConfig(state)
+	if err != nil {
+		t.Fatalf("RenderProxyConfig() = %v", err)
+	}
+
+	read, err := parsed(rendered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.Apps.TLS == nil {
+		t.Fatal("the config declares no pinned pair at all")
+	}
+	files := read.Apps.TLS.Certificates.LoadFiles
+	if len(files) != 1 {
+		t.Fatalf("the proxy is handed %s %d times, want once: a pair loaded twice is one certificate cached under two tags, and which of them the proxy answers a handshake from is whichever load ran last",
+			at, len(files))
+	}
+	if !slices.Equal(files[0].Tags, []string{"blog.example.com", "shop.example.com"}) {
+		t.Errorf("the one entry is tagged %v, want every hostname the pair was pinned for: a tag dropped here is a hostname nothing on this box can say is pinned", files[0].Tags)
+	}
+
+	held, err := ReadProxyState(rendered)
+	if err != nil {
+		t.Fatalf("ReadProxyState() = %v", err)
+	}
+	want := []Pin{{Hostname: "blog.example.com", Path: at}, {Hostname: "shop.example.com", Path: at}}
+	if !slices.Equal(held.Pins, want) {
+		t.Errorf("the pins read back are %v, want %v: a deploy renders this file whole off what it reads, and a hostname lost in the round trip is a pair the next reshape stops loading", held.Pins, want)
+	}
+}
