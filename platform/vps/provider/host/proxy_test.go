@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
+
+const upstreamsPath = "/reverse_proxy/upstreams"
 
 type engineHolding struct {
 	network bool
@@ -73,7 +76,7 @@ func answering(stood bool) string {
 }
 
 func proxyItem(kind string) Item {
-	for _, item := range ProxyItems() {
+	for _, item := range ProxyItems(ArchAMD64) {
 		if item.Kind == kind {
 			return item
 		}
@@ -107,8 +110,8 @@ func TestTheProbeAndTheWriteAgreeOnWhatAServingProxyIs(t *testing.T) {
 	t.Parallel()
 
 	observed := dockered(t, holding())
-	for _, item := range ProxyItems() {
-		if item.Kind == KindFile || item.Kind == KindDir {
+	for _, item := range ProxyItems(ArchAMD64) {
+		if item.Kind == KindFile || item.Kind == KindDir || item.Kind == KindProxyConfig {
 			continue
 		}
 		if observed[item.ID()] != item.Digest() {
@@ -122,8 +125,8 @@ func TestAHostWithNoEngineCarriesNoProxyAtAll(t *testing.T) {
 	t.Parallel()
 
 	observed := dockered(t, engineHolding{})
-	for _, item := range ProxyItems() {
-		if item.Kind == KindFile || item.Kind == KindDir {
+	for _, item := range ProxyItems(ArchAMD64) {
+		if item.Kind == KindFile || item.Kind == KindDir || item.Kind == KindProxyConfig {
 			continue
 		}
 		if _, stood := observed[item.ID()]; stood {
@@ -137,16 +140,16 @@ func TestAProxyThatIsGoneIsPlannedBackAndAStandingOneIsLeftAlone(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	keys := []byte(aKey + "\n")
-	whole := Reading{Class: class, Keys: keys, Observed: digests(Items(class, keys))}
+	whole := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: digests(Items(class, keys, ArchAMD64))}
 	for _, change := range planned(whole) {
 		if change.Kind == KindContainer && change.Action != providerkit.ActionKeep {
 			t.Errorf("a re-run over a host whose proxy serves plans %q for it, and a bootstrap that reinstalls what stands is one nobody dares re-run", change.Action)
 		}
 	}
 
-	torn := digests(Items(class, keys))
+	torn := digests(Items(class, keys, ArchAMD64))
 	delete(torn, containerItem().ID())
-	gone := planFor(planned(Reading{Class: class, Keys: keys, Observed: torn}), containerItem().ID())
+	gone := planFor(planned(Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: torn}), containerItem().ID())
 	if gone.Action != providerkit.ActionCreate {
 		t.Errorf("a host whose proxy container was removed plans %q for it, want it written back: the proxy is state this host holds rather than a deploy's side effect", gone.Action)
 	}
@@ -154,10 +157,10 @@ func TestAProxyThatIsGoneIsPlannedBackAndAStandingOneIsLeftAlone(t *testing.T) {
 		t.Error("pulling the proxy image is planned as quick work, and a plan that lies about its cost is one nobody waits through")
 	}
 
-	stopped := digests(Items(class, keys))
+	stopped := digests(Items(class, keys, ArchAMD64))
 	stopped[containerItem().ID()] = digest(KindContainer, ProxyContainer, 0, rootOwner,
 		contentSum([]byte(strings.Replace(string(containerItem().Content), "state=running", "state=exited", 1))))
-	idle := Reading{Class: class, Keys: keys, Observed: stopped}
+	idle := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: stopped}
 	if idle.current(containerItem()) {
 		t.Fatal("a proxy container that has exited reads as serving, and nothing would ever start it")
 	}
@@ -333,22 +336,157 @@ func TestTheHelperIsAFileTheProxyMayReadAndNothingThereMayWrite(t *testing.T) {
 	}
 }
 
-func TestTheContainerIsWrittenAgainWhenTheConfigItWasStartedFromMoves(t *testing.T) {
+func TestTheContainerIsWrittenAgainWhenTheBaselineBehindItMoves(t *testing.T) {
 	t.Parallel()
 
 	stamped := contentSum(proxyBaseline)
 	if !strings.Contains(containerCommand(), quoted(proxyLabel+"="+stamped)) {
-		t.Errorf("the proxy is run carrying no record of the config behind it, so a changed baseline would never reach the running proxy:\n%s", containerCommand())
+		t.Errorf("the proxy is run carrying no record of the baseline behind it, so a box already carrying one would never be given the next:\n%s", containerCommand())
 	}
-	if !strings.Contains(string(containerItem().Content), "config="+stamped) {
-		t.Errorf("the proxy is surveyed without the config it was started from:\n%s", containerItem().Content)
+	if !strings.Contains(string(containerItem().Content), "baseline="+stamped) {
+		t.Errorf("the proxy is surveyed without the baseline it was written under:\n%s", containerItem().Content)
+	}
+}
+
+func TestTheFileTheProxyIsStartedFromIsTheWholeOfWhatItServes(t *testing.T) {
+	t.Parallel()
+
+	command := containerCommand()
+	run, config, split := strings.Cut(strings.TrimSuffix(command, " >/dev/null"), quoted("caddy")+" "+quoted("run")+" ")
+	if !split {
+		t.Fatalf("nothing in the run command starts caddy:\n%s", command)
+	}
+	if config != quoted("--config")+" "+quoted(proxyConfigMount) {
+		t.Errorf("caddy is started with %q, want nothing beyond --config: --resume is documented to use the last autosaved configuration, overriding --config, so the file every deploy replaces would be read and thrown away",
+			config)
+	}
+	if strings.Contains(run, "--resume") {
+		t.Errorf("the proxy is run with --resume:\n%s", command)
+	}
+	if !strings.Contains(command, quoted(ProxyConfig+":"+proxyConfigMount+":ro")) {
+		t.Errorf("the file the proxy is started from is not the one ocel writes at %s:\n%s", ProxyConfig, command)
+	}
+}
+
+func TestWhatTheDeployLoopWritesOverTheProxysConfigIsNeverCalledDrift(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	keys := []byte(aKey + "\n")
+	deployed := digests(Items(class, keys, ArchAMD64))
+	routed := proxyConfigItem()
+	routed.Content = []byte("every route this box serves")
+	if routed.Digest() != proxyConfigItem().Digest() {
+		t.Fatal("the proxy's config digests differently once a deploy has written routes into it, and every deploy would then read as drift")
+	}
+
+	read := Reading{Class: class, Keys: keys, Arch: ArchAMD64, Observed: deployed}
+	if !read.current(routed) {
+		t.Fatal("a box whose deploys have written routes into the proxy's config reads as drifted, and the item is keyed on content the deploy loop is built to replace")
+	}
+	if planned := planFor(planned(read), proxyConfigItem().ID()); planned.Action != providerkit.ActionKeep {
+		t.Errorf("a re-run over a box carrying deployed routes plans %q for %s, and a bootstrap that reseeds it takes every app on the box down", planned.Action, ProxyConfig)
+	}
+	if sum := proxyConfigItem().sum(); sum != "" {
+		t.Errorf("the proxy's config is digested over %q, and every deploy invalidates it", sum)
+	}
+	if strings.Contains(proxyConfigProbe(proxyConfigItem()), "sha256sum") {
+		t.Errorf("the survey hashes what the proxy serves:\n%s", proxyConfigProbe(proxyConfigItem()))
+	}
+	seeding := proxyConfigCommand(proxyConfigItem())
+	if !strings.Contains(seeding, "if [ -e "+quoted(ProxyConfig)+" ]") {
+		t.Errorf("the write of %s replaces what stands there rather than seeding what does not:\n%s", ProxyConfig, seeding)
+	}
+	if !strings.Contains(seeding, "chown "+stateOwner+":"+stateOwner) || !strings.Contains(seeding, "chmod 0640") {
+		t.Errorf("the write of %s leaves its mode and owner as it found them:\n%s", ProxyConfig, seeding)
+	}
+}
+
+func TestOneProxyConfigOfTheDeploysOwnDoesNotRefuseTheHealOfEveryOtherItem(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	keys := []byte(aKey + "\n")
+	items := Items(class, keys, ArchAMD64)
+	observed := digests(items)
+	observed[proxyConfigItem().ID()] = digest(KindProxyConfig, ProxyConfig, 0o600, rootOwner, "")
+	observed[KindDir+" "+RecordsDir(class)] = digest(KindDir, RecordsDir(class), 0o700, stateOwner, "")
+	read := Reading{Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
+		Stamp: Stamp{State: StateComplete, Digests: digests(items)}}
+
+	work, left, err := healable(read)
+	if err != nil {
+		t.Fatalf("heal over a box whose proxy config stands as the deploy left it = %v, want every other item still healed", err)
+	}
+	if len(work) != 1 || work[0].Name != RecordsDir(class) {
+		t.Errorf("healable() = %v, want only the record tier", ids(work))
+	}
+	if !slices.Contains(left, proxyConfigItem().ID()) {
+		t.Errorf("heal left %v, and a box told nothing about the one item it declined to write is one nobody can read the exit code of", left)
+	}
+	if err := refuseReplacements(read, work); err != nil {
+		t.Errorf("an unattended apply over the same box = %v, want the proxy's own config never counted as something a user must consent to overwrite", err)
+	}
+}
+
+func TestAMissingProxyIsLeftToABootstrapAndSaidSoRatherThanPassedOver(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	keys := []byte(aKey + "\n")
+	items := Items(class, keys, ArchAMD64)
+	observed := digests(items)
+	for _, gone := range []Item{containerItem(), proxyConfigItem()} {
+		delete(observed, gone.ID())
+	}
+	read := Reading{Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
+		Stamp: Stamp{State: StateComplete, Digests: digests(items)}}
+
+	work, left, err := healable(read)
+	if err != nil {
+		t.Fatalf("heal over a box whose proxy is gone = %v", err)
+	}
+	if len(work) != 0 {
+		t.Errorf("heal writes %v, and the unattended path with nobody watching does not install a proxy", ids(work))
+	}
+	for _, said := range []string{containerItem().ID(), proxyConfigItem().ID()} {
+		if !slices.Contains(left, said) {
+			t.Errorf("heal left %v and never names %s, so a box with no proxy at all exits zero saying nothing", left, said)
+		}
+	}
+}
+
+func TestANetworkAnotherWorkloadHoldsIsReportedKeptRatherThanRemoved(t *testing.T) {
+	t.Parallel()
+
+	command := (removal{kind: KindNetwork, path: ProxyNetwork}).command()
+	for held, want := range map[string]string{"0": networkHeld, "1": ""} {
+		stub := t.TempDir()
+		script := "#!/bin/sh\n" +
+			"case \"$1 $2\" in\n" +
+			"'network rm') exit 1 ;;\n" +
+			"'network inspect') exit " + held + " ;;\n" +
+			"esac\nexit 1\n"
+		if err := os.WriteFile(filepath.Join(stub, dockerEngine), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		run := exec.Command("/bin/sh", "-c", command)
+		run.Env = []string{"PATH=" + stub}
+		rendered, err := run.Output()
+		if err != nil {
+			t.Fatalf("taking the network = %v", err)
+		}
+		if strings.TrimSpace(string(rendered)) != want {
+			t.Errorf("a network the engine still holds after the removal answers %q, want %q: a removal that always exits zero reports every kept network as removed",
+				strings.TrimSpace(string(rendered)), want)
+		}
 	}
 }
 
 func TestHealNeverWritesOverTheConfigTheProxyIsServingFrom(t *testing.T) {
 	t.Parallel()
 
-	for _, item := range ProxyItems() {
+	for _, item := range ProxyItems(ArchAMD64) {
 		if deployOwned(item) {
 			t.Errorf("heal may write %s, and the one unattended path with nobody watching would replace the routes every deployed app is reached through", item.ID())
 		}
@@ -360,12 +498,12 @@ func TestAnUnattendedApplyWritesOcelsOwnProxyBackWithoutAsking(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	keys := []byte(aKey + "\n")
-	observed := digests(Items(class, keys))
+	observed := digests(Items(class, keys, ArchAMD64))
 	observed[containerItem().ID()] = digest(KindContainer, ProxyContainer, 0, rootOwner, contentSum([]byte("state=exited\n")))
 	observed[networkItem().ID()] = digest(KindNetwork, ProxyNetwork, 0, rootOwner, contentSum([]byte("moved\n")))
 
-	read := Reading{Class: class, Keys: keys, Observed: observed}
-	if err := refuseReplacements(read, Items(class, keys)); err != nil {
+	read := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: observed}
+	if err := refuseReplacements(read, Items(class, keys, ArchAMD64)); err != nil {
 		t.Errorf("an unattended apply over a host whose proxy has moved = %v, want it written back: the proxy carries ocel's own name and nothing of the user's", err)
 	}
 }
@@ -375,8 +513,8 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	keys := []byte(aKey + "\n")
-	standing := Reading{Class: production, Keys: keys, Observed: digests(Items(production, keys))}
-	beside := Reading{Class: preview, Keys: keys, Observed: digests(Items(preview, keys))}
+	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
+	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))}
 	proxied := []string{ProxyContainer, ProxyVolume, ProxyNetwork, proxyRoot, ProxyHelper}
 
 	for _, taken := range removing(standing, beside) {
@@ -385,7 +523,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 		}
 	}
 
-	last := removing(standing, Reading{Class: preview, Observed: map[string]string{}})
+	last := removing(standing, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}})
 	for _, path := range proxied {
 		gone := removalOf(last, path)
 		if gone.action != providerkit.ActionDelete {
@@ -417,7 +555,7 @@ func TestRemovingTheProxyNamesOcelsOwnContainerAndNeverAsksTheEngineWhatElseItRu
 		if taken.kind == KindDir {
 			continue
 		}
-		if !strings.HasSuffix(strings.TrimSuffix(command, " || true"), quoted(taken.path)) {
+		if !strings.Contains(command, quoted(taken.path)) {
 			t.Errorf("%s is taken by %q, want a command naming ocel's own %s and nothing else", taken.path, command, taken.kind)
 		}
 		for _, sweeping := range []string{"ps", "--all", "-a", "prune", "--filter"} {
@@ -426,8 +564,12 @@ func TestRemovingTheProxyNamesOcelsOwnContainerAndNeverAsksTheEngineWhatElseItRu
 			}
 		}
 	}
-	if command := (removal{kind: KindNetwork, path: ProxyNetwork}).command(); !strings.HasSuffix(command, "|| true") {
+	command := (removal{kind: KindNetwork, path: ProxyNetwork}).command()
+	if !strings.HasPrefix(command, "if ! docker network rm ") {
 		t.Errorf("the network is taken by %q, and a destroy fails on a host still running something attached to it", command)
+	}
+	if !strings.Contains(command, quoted(networkHeld)) {
+		t.Errorf("the network is taken by %q, which says nothing about whether it went", command)
 	}
 }
 
@@ -436,7 +578,7 @@ func TestNothingButWhatOcelWroteIsEverOcelsToTake(t *testing.T) {
 
 	stood := machine(map[providerkit.Class][]Item{providerkit.ClassProduction: bootstrapped(t, providerkit.ClassProduction)})
 	for _, kind := range []string{KindEngine, KindUnit} {
-		err := stood.host().remove(context.Background(), removal{kind: kind, path: dockerEngine, action: providerkit.ActionDelete})
+		_, err := stood.host().remove(context.Background(), removal{kind: kind, path: dockerEngine, action: providerkit.ActionDelete})
 		if err == nil {
 			t.Fatalf("removing %s landed, and what this host runs stays when ocel goes", kind)
 		}
@@ -451,27 +593,81 @@ func TestNothingButWhatOcelWroteIsEverOcelsToTake(t *testing.T) {
 	}
 }
 
-func TestTheHelperIsShellAHostCanRunAndRefusesAConfigThatWouldMoveTheAdminEndpoint(t *testing.T) {
+func TestTheHelperIsAStaticBinaryOcelBuildsForEveryArchitectureABoxMayRun(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	helper := filepath.Join(dir, "proxyctl")
-	if err := os.WriteFile(helper, proxyctlScript, 0o755); err != nil {
-		t.Fatal(err)
+	for reported, want := range map[string]string{
+		"x86_64": ArchAMD64, ArchAMD64: ArchAMD64, "aarch64": ArchARM64, ArchARM64: ArchARM64,
+	} {
+		read, err := Architecture(reported)
+		if err != nil || read != want {
+			t.Errorf("a host reporting %q is served the %q helper (%v), want %q", reported, read, err, want)
+		}
 	}
-	if out, err := exec.Command("/bin/sh", "-n", helper).CombinedOutput(); err != nil {
-		t.Fatalf("the helper is not shell this host can read: %v\n%s", err, out)
+	if _, err := Architecture("riscv64"); err == nil {
+		t.Error("a host ocel builds no helper for is bootstrapped anyway, and the file the release loop execs would be for another machine")
 	}
 
-	away := filepath.Join(dir, "away.json")
-	if err := os.WriteFile(away, []byte(`{"apps":{"http":{"servers":{}}}}`), 0o600); err != nil {
-		t.Fatal(err)
+	shipped := map[string][]byte{}
+	for _, arch := range []string{ArchAMD64, ArchARM64} {
+		built := proxyHelper(arch)
+		shipped[arch] = built
+		if !bytes.HasPrefix(built, []byte("\x7fELF")) {
+			t.Fatalf("the %s helper is not an elf executable, and the proxy image lends it nothing to interpret it with", arch)
+		}
+		if bytes.Contains(built, []byte("libc.so")) || bytes.Contains(built, []byte("ld-linux")) {
+			t.Errorf("the %s helper names a dynamic loader, and the image it runs in owes it none", arch)
+		}
+		if !bytes.Contains(built, []byte(upstreamsPath)) {
+			t.Errorf("the %s helper carries no read of %s, and the drain is the one signal telling a retired release apart from a live one",
+				arch, upstreamsPath)
+		}
+		if !bytes.Contains(built, []byte(ProxyAdminSocket)) {
+			t.Errorf("the %s helper names no admin socket, so what it speaks over is whatever the caller happens to pass", arch)
+		}
 	}
-	out, err := exec.Command("/bin/sh", helper, "flip", away).CombinedOutput()
-	if err == nil {
-		t.Fatalf("the helper flipped a config declaring no admin endpoint, and caddy moves the admin endpoint before it validates the rest: the socket goes and a tcp listener takes its place\n%s", out)
+	if bytes.Equal(shipped[ArchAMD64], shipped[ArchARM64]) {
+		t.Error("both architectures are shipped the same bytes, so one of the two boxes runs a binary built for the other")
 	}
-	if !strings.Contains(string(out), ProxyAdminSocket) {
-		t.Errorf("the helper refused with %q, want it to name the socket the config must keep", out)
+	if bytes.Equal(ProxyItems(ArchAMD64)[0].Content, ProxyItems(ArchARM64)[0].Content) {
+		t.Error("the helper item carries the same bytes whatever the box reports, and the architecture is then not what selects it")
+	}
+}
+
+func TestTheHelperCarriesNoDependenceOnWhatTheProxyImageHappensToShip(t *testing.T) {
+	t.Parallel()
+
+	command := containerCommand()
+	for _, borrowed := range []string{"curl", "wget", "busybox"} {
+		if strings.Contains(command, borrowed) {
+			t.Errorf("the proxy is run naming %q, and a gate whose precondition is that the image happens to carry a program is not a contract:\n%s", borrowed, command)
+		}
+	}
+	if got := proxyItem(KindFile).Content; !bytes.Equal(got, proxyHelper(ArchAMD64)) && !bytes.Equal(got, proxyHelper(ArchARM64)) {
+		t.Error("the file bootstrap ships to the box is not one of the helpers ocel builds")
+	}
+}
+
+func TestABoxOcelBuildsNoHelperForIsStillABoxOcelCanDestroy(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	stood.facts.Arch = "riscv64"
+
+	if _, err := Bootstrap(stood.host()).PlanRemoval(context.Background(), class); err != nil {
+		t.Fatalf("PlanRemoval() over a host ocel builds no flip helper for = %v, want what ocel wrote still taken back: the paths it wrote are the same whatever the box runs", err)
+	}
+	if _, err := stood.host().Read(context.Background(), class); err == nil {
+		t.Error("a host reporting an architecture ocel builds no helper for is bootstrapped anyway, and the file the release loop execs would be for another machine")
+	}
+}
+
+func TestWhatTheDeployLoginHoldsIsTheSameWhicheverArchitectureTheBoxRuns(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	if !slices.Equal(grants(class, ArchAMD64), grants(class, ArchARM64)) {
+		t.Error("`ocel permissions deploy` prints one thing on an amd64 box and another on an arm64 one, and what a login holds does not depend on what the box runs")
 	}
 }

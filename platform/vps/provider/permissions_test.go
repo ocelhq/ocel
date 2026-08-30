@@ -91,7 +91,7 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 
 	document := rendered(t, providerkit.TierDeploy).Document
 	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		for _, item := range host.Items(class, nil) {
+		for _, item := range host.Items(class, nil, host.ArchAMD64) {
 			if item.Owner != "ocel-deploy" || item.Kind == "linux:user" {
 				continue
 			}
@@ -104,7 +104,7 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 
 func describedGroup(t *testing.T, class providerkit.Class) string {
 	t.Helper()
-	for _, item := range host.Items(class, nil) {
+	for _, item := range host.Items(class, nil, host.ArchAMD64) {
 		if item.Kind != "linux:user" {
 			continue
 		}
@@ -149,7 +149,7 @@ func TestTheDeployDocumentCarriesTheOneSudoersLineTheSealHelperNeeds(t *testing.
 	t.Parallel()
 
 	document := rendered(t, providerkit.TierDeploy).Document
-	for _, item := range host.Items(providerkit.ClassProduction, nil) {
+	for _, item := range host.Items(providerkit.ClassProduction, nil, host.ArchAMD64) {
 		if !strings.HasPrefix(item.Name, "/etc/sudoers.d/") {
 			continue
 		}

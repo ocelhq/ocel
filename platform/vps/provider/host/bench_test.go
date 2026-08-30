@@ -33,7 +33,7 @@ func machine(stands map[providerkit.Class][]Item) *bench {
 			User:       "ada",
 			KnownHosts: []string{"/home/ada/.ssh/known_hosts"},
 		},
-		facts:  session.Facts{Root: true, Systemd: true},
+		facts:  session.Facts{Root: true, Systemd: true, Arch: "x86_64"},
 		stands: stands,
 	}
 }
@@ -61,7 +61,7 @@ func (b *bench) taking() []string {
 	for _, command := range b.commands() {
 		if strings.HasPrefix(command, "rm ") || strings.HasPrefix(command, "rm -rf ") ||
 			strings.HasPrefix(command, "rmdir ") || strings.HasPrefix(command, "userdel ") ||
-			strings.HasPrefix(command, "docker ") {
+			strings.HasPrefix(command, "docker ") || strings.HasPrefix(command, "if ! docker ") {
 			taken = append(taken, command)
 		}
 	}
@@ -141,7 +141,7 @@ func (b *bench) rendered(command string) session.Result {
 func surveyed(items []Item) string {
 	var rendered strings.Builder
 	for _, item := range items {
-		fmt.Fprintf(&rendered, "%s\t%s\t%o\t%s\t%s", item.Kind, item.Name, item.Mode, item.Owner, contentSum(item.Content))
+		fmt.Fprintf(&rendered, "%s\t%s\t%o\t%s\t%s", item.Kind, item.Name, item.Mode, item.Owner, item.sum())
 		if item.Kind == KindSealKey {
 			rendered.WriteString("\t2026-01-01T00:00:00Z")
 		}
@@ -156,14 +156,14 @@ func bootstrapped(t *testing.T, class providerkit.Class) []Item {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return append(Items(class, []byte(aKey+"\n")), stamp)
+	return append(Items(class, []byte(aKey+"\n"), ArchAMD64), stamp)
 }
 
 func TestASurveyedHostReadsBackAsTheItemsThatStandOnIt(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	items := Items(class, []byte(aKey+"\n"))
+	items := Items(class, []byte(aKey+"\n"), ArchAMD64)
 	stood := machine(map[providerkit.Class][]Item{class: items})
 
 	read, err := stood.host().Survey(context.Background(), class)

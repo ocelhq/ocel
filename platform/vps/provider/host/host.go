@@ -28,6 +28,7 @@ type Host struct {
 	floored   bool
 	refusal   error
 	elevation string
+	reported  string
 
 	rooting sync.Mutex
 	knows   bool
@@ -123,8 +124,18 @@ func (h *Host) elevate(ctx context.Context) (string, error) {
 	if !facts.Root {
 		h.elevation = "sudo -n "
 	}
+	h.reported = facts.Arch
 	h.settled = true
 	return h.elevation, nil
+}
+
+func (h *Host) arch(ctx context.Context) (string, error) {
+	if _, err := h.elevate(ctx); err != nil {
+		return "", err
+	}
+	h.elevating.Lock()
+	defer h.elevating.Unlock()
+	return Architecture(h.reported)
 }
 
 func (h *Host) reaching(ctx context.Context) string {
@@ -240,23 +251,26 @@ func (h *Host) Reassert(ctx context.Context, item Item) error {
 	return err
 }
 
-func (h *Host) remove(ctx context.Context, taken removal) error {
+func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 	switch taken.kind {
 	case KindUser:
 		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, "userdel -f "+quoted(taken.path), nil)
-		return err
-	case KindNetwork, KindVolume, KindContainer:
+		return err == nil, err
+	case KindNetwork:
+		rendered, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
+		return strings.TrimSpace(rendered) != networkHeld, err
+	case KindVolume, KindContainer:
 		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
-		return err
-	case KindDir, KindFile, KindSealKey:
+		return err == nil, err
+	case KindDir, KindFile, KindSealKey, KindProxyConfig:
 		if !strings.HasPrefix(taken.path, "/") {
-			return providerkit.Refuse(providerkit.CodeInvalid,
+			return false, providerkit.Refuse(providerkit.CodeInvalid,
 				"%q names no path on this host, and ocel takes nothing it cannot name in full", taken.path)
 		}
 		_, err := h.run(ctx, "remove "+taken.path, taken.command(), nil)
-		return err
+		return err == nil, err
 	default:
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return false, providerkit.Refuse(providerkit.CodeInvalid,
 			"%s %s is not ocel's to take: what this host runs stays when ocel goes", taken.kind, taken.path)
 	}
 }
@@ -265,6 +279,7 @@ type Reading struct {
 	Class    providerkit.Class
 	Present  bool
 	Keys     []byte
+	Arch     string
 	Stamp    Stamp
 	Seal     Seal
 	Observed map[string]string
@@ -279,8 +294,10 @@ func (r Reading) standing(kind, path string) bool {
 
 func (r Reading) unfinished() bool { return r.Present && r.Stamp.State != StateComplete }
 
+func (r Reading) Items() []Item { return Items(r.Class, r.Keys, r.Arch) }
+
 func (r Reading) settled() bool {
-	items := Items(r.Class, r.Keys)
+	items := r.Items()
 	if !r.Present || r.Stamp.State != StateComplete || !r.Stamp.records(items) {
 		return false
 	}
@@ -312,11 +329,27 @@ func (h *Host) Own(ctx context.Context, class providerkit.Class) (Reading, error
 }
 
 func (h *Host) Survey(ctx context.Context, class providerkit.Class) (Reading, error) {
-	return h.observe(ctx, class, nil, h.run)
+	return h.observing(ctx, class, nil, h.run)
+}
+
+func (h *Host) observing(ctx context.Context, class providerkit.Class, keys []byte, ask asking) (Reading, error) {
+	arch, err := h.arch(ctx)
+	if err != nil {
+		arch = ArchAMD64
+	}
+	return h.surveyed(ctx, class, keys, arch, ask)
 }
 
 func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte, ask asking) (Reading, error) {
-	rendered, err := ask(ctx, "survey what "+string(class)+" holds", survey(Items(class, keys), StampPath(class)), nil)
+	arch, err := h.arch(ctx)
+	if err != nil {
+		return Reading{}, err
+	}
+	return h.surveyed(ctx, class, keys, arch, ask)
+}
+
+func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byte, arch string, ask asking) (Reading, error) {
+	rendered, err := ask(ctx, "survey what "+string(class)+" holds", survey(Items(class, keys, arch), StampPath(class)), nil)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -324,7 +357,7 @@ func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte
 	if err != nil {
 		return Reading{}, err
 	}
-	return Reading{Class: class, Keys: keys, Seal: held, Observed: observed}, nil
+	return Reading{Class: class, Keys: keys, Arch: arch, Seal: held, Observed: observed}, nil
 }
 
 func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte, ask asking) (Reading, error) {

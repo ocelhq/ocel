@@ -209,7 +209,7 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	items := Items(class, []byte(aKey+"\n"))
+	items := Items(class, []byte(aKey+"\n"), ArchAMD64)
 
 	key := written(items, KindSealKey, SealKeyPath(class))
 	if key.Name == "" {
@@ -235,7 +235,7 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 func TestTheDeployLoginIsWhitelistedOnTheHelperAndOnNothingBeside(t *testing.T) {
 	t.Parallel()
 
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"))
+	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64)
 
 	var lines []Item
 	for _, item := range items {
@@ -363,10 +363,11 @@ func TestAReplacedKeyIsDriftThoughEveryPathStillStandsAsItWasWritten(t *testing.
 
 	class := providerkit.ClassProduction
 	keys := []byte(aKey + "\n")
-	observed := digests(Items(class, keys))
+	observed := digests(Items(class, keys, ArchAMD64))
 	minted := Seal{Fingerprint: "9f86d081884c7d659a", Algorithm: SealAlgorithm, CreatedAt: "2026-08-26T09:00:00Z"}
 
 	read := Reading{
+		Arch:  ArchAMD64,
 		Class: class, Keys: keys, Present: true, Observed: observed, Seal: minted,
 		Stamp: Stamp{State: StateComplete, Digests: observed, Seal: minted},
 	}
@@ -420,9 +421,9 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	keys := []byte(aKey + "\n")
-	held := digests(Items(production, keys))
+	held := digests(Items(production, keys, ArchAMD64))
 
-	alone := removing(Reading{Class: production, Keys: keys, Observed: held}, Reading{Class: preview, Observed: map[string]string{}})
+	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}})
 	key := removalOf(alone, SealKeyPath(production))
 	if key.path == "" {
 		t.Fatalf("destroy leaves %s behind, and a key nothing takes is every sealed value still openable", SealKeyPath(production))
@@ -439,8 +440,8 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 		}
 	}
 
-	beside := digests(Items(preview, keys))
-	shared := removing(Reading{Class: production, Keys: keys, Observed: held}, Reading{Class: preview, Keys: keys, Observed: beside})
+	beside := digests(Items(preview, keys, ArchAMD64))
+	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside})
 	for _, singleton := range []string{SealHelper, sudoersSeal} {
 		if removalOf(shared, singleton).path != "" {
 			t.Errorf("destroying one class takes %s, which a standing sibling still seals through", singleton)

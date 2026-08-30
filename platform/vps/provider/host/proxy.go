@@ -1,15 +1,18 @@
 package host
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"fmt"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const (
-	KindNetwork   = "docker:network"
-	KindVolume    = "docker:volume"
-	KindContainer = "docker:container"
+	KindNetwork     = "docker:network"
+	KindVolume      = "docker:volume"
+	KindContainer   = "docker:container"
+	KindProxyConfig = "ocel:proxy-config"
 )
 
 const ProxyImage = "docker.io/library/caddy@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d"
@@ -24,48 +27,104 @@ const (
 )
 
 const (
-	ProxyHelper = helperRoot + "/proxyctl"
+	ProxyHelper = helperRoot + "/" + proxyHelperName
 	proxyRoot   = stateRoot + "/proxy"
 	ProxyConfig = proxyRoot + "/caddy.json"
 )
 
 const (
+	proxyHelperName  = "ocel-proxyctl"
 	proxyConfigMount = "/etc/caddy/ocel.json"
-	ProxyHelperMount = "/ocel/proxyctl"
+	ProxyHelperMount = "/ocel/" + proxyHelperName
 	proxyDataMount   = "/data"
 	ProxyAdminSocket = "/run/caddy-admin.sock"
 )
 
 const (
+	ArchAMD64 = "amd64"
+	ArchARM64 = "arm64"
+)
+
+const (
 	networkFact = "network=present"
 	volumeFact  = "volume=present"
+	networkHeld = "network=held"
 )
+
+//go:generate sh ./generate.sh
 
 //go:embed proxy.json
 var proxyBaseline []byte
 
-//go:embed proxyctl.sh
-var proxyctlScript []byte
+//go:embed dist
+var proxyHelpers embed.FS
 
 const proxyFactTemplate = `image={{.Config.Image}}
 restart={{.HostConfig.RestartPolicy.Name}}
 networks={{range $n, $v := .NetworkSettings.Networks}}{{$n}} {{end}}
 binds={{json .HostConfig.Binds}}
 ports={{json .HostConfig.PortBindings}}
-config={{index .Config.Labels "` + proxyLabel + `"}}
+baseline={{index .Config.Labels "` + proxyLabel + `"}}
 state={{.State.Status}}`
 
-func ProxyItems() []Item {
+func Architecture(reported string) (string, error) {
+	switch reported {
+	case "x86_64", ArchAMD64:
+		return ArchAMD64, nil
+	case "aarch64", ArchARM64:
+		return ArchARM64, nil
+	default:
+		return "", providerkit.Refuse(providerkit.CodeDenied,
+			"this host reports its architecture as %q, and ocel builds the proxy's flip helper for %s and %s alone",
+			reported, ArchAMD64, ArchARM64)
+	}
+}
+
+func proxyHelper(arch string) []byte {
+	read, err := proxyHelpers.ReadFile("dist/" + proxyHelperName + "-" + arch)
+	if err != nil {
+		panic(err)
+	}
+	return read
+}
+
+func ProxyItems(arch string) []Item {
 	return []Item{
-		{Kind: KindFile, Name: ProxyHelper, Mode: 0o750, Owner: rootOwner, Content: proxyctlScript,
+		{Kind: KindFile, Name: ProxyHelper, Mode: 0o750, Owner: rootOwner, Content: proxyHelper(arch),
 			Note: "gates a target, flips the proxy and reads what is still in flight"},
 		dir(proxyRoot, 0o750, stateOwner, "what the proxy serves"),
-		{Kind: KindFile, Name: ProxyConfig, Mode: 0o640, Owner: stateOwner, Content: proxyBaseline,
-			Note: "the proxy's whole configuration, which every deploy replaces"},
+		proxyConfigItem(),
 		networkItem(),
 		volumeItem(),
 		containerItem(),
 	}
+}
+
+func proxyConfigItem() Item {
+	return Item{
+		Kind:    KindProxyConfig,
+		Name:    ProxyConfig,
+		Mode:    0o640,
+		Owner:   stateOwner,
+		Content: proxyBaseline,
+		Note:    "the proxy's whole configuration, seeded once here and rewritten by every deploy",
+	}
+}
+
+func proxyConfigCommand(item Item) string {
+	seed := fmt.Sprintf("install -m %04o -o %s -g %s /dev/stdin %s", item.Mode, item.Owner, item.Owner, quoted(item.Name))
+	return "set -e\n" +
+		"if [ -e " + quoted(item.Name) + " ]; then cat >/dev/null; else " + seed + "; fi\n" +
+		fmt.Sprintf("chown %s:%s %s\n", item.Owner, item.Owner, quoted(item.Name)) +
+		fmt.Sprintf("chmod %04o %s", item.Mode, quoted(item.Name))
+}
+
+func proxyConfigProbe(item Item) string {
+	at := quoted(item.Name)
+	return "if [ -h " + at + " ]; then " +
+		reports(quoted(kindLink), at, "0", "''", `"$(readlink `+at+`)"`) + "\n" +
+		"elif [ -f " + at + " ]; then " +
+		reports(quoted(KindProxyConfig), at, `"$(stat -c %a `+at+`)"`, `"$(stat -c %U `+at+`)"`, "''") + "\nfi"
 }
 
 func networkItem() Item {
@@ -100,7 +159,7 @@ func containerItem() Item {
 }
 
 func proxyFacts() []byte {
-	return fmt.Appendf(nil, "image=%s\nrestart=%s\nnetworks=%s \nbinds=%s\nports=%s\nconfig=%s\nstate=running\n",
+	return fmt.Appendf(nil, "image=%s\nrestart=%s\nnetworks=%s \nbinds=%s\nports=%s\nbaseline=%s\nstate=running\n",
 		ProxyImage, proxyRestart, ProxyNetwork, marshalled(proxyBinds()), marshalled(proxyPorts()), contentSum(proxyBaseline))
 }
 
@@ -148,7 +207,7 @@ func containerCommand() string {
 	for _, bind := range proxyBinds() {
 		argv = append(argv, "--volume", bind)
 	}
-	argv = append(argv, ProxyImage, "caddy", "run", "--config", proxyConfigMount, "--resume")
+	argv = append(argv, ProxyImage, "caddy", "run", "--config", proxyConfigMount)
 	return "set -e\n" +
 		"docker rm --force " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
 		words(argv) + " >/dev/null"

@@ -102,7 +102,7 @@ func TestADockerBinaryWithNoUnitBehindItStandsWithoutServingAndIsNeverRebuiltUna
 	if _, stood := observed[unitItem().ID()]; stood {
 		t.Errorf("the probe read %s on a host whose docker binary carries no unit file", unitItem().ID())
 	}
-	read := Reading{Class: providerkit.ClassProduction, Observed: observed}
+	read := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: observed}
 	if !read.standing(KindEngine, dockerEngine) {
 		t.Fatalf("the probe read no engine on a host carrying a docker binary, and an unattended run would fetch %s and run it as root over an install that is already there", dockerSource)
 	}
@@ -134,7 +134,7 @@ func TestAnInstalledEngineWhoseDaemonIsIdleIsProbedAsStandingAndNotCurrent(t *te
 			if observed[engineItem().ID()] != engineItem().Digest() {
 				t.Error("the probe calls an installed engine absent, and the plan would fetch the install script over a host that already has one")
 			}
-			read := Reading{Class: providerkit.ClassProduction, Observed: observed}
+			read := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: observed}
 			if !read.standing(KindUnit, dockerUnit) {
 				t.Fatalf("the probe read no unit on a host whose docker.service is %s", name)
 			}
@@ -150,7 +150,7 @@ func TestAnEngineThatStandsIsKeptAndAnIdleDaemonPlansTheUnitAlone(t *testing.T) 
 
 	class := providerkit.ClassProduction
 	idle := digest(KindUnit, dockerUnit, 0, rootOwner, contentSum([]byte("active=inactive\nenabled=disabled\n")))
-	read := Reading{Class: class, Observed: map[string]string{
+	read := Reading{Arch: ArchAMD64, Class: class, Observed: map[string]string{
 		engineItem().ID(): engineItem().Digest(),
 		unitItem().ID():   idle,
 	}}
@@ -174,7 +174,7 @@ func TestAnEngineThatStandsIsKeptAndAnIdleDaemonPlansTheUnitAlone(t *testing.T) 
 func TestTheEngineCanOnlyEverBePresentOrAbsent(t *testing.T) {
 	t.Parallel()
 
-	stood := Reading{Class: providerkit.ClassProduction, Observed: map[string]string{
+	stood := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: map[string]string{
 		engineItem().ID(): engineItem().Digest(),
 	}}
 	if !stood.current(engineItem()) {
@@ -198,7 +198,7 @@ func TestTheDocumentSaysWhereTheDaemonTheGroupReachesCameFrom(t *testing.T) {
 	if claim.Name == "" {
 		t.Fatal("the deploy login is written into the docker group and the document claims no membership of it")
 	}
-	if written(Items(class, nil), KindEngine, dockerEngine).Name == "" {
+	if written(Items(class, nil, ArchAMD64), KindEngine, dockerEngine).Name == "" {
 		t.Fatal("the document names the daemon bootstrap installs and bootstrap installs no engine at all")
 	}
 	if !strings.Contains(claim.Detail, dockerSource) {
@@ -212,7 +212,7 @@ func TestTheDocumentSaysWhereTheDaemonTheGroupReachesCameFrom(t *testing.T) {
 func TestAHostWithNoEngineHasTheInstallPlannedLastAndNamed(t *testing.T) {
 	t.Parallel()
 
-	changes := planned(Reading{Class: providerkit.ClassProduction, Observed: map[string]string{}})
+	changes := planned(Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: map[string]string{}})
 	engine := planFor(changes, engineItem().ID())
 	if engine.Action != providerkit.ActionCreate {
 		t.Fatalf("a host with no engine plans %q for it, want the install shown as a change to consent to", engine.Action)
@@ -232,11 +232,11 @@ func TestDestroyKeepsTheEngineWhicheverClassIsTheLastOne(t *testing.T) {
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	keys := []byte(aKey + "\n")
-	standing := Reading{Class: production, Keys: keys, Observed: digests(Items(production, keys))}
+	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
 
 	for name, sibling := range map[string]Reading{
 		"the last class on the host": {Class: preview, Observed: map[string]string{}},
-		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys))},
+		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))},
 	} {
 		taken := removing(standing, sibling)
 		kept := removalOf(taken, dockerEngine)
@@ -263,7 +263,7 @@ func TestAHostCarryingNothingButTheEngineHasNothingToDestroy(t *testing.T) {
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	engine := digests(EngineItems())
-	taken := removing(Reading{Class: production, Observed: engine}, Reading{Class: preview, Observed: engine})
+	taken := removing(Reading{Arch: ArchAMD64, Class: production, Observed: engine}, Reading{Arch: ArchAMD64, Class: preview, Observed: engine})
 	if len(taken) != 0 {
 		t.Errorf("a machine carrying nothing but docker plans %d removals, want a destroy with nothing to say", len(taken))
 	}

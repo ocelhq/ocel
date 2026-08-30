@@ -82,8 +82,8 @@ func StorageItems(class providerkit.Class, keys []byte) []Item {
 	}
 }
 
-func Items(class providerkit.Class, keys []byte) []Item {
-	return slices.Concat(ClassItems(class), StorageItems(class, keys), EngineItems(), ProxyItems())
+func Items(class providerkit.Class, keys []byte, arch string) []Item {
+	return slices.Concat(ClassItems(class), StorageItems(class, keys), EngineItems(), ProxyItems(arch))
 }
 
 func dir(name string, mode fs.FileMode, owner string, note string) Item {
@@ -93,14 +93,21 @@ func dir(name string, mode fs.FileMode, owner string, note string) Item {
 func (i Item) ID() string { return i.Kind + " " + i.Name }
 
 func (i Item) stdin() []byte {
-	if i.Kind == KindFile {
+	if i.Kind == KindFile || i.Kind == KindProxyConfig {
 		return i.Content
 	}
 	return nil
 }
 
 func (i Item) Digest() string {
-	return digest(i.Kind, i.Name, i.Mode, i.Owner, contentSum(i.Content))
+	return digest(i.Kind, i.Name, i.Mode, i.Owner, i.sum())
+}
+
+func (i Item) sum() string {
+	if i.Kind == KindProxyConfig {
+		return ""
+	}
+	return contentSum(i.Content)
 }
 
 func (i Item) command() string {
@@ -119,6 +126,8 @@ func (i Item) command() string {
 		return volumeCommand()
 	case KindContainer:
 		return containerCommand()
+	case KindProxyConfig:
+		return proxyConfigCommand(i)
 	case KindDir:
 		return fmt.Sprintf("install -d -m %04o -o %s -g %s %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
 	default:
@@ -142,6 +151,8 @@ func (i Item) probe() string {
 		return volumeProbe()
 	case KindContainer:
 		return containerProbe()
+	case KindProxyConfig:
+		return proxyConfigProbe(i)
 	default:
 		return ""
 	}
