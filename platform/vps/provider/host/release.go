@@ -88,16 +88,28 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 			return err
 		}
 	}
+	warnExpiry(report, result.Stdout)
+	retired := flipping.Retiring
 	standing.Retiring = ""
 	if _, err := h.writeProxyConfig(ctx, flipped, standing); err != nil {
-		return err
+		return h.serving(rel, retired, err)
 	}
 	if _, err := h.ran(ctx, "reload the proxy's steady-state configuration",
 		words(helperCommand("flip", proxyConfigMount)), nil, elevation); err != nil {
-		return err
+		return h.serving(rel, retired, err)
 	}
-	warnExpiry(report, result.Stdout)
 	return nil
+}
+
+func (h *Host) serving(rel Release, retired string, why error) error {
+	left := ProxyConfig + " is one write behind the configuration the proxy loaded"
+	if retired != "" {
+		left = fmt.Sprintf("%s still declares %s forwarding to %s, which is stopped, and a restarted proxy reads this file rather than what the flip loaded",
+			ProxyConfig, proxyDrainServer, rel.retiredName())
+	}
+	return providerkit.Refuse(providerkit.CodeNotReady,
+		"release %s onto %s: the proxy is flipped onto %s and serving it, and only the steady-state configuration that follows the flip did not land: %v\n%s. Nothing was rolled back and nothing is left standing; run this deploy again to write it",
+		rel.App, h.named(), rel.targetName(), why, left)
 }
 
 func warnExpiry(report providerkit.Reporter, said string) {

@@ -425,6 +425,58 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 	}
 }
 
+func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *testing.T) {
+	t.Parallel()
+
+	report := &watched{}
+	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
+	proxied := servesProxy(stood.bench, &stood.held)
+	writes := 0
+	stood.answer = func(command string) (session.Result, bool) {
+		switch {
+		case writesProxy(command):
+			stood.mu.Lock()
+			writes++
+			steady := writes == 2
+			stood.mu.Unlock()
+			if steady {
+				return session.Result{Code: proxyMoved, Stderr: "the digest an ocel domain left"}, true
+			}
+			return proxied(command)
+		case strings.Contains(command, quoted("deploy")):
+			return session.Result{Stdout: caddyadmin.DrainExpired + " " + retired + " 2\n"}, true
+		default:
+			return proxied(command)
+		}
+	}
+
+	err := stood.host().Release(context.Background(), aRelease(), report)
+	if err == nil {
+		t.Fatal("the steady-state write was refused and the release reported success")
+	}
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) {
+		t.Fatalf("a failure after the flip failed with %T (%v), want the refusal every other failure renders: a bare machine error reads as a failed release while the new one is in fact serving", err, err)
+	}
+	said := err.Error()
+	for what, wanted := range map[string]string{
+		"that the flip already landed":      "flipped",
+		"the release that is now serving":   physical,
+		"the drain server left declared":    proxyDrainServer,
+		"the stopped container it names":    retiring,
+		"the file a restarted proxy reads":  ProxyConfig,
+		"why the steady-state write failed": "digest",
+	} {
+		if !strings.Contains(said, wanted) {
+			t.Errorf("a failure after the flip is refused with\n%s\nand that names no %s (%s)", said, what, wanted)
+		}
+	}
+	warned := strings.Join(report.told, "\n")
+	if !strings.Contains(warned, retired) || !strings.Contains(warned, "502") {
+		t.Errorf("the release reported %q; the drain expired holding requests open and the write that failed after the flip swallowed the warning", warned)
+	}
+}
+
 func diagnosed(t *testing.T, helper session.Result, state, logs string) string {
 	t.Helper()
 	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
