@@ -73,10 +73,10 @@ func (b Builder) Build(ctx context.Context, app App) (Image, error) {
 	return image, nil
 }
 
-func (c Choice) Railpack() bool { return c.Dockerfile == "" }
+func (c Choice) railpack() bool { return c.Dockerfile == "" }
 
 func (c Choice) solve() (client.SolveOpt, func(), error) {
-	if !c.Railpack() {
+	if !c.railpack() {
 		opt, err := dockerfileOptions(c.App.Dir, c.Dockerfile)
 		return opt, func() {}, err
 	}
@@ -97,7 +97,7 @@ func (c Choice) solve() (client.SolveOpt, func(), error) {
 }
 
 func (c Choice) run(ctx context.Context, builder *client.Client, opt client.SolveOpt, status chan *client.SolveStatus) (*client.SolveResponse, error) {
-	if c.Railpack() {
+	if c.railpack() {
 		return builder.Build(ctx, opt, "", railpack.Build, status)
 	}
 	return builder.Solve(ctx, nil, opt, status)
