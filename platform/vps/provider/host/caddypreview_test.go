@@ -14,6 +14,8 @@ import (
 
 const previewBase = "preview.example.com"
 
+const internalBase = "preview.ocel.home.arpa"
+
 func previewing() ProxyState {
 	state := routed()
 	state.PreviewBase = previewBase
@@ -318,5 +320,32 @@ func TestABoxServingOnePreviewBaseRefusesASecondByName(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), edge.PreviewWildcard(previewBase)) {
 		t.Errorf("the refusal reads %q and never names the wildcard already standing", err)
+	}
+}
+
+func TestAPreviewBaseNoPublicCaWillIssueForIsManagedInternallyAndReachesNoCaAtAll(t *testing.T) {
+	state := routed()
+	state.PreviewBase = internalBase
+	ask := probingConfig(t, mustRender(t, state))
+	ask("pr-7." + internalBase)
+
+	probe := edge.ProbeHostname(edge.PreviewWildcard(internalBase))
+	const managing = "enabling automatic TLS certificate management"
+	var logs string
+	for range 100 {
+		if logs = logsOf(probeName(t)); managed(logs, managing, probe) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !managed(logs, managing, probe) {
+		t.Fatalf("the proxy manages certificates for nothing naming %s, so this window carries no subject collection to read an absence out of:\n%s", probe, logs)
+	}
+	if strings.Contains(logs, acmeDirectory) {
+		t.Errorf("a preview base under %s reached a public CA, so the live tier cannot use one to install a preview entry without putting a real order on the wire from CI:\n%s",
+			internalBase, logs)
+	}
+	if strings.Contains(logs, edge.PreviewWildcard(internalBase)) {
+		t.Errorf("the proxy names the wildcard in its own log even where the exclusion holds:\n%s", logs)
 	}
 }

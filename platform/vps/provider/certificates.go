@@ -13,6 +13,9 @@ import (
 func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
 	path := p.host.PinFor(req.Hostname)
 	if path == "" {
+		if err := p.host.CertificateTrouble(ctx, req.Hostname); err != nil {
+			return providerkit.Certificate{}, err
+		}
 		return providerkit.Certificate{ID: certs.ProxyHandle(req.Hostname)}, nil
 	}
 	leaf, err := p.pinnedLeaf(ctx, path)
