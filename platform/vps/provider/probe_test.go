@@ -272,7 +272,7 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testi
 	const owner = "ocel--shop--production"
 	rendered, err := host.RenderProxyConfig(host.ProxyState{
 		Grace:  host.DrainWindow,
-		Claims: []host.HostClaim{{Hostname: hostname, Owner: owner}},
+		Claims: []host.HostClaim{{Hostname: hostname, Owner: owner, Pointer: edge.DefaultPointer}},
 		Routes: []host.AppRoute{{
 			RouteKey: host.RouteKey{Owner: owner, Pointer: "@production", App: "web"},
 			Upstream: "shop-web-2222:" + host.AppPort,

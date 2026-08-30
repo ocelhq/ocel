@@ -137,7 +137,7 @@ func TestARealProxyAnswersAHostnameNothingOnTheBoxClaimsWithABare404(t *testing.
 
 func TestARealProxyForwardsAClaimedHostnameToTheProjectThatClaimedIt(t *testing.T) {
 	state := twoProjects()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	ask := probing(t, state)
 
 	if said := ask(claimed); said.status == http.StatusNotFound {
@@ -153,7 +153,7 @@ func TestARealProxyForwardsAClaimedHostnameToTheProjectThatClaimedIt(t *testing.
 func TestARealProxyAnswersEveryHostnameOneSurfaceClaimsOnTheAppItRuns(t *testing.T) {
 	second := "second.example.com"
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}, {Hostname: second, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, {Hostname: second, Owner: surface, Pointer: pointed}}
 	ask := probing(t, state)
 
 	for _, hostname := range []string{claimed, second} {
@@ -196,7 +196,7 @@ func TestARealProxyServesTheAppsBodyUnderTheHostnameAndNamesTheEdgeThatServedIt(
 	state := ProxyState{
 		Grace:  DrainWindow,
 		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
-		Claims: []HostClaim{{Hostname: claimed, Owner: surface}},
+		Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 	}
 	said := probingConfig(t, issuedByNobody(t, mustRender(t, state)), network)(claimed)
 
@@ -215,7 +215,7 @@ func TestARealProxyStopsServingAHostnameTheProjectUnbound(t *testing.T) {
 	bound := ProxyState{
 		Grace:  DrainWindow,
 		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
-		Claims: []HostClaim{{Hostname: claimed, Owner: surface}},
+		Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 	}
 	unbound := bound
 	unbound.Claims = Disclaiming(bound.Claims, func(claim HostClaim) bool {

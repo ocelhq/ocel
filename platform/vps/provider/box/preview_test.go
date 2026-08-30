@@ -2,10 +2,14 @@ package box_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 const previewBase = "preview.example.com"
@@ -103,5 +107,135 @@ func TestABoxAlreadyServingOnePreviewBaseRefusesASecondRatherThanSwappingIt(t *t
 
 	if _, err := front.ReconcilePreviewWildcard(ctx, other); err == nil {
 		t.Fatal("a second preview base was installed over the first, and every preview hostname on this box is a name under the base it was raised on: swapping it silently takes every live preview off the air")
+	}
+}
+
+func previewStack(t *testing.T, stood *machine) edge.EdgeStack {
+	t.Helper()
+
+	front := box.New(stood, fake.NewRecords(), sshScope)
+	if _, err := front.ReconcilePreviewWildcard(context.Background(), previewSpec()); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard: %v", err)
+	}
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
+		Version: "test", Class: edge.ClassPreview, Slug: slug,
+	}, edge.StackState{GlobalPreview: previewBase})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	return stack
+}
+
+func previewed(t *testing.T, stack edge.EdgeStack, pointer string, apps ...string) {
+	t.Helper()
+
+	builds := map[string]string{}
+	for _, app := range apps {
+		staged(t, stack, app, "b1", slug+"-"+app+"-"+pointer)
+		builds[app] = "b1"
+	}
+	if err := stack.Promote(context.Background(), edge.Promotion{
+		PromotionID: "p-" + pointer, Ts: 1, Builds: builds,
+	}, pointer, edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote(%s): %v", pointer, err)
+	}
+}
+
+func claimedOn(t *testing.T, stood *machine) []host.HostClaim {
+	t.Helper()
+
+	held, err := stood.Claims(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return held
+}
+
+func TestAPreviewOfAMultiAppProjectClaimsOneHostnamePerApp(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	previewed(t, previewStack(t, stood), "pr-7", "api", "web")
+
+	surface := box.Surface(slug, edge.ClassPreview)
+	want := []host.HostClaim{
+		{Hostname: slug + "--pr-7--api." + previewBase, Owner: surface, Pointer: "pr-7", App: "api"},
+		{Hostname: slug + "--pr-7--web." + previewBase, Owner: surface, Pointer: "pr-7", App: "web"},
+	}
+	if held := claimedOn(t, stood); !slices.Equal(held, want) {
+		t.Fatalf("the box holds %v, want %v: a preview is one routing entry per app the project has, each on its own hostname and its own per-host certificate", held, want)
+	}
+}
+
+func TestAPreviewOfASingleAppProjectClaimsTheOneHostnameTheBranchIsNamedFor(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	previewed(t, previewStack(t, stood), "pr-7", "web")
+
+	want := []host.HostClaim{{
+		Hostname: slug + "--pr-7." + previewBase,
+		Owner:    box.Surface(slug, edge.ClassPreview),
+		Pointer:  "pr-7",
+	}}
+	if held := claimedOn(t, stood); !slices.Equal(held, want) {
+		t.Fatalf("the box holds %v, want %v", held, want)
+	}
+}
+
+func TestTwoBranchesOfOneProjectEachKeepTheirOwnPreviewHostname(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	stack := previewStack(t, stood)
+	previewed(t, stack, "pr-7", "web")
+	previewed(t, stack, "pr-9", "web")
+
+	held := claimedOn(t, stood)
+	if len(held) != 2 {
+		t.Fatalf("the box holds %v, want one hostname per live branch: the preview hostname is a function of the branch name, so a second branch is a second name rather than a second deploy of the first", held)
+	}
+	for _, claim := range held {
+		if !strings.Contains(claim.Hostname, "--"+claim.Pointer+".") {
+			t.Errorf("%s is claimed under branch %q", claim.Hostname, claim.Pointer)
+		}
+	}
+}
+
+func TestRemovingAPreviewPointerTakesItsHostnamesOffTheBoxWithIt(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	stack := previewStack(t, stood)
+	previewed(t, stack, "pr-7", "api", "web")
+	previewed(t, stack, "pr-9", "api", "web")
+
+	if _, err := stack.RemovePointer(context.Background(), "pr-7"); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+	for _, claim := range claimedOn(t, stood) {
+		if claim.Pointer == "pr-7" {
+			t.Errorf("%s is still claimed on this box after the preview it belongs to was removed: the box's proxy holds a certificate per hostname, and a name nothing serves keeps being renewed", claim.Hostname)
+		}
+		if claim.Pointer != "pr-9" {
+			t.Errorf("removing one preview took %s with it, and it belongs to branch %q", claim.Hostname, claim.Pointer)
+		}
+	}
+	if len(claimedOn(t, stood)) != 2 {
+		t.Errorf("the box holds %v after one of two branches went, want the other branch's two hostnames", claimedOn(t, stood))
+	}
+}
+
+func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	_, _, stack := standing(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if held := claimedOn(t, stood); len(held) != 0 {
+		t.Errorf("a production promotion claimed %v", held)
 	}
 }

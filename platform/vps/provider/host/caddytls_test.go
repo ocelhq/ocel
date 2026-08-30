@@ -65,7 +65,7 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 	pinnedPair(t, stood.pins, "wildcard", []string{"*.preview.example.com"})
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: "pr-7.preview.example.com", Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: "pr-7.preview.example.com", Owner: surface, Pointer: pointed}}
 	state.Pins = []Pin{{Hostname: "*.preview.example.com", Path: at}}
 	rendered, err := RenderProxyConfig(state)
 	if err != nil {
@@ -120,7 +120,7 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 
 func TestARealProxyAsksACAForEveryHostnameSomethingOnTheBoxClaims(t *testing.T) {
 	state := twoProjects()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	rendered, err := RenderProxyConfig(state)
 	if err != nil {
 		t.Fatalf("RenderProxyConfig() = %v", err)

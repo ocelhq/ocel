@@ -68,18 +68,35 @@ type AppRoute struct {
 type HostClaim struct {
 	Hostname string
 	Owner    string
+	Pointer  string
 	App      string
 }
 
 type claimKey struct {
-	Owner string
-	App   string
+	Owner   string
+	Pointer string
+	App     string
 }
 
-func (c HostClaim) key() claimKey { return claimKey{Owner: c.Owner, App: c.App} }
+type surfaceKey struct {
+	Owner   string
+	Pointer string
+}
+
+func (c HostClaim) key() claimKey {
+	return claimKey{Owner: c.Owner, Pointer: c.Pointer, App: c.App}
+}
+
+func (c HostClaim) surface() surfaceKey {
+	return surfaceKey{Owner: c.Owner, Pointer: c.Pointer}
+}
+
+func (r AppRoute) surface() surfaceKey {
+	return surfaceKey{Owner: r.Owner, Pointer: r.Pointer}
+}
 
 func (c HostClaim) identity() string {
-	fields := []string{c.Owner, c.Hostname}
+	fields := []string{c.Owner, c.Hostname, c.Pointer}
 	if c.App != "" {
 		fields = append(fields, c.App)
 	}
@@ -309,29 +326,29 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 		claimed[claim.key()] = append(claimed[claim.key()], claim.Hostname)
 	}
 	standing := slices.SortedFunc(slices.Values(state.Routes), byKey)
-	running := map[string][]string{}
+	running := map[surfaceKey][]string{}
 	for _, route := range standing {
 		if err := validRoute(route); err != nil {
 			return nil, err
 		}
-		if !slices.Contains(running[route.Owner], route.App) {
-			running[route.Owner] = append(running[route.Owner], route.App)
+		if !slices.Contains(running[route.surface()], route.App) {
+			running[route.surface()] = append(running[route.surface()], route.App)
 		}
 	}
-	for _, owner := range slices.Sorted(maps.Keys(running)) {
-		wide := claimed[claimKey{Owner: owner}]
-		if len(wide) == 0 || len(running[owner]) == 1 {
+	for _, under := range slices.SortedFunc(maps.Keys(running), bySurface) {
+		wide := claimed[claimKey{Owner: under.Owner, Pointer: under.Pointer}]
+		if len(wide) == 0 || len(running[under]) == 1 {
 			continue
 		}
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s claims %s on this box and runs %s: a reverse proxy handler is terminal, so whichever app sorted first would answer every one of those hostnames and the rest would be configuration nothing reaches. Declare the hostname under the app that serves it — domains.production on the app rather than on the project — and run this again",
-			owner, strings.Join(wide, ", "), strings.Join(running[owner], " and "))
+			"%s claims %s on this box under %s and runs %s there: a reverse proxy handler is terminal, so whichever app sorted first would answer every one of those hostnames and the rest would be configuration nothing reaches. Declare the hostname under the app that serves it — domains.production on the app rather than on the project — and run this again",
+			under.Owner, strings.Join(wide, ", "), under.Pointer, strings.Join(running[under], " and "))
 	}
 	answering := map[string]AppRoute{}
 	for _, route := range standing {
-		hostnames := claimed[claimKey{Owner: route.Owner, App: route.App}]
-		if len(running[route.Owner]) == 1 {
-			hostnames = append(slices.Clone(hostnames), claimed[claimKey{Owner: route.Owner}]...)
+		hostnames := claimed[claimKey{Owner: route.Owner, Pointer: route.Pointer, App: route.App}]
+		if len(running[route.surface()]) == 1 {
+			hostnames = append(slices.Clone(hostnames), claimed[claimKey{Owner: route.Owner, Pointer: route.Pointer}]...)
 		}
 		slices.Sort(hostnames)
 		for _, hostname := range hostnames {
@@ -561,12 +578,12 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 		}
 		if claim, mine := strings.CutPrefix(route.Identity, claimIdentity); mine {
 			fields := strings.Split(claim, claimSeparator)
-			if len(fields) < 2 || len(fields) > 3 || slices.Contains(fields, "") || !claimsOnly(route, fields[1]) {
+			if len(fields) < 3 || len(fields) > 4 || slices.Contains(fields, "") || !claimsOnly(route, fields[1]) {
 				return ProxyState{}, unwritten("route", route.Identity)
 			}
-			held := HostClaim{Hostname: fields[1], Owner: fields[0]}
-			if len(fields) == 3 {
-				held.App = fields[2]
+			held := HostClaim{Hostname: fields[1], Owner: fields[0], Pointer: fields[2]}
+			if len(fields) == 4 {
+				held.App = fields[3]
 			}
 			state.Claims = append(state.Claims, held)
 			continue
@@ -631,6 +648,10 @@ func byKey(a, b AppRoute) int {
 	return strings.Compare(a.identity(), b.identity())
 }
 
+func bySurface(a, b surfaceKey) int {
+	return strings.Compare(a.Owner+claimSeparator+a.Pointer, b.Owner+claimSeparator+b.Pointer)
+}
+
 func validRoute(route AppRoute) error {
 	for _, field := range []struct{ what, named string }{
 		{"surface", route.Owner}, {"pointer", route.Pointer}, {"app", route.App},
@@ -661,14 +682,15 @@ func claimsOnly(route caddyRoute, hostname string) bool {
 
 func validClaim(claim HostClaim) error {
 	switch {
-	case claim.Hostname == "" || claim.Owner == "":
+	case claim.Hostname == "" || claim.Owner == "" || claim.Pointer == "":
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"a hostname claim on this box names host %q and surface %q, and %s answers which surface claims a host out of both",
-			claim.Hostname, claim.Owner, ProxyConfig)
-	case strings.Contains(claim.Owner, claimSeparator) || strings.Contains(claim.Hostname, claimSeparator) || strings.Contains(claim.App, claimSeparator):
+			"a hostname claim on this box names host %q, surface %q and pointer %q, and %s answers which of a surface's routes claims a host out of all three: a box runs many pointers of one app at once and a claim naming none of them belongs to all of them",
+			claim.Hostname, claim.Owner, claim.Pointer, ProxyConfig)
+	case strings.Contains(claim.Owner, claimSeparator) || strings.Contains(claim.Hostname, claimSeparator) ||
+		strings.Contains(claim.Pointer, claimSeparator) || strings.Contains(claim.App, claimSeparator):
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the claim of %q by %q under app %q carries %q, which is what separates the surface, the host it claims and the app it was declared under",
-			claim.Hostname, claim.Owner, claim.App, claimSeparator)
+			"the claim of %q by %q under pointer %q and app %q carries %q, which is what separates the surface, the host it claims, the pointer it answers for and the app it was declared under",
+			claim.Hostname, claim.Owner, claim.Pointer, claim.App, claimSeparator)
 	}
 	return nil
 }
