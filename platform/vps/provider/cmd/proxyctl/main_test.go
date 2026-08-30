@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 type admin struct {
@@ -19,6 +20,7 @@ type admin struct {
 	loaded []byte
 	status int
 	body   string
+	queue  []string
 }
 
 func served(t *testing.T) (*admin, string) {
@@ -40,6 +42,12 @@ func served(t *testing.T) (*admin, string) {
 			held.loaded = read
 		}
 		status, body := held.status, held.body
+		if len(held.queue) > 0 {
+			body = held.queue[0]
+			if len(held.queue) > 1 {
+				held.queue = held.queue[1:]
+			}
+		}
 		held.mu.Unlock()
 		w.WriteHeader(status)
 		_, _ = io.WriteString(w, body)
@@ -254,5 +262,58 @@ func TestAGateThatExpiresSaysWhetherTheTargetAnsweredAtAllAndDoesNotConflateTheT
 	}
 	if !strings.Contains(said, "503") {
 		t.Errorf("the expired gate said %q and never named the status it kept reading", said)
+	}
+}
+
+func TestTheDrainReturnsTheMomentTheRetiredUpstreamReportsNothingInFlight(t *testing.T) {
+	held, socket := served(t)
+	held.queue = []string{
+		`[{"address":"old:8080","num_requests":1},{"address":"new:8080","num_requests":0}]`,
+		`[{"address":"old:8080","num_requests":1},{"address":"new:8080","num_requests":0}]`,
+		`[{"address":"old:8080","num_requests":0},{"address":"new:8080","num_requests":1}]`,
+	}
+
+	var out, errs strings.Builder
+	if code := draining(socket, "old:8080", 30*time.Second, &out, &errs); code != 0 {
+		t.Fatalf("draining an upstream that finishes its request = %d, %q", code, errs.String())
+	}
+	if asked := held.asked(); len(asked) != 3 {
+		t.Errorf("the drain asked %d times, want it to stop at the poll that read zero: %v", len(asked), asked)
+	}
+	if out.String() != "" {
+		t.Errorf("a drain that completed printed %q, and the expiry line is what an operator is warned by", out.String())
+	}
+}
+
+func TestADrainThatExpiresIsNotAFailureAndCarriesTheCountStillInFlight(t *testing.T) {
+	held, socket := served(t)
+	held.body = `[{"address":"old:8080","num_requests":3}]`
+
+	var out, errs strings.Builder
+	if code := draining(socket, "old:8080", time.Second, &out, &errs); code != 0 {
+		t.Fatalf("draining past the window = %d, want it borne as a warning: the new release is serving", code)
+	}
+	printed := strings.TrimSpace(out.String())
+	if !strings.Contains(printed, "old:8080") || !strings.Contains(printed, "3") {
+		t.Errorf("the expired drain printed %q, want the address and the count still in flight", printed)
+	}
+	if len(held.asked()) < 2 {
+		t.Errorf("the drain asked %v, want it polled across the window rather than sampled once", held.asked())
+	}
+}
+
+func TestARetiredUpstreamAbsentFromThePoolIsABrokenCompositionRatherThanADrain(t *testing.T) {
+	_, socket := served(t)
+
+	var out, errs strings.Builder
+	code := draining(socket, "old:8080", time.Second, &out, &errs)
+	if code == 0 {
+		t.Fatal("an upstream the proxy never reported read as drained, and a proxy upgrade that drops a retired upstream from the pool would stop old containers under live requests forever")
+	}
+	if code != exitUnattributable {
+		t.Errorf("the drain exited %d, want %d: it is neither a gate failure nor a rejected config", code, exitUnattributable)
+	}
+	if !strings.Contains(errs.String(), "old:8080") {
+		t.Errorf("the drain failed with %q, want it to name the address the pool never carried", errs.String())
 	}
 }
