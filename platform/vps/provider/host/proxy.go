@@ -45,6 +45,8 @@ const (
 	ArchARM64 = "arm64"
 )
 
+const proxyRising = 30
+
 const (
 	networkFact = "network=present"
 	volumeFact  = "volume=present"
@@ -195,7 +197,9 @@ func volumeCommand() string {
 		"docker volume create " + quoted(ProxyVolume) + " >/dev/null"
 }
 
-func containerCommand() string {
+func containerCommand() string { return containerWriting(proxyRising) }
+
+func containerWriting(attempts int) string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", ProxyContainer,
 		"--restart", proxyRestart,
@@ -210,7 +214,26 @@ func containerCommand() string {
 	argv = append(argv, ProxyImage, "caddy", "run", "--config", proxyConfigMount)
 	return "set -e\n" +
 		"docker rm --force " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
-		words(argv) + " >/dev/null"
+		words(argv) + " >/dev/null\n" +
+		containerRising(attempts)
+}
+
+func containerRising(attempts int) string {
+	name := quoted(ProxyContainer)
+	inspect := "docker inspect --type container --format "
+	return "at=0\n" +
+		"while :; do\n" +
+		"if [ \"$(" + inspect + quoted("{{.State.Status}}") + " " + name + " 2>/dev/null)\" = running ]; then exit 0; fi\n" +
+		"at=$((at + 1))\n" +
+		"[ \"$at\" -lt " + fmt.Sprint(attempts) + " ] || break\n" +
+		"sleep 1\n" +
+		"done\n" +
+		"printf '%s\\n' " + quoted(fmt.Sprintf(
+		"%s was created and did not report running within %ds", ProxyContainer, attempts)) + " >&2\n" +
+		inspect + quoted("status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}") +
+		" " + name + " >&2 2>&1 || true\n" +
+		"docker logs --tail 2 " + name + " >&2 2>&1 || true\n" +
+		"exit 1"
 }
 
 func standingProbe(kind, name, ask, fact string) string {
