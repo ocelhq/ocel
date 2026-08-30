@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -14,7 +16,35 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 )
 
+func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
+	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
+
+	registry := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).DNS()
+
+	if got := registry.Supported(); !slices.Equal(got, []providerkit.DNSKind{"cloudflare"}) {
+		t.Errorf("Supported() = %v, want cloudflare alone", got)
+	}
+	if got := registry.Default(); got != "" {
+		t.Errorf("Default() = %q, want no default: instructions-only DNS is the absence of a writer", got)
+	}
+	writer, err := registry.Open("cloudflare", "app.com")
+	if err != nil || writer == nil {
+		t.Fatalf("Open(cloudflare) = %v, %v, want a writer", writer, err)
+	}
+
+	var refusal providerkit.Refusal
+	opened, err := registry.Open("route53", "app.com")
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Open(route53) = %v, %v, want an invalid refusal", opened, err)
+	}
+	if !strings.Contains(refusal.Message, "cloudflare") {
+		t.Errorf("Open(route53) refusal = %q, want it to name the writers this provider has", refusal.Message)
+	}
+}
+
 func TestVPSProvider(t *testing.T) {
+	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
+
 	conformance.Run(t, conformance.Suite{
 		Spec:    providerkit.Spec{Version: "test", New: vps.New},
 		Options: providerkit.Options{"ssh": map[string]any{"host": "203.0.113.10"}},
