@@ -168,6 +168,8 @@ func stagedWrite(expected string) string {
 		`staged=$(mktemp ` + quoted(ProxyConfig+".XXXXXX") + `)`,
 		`trap 'rm -f "$staged"' EXIT`,
 		`cat > "$staged"`,
+		"exec 9<" + config,
+		"flock -x 9",
 		`held=$(sha256sum ` + config + ` | cut -d' ' -f1)`,
 		`if [ "$held" != ` + quoted(expected) + ` ]; then printf '%s' "$held" >&2; exit ` + strconv.Itoa(proxyMoved) + `; fi`,
 		`chmod --reference=` + config + ` "$staged"`,

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -358,6 +361,67 @@ func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(warned), "websocket") {
 		t.Errorf("the warning reads %q and leaves the fate of a hijacked connection implied", warned)
+	}
+}
+
+func TestTheCompareAndSetOverTheProxyConfigIsOneCriticalSection(t *testing.T) {
+	t.Parallel()
+
+	written := stagedWrite("a-digest-this-deploy-read")
+	locked := strings.Index(written, "flock -x")
+	compared := strings.Index(written, `if [ "$held" != `)
+	moved := strings.Index(written, `mv "$staged" `)
+	if locked < 0 {
+		t.Fatalf("the staged write is\n%s\nand takes no lock: the digest is read, compared and only then moved over, so two writers that read the same digest both pass the compare and the second mv drops the first one's routes — which is the update this compare-and-set exists to refuse", written)
+	}
+	if compared < locked || moved < locked {
+		t.Errorf("the staged write is\n%s\nand compares or moves outside the lock it takes, which serializes nothing", written)
+	}
+	if !strings.Contains(written[:locked], "exec 9<"+quoted(ProxyConfig)) {
+		t.Errorf("the staged write is\n%s\nand locks something other than %s, so a writer of that file contends with nothing", written, ProxyConfig)
+	}
+	if strings.Index(written, `cat > "$staged"`) > locked {
+		t.Errorf("the staged write is\n%s\nand reads the whole document off the wire with the lock held, which stalls every other writer on this box for the length of an ssh transfer", written)
+	}
+}
+
+func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testing.T) {
+	t.Parallel()
+
+	for _, needed := range []string{"sh", "flock", "sha256sum", "mktemp"} {
+		if _, err := exec.LookPath(needed); err != nil {
+			t.Skipf("no %s on this machine, and the write under test is the shell one a box runs", needed)
+		}
+	}
+	config := filepath.Join(t.TempDir(), "caddy.json")
+	if err := os.WriteFile(config, []byte("the config both writers read\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	read := contentSum([]byte("the config both writers read\n"))
+
+	racing := make(chan error, 2)
+	for _, document := range []string{"written by one\n", "written by the other\n"} {
+		go func() {
+			run := exec.Command("/bin/sh", "-c", strings.ReplaceAll(stagedWrite(read), ProxyConfig, config))
+			run.Stdin = strings.NewReader(document)
+			racing <- run.Run()
+		}()
+	}
+	won := 0
+	for range 2 {
+		if err := <-racing; err == nil {
+			won++
+		}
+	}
+	if won != 1 {
+		t.Fatalf("%d of two writers that read the same digest were told they had written it, want one: the other composed its routes onto a file it no longer holds", won)
+	}
+	held, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(held) != "written by one\n" && string(held) != "written by the other\n" {
+		t.Errorf("the file holds %q, want one writer's whole document", held)
 	}
 }
 
