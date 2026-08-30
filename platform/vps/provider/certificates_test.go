@@ -22,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-const wildcardPin = "/etc/ocel/preview/certs/wildcard"
+var wildcardPin = host.ProxyPins + "/wildcard"
 
 func selfSigned(t *testing.T, names []string, until time.Duration) []byte {
 	t.Helper()

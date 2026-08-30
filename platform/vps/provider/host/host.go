@@ -46,6 +46,10 @@ type Host struct {
 	holding sync.Mutex
 	held    []byte
 
+	pinning  sync.Mutex
+	vouched  bool
+	unusable error
+
 	mu        sync.Mutex
 	principal string
 	tiers     map[providerkit.Class]bool
@@ -57,13 +61,7 @@ func New(dial Dial, deploy Keys, pins []Pin) *Host {
 
 func (h *Host) Pins() []Pin { return slices.Clone(h.pins) }
 
-func (h *Host) PinFor(hostname string) string {
-	at := slices.IndexFunc(h.pins, func(pin Pin) bool { return pin.Hostname == hostname })
-	if at < 0 {
-		return ""
-	}
-	return h.pins[at].Path
-}
+func (h *Host) PinFor(hostname string) string { return Covering(h.pins, hostname) }
 
 func (h *Host) holds(ctx context.Context, class providerkit.Class) (bool, error) {
 	h.mu.Lock()

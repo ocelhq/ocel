@@ -32,6 +32,7 @@ const (
 	proxyRoot   = stateRoot + "/proxy"
 	ProxyConfig = proxyRoot + "/" + proxyConfigName
 	ProxyData   = proxyRoot + "/data"
+	ProxyPins   = classRoot + "/certs"
 )
 
 const (
@@ -41,6 +42,7 @@ const (
 	proxyConfigMount = proxyConfigDir + "/" + proxyConfigName
 	ProxyHelperMount = "/ocel/" + proxyHelperName
 	proxyDataMount   = "/data"
+	proxyPinsMount   = "/etc/caddy/pins"
 	ProxyAdminSocket = "/run/caddy-admin.sock"
 )
 
@@ -98,6 +100,7 @@ func ProxyItems(arch string) []Item {
 		{Kind: KindFile, Name: ProxyHelper, Mode: 0o750, Owner: rootOwner, Content: proxyHelper(arch),
 			Note: "gates a target, flips the proxy and reads what is still in flight"},
 		dir(proxyRoot, 0o750, stateOwner, "what the proxy serves"),
+		dir(ProxyPins, 0o755, rootOwner, "the one directory a certificate pair pinned by an operator is loaded from, which a destroy leaves where it found it"),
 		proxyConfigItem(),
 		dir(ProxyData, 0o700, rootOwner, "the proxy's certificates, their private keys and the acme account key that issues for every one of them"),
 		networkItem(),
@@ -194,6 +197,7 @@ func proxyBinds() []string {
 	return []string{
 		proxyRoot + ":" + proxyConfigDir + ":ro",
 		ProxyHelper + ":" + ProxyHelperMount + ":ro",
+		ProxyPins + ":" + proxyPinsMount + ":ro",
 		ProxyData + ":" + proxyDataMount,
 	}
 }
@@ -290,5 +294,6 @@ func proxyRemovals() []removal {
 		taking(KindProxyConfig, ProxyConfig,
 			"the routes every app deployed onto this host is reached through, which no deploy renders again"),
 		taking(KindDir, proxyRoot, "what the proxy serves"),
+		sharing(ProxyPins),
 	}
 }

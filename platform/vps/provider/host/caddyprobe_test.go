@@ -20,12 +20,18 @@ type answered struct {
 func probing(t *testing.T, state ProxyState) func(hostname string) answered {
 	t.Helper()
 
-	engineOrSkip(t)
-	dir := seenByTheEngine(t)
 	rendered, err := RenderProxyConfig(state)
 	if err != nil {
 		t.Fatalf("RenderProxyConfig() = %v", err)
 	}
+	return probingConfig(t, rendered)
+}
+
+func probingConfig(t *testing.T, rendered []byte) func(hostname string) answered {
+	t.Helper()
+
+	engineOrSkip(t)
+	dir := seenByTheEngine(t)
 	config := filepath.Join(dir, "caddy.json")
 	if err := os.WriteFile(config, rendered, 0o644); err != nil {
 		t.Fatal(err)

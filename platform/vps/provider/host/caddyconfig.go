@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 )
 
 const (
@@ -67,6 +68,22 @@ const (
 func PinCertificate(path string) string { return path + pinCertificate }
 
 func PinKey(path string) string { return path + pinKey }
+
+func (p Pin) Covers(hostname string) bool {
+	return (certs.Leaf{Domains: []string{p.Hostname}}).Covers(hostname)
+}
+
+func Covering(pins []Pin, hostname string) string {
+	for _, exact := range []bool{true, false} {
+		at := slices.IndexFunc(pins, func(pin Pin) bool {
+			return exact == (pin.Hostname == hostname) && pin.Covers(hostname)
+		})
+		if at >= 0 {
+			return pins[at].Path
+		}
+	}
+	return ""
+}
 
 type ProxyState struct {
 	Grace    time.Duration
@@ -261,20 +278,36 @@ func loadFiles(pins []Pin) (*caddyTLS, error) {
 		if err := validPin(pin); err != nil {
 			return nil, err
 		}
+		mounted := pinMount(pin.Path)
 		files = append(files, caddyLoadFile{
-			Certificate: PinCertificate(pin.Path),
-			Key:         PinKey(pin.Path),
+			Certificate: PinCertificate(mounted),
+			Key:         PinKey(mounted),
 			Tags:        []string{pin.Hostname},
 		})
 	}
 	return &caddyTLS{Certificates: caddyCertificates{LoadFiles: files}}, nil
 }
 
+func pinMount(path string) string { return proxyPinsMount + strings.TrimPrefix(path, ProxyPins) }
+
+func pinnedAt(mounted string) (string, bool) {
+	under, ok := strings.CutPrefix(mounted, proxyPinsMount+"/")
+	if !ok || !pinLeaf(under) {
+		return "", false
+	}
+	return ProxyPins + "/" + under, true
+}
+
+func pinLeaf(under string) bool {
+	return under != "" && !strings.Contains(under, "/") && under != "." && under != ".."
+}
+
 func validPin(pin Pin) error {
-	if pin.Hostname == "" || !strings.HasPrefix(pin.Path, "/") {
+	under, beneath := strings.CutPrefix(pin.Path, ProxyPins+"/")
+	if pin.Hostname == "" || !beneath || !pinLeaf(under) {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"a pinned certificate on this box names host %q at %q, and the proxy loads a pair off a path this host spells in full",
-			pin.Hostname, pin.Path)
+			"a pinned certificate on this box names host %q at %q, and the proxy loads a pair off %s/<name> alone: %s is the one directory bound into the proxy, and a pair anywhere else on this host is a path the proxy cannot open",
+			pin.Hostname, pin.Path, ProxyPins, ProxyPins)
 	}
 	return nil
 }
@@ -285,11 +318,12 @@ func pinnedBy(read caddyConfig) ([]Pin, error) {
 	}
 	var pins []Pin
 	for _, file := range read.Apps.TLS.Certificates.LoadFiles {
-		path, cut := strings.CutSuffix(file.Certificate, pinCertificate)
-		if len(file.Tags) != 1 || !cut || file.Key != PinKey(path) {
+		mounted, cut := strings.CutSuffix(file.Certificate, pinCertificate)
+		at, beneath := pinnedAt(mounted)
+		if len(file.Tags) != 1 || !cut || !beneath || file.Key != PinKey(mounted) {
 			return nil, unwritten("pinned certificate", file.Certificate)
 		}
-		pins = append(pins, Pin{Hostname: file.Tags[0], Path: path})
+		pins = append(pins, Pin{Hostname: file.Tags[0], Path: at})
 	}
 	return pins, nil
 }
