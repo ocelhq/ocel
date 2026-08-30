@@ -379,3 +379,20 @@ func TestAContainerAppWithNoContainerRefusesTheDeploy(t *testing.T) {
 		t.Errorf("buildDeployPlan() error = %q, want it to name the app", err)
 	}
 }
+
+func TestAContainerAppPackedIntoFunctionsRefusesTheDeploy(t *testing.T) {
+	t.Parallel()
+
+	req := containerRequest(pinnedTestImage)
+	req.Manifest.Functions = []*contractv1.ManifestFunction{{LogicalName: "api-server", App: "api"}}
+
+	_, err := buildDeployPlan(req, "p1")
+	if err == nil {
+		t.Fatal("buildDeployPlan() admitted a container app that was packed into functions too, so the process and a zip would both answer the same request with nothing to say which was meant to")
+	}
+	for _, want := range []string{"api", "api-server"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("buildDeployPlan() error = %q, want it to name %s", err, want)
+		}
+	}
+}
