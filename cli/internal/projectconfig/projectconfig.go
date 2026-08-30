@@ -51,6 +51,10 @@ type Build struct {
 	Dockerfile string
 }
 
+type Health struct {
+	Path string
+}
+
 type App struct {
 	Name       string
 	Path       string
@@ -59,6 +63,7 @@ type App struct {
 	Domains    map[string][]string
 	Compute    string
 	Build      *Build
+	Health     *Health
 	Folder     string
 }
 
@@ -110,6 +115,9 @@ type rawConfig struct {
 		Build      *struct {
 			Dockerfile string `json:"dockerfile"`
 		} `json:"build"`
+		Health *struct {
+			Path string `json:"path"`
+		} `json:"health"`
 	} `json:"apps"`
 	Links         []string        `json:"links"`
 	Domains       rawDomains      `json:"domains"`
@@ -507,6 +515,14 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			}
 			build = &Build{Dockerfile: dockerfile}
 		}
+		var health *Health
+		if a.Health != nil {
+			path := strings.TrimSpace(a.Health.Path)
+			if path != "" && !strings.HasPrefix(path, "/") {
+				return nil, fmt.Errorf("app %q sets health.path to %q, which is not a path off the app's root: give it one starting with %q, or drop health.path to have %q probed at %q", a.Name, a.Health.Path, "/", a.Name, "/")
+			}
+			health = &Health{Path: path}
+		}
 		apps = append(apps, App{
 			Name:       a.Name,
 			Path:       a.Path,
@@ -515,6 +531,7 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			Domains:    domains,
 			Compute:    a.Compute,
 			Build:      build,
+			Health:     health,
 			Folder:     a.Folder,
 		})
 	}

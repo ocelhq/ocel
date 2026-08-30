@@ -169,6 +169,52 @@ func TestAnAppThatFallsBackToServerlessIsRefusedItsBuildToo(t *testing.T) {
 	}
 }
 
+func TestAServerlessAppThatConfiguresAHealthCheckFailsThePlanByName(t *testing.T) {
+	t.Parallel()
+
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+		{Name: "web"},
+		{Name: "api", Compute: "serverless", Health: &projectconfig.Health{Path: "/healthz"}},
+	}}
+
+	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "aws")
+	if err == nil {
+		t.Fatal("ResolveComputes() admitted a health check on a serverless app, which has no always-on process to probe, so config that can do nothing would look like it might")
+	}
+	for _, want := range []string{`"api"`, "health", "container"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("ResolveComputes() error = %q, want it to name %s", err, want)
+		}
+	}
+	if cfg.Apps[0].Compute != "" {
+		t.Errorf("app %q resolved to compute %q, want the apps before the offending one left alone", cfg.Apps[0].Name, cfg.Apps[0].Compute)
+	}
+}
+
+func TestAnAppThatFallsBackToServerlessIsRefusedItsHealthCheckToo(t *testing.T) {
+	t.Parallel()
+
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+		{Name: "api", Health: &projectconfig.Health{Path: "/healthz"}},
+	}}
+
+	if _, err := ResolveComputes(cfg, []string{"serverless"}, "aws"); err == nil {
+		t.Fatal("ResolveComputes() admitted a health check on an app its provider runs serverless, so the refusal turns on what the config says rather than what the app runs on")
+	}
+}
+
+func TestAContainerAppKeepsItsHealthCheck(t *testing.T) {
+	t.Parallel()
+
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+		{Name: "api", Compute: "container", Health: &projectconfig.Health{Path: "/healthz"}},
+	}}
+
+	if _, err := ResolveComputes(cfg, []string{"serverless", "container"}, "vps"); err != nil {
+		t.Errorf("ResolveComputes() = %v, want a health check admitted on the compute it configures", err)
+	}
+}
+
 func TestAContainerAppKeepsItsBuild(t *testing.T) {
 	t.Parallel()
 
