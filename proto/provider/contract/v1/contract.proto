@@ -36,6 +36,8 @@ service ProviderService {
 
     rpc Preflight(PreflightRequest) returns (PreflightResponse);
 
+    rpc ResolveImageRegistry(ResolveImageRegistryRequest) returns (ResolveImageRegistryResponse);
+
     rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
 
     rpc Rollback(RollbackRequest) returns (RollbackResponse);
@@ -439,6 +441,20 @@ message PreflightResponse {
   BootstrapStatus bootstrap = 8;
 
   repeated string computes = 9;
+}
+
+message ResolveImageRegistryRequest {
+  repeated string repositories = 1 [(buf.validate.field).repeated = {min_items: 1, items: {string: {pattern: "^[a-z0-9]+([._-][a-z0-9]+)*$", max_len: 255}}}];
+}
+
+message ResolveImageRegistryResponse {
+  string server = 1;
+
+  string namespace = 2;
+
+  string username = 3;
+
+  string password = 4 [debug_redact = true];
 }
 
 message PreviewWildcard {

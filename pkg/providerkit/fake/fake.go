@@ -308,6 +308,10 @@ func (Full) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _
 	return StoodUpContainers(plan), nil
 }
 
+func (Full) ImageRegistry(context.Context, []string) (providerkit.RegistryTarget, error) {
+	return providerkit.RegistryTarget{Server: RegistryServer, Namespace: RegistryNamespace, Username: "fake", Password: "fake-token"}, nil
+}
+
 func (f Full) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ providerkit.Reporter) error {
 	for _, container := range containers {
 		f.releases.tookDown(container.Name)
@@ -325,8 +329,14 @@ var (
 	_ providerkit.DeployPreflighter = DeployPreflighter{}
 	_ providerkit.Certifier         = (*Provider)(nil)
 	_ providerkit.EdgeProgrammer    = (*Provider)(nil)
+	_ providerkit.ImageRegistry     = Full{}
 	_ resources.Functions           = Full{}
 	_ resources.AppContainers       = Full{}
+)
+
+const (
+	RegistryServer    = "registry.fake.invalid"
+	RegistryNamespace = "ocel"
 )
 
 const Membrane = "fake-membrane"
