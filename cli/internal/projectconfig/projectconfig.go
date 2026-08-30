@@ -388,14 +388,14 @@ func normalizeRegistry(raw rawConfig) (*Registry, error) {
 		return nil, errors.New("`server` is the only field naming where images land, so a registry without one would push wherever docker defaults to")
 	}
 	if strings.Contains(server, "://") || strings.Contains(server, "/") {
-		return nil, fmt.Errorf("`server` is a registry host such as \"ghcr.io\", not a URL: drop the scheme and the path from %q", server)
+		return nil, errors.New("`server` is a registry host such as \"ghcr.io\", not a URL: drop the scheme and the path")
 	}
 	password := strings.TrimSpace(raw.Registry.Password)
 	if password == "" {
 		return nil, errors.New("`password` names the environment variable holding the registry password or token, and a push authenticates, so there is no anonymous form to fall back to")
 	}
 	if !envVarName.MatchString(password) {
-		return nil, fmt.Errorf("`password` is the name of an environment variable, not the secret itself, and %q is no variable name: put the secret in the environment and name it here", password)
+		return nil, errors.New("`password` is the name of an environment variable, not the secret itself, and this value is no variable name: put the secret in the environment and name it here")
 	}
 	return &Registry{
 		Server:   server,
