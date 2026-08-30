@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func workerOutputName(app string) string {
@@ -21,7 +22,11 @@ func manifestApps(manifest *contractv1.Manifest) []*contractv1.ManifestApp {
 	for _, fn := range manifest.GetFunctions() {
 		if name := fn.GetApp(); !seen[name] {
 			seen[name] = true
-			apps = append(apps, &contractv1.ManifestApp{Name: name, Framework: fn.GetFramework()})
+			apps = append(apps, &contractv1.ManifestApp{
+				Name:      name,
+				Framework: fn.GetFramework(),
+				Compute:   string(providerkit.ComputeServerless),
+			})
 		}
 	}
 	return apps
