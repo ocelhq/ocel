@@ -3,6 +3,7 @@ package appregistry
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -148,6 +149,25 @@ func TestAProjectPushingNoImageAsksTheProviderForNoRegistry(t *testing.T) {
 	}
 	if calls := native.calls(); len(calls) != 0 {
 		t.Errorf("the provider was asked %v to resolve a registry for no repository at all", calls)
+	}
+}
+
+func TestAResolvedTargetRendersWithoutItsPassword(t *testing.T) {
+	target := Target{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "ghp_livesecret"}
+
+	for _, rendered := range []string{
+		fmt.Sprintf("%v", target),
+		fmt.Sprintf("%+v", target),
+		fmt.Sprintf("target=%s", target),
+		fmt.Sprintf("%#v", target),
+		fmt.Errorf("push to %v: %w", target, errors.New("denied")).Error(),
+	} {
+		if strings.Contains(rendered, "ghp_livesecret") {
+			t.Errorf("a registry target rendered as %q, and the password rides along into any log line that prints one", rendered)
+		}
+		if !strings.Contains(rendered, "ghcr.io") {
+			t.Errorf("a registry target rendered as %q, want it to still name the registry it is", rendered)
+		}
 	}
 }
 

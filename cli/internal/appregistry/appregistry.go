@@ -23,6 +23,12 @@ type Target struct {
 	Password  string
 }
 
+func (t Target) String() string {
+	return fmt.Sprintf("registry %s namespace %q username %q password [redacted]", t.Server, t.Namespace, t.Username)
+}
+
+func (t Target) GoString() string { return t.String() }
+
 func (t Target) Coordinate(repository, tag string) string {
 	parts := []string{t.Server}
 	if t.Namespace != "" {
