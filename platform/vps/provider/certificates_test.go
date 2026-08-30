@@ -242,6 +242,43 @@ func TestTheProxyHandleIsReadOffTheHandshakeAndNeverOffCaddysDataDirectory(t *te
 	}
 }
 
+func TestAProxyServedLeafPastItsNotAfterReportsExpiredRatherThanServing(t *testing.T) {
+	t.Parallel()
+
+	for what, until := range map[string]time.Duration{
+		"a leaf the proxy renewed in time": 60 * 24 * time.Hour,
+		"a leaf whose renewal stopped":     -time.Hour,
+	} {
+		machine := &box{leaf: string(selfSigned(t, []string{"shop.example.com"}, until))}
+		p := vps.ProviderOver(
+			vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+			func(context.Context) (host.Conn, error) { return machine, nil },
+		)
+
+		cert := certificateFor(t, p, "shop.example.com")
+		health, err := p.InspectCertificate(context.Background(), boxedge.Kind, "shop.example.com", cert)
+		if err != nil {
+			t.Fatalf("InspectCertificate() over %s = %v", what, err)
+		}
+		live := until > 0
+		if health.Issued != live {
+			t.Errorf("InspectCertificate() over %s reports issued %v, want %v", what, health.Issued, live)
+		}
+		want := "EXPIRED"
+		if live {
+			want = "SERVING"
+		}
+		if health.Status != want {
+			t.Errorf("InspectCertificate() over %s = %q, want %q: the proxy renews this pair and the expiry is decorative while that renewal is healthy, but a leaf served past its own NotAfter is renewal that stopped and every browser reaching the box is already refusing it",
+				what, health.Status, want)
+		}
+		if health.ExpiresAt != 0 || health.ExpiringSoon {
+			t.Errorf("InspectCertificate() over %s reports expiry %d and expiring-soon %v, want neither: nothing asks the operator to act on a date for a certificate something else renews",
+				what, health.ExpiresAt, health.ExpiringSoon)
+		}
+	}
+}
+
 func TestAProxyHandleWithNothingServedYetIsPendingRatherThanIssued(t *testing.T) {
 	t.Parallel()
 

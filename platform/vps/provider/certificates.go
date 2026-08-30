@@ -94,8 +94,12 @@ func (p *Provider) servedHealth(ctx context.Context, served, hostname string, he
 	if err != nil {
 		return health, err
 	}
-	health.Issued = true
+	expired := leaf.Expired(time.Now())
+	health.Issued = !expired
 	health.Status = "SERVING"
+	if expired {
+		health.Status = "EXPIRED"
+	}
 	health.Domains = leaf.Domains
 	health.Covers = leaf.Covers(hostname)
 	return health, nil
