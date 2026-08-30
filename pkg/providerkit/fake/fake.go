@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -292,6 +293,28 @@ func (f Full) PreflightDeploy(_ context.Context, pre providerkit.DeployPreflight
 	return f.preflight(pre)
 }
 
+func (Full) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.Function, error) {
+	return StoodUpFunctions(plan), nil
+}
+
+func (f Full) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ providerkit.Reporter) error {
+	for _, function := range functions {
+		f.releases.tookDown(function.Name)
+	}
+	return nil
+}
+
+func (Full) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.AppContainer, error) {
+	return StoodUpContainers(plan), nil
+}
+
+func (f Full) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ providerkit.Reporter) error {
+	for _, container := range containers {
+		f.releases.tookDown(container.Name)
+	}
+	return nil
+}
+
 var (
 	_ providerkit.Provider          = (*Provider)(nil)
 	_ providerkit.Warmer            = Warmer{}
@@ -302,6 +325,8 @@ var (
 	_ providerkit.DeployPreflighter = DeployPreflighter{}
 	_ providerkit.Certifier         = (*Provider)(nil)
 	_ providerkit.EdgeProgrammer    = (*Provider)(nil)
+	_ resources.Functions           = Full{}
+	_ resources.AppContainers       = Full{}
 )
 
 const Membrane = "fake-membrane"

@@ -7,8 +7,10 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 )
 
 func TestRecordsWriteIsACompareAndSet(t *testing.T) {
@@ -220,4 +222,49 @@ func setsOn(p providerkit.Provider) []string {
 		found = append(found, "GrantVerifier")
 	}
 	return found
+}
+
+func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *testing.T) {
+	t.Parallel()
+
+	provider := fake.Full{Provider: fake.NewProvider(fake.Options{})}
+	releaser := resources.Releaser(provider.Records(), provider.Artifacts(), provider)
+	ref := providerkit.StackRef{
+		Project: "shop",
+		Class:   providerkit.ClassProduction,
+		Name:    naming.AppStack("prod", "web", naming.NewRelease("d1", "f1")),
+	}
+
+	served, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+		Ref:  ref,
+		Kind: providerkit.StackApp,
+		App: &providerkit.AppPlan{
+			App:       "web",
+			Compute:   providerkit.ComputeServerless,
+			Functions: []providerkit.FunctionSpec{{Name: "api"}},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Provision() of a serverless app = %v", err)
+	}
+	if len(served.Functions) != 1 || len(served.Containers) != 0 {
+		t.Fatalf("Provision() of a serverless app = %+v, want it to reach Functions alone", served)
+	}
+
+	contained, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+		Ref:  ref,
+		Kind: providerkit.StackApp,
+		App: &providerkit.AppPlan{
+			App:             "web",
+			Compute:         providerkit.ComputeContainer,
+			Image:           "ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			HealthCheckPath: "/",
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Provision() of a container app = %v", err)
+	}
+	if len(contained.Containers) != 1 || len(contained.Functions) != 0 {
+		t.Fatalf("Provision() of a container app = %+v, want it to reach AppContainers alone", contained)
+	}
 }

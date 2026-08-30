@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 )
 
 func runOptionalSets(t *testing.T, suite Suite) {
@@ -85,6 +86,16 @@ var optionalSets = []struct {
 		name:   "Certifier",
 		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.Certifier); return ok },
 		onPort: func(port any) bool { _, ok := port.(providerkit.Certifier); return ok },
+	},
+	{
+		name:   resources.FunctionsPrimitive,
+		onRoot: func(p providerkit.Provider) bool { _, ok := p.(resources.Functions); return ok },
+		onPort: func(port any) bool { _, ok := port.(resources.Functions); return ok },
+	},
+	{
+		name:   resources.AppContainersPrimitive,
+		onRoot: func(p providerkit.Provider) bool { _, ok := p.(resources.AppContainers); return ok },
+		onPort: func(port any) bool { _, ok := port.(resources.AppContainers); return ok },
 	},
 }
 
