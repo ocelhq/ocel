@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	functionKind = "function"
+	functionKind  = "function"
+	containerKind = "app container"
 
 	reasonUndeclared = "this release no longer declares it"
 )
@@ -33,6 +34,14 @@ func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, s
 			Action: standsOrCreates(slices.ContainsFunc(standing.Functions, calling(function))),
 		})
 	}
+	containers := DeclaredContainers(plan)
+	for _, container := range containers {
+		changes = append(changes, Change{
+			Kind:   containerKind,
+			Name:   container,
+			Action: standsOrCreates(slices.ContainsFunc(standing.Containers, holding(container))),
+		})
+	}
 	for _, link := range standing.Links {
 		if slices.ContainsFunc(plan.Resources, func(resource Resource) bool { return linking(resource)(link) }) {
 			continue
@@ -45,16 +54,25 @@ func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, s
 		}
 		changes = append(changes, Change{Kind: functionKind, Name: function.Name, Action: ActionDelete, Reason: reasonUndeclared})
 	}
+	for _, container := range standing.Containers {
+		if slices.Contains(containers, container.Name) {
+			continue
+		}
+		changes = append(changes, Change{Kind: containerKind, Name: container.Name, Action: ActionDelete, Reason: reasonUndeclared})
+	}
 	return stackPlan(plan.Ref, changes), nil
 }
 
 func SynthesizedRemoval(ref StackRef, standing StackResult) Plan {
-	changes := make([]Change, 0, len(standing.Links)+len(standing.Functions))
+	changes := make([]Change, 0, len(standing.Links)+len(standing.Functions)+len(standing.Containers))
 	for _, link := range standing.Links {
 		changes = append(changes, Change{Kind: string(link.Type), Name: link.Name, Action: ActionDelete})
 	}
 	for _, function := range standing.Functions {
 		changes = append(changes, Change{Kind: functionKind, Name: function.Name, Action: ActionDelete})
+	}
+	for _, container := range standing.Containers {
+		changes = append(changes, Change{Kind: containerKind, Name: container.Name, Action: ActionDelete})
 	}
 	return stackPlan(ref, changes)
 }
@@ -70,6 +88,13 @@ func DeclaredFunctions(plan StackPlan) []string {
 	return names
 }
 
+func DeclaredContainers(plan StackPlan) []string {
+	if plan.App == nil || plan.App.Compute != ComputeContainer {
+		return nil
+	}
+	return []string{plan.App.App}
+}
+
 func standsOrCreates(stands bool) ChangeAction {
 	if stands {
 		return ActionKeep
@@ -83,6 +108,10 @@ func linking(resource Resource) func(Link) bool {
 
 func calling(function string) func(Function) bool {
 	return func(held Function) bool { return held.Name == function }
+}
+
+func holding(container string) func(AppContainer) bool {
+	return func(held AppContainer) bool { return held.Name == container }
 }
 
 func stackPlan(ref StackRef, changes []Change) Plan {

@@ -37,10 +37,21 @@ type Remover interface {
 	RemoveResource(ctx context.Context, ref providerkit.StackRef, link providerkit.Link, report providerkit.Reporter) error
 }
 
+const (
+	FunctionsPrimitive     = "Functions"
+	AppContainersPrimitive = "AppContainers"
+)
+
 type Functions interface {
 	ProvisionFunctions(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.Function, error)
 
 	RemoveFunctions(ctx context.Context, ref providerkit.StackRef, functions []providerkit.Function, report providerkit.Reporter) error
+}
+
+type AppContainers interface {
+	ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.AppContainer, error)
+
+	RemoveContainers(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, report providerkit.Reporter) error
 }
 
 func Serves(impl any) []providerkit.LinkType {
@@ -120,7 +131,7 @@ func (f *fanout) PlanDestroy(ctx context.Context, ref providerkit.StackRef, _ pr
 }
 
 func standing(recorded providerkit.Stack) providerkit.StackResult {
-	return providerkit.StackResult{Links: recorded.Links, Functions: recorded.Functions}
+	return providerkit.StackResult{Links: recorded.Links, Functions: recorded.Functions, Containers: recorded.Containers}
 }
 
 func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
@@ -152,15 +163,41 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 	if plan.App == nil {
 		return result, nil
 	}
-	functions, serves := f.impl.(Functions)
-	if !serves {
-		return result, providerkit.Refuse(providerkit.CodeInvalid,
-			"this provider stands up no functions, so it cannot serve %s's app stack", plan.Ref.Project)
-	}
-	if result.Functions, err = functions.ProvisionFunctions(ctx, plan, report); err != nil {
+	if err := f.standUpApp(ctx, plan, report, &result); err != nil {
 		return providerkit.StackResult{}, err
 	}
 	return result, nil
+}
+
+func (f *fanout) standUpApp(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter, result *providerkit.StackResult) error {
+	switch plan.App.Compute {
+	case providerkit.ComputeServerless:
+		functions, serves := f.impl.(Functions)
+		if !serves {
+			return lacking(plan.App, FunctionsPrimitive)
+		}
+		standing, err := functions.ProvisionFunctions(ctx, plan, report)
+		result.Functions = standing
+		return err
+	case providerkit.ComputeContainer:
+		containers, serves := f.impl.(AppContainers)
+		if !serves {
+			return lacking(plan.App, AppContainersPrimitive)
+		}
+		standing, err := containers.ProvisionContainers(ctx, plan, report)
+		result.Containers = standing
+		return err
+	default:
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"app %s names the compute %q, and a stack is stood up by the primitive its compute names; the computes are %v",
+			plan.App.App, plan.App.Compute, providerkit.ComputeNames(providerkit.Computes()))
+	}
+}
+
+func lacking(app *providerkit.AppPlan, primitive string) error {
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"app %s runs on %s compute and this provider implements no %s, so nothing here can stand it up",
+		app.App, app.Compute, primitive)
 }
 
 func (f *fanout) provision(ctx context.Context, plan providerkit.StackPlan, resource providerkit.Resource, report providerkit.Reporter) (providerkit.Link, error) {
@@ -206,16 +243,38 @@ func (f *fanout) Destroy(ctx context.Context, ref providerkit.StackRef, report p
 			return err
 		}
 	}
-	if len(recorded.Functions) == 0 {
+	if err := f.removeFunctions(ctx, ref, recorded.Functions, report); err != nil {
+		return err
+	}
+	return f.removeContainers(ctx, ref, recorded.Containers, report)
+}
+
+func (f *fanout) removeFunctions(ctx context.Context, ref providerkit.StackRef, going []providerkit.Function, report providerkit.Reporter) error {
+	if len(going) == 0 {
 		return nil
 	}
 	functions, serves := f.impl.(Functions)
 	if !serves {
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%s recorded %d function(s) and this provider stands up none, so nothing here can take them down",
-			ref.Name, len(recorded.Functions))
+		return unownable(ref, len(going), "function", FunctionsPrimitive)
 	}
-	return functions.RemoveFunctions(ctx, ref, recorded.Functions, report)
+	return functions.RemoveFunctions(ctx, ref, going, report)
+}
+
+func (f *fanout) removeContainers(ctx context.Context, ref providerkit.StackRef, going []providerkit.AppContainer, report providerkit.Reporter) error {
+	if len(going) == 0 {
+		return nil
+	}
+	containers, serves := f.impl.(AppContainers)
+	if !serves {
+		return unownable(ref, len(going), "container", AppContainersPrimitive)
+	}
+	return containers.RemoveContainers(ctx, ref, going, report)
+}
+
+func unownable(ref providerkit.StackRef, going int, noun, primitive string) error {
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"%s holds %d %s(s) nothing here declares and this provider implements no %s, so they would be left standing and unowned",
+		ref.Name, going, noun, primitive)
 }
 
 func (f *fanout) removeOrphans(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, report providerkit.Reporter) error {
@@ -232,7 +291,10 @@ func (f *fanout) removeOrphans(ctx context.Context, plan providerkit.StackPlan, 
 			return err
 		}
 	}
-	return f.removeOrphanFunctions(ctx, plan, recorded, report)
+	if err := f.removeOrphanFunctions(ctx, plan, recorded, report); err != nil {
+		return err
+	}
+	return f.removeOrphanContainers(ctx, plan, recorded, report)
 }
 
 func (f *fanout) removeOrphanFunctions(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, report providerkit.Reporter) error {
@@ -242,21 +304,30 @@ func (f *fanout) removeOrphanFunctions(ctx context.Context, plan providerkit.Sta
 		if slices.Contains(declared, held.Name) {
 			continue
 		}
-		if report != nil {
-			report.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", held.Name))
-		}
+		reportUndeclared(report, held.Name)
 		orphans = append(orphans, held)
 	}
-	if len(orphans) == 0 {
-		return nil
+	return f.removeFunctions(ctx, plan.Ref, orphans, report)
+}
+
+func (f *fanout) removeOrphanContainers(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, report providerkit.Reporter) error {
+	declared := providerkit.DeclaredContainers(plan)
+	var orphans []providerkit.AppContainer
+	for _, held := range recorded.Containers {
+		if slices.Contains(declared, held.Name) {
+			continue
+		}
+		reportUndeclared(report, held.Name)
+		orphans = append(orphans, held)
 	}
-	functions, serves := f.impl.(Functions)
-	if !serves {
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%s recorded %d function(s) this release no longer declares and this provider stands up none, so nothing here can take them down",
-			plan.Ref.Name, len(orphans))
+	return f.removeContainers(ctx, plan.Ref, orphans, report)
+}
+
+func reportUndeclared(report providerkit.Reporter, name string) {
+	if report == nil {
+		return
 	}
-	return functions.RemoveFunctions(ctx, plan.Ref, orphans, report)
+	report.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", name))
 }
 
 func (f *fanout) remove(ctx context.Context, ref providerkit.StackRef, link providerkit.Link, report providerkit.Reporter) error {
