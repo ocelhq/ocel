@@ -92,8 +92,8 @@ func TestTheAppPlanCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.
 	if app.Compute != providerkit.ComputeContainer {
 		t.Errorf("Compute = %q, want %q: the primitive is chosen by what the plan names", app.Compute, providerkit.ComputeContainer)
 	}
-	if app.Image != containerTestImage {
-		t.Errorf("Image = %q, want the pinned image the manifest carries", app.Image)
+	if app.Image != pushedCoordinate {
+		t.Errorf("Image = %q, want %q: the plan names the coordinate the push wrote, not the ref the build left in the local store", app.Image, pushedCoordinate)
 	}
 	if app.HealthCheckPath != "/healthz" {
 		t.Errorf("HealthCheckPath = %q, want the path the manifest says the process is probed at", app.HealthCheckPath)
@@ -143,8 +143,8 @@ func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
 		if len(entry.Containers) != 1 || entry.Containers[0].Name != "web" {
 			t.Fatalf("%s recorded %v, want the container it stood the app up as: nothing can take down what was never written", entry.Name, entry.Containers)
 		}
-		if entry.Containers[0].Image != containerTestImage {
-			t.Errorf("%s recorded the container running %q, want %q: a teardown that cannot say what a container ran cannot sweep the image it held", entry.Name, entry.Containers[0].Image, containerTestImage)
+		if entry.Containers[0].Image != pushedCoordinate {
+			t.Errorf("%s recorded the container running %q, want %q: a teardown that cannot say what a container ran cannot sweep the image it held", entry.Name, entry.Containers[0].Image, pushedCoordinate)
 		}
 	}
 	if stacks == 0 {
