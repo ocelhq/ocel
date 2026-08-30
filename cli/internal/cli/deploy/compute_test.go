@@ -73,3 +73,25 @@ func computeOf(t *testing.T, manifest *contractv1.Manifest, app string) string {
 	t.Fatalf("manifest carries no app %q: %+v", app, manifest.GetApps())
 	return ""
 }
+
+func TestAContainerAppThatNamesNoFrameworkStillReachesTheProvider(t *testing.T) {
+	root := t.TempDir()
+	clitest.WritePrebuiltFunction(t, root, "api", "index")
+	deps := clitest.NewDeps()
+	recordBuildApp(&deps)
+
+	s, _ := newBuildManifestSession(t)
+	cfg := &projectconfig.Config{
+		Dir:  root,
+		Slug: "prebuilt",
+		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "container"}},
+	}
+
+	manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "container")
+	if err != nil {
+		t.Fatalf("collectAndBuildManifest over a container app with no framework: %v", err)
+	}
+	if got := computeOf(t, manifest, "api"); got != "container" {
+		t.Errorf("manifest app %q compute = %q, want %q", "api", got, "container")
+	}
+}
