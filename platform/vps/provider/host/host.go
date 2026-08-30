@@ -321,7 +321,10 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 			return false, providerkit.Refuse(providerkit.CodeInvalid,
 				"%q names no path on this host, and ocel takes nothing it cannot name in full", taken.path)
 		}
-		_, err := h.run(ctx, "remove "+taken.path, taken.command(), nil)
+		rendered, err := h.run(ctx, "remove "+taken.path, taken.command(), nil)
+		if taken.kind == KindDir && taken.shared {
+			return strings.TrimSpace(rendered) != dirHeld, err
+		}
 		return err == nil, err
 	default:
 		return false, providerkit.Refuse(providerkit.CodeInvalid,

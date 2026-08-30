@@ -213,6 +213,9 @@ func gone(taken []string, name string) bool {
 		if strings.Contains(command, "docker network rm "+quoted(name)) {
 			return true
 		}
+		if strings.HasPrefix(command, "rmdir "+quoted(name)+" ") {
+			return true
+		}
 		if under, sweeping := strings.CutPrefix(command, "rm -rf "); sweeping &&
 			strings.HasPrefix(name, strings.Trim(under, "'")+"/") {
 			return true

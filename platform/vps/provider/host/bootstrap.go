@@ -403,6 +403,8 @@ func leavingKnownHosts(forget string) string {
 	return "your known_hosts is as ocel found it; to drop this host's key from it yourself, run: " + forget
 }
 
+const dirHeld = "dir=held"
+
 type removal struct {
 	kind   string
 	path   string
@@ -427,7 +429,7 @@ func (r removal) command() string {
 		return "if ! docker network rm " + quoted(r.path) + " >/dev/null 2>&1 && " +
 			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkHeld) + "; fi"
 	case r.shared:
-		return "rmdir --ignore-fail-on-non-empty " + quoted(r.path)
+		return "rmdir " + quoted(r.path) + " 2>/dev/null || printf '%s\\n' " + quoted(dirHeld)
 	default:
 		return "rm -rf " + quoted(r.path)
 	}
