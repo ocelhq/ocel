@@ -100,12 +100,16 @@ func (h *Host) RemoveContainer(ctx context.Context, name string) error {
 	return err
 }
 
-func stateCommand(name string) string {
+func stateSelectors() []string {
 	selectors := make([]string, 0, len(stateFields))
 	for _, field := range stateFields {
 		selectors = append(selectors, field+"={{.State."+field+"}}")
 	}
-	return "docker inspect --type container --format " + quoted(strings.Join(selectors, " ")) + " " + quoted(name) + " 2>&1 || true"
+	return selectors
+}
+
+func stateCommand(name string) string {
+	return "docker inspect --type container --format " + quoted(strings.Join(stateSelectors(), " ")) + " " + quoted(name) + " 2>&1 || true"
 }
 
 func logCommand(name string) string {

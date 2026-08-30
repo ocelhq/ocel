@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -250,5 +251,106 @@ func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(warned), "websocket") {
 		t.Errorf("the warning reads %q and leaves the fate of a hijacked connection implied", warned)
+	}
+}
+
+func diagnosed(t *testing.T, helper session.Result, state, logs string) string {
+	t.Helper()
+	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
+	stood.answer = func(command string) (session.Result, bool) {
+		switch {
+		case strings.HasPrefix(command, "cat "+quoted(ProxyConfig)):
+			return session.Result{Stdout: stood.held}, true
+		case strings.Contains(command, "cat > "+quoted(ProxyConfig)):
+			return session.Result{}, true
+		case strings.Contains(command, quoted("deploy")):
+			return helper, true
+		case strings.Contains(command, "docker inspect") && strings.Contains(command, ".State."):
+			return session.Result{Stdout: state}, true
+		case strings.Contains(command, "docker logs"):
+			return session.Result{Stdout: logs}, true
+		default:
+			return session.Result{}, false
+		}
+	}
+	err := stood.host().Release(context.Background(), aRelease(), nil)
+	if err == nil {
+		t.Fatal("a release the helper refused returned no error at all")
+	}
+	read, removed := stood.at("docker logs"), stood.at("docker rm --force "+quoted(physical))
+	if read < 0 || stood.at("docker inspect --type container --format "+quoted(strings.Join(stateSelectors(), " "))) < 0 {
+		t.Fatalf("a refused release captured no evidence at all: %v", stood.commands())
+	}
+	if removed < read {
+		t.Error("the new container was removed before its logs were read, and a removed container answers neither logs nor inspect")
+	}
+	return err.Error()
+}
+
+func TestAHungAppIsDiagnosedByTheCombinationAndNeverByOneLine(t *testing.T) {
+	t.Parallel()
+
+	said := diagnosed(t,
+		session.Result{Code: 4, Stderr: physical + ":" + AppPort + " never answered /healthz within 30s"},
+		"Status=running ExitCode=0 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=0001-01-01T00:00:00Z RestartCount=0", "")
+
+	for what, wanted := range map[string]string{
+		"the verdict the helper reached":      "never answered",
+		"the exact target it probed":          physical + ":" + AppPort,
+		"the path it probed":                  "/healthz",
+		"the config key that changes it":      healthKey,
+		"the deploy timeout that expired":     "30s",
+		"the state that says it never exited": "Status=running",
+		"the restart count":                   "RestartCount=0",
+		"the absence of logs, said out loud":  noLogOutput,
+	} {
+		if !strings.Contains(said, wanted) {
+			t.Errorf("a hung app is refused with\n%s\nand that names no %s (%s)", said, what, wanted)
+		}
+	}
+}
+
+func TestTheEvidenceIsNotCutToFourLinesTheWayEveryOtherRefusalOnThisHostIs(t *testing.T) {
+	t.Parallel()
+
+	var written strings.Builder
+	for at := range 10 {
+		fmt.Fprintf(&written, "helper line %d\n", at)
+	}
+	said := diagnosed(t, session.Result{Code: 3, Stderr: written.String()},
+		"Status=exited ExitCode=1 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=2026-01-01T00:00:01Z RestartCount=0",
+		"2026-01-01T00:00:01Z panic: no such table\n")
+
+	for at := range 10 {
+		if !strings.Contains(said, fmt.Sprintf("helper line %d", at)) {
+			t.Fatalf("the refusal reads\n%s\nand line %d of the helper's verdict is gone: the four-line formatter every other refusal on this host uses would take the evidence with it", said, at)
+		}
+	}
+	if !strings.Contains(said, "panic: no such table") {
+		t.Errorf("the refusal reads\n%s\nand carries none of what the container wrote", said)
+	}
+}
+
+func TestExitedRestartingAndHungReadAsThreeDifferentThings(t *testing.T) {
+	t.Parallel()
+
+	shapes := map[string]string{
+		"exited":     "Status=exited ExitCode=1 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=2026-01-01T00:00:01Z RestartCount=0",
+		"restarting": "Status=restarting ExitCode=1 OOMKilled=false Error= StartedAt=2026-01-01T00:00:09Z FinishedAt=2026-01-01T00:00:09Z RestartCount=7",
+		"hung":       "Status=running ExitCode=0 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=0001-01-01T00:00:00Z RestartCount=0",
+	}
+	read := map[string]string{}
+	for what, state := range shapes {
+		read[what] = diagnosed(t, session.Result{Code: 4, Stderr: "never answered /healthz"}, state, "")
+	}
+	for what, said := range read {
+		for other, beside := range read {
+			if what != other && said == beside {
+				t.Errorf("%s and %s are refused with the same words, and the restart policy makes a crash loop invisible without them", what, other)
+			}
+		}
+		if !strings.Contains(said, "Status="+strings.TrimSuffix(what, "hung")) && what != "hung" {
+			t.Errorf("%s is refused with\n%s\nand never names the status it was found in", what, said)
+		}
 	}
 }
