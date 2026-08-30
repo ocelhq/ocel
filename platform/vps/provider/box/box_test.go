@@ -403,6 +403,50 @@ func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testin
 	}
 }
 
+func TestReleasingAPreviewWildcardNamesTheRouteItTakesAndTheCatchAllItLeaves(t *testing.T) {
+	t.Parallel()
+
+	const wildcard = "*.preview.example.com"
+	front := box.New(aMachine(), fake.NewRecords(), sshScope)
+	removed, kept := front.PreviewWildcardRemovals(wildcard)
+
+	if removed.Action != edge.PlanDelete {
+		t.Errorf("the removed group is actioned %q, want %q: releasing the wildcard takes down what holds it", removed.Action, edge.PlanDelete)
+	}
+	if len(removed.Changes) != 1 || removed.Changes[0].Name != wildcard {
+		t.Fatalf("the removed group carries %v, want the one route claiming %s", removed.Changes, wildcard)
+	}
+	if removed.Changes[0].Kind != box.RouteKind || removed.Changes[0].Action != edge.PlanDelete {
+		t.Errorf("the wildcard row is %q actioned %q, want a %q delete: a box holds a wildcard as a claim on its own proxy and nothing else",
+			removed.Changes[0].Kind, removed.Changes[0].Action, box.RouteKind)
+	}
+	if !strings.Contains(removed.Changes[0].Reason, wildcard) {
+		t.Errorf("the wildcard row reads %q and never names the hostname it takes", removed.Changes[0].Reason)
+	}
+	shared := front.SharedPreviewRemoval()
+	if kept.Action != shared.Action || kept.Reason != shared.Reason || len(kept.Changes) != 0 {
+		t.Errorf("the kept group is %+v, want the shared catch-all removal %+v: the wildcard and the catch-all every unclaimed hostname falls through to are two rows, and folding them into one hides which of them the release touches", kept, shared)
+	}
+}
+
+func TestTheSharedCatchAllIsAKeptRowThatSaysWhyItStays(t *testing.T) {
+	t.Parallel()
+
+	shared := box.New(aMachine(), fake.NewRecords(), sshScope).SharedPreviewRemoval()
+	if shared.Action != edge.PlanKeep {
+		t.Errorf("the shared catch-all is actioned %q, want %q: it is a bootstrap item and it answers for every project this box serves", shared.Action, edge.PlanKeep)
+	}
+	if len(shared.Changes) != 0 {
+		t.Errorf("the shared catch-all carries rows %v; a kept group that lists rows reads as a removal that spared them", shared.Changes)
+	}
+	if shared.Reason == "" {
+		t.Error("the shared catch-all is kept for no stated reason, and a kept row a user cannot explain is one they cannot decide to remove by hand")
+	}
+	if shared.Name != edge.EdgeGroupName(box.Kind) || shared.Kind != edge.EdgeGroupKind {
+		t.Errorf("the shared catch-all is named %q of kind %q, want the box edge's own group", shared.Name, shared.Kind)
+	}
+}
+
 func standingOn(t *testing.T, stood *machine, named string) edge.EdgeStack {
 	t.Helper()
 
