@@ -515,7 +515,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	keys := []byte(aKey + "\n")
 	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))}
-	proxied := []string{ProxyContainer, ProxyVolume, ProxyNetwork, proxyRoot, ProxyHelper}
+	proxied := []string{ProxyContainer, ProxyVolume, ProxyNetwork, proxyRoot, ProxyHelper, ProxyConfig}
 
 	for _, taken := range removing(standing, beside) {
 		if slices.Contains(proxied, taken.path) && taken.action == providerkit.ActionDelete {

@@ -242,6 +242,8 @@ func proxyRemovals() []removal {
 		taking(KindVolume, ProxyVolume, "the proxy's autosaved config and every certificate it issued, which no other machine holds"),
 		taking(KindNetwork, ProxyNetwork,
 			"the network ocel's deploys resolve across, which stays as long as anything this host runs is still attached to it"),
+		taking(KindProxyConfig, ProxyConfig,
+			"the routes every app deployed onto this host is reached through, which no deploy renders again"),
 		taking(KindDir, proxyRoot, "what the proxy serves"),
 	}
 }
