@@ -95,6 +95,9 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackRunsItAgain(
 	if state := vm.state(t, two.physical); state != "exited" {
 		t.Errorf("the container the rollback rolled off reads as %q, want it stopped and standing", state)
 	}
+	if held := windowOf(t, vm, liveApp); len(held) == 0 || held[0] != fixtureAt("one") {
+		t.Errorf("the box's release window reads %v, want %s at its head: rolling back is what this box most recently served, and a window the rollback does not re-head has the release it restored swept off by the next deploy's reconcile while the ledger still offers it", held, fixtureAt("one"))
+	}
 }
 
 func TestLiveARollbackRunsTheSameImageDigestTheBoxAlreadyHeld(t *testing.T) {

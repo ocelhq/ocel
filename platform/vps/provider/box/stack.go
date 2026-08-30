@@ -101,6 +101,9 @@ func (s *stack) standing(ctx context.Context, app, pointer string, promotion edg
 
 func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) error {
 	record := held.record
+	if report != nil {
+		report.Say("Standing " + held.app + " back up as " + record.Physical + " from the image this host already holds")
+	}
 	if err := s.e.machine.StandUp(ctx, host.Container{Name: record.Physical, App: held.app, Image: record.Image}); err != nil {
 		return err
 	}
