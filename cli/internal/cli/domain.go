@@ -325,7 +325,8 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 	if err != nil {
 		return err
 	}
-	configured := preflight.Names(preflight.Hostnames(cfg, "production"))
+	declared := preflight.Hostnames(cfg, "production")
+	configured := preflight.Names(declared)
 	if len(configured) == 0 {
 		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
 	}
@@ -335,7 +336,7 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 		}
 		req := &contractv1.HostnameRequest{
 			Slug:       cfg.Slug,
-			Configured: preflight.Configured(preflight.Hostnames(cfg, "production")),
+			Configured: preflight.Configured(declared),
 			Host:       host,
 			Edge:       edgewire.Selection(cfg),
 		}
