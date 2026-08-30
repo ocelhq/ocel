@@ -16,10 +16,8 @@ const (
 )
 
 const (
-	appRestart  = "unless-stopped"
-	appLogTail  = "200"
-	nameShort   = 12
-	noLogOutput = "(no output)"
+	appRestart = "unless-stopped"
+	nameShort  = 12
 )
 
 var stateFields = []string{"Status", "ExitCode", "OOMKilled", "Error", "StartedAt", "FinishedAt", "RestartCount"}
@@ -108,6 +106,10 @@ func stateCommand(name string) string {
 		selectors = append(selectors, field+"={{.State."+field+"}}")
 	}
 	return "docker inspect --type container --format " + quoted(strings.Join(selectors, " ")) + " " + quoted(name) + " 2>&1 || true"
+}
+
+func logCommand(name string) string {
+	return "docker logs --timestamps --tail " + appLogTail + " " + quoted(name) + " 2>&1 || true"
 }
 
 func (h *Host) said(ctx context.Context, command string, elevation string) string {
