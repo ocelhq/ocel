@@ -33,6 +33,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 		Name:     app.App,
 		Physical: physical,
 		URL:      "http://" + physical + ":" + host.AppPort,
+		Image:    app.Image,
 	}}, nil
 }
 

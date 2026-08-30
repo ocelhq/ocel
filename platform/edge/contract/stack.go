@@ -147,6 +147,7 @@ type DeploymentRecord struct {
 	BuildID          string            `json:"buildId"`
 	Entry            string            `json:"entry"`
 	EntryFunction    string            `json:"entryFunction,omitempty"`
+	Image            string            `json:"image,omitempty"`
 	RoutingManifest  any               `json:"routingManifest"`
 	FunctionURLs     map[string]string `json:"functionUrls"`
 	AssetPrefix      string            `json:"assetPrefix"`

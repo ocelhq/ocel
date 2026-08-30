@@ -175,6 +175,7 @@ type AppContainer struct {
 	Name     string `json:"name"`
 	Physical string `json:"physical,omitempty"`
 	URL      string `json:"url,omitempty"`
+	Image    string `json:"image,omitempty"`
 }
 
 type StackState struct {

@@ -363,6 +363,7 @@ func StoodUpContainers(plan providerkit.StackPlan) []providerkit.AppContainer {
 		Name:     plan.App.App,
 		Physical: physical,
 		URL:      "https://" + physical + ".ctr.fake.invalid",
+		Image:    plan.App.Image,
 	}}
 }
 

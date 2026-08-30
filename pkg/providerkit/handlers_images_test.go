@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -12,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const pushedCoordinate = "ghcr.io/acme/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -426,4 +429,88 @@ func TestTheDeploySaysWhereTheImageWentRatherThanWhatItIsCalledThere(t *testing.
 		}
 	}
 	t.Errorf("no event says %q: a transfer onto a machine reported as a push to %q names the coordinate where the reader expects the destination", want, loadedCoordinate)
+}
+
+type stagingLedger struct {
+	fake.Ledger
+	mu     sync.Mutex
+	staged []edge.DeploymentRecord
+}
+
+func (l *stagingLedger) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
+	l.mu.Lock()
+	l.staged = append(l.staged, record)
+	l.mu.Unlock()
+	return l.Ledger.PutStaged(ctx, record)
+}
+
+func (l *stagingLedger) records() []edge.DeploymentRecord {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]edge.DeploymentRecord(nil), l.staged...)
+}
+
+func staging(t *testing.T, provider *fake.Provider) *stagingLedger {
+	t.Helper()
+	held := &stagingLedger{}
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
+		held.Ledger = ledger.New(provider.Records(), providerkit.Class(state.Class), state.Slug)
+		return held
+	})
+	return held
+}
+
+func TestAnAppPlanNamesTheCoordinateTheProviderWillHoldRatherThanTheOneTheBuildLeft(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+
+	result, _ := deploy(t, client, registryDeployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	plans := provider.Releases().(*fake.Releaser).Plans()
+	app := plans[len(plans)-1].App
+	if app == nil {
+		t.Fatal("the last plan the releaser saw stands up no app")
+	}
+	if app.Image != pushedCoordinate {
+		t.Errorf("Image = %q, want %q: what stands the app up is the coordinate the push wrote, and the local digest ref names nothing the runtime can reach", app.Image, pushedCoordinate)
+	}
+}
+
+func TestTheStagedRecordNamesTheImageThatReleaseRuns(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	held := staging(t, provider)
+
+	result, _ := deploy(t, client, registryDeployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	staged := held.records()
+	if len(staged) != 1 {
+		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+	}
+	if staged[0].Image != pushedCoordinate {
+		t.Errorf("the staged record names the image %q, want %q: a promotion's unit is a build identity, and a rollback that re-runs a retained digest needs the record keyed by that identity to name the ref", staged[0].Image, pushedCoordinate)
+	}
+}
+
+func TestAServerlessRecordNamesNoImage(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	held := staging(t, provider)
+
+	result, _ := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	for _, record := range held.records() {
+		if record.Image != "" {
+			t.Errorf("%s staged the image %q, and a serverless release runs none", record.App, record.Image)
+		}
+	}
 }
