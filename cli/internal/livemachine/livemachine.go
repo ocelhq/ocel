@@ -2,6 +2,7 @@ package livemachine
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -70,8 +71,11 @@ func (vm Machine) Attempt(command string) (string, error) {
 	return strings.TrimSpace(string(said)), err
 }
 
-const installEngine = `set -e
-if command -v docker >/dev/null 2>&1; then exit 0; fi
+const engineSetup = `set -e
+exec 9>/tmp/ocel-engine.lock
+flock 9
+want='{"features":{"containerd-snapshotter":true}}'
+if ! sudo docker info >/dev/null 2>&1; then
 script=$(mktemp)
 trap 'rm -f "$script"' EXIT
 if curl -fsSL --connect-timeout 10 --retry 5 --retry-delay 2 --retry-all-errors https://get.docker.com -o "$script"; then
@@ -80,16 +84,21 @@ else
 echo 'https://get.docker.com is unreachable from this machine, so the distro package stands in' >&2
 sudo apt-get update
 sudo apt-get install -y docker.io
-fi`
+fi
+fi
+docker --version
+getent group docker >/dev/null || sudo groupadd docker
+id -nG %[1]s | grep -qw docker || sudo usermod -aG docker %[1]s
+if [ "$(cat /etc/docker/daemon.json 2>/dev/null)" != "$want" ]; then
+sudo mkdir -p /etc/docker
+printf '%%s\n' "$want" | sudo tee /etc/docker/daemon.json >/dev/null
+sudo systemctl restart docker
+fi
+sudo docker version >/dev/null`
 
 func (vm Machine) Engine(t *testing.T) {
 	t.Helper()
-	vm.SSH(t, installEngine)
-	vm.SSH(t, "docker --version")
-	vm.SSH(t, `sudo mkdir -p /etc/docker && printf '{"features":{"containerd-snapshotter":true}}\n' | sudo tee /etc/docker/daemon.json >/dev/null`)
-	vm.SSH(t, "sudo usermod -aG docker "+vm.user)
-	vm.SSH(t, "sudo systemctl restart docker")
-	vm.SSH(t, "docker version >/dev/null")
+	vm.SSH(t, fmt.Sprintf(engineSetup, vm.user))
 }
 
 func (vm Machine) Forward(t *testing.T) {
