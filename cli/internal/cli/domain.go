@@ -36,8 +36,8 @@ var domainCmd = &cobra.Command{
 	Use:   "domain",
 	Short: "Manage this project's production hostnames, and the domain every project's previews are served on",
 	Long: "Manage this project's production hostnames, and the bootstrap-wide domain every project's previews are served on.\n\n" +
-		"`add` and `rm` are project-scoped and read domains.production, which is the declaration: " +
-		"no command edits it. `use`, `ls` and `release` take --preview and act on the bootstrap, where " +
+		"`add`, `rm`, `ls` and `status` are project-scoped and read domains.production, which is the declaration: " +
+		"no command edits it. `use` and `release` take --preview and act on the bootstrap, where " +
 		"one shared entry worker on one wildcard serves every project bootstrapped into the preview " +
 		"class, at \"<project>--<preview>[--<app>].<domain>\". A project that declares its own " +
 		"domains.preview keeps it and ignores this one.",
@@ -61,7 +61,7 @@ var domainUseCmd = &cobra.Command{
 
 var domainLsCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "Show the global domain and the projects served on it",
+	Short: "List this project's production hostnames, or with --preview the global domain and the projects served on it",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
@@ -142,9 +142,10 @@ func firstArg(args []string) string {
 }
 
 func init() {
-	for _, c := range []*cobra.Command{domainUseCmd, domainLsCmd, domainReleaseCmd} {
+	for _, c := range []*cobra.Command{domainUseCmd, domainReleaseCmd} {
 		c.Flags().BoolVar(&domainOpts.preview, "preview", false, "Act on the preview class (required)")
 	}
+	domainLsCmd.Flags().BoolVar(&domainOpts.preview, "preview", false, "List the global preview domain and the projects served on it instead of this project's own hostnames")
 	cmddeps.Yes(domainReleaseCmd, &domainOpts.yes)
 	domainStatusCmd.Flags().BoolVar(&domainOpts.wait, "wait", false, "Keep polling until every declared hostname is served, or give up")
 
@@ -205,16 +206,20 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 }
 
 func runDomainLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer) error {
-	if err := requirePreviewClass("ocel domain ls", opts.preview); err != nil {
-		return err
-	}
-
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
 	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
+		if !opts.preview {
+			resp, err := listProductionHostnames(ctx, deps, runner, cfg, stdout)
+			if err != nil {
+				return err
+			}
+			renderBoundHostnames(stdout, resp, filepath.Base(cfg.Path))
+			return nil
+		}
 		resp, err := listGlobalPreviewDomain(ctx, deps, runner, cfg, stdout)
 		if err != nil {
 			return err
@@ -222,6 +227,45 @@ func runDomainLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts domain
 		renderGlobalDomain(stdout, resp)
 		return nil
 	})
+}
+
+func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer) (*contractv1.GetHostnameStatusResponse, error) {
+	if err := preflight.Tier(ctx, runui.Plain(deps.Presentation(out), out), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
+		return nil, err
+	}
+	client, err := runner.Client()
+	if err != nil {
+		return nil, err
+	}
+	spinner := runui.StartSpinner(deps.Presentation(out), out, "Reading the hostnames this project serves")
+	resp, err := client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
+		Slug:       cfg.Slug,
+		Configured: preflight.Hostnames(cfg, "production"),
+		Edge:       edgewire.Selection(cfg),
+	})
+	spinner.Stop()
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func renderBoundHostnames(out io.Writer, resp *contractv1.GetHostnameStatusResponse, configName string) {
+	if len(resp.GetHostnames()) == 0 {
+		fmt.Fprintf(out, "This project declares no domains.production in %s and serves none.\n", configName)
+		fmt.Fprintln(out, "  → declare one and run `ocel domain add`; `ocel domain ls --preview` shows the domain every project's previews share")
+		return
+	}
+	for _, host := range resp.GetHostnames() {
+		fmt.Fprintf(out, "%-8s %s", domainHostState(host), host.GetHostname())
+		if pointer := host.GetServingPointer(); pointer != "" {
+			fmt.Fprintf(out, "  → %s", pointer)
+		}
+		fmt.Fprintln(out)
+		if pending := host.GetPending(); pending != "" {
+			fmt.Fprintf(out, "         %s\n", pending)
+		}
+	}
 }
 
 func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) error {
