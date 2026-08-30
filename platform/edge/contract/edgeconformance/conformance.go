@@ -247,12 +247,8 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("binding a domain twice binds it once and shows in state", func(t *testing.T) {
 		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
-		binding := edge.DomainBinding{Hostname: suite.Hostname}
-
-		if err := stack.BindDomain(ctx, binding); err != nil {
-			t.Fatalf("BindDomain: %v", err)
-		}
-		if err := stack.BindDomain(ctx, binding); err != nil {
+		binds(t, stack, suite.Hostname)
+		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
 			t.Fatalf("BindDomain again: %v", err)
 		}
 
@@ -270,11 +266,8 @@ func Run(t *testing.T, suite Suite) {
 	})
 
 	t.Run("a bound domain has a front to point DNS at", func(t *testing.T) {
-		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
-		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
-			t.Fatalf("BindDomain: %v", err)
-		}
+		binds(t, stack, suite.Hostname)
 
 		records := frontedRecords(t, e, stack.State(), suite.Hostname)
 
@@ -289,27 +282,21 @@ func Run(t *testing.T, suite Suite) {
 	})
 
 	t.Run("the binding publishes the front, not some reconcile before it", func(t *testing.T) {
-		ctx := context.Background()
 		e, reconciled := reconciledOn(t, suite)
 		stack, err := e.Open(withoutFronts(reconciled.State()))
 		if err != nil {
 			t.Fatalf("Open a state carrying no front: %v", err)
 		}
-		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
-			t.Fatalf("BindDomain: %v", err)
-		}
+		binds(t, stack, suite.Hostname)
 
 		frontedRecords(t, e, stack.State(), suite.Hostname)
 	})
 
 	t.Run("a binding reports the state change the origin persists on", func(t *testing.T) {
-		ctx := context.Background()
 		_, stack := reconciledOn(t, suite)
 
 		before := stack.State()
-		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
-			t.Fatalf("BindDomain: %v", err)
-		}
+		binds(t, stack, suite.Hostname)
 		if after := stack.State(); after.Equal(before) {
 			t.Errorf("state = %+v both before and after %q was bound; the origin writes what a call reports as changed, so a binding that reports nothing is lost the moment the process ends", after, suite.Hostname)
 		}
@@ -318,9 +305,7 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("state survives the seam it is persisted through", func(t *testing.T) {
 		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
-		if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
-			t.Fatalf("BindDomain: %v", err)
-		}
+		binds(t, stack, suite.Hostname)
 		promotion := edge.Promotion{PromotionID: "conformance-persisted", Ts: 1, Builds: map[string]string{"web": "b1"}}
 		promote(t, stack, promotion, "")
 
@@ -370,6 +355,28 @@ func Run(t *testing.T, suite Suite) {
 		}
 		if owner != "" {
 			t.Errorf("DomainOwner(%q) = %q, want nothing serving an unbound host", suite.Hostname, owner)
+		}
+	})
+
+	t.Run("a hostname one surface releases is one the next can bind", func(t *testing.T) {
+		ctx := context.Background()
+		_, first := reconciledOn(t, suite)
+		if err := first.BindDomain(ctx, edge.DomainBinding{Hostname: suite.Hostname}); err != nil {
+			t.Fatalf("BindDomain: %v", err)
+		}
+		if err := first.UnbindDomain(ctx, suite.Hostname); err != nil {
+			t.Fatalf("UnbindDomain: %v", err)
+		}
+
+		e, second := reconciledOn(t, suite)
+		binds(t, second, suite.Hostname)
+
+		owner, err := e.DomainOwner(ctx, suite.Hostname)
+		if err != nil {
+			t.Fatalf("DomainOwner: %v", err)
+		}
+		if owner == "" {
+			t.Errorf("DomainOwner(%q) = %q after the surface that held it released it and another bound it; a name the first project gives up has to come back into circulation, or moving a domain between projects needs an edge no one can reach", suite.Hostname, owner)
 		}
 	})
 
@@ -508,6 +515,19 @@ func reconciled(t *testing.T, suite Suite) edge.EdgeStack {
 	t.Helper()
 	_, stack := reconciledOn(t, suite)
 	return stack
+}
+
+func binds(t *testing.T, stack edge.EdgeStack, hostname string) {
+	t.Helper()
+
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := stack.UnbindDomain(context.Background(), hostname); err != nil {
+			t.Errorf("UnbindDomain(%q) releasing what this obligation bound: %v", hostname, err)
+		}
+	})
 }
 
 func reconciledOn(t *testing.T, suite Suite) (edge.Edge, edge.EdgeStack) {
