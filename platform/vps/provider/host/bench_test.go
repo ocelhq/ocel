@@ -24,6 +24,7 @@ type bench struct {
 	dead   error
 	floor  error
 	answer func(command string) (session.Result, bool)
+	broke  func(command string) error
 	after  func(b *bench, command string)
 }
 
@@ -114,9 +115,14 @@ func (w wire) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 	b.mu.Lock()
 	b.ran = append(b.ran, command)
 	b.fed = append(b.fed, fed)
-	answer, hook := b.answer, b.after
+	answer, broke, hook := b.answer, b.broke, b.after
 	b.mu.Unlock()
 
+	if broke != nil {
+		if err := broke(command); err != nil {
+			return session.Result{}, err
+		}
+	}
 	result := b.rendered(command)
 	if answer != nil {
 		if scripted, said := answer(command); said {
