@@ -194,7 +194,7 @@ func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	}
 }
 
-func TestLiveRegion(t *testing.T) {
+func TestTheRegionThatRedrawsInPlace(t *testing.T) {
 	t.Run("a parallel deploy shows one line per app, each with its own stage", func(t *testing.T) {
 		t.Parallel()
 		s, out := liveStream(t)
