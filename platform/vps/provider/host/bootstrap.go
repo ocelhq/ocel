@@ -19,7 +19,7 @@ func Bootstrap(h *Host) Bootstrapper { return Bootstrapper{host: h} }
 func (b Bootstrapper) Catalogue() []providerkit.Feature { return nil }
 
 func (b Bootstrapper) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
-	read, err := b.host.Read(ctx, class)
+	read, err := b.host.Observe(ctx, class)
 	if err != nil {
 		return providerkit.Bootstrap{}, err
 	}

@@ -377,6 +377,14 @@ func (h *Host) Read(ctx context.Context, class providerkit.Class) (Reading, erro
 	return h.read(ctx, class, keys, drawing{ask: h.run})
 }
 
+func (h *Host) Observe(ctx context.Context, class providerkit.Class) (Reading, error) {
+	keys, err := h.keys(ctx)
+	if err != nil {
+		return Reading{}, err
+	}
+	return h.read(ctx, class, keys, drawing{ask: h.reach})
+}
+
 func (h *Host) Own(ctx context.Context, class providerkit.Class) (Reading, error) {
 	keys, err := h.keys(ctx)
 	if err != nil {

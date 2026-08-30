@@ -192,15 +192,6 @@ type elevating struct {
 	elevated func(context.Context) error
 }
 
-func (e elevating) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
-	if !req.Heal {
-		if err := e.elevated(ctx); err != nil {
-			return providerkit.Plan{}, err
-		}
-	}
-	return e.Bootstrapper.Plan(ctx, req)
-}
-
 func (e elevating) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
 	if !req.Heal {
 		if err := e.elevated(ctx); err != nil {
@@ -208,13 +199,6 @@ func (e elevating) Apply(ctx context.Context, req providerkit.BootstrapRequest, 
 		}
 	}
 	return e.Bootstrapper.Apply(ctx, req, report)
-}
-
-func (e elevating) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
-	if err := e.elevated(ctx); err != nil {
-		return providerkit.Plan{}, err
-	}
-	return e.Bootstrapper.PlanRemoval(ctx, class)
 }
 
 func (e elevating) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
