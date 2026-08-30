@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 )
 
 const DrainExpired = "drain-expired"
 
-func Listen(socket string) string { return "unix/" + socket }
+const SocketMode = "0600"
+
+func Listen(socket string) string { return "unix/" + socket + "|" + SocketMode }
 
 func Keeps(document []byte, socket string) error {
 	var read struct {
@@ -23,11 +24,11 @@ func Keeps(document []byte, socket string) error {
 	}
 	wanted := Listen(socket)
 	moving := errors.New("declares no admin endpoint at " + wanted +
-		", and caddy moves the admin endpoint before it validates the rest: a config without one takes the socket this helper is reached through with it and opens a tcp listener in its place")
+		", and caddy moves the admin endpoint before it validates the rest: a config without one takes the socket this helper is reached through with it and opens a tcp listener in its place, and one that names the socket without the mode leaves the permissions that are the whole of its access control to whatever the proxy happens to default to")
 	if read.Admin == nil || read.Admin.Disabled {
 		return moving
 	}
-	if listen, _, _ := strings.Cut(read.Admin.Listen, "|"); listen != wanted {
+	if read.Admin.Listen != wanted {
 		return moving
 	}
 	return nil

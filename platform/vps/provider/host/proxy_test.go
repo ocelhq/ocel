@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 )
 
 const upstreamsPath = "/reverse_proxy/upstreams"
@@ -221,9 +222,13 @@ func TestTheProxyIsRestartedUnlessSomebodyStopsItAndSitsOnTheOneSharedNetwork(t 
 func TestTheControlPlaneBindsAUnixSocketAndNothingPublishesAPortForIt(t *testing.T) {
 	t.Parallel()
 
-	if listen := nested(t, baseline(t), "admin", "listen"); listen != "unix/"+ProxyAdminSocket {
-		t.Fatalf("the admin endpoint listens on %v, want the unix socket at %s: an endpoint with no authentication is one that must bind nothing a peer can dial",
-			listen, ProxyAdminSocket)
+	if listen := nested(t, baseline(t), "admin", "listen"); listen != caddyadmin.Listen(ProxyAdminSocket) {
+		t.Fatalf("the admin endpoint listens on %v, want %s: an endpoint with no authentication is one that must bind nothing a peer can dial, and the mode it is created under is the whole of what stands between it and everything else in the container",
+			listen, caddyadmin.Listen(ProxyAdminSocket))
+	}
+	if !strings.HasSuffix(caddyadmin.Listen(ProxyAdminSocket), "|"+caddyadmin.SocketMode) {
+		t.Errorf("the admin endpoint is declared as %s, which names no mode and leaves the socket at whatever the proxy defaults to",
+			caddyadmin.Listen(ProxyAdminSocket))
 	}
 	if strings.Contains(string(proxyBaseline), "2019") {
 		t.Errorf("the proxy config names caddy's default admin port, and the whole of this pick is that nothing listens on it:\n%s", proxyBaseline)
