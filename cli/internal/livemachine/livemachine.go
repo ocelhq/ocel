@@ -70,9 +70,22 @@ func (vm Machine) Attempt(command string) (string, error) {
 	return strings.TrimSpace(string(said)), err
 }
 
+const installEngine = `set -e
+if command -v docker >/dev/null 2>&1; then exit 0; fi
+script=$(mktemp)
+trap 'rm -f "$script"' EXIT
+if curl -fsSL --connect-timeout 10 --retry 5 --retry-delay 2 --retry-all-errors https://get.docker.com -o "$script"; then
+sudo sh "$script"
+else
+echo 'https://get.docker.com is unreachable from this machine, so the distro package stands in' >&2
+sudo apt-get update
+sudo apt-get install -y docker.io
+fi`
+
 func (vm Machine) Engine(t *testing.T) {
 	t.Helper()
-	vm.SSH(t, "command -v docker >/dev/null || (curl -fsSL https://get.docker.com | sudo sh) >/dev/null")
+	vm.SSH(t, installEngine)
+	vm.SSH(t, "docker --version")
 	vm.SSH(t, `sudo mkdir -p /etc/docker && printf '{"features":{"containerd-snapshotter":true}}\n' | sudo tee /etc/docker/daemon.json >/dev/null`)
 	vm.SSH(t, "sudo usermod -aG docker "+vm.user)
 	vm.SSH(t, "sudo systemctl restart docker")
