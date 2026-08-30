@@ -297,32 +297,70 @@ func (r registryImages) Push(ctx context.Context, push ImagePush, report Reporte
 	if err := host.Tag(ctx, client, push.Source, named, tag); err != nil {
 		return err
 	}
-	return r.upload(ctx, client, host, named, tag, report)
+	defer r.unname(ctx, client, named, tag)
+
+	var wait time.Duration
+	var again bool
+	for attempt := range registryAttempts {
+		if attempt > 0 {
+			if err := pause(ctx, backoff(attempt, wait)); err != nil {
+				return err
+			}
+		}
+		again, wait, err = r.upload(ctx, client, host, named, tag, report)
+		if !again {
+			return err
+		}
+	}
+	return err
 }
 
-func (r registryImages) upload(ctx context.Context, client *http.Client, host DockerHost, named, tag string, report Reporter) error {
+func (r registryImages) upload(ctx context.Context, client *http.Client, host DockerHost, named, tag string, report Reporter) (again bool, after time.Duration, err error) {
 	endpoint := "http://docker/images/" + named + "/push?" + url.Values{"tag": {tag}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
-		return err
+		return false, 0, err
 	}
 	authorization, err := r.registryAuth()
 	if err != nil {
-		return err
+		return false, 0, err
 	}
-	req.Header.Set("X-Registry-Auth", authorization)
+	if authorization != "" {
+		req.Header.Set("X-Registry-Auth", authorization)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("push %s:%s from the daemon at %s: %w", named, tag, host.Address, err)
+		return false, 0, fmt.Errorf("push %s:%s from the daemon at %s: %w", named, tag, host.Address, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("the daemon at %s answered %q pushing %s:%s: %s", host.Address, resp.Status, named, tag, said(resp.Body))
+		return resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500, retryAfter(resp),
+			fmt.Errorf("the daemon at %s answered %q pushing %s:%s: %s", host.Address, resp.Status, named, tag, said(resp.Body))
 	}
-	return drainPush(resp.Body, report)
+	if err := drainPush(resp.Body, report); err != nil {
+		var refusal registryRefusal
+		return errors.As(err, &refusal) && refusal.again, 0, err
+	}
+	return false, 0, nil
+}
+
+func (r registryImages) unname(ctx context.Context, client *http.Client, named, tag string) {
+	endpoint := "http://docker/images/" + named + ":" + tag + "?" + url.Values{"noprune": {"1"}}.Encode()
+	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), http.MethodDelete, endpoint, nil)
+	if err != nil {
+		return
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	_ = resp.Body.Close()
 }
 
 func (r registryImages) registryAuth() (string, error) {
+	if r.target.Username == "" && r.target.Password == "" {
+		return "", nil
+	}
 	encoded, err := json.Marshal(map[string]string{
 		"username":      r.target.Username,
 		"password":      r.target.Password,
@@ -333,6 +371,13 @@ func (r registryImages) registryAuth() (string, error) {
 	}
 	return base64.URLEncoding.EncodeToString(encoded), nil
 }
+
+type registryRefusal struct {
+	said  string
+	again bool
+}
+
+func (e registryRefusal) Error() string { return "the registry refused the push: " + e.said }
 
 func drainPush(body io.Reader, report Reporter) error {
 	decoder := json.NewDecoder(body)
@@ -348,12 +393,27 @@ func drainPush(body io.Reader, report Reporter) error {
 			return fmt.Errorf("read the daemon's push progress: %w", err)
 		}
 		if line.Error != "" {
-			return fmt.Errorf("the registry refused the push: %s", line.Error)
+			return registryRefusal{said: line.Error, again: throttled(line.Error)}
 		}
 		if report != nil && line.Status != "" {
 			report.Detail(line.Status)
 		}
 	}
+}
+
+func throttled(said string) bool {
+	lowered := strings.ToLower(said)
+	for _, refusal := range []string{"unauthorized", "authentication required", "denied", "forbidden"} {
+		if strings.Contains(lowered, refusal) {
+			return false
+		}
+	}
+	for _, mark := range []string{"toomanyrequests", "too many requests", "429", "500", "502", "503", "504", "server error"} {
+		if strings.Contains(lowered, mark) {
+			return true
+		}
+	}
+	return false
 }
 
 func said(body io.Reader) string {
