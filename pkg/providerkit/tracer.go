@@ -119,11 +119,6 @@ func NewStage(parent Stage, title string) Stage {
 	return Stage{ID: newStageID(), ParentID: parent.ID, Title: sanitizeTitle(title)}
 }
 
-type Attr struct {
-	Key   string
-	Value string
-}
-
 const (
 	AttrKeyApp           = "app"
 	AttrKeyResourceCount = "resource.count"
@@ -147,27 +142,27 @@ var attributeKeys = map[string]progressv1.AttributeKey{
 func AttributeKey(key string) progressv1.AttributeKey { return attributeKeys[key] }
 
 func AttrApp(name string) Attr {
-	return Attr{AttrKeyApp, name}
+	return Attr{Key: AttrKeyApp, Value: name}
 }
 
 func AttrResourceCount(n int) Attr {
-	return Attr{AttrKeyResourceCount, strconv.Itoa(n)}
+	return Attr{Key: AttrKeyResourceCount, Value: strconv.Itoa(n)}
 }
 
 func AttrBytes(n int64) Attr {
-	return Attr{AttrKeyBytes, strconv.FormatInt(n, 10)}
+	return Attr{Key: AttrKeyBytes, Value: strconv.FormatInt(n, 10)}
 }
 
 func AttrDurationMS(d time.Duration) Attr {
-	return Attr{AttrKeyDurationMS, strconv.FormatInt(d.Milliseconds(), 10)}
+	return Attr{Key: AttrKeyDurationMS, Value: strconv.FormatInt(d.Milliseconds(), 10)}
 }
 
 func AttrResourceType(typ string) Attr {
-	return Attr{AttrKeyResourceType, typ}
+	return Attr{Key: AttrKeyResourceType, Value: typ}
 }
 
 func AttrResourceName(name string) Attr {
-	return Attr{AttrKeyResourceName, name}
+	return Attr{Key: AttrKeyResourceName, Value: name}
 }
 
 type Tracer interface {
@@ -281,7 +276,7 @@ func (t *eventTracer) Span(id, parentID StageID, name string, start, end time.Ti
 	status := progressv1.SpanStatus_SPAN_STATUS_OK
 	if err != nil {
 		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
-		attrs = append(attrs, Attr{AttrKeyErrorKind, ClassifyError(err)})
+		attrs = append(attrs, Attr{Key: AttrKeyErrorKind, Value: ClassifyError(err)})
 	}
 
 	pbAttrs := make([]*progressv1.SpanAttribute, len(attrs))

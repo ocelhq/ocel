@@ -1,18 +1,13 @@
 package providerkit
 
 import (
-	"time"
-
 	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type Reporter interface {
-	Say(message string)
+type Reporter = edge.Reporter
 
-	Detail(message string)
-
-	Span(name string, start, end time.Time, err error, attrs ...Attr)
-}
+type Attr = edge.Attr
 
 type Code = ports.Code
 
