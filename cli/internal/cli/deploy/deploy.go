@@ -138,12 +138,19 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			Tier:      environmentv1.Tier_TIER_PRODUCTION,
 			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
 		}
+		registry, err := imageRegistry(ctx, runner, cfg)
+		if err != nil {
+			return err
+		}
+
 		req := &contractv1.DeployRequest{
 			Manifest:    manifest,
 			Environment: env,
 			Tag:         opts.tag,
 			Edge:        edgewire.Selection(cfg),
 			Dry:         opts.dry,
+
+			ImageRegistry: registry,
 		}
 
 		if opts.dry {

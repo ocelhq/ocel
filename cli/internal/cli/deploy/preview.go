@@ -239,11 +239,18 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		}
 		ui.BuildOK()
 
+		registry, err := imageRegistry(ctx, runner, cfg)
+		if err != nil {
+			return err
+		}
+
 		req := &contractv1.DeployRequest{
 			Manifest:    manifest,
 			Environment: env,
 			Edge:        edgewire.Selection(cfg),
 			Dry:         opts.dry,
+
+			ImageRegistry: registry,
 		}
 
 		if opts.dry {

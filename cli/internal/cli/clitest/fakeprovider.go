@@ -247,6 +247,12 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 		}
 	}
 
+	if registry := req.GetImageRegistry(); registry.GetServer() != "" {
+		if err := stream.Send(fakeProgress("REGISTRY " + describeRegistry(registry))); err != nil {
+			return err
+		}
+	}
+
 	for _, message := range consumeFakeLinks(req.GetManifest()) {
 		if err := stream.Send(fakeProgress(message)); err != nil {
 			return err
@@ -1393,6 +1399,10 @@ func fakeComputes() []string {
 
 func describeContainer(c *contractv1.ManifestContainer) string {
 	return fmt.Sprintf("app=%s image=%s health=%s", c.GetApp(), c.GetImage(), c.GetHealthCheckPath())
+}
+
+func describeRegistry(r *contractv1.ImageRegistry) string {
+	return fmt.Sprintf("server=%s namespace=%s username=%s secret=%d", r.GetServer(), r.GetNamespace(), r.GetUsername(), len(r.GetPassword()))
 }
 
 func describeApp(a *contractv1.ManifestApp) string {

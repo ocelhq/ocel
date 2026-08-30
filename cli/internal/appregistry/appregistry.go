@@ -107,3 +107,12 @@ func secret(registry *projectconfig.Registry) (string, error) {
 	}
 	return password, nil
 }
+
+func Wire(target providerkit.RegistryTarget) *contractv1.ImageRegistry {
+	return &contractv1.ImageRegistry{
+		Server:    target.Server,
+		Namespace: target.Namespace,
+		Username:  target.Username,
+		Password:  target.Password,
+	}
+}

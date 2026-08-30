@@ -182,3 +182,59 @@ func TestAContainerAppRendersADigestPinnedManifestUnderDry(t *testing.T) {
 	}
 	clitest.WaitForNoStaleSocket(t, sockPath)
 }
+
+func TestTheRegistryTheProjectNamesRidesTheDeployWithItsSecretResolved(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	deps, root, _ := registryProject(t, `
+  registry: { server: "ghcr.io", username: "acme-bot", password: "OCEL_TEST_REGISTRY_TOKEN" },`)
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	want := "REGISTRY server=ghcr.io namespace= username=acme-bot secret=7"
+	if !strings.Contains(stdout.String(), want) {
+		t.Errorf("stdout = %q, want %q — the push is an engine resource, so the registry it pushes to reaches the release", stdout.String(), want)
+	}
+}
+
+func TestADeployThatNamesNoRegistryCarriesNone(t *testing.T) {
+	deps, root, _ := registryProject(t, "")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "REGISTRY ") {
+		t.Errorf("stdout = %q, want no registry on a deploy neither the project nor the provider names one for", stdout.String())
+	}
+}
+
+func TestAServerlessOnlyDeployAsksForNoRegistryAtAll(t *testing.T) {
+	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	clitest.StubBuild(&deps, []manifestbuilder.Function{
+		{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+	})
+	root, _ := clitest.SetUpDeployFixture(t)
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { preview: "*.preview.acme.com" },
+  apps: [{ name: "api", path: "apps/api", compute: "serverless", framework: "express" }],
+  registry: { server: "ghcr.io", password: "OCEL_TEST_REGISTRY_TOKEN" },
+};
+`)
+	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export {};\n")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "REGISTRY ") {
+		t.Errorf("stdout = %q, want a deploy that pushes no image to carry no registry token across the boundary", stdout.String())
+	}
+}
