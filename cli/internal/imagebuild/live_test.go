@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 )
 
+const leaked = "a value the build must never see"
+
 type machine struct {
 	addr  string
 	user  string
@@ -124,7 +126,7 @@ func TestLiveARailpackBuildLandsAWorkingImageInTheDaemon(t *testing.T) {
 	vm := live(t)
 	vm.engine(t)
 	vm.forward(t)
-	t.Setenv("OCEL_LIVE_LEAK", "a value the build must never see")
+	t.Setenv("OCEL_LIVE_LEAK", leaked)
 
 	image, err := imagebuild.Builder{Progress: progress{t}}.Build(context.Background(), "Web API", "testdata/plainserver")
 	if err != nil {
@@ -143,11 +145,24 @@ func TestLiveARailpackBuildLandsAWorkingImageInTheDaemon(t *testing.T) {
 		}
 	}
 
+	repoDigests := vm.ssh(t, "docker image inspect --format '{{json .RepoDigests}}' "+image.Repository+":"+image.Tag)
+	if !strings.Contains(repoDigests, image.Ref) {
+		t.Errorf("the daemon addresses the image it built by %s, and %s is not among them: the digest ocel hands a provider is not the one the daemon answers to", repoDigests, image.Ref)
+	}
+
 	if pulled := vm.ssh(t, "docker image ls --format '{{.Repository}}'"); strings.Contains(pulled, "railpack-frontend") {
 		t.Errorf("the daemon pulled a railpack frontend image, so the build was not in-process:\n%s", pulled)
 	}
-	if env := vm.ssh(t, "docker image inspect --format '{{.Config.Env}}' "+image.Ref); strings.Contains(env, "OCEL_LIVE_LEAK") {
-		t.Errorf("the image carries %q, so a variable from ocel's own environment was baked into it", env)
+	for _, where := range []string{
+		"docker image inspect " + image.Ref,
+		"docker image history --no-trunc --format '{{.CreatedBy}}' " + image.Ref,
+	} {
+		said := vm.ssh(t, where)
+		for _, secret := range []string{"OCEL_LIVE_LEAK", leaked} {
+			if strings.Contains(said, secret) {
+				t.Errorf("`%s` carries %q from ocel's own environment, so the build was not bare:\n%s", where, secret, said)
+			}
+		}
 	}
 
 	name := "ocel-live-build"
