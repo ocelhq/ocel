@@ -4,6 +4,8 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -61,11 +63,11 @@ var proxyBaseline []byte
 //go:embed dist
 var proxyHelpers embed.FS
 
-const proxyFactTemplate = `image={{.Config.Image}}
+const ProxyFactTemplate = `image={{.Config.Image}}
 restart={{.HostConfig.RestartPolicy.Name}}
 networks={{range $n, $v := .NetworkSettings.Networks}}{{$n}} {{end}}
-binds={{json .HostConfig.Binds}}
-ports={{json .HostConfig.PortBindings}}
+{{range .HostConfig.Binds}}bind={{.}}
+{{end}}ports={{json .HostConfig.PortBindings}}
 baseline={{index .Config.Labels "` + proxyLabel + `"}}
 state={{.State.Status}}`
 
@@ -178,9 +180,22 @@ func containerItem() Item {
 	}
 }
 
-func proxyFacts() []byte {
-	return fmt.Appendf(nil, "image=%s\nrestart=%s\nnetworks=%s \nbinds=%s\nports=%s\nbaseline=%s\nstate=running\n",
-		ProxyImage, proxyRestart, ProxyNetwork, marshalled(proxyBinds()), marshalled(proxyPorts()), contentSum(proxyBaseline))
+func proxyFacts() []byte { return proxyFactsOver(proxyBinds()) }
+
+func proxyFactsOver(binds []string) []byte {
+	stated := []string{
+		"image=" + ProxyImage,
+		"restart=" + proxyRestart,
+		"networks=" + ProxyNetwork + " ",
+		"ports=" + marshalled(proxyPorts()),
+		"baseline=" + contentSum(proxyBaseline),
+		"state=running",
+	}
+	for _, bind := range binds {
+		stated = append(stated, "bind="+bind)
+	}
+	slices.Sort(stated)
+	return []byte(strings.Join(stated, "\n") + "\n")
 }
 
 func proxyBinds() []string {
@@ -273,9 +288,9 @@ func volumeProbe() string {
 
 func containerProbe() string {
 	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1 && " +
-		"facts=$(docker inspect --type container --format " + quoted(proxyFactTemplate) + " " + quoted(ProxyContainer) + " 2>/dev/null); then\n" +
+		"facts=$(docker inspect --type container --format " + quoted(ProxyFactTemplate) + " " + quoted(ProxyContainer) + " 2>/dev/null); then\n" +
 		reports(quoted(KindContainer), quoted(ProxyContainer), "0", quoted(rootOwner),
-			`"$(printf '%s\n' "$facts" | sha256sum | cut -d' ' -f1)"`) + "\nfi"
+			`"$(printf '%s\n' "$facts" | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"`) + "\nfi"
 }
 
 func proxyRemovals() []removal {

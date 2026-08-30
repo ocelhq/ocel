@@ -46,7 +46,7 @@ func dockered(t *testing.T, held engineHolding) map[string]string {
 	if err := os.WriteFile(filepath.Join(dir, dockerEngine), []byte(stub), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, tool := range []string{"sha256sum", "cut", "cat"} {
+	for _, tool := range []string{"sha256sum", "cut", "cat", "sort"} {
 		found, err := exec.LookPath(tool)
 		if err != nil {
 			t.Fatal(err)
@@ -891,5 +891,51 @@ func TestAProxyStandingAsWrittenButNotRunningIsPlannedBackAndNeverCalledSettled(
 			t.Errorf("a box whose proxy is %q reports itself settled, and Describe would call it current while a re-run plans an update over it",
 				between)
 		}
+	}
+}
+
+func TestTheProxysFactsReadTheSameWhateverOrderTheEngineReportsItsMountsIn(t *testing.T) {
+	t.Parallel()
+
+	binds := proxyBinds()
+	if len(binds) < 3 {
+		t.Fatalf("the proxy carries %d mounts, and nothing about ordering can be proven over fewer than two", len(binds))
+	}
+	stated := proxyFacts()
+	for _, order := range [][]int{{2, 0, 1}, {1, 2, 0}, {2, 1, 0}, {0, 2, 1}, {1, 0, 2}} {
+		shuffled := make([]string, 0, len(binds))
+		for _, at := range order {
+			shuffled = append(shuffled, binds[at])
+		}
+		if got := proxyFactsOver(shuffled); !bytes.Equal(got, stated) {
+			t.Errorf("the engine reporting ocel's own mounts in the order %v reads as a proxy that drifted:\n%s\nwant\n%s",
+				order, got, stated)
+		}
+	}
+
+	for _, missing := range []([]string){binds[:2], append(slices.Clone(binds), "/somewhere/else:/etc/caddy/ocel.json:ro")} {
+		if bytes.Equal(proxyFactsOver(missing), stated) {
+			t.Errorf("a proxy carrying the mounts %v reads as one carrying %v, and a proxy someone re-ran with different mounts is drift ocel must catch",
+				missing, binds)
+		}
+	}
+}
+
+func TestEveryFactTheProbeReadsIsOneTheItemStates(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{"image=", "restart=", "networks=", "bind=", "ports=", "baseline=", "state="} {
+		if !strings.Contains(ProxyFactTemplate, key) {
+			t.Errorf("the probe reads no %q off the box, and the item states one", key)
+		}
+		if !strings.Contains(string(containerItem().Content), key) {
+			t.Errorf("the item states no %q, and the probe reads one off the box", key)
+		}
+	}
+	if strings.Contains(ProxyFactTemplate, "json .HostConfig.Binds") {
+		t.Error("the mounts are read off the box as one json array, and the engine does not promise the order of that array")
+	}
+	if !strings.Contains(containerProbe(), "LC_ALL=C sort") {
+		t.Errorf("the probe hashes what the box says in the order the box happens to say it:\n%s", containerProbe())
 	}
 }
