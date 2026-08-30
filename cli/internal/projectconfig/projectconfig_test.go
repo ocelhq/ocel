@@ -948,11 +948,22 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  registry: { server: "ghcr.io", password: "ghp_livesecret/value" },
+  registry: { server: "ghcr.io", password: "ghp_16C7e42F292c6912E7710c838347Ae178B4a" },
 };
 `,
 			wantErr:  []string{`invalid "registry"`, "password", "environment variable"},
-			unspoken: []string{"ghp_livesecret/value"},
+			unspoken: []string{"ghp_16C7e42F292c6912E7710c838347Ae178B4a"},
+		},
+		{
+			name: "rejects a registry password given as a token no shell variable is named like",
+			config: `
+export default {
+  slug: "test-app",
+  registry: { server: "ghcr.io", password: "dckr_pat_abcDEF123" },
+};
+`,
+			wantErr:  []string{`invalid "registry"`, "password", "environment variable"},
+			unspoken: []string{"dckr_pat_abcDEF123"},
 		},
 		{
 			name: "rejects a registry with no password, so nothing falls back to an anonymous push",
