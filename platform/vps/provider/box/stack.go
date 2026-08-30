@@ -122,34 +122,10 @@ func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) 
 }
 
 func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error) {
-	routed, err := s.routed(ctx, named(pointer))
-	if err != nil {
+	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
 	}
-	for _, key := range routed {
-		if err := s.e.machine.Unroute(ctx, key); err != nil {
-			return edge.PruneResult{}, err
-		}
-	}
 	return s.ledger().RemovePointer(ctx, pointer)
-}
-
-func (s *stack) routed(ctx context.Context, pointer string) ([]host.RouteKey, error) {
-	entries, err := s.ledger().History(ctx, pointer)
-	if err != nil {
-		return nil, err
-	}
-	apps := map[string]bool{}
-	for _, entry := range entries {
-		for app := range entry.Builds {
-			apps[app] = true
-		}
-	}
-	keys := make([]host.RouteKey, 0, len(apps))
-	for _, app := range slices.Sorted(maps.Keys(apps)) {
-		keys = append(keys, host.RouteKey{Owner: s.surface(), Pointer: pointer, App: app})
-	}
-	return keys, nil
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {

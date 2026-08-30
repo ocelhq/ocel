@@ -21,7 +21,7 @@ type Machine interface {
 	Promote(ctx context.Context, class providerkit.Class, app, coordinate string) error
 	Serving(ctx context.Context, key host.RouteKey) (string, error)
 	Release(ctx context.Context, rel host.Release, report providerkit.Reporter) error
-	Unroute(ctx context.Context, key host.RouteKey) error
+	UnroutePointer(ctx context.Context, owner, pointer string) error
 	UnrouteSurface(ctx context.Context, owner string) error
 	Claims(ctx context.Context) ([]host.HostClaim, error)
 	ClaimHost(ctx context.Context, claim host.HostClaim) error
