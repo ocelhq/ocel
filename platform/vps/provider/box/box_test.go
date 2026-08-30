@@ -14,6 +14,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -24,6 +25,7 @@ const (
 )
 
 type machine struct {
+	pins     []host.Pin
 	claims   []host.HostClaim
 	upstream map[host.RouteKey]string
 	swept    map[string]bool
@@ -39,6 +41,8 @@ func aMachine() *machine {
 }
 
 func (m *machine) Address(context.Context) (string, error) { return address, nil }
+
+func (m *machine) Pins() []host.Pin { return m.pins }
 
 func (m *machine) HoldsImage(_ context.Context, coordinate string) (bool, error) {
 	return !m.swept[coordinate], nil
@@ -505,6 +509,39 @@ func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testin
 		if !strings.Contains(change.Reason, "renews") {
 			t.Errorf("the certificate row reads %q, want it to name who renews it: that is the only distinction an operator has to act on", change.Reason)
 		}
+	}
+}
+
+func TestTheKeptCertificateIsNamedByTheHandleThatHoldsItAndSaysWhoRenewsIt(t *testing.T) {
+	t.Parallel()
+
+	const pinned = "pr-7.preview.example.com"
+	at := host.ProxyPins + "/wildcard"
+	stood := aMachine()
+	stood.pins = []host.Pin{{Hostname: "*.preview.example.com", Path: at}}
+	front := box.New(stood, fake.NewRecords(), sshScope)
+
+	kept := map[string]edge.PlanChange{}
+	for _, change := range front.ProjectRemovals(edge.ProjectScope{
+		Slug: slug, Class: edge.ClassProduction, Hostnames: []string{"shop.example.com", pinned}, Front: address,
+	})[0].Changes {
+		if change.Kind == box.CertificateKind {
+			kept[change.Name] = change
+		}
+	}
+
+	held, named := kept[certs.PinHandle(at)]
+	if !named {
+		t.Fatalf("the rows kept are %v, want the pair covering %s named by the handle that holds it: naming it by hostname says this box's proxy obtained and renews a certificate the operator placed, which is the wrong-wording bug in the other direction", slices.Sorted(maps.Keys(kept)), pinned)
+	}
+	if !strings.Contains(held.Reason, at) || !strings.Contains(held.Reason, "you") {
+		t.Errorf("the row for a pinned pair reads %q, want it to name the path it sits at and the operator who renews it", held.Reason)
+	}
+	if _, obtained := kept[certs.ProxyHandle("shop.example.com")]; !obtained {
+		t.Errorf("the rows kept are %v, want shop.example.com named by the proxy handle: nothing on this box pins it, so the proxy obtained it and renews it", slices.Sorted(maps.Keys(kept)))
+	}
+	if _, wrong := kept[certs.ProxyHandle(pinned)]; wrong {
+		t.Errorf("%s is named as a certificate this box's proxy obtained and renews, and a pinned pair covers it", certs.ProxyHandle(pinned))
 	}
 }
 
