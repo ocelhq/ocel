@@ -91,9 +91,15 @@ type Provider struct {
 	records *host.Records
 	sealer  *host.Sealer
 	probing *http.Client
-	dial    sync.Mutex
-	live    *session.Session
+
+	probed    sync.Mutex
+	unreached map[string]string
+
+	dial sync.Mutex
+	live *session.Session
 }
+
+var _ providerkit.Diagnoser = (*Provider)(nil)
 
 func (p *Provider) Session(ctx context.Context) (*session.Session, error) {
 	p.dial.Lock()
