@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -89,6 +90,33 @@ func TestTheWindowIsWrittenUnderNoElevationAtAll(t *testing.T) {
 				t.Errorf("the %s ran as %q: it touches no daemon, and a window root writes is a window the deploy login can no longer rewrite", name, called[0])
 			}
 		})
+	}
+}
+
+func TestAReleaseThatNeverReachedItsRecordSweepsItsOwnImageAnyway(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{refuses: func(command string) (session.Result, bool) {
+		switch {
+		case strings.Contains(command, "echo held"):
+			return session.Result{Stdout: "held\n"}, true
+		case strings.Contains(command, "/usr/local/lib/ocel/records"):
+			return session.Result{Code: 1, Stderr: "refused"}, true
+		}
+		return session.Result{}, false
+	}}
+	p := over(machine)
+
+	if _, err := resources.Releaser(p.Records(), p.Artifacts(), p).Provision(context.Background(), aStack(t, anApp()), nil); err == nil {
+		t.Fatal("Provision() succeeded over a box whose record tier refused, and this test needs the failure path")
+	}
+	called := helperCalls(machine, "reconcile")
+	if len(called) != 1 {
+		t.Fatalf("the failed release ran %d reconciles, want the one that sweeps the image it left: no timer, no cron and no unit sweeps this box between deploys", len(called))
+	}
+	repository, _ := host.Repository(loadedCoordinate)
+	if !strings.Contains(called[0], "'"+repository+"'") {
+		t.Errorf("the sweep ran as %q and never names %q, the repository the release it could not finish left an image under", called[0], repository)
 	}
 }
 

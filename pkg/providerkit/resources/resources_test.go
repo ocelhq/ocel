@@ -992,6 +992,47 @@ func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testin
 	}
 }
 
+type unreadable struct{ *fake.Records }
+
+func (unreadable) Read(context.Context, providerkit.RecordName) (providerkit.Record, error) {
+	return providerkit.Record{}, errors.New("this login reads no record tier")
+}
+
+func TestAContainerReleaseReconcilesEvenWhenItNeverReachedTheWork(t *testing.T) {
+	t.Parallel()
+
+	for name, breaking := range map[string]func() (providerkit.RecordStore, providerkit.StackPlan){
+		"the record cannot be read": func() (providerkit.RecordStore, providerkit.StackPlan) {
+			return unreadable{fake.NewRecords()}, containerPlan()
+		},
+		"a resource names a primitive this provider never serves": func() (providerkit.RecordStore, providerkit.StackPlan) {
+			plan := containerPlan()
+			plan.Resources = []providerkit.Resource{{Name: "ledger", Type: providerkit.LinkPostgres}}
+			return fake.NewRecords(), plan
+		},
+		"the app names a compute nothing stands up": func() (providerkit.RecordStore, providerkit.StackPlan) {
+			plan := containerPlan()
+			plan.App.Compute = providerkit.Compute("steam")
+			return fake.NewRecords(), plan
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			own := &retaining{buckets: &buckets{}}
+			records, plan := breaking()
+			releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+
+			if _, err := releaser.Provision(context.Background(), plan, nil); err == nil {
+				t.Fatal("Provision() succeeded, and this case is the failure path")
+			}
+			if len(own.swept) != 1 || own.swept[0] != "web "+testImage {
+				t.Fatalf("the release swept %v, want one reconcile of web: the sweep is deferred rather than conditional, so a release that leaves before it reaches the work sweeps its own leaked image on the way out", own.swept)
+			}
+		})
+	}
+}
+
 func TestAServerlessReleaseReconcilesNoImages(t *testing.T) {
 	t.Parallel()
 

@@ -141,6 +141,9 @@ func standing(recorded providerkit.Stack) providerkit.StackResult {
 }
 
 func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+	if plan.App != nil {
+		defer func() { _ = f.reconcile(ctx, plan.Ref, plan.App.App, plan.App.Image, report) }()
+	}
 	if err := f.serves(plan); err != nil {
 		return providerkit.StackResult{}, err
 	}
@@ -154,9 +157,6 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 	}
 	if err := f.removeOrphans(ctx, plan, recorded, report); err != nil {
 		return providerkit.StackResult{}, err
-	}
-	if plan.App != nil {
-		defer func() { _ = f.reconcile(ctx, plan.Ref, plan.App.App, plan.App.Image, report) }()
 	}
 	if err := plan.Images.Ship(ctx, report); err != nil {
 		return providerkit.StackResult{}, err
