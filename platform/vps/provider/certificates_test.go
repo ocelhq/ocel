@@ -336,3 +336,27 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 }
 
 func asRefusal(err error, refusal *providerkit.Refusal) bool { return errors.As(err, refusal) }
+
+func TestABoxHoldsNoCertificateForThePreviewWildcardItself(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	wildcard := edge.PreviewWildcard("preview.example.com")
+
+	cert := certificateFor(t, p, wildcard)
+	if cert.Held() {
+		t.Fatalf("Certificate(%s) = %q: the catch-all terminates nothing and every preview under it holds its own http-01 certificate, so a handle here names a certificate this box will never obtain and `ocel domain status` reports forever on a slot nothing fills",
+			wildcard, cert.ID)
+	}
+	health, err := p.InspectCertificate(context.Background(), boxedge.Kind, wildcard, cert)
+	if err != nil {
+		t.Fatalf("InspectCertificate() = %v", err)
+	}
+	if health.Issued || health.Status != "" {
+		t.Errorf("InspectCertificate() = %+v over a wildcard bearing no certificate, want nothing to report", health)
+	}
+}

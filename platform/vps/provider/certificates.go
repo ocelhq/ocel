@@ -2,6 +2,7 @@ package vps
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -13,6 +14,9 @@ import (
 func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
 	path := p.host.PinFor(req.Hostname)
 	if path == "" {
+		if strings.HasPrefix(req.Hostname, "*.") {
+			return providerkit.Certificate{}, nil
+		}
 		if err := p.host.CertificateTrouble(ctx, req.Hostname); err != nil {
 			return providerkit.Certificate{}, err
 		}
