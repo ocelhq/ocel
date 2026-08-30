@@ -15,6 +15,7 @@ func TestTheWireAcceptsAnAppNamingContainer(t *testing.T) {
 
 	req := deployRequest()
 	req.Manifest.Apps[0].Compute = string(providerkit.ComputeContainer)
+	req.Manifest.Functions = nil
 	req.Manifest.Containers = []*contractv1.ManifestContainer{{
 		App:             req.Manifest.Apps[0].GetName(),
 		Image:           "ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",

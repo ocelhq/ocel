@@ -119,6 +119,13 @@ func containerImages(manifest *contractv1.Manifest) (map[string]string, error) {
 				"app %q runs on container compute and this manifest carries no image for it", app)
 		}
 	}
+	for _, fn := range manifest.GetFunctions() {
+		if _, served := images[fn.GetApp()]; served {
+			return nil, Refuse(CodeInvalid,
+				"app %q runs on container compute and this manifest packs function %s into it as well, so two things would answer the same request",
+				fn.GetApp(), fn.GetLogicalName())
+		}
+	}
 	return images, nil
 }
 
