@@ -34,7 +34,12 @@ type AppEntry struct {
 	Stack    naming.StackName
 	Build    Build
 	Manifest *contractv1.ManifestApp
+
+	Image           string
+	HealthCheckPath string
 }
+
+func (e AppEntry) Compute() Compute { return Compute(e.Manifest.GetCompute()) }
 
 func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployPlan, error) {
 	manifest := req.GetManifest()
@@ -67,7 +72,7 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 	if !ephemeral(env) {
 		plan.Infra = naming.InfraStack(name)
 	}
-	images, err := containerImages(manifest)
+	containers, err := appContainers(manifest)
 	if err != nil {
 		return DeployPlan{}, err
 	}
@@ -76,12 +81,14 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 		if err != nil {
 			return DeployPlan{}, err
 		}
-		plan.Apps = append(plan.Apps, entry)
-		if image, ours := images[entry.App]; ours {
-			plan.Builds[entry.App] = image
-			continue
+		if container, ours := containers[entry.App]; ours {
+			entry.Image = container.GetImage()
+			entry.HealthCheckPath = container.GetHealthCheckPath()
+			plan.Builds[entry.App] = entry.Image
+		} else {
+			plan.Builds[entry.App] = entry.Build.String()
 		}
-		plan.Builds[entry.App] = entry.Build.String()
+		plan.Apps = append(plan.Apps, entry)
 	}
 	if err := refuseOrphanFunctions(manifest, plan.Builds); err != nil {
 		return DeployPlan{}, err
@@ -89,13 +96,13 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 	return plan, nil
 }
 
-func containerImages(manifest *contractv1.Manifest) (map[string]string, error) {
+func appContainers(manifest *contractv1.Manifest) (map[string]*contractv1.ManifestContainer, error) {
 	compute := make(map[string]string, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
 		compute[app.GetName()] = app.GetCompute()
 	}
 
-	images := make(map[string]string, len(manifest.GetContainers()))
+	containers := make(map[string]*contractv1.ManifestContainer, len(manifest.GetContainers()))
 	for _, container := range manifest.GetContainers() {
 		app := container.GetApp()
 		kind, declared := compute[app]
@@ -107,26 +114,26 @@ func containerImages(manifest *contractv1.Manifest) (map[string]string, error) {
 			return nil, Refuse(CodeInvalid,
 				"a container names the app %q, which this manifest says runs on %q compute", app, kind)
 		}
-		if _, twice := images[app]; twice {
+		if _, twice := containers[app]; twice {
 			return nil, Refuse(CodeInvalid,
 				"app %q carries two containers, and an app is served by one process", app)
 		}
-		images[app] = container.GetImage()
+		containers[app] = container
 	}
 	for app, kind := range compute {
-		if kind == string(ComputeContainer) && images[app] == "" {
+		if kind == string(ComputeContainer) && containers[app].GetImage() == "" {
 			return nil, Refuse(CodeInvalid,
 				"app %q runs on container compute and this manifest carries no image for it", app)
 		}
 	}
 	for _, fn := range manifest.GetFunctions() {
-		if _, served := images[fn.GetApp()]; served {
+		if _, served := containers[fn.GetApp()]; served {
 			return nil, Refuse(CodeInvalid,
 				"app %q runs on container compute and this manifest packs function %s into it as well, so two things would answer the same request",
 				fn.GetApp(), fn.GetLogicalName())
 		}
 	}
-	return images, nil
+	return containers, nil
 }
 
 func refuseOrphanFunctions(manifest *contractv1.Manifest, declared map[string]string) error {
