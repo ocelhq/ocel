@@ -3,6 +3,7 @@ package providerkit
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -119,6 +120,8 @@ type recordSet struct {
 	Owed    []edge.Record
 }
 
+const instructionsOnly = "This project has no DNS writer configured, so ocel wrote none of them and changed nothing at your DNS provider."
+
 func (s settler) write(ctx context.Context, records []edge.Record, headline string, say func(string), notes ...string) (recordSet, error) {
 	var settled recordSet
 	if len(records) == 0 {
@@ -132,7 +135,7 @@ func (s settler) write(ctx context.Context, records []edge.Record, headline stri
 	if s.writer == nil {
 		settled.Owed = records
 		if s.ask != nil {
-			s.ask(headline, records, notes...)
+			s.ask(headline, records, append(slices.Clone(notes), instructionsOnly)...)
 		}
 		return settled, nil
 	}

@@ -111,17 +111,21 @@ func TestAddHostnameOwesTheRecordsWhenNoWriterIsSelected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddHostname() error = %v", err)
 	}
-	var owed []string
+	var owed, notes []string
 	defer stream.Close()
 	for stream.Receive() {
 		if event := stream.Msg().GetDnsOwed(); event != nil {
 			for _, record := range event.GetRecords() {
 				owed = append(owed, record.GetName())
 			}
+			notes = append(notes, event.GetNotes()...)
 		}
 	}
 	if !slices.Contains(owed, "app.acme.com") {
 		t.Errorf("the run owed %v, want app.acme.com asked of the operator", owed)
+	}
+	if !slices.ContainsFunc(notes, func(note string) bool { return strings.Contains(note, "wrote none of them") }) {
+		t.Errorf("the owed records came with %v, want a note saying ocel wrote none of them: instructions-only DNS is the normal state and the text may never leave the operator guessing whether something was automated", notes)
 	}
 	if settled := readStack(t, provider, providerkit.ClassProduction, "shop").Host("app.acme.com"); len(settled.Owed) == 0 {
 		t.Error("the settlement owes no record, so nothing tells the operator what to write")
