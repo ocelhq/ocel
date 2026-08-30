@@ -28,6 +28,8 @@ printf 'tools=%s\n' "$held"`
 
 var toolList = strings.Join(bootstrapTools, " ")
 
+func BootstrapTools() []string { return slices.Clone(bootstrapTools) }
+
 type Facts struct {
 	Root    bool
 	Sudo    bool
@@ -84,12 +86,19 @@ func absent(held []string) []string {
 	return missing
 }
 
-func (s *Session) Preflight(ctx context.Context) (Facts, error) {
+func (s *Session) Facts(ctx context.Context) (Facts, error) {
 	rendered, err := s.Run(ctx, survey)
 	if err != nil {
 		return Facts{}, err
 	}
-	facts := readFacts(rendered)
+	return readFacts(rendered), nil
+}
+
+func (s *Session) Preflight(ctx context.Context) (Facts, error) {
+	facts, err := s.Facts(ctx)
+	if err != nil {
+		return Facts{}, err
+	}
 	return facts, met(facts, s.dest.Principal())
 }
 

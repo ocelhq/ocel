@@ -14,12 +14,22 @@ import (
 
 type credentials struct{ provider *Provider }
 
+type surveyor interface {
+	Facts(ctx context.Context) (session.Facts, error)
+	HostKey() providerkit.HostKey
+	Destination() session.Destination
+}
+
 func (c credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 	live, err := c.provider.Session(ctx)
 	if err != nil {
 		return providerkit.Identity{}, err
 	}
-	facts, err := live.Preflight(ctx)
+	return whoami(ctx, live)
+}
+
+func whoami(ctx context.Context, live surveyor) (providerkit.Identity, error) {
+	facts, err := live.Facts(ctx)
 	if err != nil {
 		return providerkit.Identity{}, err
 	}
@@ -39,10 +49,14 @@ func (c credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 }
 
 func elevation(facts session.Facts) string {
-	if facts.Root {
+	switch {
+	case facts.Root:
 		return "root"
+	case facts.Sudo:
+		return "sudo without a password"
+	default:
+		return "neither root nor sudo without a password"
 	}
-	return "sudo without a password"
 }
 
 func named(details []providerkit.Detail) []providerkit.Detail {
