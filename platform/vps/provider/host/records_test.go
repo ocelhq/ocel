@@ -331,3 +331,29 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 		t.Error("no command the read ran named the helper at all, so this test read nothing")
 	}
 }
+
+func TestARecordThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) {
+	t.Parallel()
+
+	b := machine(nil)
+	b.facts = session.Facts{Systemd: true}
+	b.floor = providerkit.Refuse(providerkit.CodeDenied,
+		"%s can neither act as root nor run sudo without a password", deployUser)
+	b.answer = func(command string) (session.Result, bool) {
+		switch {
+		case strings.Contains(command, "echo held"):
+			return session.Result{Stdout: "held\n"}, true
+		case strings.Contains(command, recordsHelper):
+			return session.Result{Code: 1, Stderr: "Permission denied"}, true
+		}
+		return session.Result{}, false
+	}
+
+	_, err := NewRecords(b.host()).Read(context.Background(), providerkit.ProjectRecord(providerkit.ClassProduction, "shop"))
+	if err == nil {
+		t.Fatal("a record tier this login could neither read nor elevate to read answered a row")
+	}
+	if !strings.Contains(err.Error(), "sudo") {
+		t.Errorf("the read failed with\n%s\nand never names the elevation that was refused; the deploy login owns this tier, so a permission error on it is the preflight refusal showing up somewhere it cannot be acted on", err)
+	}
+}
