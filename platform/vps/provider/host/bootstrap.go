@@ -31,6 +31,11 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 	if err != nil {
 		return providerkit.Bootstrap{}, err
 	}
+	if read.standing(KindProxyConfig, ProxyConfig) {
+		if _, _, err := b.host.proxyState(ctx); err != nil {
+			return providerkit.Bootstrap{}, err
+		}
+	}
 	return providerkit.Bootstrap{
 		Class:      read.Class,
 		Present:    read.Present,

@@ -248,11 +248,13 @@ func settledOn(t *testing.T, class providerkit.Class) *bench {
 		t.Fatal(err)
 	}
 	stood := machine(map[providerkit.Class][]Item{class: append(standing, stamp)})
+	seeded := string(proxyBaseline)
+	proxied := servesProxy(stood, &seeded)
 	stood.answer = func(command string) (session.Result, bool) {
-		if command != "cat ~/.ssh/authorized_keys 2>/dev/null" {
-			return session.Result{}, false
+		if command == "cat ~/.ssh/authorized_keys 2>/dev/null" {
+			return session.Result{Stdout: aKey + "\n"}, true
 		}
-		return session.Result{Stdout: aKey + "\n"}, true
+		return proxied(command)
 	}
 	return stood
 }

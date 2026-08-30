@@ -87,10 +87,6 @@ func (c HostClaim) key() claimKey {
 	return claimKey{Owner: c.Owner, Pointer: c.Pointer, App: c.App}
 }
 
-func (c HostClaim) surface() surfaceKey {
-	return surfaceKey{Owner: c.Owner, Pointer: c.Pointer}
-}
-
 func (r AppRoute) surface() surfaceKey {
 	return surfaceKey{Owner: r.Owner, Pointer: r.Pointer}
 }
