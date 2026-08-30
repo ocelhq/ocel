@@ -98,7 +98,11 @@ func (dns) Open(kind providerkit.DNSKind, zone string) (edge.DNSWriter, error) {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"this provider cannot write DNS records with %q; it writes them with %s", kind, dnsCloudflare)
 	}
-	return cloudflare.NewDNS(zone)
+	writer, err := cloudflare.NewDNS(zone)
+	if err != nil {
+		return nil, providerkit.Refuse(providerkit.CodeInvalid, "%s", err)
+	}
+	return writer, nil
 }
 
 var (
