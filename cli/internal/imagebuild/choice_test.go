@@ -123,6 +123,39 @@ func TestADirectoryNamedDockerfileSwitchesNothing(t *testing.T) {
 	}
 }
 
+func TestASymlinkNamedDockerfileIsFollowedToWhatItPointsAt(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	appDir := filepath.Join(root, "api")
+	write(t, filepath.Join(root, "shared", imagebuild.DockerfileName))
+	if err := os.MkdirAll(filepath.Join(appDir, "holder"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("to a directory", func(t *testing.T) {
+		linked := filepath.Join(appDir, "holder", imagebuild.DockerfileName)
+		if err := os.Symlink(filepath.Join(root, "shared"), linked); err != nil {
+			t.Skipf("this machine makes no symlinks: %v", err)
+		}
+
+		if got := chosen(t, imagebuild.App{Name: "web", Dir: filepath.Join(appDir, "holder")}).Dockerfile; got != "" {
+			t.Errorf("Choose() built from %q, and a link to a directory is no more a Dockerfile than the directory is — buildkit finds that out with an error nobody can read", got)
+		}
+	})
+
+	t.Run("to a file", func(t *testing.T) {
+		linked := filepath.Join(appDir, imagebuild.DockerfileName)
+		if err := os.Symlink(filepath.Join(root, "shared", imagebuild.DockerfileName), linked); err != nil {
+			t.Skipf("this machine makes no symlinks: %v", err)
+		}
+
+		if got := chosen(t, imagebuild.App{Name: "web", Dir: appDir}).Dockerfile; got != linked {
+			t.Errorf("Choose() built from %q, want %q — a link to a Dockerfile builds what it points at", got, linked)
+		}
+	})
+}
+
 func TestAConfiguredDockerfileMayLiveOutsideTheAppItBuilds(t *testing.T) {
 	t.Parallel()
 
