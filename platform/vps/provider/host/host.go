@@ -240,14 +240,19 @@ func (h *Host) reach(ctx context.Context, what, command string, stdin io.Reader)
 }
 
 func (h *Host) ran(ctx context.Context, what, command string, stdin io.Reader, elevation string) (string, error) {
+	said, _, err := h.spoke(ctx, what, command, stdin, elevation)
+	return said, err
+}
+
+func (h *Host) spoke(ctx context.Context, what, command string, stdin io.Reader, elevation string) (string, string, error) {
 	result, err := h.stream(ctx, command, stdin, elevation)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if result.Code != 0 {
-		return "", h.refuse(what, result)
+		return "", spoken(result), h.refuse(what, result)
 	}
-	return result.Stdout, nil
+	return result.Stdout, "", nil
 }
 
 const saidLines = 4

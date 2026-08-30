@@ -253,14 +253,14 @@ func TestTheCredentialDirectoryGoesEvenWhereTheSessionRefuses(t *testing.T) {
 	standingDaemon(t)
 	server, registry := standingRegistry(t)
 	registry.held(true)
-	machine := &box{refuses: func(command string) (session.Result, bool) {
-		return session.Result{Code: 1, Stderr: "Error response from daemon: manifest unknown"},
-			strings.Contains(command, "docker pull")
-	}}
+	machine, asked := refusingPulls("Error response from daemon: manifest unknown", 100)
 	target := aTarget(server)
 
 	if err := pulling(t, machine, target).Push(context.Background(), aPull(target), nil); err == nil {
 		t.Fatal("Push() = nil over a machine whose pull refused, so a release would promote an image the box was never given")
+	}
+	if got := asked.Load(); got != 1 {
+		t.Errorf("the machine was told to pull %d times over a manifest the registry does not hold, want the refusal taken at its word", got)
 	}
 	underShell(t, sessionThatPulls(t, machine))
 }

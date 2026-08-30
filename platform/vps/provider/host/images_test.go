@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -134,6 +135,67 @@ func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), coordinate) {
 		t.Errorf("LoadImage() = %v, want the coordinate the machine does not hold named", err)
+	}
+}
+
+func refusedPull(said string) (*bench, *int) {
+	stood := machine(nil)
+	var asked int
+	stood.answer = func(command string) (session.Result, bool) {
+		if !strings.Contains(command, "docker pull") {
+			return session.Result{}, false
+		}
+		asked++
+		return session.Result{Code: 1, Stderr: said}, true
+	}
+	return stood, &asked
+}
+
+const (
+	plainHex  = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	markedHex = "4295030000000000000000000000000000000000000000000000000000000000"
+)
+
+func pulled(t *testing.T, stood *bench, server, hex string) error {
+	t.Helper()
+	_, err := stood.host().PullImage(context.Background(),
+		providerkit.RegistryTarget{Server: server, Namespace: "acme"},
+		server+"/acme/web:sha256-"+hex, "sha256:"+hex)
+	return err
+}
+
+func TestAFatalPullIsNotAskedAgainBecauseTheRegistryAnswersOnPortFiveThousand(t *testing.T) {
+	stood, asked := refusedPull("Error response from daemon: manifest unknown")
+
+	if err := pulled(t, stood, "registry.example.com:5000", plainHex); err == nil {
+		t.Fatal("PullImage() = nil over a machine whose daemon says the manifest is unknown")
+	}
+	if *asked != 1 {
+		t.Errorf("the machine was told to pull %d times over a manifest that does not exist, want the refusal taken at its word: "+
+			"the registry's own port is read as a 500 and every fatal pull is waited out five times", *asked)
+	}
+}
+
+func TestAFatalPullIsNotAskedAgainBecauseTheDigestHexReadsAsAStatusCode(t *testing.T) {
+	stood, asked := refusedPull("Error response from daemon: manifest unknown")
+
+	if err := pulled(t, stood, "registry.example.com:9443", markedHex); err == nil {
+		t.Fatal("PullImage() = nil over a machine whose daemon says the manifest is unknown")
+	}
+	if *asked != 1 {
+		t.Errorf("the machine was told to pull %d times over a manifest that does not exist, want the refusal taken at its word: "+
+			"the digest ocel pinned carries the hex 429 and 503, and a digest is random", *asked)
+	}
+}
+
+func TestAThrottledPullIsStillAskedAgainWhereTheDaemonSaysSo(t *testing.T) {
+	stood, asked := refusedPull("toomanyrequests: You have reached your pull rate limit")
+
+	if err := pulled(t, stood, "registry.example.com:9443", plainHex); err == nil {
+		t.Fatal("PullImage() = nil over a registry that throttled every pull")
+	}
+	if *asked != pullAttempts {
+		t.Errorf("the machine was told to pull %d times over a registry that throttled it, want %d", *asked, pullAttempts)
 	}
 }
 
