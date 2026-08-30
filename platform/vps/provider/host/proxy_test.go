@@ -589,6 +589,23 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	}
 }
 
+func TestThePinRootIsPlannedAsReclaimedOnlyIfEmptyRatherThanAsABareDelete(t *testing.T) {
+	t.Parallel()
+
+	pins := removalOf(proxyRemovals(), ProxyPins)
+	if pins.action != providerkit.ActionDelete {
+		t.Fatalf("the pin root is planned as %q, and this test states nothing about the row a destroy prints for it", pins.action)
+	}
+	if pins.reason == "" {
+		t.Fatal("the typed confirmation offers to delete the directory holding an operator's key material and says nothing about what happens to it")
+	}
+	for _, said := range []string{"empty", "ocel never placed one"} {
+		if !strings.Contains(pins.reason, said) {
+			t.Errorf("the pin root is offered as %q, which never says %q: what the destroy runs reclaims it only when nothing is pinned under it", pins.reason, said)
+		}
+	}
+}
+
 func TestRemovingTheProxyNamesOcelsOwnContainerAndNeverAsksTheEngineWhatElseItRuns(t *testing.T) {
 	t.Parallel()
 
