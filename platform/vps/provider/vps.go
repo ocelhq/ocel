@@ -152,6 +152,10 @@ func (p *Provider) Target() Target { return p.options.SSH }
 
 func (p *Provider) Serves() []providerkit.LinkType { return resources.Serves(p) }
 
+func (p *Provider) Computes() []providerkit.Compute {
+	return []providerkit.Compute{providerkit.ComputeContainer}
+}
+
 func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
 	return host.Bootstrap(p.host), nil
 }

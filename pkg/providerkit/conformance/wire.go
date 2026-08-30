@@ -40,7 +40,9 @@ func runWire(t *testing.T, suite Suite) {
 		server := httptest.NewServer(providerkit.ConformanceMux(suite.Spec))
 		t.Cleanup(server.Close)
 
-		holdsTheSessionRules(t, client(server.Client(), server.URL), suite.Options)
+		provider := client(server.Client(), server.URL)
+		holdsTheSessionRules(t, provider, suite.Options)
+		namesTheComputesItRuns(t, suite, provider)
 	})
 
 	t.Run("a run says what it would change and then what it is doing", func(t *testing.T) {
@@ -64,7 +66,9 @@ func runWire(t *testing.T, suite Suite) {
 		provider := spawn(t, suite.Binary)
 
 		provider.refusesAnUnpairedClient(t)
-		holdsTheSessionRules(t, client(provider.http, providerURL), suite.Options)
+		paired := client(provider.http, providerURL)
+		holdsTheSessionRules(t, paired, suite.Options)
+		namesTheComputesItRuns(t, suite, paired)
 
 		provider.stopsOnSIGTERM(t)
 	})

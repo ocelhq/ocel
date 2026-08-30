@@ -12,6 +12,8 @@ type Provider interface {
 
 	Serves() []LinkType
 
+	Computes() []Compute
+
 	Bootstrap(kind edge.Kind) (Bootstrapper, error)
 	Releases() Releaser
 	Artifacts() ArtifactStore

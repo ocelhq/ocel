@@ -78,6 +78,7 @@ func deployRequest() *contractv1.DeployRequest {
 			Apps: []*contractv1.ManifestApp{{
 				Name:         "web",
 				Framework:    "next",
+				Compute:      string(providerkit.ComputeServerless),
 				DeploymentId: webDeploymentID,
 			}},
 			Functions: []*contractv1.ManifestFunction{{
@@ -205,6 +206,7 @@ func twoAppRequest() *contractv1.DeployRequest {
 	manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
 		Name:         "admin",
 		Framework:    "next",
+		Compute:      string(providerkit.ComputeServerless),
 		DeploymentId: adminDeploymentID,
 	})
 	manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{

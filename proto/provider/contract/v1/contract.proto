@@ -179,6 +179,8 @@ message ManifestApp {
   string folder = 5 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
 
   string deployment_id = 6;
+
+  string compute = 7;
 }
 
 message ManifestVariable {
@@ -425,6 +427,8 @@ message PreflightResponse {
   PreviewWildcard preview_wildcard = 7;
 
   BootstrapStatus bootstrap = 8;
+
+  repeated string computes = 9;
 }
 
 message PreviewWildcard {

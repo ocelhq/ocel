@@ -77,6 +77,10 @@ func (p *Provider) Serves() []providerkit.LinkType {
 	return []providerkit.LinkType{providerkit.LinkPostgres, providerkit.LinkBucket}
 }
 
+func (p *Provider) Computes() []providerkit.Compute {
+	return []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
+}
+
 func (p *Provider) Region() string { return p.options.Region }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {

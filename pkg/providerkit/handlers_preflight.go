@@ -20,7 +20,10 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return nil, err
 	}
 
-	resp := &contractv1.PreflightResponse{Identity: &contractv1.Identity{}}
+	resp := &contractv1.PreflightResponse{
+		Identity: &contractv1.Identity{},
+		Computes: ComputeNames(provider.Computes()),
+	}
 
 	identity, err := provider.Credentials().Whoami(ctx)
 	if err != nil {
