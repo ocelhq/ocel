@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"math/big"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -54,6 +55,23 @@ func placedOnTheBox(t *testing.T, vm machine, at string, names []string, until t
 	vm.ssh(t, "sudo chmod 0600 "+quote(host.PinKey(at)))
 }
 
+func (vm machine) proxyLogBytes(t *testing.T) int {
+	t.Helper()
+
+	counted, err := strconv.Atoi(strings.TrimSpace(
+		vm.ssh(t, "sudo docker logs "+host.ProxyContainer+" 2>&1 | wc -c")))
+	if err != nil {
+		t.Fatalf("count what the proxy has already logged: %v", err)
+	}
+	return counted
+}
+
+func (vm machine) proxyLogSince(t *testing.T, written int) string {
+	t.Helper()
+
+	return vm.ssh(t, "sudo docker logs "+host.ProxyContainer+" 2>&1 | tail -c +"+strconv.Itoa(written+1))
+}
+
 func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
@@ -82,6 +100,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 		t.Error("Certificate().Requested = true on a box, and ocel placed no key material here so it holds authority to remove none")
 	}
 
+	spoken := vm.proxyLogBytes(t)
 	served, err := pinned.InspectCertificate(ctx, boxedge.Kind, host.ProxyContainer,
 		providerkit.Certificate{ID: certs.ProxyHandle(host.ProxyContainer)})
 	if err != nil {
@@ -97,7 +116,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 		t.Errorf("InspectCertificate().Renewal = %q, want %q", served.Renewal, certs.ProxyRenewal)
 	}
 
-	logs := vm.ssh(t, "sudo docker logs --tail 200 "+host.ProxyContainer+" 2>&1 || true")
+	logs := vm.proxyLogSince(t, spoken)
 	for _, asked := range []string{"/config/apps", "/pki/ca", "admin.api"} {
 		if strings.Contains(logs, asked) {
 			t.Errorf("reading what the proxy serves reached the admin api (%s): caddy exposes no managed-certificate inventory there, and a 200 from a config load is not evidence a certificate exists because caddy obtains them in the background:\n%s",
