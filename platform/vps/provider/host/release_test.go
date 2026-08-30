@@ -354,3 +354,33 @@ func TestExitedRestartingAndHungReadAsThreeDifferentThings(t *testing.T) {
 		}
 	}
 }
+
+func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T) {
+	t.Parallel()
+
+	report := &watched{}
+	if _, err := released(t, aRelease(), session.Result{}, report); err != nil {
+		t.Fatalf("Release() = %v", err)
+	}
+	stated := strings.Join(report.told, "\n")
+	for what, wanted := range map[string]string{
+		"the window in-flight requests are given": "30s",
+		"what a client past it receives":          "502",
+		"the fate of a websocket":                 "websocket",
+		"the fate of a stream":                    "server-sent-events",
+	} {
+		if !strings.Contains(stated, wanted) {
+			t.Errorf("a release states\n%s\nwhich leaves %s implied", stated, what)
+		}
+	}
+
+	first := aRelease()
+	first.Retire = ""
+	quiet := &watched{}
+	if _, err := released(t, first, session.Result{}, quiet); err != nil {
+		t.Fatal(err)
+	}
+	if len(quiet.told) != 0 {
+		t.Errorf("a first deploy states a drain contract for a container it does not have: %v", quiet.told)
+	}
+}

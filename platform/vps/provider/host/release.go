@@ -17,8 +17,8 @@ const (
 	healthKey    = "health.path"
 	appLogTail   = "200"
 	noLogOutput  = "(no output)"
-	hijackedFate = "websocket and sse connections do not survive a deploy: they hold the retired upstream open until the window closes and are then cut with it, so clients must reconnect"
-	drainCeiling = "requests still running when the drain window closes are cut when the retired container stops, and their clients receive 502"
+	hijackedFate = "neither shape of long-lived connection survives a deploy and clients of both must reconnect, but they reach that end differently: a websocket is cut at the flip itself, while a server-sent-events stream keeps the retired container occupied for this whole window and is cut when it stops, so an app serving one drains at its ceiling on every deploy"
+	drainCeiling = "requests still running when the window closes are cut with the retired container: a client still waiting for its first byte receives 502, and one already reading a response sees that response truncated"
 )
 
 type Release struct {
@@ -66,6 +66,10 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	}
 
 	say(report, "Gating "+rel.Target+rel.HealthPath+", then flipping the proxy onto it")
+	if flipping.Retiring != "" && report != nil {
+		report.Detail(fmt.Sprintf("%s has up to %s to finish what it is still serving, and the deploy returns as soon as it reports nothing in flight. %s. %s",
+			rel.retiredName(), rel.DrainTimeout, drainCeiling, hijackedFate))
+	}
 	result, err := h.stream(ctx, words(releaseCommand(rel)), nil, elevation)
 	if err != nil {
 		return err
