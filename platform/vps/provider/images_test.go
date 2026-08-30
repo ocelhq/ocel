@@ -1,0 +1,178 @@
+package vps
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
+)
+
+const loadedCoordinate = "ocel/web:sha256-abc"
+
+type box struct {
+	mu    sync.Mutex
+	ran   []string
+	fed   []string
+	holds bool
+}
+
+func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
+	var carried string
+	if stdin != nil {
+		raw, err := io.ReadAll(stdin)
+		if err != nil {
+			return session.Result{}, err
+		}
+		carried = string(raw)
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.ran = append(b.ran, command)
+	b.fed = append(b.fed, carried)
+	switch {
+	case strings.Contains(command, "docker load"):
+		b.holds = true
+		return session.Result{Stdout: "Loaded image: " + loadedCoordinate + "\n"}, nil
+	case strings.Contains(command, "docker image ls"):
+		if b.holds {
+			return session.Result{Stdout: "sha256:abcdef\n"}, nil
+		}
+		return session.Result{}, nil
+	default:
+		return session.Result{}, nil
+	}
+}
+
+func (b *box) Run(ctx context.Context, command string) (string, error) {
+	result, err := b.Stream(ctx, command, nil)
+	return result.Stdout, err
+}
+
+func (b *box) Preflight(context.Context) (session.Facts, error) {
+	return session.Facts{Root: true, Systemd: true}, nil
+}
+
+func (b *box) Destination() session.Destination {
+	return session.Destination{Written: "ada@box.invalid", Address: "box.invalid", Port: 22, User: "ada"}
+}
+
+func (b *box) commands() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]string(nil), b.ran...)
+}
+
+func (b *box) carried() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]string(nil), b.fed...)
+}
+
+func standing(t *testing.T, machine *box) providerkit.ImageStore {
+	t.Helper()
+	p := NewProvider(Options{SSH: Target{Host: "box.invalid", User: "ada"}})
+	p.host = host.New(func(context.Context) (host.Conn, error) { return machine, nil }, host.Keys{})
+	store, err := p.DirectImages(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
+
+func daemonHolding(t *testing.T, tar string) *int {
+	t.Helper()
+	var reads int
+	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || !strings.HasSuffix(r.URL.Path, "/get") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		reads++
+		_, _ = io.WriteString(w, tar)
+	}))
+	t.Cleanup(daemon.Close)
+	t.Setenv(providerkit.DockerTLSVerifyEnv, "")
+	t.Setenv(providerkit.DockerCertPathEnv, "")
+	t.Setenv(providerkit.DockerHostEnv, "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
+	return &reads
+}
+
+func aPush() providerkit.ImagePush {
+	return providerkit.ImagePush{
+		App:    "web",
+		Source: "ocel/web@sha256:abc",
+		Target: loadedCoordinate,
+		Digest: "sha256:abc",
+	}
+}
+
+func TestTheImageIsReadOutOfTheLocalDaemonAndPipedIntoTheMachinesOwn(t *testing.T) {
+	reads := daemonHolding(t, "tar-bytes")
+	machine := &box{}
+	store := standing(t, machine)
+
+	if err := store.Push(context.Background(), aPush(), nil); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+	if *reads != 1 {
+		t.Errorf("the local daemon was read %d times for one image", *reads)
+	}
+	if carried := strings.Join(machine.carried(), "\n"); !strings.Contains(carried, "tar-bytes") {
+		t.Errorf("the machine was fed %q, want the tar the local daemon handed over", carried)
+	}
+	if commands := strings.Join(machine.commands(), "\n"); !strings.Contains(commands, "docker load") {
+		t.Errorf("the machine ran %q, want the stream loaded into its own daemon", commands)
+	}
+}
+
+func TestNothingIsInstalledOnTheMachineToReceiveAnImage(t *testing.T) {
+	daemonHolding(t, "tar-bytes")
+	machine := &box{}
+	store := standing(t, machine)
+
+	if err := store.Push(context.Background(), aPush(), nil); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+	for _, command := range machine.commands() {
+		for _, writing := range []string{"apt-get", "curl", "wget", "install", "mkdir", "tee", "cat >", "systemctl"} {
+			if strings.Contains(command, writing) {
+				t.Errorf("the transfer ran %q on the machine: the bootstrap guarantee it consumes is dockerd and nothing else", command)
+			}
+		}
+	}
+}
+
+func TestAnImageTheMachineHoldsIsAnsweredWithoutReadingTheLocalDaemon(t *testing.T) {
+	reads := daemonHolding(t, "tar-bytes")
+	machine := &box{holds: true}
+	store := standing(t, machine)
+
+	held, err := store.Has(context.Background(), aPush())
+	if err != nil {
+		t.Fatalf("Has() = %v", err)
+	}
+	if !held {
+		t.Fatal("Has() says no over a machine whose daemon answers to the coordinate")
+	}
+	if *reads != 0 {
+		t.Errorf("the local daemon was read %d times answering a question the machine answers", *reads)
+	}
+}
+
+func TestTheTransferNamesTheMachineRatherThanTheCoordinate(t *testing.T) {
+	store := standing(t, &box{})
+	named, says := store.(providerkit.ImageDestination)
+	if !says {
+		t.Fatal("the direct store does not say where it sends, so a deploy reports the coordinate as though it were a destination")
+	}
+	if got := named.ImageDestination(); got != "box.invalid" {
+		t.Errorf("ImageDestination() = %q, want the machine the image lands on", got)
+	}
+}

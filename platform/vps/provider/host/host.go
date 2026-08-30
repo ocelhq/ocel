@@ -37,6 +37,10 @@ type Host struct {
 	knows   bool
 	prefix  string
 
+	engining sync.Mutex
+	engined  bool
+	engine   string
+
 	holding sync.Mutex
 	held    []byte
 
