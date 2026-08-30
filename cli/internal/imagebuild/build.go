@@ -14,16 +14,23 @@ import (
 )
 
 const (
-	contextMount = "context"
-	planMount    = "dockerfile"
-	mobyExporter = "moby"
+	contextMount  = "context"
+	frontendMount = "dockerfile"
+	mobyExporter  = "moby"
+
+	dockerfileFrontend = "dockerfile.v0"
+	filenameAttr       = "filename"
 )
 
 type Builder struct {
 	Progress io.Writer
 }
 
-func (b Builder) Build(ctx context.Context, app, appDir string) (Image, error) {
+func (b Builder) Build(ctx context.Context, app App) (Image, error) {
+	choice, err := Choose(app)
+	if err != nil {
+		return Image{}, err
+	}
 	d, err := openDaemon()
 	if err != nil {
 		return Image{}, err
@@ -38,20 +45,11 @@ func (b Builder) Build(ctx context.Context, app, appDir string) (Image, error) {
 		return Image{}, err
 	}
 
-	plan, err := Plan(appDir)
+	opt, done, err := choice.solve()
 	if err != nil {
 		return Image{}, err
 	}
-	planDir, err := stagePlan(plan)
-	if err != nil {
-		return Image{}, err
-	}
-	defer func() { _ = os.RemoveAll(planDir) }()
-
-	opt, err := solveOptions(appDir, planDir)
-	if err != nil {
-		return Image{}, err
-	}
+	defer done()
 
 	status := make(chan *client.SolveStatus)
 	reported := make(chan struct{})
@@ -59,13 +57,13 @@ func (b Builder) Build(ctx context.Context, app, appDir string) (Image, error) {
 		defer close(reported)
 		report(status, b.Progress)
 	}()
-	resp, err := builder.Build(ctx, opt, "", railpack.Build, status)
+	resp, err := choice.run(ctx, builder, opt, status)
 	<-reported
 	if err != nil {
-		return Image{}, fmt.Errorf("build %s: %w", app, err)
+		return Image{}, fmt.Errorf("build %s: %w", app.Name, err)
 	}
 
-	image, err := imageFor(app, resp.ExporterResponse[exptypes.ExporterImageDigestKey])
+	image, err := imageFor(app.Name, resp.ExporterResponse[exptypes.ExporterImageDigestKey])
 	if err != nil {
 		return Image{}, err
 	}
@@ -73,6 +71,34 @@ func (b Builder) Build(ctx context.Context, app, appDir string) (Image, error) {
 		return Image{}, err
 	}
 	return image, nil
+}
+
+func (c Choice) solve() (client.SolveOpt, func(), error) {
+	if c.Dockerfile != "" {
+		opt, err := dockerfileOptions(c.App.Dir, c.Dockerfile)
+		return opt, func() {}, err
+	}
+	plan, err := Plan(c.App.Dir)
+	if err != nil {
+		return client.SolveOpt{}, nil, err
+	}
+	planDir, err := stagePlan(plan)
+	if err != nil {
+		return client.SolveOpt{}, nil, err
+	}
+	opt, err := solveOptions(c.App.Dir, planDir)
+	if err != nil {
+		_ = os.RemoveAll(planDir)
+		return client.SolveOpt{}, nil, err
+	}
+	return opt, func() { _ = os.RemoveAll(planDir) }, nil
+}
+
+func (c Choice) run(ctx context.Context, builder *client.Client, opt client.SolveOpt, status chan *client.SolveStatus) (*client.SolveResponse, error) {
+	if c.Dockerfile != "" {
+		return builder.Solve(ctx, nil, opt, status)
+	}
+	return builder.Build(ctx, opt, "", railpack.Build, status)
 }
 
 func stagePlan(plan []byte) (string, error) {
@@ -97,9 +123,30 @@ func solveOptions(appDir, planDir string) (client.SolveOpt, error) {
 		return client.SolveOpt{}, err
 	}
 	return client.SolveOpt{
-		LocalMounts: map[string]fsutil.FS{contextMount: source, planMount: plan},
-		Exports:     []client.ExportEntry{{Type: mobyExporter}},
+		LocalMounts: map[string]fsutil.FS{contextMount: source, frontendMount: plan},
+		Exports:     exports(),
 	}, nil
+}
+
+func dockerfileOptions(appDir, dockerfile string) (client.SolveOpt, error) {
+	source, err := fsutil.NewFS(appDir)
+	if err != nil {
+		return client.SolveOpt{}, fmt.Errorf("read %s as a build context: %w", appDir, err)
+	}
+	holding, err := fsutil.NewFS(filepath.Dir(dockerfile))
+	if err != nil {
+		return client.SolveOpt{}, fmt.Errorf("read %s as the directory %s is in: %w", filepath.Dir(dockerfile), dockerfile, err)
+	}
+	return client.SolveOpt{
+		Frontend:      dockerfileFrontend,
+		FrontendAttrs: map[string]string{filenameAttr: filepath.Base(dockerfile)},
+		LocalMounts:   map[string]fsutil.FS{contextMount: source, frontendMount: holding},
+		Exports:       exports(),
+	}, nil
+}
+
+func exports() []client.ExportEntry {
+	return []client.ExportEntry{{Type: mobyExporter}}
 }
 
 func report(status <-chan *client.SolveStatus, to io.Writer) {
