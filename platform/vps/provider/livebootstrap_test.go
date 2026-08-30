@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -37,6 +38,10 @@ func (vm machine) feeding(login, fed, command string) (string, error) {
 		login+"@"+vm.addr, command)
 	ran.Stdin = strings.NewReader(fed)
 	rendered, err := ran.Output()
+	var exited *exec.ExitError
+	if errors.As(err, &exited) && len(exited.Stderr) > 0 {
+		err = fmt.Errorf("%w: %s", err, strings.TrimSpace(string(exited.Stderr)))
+	}
 	return string(rendered), err
 }
 
