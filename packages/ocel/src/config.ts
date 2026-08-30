@@ -62,10 +62,11 @@ export type Framework = "next" | "express" | "fastify" | "hono";
  */
 export interface BuildConfig {
   /**
-   * The Dockerfile to build from, resolved against the app's directory and
-   * free to point outside it. Naming one builds from it whether or not the
-   * app has a `Dockerfile` of its own. The build context is the app's
-   * directory either way.
+   * The Dockerfile to build from. A relative path resolves against the app's
+   * directory and is free to point outside it; an absolute path is taken as
+   * written, which ties the config to the machine it is read on. Naming one
+   * builds from it whether or not the app has a `Dockerfile` of its own. The
+   * build context is the app's directory either way.
    */
   dockerfile?: string;
 }
