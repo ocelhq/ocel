@@ -128,7 +128,7 @@ func TestRunDomainStatusJSON(t *testing.T) {
 }
 
 func TestRunDomain(t *testing.T) {
-	t.Run("every subcommand refuses without --preview", func(t *testing.T) {
+	t.Run("the bootstrap-wide subcommands refuse without --preview", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
@@ -136,7 +136,6 @@ func TestRunDomain(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		runs := map[string]error{
 			"use":     runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{}, &stdout, &stderr),
-			"ls":      runDomainLs(context.Background(), deps, root, domainOptions{}, &stdout, &stderr),
 			"release": runDomainRelease(context.Background(), deps, root, domainOptions{}, &stdout, &stderr, strings.NewReader("")),
 		}
 		for name, err := range runs {
@@ -811,4 +810,26 @@ func TestDomainStatusSaysNothingAboutExpiryForACertificateSomethingElseRenews(t 
 	if strings.Contains(out.String(), "EXPIRING SOON") {
 		t.Errorf("status warns about a certificate something else renews:\n%s", out.String())
 	}
+}
+
+func TestDomainLsListsThisProjectsOwnHostnamesWithoutPreview(t *testing.T) {
+	root, sockPath := clitest.SetUpDeployFixture(t)
+	writeProductionConfig(t, root)
+	deps := newDeps()
+	clitest.SetLoggedIn(&deps)
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+	t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED proxy:shop.app.com")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDomainLs(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runDomainLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{"shop.app.com", "READY"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout = %q, want it to name %q: `ocel domain ls` lists what this project has bound", out, want)
+		}
+	}
+	clitest.WaitForNoStaleSocket(t, sockPath)
 }
