@@ -1,0 +1,31 @@
+{
+  "admin": { "listen": "unix//run/caddy-admin.sock" },
+  "logging": {
+    "logs": {
+      "default": { "exclude": ["http.log.access.ocel"] },
+      "ocel": {
+        "include": ["http.log.access.ocel"],
+        "writer": { "output": "stdout" },
+        "encoder": {
+          "format": "filter",
+          "wrap": { "format": "json" },
+          "fields": {
+            "request>uri": { "filter": "regexp", "regexp": "\\?.*$", "value": "?redacted" }
+          }
+        }
+      }
+    }
+  },
+  "apps": {
+    "http": {
+      "grace_period": "30s",
+      "servers": {
+        "ocel": {
+          "listen": [":80"],
+          "logs": { "default_logger_name": "ocel" },
+          "routes": []
+        }
+      }
+    }
+  }
+}

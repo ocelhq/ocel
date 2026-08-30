@@ -172,6 +172,9 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err := b.write(ctx, standing, EngineItems(), report); err != nil {
 		return err
 	}
+	if err := b.write(ctx, standing, ProxyItems(), report); err != nil {
+		return err
+	}
 	stamp.State, stamp.Seal = StateComplete, minted.Seal
 	return b.host.Stamp(ctx, req.Class, stamp)
 }
@@ -243,7 +246,7 @@ func deployOwned(item Item) bool {
 	if item.Kind != KindDir && item.Kind != KindFile {
 		return false
 	}
-	if beneath(sshDir, item.Name) {
+	if beneath(sshDir, item.Name) || beneath(proxyRoot, item.Name) {
 		return false
 	}
 	return item.Owner == stateOwner && beneath(stateRoot, item.Name)
@@ -255,7 +258,7 @@ func beneath(root, name string) bool {
 
 func replacing(item Item) bool {
 	switch item.Kind {
-	case KindDir, KindUnit:
+	case KindDir, KindUnit, KindNetwork, KindVolume, KindContainer:
 		return false
 	default:
 		return true
@@ -395,10 +398,18 @@ func sharing(path string) removal {
 }
 
 func (r removal) command() string {
-	if r.shared {
+	switch {
+	case r.kind == KindContainer:
+		return "docker rm --force " + quoted(r.path)
+	case r.kind == KindVolume:
+		return "docker volume rm " + quoted(r.path)
+	case r.kind == KindNetwork:
+		return "docker network rm " + quoted(r.path) + " || true"
+	case r.shared:
 		return "rmdir --ignore-fail-on-non-empty " + quoted(r.path)
+	default:
+		return "rm -rf " + quoted(r.path)
 	}
-	return "rm -rf " + quoted(r.path)
 }
 
 func (b Bootstrapper) removals(ctx context.Context, class providerkit.Class) ([]removal, error) {
@@ -425,6 +436,7 @@ func removing(read, sibling Reading) []removal {
 		"the stamp that says what this host carries, taken last so an interrupted destroy leaves a host that still says what it is")}
 	var above []removal
 	if last {
+		beneath = append(beneath, proxyRemovals()...)
 		beneath = append(beneath,
 			taking(KindDir, sshDir, "the deploy login's own key store, which nothing but ocel ever wrote"),
 			sharing(stateRoot),
@@ -432,6 +444,7 @@ func removing(read, sibling Reading) []removal {
 			taking(KindFile, sudoersSeal, ""),
 			taking(KindFile, recordsHelper, ""),
 			taking(KindFile, SealHelper, ""),
+			taking(KindFile, ProxyHelper, ""),
 			sharing(helperRoot),
 		)
 		above = []removal{sharing(classRoot)}

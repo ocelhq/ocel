@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/fs"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -82,7 +83,7 @@ func StorageItems(class providerkit.Class, keys []byte) []Item {
 }
 
 func Items(class providerkit.Class, keys []byte) []Item {
-	return append(append(ClassItems(class), StorageItems(class, keys)...), EngineItems()...)
+	return slices.Concat(ClassItems(class), StorageItems(class, keys), EngineItems(), ProxyItems())
 }
 
 func dir(name string, mode fs.FileMode, owner string, note string) Item {
@@ -112,6 +113,12 @@ func (i Item) command() string {
 		return engineCommand()
 	case KindUnit:
 		return unitCommand()
+	case KindNetwork:
+		return networkCommand()
+	case KindVolume:
+		return volumeCommand()
+	case KindContainer:
+		return containerCommand()
 	case KindDir:
 		return fmt.Sprintf("install -d -m %04o -o %s -g %s %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
 	default:
@@ -129,6 +136,12 @@ func (i Item) probe() string {
 		return engineProbe()
 	case KindUnit:
 		return unitProbe()
+	case KindNetwork:
+		return networkProbe()
+	case KindVolume:
+		return volumeProbe()
+	case KindContainer:
+		return containerProbe()
 	default:
 		return ""
 	}
