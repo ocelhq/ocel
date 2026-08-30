@@ -446,8 +446,8 @@ func TestARouteOnlyOneSurfaceOwnsIsTakenByThatSurfaceAlone(t *testing.T) {
 	t.Parallel()
 
 	stood := claimingBox(t, twoProjects())
-	if err := stood.host().Unroute(context.Background(), keyed("web")); err != nil {
-		t.Fatalf("Unroute() = %v", err)
+	if err := stood.host().UnroutePointer(context.Background(), surface, pointed); err != nil {
+		t.Fatalf("UnroutePointer() = %v", err)
 	}
 	held, err := ReadProxyState([]byte(stood.held))
 	if err != nil {

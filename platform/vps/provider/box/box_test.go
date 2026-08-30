@@ -67,9 +67,11 @@ func (m *machine) Release(_ context.Context, rel host.Release, _ providerkit.Rep
 	return m.refuse
 }
 
-func (m *machine) Unroute(_ context.Context, key host.RouteKey) error {
-	m.calls = append(m.calls, "unroute "+key.Owner+"/"+key.Pointer+"/"+key.App)
-	delete(m.upstream, key)
+func (m *machine) UnroutePointer(_ context.Context, owner, pointer string) error {
+	m.calls = append(m.calls, "unroute "+owner+"/"+pointer)
+	maps.DeleteFunc(m.upstream, func(key host.RouteKey, _ string) bool {
+		return key.Owner == owner && key.Pointer == pointer
+	})
 	return nil
 }
 
@@ -527,6 +529,43 @@ func TestRemovingAPointerTakesTheRoutesItPointedAt(t *testing.T) {
 	}
 	if len(stood.upstream) != 0 {
 		t.Errorf("the routes left after the pointer was removed are %v; nothing offers those releases any more and the proxy still forwards to their containers", stood.upstream)
+	}
+}
+
+func TestRemovingAPointerTakesTheRouteOfAnAppTheLedgerNoLongerRemembers(t *testing.T) {
+	t.Parallel()
+
+	stood, _, stack := standing(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "worker", "b1", "shop-worker-1111")
+	if err := stack.Promote(context.Background(), edge.Promotion{
+		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1", "worker": "b1"},
+	}, "", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote(p1): %v", err)
+	}
+	staged(t, stack, "web", "b2", "shop-web-2222")
+	if err := promoted(t, stack, "p2", "web", "b2"); err != nil {
+		t.Fatalf("Promote(p2): %v", err)
+	}
+	if _, err := stack.Ledger().Prune(context.Background(), 1, ""); err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+
+	entries, err := stack.Ledger().History(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if _, dropped := entry.Builds["worker"]; dropped {
+			t.Fatalf("the promotion that built worker is still retained (%v), and this test needs one the ledger has forgotten", entries)
+		}
+	}
+
+	if _, err := stack.RemovePointer(context.Background(), ""); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+	if len(stood.upstream) != 0 {
+		t.Errorf("the routes left after the pointer was removed are %v; the ledger remembers only the promotions it retained, so an app dropped from the build set and aged out of that window keeps a route forwarding to a container this box removed. The proxy is what says which routes are live", stood.upstream)
 	}
 }
 
