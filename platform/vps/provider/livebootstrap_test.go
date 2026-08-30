@@ -27,10 +27,16 @@ func (vm machine) sshAs(t *testing.T, login, command string) string {
 }
 
 func (vm machine) attempt(login, command string) (string, error) {
-	rendered, err := exec.Command("ssh",
+	return vm.feeding(login, "", command)
+}
+
+func (vm machine) feeding(login, fed, command string) (string, error) {
+	ran := exec.Command("ssh",
 		"-F", vm.config, "-i", vm.key,
 		"-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
-		login+"@"+vm.addr, command).Output()
+		login+"@"+vm.addr, command)
+	ran.Stdin = strings.NewReader(fed)
+	rendered, err := ran.Output()
 	return string(rendered), err
 }
 

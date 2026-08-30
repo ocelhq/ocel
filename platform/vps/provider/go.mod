@@ -8,7 +8,6 @@ require (
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
-	golang.org/x/crypto v0.55.0
 )
 
 require (
