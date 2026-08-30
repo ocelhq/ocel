@@ -635,3 +635,39 @@ func configuredHosts(named ...string) []*contractv1.ConfiguredHostname {
 	}
 	return wired
 }
+
+func TestTheAppAHostnameWasDeclaredUnderReachesTheEdgeThatBindsIt(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassProduction, "shop")
+
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug: "shop",
+		Configured: []*contractv1.ConfiguredHostname{
+			{Hostname: "api.acme.com", App: "api"},
+			{Hostname: "acme.com"},
+		},
+		Edge: zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, want both hostnames settled", result.GetError())
+	}
+
+	bound := map[string]string{}
+	for _, binding := range provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings() {
+		bound[binding.Hostname] = binding.App
+	}
+	if bound["api.acme.com"] != "api" {
+		t.Errorf("api.acme.com was bound naming app %q, want \"api\": the project declared it under that app, and an edge told nothing cannot point one hostname at one of the apps a project runs", bound["api.acme.com"])
+	}
+	if app, ok := bound["acme.com"]; !ok || app != "" {
+		t.Errorf("acme.com was bound naming app %q, want none: the project declared it project-wide, and what that means is the edge's to decide — API Gateway path-routes it to every app and attributing it to one would be wrong", app)
+	}
+}
