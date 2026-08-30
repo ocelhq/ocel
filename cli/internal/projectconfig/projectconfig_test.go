@@ -714,9 +714,10 @@ export default {
 	}
 
 	rejected := []struct {
-		name    string
-		config  string
-		wantErr []string
+		name     string
+		config   string
+		wantErr  []string
+		unspoken []string
 	}{
 		{
 			name: "rejects an unparseable config",
@@ -932,6 +933,17 @@ export default {
 			wantErr: []string{`invalid "registry"`, "server", "ghcr.io"},
 		},
 		{
+			name: "rejects a registry server carrying credentials, without repeating them",
+			config: `
+export default {
+  slug: "test-app",
+  registry: { server: "bot:ghp_16C7e42F292c6912E7710c838347Ae178B4a@ghcr.io/acme", password: "GHCR_TOKEN" },
+};
+`,
+			wantErr:  []string{`invalid "registry"`, "server"},
+			unspoken: []string{"ghp_16C7e42F292c6912E7710c838347Ae178B4a"},
+		},
+		{
 			name: "rejects a registry password given as a secret rather than a variable name",
 			config: `
 export default {
@@ -939,7 +951,8 @@ export default {
   registry: { server: "ghcr.io", password: "ghp_livesecret/value" },
 };
 `,
-			wantErr: []string{`invalid "registry"`, "password", "environment variable"},
+			wantErr:  []string{`invalid "registry"`, "password", "environment variable"},
+			unspoken: []string{"ghp_livesecret/value"},
 		},
 		{
 			name: "rejects a registry with no password, so nothing falls back to an anonymous push",
@@ -978,6 +991,11 @@ export default {
 			for _, want := range tc.wantErr {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("err = %v, want it to mention %q", err, want)
+				}
+			}
+			for _, secret := range tc.unspoken {
+				if strings.Contains(err.Error(), secret) {
+					t.Errorf("err = %v, and it reprinted %q — the refusal reaches stderr and CI logs", err, secret)
 				}
 			}
 		})
