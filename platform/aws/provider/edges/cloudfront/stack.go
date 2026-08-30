@@ -168,7 +168,7 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 	return findDistribution(ctx, c, name)
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
 	c, err := s.p.clientsFor(ctx)
 	if err != nil {
 		return err
@@ -187,7 +187,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 			return err
 		}
 	}
-	if err := s.ledger(c).Promote(ctx, promotion, pointer); err != nil {
+	if err := s.ledger(c).Promote(ctx, promotion, pointer, report); err != nil {
 		return errors.Join(err, s.unpublishUnrecorded(ctx, c, pointer))
 	}
 	return nil

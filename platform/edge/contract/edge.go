@@ -99,7 +99,7 @@ type EdgeStack interface {
 
 	Ledger() Ledger
 
-	Promote(ctx context.Context, promotion Promotion, pointer string) error
+	Promote(ctx context.Context, promotion Promotion, pointer string, report Reporter) error
 
 	RemovePointer(ctx context.Context, pointer string) (PruneResult, error)
 

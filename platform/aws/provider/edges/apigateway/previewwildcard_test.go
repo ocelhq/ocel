@@ -80,7 +80,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	promotion := edge.Promotion{PromotionID: "p-" + pointer, Ts: 1, Builds: map[string]string{"web": record.Identity}}
-	if err := stack.Promote(ctx, promotion, pointer); err != nil {
+	if err := stack.Promote(ctx, promotion, pointer, edge.DiscardReporter()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }

@@ -117,7 +117,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Tag:         target.Tag,
 		Flip:        &flip,
 	}
-	if err := session.stack.Promote(ctx, promoted, ""); err != nil {
+	if err := session.stack.Promote(ctx, promoted, "", edge.DiscardReporter()); err != nil {
 		return nil, RefusalError(err)
 	}
 	if err := session.checkpoint(ctx); err != nil {

@@ -222,7 +222,7 @@ func (s *recordingStack) PutStaged(_ context.Context, record edge.DeploymentReco
 	return nil
 }
 
-func (s *recordingStack) Promote(_ context.Context, promotion edge.Promotion, pointer string) error {
+func (s *recordingStack) Promote(_ context.Context, promotion edge.Promotion, pointer string, _ edge.Reporter) error {
 	if err := s.checkAuth(); err != nil {
 		return err
 	}
@@ -440,7 +440,7 @@ func TestRecordingEdge(t *testing.T) {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1, Builds: map[string]string{"web": "b1"}}
-		if err := stack.Promote(ctx, promotion, ""); err != nil {
+		if err := stack.Promote(ctx, promotion, "", edge.DiscardReporter()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		history, err := stack.Ledger().History(ctx, "")

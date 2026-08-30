@@ -19,7 +19,7 @@ func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing
 	stack := reconciled(t, w)
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+	if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	live := routeOn(t, w, stack, boundHost)
@@ -28,7 +28,7 @@ func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing
 	preview := promotion()
 	preview.PromotionID = "p2"
 	preview.Builds = map[string]string{"web": "d2.f2"}
-	if err := stack.Promote(context.Background(), preview, "pr-7"); err != nil {
+	if err := stack.Promote(context.Background(), preview, "pr-7", edge.DiscardReporter()); err != nil {
 		t.Fatalf("Promote onto a preview pointer: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestRemovePointerLeavesTheHostnameServing(t *testing.T) {
 			stack := reconciled(t, w)
 			bound(t, stack)
 			staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-			if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+			if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
 				t.Fatalf("Promote: %v", err)
 			}
 
@@ -83,7 +83,7 @@ func TestDomainOwnerAsksTheRouteStoreBeforeListingTheAccount(t *testing.T) {
 	}
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+	if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	listed := w.front.count("ListDistributions")

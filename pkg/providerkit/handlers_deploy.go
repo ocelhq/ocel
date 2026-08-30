@@ -952,7 +952,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 	if err := r.tracked.unit(r.stages.Promotion, func(u *unitRun) error {
 		return u.phase(progressv1.Phase_PHASE_FINALIZING, func(report Reporter) error {
 			report.Say("Promoting the deployment")
-			if err := r.stack.Promote(ctx, promotion, r.plan.Pointer); err != nil {
+			if err := r.stack.Promote(ctx, promotion, r.plan.Pointer, report); err != nil {
 				return err
 			}
 			if err := r.checkpoint(ctx); err != nil {

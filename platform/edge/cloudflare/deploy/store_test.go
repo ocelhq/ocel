@@ -226,7 +226,7 @@ func TestPromotionHistory(t *testing.T) {
 		state := testState(srv.URL, "s3cr3t")
 		promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
 
-		if err := stackOn(p, state).Promote(t.Context(), promotion, ""); err != nil {
+		if err := stackOn(p, state).Promote(t.Context(), promotion, "", edge.DiscardReporter()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		history, err := stackOn(p, state).History(t.Context(), "")
@@ -249,7 +249,7 @@ func TestPromotionHistory(t *testing.T) {
 		state := testState(srv.URL, "s3cr3t")
 
 		for _, id := range []string{"p1", "p2", "p3"} {
-			if err := stackOn(p, state).Promote(t.Context(), edge.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": id}}, ""); err != nil {
+			if err := stackOn(p, state).Promote(t.Context(), edge.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": id}}, "", edge.DiscardReporter()); err != nil {
 				t.Fatalf("Promote(%s): %v", id, err)
 			}
 		}
@@ -300,7 +300,7 @@ func TestStorePointer(t *testing.T) {
 		state := testState(srv.URL, "s3cr3t")
 		ctx := t.Context()
 
-		if err := stackOn(p, state).Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "pr-42"); err != nil {
+		if err := stackOn(p, state).Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "pr-42", edge.DiscardReporter()); err != nil {
 			t.Fatalf("Promote(preview): %v", err)
 		}
 		if _, err := stackOn(p, state).History(ctx, "pr-42"); err != nil {
@@ -309,7 +309,7 @@ func TestStorePointer(t *testing.T) {
 		if _, err := stackOn(p, state).Prune(ctx, 3, "pr-42"); err != nil {
 			t.Fatalf("Prune(preview): %v", err)
 		}
-		if err := stackOn(p, state).Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, ""); err != nil {
+		if err := stackOn(p, state).Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, "", edge.DiscardReporter()); err != nil {
 			t.Fatalf("Promote(prod): %v", err)
 		}
 		if _, err := stackOn(p, state).History(ctx, ""); err != nil {
@@ -491,7 +491,7 @@ func TestDestroyInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &provider{}
 		state := testState(srv.URL, "s3cr3t")
-		if err := stackOn(p, state).Promote(t.Context(), edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, ""); err != nil {
+		if err := stackOn(p, state).Promote(t.Context(), edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "", edge.DiscardReporter()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if err := p.destroyInstance(t.Context(), state); err != nil {

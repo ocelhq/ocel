@@ -136,7 +136,7 @@ func TestPromoteRefusesAPointerAnotherDeployMoved(t *testing.T) {
 	l, records := fixture()
 	ctx := context.Background()
 
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, ""); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "", edge.DiscardReporter()); err != nil {
 		t.Fatal(err)
 	}
 	pointer := l.pointerName(edge.DefaultPointer).String()
@@ -150,7 +150,7 @@ func TestPromoteRefusesAPointerAnotherDeployMoved(t *testing.T) {
 		records.held[pointer] = held
 	}
 
-	err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "")
+	err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardReporter())
 	var refusal ports.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != ports.CodeBusy {
 		t.Fatalf("promote onto a moved pointer = %v, want a busy refusal", err)
@@ -171,7 +171,7 @@ func TestHistoryOrdersNewestFirstAndMarksActive(t *testing.T) {
 	ctx := context.Background()
 
 	for _, id := range []string{"p1", "p2", "p3"} {
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, ""); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "", edge.DiscardReporter()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -199,7 +199,7 @@ func TestPruneKeepsNAndTheActivePromotion(t *testing.T) {
 		if err := l.PutStaged(ctx, edge.DeploymentRecord{App: "web", Identity: id}); err != nil {
 			t.Fatal(err)
 		}
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: id, Builds: map[string]string{"web": id}}, ""); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id, Builds: map[string]string{"web": id}}, "", edge.DiscardReporter()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -229,11 +229,11 @@ func TestPruneKeepsAnActivePromotionThatFellOutOfTheWindow(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "old"}, ""); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "old"}, "", edge.DiscardReporter()); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"p2", "p3", "p4"} {
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "staging"); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "staging", edge.DiscardReporter()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -254,7 +254,7 @@ func TestPruneKeepsARecordAnUnprunedPromotionStillNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"p1", "p2"} {
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: id, Builds: map[string]string{"web": "b1"}}, ""); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id, Builds: map[string]string{"web": "b1"}}, "", edge.DiscardReporter()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -277,10 +277,10 @@ func TestATagIsFreedWithThePromotionItNamed(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1", Tag: "live"}, ""); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1", Tag: "live"}, "", edge.DiscardReporter()); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, ""); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardReporter()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := l.Prune(ctx, 1, ""); err != nil {
@@ -312,7 +312,7 @@ func TestPointersAndDestroy(t *testing.T) {
 	ctx := context.Background()
 
 	for _, pointer := range []string{"", "staging"} {
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: "p-" + pointer}, pointer); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: "p-" + pointer}, pointer, edge.DiscardReporter()); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -21,7 +21,7 @@ const (
 type Ledger interface {
 	edge.Ledger
 
-	Promote(ctx context.Context, promotion edge.Promotion, pointer string) error
+	Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error
 
 	RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error)
 
@@ -327,8 +327,8 @@ func (s *Stack) State() edge.StackState {
 
 func (s *Stack) Ledger() edge.Ledger { return s.ledger }
 
-func (s *Stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string) error {
-	return s.ledger.Promote(ctx, promotion, pointer)
+func (s *Stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
+	return s.ledger.Promote(ctx, promotion, pointer, report)
 }
 
 func (s *Stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error) {
