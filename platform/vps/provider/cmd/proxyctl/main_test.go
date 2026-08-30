@@ -114,7 +114,7 @@ func TestTheGateCallsATargetUpOnlyOnATwoHundred(t *testing.T) {
 	} else if strings.TrimSpace(out) != "204" {
 		t.Errorf("the gate printed %q, want the status it read", out)
 	}
-	if code, out, _ := ran(t, "gate", target, "/down", "5"); code != exitUnhealthy {
+	if code, out, _ := ran(t, "gate", target, "/down", "1"); code != exitUnhealthy {
 		t.Errorf("gating a target answering 502 = %d, want %d: forcing past the gate is rejected", code, exitUnhealthy)
 	} else if strings.TrimSpace(out) != "502" {
 		t.Errorf("the gate printed %q, and answered-with-N is a different bug from never-answered", out)
@@ -200,5 +200,59 @@ func TestTheHelperReadsTheServedConfigOverTheSameSocketAndNoOtherPath(t *testing
 		t.Error("the helper answered with no socket to speak over, so what it read came from somewhere else")
 	} else if !strings.Contains(errs, "gone.sock") {
 		t.Errorf("the helper failed with %q, want it to name the socket it could not reach", errs)
+	}
+}
+
+func refusing(t *testing.T, refusals int) string {
+	t.Helper()
+	var mu sync.Mutex
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		left := refusals
+		refusals--
+		mu.Unlock()
+		if left > 0 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(backend.Close)
+	return strings.TrimPrefix(backend.URL, "http://")
+}
+
+func TestTheGateKeepsAskingUntilTheWindowCloses(t *testing.T) {
+	target := refusing(t, 3)
+
+	code, out, errs := ran(t, "gate", target, "/up", "10")
+	if code != 0 {
+		t.Fatalf("gating a target that warms up over its first answers = %d, %q %q: a container still binding its port refuses in milliseconds and the window is what it is given",
+			code, out, errs)
+	}
+	if strings.TrimSpace(out) != "200" {
+		t.Errorf("the gate printed %q, want the status it finally read", out)
+	}
+}
+
+func TestAGateThatExpiresSaysWhetherTheTargetAnsweredAtAllAndDoesNotConflateTheTwo(t *testing.T) {
+	answering := refusing(t, 1<<30)
+
+	code, out, said := ran(t, "gate", answering, "/up", "1")
+	if code != exitUnhealthy {
+		t.Fatalf("gating a target that answers 503 throughout = %d, want %d: %q", code, exitUnhealthy, said)
+	}
+	if strings.TrimSpace(out) != "503" {
+		t.Errorf("the gate printed %q, want the last status it read", out)
+	}
+
+	silentCode, _, silent := ran(t, "gate", "127.0.0.1:1", "/up", "1")
+	if silentCode != exitSilent {
+		t.Fatalf("gating a target that answers nothing = %d, want %d", silentCode, exitSilent)
+	}
+	if said == silent {
+		t.Errorf("a target that answered %s and one that answered nothing both said %q, and they are different bugs with different fixes", "503", said)
+	}
+	if !strings.Contains(said, "503") {
+		t.Errorf("the expired gate said %q and never named the status it kept reading", said)
 	}
 }
