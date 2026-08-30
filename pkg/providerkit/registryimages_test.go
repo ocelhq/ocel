@@ -118,3 +118,23 @@ func TestARegistryThatAnswersNeitherWayStopsTheDeployRatherThanPushing(t *testin
 		t.Fatal("Has() read a broken registry as an empty one, and a plan would show a push it cannot verify")
 	}
 }
+
+func TestAThrottledRegistryIsWaitedOutRatherThanTreatedAsEmpty(t *testing.T) {
+	asked := 0
+	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
+		asked++
+		if asked == 1 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+	})
+
+	held, err := store.Has(context.Background(), push)
+	if err != nil {
+		t.Fatalf("Has() = %v", err)
+	}
+	if !held || asked != 2 {
+		t.Errorf("Has() asked %d times and answered %v; a throttle is an expected answer, not a missing image", asked, held)
+	}
+}
