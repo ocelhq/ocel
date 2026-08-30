@@ -31,7 +31,7 @@ func probing(t *testing.T, state ProxyState) func(hostname string) answered {
 		t.Fatal(err)
 	}
 
-	name := "ocel-probe-" + strings.ToLower(strings.NewReplacer("/", "-", " ", "-").Replace(t.Name()))
+	name := probeName(t)
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
 		"--publish", "127.0.0.1::80",
@@ -84,6 +84,10 @@ func probing(t *testing.T, state ProxyState) func(hostname string) answered {
 		t.Fatalf("the probe proxy never answered on %s:\n%s", at, logsOf(name))
 	}
 	return ask
+}
+
+func probeName(t *testing.T) string {
+	return "ocel-probe-" + strings.ToLower(strings.NewReplacer("/", "-", " ", "-").Replace(t.Name()))
 }
 
 func logsOf(name string) string {

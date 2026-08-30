@@ -25,6 +25,8 @@ type box struct {
 	unsocket bool
 	serves   map[string]string
 	images   map[string]string
+	reads    map[string]string
+	leaf     string
 	refuses  func(command string) (session.Result, bool)
 }
 
@@ -48,6 +50,9 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 	}
 	if b.unsocket && strings.Contains(command, "docker version") {
 		return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, nil
+	}
+	if read, named := b.catting(command); named {
+		return read, nil
 	}
 	var said string
 	for _, line := range strings.Split(command, "\n") {
@@ -74,6 +79,36 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 		}
 	}
 	return session.Result{Stdout: said}, nil
+}
+
+func (b *box) catting(command string) (session.Result, bool) {
+	if named, catted := strings.CutPrefix(command, "cat "); catted {
+		var said string
+		for _, path := range strings.Fields(named) {
+			read, held := b.reads[unquoted(path)]
+			if !held {
+				return session.Result{Code: 1, Stderr: "cat: " + unquoted(path) + ": No such file or directory"}, true
+			}
+			said += read
+		}
+		return session.Result{Stdout: said}, true
+	}
+	if !strings.Contains(command, "'leaf'") {
+		return session.Result{}, false
+	}
+	if b.leaf == "" {
+		return session.Result{Code: 3, Stderr: "ocel-proxyctl: the proxy served no certificate"}, true
+	}
+	return session.Result{Stdout: b.leaf}, true
+}
+
+func (b *box) at(fragment string) int {
+	for at, command := range b.commands() {
+		if strings.Contains(command, fragment) {
+			return at
+		}
+	}
+	return -1
 }
 
 func (b *box) name(ref, image string) {

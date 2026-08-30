@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestRequirePreviewClass(t *testing.T) {
@@ -743,4 +744,71 @@ export default {
 			t.Errorf("err = %v, want it to point at --yes", err)
 		}
 	})
+}
+
+func TestDomainStatusNamesWhoRenewsACertificateOcelDoesNotOwn(t *testing.T) {
+	t.Parallel()
+
+	for what, host := range map[string]*contractv1.ProductionHostname{
+		"one the box's proxy obtained": {
+			Hostname: "shop.app.com",
+			Declared: true,
+			Ready:    true,
+			Certificate: &contractv1.CertificateState{
+				CertificateId:     "proxy:shop.app.com",
+				CertificateStatus: "SERVING",
+			},
+			RenewalStatus: "the proxy on this box obtained it over http-01 and renews it; ocel issues and renews nothing here",
+		},
+		"one the operator pinned": {
+			Hostname: "pr-7.preview.app.com",
+			Declared: true,
+			Ready:    true,
+			Certificate: &contractv1.CertificateState{
+				CertificateId:     "pem:/etc/ocel/preview/certs/wildcard",
+				CertificateStatus: "PINNED",
+			},
+			RenewalStatus: "you placed it on this box and you renew it; ocel issues and renews nothing here",
+			ExpiresAt:     1757000000,
+			ExpiringSoon:  true,
+		},
+	} {
+		var out bytes.Buffer
+		renderDomainStatus(&out, &contractv1.GetHostnameStatusResponse{
+			Hostnames: []*contractv1.ProductionHostname{host},
+		}, "ocel.config.ts")
+		rendered := out.String()
+
+		if !strings.Contains(rendered, "Certificate") || !strings.Contains(rendered, host.GetCertificate().GetCertificateId()) {
+			t.Errorf("status for %s prints no certificate line:\n%s", what, rendered)
+		}
+		if !strings.Contains(rendered, "Renewal") || !strings.Contains(rendered, host.GetRenewalStatus()) {
+			t.Errorf("status for %s prints no renewal line naming who renews it, which reads as no tls rather than tls you do not manage:\n%s", what, rendered)
+		}
+		if strings.Contains(rendered, "ocel renews") || strings.Contains(rendered, "ocel will renew") {
+			t.Errorf("status for %s claims ocel renews something:\n%s", what, rendered)
+		}
+	}
+}
+
+func TestDomainStatusSaysNothingAboutExpiryForACertificateSomethingElseRenews(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	renderDomainStatus(&out, &contractv1.GetHostnameStatusResponse{
+		Hostnames: []*contractv1.ProductionHostname{{
+			Hostname:      "shop.app.com",
+			Declared:      true,
+			Ready:         true,
+			Certificate:   &contractv1.CertificateState{CertificateId: "proxy:shop.app.com", CertificateStatus: "SERVING"},
+			RenewalStatus: "the proxy on this box obtained it over http-01 and renews it; ocel issues and renews nothing here",
+		}},
+	}, "ocel.config.ts")
+
+	if !strings.Contains(out.String(), "no expiry reported") {
+		t.Errorf("status reports an expiry for a certificate the proxy renews, and the number is decorative wherever renewal is healthy:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "EXPIRING SOON") {
+		t.Errorf("status warns about a certificate something else renews:\n%s", out.String())
+	}
 }
