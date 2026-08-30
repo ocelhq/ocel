@@ -20,12 +20,13 @@ func engineOrSkip(t *testing.T) {
 	if err := exec.Command(dockerEngine, "info").Run(); err != nil {
 		t.Skip("the docker on this machine answers nothing, so there is no engine to measure against")
 	}
-	for _, held := range [][]string{
-		{"container", "inspect", ProxyContainer},
-		{"network", "inspect", ProxyNetwork},
+	for _, held := range []struct{ kind, name, take string }{
+		{"container", ProxyContainer, "docker rm --force " + ProxyContainer},
+		{"network", ProxyNetwork, "docker network rm " + ProxyNetwork},
 	} {
-		if exec.Command(dockerEngine, append([]string{held[0]}, held[1:]...)...).Run() == nil {
-			t.Skipf("this machine already carries the %s ocel writes, and the test will not take something it did not create", held[0])
+		if exec.Command(dockerEngine, held.kind, "inspect", held.name).Run() == nil {
+			t.Fatalf("this machine already carries the %s %q ocel writes, and the test will not take something it did not create. Skipping here is how the redirect ordering, the subject collection and the pinned pair evaporate into a green run under stale local state. Take it with `%s` and re-run",
+				held.kind, held.name, held.take)
 		}
 	}
 }
@@ -57,6 +58,7 @@ func seenByTheEngine(t *testing.T) string {
 
 type standingProxy struct {
 	dir    string
+	pins   string
 	helper string
 	here   func(string) string
 }
@@ -78,11 +80,14 @@ func proxyStanding(t *testing.T) standingProxy {
 	if err := os.WriteFile(helper, proxyHelper(arch), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o700); err != nil {
-		t.Fatal(err)
+	pins := filepath.Join(dir, "pins")
+	for _, made := range []string{filepath.Join(dir, "data"), pins} {
+		if err := os.MkdirAll(made, 0o700); err != nil {
+			t.Fatal(err)
+		}
 	}
-	stood := standingProxy{dir: dir, helper: helper, here: func(written string) string {
-		return strings.ReplaceAll(strings.ReplaceAll(written, proxyRoot, dir), ProxyHelper, helper)
+	stood := standingProxy{dir: dir, pins: pins, helper: helper, here: func(written string) string {
+		return strings.NewReplacer(ProxyPins, pins, proxyRoot, dir, ProxyHelper, helper).Replace(written)
 	}}
 
 	if out, err := exec.Command(dockerEngine, "network", "create", ProxyNetwork).CombinedOutput(); err != nil {
@@ -114,6 +119,7 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 	stated.Content = proxyFactsOver([]string{
 		dir + ":" + proxyConfigDir + ":ro",
 		helper + ":" + ProxyHelperMount + ":ro",
+		stood.pins + ":" + proxyPinsMount + ":ro",
 		filepath.Join(dir, "data") + ":" + proxyDataMount,
 	})
 	if observed[stated.ID()] != stated.Digest() {

@@ -2,9 +2,50 @@ package host
 
 import (
 	"context"
+	"slices"
+	"time"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 )
 
 const proxyServesNoCertificate = 3
+
+func (h *Host) VerifiedPins(ctx context.Context) ([]Pin, error) {
+	h.pinning.Lock()
+	defer h.pinning.Unlock()
+	if h.vouched {
+		return slices.Clone(h.pins), h.unusable
+	}
+	for _, pin := range h.pins {
+		if err := h.vouch(ctx, pin); err != nil {
+			return nil, err
+		}
+	}
+	h.vouched = true
+	return slices.Clone(h.pins), nil
+}
+
+func (h *Host) vouch(ctx context.Context, pin Pin) error {
+	refused := func(err error) error {
+		h.vouched, h.unusable = true, err
+		return err
+	}
+	if err := validPin(pin); err != nil {
+		return refused(err)
+	}
+	block, err := h.PinnedCertificate(ctx, pin.Path)
+	if err != nil {
+		return err
+	}
+	leaf, err := certs.Parse(PinCertificate(pin.Path), block)
+	if err != nil {
+		return refused(err)
+	}
+	if err := certs.Verify(pin.Path, pin.Hostname, leaf, time.Now()); err != nil {
+		return refused(err)
+	}
+	return nil
+}
 
 func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, error) {
 	read, err := h.run(ctx, "read the certificate pinned at "+PinCertificate(path),

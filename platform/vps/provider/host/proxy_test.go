@@ -930,7 +930,7 @@ func TestTheProxysFactsReadTheSameWhateverOrderTheEngineReportsItsMountsIn(t *te
 		t.Fatalf("the proxy carries %d mounts, and nothing about ordering can be proven over fewer than two", len(binds))
 	}
 	stated := proxyFacts()
-	for _, order := range [][]int{{2, 0, 1}, {1, 2, 0}, {2, 1, 0}, {0, 2, 1}, {1, 0, 2}} {
+	for _, order := range orderings(len(binds)) {
 		shuffled := make([]string, 0, len(binds))
 		for _, at := range order {
 			shuffled = append(shuffled, binds[at])
@@ -947,6 +947,26 @@ func TestTheProxysFactsReadTheSameWhateverOrderTheEngineReportsItsMountsIn(t *te
 				missing, binds)
 		}
 	}
+}
+
+func orderings(count int) [][]int {
+	var found [][]int
+	var walk func(taken, rest []int)
+	walk = func(taken, rest []int) {
+		if len(rest) == 0 {
+			found = append(found, slices.Clone(taken))
+			return
+		}
+		for at := range rest {
+			walk(append(taken, rest[at]), slices.Concat(rest[:at], rest[at+1:]))
+		}
+	}
+	all := make([]int, count)
+	for at := range all {
+		all[at] = at
+	}
+	walk(nil, all)
+	return found
 }
 
 func TestEveryFactTheProbeReadsIsOneTheItemStates(t *testing.T) {

@@ -103,7 +103,9 @@ func (h *Host) reshape(ctx context.Context, change func(ProxyState) (ProxyState,
 	if err != nil {
 		return err
 	}
-	changed.Pins = h.Pins()
+	if changed.Pins, err = h.VerifiedPins(ctx); err != nil {
+		return err
+	}
 	next, err := RenderProxyConfig(changed)
 	if err != nil {
 		return err
