@@ -362,6 +362,97 @@ func TestABoundHostnameIsClaimedOnTheProxyAndPointedAtTheBoxItself(t *testing.T)
 	}
 }
 
+func TestAHostnameOneProjectUnbindsIsOneAnotherCanBind(t *testing.T) {
+	t.Parallel()
+
+	const hostname = "moving.example.com"
+	ctx := context.Background()
+	stood := aMachine()
+	first := standingOn(t, stood, "shop")
+	if err := first.BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+	if err := first.UnbindDomain(ctx, hostname); err != nil {
+		t.Fatalf("UnbindDomain: %v", err)
+	}
+
+	if err := standingOn(t, stood, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Errorf("binding %q after the project holding it released it = %v; a name one project gives up comes back into circulation, or moving a domain between projects is a change only someone with a shell on the box can make", hostname, err)
+	}
+}
+
+func TestAHostnameATornDownProjectHeldIsOneAnotherCanBind(t *testing.T) {
+	t.Parallel()
+
+	const hostname = "moving.example.com"
+	ctx := context.Background()
+	stood := aMachine()
+	first := standingOn(t, stood, "shop")
+	if err := first.BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+	if err := first.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+
+	if err := standingOn(t, stood, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Errorf("binding %q after the project holding it was torn down = %v; a destroyed surface answers for nothing, so a claim outliving it locks the name up for good", hostname, err)
+	}
+}
+
+func TestATeardownTakesTheClaimsTheBoxHoldsRatherThanTheOnesItsStateRemembers(t *testing.T) {
+	t.Parallel()
+
+	const hostname = "moving.example.com"
+	ctx := context.Background()
+	stood := aMachine()
+	front := box.New(stood, fake.NewRecords(), sshScope)
+	first := standingOn(t, stood, "shop")
+	if err := first.BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+
+	forgotten := first.State()
+	forgotten.Bound, forgotten.Fronts, forgotten.Front = nil, nil, ""
+	reopened, err := front.Open(forgotten)
+	if err != nil {
+		t.Fatalf("Open a state carrying no binding: %v", err)
+	}
+	if err := reopened.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+
+	if err := standingOn(t, stood, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Errorf("binding %q after the project holding it was torn down through a state that had lost the binding = %v; the claim is written on the box before the state naming it is persisted anywhere, so a teardown that releases only what its own state remembers strands every claim that outran it", hostname, err)
+	}
+}
+
+func TestAHostnameAnotherProjectStillHoldsIsRefusedNamingWhoHoldsIt(t *testing.T) {
+	t.Parallel()
+
+	const hostname = "contested.example.com"
+	ctx := context.Background()
+	stood := aMachine()
+	if err := standingOn(t, stood, "shop").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+
+	err := standingOn(t, stood, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname})
+	if err == nil {
+		t.Fatalf("binding %q over the project still holding it succeeded, and that project's site goes dark with nothing telling it why", hostname)
+	}
+	if !strings.Contains(err.Error(), box.Surface("shop", edge.ClassProduction)) {
+		t.Errorf("the refusal reads %q and never names the surface holding %q, so nobody knows where to unbind it", err, hostname)
+	}
+	owner, err := box.New(stood, fake.NewRecords(), sshScope).DomainOwner(ctx, hostname)
+	if err != nil {
+		t.Fatalf("DomainOwner: %v", err)
+	}
+	if want := box.Surface("shop", edge.ClassProduction); owner != want {
+		t.Errorf("DomainOwner(%q) = %q, want %q: a refused bind leaves the claim where it stood", hostname, owner, want)
+	}
+}
+
 func TestAPreviewWildcardIsRefusedByNameRatherThanServedWrong(t *testing.T) {
 	t.Parallel()
 
