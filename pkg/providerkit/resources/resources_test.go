@@ -416,7 +416,11 @@ func TestTheFanOutTakesDownTheFunctionItsPlanShowsGoing(t *testing.T) {
 	plan := providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackApp,
-		App:  &providerkit.AppPlan{App: "web", Functions: []providerkit.FunctionSpec{{Name: "api"}}},
+		App: &providerkit.AppPlan{
+			App:       "web",
+			Compute:   providerkit.ComputeServerless,
+			Functions: []providerkit.FunctionSpec{{Name: "api"}},
+		},
 	}
 
 	shown, err := releaser.Plan(ctx, plan, nil)
@@ -460,5 +464,256 @@ func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing
 	}
 	if len(own.removed) != 1 || own.removed[0].Name != "api" {
 		t.Fatalf("the fan-out took down %v, want the function its plan showed going", own.removed)
+	}
+}
+
+type withContainers struct {
+	*buckets
+	stood   []providerkit.StackPlan
+	removed []providerkit.AppContainer
+}
+
+func (w *withContainers) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.AppContainer, error) {
+	w.stood = append(w.stood, plan)
+	return []providerkit.AppContainer{container(plan.Ref, plan.App.App)}, nil
+}
+
+func (w *withContainers) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ providerkit.Reporter) error {
+	w.removed = append(w.removed, containers...)
+	return nil
+}
+
+func container(ref providerkit.StackRef, name string) providerkit.AppContainer {
+	return providerkit.AppContainer{Name: name, Physical: ref.Name.String() + "-" + name}
+}
+
+const testImage = "ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+func containerApp(app string) *providerkit.AppPlan {
+	return &providerkit.AppPlan{
+		App:             app,
+		Compute:         providerkit.ComputeContainer,
+		Image:           testImage,
+		HealthCheckPath: "/healthz",
+	}
+}
+
+func recordContainers(t *testing.T, records providerkit.RecordStore, ref providerkit.StackRef, names ...string) {
+	t.Helper()
+
+	stack := providerkit.Stack{Kind: providerkit.StackApp}
+	for _, name := range names {
+		stack.Containers = append(stack.Containers, container(ref, name))
+	}
+	if err := providerkit.WriteStack(context.Background(), records, ref.Class, ref.Project, ref.Name, stack); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAContainerAppReachesTheContainerPrimitiveCarryingItsImageAndProbe(t *testing.T) {
+	t.Parallel()
+
+	ref := appRef()
+	own := &withContainers{buckets: &buckets{}}
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+
+	result, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+		Ref:  ref,
+		Kind: providerkit.StackApp,
+		App:  containerApp("web"),
+	}, nil)
+	if err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(own.stood) != 1 {
+		t.Fatalf("the container primitive was called %d times, want the one app the plan carries", len(own.stood))
+	}
+	app := own.stood[0].App
+	if app.Compute != providerkit.ComputeContainer || app.Image != testImage || app.HealthCheckPath != "/healthz" {
+		t.Errorf("the primitive read compute %q, image %q and probe %q, want the flat fields the plan carries", app.Compute, app.Image, app.HealthCheckPath)
+	}
+	if len(result.Containers) != 1 || result.Containers[0].Name != "web" {
+		t.Fatalf("Provision() returned %v, want the container the primitive stood up", result.Containers)
+	}
+	if len(result.Functions) != 0 {
+		t.Errorf("Provision() returned %v, want a container app to stand up no function", result.Functions)
+	}
+}
+
+func TestAServerlessAppStillReachesFunctions(t *testing.T) {
+	t.Parallel()
+
+	own := &withFunctions{buckets: &buckets{}}
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+
+	result, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+		Ref:  appRef(),
+		Kind: providerkit.StackApp,
+		App: &providerkit.AppPlan{
+			App:       "web",
+			Compute:   providerkit.ComputeServerless,
+			Functions: []providerkit.FunctionSpec{{Name: "api"}},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(result.Functions) != 1 || result.Functions[0].Name != "api" {
+		t.Fatalf("Provision() returned %v, want the function the serverless app declares", result.Functions)
+	}
+	if len(result.Containers) != 0 {
+		t.Errorf("Provision() returned %v, want a serverless app to stand up no container", result.Containers)
+	}
+}
+
+func TestAProviderStandingUpNoContainersRefusesAContainerAppByName(t *testing.T) {
+	t.Parallel()
+
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), &withFunctions{buckets: &buckets{}})
+
+	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+		Ref:  appRef(),
+		Kind: providerkit.StackApp,
+		App:  containerApp("web"),
+	}, nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want an invalid refusal", err)
+	}
+	if !strings.Contains(refusal.Message, resources.AppContainersPrimitive) {
+		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, resources.AppContainersPrimitive)
+	}
+}
+
+func TestAProviderStandingUpNoFunctionsRefusesAServerlessAppByName(t *testing.T) {
+	t.Parallel()
+
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), &withContainers{buckets: &buckets{}})
+
+	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+		Ref:  appRef(),
+		Kind: providerkit.StackApp,
+		App:  &providerkit.AppPlan{App: "web", Compute: providerkit.ComputeServerless},
+	}, nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Provision() of a serverless app on a provider that stands up none = %v, want an invalid refusal", err)
+	}
+	if !strings.Contains(refusal.Message, resources.FunctionsPrimitive) {
+		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, resources.FunctionsPrimitive)
+	}
+}
+
+func TestAnAppNamingNoComputeIsRefusedRatherThanAssumedServerless(t *testing.T) {
+	t.Parallel()
+
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), &withFunctions{buckets: &buckets{}})
+
+	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+		Ref:  appRef(),
+		Kind: providerkit.StackApp,
+		App:  &providerkit.AppPlan{App: "web"},
+	}, nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Provision() of an app naming no compute = %v, want an invalid refusal", err)
+	}
+}
+
+func TestTheFanOutTakesDownTheContainerItsPlanShowsGoing(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := appRef()
+	recordContainers(t, records, ref, "web", "legacy")
+
+	own := &withContainers{buckets: &buckets{}}
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackApp, App: containerApp("web")}
+
+	shown, err := releaser.Plan(ctx, plan, nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	rows := rowsOf(shown)
+	if rows["legacy"] != providerkit.ActionDelete {
+		t.Fatalf("legacy reads %q, want the container this release stopped declaring shown as going", rows["legacy"])
+	}
+	if rows["web"] != providerkit.ActionKeep {
+		t.Errorf("web reads %q, want the container this release still declares kept", rows["web"])
+	}
+
+	if _, err := releaser.Provision(ctx, plan, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if len(own.removed) != 1 || own.removed[0].Name != "legacy" {
+		t.Fatalf("the fan-out took down %v, want the legacy container its plan showed going", own.removed)
+	}
+}
+
+func TestAProviderStandingUpNoContainersRefusesToOrphanTheOnesItRecorded(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := appRef()
+	recordContainers(t, records, ref, "legacy")
+
+	releaser := resources.Releaser(records, fake.NewArtifacts(), &withFunctions{buckets: &buckets{}})
+
+	_, err := releaser.Provision(ctx, providerkit.StackPlan{
+		Ref:  ref,
+		Kind: providerkit.StackApp,
+		App: &providerkit.AppPlan{
+			App:       "web",
+			Compute:   providerkit.ComputeServerless,
+			Functions: []providerkit.FunctionSpec{{Name: "api"}},
+		},
+	}, nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, resources.AppContainersPrimitive) {
+		t.Fatalf("Provision() over a recorded container nothing can take down = %v, want a refusal naming %s", err, resources.AppContainersPrimitive)
+	}
+}
+
+func TestDestroyTakesDownEveryContainerTheStackRecorded(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := appRef()
+	recordContainers(t, records, ref, "web")
+
+	own := &withContainers{buckets: &buckets{}}
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+
+	shown, err := releaser.PlanDestroy(ctx, ref, nil)
+	if err != nil {
+		t.Fatalf("PlanDestroy() = %v", err)
+	}
+	if rows := rowsOf(shown); rows["web"] != providerkit.ActionDelete {
+		t.Errorf("web reads %q, want the recorded container shown as going", rows["web"])
+	}
+	if err := releaser.Destroy(ctx, ref, nil); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if len(own.removed) != 1 || own.removed[0].Name != "web" {
+		t.Fatalf("Destroy() took down %v, want the container the stack recorded", own.removed)
+	}
+}
+
+func TestDestroyRefusesByNameWhenNothingCanTakeTheRecordedContainerDown(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	records := fake.NewRecords()
+	ref := appRef()
+	recordContainers(t, records, ref, "web")
+
+	err := resources.Releaser(records, fake.NewArtifacts(), &withFunctions{buckets: &buckets{}}).Destroy(ctx, ref, nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, resources.AppContainersPrimitive) {
+		t.Fatalf("Destroy() of a recorded container nothing stands up = %v, want a refusal naming %s", err, resources.AppContainersPrimitive)
 	}
 }

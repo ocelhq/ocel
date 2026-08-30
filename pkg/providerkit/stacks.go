@@ -18,8 +18,11 @@ type Stack struct {
 	Identity  string     `json:"identity,omitempty"`
 	Links     []Link     `json:"links,omitempty"`
 	Functions []Function `json:"functions,omitempty"`
-	Writer    Writer     `json:"writer,omitempty"`
-	UpdatedAt int64      `json:"updated_at,omitempty"`
+
+	Containers []AppContainer `json:"containers,omitempty"`
+
+	Writer    Writer `json:"writer,omitempty"`
+	UpdatedAt int64  `json:"updated_at,omitempty"`
 }
 
 type StackEntry struct {

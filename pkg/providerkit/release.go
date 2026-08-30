@@ -63,7 +63,11 @@ type AppPlan struct {
 	Framework  string
 	Entry      string
 	Deployment string
+	Compute    Compute
 	Functions  []FunctionSpec
+
+	Image           string
+	HealthCheckPath string
 
 	Values AppValues
 
@@ -132,6 +136,8 @@ type StackResult struct {
 	Links []Link
 
 	Functions []Function
+
+	Containers []AppContainer
 }
 
 type Link struct {
@@ -158,6 +164,12 @@ type GrantCondition struct {
 }
 
 type Function struct {
+	Name     string `json:"name"`
+	Physical string `json:"physical,omitempty"`
+	URL      string `json:"url,omitempty"`
+}
+
+type AppContainer struct {
 	Name     string `json:"name"`
 	Physical string `json:"physical,omitempty"`
 	URL      string `json:"url,omitempty"`
