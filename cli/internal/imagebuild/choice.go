@@ -36,8 +36,12 @@ func Choose(app App) (Choice, error) {
 		return Choice{}, fmt.Errorf("read the directory app %q is built from: %w", app.Name, err)
 	}
 	for _, entry := range entries {
-		if entry.Name() == DockerfileName && !entry.IsDir() {
-			return Choice{App: app, Dockerfile: filepath.Join(app.Dir, DockerfileName)}, nil
+		if entry.Name() != DockerfileName {
+			continue
+		}
+		beside := filepath.Join(app.Dir, DockerfileName)
+		if info, err := os.Stat(beside); err == nil && info.Mode().IsRegular() {
+			return Choice{App: app, Dockerfile: beside}, nil
 		}
 	}
 	return Choice{App: app}, nil
