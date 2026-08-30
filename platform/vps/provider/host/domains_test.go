@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -374,7 +375,7 @@ func TestAppRoutesAreReachedByTheHostnamesTheirOwnSurfaceClaims(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
-		if len(route.Handle) == 0 {
+		if len(route.Handle) == 0 || len(route.Handle[0].Upstreams) == 0 {
 			continue
 		}
 		if len(route.Match) != 1 {
@@ -390,54 +391,54 @@ func TestAppRoutesAreReachedByTheHostnamesTheirOwnSurfaceClaims(t *testing.T) {
 	}
 }
 
-func TestABoxServingOneAppAndClaimingNothingStillAnswersAtItsOwnAddress(t *testing.T) {
+func TestEveryBoxRefusesTheHostnamesNothingOnItClaimsAndNamesItselfDoingIt(t *testing.T) {
 	t.Parallel()
 
-	var read struct {
-		Apps struct {
-			HTTP struct {
-				Servers map[string]struct{ Routes []caddyRoute } `json:"servers"`
-			} `json:"http"`
-		} `json:"apps"`
-	}
-	if err := json.Unmarshal(mustRender(t, routed()), &read); err != nil {
-		t.Fatal(err)
-	}
-	routes := read.Apps.HTTP.Servers[proxyServer].Routes
-	fallbacks := 0
-	for _, route := range routes {
-		if len(route.Match) == 0 && len(route.Handle) > 0 {
-			fallbacks++
-			if route.Identity != boxIdentity {
-				t.Errorf("the route answering every unclaimed hostname is %q, want the box's own named default rather than whichever app route sorted first", route.Identity)
-			}
-			if route.Handle[0].Upstreams[0].Dial != "shop-web-2222:"+AppPort {
-				t.Errorf("the box's default forwards to %q, want the one app this box serves", route.Handle[0].Upstreams[0].Dial)
-			}
-		}
-	}
-	if fallbacks != 1 {
-		t.Errorf("a box serving one app and claiming no hostname carries %d routes answering its own address, want exactly one: a deploy with no domain bound is reached there and nowhere else", fallbacks)
-	}
-}
+	for _, box := range []struct {
+		what  string
+		state ProxyState
+	}{
+		{"a box serving nothing", ProxyState{Grace: DrainWindow}},
+		{"a box serving one project", routed()},
+		{"a box serving two projects", twoProjects()},
+	} {
+		t.Run(box.what, func(t *testing.T) {
+			t.Parallel()
 
-func TestABoxServingTwoProjectsAnswersItsOwnAddressWithNoProjectsApp(t *testing.T) {
-	t.Parallel()
-
-	var read struct {
-		Apps struct {
-			HTTP struct {
-				Servers map[string]struct{ Routes []caddyRoute } `json:"servers"`
-			} `json:"http"`
-		} `json:"apps"`
-	}
-	if err := json.Unmarshal(mustRender(t, twoProjects()), &read); err != nil {
-		t.Fatal(err)
-	}
-	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
-		if len(route.Match) == 0 && len(route.Handle) > 0 {
-			t.Errorf("the route %q answers every hostname this box receives; with two projects on it that is one project's app answering the other's traffic, and there is no address a box can serve both at", route.Identity)
-		}
+			var read struct {
+				Apps struct {
+					HTTP struct {
+						Servers map[string]struct{ Routes []caddyRoute } `json:"servers"`
+					} `json:"http"`
+				} `json:"apps"`
+			}
+			if err := json.Unmarshal(mustRender(t, box.state), &read); err != nil {
+				t.Fatal(err)
+			}
+			routes := read.Apps.HTTP.Servers[proxyServer].Routes
+			last := routes[len(routes)-1]
+			if last.Identity != boxIdentity || len(last.Match) != 0 {
+				t.Fatalf("%s ends its routes at %q matching %v, want the box's own named default last: every configuration renders it, so what the bare address answers is one decision and never a count of the routes that happen to stand", box.what, last.Identity, last.Match)
+			}
+			unmatched := 0
+			for _, route := range routes {
+				if len(route.Match) == 0 {
+					unmatched++
+				}
+			}
+			if unmatched != 1 {
+				t.Errorf("%s renders %d routes matching no hostname, want the box's default alone: a second one is dead configuration and a forwarding one hands whichever app sorted first every hostname pointed at this machine", box.what, unmatched)
+			}
+			if handled := last.Handle; len(handled) != 1 || handled[0].Handler != "static_response" || len(handled[0].Upstreams) != 0 {
+				t.Fatalf("%s answers its bare address with %v, want a static refusal: a box forwards a hostname a project claimed and nothing else, which is what Facts().ServesUnbound = false says of it", box.what, handled)
+			}
+			if last.Handle[0].Status != http.StatusNotFound {
+				t.Errorf("%s answers its bare address with %d, want 404: an empty 200 reads as healthy to every uptime check pointed at it", box.what, last.Handle[0].Status)
+			}
+			if named := last.Handle[0].Headers[EdgeHeader]; !slices.Equal(named, []string{EdgeName}) {
+				t.Errorf("%s answers its bare address carrying %s: %v, want %q: the refusal names the edge that made it and says nothing about what else this box serves", box.what, EdgeHeader, named, EdgeName)
+			}
+		})
 	}
 }
 

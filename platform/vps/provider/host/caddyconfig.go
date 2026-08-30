@@ -3,6 +3,7 @@ package host
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -20,6 +21,11 @@ const (
 	claimSeparator   = "/"
 	drainIdentity    = "ocel-retiring"
 	boxIdentity      = "ocel-box"
+)
+
+const (
+	EdgeHeader = "X-Ocel-Edge"
+	EdgeName   = "box"
 )
 
 const (
@@ -107,8 +113,10 @@ type caddyMatch struct {
 }
 
 type caddyForward struct {
-	Handler   string      `json:"handler"`
-	Upstreams []caddyDial `json:"upstreams"`
+	Handler   string              `json:"handler"`
+	Upstreams []caddyDial         `json:"upstreams,omitempty"`
+	Status    int                 `json:"status_code,omitempty"`
+	Headers   map[string][]string `json:"headers,omitempty"`
 }
 
 type caddyDial struct {
@@ -121,6 +129,17 @@ func forwarding(identity, upstream string) caddyRoute {
 		Handle: []caddyForward{{
 			Handler:   "reverse_proxy",
 			Upstreams: []caddyDial{{Dial: upstream}},
+		}},
+	}
+}
+
+func refusing(identity string) caddyRoute {
+	return caddyRoute{
+		Identity: identity,
+		Handle: []caddyForward{{
+			Handler: "static_response",
+			Status:  http.StatusNotFound,
+			Headers: map[string][]string{EdgeHeader: {EdgeName}},
 		}},
 	}
 }
@@ -158,9 +177,7 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 		}
 		routes = append(routes, matching(route.identity(), claimed[route.Owner], route.Upstream))
 	}
-	if len(surfaced) == 1 {
-		routes = append(routes, forwarding(boxIdentity, surfaced[0].Upstream))
-	}
+	routes = append(routes, refusing(boxIdentity))
 
 	live := seeded.Apps.HTTP.Servers[proxyServer]
 	live.Routes = routes

@@ -17,9 +17,11 @@ import (
 )
 
 const (
-	liveApp    = "web"
-	healthPath = "/healthz"
-	drainPort  = "9"
+	liveApp     = "web"
+	liveOwner   = "ocel--shop--production"
+	livePointer = "@production"
+	healthPath  = "/healthz"
+	drainPort   = "9"
 )
 
 type release struct {
@@ -35,7 +37,11 @@ func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 	})
-	return vm, vm.deploying(t)
+	p := vm.deploying(t)
+	if err := p.Host().ClaimHost(context.Background(), host.HostClaim{Hostname: host.ProxyContainer, Owner: liveOwner}); err != nil {
+		t.Fatalf("ClaimHost(%s) = %v", host.ProxyContainer, err)
+	}
+	return vm, p
 }
 
 func livePlan(t *testing.T, tag string) providerkit.StackPlan {
@@ -72,7 +78,7 @@ func standsUp(t *testing.T, p *vps.Provider, tag string) release {
 
 func releasing(p *vps.Provider, held release, retire string, drain time.Duration, report providerkit.Reporter) error {
 	return p.Host().Release(context.Background(), host.Release{
-		App:           liveApp,
+		RouteKey:      host.RouteKey{Owner: liveOwner, Pointer: livePointer, App: liveApp},
 		Target:        held.address,
 		Retire:        retire,
 		HealthPath:    healthPath,
