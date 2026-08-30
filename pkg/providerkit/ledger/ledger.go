@@ -148,7 +148,7 @@ func (l *Ledger) Record(ctx context.Context, app, identity string) (edge.Deploym
 	return record, true, nil
 }
 
-func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer string) error {
+func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer string, _ edge.Reporter) error {
 	name := pointerOr(pointer)
 	if err := l.claimTag(ctx, promotion); err != nil {
 		return err

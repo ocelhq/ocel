@@ -31,7 +31,7 @@ func promote(t *testing.T, stack edge.EdgeStack, promotion edge.Promotion, point
 			t.Fatalf("PutStaged(%s/%s): %v", app, identity, err)
 		}
 	}
-	if err := stack.Promote(ctx, promotion, pointer); err != nil {
+	if err := stack.Promote(ctx, promotion, pointer, edge.DiscardReporter()); err != nil {
 		t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
 	}
 }

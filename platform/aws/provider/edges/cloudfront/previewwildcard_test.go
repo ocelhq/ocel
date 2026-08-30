@@ -86,7 +86,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 		PromotionID: "preview-" + pointer,
 		Ts:          1,
 		Builds:      map[string]string{"web": "d1.f1"},
-	}, pointer); err != nil {
+	}, pointer, edge.DiscardReporter()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -412,7 +412,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			PromotionID: "refused",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
-		}, previewPointer); err == nil {
+		}, previewPointer, edge.DiscardReporter()); err == nil {
 			t.Fatal("Promote err = nil, want the refusal from the key value store")
 		}
 		history, err := stack.Ledger().History(context.Background(), previewPointer)
@@ -503,7 +503,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			PromotionID: "orphan",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
-		}, previewPointer); err == nil {
+		}, previewPointer, edge.DiscardReporter()); err == nil {
 			t.Fatal("Promote err = nil, want the refusal from the deployments ledger")
 		}
 		if held := previewRoutes(t, w); len(held) != 0 {

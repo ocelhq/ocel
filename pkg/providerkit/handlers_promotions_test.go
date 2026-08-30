@@ -29,7 +29,7 @@ func seedPromotions(t *testing.T, provider *fake.Provider, class providerkit.Cla
 	}
 	for i, id := range ids {
 		promotion := edge.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": buildIdentity(i)}}
-		if err := held.Promote(context.Background(), promotion, pointer); err != nil {
+		if err := held.Promote(context.Background(), promotion, pointer, edge.DiscardReporter()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -216,7 +216,9 @@ func (m *memoryLedger) Prune(_ context.Context, keepN int, _ string) (edge.Prune
 	return edge.PruneResult{KeptPromotionIDs: []string{"own-1"}}, nil
 }
 
-func (*memoryLedger) Promote(context.Context, edge.Promotion, string) error { return nil }
+func (*memoryLedger) Promote(context.Context, edge.Promotion, string, edge.Reporter) error {
+	return nil
+}
 
 func (*memoryLedger) RemovePointer(context.Context, string) (edge.PruneResult, error) {
 	return edge.PruneResult{}, nil

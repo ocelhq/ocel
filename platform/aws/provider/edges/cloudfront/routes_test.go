@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const fakeStoreARN = "arn:aws:cloudfront::123456789012:key-value-store/routes"
@@ -45,7 +47,7 @@ func TestAThrottledStoreIsWaitedOutRatherThanGivenUpOn(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.store.throttles = 2
 
-		if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 

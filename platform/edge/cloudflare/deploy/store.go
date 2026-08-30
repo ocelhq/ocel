@@ -50,7 +50,7 @@ type promoteBody struct {
 	Pointer string `json:"pointer,omitempty"`
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, _ edge.Reporter) error {
 	_, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/promote", promoteBody{Promotion: promotion, Pointer: pointer}, nil)
 	return err
 }

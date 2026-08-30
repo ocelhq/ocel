@@ -306,7 +306,7 @@ func TestPromote(t *testing.T) {
 		bound(t, stack)
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 
-		if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 
@@ -326,7 +326,7 @@ func TestPromote(t *testing.T) {
 		bound(t, stack)
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix+"/")
 
-		if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 
@@ -360,7 +360,7 @@ func TestPromote(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.store.updateErr = &kvstypes.AccessDeniedException{Message: aws.String("no")}
 
-		if err := stack.Promote(context.Background(), promotion(), ""); err == nil {
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err == nil {
 			t.Fatal("Promote error = nil, want the refusal the store gave")
 		}
 
@@ -382,7 +382,7 @@ func TestPromote(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.store.conflicts = 2
 
-		if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 
@@ -405,7 +405,7 @@ func TestPromote(t *testing.T) {
 		bound(t, stack)
 		staged(t, stack, "", fakeAssetPrefix)
 
-		err := stack.Promote(context.Background(), promotion(), "")
+		err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter())
 		if err == nil {
 			t.Fatal("Promote error = nil, want a refusal: nothing names a URL the edge can reach")
 		}
@@ -421,7 +421,7 @@ func TestPromote(t *testing.T) {
 		stack := reconciled(t, w)
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 
-		if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if got := w.store.count("kvs.UpdateKeys"); got != 0 {
@@ -437,7 +437,7 @@ func TestUnbindDomainTakesTheRouteAndTheAlias(t *testing.T) {
 	stack := reconciled(t, w)
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := stack.Promote(context.Background(), promotion(), ""); err != nil {
+	if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 
