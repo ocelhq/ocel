@@ -2,10 +2,13 @@ package providerkit_test
 
 import (
 	"context"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -139,6 +142,20 @@ func TestAThrottledRegistryIsWaitedOutRatherThanTreatedAsEmpty(t *testing.T) {
 	}
 }
 
+func TestAManifestTheRegistryAnswersForUnderAnotherDigestIsNotThisImage(t *testing.T) {
+	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Docker-Content-Digest", "sha256:someoneelses")
+	})
+
+	held, err := store.Has(context.Background(), push)
+	if err != nil {
+		t.Fatalf("Has() = %v", err)
+	}
+	if held {
+		t.Error("Has() read a tag holding a foreign digest as this image, so the release would point a container at whatever was there")
+	}
+}
+
 func TestARealmOnAnotherHostIsNotHandedTheRegistryPassword(t *testing.T) {
 	var harvested string
 	thief := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -199,5 +216,37 @@ func TestAScopeCarryingACommaSurvivesTheChallenge(t *testing.T) {
 	}
 	if bought != "repository:acme/web:pull,push" {
 		t.Errorf("the token was bought for scope %q, want the whole scope the registry named", bought)
+	}
+}
+
+func TestARegistryThatNeverAnswersStopsTheDeployRatherThanHangingIt(t *testing.T) {
+	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	})
+	held := *providerkit.RegistryTimeout
+	*providerkit.RegistryTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { *providerkit.RegistryTimeout = held })
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := store.Has(context.Background(), push)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Has() answered a registry that never answered")
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("Has() is still waiting on a registry that accepted the connection and said nothing, and only Ctrl-C ends the deploy")
+	}
+}
+
+func TestAHostnameThatResolvesToNothingIsReportedRatherThanRetried(t *testing.T) {
+	if providerkit.Addressable(&net.DNSError{Err: "no such host", IsNotFound: true}) {
+		t.Error("a hostname that resolves to nothing is retried five times, so a typo takes seconds to report")
+	}
+	if !providerkit.Addressable(errors.New("connection reset by peer")) {
+		t.Error("a transport error the next attempt might survive is not retried")
 	}
 }

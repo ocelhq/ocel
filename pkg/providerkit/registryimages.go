@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -33,37 +35,36 @@ const (
 	registryCeiling  = 8 * time.Second
 )
 
+var registryTimeout = 30 * time.Second
+
 func (r registryImages) Has(ctx context.Context, push ImagePush) (bool, error) {
 	server, repository, tag, err := splitCoordinate(push.Target)
 	if err != nil {
 		return false, err
 	}
-	client := &http.Client{}
+	client := &http.Client{Timeout: registryTimeout}
 	endpoint := registryScheme(server) + "://" + server + "/v2/" + repository + "/manifests/" + url.PathEscape(tag)
 
 	var wait time.Duration
+	var held, again bool
 	for attempt := range registryAttempts {
 		if attempt > 0 {
 			if err := pause(ctx, backoff(attempt, wait)); err != nil {
 				return false, err
 			}
 		}
-		held, again, after, err := r.look(ctx, client, endpoint, server, repository, push.Target)
+		held, again, wait, err = r.look(ctx, client, endpoint, server, repository, push)
 		if !again {
 			return held, err
 		}
-		wait = after
-		if attempt == registryAttempts-1 {
-			return false, err
-		}
 	}
-	return false, nil
+	return false, err
 }
 
-func (r registryImages) look(ctx context.Context, client *http.Client, endpoint, server, repository, coordinate string) (held, again bool, after time.Duration, err error) {
+func (r registryImages) look(ctx context.Context, client *http.Client, endpoint, server, repository string, push ImagePush) (held, again bool, after time.Duration, err error) {
 	resp, err := r.head(ctx, client, endpoint, "")
 	if err != nil {
-		return false, true, 0, err
+		return false, addressable(err), 0, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		authorization, err := r.authorize(ctx, client, resp, server, repository)
@@ -72,20 +73,30 @@ func (r registryImages) look(ctx context.Context, client *http.Client, endpoint,
 			return false, false, 0, err
 		}
 		if resp, err = r.head(ctx, client, endpoint, authorization); err != nil {
-			return false, true, 0, err
+			return false, addressable(err), 0, err
 		}
 	}
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusOK:
-		return true, false, 0, nil
+		return answersFor(resp, push.Digest), false, 0, nil
 	case resp.StatusCode == http.StatusNotFound:
 		return false, false, 0, nil
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
-		return false, true, retryAfter(resp), fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, coordinate)
+		return false, true, retryAfter(resp), fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, push.Target)
 	default:
-		return false, false, 0, fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, coordinate)
+		return false, false, 0, fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, push.Target)
 	}
+}
+
+func answersFor(resp *http.Response, digest string) bool {
+	answered := resp.Header.Get("Docker-Content-Digest")
+	return answered == "" || answered == digest
+}
+
+func addressable(err error) bool {
+	var dns *net.DNSError
+	return !errors.As(err, &dns) || !dns.IsNotFound
 }
 
 func retryAfter(resp *http.Response) time.Duration {
@@ -331,7 +342,7 @@ func drainPush(body io.Reader, report Reporter) error {
 			Error  string `json:"error"`
 		}
 		if err := decoder.Decode(&line); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return nil
 			}
 			return fmt.Errorf("read the daemon's push progress: %w", err)
