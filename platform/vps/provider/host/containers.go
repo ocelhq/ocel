@@ -10,6 +10,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
+const AppPort = "8080"
+
 const (
 	LabelApp = "ocel.app"
 	LabelRef = "ocel.ref"
