@@ -22,12 +22,14 @@ const (
 )
 
 const (
-	classRoot  = "/etc/ocel"
-	stateRoot  = "/var/lib/ocel"
-	helperRoot = "/usr/local/lib/ocel"
+	classRoot    = "/etc/ocel"
+	stateRoot    = "/var/lib/ocel"
+	releasesRoot = stateRoot + "/releases"
+	helperRoot   = "/usr/local/lib/ocel"
 
-	recordsHelper = helperRoot + "/records"
-	SealHelper    = helperRoot + "/seal"
+	recordsHelper  = helperRoot + "/records"
+	releasesHelper = helperRoot + "/releases"
+	SealHelper     = helperRoot + "/seal"
 
 	stampFile   = "stamp.json"
 	sealKeyFile = "seal.key"
@@ -47,6 +49,8 @@ func StampPath(class providerkit.Class) string { return ClassDir(class) + "/" + 
 func SealKeyPath(class providerkit.Class) string { return ClassDir(class) + "/" + sealKeyFile }
 
 func StateDir(class providerkit.Class) string { return stateRoot + "/" + string(class) }
+
+func ReleasesDir() string { return releasesRoot }
 
 func RecordsDir(class providerkit.Class) string { return StateDir(class) + "/records" }
 
@@ -72,10 +76,12 @@ func StorageItems(class providerkit.Class, keys []byte) []Item {
 	return []Item{
 		dir(helperRoot, 0o755, rootOwner, "ocel's helper scripts"),
 		{Kind: KindFile, Name: recordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript, Note: "reads and writes deploy records"},
+		{Kind: KindFile, Name: releasesHelper, Mode: 0o755, Owner: rootOwner, Content: releasesScript, Note: "keeps the release window and sweeps the images no release names"},
 		{Kind: KindFile, Name: SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript, Note: "seals and opens secret values"},
 		principal(),
 		{Kind: KindFile, Name: sudoersSeal, Mode: 0o440, Owner: rootOwner, Content: sealSudoers(), Note: "lets " + deployUser + " run the seal helper as root"},
 		dir(stateRoot, 0o750, stateOwner, "deploy state root"),
+		dir(releasesRoot, 0o750, stateOwner, "the release window every class on this host keeps"),
 		dir(sshDir, 0o700, stateOwner, "the deploy account's ssh login"),
 		{Kind: KindFile, Name: authorizedKeys, Mode: 0o600, Owner: stateOwner, Content: keys, Note: "the keys allowed to deploy"},
 		dir(StateDir(class), 0o750, stateOwner, "state for this class"),
