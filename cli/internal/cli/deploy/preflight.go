@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func preflightPreview(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config) error {
@@ -109,9 +108,6 @@ func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string, w
 			continue
 		}
 		if claim.GetStatus() != contractv1.DomainClaim_STATUS_CLAIMED {
-			continue
-		}
-		if claim.GetOwner() == edge.PreviewEntryOwner {
 			continue
 		}
 		if b.Len() == 0 {
