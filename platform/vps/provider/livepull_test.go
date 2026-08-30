@@ -125,6 +125,41 @@ func answering(t *testing.T, server string) {
 	t.Fatalf("the registry on the machine never answered at %s: %s", server, said)
 }
 
+func liveDigest(t *testing.T, target providerkit.RegistryTarget, coordinate string) string {
+	t.Helper()
+	seed := providerkit.ImagePush{
+		App:    pullRepository,
+		Source: transferCoordinate(),
+		Target: coordinate,
+		Digest: transferDigest,
+	}
+	if err := providerkit.RegistryImages(target).Push(context.Background(), seed, nil); err != nil {
+		t.Fatalf("push %s into the registry the machine pulls from = %v", coordinate, err)
+	}
+	req, err := http.NewRequest(http.MethodHead,
+		"http://"+target.Server+"/v2/"+pullNamespace+"/"+pullRepository+"/manifests/"+transferTag, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.SetBasicAuth(target.Username, target.Password)
+	req.Header.Set("Accept", strings.Join([]string{
+		"application/vnd.oci.image.index.v1+json",
+		"application/vnd.oci.image.manifest.v1+json",
+		"application/vnd.docker.distribution.manifest.list.v2+json",
+		"application/vnd.docker.distribution.manifest.v2+json",
+	}, ", "))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	digest := resp.Header.Get("Docker-Content-Digest")
+	if resp.StatusCode != http.StatusOK || digest == "" {
+		t.Fatalf("the registry answered %q with digest %q for %s, and a pull is pinned to the digest it hands back", resp.Status, digest, coordinate)
+	}
+	return digest
+}
+
 func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	vm := live(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
@@ -132,13 +167,16 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 
 	target := vm.registry(t)
 	coordinate := target.Coordinate(pullRepository, transferTag)
+	digest := liveDigest(t, target, coordinate)
 	push := providerkit.ImagePush{
 		App:    pullRepository,
 		Source: transferCoordinate(),
 		Target: coordinate,
-		Digest: transferDigest,
+		Digest: digest,
 	}
-	t.Cleanup(func() { vm.ssh(t, "sudo docker image rm -f "+coordinate+" >/dev/null 2>&1 || true") })
+	t.Cleanup(func() {
+		vm.ssh(t, "sudo docker image rm -f "+coordinate+" "+pinnedAt(coordinate, digest)+" >/dev/null 2>&1 || true")
+	})
 
 	ctx := context.Background()
 	store, err := vm.deploying(t).Images(ctx, target)

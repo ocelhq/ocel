@@ -159,8 +159,12 @@ func TestARegistryTurnsTheTransferIntoAPullTheMachineMakes(t *testing.T) {
 	}
 
 	commands := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(commands, "docker pull "+quotedIn(push.Target)) {
-		t.Errorf("the machine ran %q, want it to pull %s", commands, push.Target)
+	pinned := pinnedAt(push.Target, pullDigest)
+	if !strings.Contains(commands, "docker pull "+quotedIn(pinned)) {
+		t.Errorf("the machine ran %q, want it to pull %s", commands, pinned)
+	}
+	if !strings.Contains(commands, "docker tag "+quotedIn(pinned)+" "+quotedIn(push.Target)) {
+		t.Errorf("the machine ran %q, want the digest it pulled named %s", commands, push.Target)
 	}
 	if strings.Contains(commands, "docker load") {
 		t.Errorf("the machine ran %q: a registry is named, so nothing is streamed onto the box", commands)
@@ -169,6 +173,26 @@ func TestARegistryTurnsTheTransferIntoAPullTheMachineMakes(t *testing.T) {
 		if strings.Contains(carried, "tar") {
 			t.Errorf("the machine was fed %q where it was told to pull", carried)
 		}
+	}
+}
+
+func TestAnImageServedUnderTheTagIsNotWhatTheMachineEndsHolding(t *testing.T) {
+	standingDaemon(t)
+	server, registry := standingRegistry(t)
+	registry.held(true)
+	target := aTarget(server)
+	push := aPull(target)
+	machine := &box{serves: map[string]string{
+		push.Target:                       "an image someone else wrote to the tag",
+		pinnedAt(push.Target, pullDigest): "the image this deploy built",
+	}}
+
+	if err := pulling(t, machine, target).Push(context.Background(), push, nil); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+	if held := machine.under(push.Target); held != "the image this deploy built" {
+		t.Errorf("the machine holds %q under %s, and the release loop, rollback and retention all pin that coordinate: "+
+			"a tag is rewritten by whoever can write the registry, and only the digest names the image this deploy built", held, push.Target)
 	}
 }
 
@@ -320,6 +344,10 @@ func basicFor(username, password string) string {
 }
 
 func quotedIn(arg string) string { return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'" }
+
+func pinnedAt(coordinate, digest string) string {
+	return coordinate[:strings.LastIndex(coordinate, ":")] + "@" + digest
+}
 
 func sessionThatPulls(t *testing.T, machine *box) string {
 	t.Helper()
