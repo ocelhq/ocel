@@ -10,8 +10,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -45,6 +47,16 @@ func machine(stands map[providerkit.Class][]Item) *bench {
 }
 
 func (b *bench) host() *Host { return New(b.dial, Keys{}, nil) }
+
+type recorder struct{ said *[]string }
+
+func saying(said *[]string) providerkit.Reporter { return recorder{said: said} }
+
+func (r recorder) Say(message string) { *r.said = append(*r.said, message) }
+
+func (recorder) Detail(string) {}
+
+func (recorder) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
 func (b *bench) dial(context.Context) (Conn, error) {
 	b.mu.Lock()

@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const upstreamsPath = "/reverse_proxy/upstreams"
@@ -586,6 +587,72 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	}
 	if kept := removalOf(last, dockerEngine); kept.action != providerkit.ActionKeep {
 		t.Errorf("destroying the last class plans the engine as %q, want it kept with every container it runs", kept.action)
+	}
+}
+
+func TestAPinRootStillHoldingAnOperatorsPairIsReportedKeptRatherThanRemoved(t *testing.T) {
+	t.Parallel()
+
+	for what, pinned := range map[string]bool{
+		"a pin root nothing was ever pinned under": false,
+		"a pin root holding the pair you placed":   true,
+	} {
+		at := filepath.Join(t.TempDir(), "certs")
+		if err := os.Mkdir(at, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if pinned {
+			if err := os.WriteFile(filepath.Join(at, "wildcard.key"), []byte("a private key ocel never placed"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		run := exec.Command("/bin/sh", "-c", sharing(at, "").command())
+		rendered, err := run.Output()
+		if err != nil {
+			t.Fatalf("taking %s = %v, and a destroy that fails on a root it shares leaves the host half-taken", what, err)
+		}
+		if held := strings.TrimSpace(string(rendered)) == dirHeld; held != pinned {
+			t.Errorf("taking %s answered %q, and a removal that always exits zero tells an operator ocel deleted their private key",
+				what, strings.TrimSpace(string(rendered)))
+		}
+		if _, err := os.Stat(at); (err == nil) != pinned {
+			t.Errorf("taking %s left the directory %v, and what the report says went is what went", what, err)
+		}
+	}
+}
+
+func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing.T) {
+	t.Parallel()
+
+	for what, held := range map[string]bool{
+		"a pin root nothing was ever pinned under": false,
+		"a pin root holding the pair you placed":   true,
+	} {
+		class := providerkit.ClassProduction
+		stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+		stood.answer = func(command string) (session.Result, bool) {
+			if !strings.HasPrefix(command, "rmdir "+quoted(ProxyPins)+" ") {
+				return session.Result{}, false
+			}
+			if held {
+				return session.Result{Stdout: dirHeld + "\n"}, true
+			}
+			return session.Result{}, true
+		}
+
+		var said []string
+		if err := Bootstrap(stood.host()).Remove(context.Background(), class, saying(&said)); err != nil {
+			t.Fatalf("destroying over %s = %v", what, err)
+		}
+
+		want := "removed " + KindDir + " " + ProxyPins
+		if held {
+			want = "kept " + KindDir + " " + ProxyPins
+		}
+		if !slices.ContainsFunc(said, func(line string) bool { return strings.HasPrefix(line, want) }) {
+			t.Errorf("destroying over %s reported %v, want a line opening %q: the report names the private key an operator still holds as one ocel deleted",
+				what, said, want)
+		}
 	}
 }
 
