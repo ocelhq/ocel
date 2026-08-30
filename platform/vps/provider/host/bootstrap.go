@@ -462,10 +462,12 @@ func removing(read, sibling Reading) []removal {
 		beneath = append(beneath, proxyRemovals()...)
 		beneath = append(beneath,
 			taking(KindDir, sshDir, "the deploy login's own key store, which nothing but ocel ever wrote"),
+			taking(KindDir, releasesRoot, "the window naming which images this host still owes a rollback to; the images themselves stay, because what this host runs stays when ocel goes"),
 			sharing(stateRoot),
 			taking(KindUser, deployUser, "the login every deploy onto this host runs as"),
 			taking(KindFile, sudoersSeal, ""),
 			taking(KindFile, recordsHelper, ""),
+			taking(KindFile, releasesHelper, ""),
 			taking(KindFile, SealHelper, ""),
 			taking(KindFile, ProxyHelper, ""),
 			sharing(helperRoot),
