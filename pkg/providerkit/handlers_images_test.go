@@ -256,6 +256,36 @@ func TestTheImageStoreIsOpenedFromTheTargetTheDeployCarries(t *testing.T) {
 	}
 }
 
+type refusingStore struct{ where string }
+
+func (s refusingStore) ImageDestination() string { return s.where }
+
+func (s refusingStore) Has(context.Context, providerkit.ImagePush) (bool, error) {
+	return false, nil
+}
+
+func (s refusingStore) Push(context.Context, providerkit.ImagePush, providerkit.Reporter) error {
+	return errors.New("the stream stopped short")
+}
+
+func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *testing.T) {
+	store := refusingStore{where: "box.invalid"}
+	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{{
+		App: "web", Source: containerTestImage, Target: loadedCoordinate,
+	}}}
+
+	err := plan.Ship(context.Background(), nil)
+	if err == nil {
+		t.Fatal("Ship() = nil over a store that refuses every push")
+	}
+	if !strings.Contains(err.Error(), store.where) {
+		t.Errorf("Ship() = %v, want the destination %q the deploy announced it was sending to", err, store.where)
+	}
+	if strings.Contains(err.Error(), loadedCoordinate) {
+		t.Errorf("Ship() = %v: a direct transfer that failed reads as a push to a registry that was never involved", err)
+	}
+}
+
 const loadedCoordinate = "ocel/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 type loadingProvider struct {
