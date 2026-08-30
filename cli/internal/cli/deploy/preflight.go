@@ -32,6 +32,9 @@ func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider
 	if err != nil {
 		return nil, "", err
 	}
+	if err := preflight.RequireBuilder(ctx, cfg); err != nil {
+		return nil, "", err
+	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
 		return nil, "", err
 	}
@@ -52,6 +55,9 @@ func preflightDeploy(ctx context.Context, ui *runui.Session, runner *provider.Ru
 	}
 	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Package())
 	if err != nil {
+		return nil, "", err
+	}
+	if err := preflight.RequireBuilder(ctx, cfg); err != nil {
 		return nil, "", err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path)); err != nil {
