@@ -72,6 +72,9 @@ jobs:
           pnpm --filter ocel build
           go generate -C cli ./...
 
+      - name: The flip helper the provider embeds
+        run: go generate -C platform/vps/provider ./...
+
       - name: Virtualisation the qemu driver hard-requires
         run: |
           sudo modprobe vhost_vsock || true
