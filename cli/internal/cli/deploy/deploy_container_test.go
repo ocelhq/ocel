@@ -193,7 +193,7 @@ func TestTheRegistryTheProjectNamesRidesTheDeployWithItsSecretResolved(t *testin
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	want := "REGISTRY server=ghcr.io namespace= username=acme-bot secret=7"
+	want := "REGISTRY server=ghcr.io namespace= username=acme-bot secret=true"
 	if !strings.Contains(stdout.String(), want) {
 		t.Errorf("stdout = %q, want %q — the push is an engine resource, so the registry it pushes to reaches the release", stdout.String(), want)
 	}

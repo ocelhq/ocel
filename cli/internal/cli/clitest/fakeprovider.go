@@ -1402,7 +1402,7 @@ func describeContainer(c *contractv1.ManifestContainer) string {
 }
 
 func describeRegistry(r *contractv1.ImageRegistry) string {
-	return fmt.Sprintf("server=%s namespace=%s username=%s secret=%d", r.GetServer(), r.GetNamespace(), r.GetUsername(), len(r.GetPassword()))
+	return fmt.Sprintf("server=%s namespace=%s username=%s secret=%v", r.GetServer(), r.GetNamespace(), r.GetUsername(), r.GetPassword() != "")
 }
 
 func describeApp(a *contractv1.ManifestApp) string {

@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type registryImages struct {
@@ -24,6 +27,12 @@ var manifestTypes = []string{
 	"application/vnd.docker.distribution.manifest.v2+json",
 }
 
+const (
+	registryAttempts = 5
+	registryBackoff  = 250 * time.Millisecond
+	registryCeiling  = 8 * time.Second
+)
+
 func (r registryImages) Has(ctx context.Context, push ImagePush) (bool, error) {
 	server, repository, tag, err := splitCoordinate(push.Target)
 	if err != nil {
@@ -32,28 +41,80 @@ func (r registryImages) Has(ctx context.Context, push ImagePush) (bool, error) {
 	client := &http.Client{}
 	endpoint := registryScheme(server) + "://" + server + "/v2/" + repository + "/manifests/" + url.PathEscape(tag)
 
+	var wait time.Duration
+	for attempt := range registryAttempts {
+		if attempt > 0 {
+			if err := pause(ctx, backoff(attempt, wait)); err != nil {
+				return false, err
+			}
+		}
+		held, again, after, err := r.look(ctx, client, endpoint, server, repository, push.Target)
+		if !again {
+			return held, err
+		}
+		wait = after
+		if attempt == registryAttempts-1 {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
+func (r registryImages) look(ctx context.Context, client *http.Client, endpoint, server, repository, coordinate string) (held, again bool, after time.Duration, err error) {
 	resp, err := r.head(ctx, client, endpoint, "")
 	if err != nil {
-		return false, err
+		return false, true, 0, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		authorization, err := r.authorize(ctx, client, resp, repository)
 		resp.Body.Close()
 		if err != nil {
-			return false, err
+			return false, false, 0, err
 		}
 		if resp, err = r.head(ctx, client, endpoint, authorization); err != nil {
-			return false, err
+			return false, true, 0, err
 		}
 	}
 	defer resp.Body.Close()
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return true, nil
-	case http.StatusNotFound:
-		return false, nil
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return true, false, 0, nil
+	case resp.StatusCode == http.StatusNotFound:
+		return false, false, 0, nil
+	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
+		return false, true, retryAfter(resp), fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, coordinate)
 	default:
-		return false, fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, push.Target)
+		return false, false, 0, fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, coordinate)
+	}
+}
+
+func retryAfter(resp *http.Response) time.Duration {
+	seconds, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After")))
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func backoff(attempt int, asked time.Duration) time.Duration {
+	wait := asked
+	if wait <= 0 {
+		wait = registryBackoff << (attempt - 1)
+	}
+	if wait > registryCeiling {
+		wait = registryCeiling
+	}
+	return wait/2 + time.Duration(rand.Int64N(int64(wait/2)+1))
+}
+
+func pause(ctx context.Context, wait time.Duration) error {
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 
