@@ -219,14 +219,20 @@ func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
 		t.Fatalf("the proxy reports its grace period as %q, so what it serves cannot be read back here", seeded)
 	}
 
-	moved := strings.Trim(seeded, `"`) + "1s"
-	vm.ssh(t, "sudo sed -i "+quote("s/"+strings.Trim(seeded, `"`)+"/"+moved+"/")+" "+host.ProxyConfig)
+	moved := `"9s"`
+	if seeded == moved {
+		moved = `"11s"`
+	}
+	vm.ssh(t, "sudo sed -i "+quote("s|"+seeded+"|"+moved+"|")+" "+host.ProxyConfig)
+	if written := vm.drives(t, "config apps/http/grace_period"); written != seeded {
+		t.Fatalf("the running proxy already reports %s before it was restarted, so the restart is not what this test measures", written)
+	}
 	vm.ssh(t, "sudo docker restart "+host.ProxyContainer)
 	for at := 0; at < 20 && !vm.running(t, host.ProxyContainer); at++ {
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	if served := vm.drives(t, "config apps/http/grace_period"); served != `"`+moved+`"` {
+	if served := vm.drives(t, "config apps/http/grace_period"); served != moved {
 		t.Errorf("the file on the box declares %q and the running proxy serves %s: caddy's --resume uses the last autosaved configuration, overriding --config, so a box recreated after a changed config would keep serving the old one while every digest ocel holds says it does not",
 			moved, served)
 	}
