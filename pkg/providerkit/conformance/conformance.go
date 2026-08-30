@@ -17,6 +17,8 @@ type Suite struct {
 	Binary string
 
 	Vendor func(t *testing.T, provider providerkit.Provider)
+
+	Certifier *CertifierChecks
 }
 
 func Run(t *testing.T, suite Suite) {
@@ -25,6 +27,7 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("ports", func(t *testing.T) { runPorts(t, suite) })
 	t.Run("optional sets", func(t *testing.T) { runOptionalSets(t, suite) })
 	t.Run("wire", func(t *testing.T) { runWire(t, suite) })
+	t.Run("certifier", func(t *testing.T) { runCertifier(t, suite) })
 	t.Run("vendor", func(t *testing.T) { runVendor(t, suite) })
 }
 
