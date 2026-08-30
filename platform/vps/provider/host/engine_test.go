@@ -214,8 +214,11 @@ func TestAConfigMovedIntoPlaceIsWhatTheRunningProxyLoads(t *testing.T) {
 		t.Errorf("a hostname nothing on this box claims was answered %d carrying %s: %q, want a 404 naming this edge: an empty 200 is what the seeded config answers everything with, and a proxy still serving the seed after a deploy looks healthy to everything that checks it",
 			said.StatusCode, EdgeHeader, said.Header.Get(EdgeHeader))
 	}
-	if said := ask(claimed); said.Header.Get(EdgeHeader) == EdgeName {
+	if said := ask(claimed); said.StatusCode == http.StatusNotFound {
 		t.Errorf("the hostname %q claims was answered by the box's own default after the flip, want the route of the surface that claimed it: the deploy loaded a document naming %s and a proxy that answers it from the default never loaded that document",
 			surface, upstream)
+	} else if said.Header.Get(EdgeHeader) != EdgeName {
+		t.Errorf("the surface's own route answered %s: %q, want %q: the bind's probe reads this header off the hostname itself and a route that forwards without it reports the box as serving nothing",
+			EdgeHeader, said.Header.Get(EdgeHeader), EdgeName)
 	}
 }

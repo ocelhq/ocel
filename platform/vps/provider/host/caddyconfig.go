@@ -170,16 +170,28 @@ type caddyForward struct {
 	Upstreams []caddyDial         `json:"upstreams,omitempty"`
 	Status    int                 `json:"status_code,omitempty"`
 	Headers   map[string][]string `json:"headers,omitempty"`
+	Response  *caddyHeaderOps     `json:"response,omitempty"`
+}
+
+type caddyHeaderOps struct {
+	Set map[string][]string `json:"set"`
 }
 
 type caddyDial struct {
 	Dial string `json:"dial"`
 }
 
+func namingTheEdge() caddyForward {
+	return caddyForward{
+		Handler:  "headers",
+		Response: &caddyHeaderOps{Set: map[string][]string{EdgeHeader: {EdgeName}}},
+	}
+}
+
 func forwarding(identity, upstream string) caddyRoute {
 	return caddyRoute{
 		Identity: identity,
-		Handle: []caddyForward{{
+		Handle: []caddyForward{namingTheEdge(), {
 			Handler:   "reverse_proxy",
 			Upstreams: []caddyDial{{Dial: upstream}},
 		}},
@@ -363,15 +375,25 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 		}
 		named, keyed := strings.CutPrefix(route.Identity, routeIdentity)
 		fields := strings.Split(named, claimSeparator)
-		if !keyed || len(fields) != 3 || len(route.Handle) == 0 || len(route.Handle[0].Upstreams) == 0 {
+		upstream := forwardedTo(route)
+		if !keyed || len(fields) != 3 || upstream == "" {
 			return ProxyState{}, unwritten("route", route.Identity)
 		}
 		state.Routes = append(state.Routes, AppRoute{
 			RouteKey: RouteKey{Owner: fields[0], Pointer: fields[1], App: fields[2]},
-			Upstream: route.Handle[0].Upstreams[0].Dial,
+			Upstream: upstream,
 		})
 	}
 	return state, nil
+}
+
+func forwardedTo(route caddyRoute) string {
+	for _, handled := range route.Handle {
+		if len(handled.Upstreams) > 0 {
+			return handled.Upstreams[0].Dial
+		}
+	}
+	return ""
 }
 
 func byKey(a, b AppRoute) int {
