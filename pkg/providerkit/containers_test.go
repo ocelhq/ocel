@@ -10,6 +10,35 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
+func TestAPinnedImageCarriesARegistryHostButNeverATag(t *testing.T) {
+	const digest = "@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+	for _, ref := range []string{
+		"ocel/api" + digest,
+		"registry.example.com:5000/ocel/api" + digest,
+		"localhost:5000/api" + digest,
+		"api" + digest,
+	} {
+		if !providerkit.PinnedImage(ref) {
+			t.Errorf("PinnedImage(%q) = false, want an ordinary OCI reference admitted: a registry answering on a port is where a pushed image lives", ref)
+		}
+	}
+
+	for _, ref := range []string{
+		"ocel/api:latest",
+		"ocel/api:latest" + digest,
+		"registry.example.com:5000/ocel/api:latest" + digest,
+		"ocel/api",
+		"ocel/api@sha256:short",
+		"/ocel/api" + digest,
+		"ocel//api" + digest,
+	} {
+		if providerkit.PinnedImage(ref) {
+			t.Errorf("PinnedImage(%q) = true, want it refused: a tag repoints under a running release, so it never rides in the identity a release is pinned to", ref)
+		}
+	}
+}
+
 func TestTheWirePinAndTheKitPinTheSameImageIdentity(t *testing.T) {
 	field := (&contractv1.ManifestContainer{}).ProtoReflect().Descriptor().Fields().ByName("image")
 	if field == nil {

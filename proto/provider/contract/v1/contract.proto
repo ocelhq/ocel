@@ -162,7 +162,7 @@ message Manifest {
 message ManifestContainer {
   string app = 1 [(buf.validate.field).string.min_len = 1];
 
-  string image = 2 [(buf.validate.field).string.pattern = "^[^@:[:space:]]+@sha256:[0-9a-f]{64}$"];
+  string image = 2 [(buf.validate.field).string.pattern = "^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$"];
 
   string health_check_path = 3 [(buf.validate.field).string.pattern = "^/[^#?[:space:][:cntrl:]]*$"];
 }

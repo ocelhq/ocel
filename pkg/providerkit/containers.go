@@ -2,7 +2,7 @@ package providerkit
 
 import "regexp"
 
-const PinnedImagePattern = `^[^@:[:space:]]+@sha256:[0-9a-f]{64}$`
+const PinnedImagePattern = `^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$`
 
 var pinnedImage = regexp.MustCompile(PinnedImagePattern)
 

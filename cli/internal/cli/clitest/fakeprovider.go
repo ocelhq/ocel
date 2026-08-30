@@ -1415,7 +1415,7 @@ func parseInfraTier(s string) environmentv1.Tier {
 	}
 }
 
-var pinnedImage = regexp.MustCompile(`^[^@:\s]+@sha256:[0-9a-f]{64}$`)
+var pinnedImage = regexp.MustCompile(`^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$`)
 
 func validateFixtureContainers(m *contractv1.Manifest) error {
 	compute := map[string]string{}
