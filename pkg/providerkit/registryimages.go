@@ -22,6 +22,12 @@ type registryImages struct {
 
 func RegistryImages(target RegistryTarget) ImageStore { return registryImages{target: target} }
 
+func (r registryImages) String() string {
+	return "images pushed to " + r.target.String()
+}
+
+func (r registryImages) GoString() string { return r.String() }
+
 var manifestTypes = []string{
 	"application/vnd.oci.image.index.v1+json",
 	"application/vnd.oci.image.manifest.v1+json",

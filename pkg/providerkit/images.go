@@ -32,6 +32,19 @@ type ImagePlan struct {
 	Pushes []ImagePush
 }
 
+func (p ImagePlan) String() string {
+	targets := make([]string, 0, len(p.Pushes))
+	for _, push := range p.Pushes {
+		targets = append(targets, push.App+" to "+push.Target)
+	}
+	if len(targets) == 0 {
+		return "no image push"
+	}
+	return "images pushing " + strings.Join(targets, ", ")
+}
+
+func (p ImagePlan) GoString() string { return p.String() }
+
 func (p ImagePlan) Rows(ctx context.Context) ([]Change, error) {
 	rows := make([]Change, 0, len(p.Pushes))
 	for _, push := range p.Pushes {
