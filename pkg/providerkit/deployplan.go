@@ -67,18 +67,59 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 	if !ephemeral(env) {
 		plan.Infra = naming.InfraStack(name)
 	}
+	images, err := containerImages(manifest)
+	if err != nil {
+		return DeployPlan{}, err
+	}
 	for _, app := range manifest.GetApps() {
 		entry, err := appEntry(app, name)
 		if err != nil {
 			return DeployPlan{}, err
 		}
 		plan.Apps = append(plan.Apps, entry)
+		if image, ours := images[entry.App]; ours {
+			plan.Builds[entry.App] = image
+			continue
+		}
 		plan.Builds[entry.App] = entry.Build.String()
 	}
 	if err := refuseOrphanFunctions(manifest, plan.Builds); err != nil {
 		return DeployPlan{}, err
 	}
 	return plan, nil
+}
+
+func containerImages(manifest *contractv1.Manifest) (map[string]string, error) {
+	compute := make(map[string]string, len(manifest.GetApps()))
+	for _, app := range manifest.GetApps() {
+		compute[app.GetName()] = app.GetCompute()
+	}
+
+	images := make(map[string]string, len(manifest.GetContainers()))
+	for _, container := range manifest.GetContainers() {
+		app := container.GetApp()
+		kind, declared := compute[app]
+		if !declared {
+			return nil, Refuse(CodeInvalid,
+				"a container names the app %q, which this manifest does not declare", app)
+		}
+		if kind != string(ComputeContainer) {
+			return nil, Refuse(CodeInvalid,
+				"a container names the app %q, which this manifest says runs on %q compute", app, kind)
+		}
+		if _, twice := images[app]; twice {
+			return nil, Refuse(CodeInvalid,
+				"app %q carries two containers, and an app is served by one process", app)
+		}
+		images[app] = container.GetImage()
+	}
+	for app, kind := range compute {
+		if kind == string(ComputeContainer) && images[app] == "" {
+			return nil, Refuse(CodeInvalid,
+				"app %q runs on container compute and this manifest carries no image for it", app)
+		}
+	}
+	return images, nil
 }
 
 func refuseOrphanFunctions(manifest *contractv1.Manifest, declared map[string]string) error {
