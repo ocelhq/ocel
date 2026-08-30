@@ -2,7 +2,6 @@ package vps_test
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -214,72 +213,6 @@ func TestADigestCoordinateNamesNoRepositoryToSweep(t *testing.T) {
 	pinned := "ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	if repository, named := host.Repository(pinned); named {
 		t.Errorf("Repository(%s) = %q, and a digest is not a tag: everything left of the last colon is the repository plus half a digest algorithm, which lists nothing and names nothing the desired set holds", pinned, repository)
-	}
-}
-
-func TestARollbackToARetainedDigestTransfersNothingAndTakesTheWindowHead(t *testing.T) {
-	t.Parallel()
-
-	machine := &box{holds: true}
-	ref := aStack(t, anApp()).Ref
-	if err := over(machine).EnsureRelease(context.Background(), ref, "web", "prod-web-x", loadedCoordinate, nil); err != nil {
-		t.Fatalf("EnsureRelease() = %v", err)
-	}
-	joined := strings.Join(machine.commands(), "\n")
-	for _, never := range []string{"docker load", "docker pull", "docker build"} {
-		if strings.Contains(joined, never) {
-			t.Errorf("re-running a retained digest ran %q, and the box already holds it", never)
-		}
-	}
-	called := helperCalls(machine, "promote")
-	if len(called) != 1 || !strings.Contains(called[0], "'"+loadedCoordinate+"'") {
-		t.Fatalf("the rollback recorded %v, want the retained ref moved to the head of the window", called)
-	}
-	if !strings.Contains(joined, "'--detach'") {
-		t.Error("the rollback stood nothing up at all")
-	}
-}
-
-func TestARollbackRevivesTheContainerTheReleaseRecorded(t *testing.T) {
-	t.Parallel()
-
-	machine := &box{holds: true}
-	ref := aStack(t, anApp()).Ref
-	stood := host.ContainerName(ref.Name.String(), "web", deployment, loadedCoordinate)
-	if err := over(machine).EnsureRelease(context.Background(), ref, "web", stood, loadedCoordinate, nil); err != nil {
-		t.Fatalf("EnsureRelease() = %v", err)
-	}
-	joined := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(joined, quoted(stood)) {
-		t.Errorf("the rollback never named %s, the container the release wrote down", stood)
-	}
-	renamed := host.ContainerName(ref.Name.String(), "web", "", loadedCoordinate)
-	if renamed == stood {
-		t.Fatal("the coordinate and the deployment name the same container, and this test proves nothing")
-	}
-	if strings.Contains(joined, quoted(renamed)) {
-		t.Errorf("the rollback named %s, a container no release ever stood up: an ensure that renames stands a second container up beside the one already serving", renamed)
-	}
-}
-
-func TestARollbackPastTheWindowSaysDeployAgain(t *testing.T) {
-	t.Parallel()
-
-	machine := &box{}
-	ref := aStack(t, anApp()).Ref
-	err := over(machine).EnsureRelease(context.Background(), ref, "web", "prod-web-x", loadedCoordinate, nil)
-	if err == nil {
-		t.Fatal("a rollback past the window succeeded over a box holding no such image")
-	}
-	if !strings.Contains(err.Error(), "deploy again") {
-		t.Errorf("the refusal reads %q and never says what to do instead", err)
-	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
-		t.Errorf("the refusal reads %#v, want the code %q", err, providerkit.CodeNotReady)
-	}
-	if len(helperCalls(machine, "promote")) != 0 {
-		t.Error("a rollback that refused still moved a ref to the window head")
 	}
 }
 

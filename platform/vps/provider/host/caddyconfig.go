@@ -19,6 +19,7 @@ const (
 	claimIdentity    = "ocel-host-"
 	claimSeparator   = "/"
 	drainIdentity    = "ocel-retiring"
+	boxIdentity      = "ocel-box"
 )
 
 const (
@@ -26,8 +27,18 @@ const (
 	DrainWindow  = 30 * time.Second
 )
 
+type RouteKey struct {
+	Owner   string
+	Pointer string
+	App     string
+}
+
+func (k RouteKey) identity() string {
+	return routeIdentity + strings.Join([]string{k.Owner, k.Pointer, k.App}, claimSeparator)
+}
+
 type AppRoute struct {
-	App      string
+	RouteKey
 	Upstream string
 }
 
@@ -50,6 +61,14 @@ func Claiming(claims []HostClaim, taken HostClaim) []HostClaim {
 
 func Disclaiming(claims []HostClaim, hostname string) []HostClaim {
 	return slices.DeleteFunc(slices.Clone(claims), func(claim HostClaim) bool { return claim.Hostname == hostname })
+}
+
+func Routing(routes []AppRoute, taken AppRoute) []AppRoute {
+	return append(Unrouting(routes, func(route AppRoute) bool { return route.RouteKey == taken.RouteKey }), taken)
+}
+
+func Unrouting(routes []AppRoute, dropped func(AppRoute) bool) []AppRoute {
+	return slices.DeleteFunc(slices.Clone(routes), dropped)
 }
 
 type caddyConfig struct {
@@ -84,7 +103,7 @@ type caddyRoute struct {
 }
 
 type caddyMatch struct {
-	Host []string `json:"host,omitempty"`
+	Host []string `json:"host"`
 }
 
 type caddyForward struct {
@@ -106,12 +125,19 @@ func forwarding(identity, upstream string) caddyRoute {
 	}
 }
 
+func matching(identity string, hostnames []string, upstream string) caddyRoute {
+	route := forwarding(identity, upstream)
+	route.Match = []caddyMatch{{Host: append([]string{}, hostnames...)}}
+	return route
+}
+
 func RenderProxyConfig(state ProxyState) ([]byte, error) {
 	seeded, err := seededConfig()
 	if err != nil {
 		return nil, err
 	}
-	routes := make([]caddyRoute, 0, len(state.Claims)+len(state.Routes))
+	routes := make([]caddyRoute, 0, len(state.Claims)+len(state.Routes)+1)
+	claimed := map[string][]string{}
 	for _, claim := range slices.SortedFunc(slices.Values(state.Claims), func(a, b HostClaim) int {
 		return strings.Compare(a.Hostname, b.Hostname)
 	}) {
@@ -123,11 +149,17 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 			Match:    []caddyMatch{{Host: []string{claim.Hostname}}},
 			Handle:   []caddyForward{},
 		})
+		claimed[claim.Owner] = append(claimed[claim.Owner], claim.Hostname)
 	}
-	for _, route := range slices.SortedFunc(slices.Values(state.Routes), func(a, b AppRoute) int {
-		return strings.Compare(a.App, b.App)
-	}) {
-		routes = append(routes, forwarding(routeIdentity+route.App, route.Upstream))
+	surfaced := slices.SortedFunc(slices.Values(state.Routes), byKey)
+	for _, route := range surfaced {
+		if err := validRoute(route); err != nil {
+			return nil, err
+		}
+		routes = append(routes, matching(route.identity(), claimed[route.Owner], route.Upstream))
+	}
+	if len(surfaced) == 1 {
+		routes = append(routes, forwarding(boxIdentity, surfaced[0].Upstream))
 	}
 
 	live := seeded.Apps.HTTP.Servers[proxyServer]
@@ -162,6 +194,9 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 	}
 	state := ProxyState{Grace: grace}
 	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
+		if route.Identity == boxIdentity {
+			continue
+		}
 		if claim, mine := strings.CutPrefix(route.Identity, claimIdentity); mine {
 			owner, hostname, split := strings.Cut(claim, claimSeparator)
 			if !split || !claimsOnly(route, hostname) {
@@ -170,13 +205,39 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 			state.Claims = append(state.Claims, HostClaim{Hostname: hostname, Owner: owner})
 			continue
 		}
-		app, named := strings.CutPrefix(route.Identity, routeIdentity)
-		if !named || len(route.Handle) == 0 || len(route.Handle[0].Upstreams) == 0 {
+		named, keyed := strings.CutPrefix(route.Identity, routeIdentity)
+		fields := strings.Split(named, claimSeparator)
+		if !keyed || len(fields) != 3 || len(route.Handle) == 0 || len(route.Handle[0].Upstreams) == 0 {
 			return ProxyState{}, unwritten(route.Identity)
 		}
-		state.Routes = append(state.Routes, AppRoute{App: app, Upstream: route.Handle[0].Upstreams[0].Dial})
+		state.Routes = append(state.Routes, AppRoute{
+			RouteKey: RouteKey{Owner: fields[0], Pointer: fields[1], App: fields[2]},
+			Upstream: route.Handle[0].Upstreams[0].Dial,
+		})
 	}
 	return state, nil
+}
+
+func byKey(a, b AppRoute) int {
+	return strings.Compare(a.identity(), b.identity())
+}
+
+func validRoute(route AppRoute) error {
+	for _, field := range []struct{ what, named string }{
+		{"surface", route.Owner}, {"pointer", route.Pointer}, {"app", route.App},
+	} {
+		what, named := field.what, field.named
+		if named == "" || strings.Contains(named, claimSeparator) {
+			return providerkit.Refuse(providerkit.CodeInvalid,
+				"a route on this box names %s %q, and %s tells one surface's route from another's out of the surface, the pointer and the app together",
+				what, named, ProxyConfig)
+		}
+	}
+	if route.Upstream == "" {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"the route %s names no upstream to forward to", route.identity())
+	}
+	return nil
 }
 
 func unwritten(identity string) error {

@@ -31,7 +31,7 @@ func (w *watched) Span(string, time.Time, time.Time, error, ...providerkit.Attr)
 
 func aRelease() Release {
 	return Release{
-		App:           "web",
+		RouteKey:      keyed("web"),
 		Target:        flipTo,
 		Retire:        retired,
 		HealthPath:    "/healthz",
@@ -44,7 +44,7 @@ func configFor(t *testing.T, upstream string) string {
 	t.Helper()
 	rendered, err := RenderProxyConfig(ProxyState{
 		Grace:  30 * time.Second,
-		Routes: []AppRoute{{App: "web", Upstream: upstream}},
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -66,15 +66,12 @@ func released(t *testing.T, rel Release, helper session.Result, report providerk
 func benched(t *testing.T, helper session.Result) *flipped {
 	t.Helper()
 	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
+	proxied := servesProxy(stood.bench, &stood.held)
 	stood.answer = func(command string) (session.Result, bool) {
+		if result, mine := proxied(command); mine {
+			return result, true
+		}
 		switch {
-		case strings.HasPrefix(command, "cat "+quoted(ProxyConfig)):
-			return session.Result{Stdout: stood.held}, true
-		case strings.Contains(command, "cat > "+quoted(ProxyConfig)):
-			stood.mu.Lock()
-			stood.held = stood.fed[len(stood.fed)-1]
-			stood.mu.Unlock()
-			return session.Result{}, true
 		case strings.Contains(command, quoted("deploy")):
 			return helper, true
 		default:
@@ -84,14 +81,7 @@ func benched(t *testing.T, helper session.Result) *flipped {
 	return stood
 }
 
-func (f *flipped) at(fragment string) int {
-	for at, command := range f.commands() {
-		if strings.Contains(command, fragment) {
-			return at
-		}
-	}
-	return -1
-}
+func (f *flipped) at(fragment string) int { return f.bench.at(fragment) }
 
 func TestTheOldContainerIsStoppedOnlyAfterTheCallReturnsSuccessAndTheSteadyStateFollowsIt(t *testing.T) {
 	t.Parallel()
@@ -182,7 +172,7 @@ func TestAFailureThePostCanOnlyReachAfterItLandedPutsThePreviousConfigBackOnTheP
 				if at <= called {
 					continue
 				}
-				if wrote < 0 && strings.Contains(command, "cat > "+quoted(ProxyConfig)) {
+				if wrote < 0 && writesProxy(command) {
 					wrote = at
 				}
 				if posted < 0 && strings.Contains(command, quoted("flip")) {
@@ -285,7 +275,7 @@ func TestAReleaseCarryingNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing
 			if stood.at(quoted("deploy")) >= 0 {
 				t.Errorf("a release carrying %s reached the helper: %v", what, stood.commands())
 			}
-			if stood.at("cat > "+quoted(ProxyConfig)) >= 0 {
+			if stood.at(`cat > "$staged"`) >= 0 {
 				t.Errorf("a release carrying %s rewrote %s before it was refused: %v", what, ProxyConfig, stood.commands())
 			}
 		})
@@ -316,15 +306,12 @@ func TestTheFlipConfigDeclaresTheRetiredUpstreamAndTheHelperIsToldToDrainIt(t *t
 
 	var posted string
 	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
+	proxied := servesProxy(stood.bench, &stood.held)
 	stood.answer = func(command string) (session.Result, bool) {
+		if result, mine := proxied(command); mine {
+			return result, true
+		}
 		switch {
-		case strings.HasPrefix(command, "cat "+quoted(ProxyConfig)):
-			return session.Result{Stdout: stood.held}, true
-		case strings.Contains(command, "cat > "+quoted(ProxyConfig)):
-			stood.mu.Lock()
-			stood.held = stood.fed[len(stood.fed)-1]
-			stood.mu.Unlock()
-			return session.Result{}, true
 		case strings.Contains(command, quoted("deploy")):
 			posted = stood.held
 			return session.Result{}, true
@@ -377,12 +364,12 @@ func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 func diagnosed(t *testing.T, helper session.Result, state, logs string) string {
 	t.Helper()
 	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
+	proxied := servesProxy(stood.bench, &stood.held)
 	stood.answer = func(command string) (session.Result, bool) {
+		if result, mine := proxied(command); mine {
+			return result, true
+		}
 		switch {
-		case strings.HasPrefix(command, "cat "+quoted(ProxyConfig)):
-			return session.Result{Stdout: stood.held}, true
-		case strings.Contains(command, "cat > "+quoted(ProxyConfig)):
-			return session.Result{}, true
 		case strings.Contains(command, quoted("deploy")):
 			return helper, true
 		case strings.Contains(command, "docker inspect") && strings.Contains(command, ".State."):
@@ -481,12 +468,12 @@ func TestExitedRestartingAndHungReadAsThreeDifferentThings(t *testing.T) {
 func refusedAfter(t *testing.T, flip session.Result) string {
 	t.Helper()
 	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
+	proxied := servesProxy(stood.bench, &stood.held)
 	stood.answer = func(command string) (session.Result, bool) {
+		if result, mine := proxied(command); mine {
+			return result, true
+		}
 		switch {
-		case strings.HasPrefix(command, "cat "+quoted(ProxyConfig)):
-			return session.Result{Stdout: stood.held}, true
-		case strings.Contains(command, "cat > "+quoted(ProxyConfig)):
-			return session.Result{}, true
 		case strings.Contains(command, quoted("deploy")):
 			return session.Result{Code: 5, Stderr: "carries no upstream " + retired}, true
 		case strings.Contains(command, quoted("flip")):
@@ -522,27 +509,22 @@ func strandedByWrite(t *testing.T, back session.Result) (*flipped, string) {
 	t.Helper()
 	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
 	writes := 0
+	proxied := servesProxy(stood.bench, &stood.held)
 	stood.answer = func(command string) (session.Result, bool) {
-		switch {
-		case strings.HasPrefix(command, "cat "+quoted(ProxyConfig)):
-			return session.Result{Stdout: stood.held}, true
-		case strings.Contains(command, "cat > "+quoted(ProxyConfig)):
-			stood.mu.Lock()
-			writes++
-			first := writes == 1
-			if first {
-				stood.held = ""
-			} else if back.Code == 0 {
-				stood.held = stood.fed[len(stood.fed)-1]
-			}
-			stood.mu.Unlock()
-			if first {
-				return session.Result{Code: 1, Stderr: "no space left on device"}, true
-			}
-			return back, true
-		default:
-			return session.Result{}, false
+		if !writesProxy(command) {
+			return proxied(command)
 		}
+		stood.mu.Lock()
+		writes++
+		first := writes == 1
+		stood.mu.Unlock()
+		if first {
+			return session.Result{Code: 1, Stderr: "no space left on device"}, true
+		}
+		if back.Code != 0 {
+			return back, true
+		}
+		return proxied(command)
 	}
 	err := stood.host().Release(context.Background(), aRelease(), nil)
 	if err == nil {
@@ -555,7 +537,7 @@ func strandedByWrite(t *testing.T, back session.Result) (*flipped, string) {
 	return stood, err.Error()
 }
 
-func TestAFlipConfigurationThatCannotBeWrittenLeavesNeitherAStandingContainerNorATruncatedFile(t *testing.T) {
+func TestAFlipConfigurationThatCannotBeWrittenLeavesNeitherAStandingContainerNorAHalfWrittenFile(t *testing.T) {
 	t.Parallel()
 
 	stood, said := strandedByWrite(t, session.Result{})
@@ -583,12 +565,15 @@ func TestAFlipConfigurationThatCannotBeWrittenLeavesNeitherAStandingContainerNor
 	}
 }
 
-func TestAFlipConfigurationThatCannotBeWrittenBackEitherSaysTheFileMayBeTruncated(t *testing.T) {
+func TestAFlipConfigurationThatCannotBeWrittenBackEitherNamesTheFileARestartWouldServe(t *testing.T) {
 	t.Parallel()
 
-	_, said := strandedByWrite(t, session.Result{Code: 1, Stderr: "no space left on device"})
-	if !strings.Contains(said, "truncat") {
-		t.Errorf("a %s that could be neither written nor put back is refused with\n%s\nwhich never warns that the file a restarted proxy serves may be truncated", ProxyConfig, said)
+	stood, said := strandedByWrite(t, session.Result{Code: 1, Stderr: "no space left on device"})
+	if !strings.Contains(said, "could not be put back") || !strings.Contains(said, ProxyConfig) {
+		t.Errorf("a %s that could be neither written nor put back is refused with\n%s\nwhich never says which file a restarted proxy would read", ProxyConfig, said)
+	}
+	if _, err := ReadProxyState([]byte(stood.held)); err != nil {
+		t.Errorf("%s was left as %q, which no restarted proxy could read: the write stages beside the file and moves it into place, so a write that fails leaves the file whole", ProxyConfig, stood.held)
 	}
 }
 

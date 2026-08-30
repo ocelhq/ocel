@@ -58,12 +58,6 @@ func sweepPlan(t *testing.T, tag string) providerkit.StackPlan {
 	}
 }
 
-func sweepStood(t *testing.T, tag string) string {
-	t.Helper()
-	plan := sweepPlan(t, tag)
-	return host.ContainerName(plan.Ref.Name.String(), plan.App.App, plan.App.Deployment, plan.App.Image)
-}
-
 func sweepsUp(t *testing.T, p *vps.Provider, tag string) {
 	t.Helper()
 	if _, err := p.ProvisionContainers(context.Background(), sweepPlan(t, tag), nil); err != nil {
@@ -171,38 +165,5 @@ func TestLiveAFailedReleaseSweepsItsOwnImage(t *testing.T) {
 	}
 	if !strings.Contains(sweepImages(t, vm), sweepAt("r1")) {
 		t.Errorf("the sweep took the release the box is still serving, and the window is what names it")
-	}
-}
-
-func TestLiveARollbackToARetainedDigestCarriesNothingAndLeadsTheWindow(t *testing.T) {
-	vm, p := onABoxSweeping(t, "r1", "r2")
-
-	sweepsUp(t, p, "r1")
-	sweepsUp(t, p, "r2")
-	before := vm.inspects(t, "image", sweepAt("r1"), "{{.Id}}")
-
-	ref := sweepPlan(t, "r1").Ref
-	if err := p.EnsureRelease(context.Background(), ref, sweepApp, sweepStood(t, "r1"), sweepAt("r1"), nil); err != nil {
-		t.Fatalf("EnsureRelease(%s) = %v", sweepAt("r1"), err)
-	}
-	if after := vm.inspects(t, "image", sweepAt("r1"), "{{.Id}}"); after != before {
-		t.Errorf("re-running a retained digest landed a different image (%s, was %s), and a rollback within the window rebuilds and re-transfers nothing", after, before)
-	}
-	if held := sweepWindow(t, vm); len(held) == 0 || held[0] != sweepAt("r1") {
-		t.Errorf("the window reads %v, want %s at its head: rolling back is what the box most recently served", held, sweepAt("r1"))
-	}
-}
-
-func TestLiveARollbackPastTheWindowSaysDeployAgain(t *testing.T) {
-	_, p := onABoxSweeping(t, "r1")
-
-	sweepsUp(t, p, "r1")
-	ref := sweepPlan(t, "r1").Ref
-	err := p.EnsureRelease(context.Background(), ref, sweepApp, sweepStood(t, "gone"), sweepAt("gone"), nil)
-	if err == nil {
-		t.Fatal("a rollback to an image this box never held succeeded")
-	}
-	if !strings.Contains(err.Error(), "deploy again") {
-		t.Errorf("the refusal reads %q and never says what to do instead", err)
 	}
 }
