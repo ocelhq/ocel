@@ -1,5 +1,5 @@
 {
-  "admin": { "listen": "unix//run/caddy-admin.sock" },
+  "admin": { "listen": "unix//run/caddy-admin.sock|0600" },
   "logging": {
     "logs": {
       "default": { "exclude": ["http.log.access.ocel"] },

@@ -150,11 +150,13 @@ func TestTheFlipRefusesEveryConfigThatWouldMoveTheAdminEndpoint(t *testing.T) {
 	held, socket := served(t)
 
 	for what, document := range map[string]string{
-		"no admin block at all":                           `{"apps":{"http":{"servers":{}}}}`,
-		"an admin block disabled":                         `{"admin":{"disabled":true,"listen":"unix/SOCKET"}}`,
-		"a tcp listener":                                  `{"admin":{"listen":"127.0.0.1:2019"}}`,
-		"another socket":                                  `{"admin":{"listen":"unix//run/other.sock"}}`,
-		"the socket named inside a comment-shaped string": `{"apps":{"note":"SOCKET"}}`,
+		"no admin block at all":   `{"apps":{"http":{"servers":{}}}}`,
+		"an admin block disabled": `{"admin":{"disabled":true,"listen":"unix/SOCKET"}}`,
+		"a tcp listener":          `{"admin":{"listen":"127.0.0.1:2019"}}`,
+		"another socket":          `{"admin":{"listen":"unix//run/other.sock|0600"}}`,
+		"the socket named without the mode it is created under":      `{"admin":{"listen":"unix/SOCKET"}}`,
+		"the socket named under a mode the whole container can dial": `{"admin":{"listen":"unix/SOCKET|0666"}}`,
+		"the socket named inside a comment-shaped string":            `{"apps":{"note":"SOCKET"}}`,
 	} {
 		code, _, errs := ran(t, "flip", configFile(t, socket, document))
 		if code == 0 {
@@ -169,13 +171,13 @@ func TestTheFlipRefusesEveryConfigThatWouldMoveTheAdminEndpoint(t *testing.T) {
 	}
 }
 
-func TestTheFlipLoadsAConfigThatKeepsTheSocketAndCarriesItsPermissionSuffix(t *testing.T) {
+func TestTheFlipLoadsAConfigThatKeepsTheSocketUnderTheModeItIsCreatedWith(t *testing.T) {
 	held, socket := served(t)
-	document := `{"admin":{"listen":"unix/SOCKET|0600"},"apps":{"http":{"servers":{}}}}`
+	document := `{"admin":{"listen":"` + caddyadmin.Listen(socket) + `"},"apps":{"http":{"servers":{}}}}`
 	path := configFile(t, socket, document)
 
 	if code, _, errs := ran(t, "flip", path); code != 0 {
-		t.Fatalf("flip = %d, %q: the socket carries an optional mode after a pipe and the address before it is what must match", code, errs)
+		t.Fatalf("flip = %d, %q: the address the helper itself declares is the one config it must always load", code, errs)
 	}
 	if asked := held.asked(); len(asked) != 1 || asked[0] != "POST "+loadPath {
 		t.Fatalf("the flip asked %v, want POST %s: it blocks until the reload completes or fails", asked, loadPath)
@@ -193,7 +195,7 @@ func TestAProxyThatRefusesTheConfigIsAFailedFlipRatherThanASilentOne(t *testing.
 	held, socket := served(t)
 	held.status, held.body = http.StatusBadRequest, "loading config: unknown module"
 
-	code, _, errs := ran(t, "flip", configFile(t, socket, `{"admin":{"listen":"unix/SOCKET"}}`))
+	code, _, errs := ran(t, "flip", configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`))
 	if code == 0 {
 		t.Fatal("a config the proxy rejected exited zero, and the release loop treats a non-zero exit as the one condition it branches on")
 	}
@@ -347,7 +349,7 @@ func loads(asked []string) int {
 
 func TestTheComposedCallGatesBeforeItEverReachesTheProxy(t *testing.T) {
 	held, socket := served(t)
-	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET"}}`)
+	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)
 
 	code, _, errs := ran(t, "deploy", "--target", "127.0.0.1:1", "--health-check-path", "/up",
 		"--deploy-timeout", "1", "--drain-timeout", "1", "--config", config, "--retire", "old:8080")
@@ -363,7 +365,7 @@ func TestAConfigTheProxyRejectsFailsTheComposedCallWithWhatTheProxySaid(t *testi
 	held, socket := served(t)
 	held.status, held.body = http.StatusBadRequest, "loading config: unknown module http.handlers.nonsense"
 	target := refusing(t, 0)
-	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET"}}`)
+	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)
 
 	code, _, errs := ran(t, "deploy", "--target", target, "--health-check-path", "/up",
 		"--deploy-timeout", "5", "--drain-timeout", "1", "--config", config, "--retire", "old:8080")
@@ -385,7 +387,7 @@ func TestOneCallGatesFlipsAndDrainsAndItsExitCodeIsTheWholeAnswer(t *testing.T) 
 		`[{"address":"old:8080","num_requests":0}]`,
 	}
 	target := refusing(t, 2)
-	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET"}}`)
+	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)
 
 	code, out, errs := ran(t, "deploy", "--target", target, "--health-check-path", "/up",
 		"--deploy-timeout", "10", "--drain-timeout", "10", "--config", config, "--retire", "old:8080")
@@ -409,7 +411,7 @@ func TestOneCallGatesFlipsAndDrainsAndItsExitCodeIsTheWholeAnswer(t *testing.T) 
 func TestAFirstDeployWithNothingToRetireDrainsNothingAtAll(t *testing.T) {
 	held, socket := served(t)
 	target := refusing(t, 0)
-	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET"}}`)
+	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)
 
 	code, _, errs := ran(t, "deploy", "--target", target, "--health-check-path", "/up",
 		"--deploy-timeout", "5", "--drain-timeout", "5", "--config", config)
