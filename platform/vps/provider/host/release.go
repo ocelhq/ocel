@@ -179,14 +179,14 @@ func (h *Host) evidence(ctx context.Context, rel Release, outcome, verdict, prev
 	unwound := h.unwind(ctx, rel, previous, elevation)
 
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"release %s onto %s: the proxy's flip helper %s and the previous release is still the live upstream\n"+
+		"release %s onto %s: the proxy's flip helper %s and %s\n"+
 			"%s\n"+
 			"gate: http://%s%s, %s to answer 2xx; the path is %q in your project configuration\n"+
 			"state: %s\n"+
 			"logs (last %s lines): %s",
-		rel.App, h.named(), outcome, verdict,
+		rel.App, h.named(), outcome, unwound.live, verdict,
 		rel.Target, rel.HealthPath, rel.DeployTimeout, healthKey,
-		state, appLogTail, logs+unwound)
+		state, appLogTail, logs+unwound.String())
 }
 
 func (h *Host) restore(ctx context.Context, previous, elevation string) error {
@@ -198,16 +198,26 @@ func (h *Host) restore(ctx context.Context, previous, elevation string) error {
 	return err
 }
 
-func (h *Host) unwind(ctx context.Context, rel Release, previous, elevation string) string {
-	var left []string
-	if err := h.restore(ctx, previous, elevation); err != nil {
-		left = append(left, fmt.Sprintf("%s and the running proxy were not put back, so %s may still be the live upstream and is left standing rather than removed: %v",
-			ProxyConfig, rel.targetName(), err))
-	} else if err := h.RemoveContainer(ctx, rel.targetName()); err != nil {
-		left = append(left, fmt.Sprintf("%s is still standing and serving nothing: %v", rel.targetName(), err))
-	}
-	if len(left) == 0 {
+type aftermath struct {
+	live string
+	left []string
+}
+
+func (a aftermath) String() string {
+	if len(a.left) == 0 {
 		return ""
 	}
-	return "\n" + strings.Join(left, "\n")
+	return "\n" + strings.Join(a.left, "\n")
+}
+
+func (h *Host) unwind(ctx context.Context, rel Release, previous, elevation string) aftermath {
+	after := aftermath{live: "the previous release is still the live upstream"}
+	if err := h.restore(ctx, previous, elevation); err != nil {
+		after.live = "which release is the live upstream is no longer known here"
+		after.left = append(after.left, fmt.Sprintf("%s and the running proxy were not put back, so %s may still be the live upstream and is left standing rather than removed: %v",
+			ProxyConfig, rel.targetName(), err))
+	} else if err := h.RemoveContainer(ctx, rel.targetName()); err != nil {
+		after.left = append(after.left, fmt.Sprintf("%s is still standing and serving nothing: %v", rel.targetName(), err))
+	}
+	return after
 }

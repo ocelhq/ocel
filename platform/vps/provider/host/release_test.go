@@ -478,6 +478,46 @@ func TestExitedRestartingAndHungReadAsThreeDifferentThings(t *testing.T) {
 	}
 }
 
+func refusedAfter(t *testing.T, flip session.Result) string {
+	t.Helper()
+	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
+	stood.answer = func(command string) (session.Result, bool) {
+		switch {
+		case strings.HasPrefix(command, "cat "+quoted(ProxyConfig)):
+			return session.Result{Stdout: stood.held}, true
+		case strings.Contains(command, "cat > "+quoted(ProxyConfig)):
+			return session.Result{}, true
+		case strings.Contains(command, quoted("deploy")):
+			return session.Result{Code: 5, Stderr: "carries no upstream " + retired}, true
+		case strings.Contains(command, quoted("flip")):
+			return flip, true
+		default:
+			return session.Result{}, false
+		}
+	}
+	err := stood.host().Release(context.Background(), aRelease(), nil)
+	if err == nil {
+		t.Fatal("a release the helper refused returned no error at all")
+	}
+	return err.Error()
+}
+
+func TestARefusalNamesTheLiveUpstreamOnceAndTheAnswerFollowsWhetherTheProxyWasPutBack(t *testing.T) {
+	t.Parallel()
+
+	rolled := refusedAfter(t, session.Result{})
+	if !strings.Contains(rolled, "the previous release is still the live upstream") {
+		t.Errorf("a refusal that put the proxy back reads\n%s\nand never says which release is live", rolled)
+	}
+	stranded := refusedAfter(t, session.Result{Code: 1, Stderr: "the proxy answered nothing over /run/caddy-admin.sock"})
+	if strings.Contains(stranded, "the previous release is still the live upstream") {
+		t.Errorf("a refusal that could not put the proxy back reads\n%s\nwhich asserts the previous release is live and then corrects itself further down, and a reader meets the false half first", stranded)
+	}
+	if !strings.Contains(stranded, physical) {
+		t.Errorf("a refusal that could not put the proxy back reads\n%s\nand never names the container it left standing", stranded)
+	}
+}
+
 func strandedByWrite(t *testing.T, back session.Result) (*flipped, string) {
 	t.Helper()
 	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
@@ -551,6 +591,7 @@ func TestAFlipConfigurationThatCannotBeWrittenBackEitherSaysTheFileMayBeTruncate
 		t.Errorf("a %s that could be neither written nor put back is refused with\n%s\nwhich never warns that the file a restarted proxy serves may be truncated", ProxyConfig, said)
 	}
 }
+
 func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T) {
 	t.Parallel()
 
