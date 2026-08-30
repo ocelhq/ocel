@@ -23,6 +23,7 @@ const (
 	ProxyContainer = "ocel-proxy"
 	proxyRestart   = "unless-stopped"
 	proxyPort      = "80"
+	proxyTLSPort   = "443"
 	proxyLabel     = "ocel.config"
 )
 
@@ -166,7 +167,8 @@ func containerItem() Item {
 		Owner:   rootOwner,
 		Content: proxyFacts(),
 		Slow:    true,
-		Note:    "the proxy every request to port " + proxyPort + " on this host reaches, pulled as " + ProxyImage,
+		Note: "the proxy every request to ports " + proxyPort + " and " + proxyTLSPort +
+			" on this host reaches, pulled as " + ProxyImage,
 	}
 }
 
@@ -197,10 +199,14 @@ func proxyBinds() []string {
 }
 
 func proxyPorts() map[string][]map[string]string {
-	return map[string][]map[string]string{
-		proxyPort + "/tcp": {{"HostIp": "", "HostPort": proxyPort}},
+	published := map[string][]map[string]string{}
+	for _, port := range proxyServing() {
+		published[port+"/tcp"] = []map[string]string{{"HostIp": "", "HostPort": port}}
 	}
+	return published
 }
+
+func proxyServing() []string { return []string{proxyPort, proxyTLSPort} }
 
 func marshalled(value any) string {
 	written, err := json.Marshal(value)
@@ -224,7 +230,9 @@ func containerWriting(attempts int, files []string) string {
 		"--network", ProxyNetwork,
 		"--label", proxyLabel + "=" + contentSum(proxyBaseline),
 		"--env", "XDG_CONFIG_HOME=" + proxyDataMount + "/config",
-		"--publish", proxyPort + ":" + proxyPort,
+	}
+	for _, port := range proxyServing() {
+		argv = append(argv, "--publish", port+":"+port)
 	}
 	for _, bind := range proxyBinds() {
 		argv = append(argv, "--volume", bind)

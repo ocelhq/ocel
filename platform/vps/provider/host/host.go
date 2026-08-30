@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 
@@ -23,6 +24,7 @@ type Dial func(ctx context.Context) (Conn, error)
 type Host struct {
 	dial   Dial
 	deploy Keys
+	pins   []Pin
 
 	elevating sync.Mutex
 	settled   bool
@@ -49,8 +51,18 @@ type Host struct {
 	tiers     map[providerkit.Class]bool
 }
 
-func New(dial Dial, deploy Keys) *Host {
-	return &Host{dial: dial, deploy: deploy, tiers: map[providerkit.Class]bool{}}
+func New(dial Dial, deploy Keys, pins []Pin) *Host {
+	return &Host{dial: dial, deploy: deploy, pins: pins, tiers: map[providerkit.Class]bool{}}
+}
+
+func (h *Host) Pins() []Pin { return slices.Clone(h.pins) }
+
+func (h *Host) PinFor(hostname string) string {
+	at := slices.IndexFunc(h.pins, func(pin Pin) bool { return pin.Hostname == hostname })
+	if at < 0 {
+		return ""
+	}
+	return h.pins[at].Path
 }
 
 func (h *Host) holds(ctx context.Context, class providerkit.Class) (bool, error) {

@@ -44,7 +44,7 @@ func machine(stands map[providerkit.Class][]Item) *bench {
 	}
 }
 
-func (b *bench) host() *Host { return New(b.dial, Keys{}) }
+func (b *bench) host() *Host { return New(b.dial, Keys{}, nil) }
 
 func (b *bench) dial(context.Context) (Conn, error) {
 	b.mu.Lock()
