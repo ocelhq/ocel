@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -624,6 +625,7 @@ func matchedBy(t *testing.T, rendered []byte) map[string][]string {
 		if forwardedTo(route) == "" {
 			continue
 		}
+		answered[route.Identity] = []string{}
 		for _, match := range route.Match {
 			answered[route.Identity] = append(answered[route.Identity], match.Host...)
 		}
@@ -638,11 +640,12 @@ func TestAHostnameDeclaredUnderOneAppOfAMultiAppSurfaceReachesThatAppAlone(t *te
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, App: "api"}}
 
 	answered := matchedBy(t, mustRender(t, state))
-	if got := answered[keyed("api").identity()]; !slices.Equal(got, []string{claimed}) {
-		t.Errorf("the api route answers %v, want %q alone: the project declared the hostname under api, and a box that cannot honour that refuses every multi-app project a domain at all", got, claimed)
+	want := map[string][]string{
+		keyed("api").identity(): {claimed},
+		keyed("web").identity(): {},
 	}
-	if got := answered[keyed("web").identity()]; len(got) != 0 {
-		t.Errorf("the web route answers %v, want nothing: reverse_proxy is terminal, so a second route carrying the same hostname is either dead configuration or the app that answers it", got)
+	if !maps.EqualFunc(answered, want, slices.Equal) {
+		t.Errorf("the surface's routes answer %v, want %v: the project declared the hostname under api, reverse_proxy is terminal so web carrying it too is dead configuration, and a box that cannot honour the declaration refuses every multi-app project a domain at all", answered, want)
 	}
 }
 
