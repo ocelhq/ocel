@@ -284,13 +284,21 @@ func loadFiles(pins []Pin) (*caddyTLS, error) {
 		return nil, nil
 	}
 	files := make([]caddyLoadFile, 0, len(pins))
+	at := map[string]int{}
 	for _, pin := range slices.SortedFunc(slices.Values(pins), func(a, b Pin) int {
 		return strings.Compare(a.Hostname, b.Hostname)
 	}) {
 		if err := validPin(pin); err != nil {
 			return nil, err
 		}
+		if held, loaded := at[pin.Path]; loaded {
+			if !slices.Contains(files[held].Tags, pin.Hostname) {
+				files[held].Tags = append(files[held].Tags, pin.Hostname)
+			}
+			continue
+		}
 		mounted := pinMount(pin.Path)
+		at[pin.Path] = len(files)
 		files = append(files, caddyLoadFile{
 			Certificate: PinCertificate(mounted),
 			Key:         PinKey(mounted),
@@ -336,10 +344,12 @@ func pinnedBy(read caddyConfig) ([]Pin, error) {
 	for _, file := range read.Apps.TLS.Certificates.LoadFiles {
 		mounted, cut := strings.CutSuffix(file.Certificate, pinCertificate)
 		at, beneath := pinnedAt(mounted)
-		if len(file.Tags) != 1 || !cut || !beneath || file.Key != PinKey(mounted) {
+		if len(file.Tags) == 0 || !cut || !beneath || file.Key != PinKey(mounted) {
 			return nil, unwritten("pinned certificate", file.Certificate)
 		}
-		pins = append(pins, Pin{Hostname: file.Tags[0], Path: at})
+		for _, hostname := range file.Tags {
+			pins = append(pins, Pin{Hostname: hostname, Path: at})
+		}
 	}
 	return pins, nil
 }
