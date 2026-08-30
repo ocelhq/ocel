@@ -48,6 +48,10 @@ type Prober interface {
 	Serving(ctx context.Context, kind edge.Kind, hostname string) (edge.Kind, error)
 }
 
+type Diagnoser interface {
+	Unreached(hostname string) string
+}
+
 func resolving(provider Provider, front edge.Edge, stand Resolver) Resolver {
 	prober, ok := provider.(Prober)
 	if !ok {
@@ -63,6 +67,14 @@ type probing struct {
 
 func (p probing) Serving(ctx context.Context, hostname string) (edge.Kind, error) {
 	return p.prober.Serving(ctx, p.kind, hostname)
+}
+
+func (p probing) Unreached(hostname string) string {
+	diagnoser, held := p.prober.(Diagnoser)
+	if !held {
+		return ""
+	}
+	return diagnoser.Unreached(hostname)
 }
 
 func boundBy(front edge.Edge, state func() edge.StackState) Resolver {
@@ -171,10 +183,22 @@ func (s settler) unresolved(hostname string, serving edge.Kind, began time.Time)
 	waited := s.now().Sub(began).Round(time.Second)
 	if serving == "" {
 		return Refuse(CodeNotReady,
-			"%s does not answer as the %s edge yet — this run gave up after about %s, and re-running it picks up where this one stopped",
-			hostname, s.kind, waited)
+			"%s does not answer as the %s edge yet%s — this run gave up after about %s, and re-running it picks up where this one stopped",
+			hostname, s.kind, s.unreached(hostname), waited)
 	}
 	return Refuse(CodeNotReady,
 		"%s answers as the %s edge, not the %s one this project deploys to — this run gave up after about %s",
 		hostname, serving, s.kind, waited)
+}
+
+func (s settler) unreached(hostname string) string {
+	diagnoser, held := s.resolve.(Diagnoser)
+	if !held {
+		return ""
+	}
+	cause := diagnoser.Unreached(hostname)
+	if cause == "" {
+		return ""
+	}
+	return ", and the last attempt to reach it ended in: " + cause
 }
