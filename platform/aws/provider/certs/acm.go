@@ -86,12 +86,6 @@ func cutSuffixFold(s, suffix string) (string, bool) {
 	return s[:len(s)-len(suffix)], true
 }
 
-type Probe struct {
-	At   time.Time `json:"at,omitempty"`
-	Edge edge.Kind `json:"edge,omitempty"`
-	OK   bool      `json:"ok,omitempty"`
-}
-
 type Issuer struct {
 	API      ACMAPI
 	Region   string

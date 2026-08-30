@@ -81,8 +81,6 @@ func boundBy(front edge.Edge, state func() edge.StackState) Resolver {
 	return boundResolver{kind: front.Kind(), unbound: front.Facts().ServesUnbound, state: state}
 }
 
-// TODO(#390): stands in for a provider that supplies no Prober, and answers from what
-// the kit just bound rather than from what the hostname serves.
 type boundResolver struct {
 	kind    edge.Kind
 	unbound bool
