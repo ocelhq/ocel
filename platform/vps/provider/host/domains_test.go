@@ -276,7 +276,7 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
-	stood := benchedOver(t, mustRender(t, state))
+	stood := claimingBox(t, state)
 
 	rel := Release{
 		App:           "web",
@@ -297,13 +297,4 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 	if !slices.Equal(held.Claims, state.Claims) {
 		t.Errorf("the claims left after a release are %v, want the %v that stood before it: a deploy renders this file whole and a hostname dropped there is a hostname nothing on this box claims", held.Claims, state.Claims)
 	}
-}
-
-func benchedOver(t *testing.T, document []byte) *claimBench {
-	t.Helper()
-	stood := claimingBox(t, ProxyState{Grace: DrainWindow})
-	stood.mu.Lock()
-	stood.held = string(document)
-	stood.mu.Unlock()
-	return stood
 }
