@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"io"
 	"net"
@@ -443,6 +444,23 @@ func listening(t *testing.T, answer func(net.Conn)) string {
 		}
 	}()
 	return held.Addr().String()
+}
+
+func TestTheLeafReadIsTakenOffTheHandshakeAndAsksTheAdminApiNothing(t *testing.T) {
+	held, _ := served(t)
+	proxy := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	t.Cleanup(proxy.Close)
+
+	var out, errs strings.Builder
+	if code := serving(proxy.Listener.Addr().String(), "shop.example.com", &out, &errs); code != 0 {
+		t.Fatalf("leaf off a proxy that served a certificate = %d: %q", code, errs.String())
+	}
+	if block, _ := pem.Decode([]byte(out.String())); block == nil || block.Type != "CERTIFICATE" {
+		t.Errorf("leaf wrote %q, want the certificate the peer presented on the handshake", out.String())
+	}
+	if asked := held.asked(); len(asked) != 0 {
+		t.Errorf("the leaf read asked the admin api %v, want nothing: caddy exposes no managed-certificate inventory there, and a 200 from a config load is not evidence a certificate exists because caddy obtains them in the background", asked)
+	}
 }
 
 func TestAHandshakeThatFailedForAnyReasonButAMissingCertificateIsNotReportedAsPending(t *testing.T) {
