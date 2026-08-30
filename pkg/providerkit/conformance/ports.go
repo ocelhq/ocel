@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -640,6 +641,28 @@ func planRows(t *testing.T, plan providerkit.Plan, verb string) int {
 	return rows
 }
 
+const conformanceImageDigest = "4f9a2c1e0d3b5a678c9e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e"
+
+type countedImages struct {
+	mu     sync.Mutex
+	pushed int
+}
+
+func (c *countedImages) Has(context.Context, providerkit.ImagePush) (bool, error) { return false, nil }
+
+func (c *countedImages) Push(_ context.Context, _ providerkit.ImagePush, _ providerkit.Reporter) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pushed++
+	return nil
+}
+
+func (c *countedImages) Pushed() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.pushed
+}
+
 const conformanceArtifactDigest = "b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c"
 
 func uploadKey(t *testing.T) string {
@@ -748,6 +771,49 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts provider
 		}
 		if !bytes.Equal(got, want) {
 			t.Errorf("the store holds %q under the shipped key, want %q", got, want)
+		}
+	})
+
+	t.Run("an image the release declares is a row the plan shows and a push the apply makes", func(t *testing.T) {
+		resources := declared(serves)
+		if len(resources) == 0 {
+			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
+		}
+		bare := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra, Resources: resources}
+		without, err := releaser.Plan(ctx, bare, nil)
+		if err != nil {
+			t.Fatalf("Plan() of a release pushing no image = %v", err)
+		}
+
+		store := &countedImages{}
+		pushing := bare
+		pushing.Images = providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{{
+			App:    "conformance",
+			Source: "ocel/conformance@sha256:" + conformanceImageDigest,
+			Target: "registry.invalid/conformance:sha256-" + conformanceImageDigest,
+			Digest: "sha256:" + conformanceImageDigest,
+		}}}
+		with, err := releaser.Plan(ctx, pushing, nil)
+		if err != nil {
+			requireInvalid(t, err, "Plan")
+			if _, err := releaser.Provision(ctx, pushing, nil); err == nil {
+				t.Error("Plan() refused a declared image push and Provision() took it, so the apply pushed nothing and said so to nobody")
+			}
+			return
+		}
+		if planRows(t, with, "Plan") <= planRows(t, without, "Plan") {
+			t.Error("declaring an image push added no plan row, and a push is a write to the customer's registry like any other: " +
+				"the plan and the apply must ship it down one path")
+		}
+		if pushed := store.Pushed(); pushed != 0 {
+			t.Errorf("Plan() pushed %d images, and a plan is the diff a human consents to before anything moves", pushed)
+		}
+
+		if _, err := releaser.Provision(ctx, pushing, nil); err != nil {
+			t.Fatalf("Provision() of the release whose plan showed the image = %v", err)
+		}
+		if pushed := store.Pushed(); pushed != 1 {
+			t.Errorf("Provision() pushed %d images, want the one the plan showed: the plan promised a push the apply never made", pushed)
 		}
 	})
 
