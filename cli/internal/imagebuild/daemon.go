@@ -151,16 +151,16 @@ func (d daemon) usable(ctx context.Context, builder *client.Client) error {
 	if err != nil {
 		return d.noBuilder(err)
 	}
-	return d.mergeable(workers)
+	return d.addressable(workers)
 }
 
-func (d daemon) mergeable(workers []*client.WorkerInfo) error {
+func (d daemon) addressable(workers []*client.WorkerInfo) error {
 	for _, worker := range workers {
 		if worker.Labels[snapshotterLabel] != "" {
 			return nil
 		}
 	}
-	return fmt.Errorf("the docker daemon at %s keeps images in its classic store, where buildkit refuses the merge operations every railpack build is made of: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.address, DockerHostEnv)
+	return fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under and buildkit refuses the merge operations every railpack build is made of: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.address, DockerHostEnv)
 }
 
 func (d daemon) tag(ctx context.Context, image Image) error {
