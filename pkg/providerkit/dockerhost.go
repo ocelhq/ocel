@@ -3,6 +3,7 @@ package providerkit
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -68,6 +69,23 @@ func (d DockerHost) Transport() *http.Transport {
 			return dialDocker(ctx, d.Network, d.Target)
 		},
 	}
+}
+
+func (d DockerHost) Export(ctx context.Context, client *http.Client, ref string) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/images/"+ref+"/get", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("read %s out of the daemon at %s: %w", ref, d.Address, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		defer func() { _ = resp.Body.Close() }()
+		return nil, fmt.Errorf("the daemon at %s answered %q reading %s out as a tar stream: %s",
+			d.Address, resp.Status, ref, said(resp.Body))
+	}
+	return resp.Body, nil
 }
 
 func (d DockerHost) Tag(ctx context.Context, client *http.Client, source, repository, tag string) error {
