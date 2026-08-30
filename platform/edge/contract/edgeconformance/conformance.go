@@ -265,6 +265,29 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
+	t.Run("the surface a project's own binding creates is the one the project can name", func(t *testing.T) {
+		ctx := context.Background()
+		e, spec := suite.New(t)
+		stack, err := e.Reconcile(ctx, spec, edge.StackState{})
+		if err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+		binds(t, stack, suite.Hostname)
+
+		mine := e.ProjectOwner(spec.Slug, spec.Class)
+		if mine == "" {
+			t.Skip("this edge names no project-wide surface, so a hostname it serves is owned by something finer than the project")
+		}
+		owner, err := e.DomainOwner(ctx, suite.Hostname)
+		if err != nil {
+			t.Fatalf("DomainOwner: %v", err)
+		}
+		if owner != mine {
+			t.Errorf("DomainOwner(%q) = %q after this project bound it, but ProjectOwner(%q, %q) = %q. The preflight guard refuses a hostname whose owner is not the name this call mints, so two spellings of one surface refuse a project its own hostname whenever a bind wrote the route and stopped before the record",
+				suite.Hostname, owner, spec.Slug, spec.Class, mine)
+		}
+	})
+
 	t.Run("a bound domain has a front to point DNS at", func(t *testing.T) {
 		e, stack := reconciledOn(t, suite)
 		binds(t, stack, suite.Hostname)

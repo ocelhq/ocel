@@ -133,6 +133,8 @@ func routePattern(hostname string) string {
 	return hostname + "/*"
 }
 
+func (p *provider) ProjectOwner(string, edge.Class) string { return "" }
+
 func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {

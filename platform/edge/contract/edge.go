@@ -78,6 +78,8 @@ type Edge interface {
 
 	DomainOwner(ctx context.Context, hostname string) (string, error)
 
+	ProjectOwner(slug string, class Class) string
+
 	ProjectRemovals(scope ProjectScope) []PlanGroup
 
 	PreviewWildcardRemovals(wildcard string) (removed, kept PlanGroup)

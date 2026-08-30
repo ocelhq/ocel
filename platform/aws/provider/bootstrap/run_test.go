@@ -565,6 +565,10 @@ func (f *fakeEdge) DomainOwner(context.Context, string) (string, error) {
 	return "", errors.New("bootstrap never reads a domain owner")
 }
 
+func (f *fakeEdge) ProjectOwner(slug string, class edge.Class) string {
+	return slug + "-" + string(class)
+}
+
 var standingEdge = func() edge.Edge { return &fakeEdge{kind: "default"} }
 
 func frontedBy(t *testing.T, ed edge.Edge) {

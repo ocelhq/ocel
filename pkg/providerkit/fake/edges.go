@@ -267,6 +267,10 @@ func (e *Edge) DomainOwner(_ context.Context, hostname string) (string, error) {
 	return e.owners[hostname], nil
 }
 
+func (e *Edge) ProjectOwner(slug string, class edge.Class) string {
+	return "ocel-" + slug + "-" + string(class)
+}
+
 func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := []edge.PlanChange{{
 		Kind:   "Fake::EdgeStack",
