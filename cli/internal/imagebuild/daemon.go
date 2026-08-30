@@ -114,6 +114,15 @@ func (d daemon) hijack(ctx context.Context, path, proto string, meta map[string]
 	return &hijacked{Conn: conn, reader: io.MultiReader(io.LimitReader(reader, int64(reader.Buffered())), conn)}, nil
 }
 
+func (d daemon) handshake(ctx context.Context, path, proto string, meta map[string][]string) (net.Conn, error) {
+	if _, set := ctx.Deadline(); !set {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, handshakeTimeout)
+		defer cancel()
+	}
+	return d.hijack(ctx, path, proto, meta)
+}
+
 func closing(conn net.Conn, err error) error {
 	_ = conn.Close()
 	return err
@@ -129,10 +138,10 @@ func (h *hijacked) Read(p []byte) (int, error) { return h.reader.Read(p) }
 func (d daemon) builder(ctx context.Context) (*client.Client, error) {
 	return client.New(ctx, "",
 		client.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return d.hijack(ctx, buildPath, upgradeTo, nil)
+			return d.handshake(ctx, buildPath, upgradeTo, nil)
 		}),
 		client.WithSessionDialer(func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error) {
-			return d.hijack(ctx, sessionPath, proto, meta)
+			return d.handshake(ctx, sessionPath, proto, meta)
 		}),
 	)
 }
@@ -163,7 +172,13 @@ func (d daemon) tag(ctx context.Context, image Image) error {
 	if err != nil {
 		return err
 	}
-	resp, err := d.client().Do(req)
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return dial(ctx, d.network, d.target)
+		},
+	}
+	defer transport.CloseIdleConnections()
+	resp, err := (&http.Client{Transport: transport}).Do(req)
 	if err != nil {
 		return fmt.Errorf("name %s in the daemon at %s: %w", image.Ref, d.address, err)
 	}
@@ -173,14 +188,6 @@ func (d daemon) tag(ctx context.Context, image Image) error {
 		return fmt.Errorf("the daemon at %s answered %q naming %s, so the image it just built cannot be reached by the ref a release pins: %s", d.address, resp.Status, image.Ref, strings.TrimSpace(string(said)))
 	}
 	return nil
-}
-
-func (d daemon) client() *http.Client {
-	return &http.Client{Transport: &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return dial(ctx, d.network, d.target)
-		},
-	}}
 }
 
 func (d daemon) unreachable(err error) error {
