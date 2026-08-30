@@ -496,6 +496,49 @@ func TestAppRoutesAreReachedByTheHostnamesTheirOwnSurfaceClaims(t *testing.T) {
 	}
 }
 
+func twoApps() ProxyState {
+	return ProxyState{
+		Grace: DrainWindow,
+		Routes: []AppRoute{
+			{RouteKey: keyed("api"), Upstream: "shop-api-1111:" + AppPort},
+			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + AppPort},
+		},
+	}
+}
+
+func TestOneSurfacesHostnameIsNotHandedToEveryAppThatSurfaceRuns(t *testing.T) {
+	t.Parallel()
+
+	state := twoApps()
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface}}
+
+	_, err := RenderProxyConfig(state)
+	if err == nil {
+		t.Fatal("a project running two apps rendered both of them matching every hostname it claims; reverse_proxy is terminal and the routes are written in name order, so api answers shop.example.com and web is configuration nothing on this box ever reaches")
+	}
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Errorf("the render failed with %v, want %s", err, providerkit.CodeInvalid)
+	}
+	for _, named := range []string{"api", "web", claimed} {
+		if !strings.Contains(err.Error(), named) {
+			t.Errorf("the render is refused with\n%s\nand never names %s", err, named)
+		}
+	}
+}
+
+func TestTwoAppsOnASurfaceThatClaimsNothingAreBothStillWritten(t *testing.T) {
+	t.Parallel()
+
+	read, err := ReadProxyState(mustRender(t, twoApps()))
+	if err != nil {
+		t.Fatalf("ReadProxyState() = %v", err)
+	}
+	if len(read.Routes) != 2 {
+		t.Errorf("a project running two apps and claiming no hostname renders %v; neither route answers a hostname yet, and refusing the pair here would stop every multi-app deploy on a box that has no domain bound at all", read.Routes)
+	}
+}
+
 func TestEveryBoxRefusesTheHostnamesNothingOnItClaimsAndNamesItselfDoingIt(t *testing.T) {
 	t.Parallel()
 
