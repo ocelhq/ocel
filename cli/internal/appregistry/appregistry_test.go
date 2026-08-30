@@ -216,3 +216,21 @@ func TestTheRepositoriesADeployPushesAreItsContainerApps(t *testing.T) {
 		t.Errorf("repositories() = %v, want one repository per container app and none for a serverless one", pushing)
 	}
 }
+
+func TestThePasswordIsReadWhereTheTargetIsBuiltAndNowhereEarlier(t *testing.T) {
+	cfg := project(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+
+	t.Setenv("GHCR_TOKEN", "the-one-checked-at-preflight")
+	if err := RequireSecret(cfg); err != nil {
+		t.Fatalf("RequireSecret() = %v", err)
+	}
+
+	t.Setenv("GHCR_TOKEN", "the-one-the-push-uses")
+	target, _, err := Resolve(context.Background(), cfg, hosting())
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if target.Password != "the-one-the-push-uses" {
+		t.Errorf("Resolve() carried %q, want the value the variable holds when the target is built: a password held from the plan-time check is one the deploy cannot let the user correct", target.Password)
+	}
+}
