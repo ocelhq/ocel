@@ -16,7 +16,7 @@ func (p *Provider) ForgetReleases(ctx context.Context, ref providerkit.StackRef,
 	return p.host.Forget(ctx, ref.Class, app)
 }
 
-func (p *Provider) EnsureRelease(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) error {
+func (p *Provider) EnsureRelease(ctx context.Context, ref providerkit.StackRef, app, physical, coordinate string, report providerkit.Reporter) error {
 	held, err := p.host.HoldsImage(ctx, coordinate)
 	if err != nil {
 		return err
@@ -26,7 +26,6 @@ func (p *Provider) EnsureRelease(ctx context.Context, ref providerkit.StackRef, 
 			"%s no longer holds %s, which %s was released from: the box keeps the last few releases of an app and this one has fallen out of that window, so there is nothing here to re-point at: deploy again",
 			p.options.SSH.session().Destination(), coordinate, app)
 	}
-	physical := host.ContainerName(ref.Name.String(), app, "", coordinate)
 	if report != nil {
 		report.Say("Standing " + app + " back up as " + physical + " from the image this host already holds")
 	}

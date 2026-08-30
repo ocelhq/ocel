@@ -690,7 +690,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 			if err := r.embed(ctx, entry, result.Functions, report); err != nil {
 				return err
 			}
-			if err := r.stage(ctx, entry, result.Functions, grants); err != nil {
+			if err := r.stage(ctx, entry, result.Functions, result.Containers, grants); err != nil {
 				return err
 			}
 			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, Stack{
@@ -905,7 +905,7 @@ func (r *deployRun) warm(ctx context.Context, functions []Function, report Repor
 	return warmer.Warm(ctx, targets, report)
 }
 
-func (r *deployRun) stage(ctx context.Context, entry AppEntry, functions []Function, grants []Link) error {
+func (r *deployRun) stage(ctx context.Context, entry AppEntry, functions []Function, containers []AppContainer, grants []Link) error {
 	urls := make(map[string]string, len(functions))
 	for _, fn := range functions {
 		urls[fn.Name] = fn.URL
@@ -922,6 +922,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, functions []Funct
 		DeploymentID:     entry.Build.DeploymentID(),
 		Entry:            entryFunction(r.manifest, entry.App),
 		Image:            images.Coordinate(entry.App),
+		Physical:         physicalOf(containers, entry.App),
 		FunctionURLs:     urls,
 		AssetPrefix:      coordinate.AssetKey(""),
 		IsrPrefix:        coordinate.ISRPrefix(),
@@ -1170,6 +1171,15 @@ func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegis
 	}
 	r.images = store
 	return nil
+}
+
+func physicalOf(containers []AppContainer, app string) string {
+	for _, container := range containers {
+		if container.Name == app {
+			return container.Physical
+		}
+	}
+	return ""
 }
 
 func runs(images ImagePlan, entry AppEntry) string {
