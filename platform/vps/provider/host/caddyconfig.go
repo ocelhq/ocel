@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	AppPort          = "8080"
 	proxyServer      = "ocel"
 	proxyDrainServer = "ocel_drain"
 	drainListen      = "127.0.0.1:9"
