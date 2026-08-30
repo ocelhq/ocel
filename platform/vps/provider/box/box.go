@@ -19,9 +19,13 @@ const (
 
 type Machine interface {
 	Address(ctx context.Context) (string, error)
+	HoldsImage(ctx context.Context, coordinate string) (bool, error)
 	StandUp(ctx context.Context, spec host.Container) error
-	Serving(ctx context.Context, app string) (string, error)
+	Promote(ctx context.Context, class providerkit.Class, app, coordinate string) error
+	Serving(ctx context.Context, key host.RouteKey) (string, error)
 	Release(ctx context.Context, rel host.Release, report providerkit.Reporter) error
+	Unroute(ctx context.Context, key host.RouteKey) error
+	UnrouteSurface(ctx context.Context, owner string) error
 	Claims(ctx context.Context) ([]host.HostClaim, error)
 	ClaimHost(ctx context.Context, claim host.HostClaim) error
 	DisclaimHost(ctx context.Context, hostname string) error

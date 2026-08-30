@@ -3,6 +3,7 @@ package box_test
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -23,16 +24,24 @@ const (
 
 type machine struct {
 	claims   []host.HostClaim
-	upstream map[string]string
+	upstream map[host.RouteKey]string
+	swept    map[string]bool
 	calls    []string
 	releases []host.Release
 	stood    []host.Container
+	headed   []string
 	refuse   error
 }
 
-func aMachine() *machine { return &machine{upstream: map[string]string{}} }
+func aMachine() *machine {
+	return &machine{upstream: map[host.RouteKey]string{}, swept: map[string]bool{}}
+}
 
 func (m *machine) Address(context.Context) (string, error) { return address, nil }
+
+func (m *machine) HoldsImage(_ context.Context, coordinate string) (bool, error) {
+	return !m.swept[coordinate], nil
+}
 
 func (m *machine) StandUp(_ context.Context, spec host.Container) error {
 	m.calls = append(m.calls, "stand-up "+spec.Name)
@@ -40,16 +49,34 @@ func (m *machine) StandUp(_ context.Context, spec host.Container) error {
 	return m.refuse
 }
 
-func (m *machine) Serving(_ context.Context, app string) (string, error) {
-	m.calls = append(m.calls, "serving "+app)
-	return m.upstream[app], nil
+func (m *machine) Promote(_ context.Context, _ providerkit.Class, app, coordinate string) error {
+	m.calls = append(m.calls, "head "+app+" at "+coordinate)
+	m.headed = append(m.headed, coordinate)
+	return m.refuse
+}
+
+func (m *machine) Serving(_ context.Context, key host.RouteKey) (string, error) {
+	m.calls = append(m.calls, "serving "+key.App)
+	return m.upstream[key], nil
 }
 
 func (m *machine) Release(_ context.Context, rel host.Release, _ providerkit.Reporter) error {
 	m.calls = append(m.calls, "release "+rel.App+" onto "+rel.Target)
 	m.releases = append(m.releases, rel)
-	m.upstream[rel.App] = rel.Target
+	m.upstream[rel.RouteKey] = rel.Target
 	return m.refuse
+}
+
+func (m *machine) Unroute(_ context.Context, key host.RouteKey) error {
+	m.calls = append(m.calls, "unroute "+key.Owner+"/"+key.Pointer+"/"+key.App)
+	delete(m.upstream, key)
+	return nil
+}
+
+func (m *machine) UnrouteSurface(_ context.Context, owner string) error {
+	m.calls = append(m.calls, "unroute "+owner)
+	maps.DeleteFunc(m.upstream, func(key host.RouteKey, _ string) bool { return key.Owner == owner })
+	return nil
 }
 
 func (m *machine) Claims(context.Context) ([]host.HostClaim, error) {
@@ -99,13 +126,15 @@ func staged(t *testing.T, stack edge.EdgeStack, app, identity, physical string) 
 		App:        app,
 		Identity:   identity,
 		Entry:      "/",
-		Image:      "ghcr.io/acme/" + app + ":" + identity,
+		Image:      imageFor(app, identity),
 		Physical:   physical,
 		HealthPath: "/healthz",
 	}); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
 }
+
+func imageFor(app, identity string) string { return "ghcr.io/acme/" + app + ":" + identity }
 
 func TestTheEdgeAnswersTheFactsABoxCanStandBehind(t *testing.T) {
 	t.Parallel()
@@ -170,7 +199,7 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItFlips(t *testing.T) {
 		t.Fatalf("Promote: %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "serving web", "release web onto shop-web-1111:" + host.AppPort}
+	want := []string{"stand-up shop-web-1111", "head web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + host.AppPort}
 	if !slices.Equal(stood.calls, want) {
 		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then flips", stood.calls, want)
 	}
@@ -206,7 +235,7 @@ func TestARollbackStandsThePreviousContainerBackUpAndFlipsOntoIt(t *testing.T) {
 		t.Fatalf("Promote(rollback): %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "serving web", "release web onto shop-web-1111:" + host.AppPort}
+	want := []string{"stand-up shop-web-1111", "head web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + host.AppPort}
 	if !slices.Equal(stood.calls, want) {
 		t.Fatalf("a rollback drove the box as %v, want %v: nothing provisions on this path, so re-pointing at a release that is not running is a ledger edit and not a restored site", stood.calls, want)
 	}
@@ -359,5 +388,159 @@ func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testin
 	}
 	if !slices.Contains(kinds, box.RouteKind) || !slices.Contains(kinds, box.CertificateKind) {
 		t.Errorf("the removal rows are %v, want the routes claimed and the certificates held", kinds)
+	}
+}
+
+func standingOn(t *testing.T, stood *machine, named string) edge.EdgeStack {
+	t.Helper()
+
+	front := box.New(stood, fake.NewRecords(), sshScope)
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
+		Version: "test", Class: edge.ClassProduction, Slug: named,
+	}, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile(%s): %v", named, err)
+	}
+	return stack
+}
+
+func promoted(t *testing.T, stack edge.EdgeStack, id, app, identity string) error {
+	t.Helper()
+	return stack.Promote(context.Background(), edge.Promotion{
+		PromotionID: id, Ts: 1, Builds: map[string]string{app: identity},
+	}, "", edge.DiscardReporter())
+}
+
+func TestTwoProjectsRunningTheSameAppNameOnOneBoxAreReleasedSeparately(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	shop, blog := standingOn(t, stood, "shop"), standingOn(t, stood, "blog")
+	staged(t, shop, "web", "b1", "shop-web-1111")
+	staged(t, blog, "web", "b1", "blog-web-1111")
+
+	if err := promoted(t, shop, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote(shop): %v", err)
+	}
+	if err := promoted(t, blog, "p2", "web", "b1"); err != nil {
+		t.Fatalf("Promote(blog): %v", err)
+	}
+
+	keys := map[string]bool{}
+	for _, rel := range stood.releases {
+		if keys[rel.Owner] {
+			continue
+		}
+		keys[rel.Owner] = true
+	}
+	if len(keys) != 2 {
+		t.Fatalf("the two projects released under %v, want a route apiece: a route named by the app alone is one project's deploy stopping the other's live container", keys)
+	}
+	if retiring := stood.releases[1].Retire; retiring != "" {
+		t.Errorf("the second project's first deploy retires %q, want nothing: that upstream belongs to the other project and stopping it takes a live site down", retiring)
+	}
+}
+
+func TestARollbackOntoASweptImageIsRefusedBeforeThePointerMoves(t *testing.T) {
+	t.Parallel()
+
+	stood, _, stack := standing(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "web", "b2", "shop-web-2222")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote(p1): %v", err)
+	}
+	if err := promoted(t, stack, "p2", "web", "b2"); err != nil {
+		t.Fatalf("Promote(p2): %v", err)
+	}
+	stood.swept[imageFor("web", "b1")] = true
+	stood.calls = nil
+
+	err := stack.Promote(context.Background(), edge.Promotion{
+		PromotionID: "p3", Ts: 3, Builds: map[string]string{"web": "b1"},
+	}, "", edge.DiscardReporter())
+	if err == nil {
+		t.Fatal("a rollback onto an image this box has swept succeeded, and docker run would then reach for a registry")
+	}
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+		t.Errorf("the rollback failed with %v, want a refusal naming what is missing rather than docker's own error", err)
+	}
+	if !strings.Contains(err.Error(), "deploy again") {
+		t.Errorf("the refusal reads %q and never says what to do instead", err)
+	}
+	if len(stood.calls) != 0 {
+		t.Errorf("the box was reached before the image was found gone: %v", stood.calls)
+	}
+
+	entries, err := stack.Ledger().History(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Active && entry.PromotionID != "p2" {
+			t.Errorf("the pointer stands at %s after a refused rollback, want the release still serving: the ensure runs before the flip so a rollback that cannot serve leaves nothing moved", entry.PromotionID)
+		}
+	}
+}
+
+func TestAPromotionPutsTheReleaseItServesAtTheHeadOfTheBoxsWindow(t *testing.T) {
+	t.Parallel()
+
+	stood, _, stack := standing(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "web", "b2", "shop-web-2222")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote(p1): %v", err)
+	}
+	if err := promoted(t, stack, "p2", "web", "b2"); err != nil {
+		t.Fatalf("Promote(p2): %v", err)
+	}
+	if err := promoted(t, stack, "p3", "web", "b1"); err != nil {
+		t.Fatalf("Promote(rollback): %v", err)
+	}
+
+	if len(stood.headed) == 0 || stood.headed[len(stood.headed)-1] != imageFor("web", "b1") {
+		t.Errorf("the box's release window heads at %v, want %s: a rollback that leaves the window alone is swept off the box by the next deploy's reconcile while the ledger still offers it", stood.headed, imageFor("web", "b1"))
+	}
+}
+
+func TestRemovingAPointerTakesTheRoutesItPointedAt(t *testing.T) {
+	t.Parallel()
+
+	stood, _, stack := standing(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if len(stood.upstream) != 1 {
+		t.Fatalf("the promotion routed %v, and this test needs a route to remove", stood.upstream)
+	}
+
+	if _, err := stack.RemovePointer(context.Background(), ""); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+	if len(stood.upstream) != 0 {
+		t.Errorf("the routes left after the pointer was removed are %v; nothing offers those releases any more and the proxy still forwards to their containers", stood.upstream)
+	}
+}
+
+func TestDestroyingAStackLeavesNoRouteOnTheBoxAtAll(t *testing.T) {
+	t.Parallel()
+
+	stood, _, stack := standing(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "worker", "b1", "shop-worker-1111")
+	if err := stack.Promote(context.Background(), edge.Promotion{
+		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1", "worker": "b1"},
+	}, "", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+
+	if err := stack.Destroy(context.Background()); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+	if len(stood.upstream) != 0 {
+		t.Errorf("a torn-down project leaves %v on this box's proxy, forwarding to containers the teardown removed", stood.upstream)
 	}
 }

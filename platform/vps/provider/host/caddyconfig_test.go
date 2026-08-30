@@ -40,7 +40,7 @@ func servers(t *testing.T, read map[string]any) map[string]any {
 func releasing() ProxyState {
 	return ProxyState{
 		Grace:    30 * time.Second,
-		Routes:   []AppRoute{{App: "web", Upstream: "shop-web-2222:" + AppPort}},
+		Routes:   []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + AppPort}},
 		Retiring: "shop-web-1111:" + AppPort,
 	}
 }
@@ -113,12 +113,12 @@ func TestARedeployThatChangesNothingRendersTheSameBytes(t *testing.T) {
 	t.Parallel()
 
 	scrambled := ProxyState{Grace: 30 * time.Second, Routes: []AppRoute{
-		{App: "worker", Upstream: "shop-worker-1:" + AppPort},
-		{App: "web", Upstream: "shop-web-1:" + AppPort},
+		{RouteKey: keyed("worker"), Upstream: "shop-worker-1:" + AppPort},
+		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + AppPort},
 	}}
 	ordered := ProxyState{Grace: 30 * time.Second, Routes: []AppRoute{
-		{App: "web", Upstream: "shop-web-1:" + AppPort},
-		{App: "worker", Upstream: "shop-worker-1:" + AppPort},
+		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + AppPort},
+		{RouteKey: keyed("worker"), Upstream: "shop-worker-1:" + AppPort},
 	}}
 	if !bytes.Equal(mustRender(t, scrambled), mustRender(t, ordered)) {
 		t.Error("two renders of the same set of apps differ by the order they were handed in, and a no-op deploy then rewrites the box's config")
@@ -176,6 +176,8 @@ func TestTheRedactingLogIsCarriedRatherThanRebuiltOnEveryFlip(t *testing.T) {
 		t.Errorf("the flip renders the logging block as\n%s\nwant the redacting one the box was bootstrapped with\n%s", got, want)
 	}
 }
+
+func keyed(app string) RouteKey { return RouteKey{Owner: surface, Pointer: pointed, App: app} }
 
 func mustRender(t *testing.T, state ProxyState) []byte {
 	t.Helper()

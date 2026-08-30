@@ -2,6 +2,8 @@ package host
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -78,6 +80,15 @@ func (b *bench) taking() []string {
 		}
 	}
 	return taken
+}
+
+func (b *bench) at(fragment string) int {
+	for at, command := range b.commands() {
+		if strings.Contains(command, fragment) {
+			return at
+		}
+	}
+	return -1
 }
 
 func (b *bench) took(fragment string) int {
@@ -278,5 +289,43 @@ func TestOneItemTheReadingCannotHashIsDriftRatherThanAnAbsence(t *testing.T) {
 	}
 	if read.settled() {
 		t.Errorf("a box whose %s does not hash as ocel writes it reports itself settled", ProxyHelper)
+	}
+}
+
+func digested(document string) string {
+	sum := sha256.Sum256([]byte(document))
+	return hex.EncodeToString(sum[:])
+}
+
+func readsProxy(command string) bool {
+	return strings.Contains(command, "sha256sum "+quoted(ProxyConfig)+" | cut")
+}
+
+func writesProxy(command string) bool {
+	return strings.Contains(command, `cat > "$staged"`)
+}
+
+func expectedDigest(command string) string {
+	_, checked, _ := strings.Cut(command, `if [ "$held" != `)
+	expected, _, _ := strings.Cut(checked, " ]")
+	return strings.Trim(expected, "'")
+}
+
+func servesProxy(b *bench, held *string) func(string) (session.Result, bool) {
+	return func(command string) (session.Result, bool) {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		switch {
+		case writesProxy(command):
+			if expected := expectedDigest(command); expected != digested(*held) {
+				return session.Result{Code: proxyMoved, Stderr: digested(*held)}, true
+			}
+			*held = b.fed[len(b.fed)-1]
+			return session.Result{Stdout: digested(*held)}, true
+		case readsProxy(command):
+			return session.Result{Stdout: digested(*held) + "\n" + *held}, true
+		default:
+			return session.Result{}, false
+		}
 	}
 }
