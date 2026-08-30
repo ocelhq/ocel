@@ -302,3 +302,80 @@ func TestBuildDeployPlanRefusesAFunctionNoDeclaredAppOwns(t *testing.T) {
 		}
 	})
 }
+
+const pinnedTestImage = "ocel/api@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+func containerRequest(image string) *contractv1.DeployRequest {
+	return &contractv1.DeployRequest{
+		Manifest: &contractv1.Manifest{
+			Slug: "shop",
+			Apps: []*contractv1.ManifestApp{
+				{Name: "api", DeploymentId: deploymentID, Compute: string(ComputeContainer)},
+				{Name: "web", DeploymentId: deploymentID, Compute: string(ComputeServerless)},
+			},
+			Containers: []*contractv1.ManifestContainer{
+				{App: "api", Image: image, HealthCheckPath: "/"},
+			},
+		},
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	}
+}
+
+func TestAContainerAppIsPromotedUnderTheDigestItWasBuiltAt(t *testing.T) {
+	t.Parallel()
+
+	plan, err := buildDeployPlan(containerRequest(pinnedTestImage), "p1")
+	if err != nil {
+		t.Fatalf("buildDeployPlan() error = %v", err)
+	}
+	if got := plan.Builds["api"]; got != pinnedTestImage {
+		t.Errorf("the promotion records %q as api's build, want %q: rolling back to it must repoint at a retained image rather than rebuild one", got, pinnedTestImage)
+	}
+}
+
+func TestAServerlessAppBesideAContainerKeepsItsOwnBuildIdentity(t *testing.T) {
+	t.Parallel()
+
+	plan, err := buildDeployPlan(containerRequest(pinnedTestImage), "p1")
+	if err != nil {
+		t.Fatalf("buildDeployPlan() error = %v", err)
+	}
+	for _, entry := range plan.Apps {
+		if entry.App != "web" {
+			continue
+		}
+		if plan.Builds["web"] != entry.Build.String() {
+			t.Errorf("the promotion records %q as web's build, want %s", plan.Builds["web"], entry.Build)
+		}
+	}
+}
+
+func TestAContainerNamingAnAppTheManifestDoesNotDeclareRefusesTheDeploy(t *testing.T) {
+	t.Parallel()
+
+	req := containerRequest(pinnedTestImage)
+	req.Manifest.Containers[0].App = "ghost"
+
+	_, err := buildDeployPlan(req, "p1")
+	if err == nil {
+		t.Fatal("buildDeployPlan() admitted a container for an app this manifest never declares, and nothing would ever stand it up")
+	}
+	if !strings.Contains(err.Error(), "ghost") {
+		t.Errorf("buildDeployPlan() error = %q, want it to name the app", err)
+	}
+}
+
+func TestAContainerAppWithNoContainerRefusesTheDeploy(t *testing.T) {
+	t.Parallel()
+
+	req := containerRequest(pinnedTestImage)
+	req.Manifest.Containers = nil
+
+	_, err := buildDeployPlan(req, "p1")
+	if err == nil {
+		t.Fatal("buildDeployPlan() admitted an app on container compute with no container, so the promotion would record no image to roll back to")
+	}
+	if !strings.Contains(err.Error(), "api") {
+		t.Errorf("buildDeployPlan() error = %q, want it to name the app", err)
+	}
+}

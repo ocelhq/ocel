@@ -5,6 +5,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -14,6 +15,11 @@ func TestTheWireAcceptsAnAppNamingContainer(t *testing.T) {
 
 	req := deployRequest()
 	req.Manifest.Apps[0].Compute = string(providerkit.ComputeContainer)
+	req.Manifest.Containers = []*contractv1.ManifestContainer{{
+		App:             req.Manifest.Apps[0].GetName(),
+		Image:           "ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		HealthCheckPath: "/",
+	}}
 
 	result, _, err := deployStream(t, client, req)
 	if err != nil {
