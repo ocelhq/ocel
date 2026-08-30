@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -348,11 +350,23 @@ func TestTheContainerIsWrittenAgainWhenTheBaselineBehindItMoves(t *testing.T) {
 	}
 }
 
+func starting(t *testing.T, command string) string {
+	t.Helper()
+
+	for _, line := range strings.Split(command, "\n") {
+		if strings.HasPrefix(line, quoted("docker")+" "+quoted("run")+" ") {
+			return line
+		}
+	}
+	t.Fatalf("nothing in the write stands the proxy up:\n%s", command)
+	return ""
+}
+
 func TestTheFileTheProxyIsStartedFromIsTheWholeOfWhatItServes(t *testing.T) {
 	t.Parallel()
 
 	command := containerCommand()
-	run, config, split := strings.Cut(strings.TrimSuffix(command, " >/dev/null"), quoted("caddy")+" "+quoted("run")+" ")
+	run, config, split := strings.Cut(strings.TrimSuffix(starting(t, command), " >/dev/null"), quoted("caddy")+" "+quoted("run")+" ")
 	if !split {
 		t.Fatalf("nothing in the run command starts caddy:\n%s", command)
 	}
@@ -669,5 +683,82 @@ func TestWhatTheDeployLoginHoldsIsTheSameWhicheverArchitectureTheBoxRuns(t *test
 	class := providerkit.ClassProduction
 	if !slices.Equal(grants(class, ArchAMD64), grants(class, ArchARM64)) {
 		t.Error("`ocel permissions deploy` prints one thing on an amd64 box and another on an arm64 one, and what a login holds does not depend on what the box runs")
+	}
+}
+
+func engineStub(t *testing.T, upAt int) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	asks := quoted(filepath.Join(dir, "asked"))
+	stub := "#!/bin/sh\n" +
+		"case \"$1\" in\n" +
+		"rm|run) exit 0 ;;\n" +
+		"logs) echo 'run: loading initial config' ; echo 'caddy said why it stopped' ; exit 0 ;;\n" +
+		"inspect)\n" +
+		"  echo call >> " + asks + "\n" +
+		"  case \"$*\" in *ExitCode*) echo 'status=exited exit=7 error=nothing caddy could parse' ; exit 0 ;; esac\n" +
+		"  if [ " + fmt.Sprint(upAt) + " -gt 0 ] && [ \"$(wc -l < " + asks + ")\" -ge " + fmt.Sprint(upAt) + " ]; then\n" +
+		"    echo running\n  else\n    echo created\n  fi\n" +
+		"  ;;\n" +
+		"esac\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(dir, dockerEngine), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func asked(t *testing.T, dir string) int {
+	t.Helper()
+
+	rendered, err := os.ReadFile(filepath.Join(dir, "asked"))
+	if errors.Is(err, os.ErrNotExist) {
+		return 0
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Count(string(rendered), "\n")
+}
+
+func writing(t *testing.T, dir, command string) (string, error) {
+	t.Helper()
+
+	cmd := exec.Command("/bin/sh", "-c", command)
+	cmd.Env = append(os.Environ(), "PATH="+dir+":"+os.Getenv("PATH"))
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stderr.String(), err
+}
+
+func TestTheContainerWriteWaitsForTheProxyItJustCreatedToComeUp(t *testing.T) {
+	t.Parallel()
+
+	dir := engineStub(t, 2)
+	said, err := writing(t, dir, containerWriting(5))
+	if err != nil {
+		t.Fatalf("the write of a proxy that reported created before it reported running = %v\n%s", err, said)
+	}
+	if at := asked(t, dir); at < 2 {
+		t.Errorf("the write asked the engine %d times whether the proxy was up, and a container still reported created is one the write returned on rather than waited for", at)
+	}
+}
+
+func TestAProxyThatNeverComesUpFailsTheWriteWithWhatTheEngineSaysAboutIt(t *testing.T) {
+	t.Parallel()
+
+	dir := engineStub(t, 0)
+	said, err := writing(t, dir, containerWriting(2))
+	if err == nil {
+		t.Fatalf("the write of a proxy that never came up landed, and the stamp then records a state the box does not hold:\n%s", said)
+	}
+	for _, evidence := range []string{ProxyContainer, "status=exited", "exit=7", "caddy said why it stopped"} {
+		if !strings.Contains(said, evidence) {
+			t.Errorf("the write said %q, and it never names %q: a proxy that crash-loops must diagnose itself here rather than surface as drift", said, evidence)
+		}
+	}
+	if lines := strings.Count(strings.TrimRight(said, "\n"), "\n") + 1; lines > saidLines {
+		t.Errorf("the write said %d lines and a refusal carries %d, so the evidence is cut before it is read:\n%s", lines, saidLines, said)
 	}
 }
