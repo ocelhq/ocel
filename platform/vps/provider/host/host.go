@@ -253,14 +253,18 @@ func (h *Host) ran(ctx context.Context, what, command string, stdin io.Reader, e
 const saidLines = 4
 
 func (h *Host) refuse(what string, result session.Result) error {
+	return providerkit.Refuse(providerkit.CodeDenied, "%s on %s: %s", what, h.named(), spoken(result))
+}
+
+func spoken(result session.Result) string {
 	said := strings.TrimSpace(result.Stderr)
 	if said == "" {
-		said = "it said nothing about why"
+		return "it said nothing about why"
 	}
 	if lines := strings.Split(said, "\n"); len(lines) > saidLines {
 		said = strings.Join(lines[:saidLines], "\n")
 	}
-	return providerkit.Refuse(providerkit.CodeDenied, "%s on %s: %s", what, h.named(), said)
+	return said
 }
 
 func (h *Host) Install(ctx context.Context, item Item) error {
