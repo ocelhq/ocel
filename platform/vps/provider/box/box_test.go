@@ -804,3 +804,31 @@ func TestDestroyingAStackLeavesNoRouteOnTheBoxAtAll(t *testing.T) {
 		t.Errorf("a torn-down project leaves %v on this box's proxy, forwarding to containers the teardown removed", stood.upstream)
 	}
 }
+
+func TestABindNamingAnAppClaimsTheHostnameForThatAppAndTheSurfaceStillOwnsIt(t *testing.T) {
+	t.Parallel()
+
+	const hostname = "api.example.com"
+	stood, front, stack := standing(t)
+	ctx := context.Background()
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: hostname, App: "api"}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+
+	claims, err := stood.Claims(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := host.HostClaim{Hostname: hostname, Owner: box.Surface(slug, edge.ClassProduction), App: "api"}
+	if len(claims) != 1 || claims[0] != want {
+		t.Errorf("the box holds %v, want %v: a project running two apps binds a hostname to one of them, and a claim that drops the app leaves the render unable to tell which route answers it", claims, want)
+	}
+
+	owner, err := front.DomainOwner(ctx, hostname)
+	if err != nil {
+		t.Fatalf("DomainOwner: %v", err)
+	}
+	if owner != box.Surface(slug, edge.ClassProduction) {
+		t.Errorf("DomainOwner(%q) = %q, want the surface: the claim guard and the preview-entry check are both project-grained, so this answer stays surface-valued whatever app the hostname was declared under", hostname, owner)
+	}
+}
