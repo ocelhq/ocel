@@ -282,6 +282,45 @@ func TestAKeyPathRelativeToNothingIsRefusedRatherThanGuessedAt(t *testing.T) {
 	}
 }
 
+func TestASurveyReportsNothingForAFileTheLoginDrawingItCannotRead(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("this test runs as root, which reads every mode, and the login a heal runs as is not root")
+	}
+	root := t.TempDir()
+	readable := filepath.Join(root, "records")
+	if err := os.WriteFile(readable, []byte("what every login may hash\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sealed := filepath.Join(root, "ocel-proxyctl")
+	if err := os.WriteFile(sealed, []byte("what root alone may hash\n"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(sealed, os.Geteuid(), os.Getegid()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(sealed, 0o000); err != nil {
+		t.Fatal(err)
+	}
+
+	items := []Item{
+		{Kind: KindFile, Name: readable, Mode: 0o644, Owner: stateOwner},
+		{Kind: KindFile, Name: sealed, Mode: 0o750, Owner: rootOwner},
+	}
+	observed, _, err := readSurvey(sh(t, root, survey(items)))
+	if err != nil {
+		t.Fatalf("readSurvey() over a tier holding a file this login may not read = %v", err)
+	}
+	if _, held := observed[KindFile+" "+readable]; !held {
+		t.Fatalf("the survey read nothing at all for %s, so what it says about %s means nothing", readable, sealed)
+	}
+	if reported, held := observed[KindFile+" "+sealed]; held {
+		t.Errorf("the survey reports %s as %q, and a file it could not hash reads as one that moved: heal denies the whole set over a helper root owns and nothing else may read",
+			sealed, reported)
+	}
+}
+
 func TestASymlinkWhereAnItemsPathShouldBeIsRefusedRatherThanFollowed(t *testing.T) {
 	t.Parallel()
 

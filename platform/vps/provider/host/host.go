@@ -28,7 +28,9 @@ type Host struct {
 	floored   bool
 	refusal   error
 	elevation string
-	reported  string
+
+	knowing  sync.Mutex
+	reported string
 
 	rooting sync.Mutex
 	knows   bool
@@ -124,17 +126,20 @@ func (h *Host) elevate(ctx context.Context) (string, error) {
 	if !facts.Root {
 		h.elevation = "sudo -n "
 	}
-	h.reported = facts.Arch
 	h.settled = true
 	return h.elevation, nil
 }
 
 func (h *Host) arch(ctx context.Context) (string, error) {
-	if _, err := h.elevate(ctx); err != nil {
-		return "", err
+	h.knowing.Lock()
+	defer h.knowing.Unlock()
+	if h.reported == "" {
+		rendered, err := h.ran(ctx, "ask this host what it runs on", "uname -m", nil, "")
+		if err != nil {
+			return "", err
+		}
+		h.reported = strings.TrimSpace(rendered)
 	}
-	h.elevating.Lock()
-	defer h.elevating.Unlock()
 	return Architecture(h.reported)
 }
 
@@ -414,7 +419,7 @@ func survey(items []Item, also ...string) string {
 	script.WriteString(`; do
 if [ -h "$p" ]; then ` + reports(quoted(kindLink), `"$p"`, `0`, `''`, `"$(readlink "$p")"`) + `
 elif [ -d "$p" ]; then ` + reports(quoted(KindDir), `"$p"`, stated, held, `''`) + `
-elif [ -f "$p" ]; then ` + reports(quoted(KindFile), `"$p"`, stated, held, `"$(sha256sum "$p" | cut -d' ' -f1)"`) + `
+elif [ -f "$p" ] && [ -r "$p" ]; then ` + reports(quoted(KindFile), `"$p"`, stated, held, `"$(sha256sum "$p" | cut -d' ' -f1)"`) + `
 fi
 done`)
 	return probes.String() + script.String()
