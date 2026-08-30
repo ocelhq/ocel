@@ -29,6 +29,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -1387,6 +1388,9 @@ func validateFixtureManifest(m *contractv1.Manifest) error {
 	for _, a := range m.GetApps() {
 		if err := naming.ValidateDeploymentID(a.GetDeploymentId()); err != nil {
 			return fmt.Errorf("app %s: %w", a.GetName(), err)
+		}
+		if !providerkit.KnownCompute(a.GetCompute()) {
+			return fmt.Errorf("app %s carries compute %q, and a provider only runs %v", a.GetName(), a.GetCompute(), providerkit.ComputeNames(providerkit.Computes()))
 		}
 	}
 	declared := map[string]bool{}

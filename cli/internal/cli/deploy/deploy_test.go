@@ -665,3 +665,33 @@ export function handler() {
 `)
 	}
 }
+
+func TestRunDeployRefusesAComputeTheProviderDoesNotRun(t *testing.T) {
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	clitest.StubBuild(&deps, nil)
+	root, sockPath := clitest.SetUpDeployFixture(t)
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { preview: "*.preview.acme.com" },
+  apps: [{ name: "api", path: "apps/api", framework: "express", compute: "container" }],
+};
+`)
+	writeAppSource(t, root, "api")
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatalf("runDeploy err = nil, want the deploy refused; stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{`"api"`, `"container"`, "@ocel/provider-aws", "serverless"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout = %q, want the refusal to name %s", out, want)
+		}
+	}
+
+	clitest.WaitForNoStaleSocket(t, sockPath)
+}
