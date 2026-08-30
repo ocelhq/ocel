@@ -144,7 +144,8 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 		t.Fatal(err)
 	}
 	if !standing.Stacks[0].DigestCurrent {
-		t.Error("Describe() calls a box whose proxy has just been installed drifted")
+		t.Errorf("Describe() calls a box whose proxy has just been installed drifted, %s\n%s",
+			stillMoving(t, bootstrapper, class, standing.Held), vm.proxySaid(t))
 	}
 	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: standing.Held})
 	if err != nil {
@@ -152,7 +153,8 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 	}
 	for _, change := range onlyGroup(t, again).Changes {
 		if change.Action != providerkit.ActionKeep {
-			t.Errorf("a re-run over a box whose proxy serves plans %q for %s, and a proxy reinstalled on every run is one nobody dares re-run", change.Action, change.Name)
+			t.Errorf("a re-run over a box whose proxy serves plans %q for %s, and a proxy reinstalled on every run is one nobody dares re-run.\n%s",
+				change.Action, change.Name, vm.proxySaid(t))
 		}
 	}
 

@@ -140,7 +140,8 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Fatal(err)
 	}
 	if !standing.Stacks[0].DigestCurrent {
-		t.Error("Describe() calls a machine that has just been bootstrapped, engine and all, drifted")
+		t.Errorf("Describe() calls a machine that has just been bootstrapped, engine and all, drifted, %s\n%s",
+			stillMoving(t, bootstrapper, class, standing.Held), vm.proxySaid(t))
 	}
 	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: standing.Held})
 	if err != nil {
@@ -152,7 +153,8 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	}
 	for _, change := range settled.Changes {
 		if change.Action != providerkit.ActionKeep {
-			t.Errorf("a re-run plans %q for %s, and bootstrap is a statement of state rather than a stack of side effects", change.Action, change.Name)
+			t.Errorf("a re-run plans %q for %s, and bootstrap is a statement of state rather than a stack of side effects.\n%s",
+				change.Action, change.Name, vm.proxySaid(t))
 		}
 	}
 
