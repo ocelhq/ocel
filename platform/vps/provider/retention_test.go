@@ -142,13 +142,19 @@ func TestAnAppNameOfMetacharactersReachesTheHelperAsOneWord(t *testing.T) {
 		machine := &box{}
 		ref := aStack(t, anApp()).Ref
 		_ = over(machine).ReconcileImages(context.Background(), ref, app, loadedCoordinate, nil)
+		carried := 0
 		for _, command := range machine.commands() {
 			if !strings.Contains(command, app) {
 				continue
 			}
 			if !strings.Contains(command, quoted(app)) {
 				t.Errorf("the name %q reached the wire as %q outside a quoted word", app, command)
+				continue
 			}
+			carried++
+		}
+		if carried == 0 {
+			t.Errorf("no command the sweep ran carried %q at all, so this test read nothing: a helper invocation that drops or mangles the app name passes it green", app)
 		}
 	}
 }
