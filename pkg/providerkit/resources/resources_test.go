@@ -805,3 +805,58 @@ func TestAContainerStandingUnderAnyNameButItsAppsIsSweptOnTheNextRelease(t *test
 		t.Fatalf("the fan-out took down %v; a release declares the app's own name and nothing else, so a container standing under any other name is swept the next time round", own.removed)
 	}
 }
+
+func imagePlan(store providerkit.ImageStore) providerkit.ImagePlan {
+	return providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{{
+		App:    "web",
+		Source: testImage,
+		Target: "ghcr.io/acme/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		Digest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	}}}
+}
+
+func TestTheImageIsPushedBeforeTheContainerItIsStoodUpFrom(t *testing.T) {
+	t.Parallel()
+
+	own := &withContainers{buckets: &buckets{}}
+	registry := fake.NewImages()
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+	plan := providerkit.StackPlan{
+		Ref:    appRef(),
+		Kind:   providerkit.StackApp,
+		App:    containerApp("web"),
+		Images: imagePlan(registry),
+	}
+
+	if _, err := releaser.Provision(context.Background(), plan, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if pushed := registry.Pushed(); len(pushed) != 1 || pushed[0].Source != testImage {
+		t.Fatalf("the fan-out pushed %v, want the app's own image", pushed)
+	}
+	if len(own.stood) != 1 {
+		t.Fatalf("the fan-out stood up %d containers, want the one the pushed image runs", len(own.stood))
+	}
+}
+
+func TestAReleaseWhoseImageCannotBePushedStandsNothingUp(t *testing.T) {
+	t.Parallel()
+
+	own := &withContainers{buckets: &buckets{}}
+	registry := fake.NewImages()
+	registry.Refusing(errors.New("the registry refused the token"))
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+	plan := providerkit.StackPlan{
+		Ref:    appRef(),
+		Kind:   providerkit.StackApp,
+		App:    containerApp("web"),
+		Images: imagePlan(registry),
+	}
+
+	if _, err := releaser.Provision(context.Background(), plan, nil); err == nil {
+		t.Fatal("Provision() succeeded with an image that never reached the registry, so the box would be pointed at an image it cannot pull")
+	}
+	if len(own.stood) != 0 {
+		t.Fatalf("the fan-out stood up %v after the push failed", own.stood)
+	}
+}
