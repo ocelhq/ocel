@@ -156,7 +156,7 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 		return providerkit.StackResult{}, err
 	}
 	if plan.App != nil {
-		defer f.reconcile(ctx, plan.Ref, plan.App.App, plan.App.Image, report)
+		defer func() { _ = f.reconcile(ctx, plan.Ref, plan.App.App, plan.App.Image, report) }()
 	}
 	if err := plan.Images.Ship(ctx, report); err != nil {
 		return providerkit.StackResult{}, err
@@ -274,33 +274,42 @@ func (f *fanout) Destroy(ctx context.Context, ref providerkit.StackRef, report p
 	if err := f.removeContainers(ctx, ref, recorded.Containers, torn, report); err != nil {
 		return err
 	}
+	var stopped error
 	for _, held := range recorded.Containers {
-		f.forget(ctx, ref, held.Name, report)
+		if err := f.forget(ctx, ref, held.Name, report); err != nil && stopped == nil {
+			stopped = err
+		}
 	}
 	for _, held := range recorded.Containers {
-		f.reconcile(ctx, ref, held.Name, held.Image, report)
+		if err := f.reconcile(ctx, ref, held.Name, held.Image, report); err != nil && stopped == nil {
+			stopped = err
+		}
 	}
-	return nil
+	return stopped
 }
 
-func (f *fanout) forget(ctx context.Context, ref providerkit.StackRef, app string, report providerkit.Reporter) {
+func (f *fanout) forget(ctx context.Context, ref providerkit.StackRef, app string, report providerkit.Reporter) error {
 	retention, sweeps := f.impl.(ImageRetention)
 	if !sweeps {
-		return
+		return nil
 	}
-	if err := retention.ForgetReleases(ctx, ref, app, report); err != nil && report != nil {
+	err := retention.ForgetReleases(ctx, ref, app, report)
+	if err != nil && report != nil {
 		report.Detail(fmt.Sprintf("Left %s's release window standing: %v", app, err))
 	}
+	return err
 }
 
-func (f *fanout) reconcile(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) {
+func (f *fanout) reconcile(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) error {
 	retention, sweeps := f.impl.(ImageRetention)
 	if !sweeps || coordinate == "" {
-		return
+		return nil
 	}
-	if err := retention.ReconcileImages(ctx, ref, app, coordinate, report); err != nil && report != nil {
+	err := retention.ReconcileImages(ctx, ref, app, coordinate, report)
+	if err != nil && report != nil {
 		report.Detail(fmt.Sprintf("Left %s's unreferenced images where they stand: %v", app, err))
 	}
+	return err
 }
 
 const (

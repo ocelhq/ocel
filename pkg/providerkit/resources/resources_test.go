@@ -863,11 +863,14 @@ func TestAReleaseWhoseImageCannotBePushedStandsNothingUp(t *testing.T) {
 
 type retaining struct {
 	*buckets
-	swept   []string
-	window  map[string][]string
-	holding map[string]bool
-	stood   func() error
-	served  func(resources.Instruction) error
+	swept      []string
+	taken      []string
+	window     map[string][]string
+	holding    map[string]bool
+	stood      func() error
+	served     func(resources.Instruction) error
+	sweeping   func() error
+	forgetting func() error
 }
 
 func (r *retaining) promote(app, coordinate string) {
@@ -893,7 +896,10 @@ func (r *retaining) ProvisionContainers(_ context.Context, plan providerkit.Stac
 	return []providerkit.AppContainer{{Name: plan.App.App, Physical: plan.Ref.Name.String() + "-" + plan.App.App, Image: plan.App.Image}}, nil
 }
 
-func (r *retaining) RemoveContainers(context.Context, providerkit.StackRef, []providerkit.AppContainer, providerkit.Reporter) error {
+func (r *retaining) RemoveContainers(_ context.Context, _ providerkit.StackRef, going []providerkit.AppContainer, _ providerkit.Reporter) error {
+	for _, container := range going {
+		r.taken = append(r.taken, container.Physical)
+	}
 	return nil
 }
 
@@ -908,6 +914,11 @@ func (r *retaining) Bucket(ctx context.Context, in resources.Instruction, report
 
 func (r *retaining) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, coordinate string, _ providerkit.Reporter) error {
 	r.swept = append(r.swept, app+" "+coordinate)
+	if r.sweeping != nil {
+		if err := r.sweeping(); err != nil {
+			return err
+		}
+	}
 	for held := range r.holding {
 		if !slices.Contains(r.window[app], held) {
 			delete(r.holding, held)
@@ -917,6 +928,11 @@ func (r *retaining) ReconcileImages(_ context.Context, _ providerkit.StackRef, a
 }
 
 func (r *retaining) ForgetReleases(_ context.Context, _ providerkit.StackRef, app string, _ providerkit.Reporter) error {
+	if r.forgetting != nil {
+		if err := r.forgetting(); err != nil {
+			return err
+		}
+	}
 	delete(r.window, app)
 	return nil
 }
@@ -1016,6 +1032,42 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasHolding(t *testing.T) {
 	}
 	if own.holds(testImage) {
 		t.Error("the teardown left " + testImage + " on the box, and a stack that names itself in the window it never rewrites is swept by nothing that comes after it")
+	}
+}
+
+func TestATeardownThatStoppedReconcilingSaysSoWithNoReporterListening(t *testing.T) {
+	t.Parallel()
+
+	refused := errors.New("the helper is not on this box")
+	for name, breaking := range map[string]func(*retaining){
+		"the window was never dropped": func(own *retaining) { own.forgetting = func() error { return refused } },
+		"the sweep never ran":          func(own *retaining) { own.sweeping = func() error { return refused } },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			records := fake.NewRecords()
+			ref := appRef()
+			if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
+				Kind:       providerkit.StackApp,
+				Containers: []providerkit.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			own := &retaining{buckets: &buckets{}}
+			breaking(own)
+			releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+
+			err := releaser.Destroy(ctx, ref, nil)
+			if !errors.Is(err, refused) {
+				t.Errorf("Destroy() = %v, want %v: a destroy run with no reporter attached is where the only trace of a box that stopped reconciling would be lost", err, refused)
+			}
+			if !slices.Equal(own.taken, []string{"shop-prod-web"}) {
+				t.Errorf("the teardown took down %v, want the container it recorded: the sweep failing is reported after the removals, never instead of them", own.taken)
+			}
+		})
 	}
 }
 
