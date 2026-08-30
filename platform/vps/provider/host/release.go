@@ -156,10 +156,7 @@ func (h *Host) writeProxyConfig(ctx context.Context, expected string, state Prox
 }
 
 func (h *Host) writeProxyDocument(ctx context.Context, expected, document string) (string, error) {
-	elevation, err := h.elevate(ctx)
-	if err != nil {
-		return "", err
-	}
+	elevation, refused := h.elevate(ctx)
 	result, err := h.stream(ctx, stagedWrite(expected), strings.NewReader(document), elevation)
 	if err != nil {
 		return "", err
@@ -172,8 +169,16 @@ func (h *Host) writeProxyDocument(ctx context.Context, expected, document string
 			"%s on %s now reads as %s and this deploy composed its routes onto %s, so another deploy or an `ocel domain` on this box rewrote the whole machine's proxy configuration while this one was working. Nothing was written and what that deploy left is still what the proxy serves: run this one again",
 			ProxyConfig, h.named(), strings.TrimSpace(result.Stderr), expected)
 	default:
-		return "", h.refuse("write "+ProxyConfig, result)
+		return "", unelevated(refused, h.refuse("write "+ProxyConfig, result))
 	}
+}
+
+func unelevated(refused, why error) error {
+	if refused == nil {
+		return why
+	}
+	return providerkit.Refuse(providerkit.CodeNotReady,
+		"%v\n\nocel wrote as this login because it could not elevate: %v", why, refused)
 }
 
 func stagedWrite(expected string) string {
