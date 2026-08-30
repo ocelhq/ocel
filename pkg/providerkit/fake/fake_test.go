@@ -267,4 +267,26 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	if len(contained.Containers) != 1 || len(contained.Functions) != 0 {
 		t.Fatalf("Provision() of a container app = %+v, want it to reach AppContainers alone", contained)
 	}
+
+	if err := providerkit.WriteStack(context.Background(), provider.Records(), ref.Class, ref.Project, ref.Name, providerkit.Stack{
+		Kind:       providerkit.StackApp,
+		Containers: contained.Containers,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+		Ref:  ref,
+		Kind: providerkit.StackApp,
+		App: &providerkit.AppPlan{
+			App:       "web",
+			Compute:   providerkit.ComputeServerless,
+			Functions: []providerkit.FunctionSpec{{Name: "api"}},
+		},
+	}, nil); err != nil {
+		t.Fatalf("Provision() of an app moving back to serverless = %v", err)
+	}
+	if taken := provider.Releases().(*fake.Releaser).TakenDown(); !slices.Contains(taken, "web") {
+		t.Errorf("the reference provider took down %v, want the container the app left behind: an app changing compute leaves the other primitive's work standing otherwise", taken)
+	}
 }
