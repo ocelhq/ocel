@@ -28,7 +28,7 @@ func preflightPreviewUp(ctx context.Context, ui *runui.Session, runner *provider
 	if err != nil {
 		return nil, "", err
 	}
-	compute, err := resolveComputes(cfg, resp)
+	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Package())
 	if err != nil {
 		return nil, "", err
 	}
@@ -50,7 +50,7 @@ func preflightDeploy(ctx context.Context, ui *runui.Session, runner *provider.Ru
 	if err != nil {
 		return nil, "", err
 	}
-	compute, err := resolveComputes(cfg, resp)
+	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Package())
 	if err != nil {
 		return nil, "", err
 	}
@@ -61,10 +61,6 @@ func preflightDeploy(ctx context.Context, ui *runui.Session, runner *provider.Ru
 		return nil, "", err
 	}
 	return resp.GetKnownSlugs(), compute, nil
-}
-
-func resolveComputes(cfg *projectconfig.Config, resp *contractv1.PreflightResponse) (string, error) {
-	return preflight.ResolveComputes(cfg, resp.GetComputes(), resp.GetIdentity().GetProvider())
 }
 
 func settleBootstrap(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
