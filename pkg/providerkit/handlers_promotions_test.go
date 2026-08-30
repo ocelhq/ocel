@@ -112,6 +112,99 @@ func TestRollbackFlipsThePointerToTheEarlierPromotion(t *testing.T) {
 	}
 }
 
+type capturingLedger struct {
+	fake.Ledger
+	marker string
+
+	mu     sync.Mutex
+	report edge.Reporter
+	heard  bool
+}
+
+func (c *capturingLedger) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
+	c.mu.Lock()
+	c.report, c.heard = report, true
+	c.mu.Unlock()
+	report.Say(c.marker)
+	report.Detail(c.marker)
+	report.Span(c.marker, time.Now(), time.Now(), nil)
+	return c.Ledger.Promote(ctx, promotion, pointer, report)
+}
+
+func (c *capturingLedger) flipped() (edge.Reporter, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.report, c.heard
+}
+
+func capturing(t *testing.T, provider *fake.Provider, class providerkit.Class, slug, marker string) *capturingLedger {
+	t.Helper()
+	held := &capturingLedger{Ledger: ledger.New(provider.Records(), class, slug), marker: marker}
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(edge.StackState) fake.Ledger { return held })
+	return held
+}
+
+func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnReporter(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	const marker = "the flip said this through the reporter it was handed"
+	held := capturing(t, provider, providerkit.ClassProduction, "shop", marker)
+
+	result, events := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	report, heard := held.flipped()
+	if !heard {
+		t.Fatal("the deploy never reached Promote, so nothing was reported from the flip")
+	}
+	if report == edge.DiscardReporter() {
+		t.Fatal("the deploy handed the flip a discarding reporter, want the Promotion stage's own")
+	}
+
+	titles := map[string]string{}
+	parents := map[string]string{}
+	var spoke string
+	for _, event := range events {
+		for _, stage := range event.GetStagePlan().GetStages() {
+			titles[string(stage.GetId())] = stage.GetTitle()
+			parents[string(stage.GetId())] = string(stage.GetParentId())
+		}
+		if progress := event.GetProgress(); progress.GetMessage() == marker {
+			spoke = string(progress.GetStageId())
+		}
+	}
+	if spoke == "" {
+		t.Fatal("nothing the flip said reached the stream, so the flip reports through a reporter the run does not carry")
+	}
+	if got, want := titles[spoke], "Finalizing"; got != want {
+		t.Errorf("the flip spoke on stage %q, want %q", got, want)
+	}
+	if got, want := titles[parents[spoke]], "Promotion"; got != want {
+		t.Errorf("the flip spoke under unit %q, want %q", got, want)
+	}
+}
+
+func TestTheRollbackFlipIsHandedAReporterThatDiscards(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassProduction, "shop")
+	seedPromotions(t, provider, providerkit.ClassProduction, "shop", "", "p1", "p2")
+	held := capturing(t, provider, providerkit.ClassProduction, "shop",
+		"the flip said this into a rollback that streams nothing")
+
+	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	report, heard := held.flipped()
+	if !heard {
+		t.Fatal("the rollback never reached Promote")
+	}
+	if report != edge.DiscardReporter() {
+		t.Errorf("the rollback handed the flip %#v, want the discarding reporter: Rollback is a unary RPC that streams nothing", report)
+	}
+}
+
 func TestRollbackRefusesAPromotionTheHistoryDoesNotHold(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
