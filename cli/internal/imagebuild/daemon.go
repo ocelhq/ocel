@@ -160,7 +160,7 @@ func (d daemon) addressable(workers []*client.WorkerInfo) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under and buildkit refuses the merge operations every railpack build is made of: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.address, DockerHostEnv)
+	return fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under, and where buildkit additionally refuses the merge operations a railpack plan is assembled from: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.address, DockerHostEnv)
 }
 
 func (d daemon) tag(ctx context.Context, image Image) error {
