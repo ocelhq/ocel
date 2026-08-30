@@ -104,6 +104,13 @@ func (p *boxProvider) Serving(_ context.Context, kind edge.Kind, hostname string
 	return p.answers, nil
 }
 
+type diagnosingProvider struct {
+	*boxProvider
+	cause string
+}
+
+func (p diagnosingProvider) Unreached(string) string { return p.cause }
+
 type frontOf struct {
 	edge.Edge
 	kind edge.Kind
@@ -232,5 +239,23 @@ func TestAResolverThatDiagnosesNothingStillRefusesInOneSentence(t *testing.T) {
 	}
 	if strings.Contains(refusal.Message, "ended in") {
 		t.Errorf("await() refused with %q, want no dangling clause where a resolver carries no cause to name", refusal.Message)
+	}
+}
+
+func TestAProviderThatDiagnosesItsOwnProbeIsAskedThroughTheKitsResolver(t *testing.T) {
+	t.Parallel()
+
+	cause := "x509: certificate is valid for parked.example.net, not shop.example.com"
+	provider := diagnosingProvider{boxProvider: &boxProvider{}, cause: cause}
+	settle, _ := waiting(resolving(provider, frontOf{kind: "box"}, &answering{kind: "box"}), 2)
+	settle.kind = "box"
+
+	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	var refusal Refusal
+	if !errors.As(err, &refusal) {
+		t.Fatalf("await() = %v, want a refusal", err)
+	}
+	if !strings.Contains(refusal.Message, cause) {
+		t.Errorf("await() refused with %q, and the cause the provider recorded never reaches the operator", refusal.Message)
 	}
 }
