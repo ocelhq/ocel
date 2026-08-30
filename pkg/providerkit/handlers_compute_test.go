@@ -4,7 +4,25 @@ import (
 	"testing"
 
 	connect "connectrpc.com/connect"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
+
+func TestTheWireAcceptsAnAppNamingContainer(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	req := deployRequest()
+	req.Manifest.Apps[0].Compute = string(providerkit.ComputeContainer)
+
+	result, _, err := deployStream(t, client, req)
+	if err != nil {
+		t.Fatalf("Deploy() with an app naming %q: error = %v, want the wire pin to admit it — it is the only compute the VPS provider runs", providerkit.ComputeContainer, err)
+	}
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() with an app naming %q = %q, want it to succeed", providerkit.ComputeContainer, result.GetError())
+	}
+}
 
 func TestTheWireRefusesAnAppThatNamesNoCompute(t *testing.T) {
 	client, _ := contractServed(t, "1.0.0")
