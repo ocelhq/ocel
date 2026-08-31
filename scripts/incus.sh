@@ -34,7 +34,8 @@ ensure_key() {
 }
 
 addr_of() {
-    incus list "^$1\$" -c4 -f csv | tr -d '"' | head -n1 | cut -d' ' -f1
+    incus list "^$1\$" -c4 -f csv | tr -d '"' |
+        awk '!/\((lo|docker[0-9]|br-|veth)/ && !found { print $1; found = 1 }'
 }
 
 ssh_opts() {
