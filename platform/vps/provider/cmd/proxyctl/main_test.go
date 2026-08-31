@@ -76,8 +76,13 @@ func gated(target, path string, window time.Duration) (int, string, string) {
 
 func ran(t *testing.T, argv ...string) (int, string, string) {
 	t.Helper()
+	return ranIn(t, t.TempDir(), argv...)
+}
+
+func ranIn(t *testing.T, data string, argv ...string) (int, string, string) {
+	t.Helper()
 	var out, errs strings.Builder
-	return run(argv, &out, &errs), out.String(), errs.String()
+	return run(data, argv, &out, &errs), out.String(), errs.String()
 }
 
 func configFile(t *testing.T, socket, body string) string {
@@ -520,11 +525,10 @@ const liveIssuer = "acme-v02.api.letsencrypt.org-directory"
 
 func TestForgettingAHostnameTakesItsCertificateAndItsKeyOutOfTheProxysStore(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv(dataEnv, root)
 	going := stored(t, root, liveIssuer, "shop--pr-7--web.preview.example.com")
 	staying := stored(t, root, liveIssuer, "shop--pr-9--web.preview.example.com")
 
-	code, out, errs := ran(t, "forget", "shop--pr-7--web.preview.example.com")
+	code, out, errs := ranIn(t, root, "forget", "shop--pr-7--web.preview.example.com")
 	if code != 0 {
 		t.Fatalf("forget = %d: %q", code, errs)
 	}
@@ -541,7 +545,6 @@ func TestForgettingAHostnameTakesItsCertificateAndItsKeyOutOfTheProxysStore(t *t
 
 func TestForgettingReachesEveryIssuerTheProxyEverOrderedFrom(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv(dataEnv, root)
 	hostname := "shop--pr-7--web.preview.example.com"
 	held := []string{
 		stored(t, root, liveIssuer, hostname),
@@ -549,7 +552,7 @@ func TestForgettingReachesEveryIssuerTheProxyEverOrderedFrom(t *testing.T) {
 		stored(t, root, "local", hostname),
 	}
 
-	if code, _, errs := ran(t, "forget", hostname); code != 0 {
+	if code, _, errs := ranIn(t, root, "forget", hostname); code != 0 {
 		t.Fatalf("forget = %d: %q", code, errs)
 	}
 	for _, path := range held {
@@ -561,7 +564,6 @@ func TestForgettingReachesEveryIssuerTheProxyEverOrderedFrom(t *testing.T) {
 
 func TestForgettingLeavesTheAcmeAccountKeyAndEveryOtherHostnameWhereTheyStand(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv(dataEnv, root)
 	account := filepath.Join(root, "caddy", "acme", liveIssuer, "users", "default")
 	if err := os.MkdirAll(account, 0o700); err != nil {
 		t.Fatal(err)
@@ -571,7 +573,7 @@ func TestForgettingLeavesTheAcmeAccountKeyAndEveryOtherHostnameWhereTheyStand(t 
 	}
 	stored(t, root, liveIssuer, "shop--pr-7--web.preview.example.com")
 
-	if code, _, errs := ran(t, "forget", "shop--pr-7--web.preview.example.com"); code != 0 {
+	if code, _, errs := ranIn(t, root, "forget", "shop--pr-7--web.preview.example.com"); code != 0 {
 		t.Fatalf("forget = %d: %q", code, errs)
 	}
 	if !standing(t, filepath.Join(account, "default.key")) {
@@ -581,10 +583,9 @@ func TestForgettingLeavesTheAcmeAccountKeyAndEveryOtherHostnameWhereTheyStand(t 
 
 func TestForgettingAHostnameNothingWasEverIssuedForRemovesNothingAndRefusesNothing(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv(dataEnv, root)
 	staying := stored(t, root, liveIssuer, "shop--pr-9--web.preview.example.com")
 
-	code, out, errs := ran(t, "forget", "shop--pr-7--web.preview.example.com")
+	code, out, errs := ranIn(t, root, "forget", "shop--pr-7--web.preview.example.com")
 	if code != 0 {
 		t.Fatalf("forget of a hostname with no certificate = %d: %q; teardown calls this unconditionally and a refusal here breaks it", code, errs)
 	}
@@ -597,20 +598,19 @@ func TestForgettingAHostnameNothingWasEverIssuedForRemovesNothingAndRefusesNothi
 }
 
 func TestForgettingAStoreThatWasNeverWrittenToIsANoOp(t *testing.T) {
-	t.Setenv(dataEnv, t.TempDir())
+	root := t.TempDir()
 
-	if code, out, errs := ran(t, "forget", "shop--pr-7--web.preview.example.com"); code != 0 || out != "" {
+	if code, out, errs := ranIn(t, root, "forget", "shop--pr-7--web.preview.example.com"); code != 0 || out != "" {
 		t.Errorf("forget against a proxy that has obtained nothing = %d, %q: %q", code, out, errs)
 	}
 }
 
 func TestForgettingRefusesANameThatIsAPathRatherThanAHostname(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv(dataEnv, root)
 	staying := stored(t, root, liveIssuer, "shop--pr-9--web.preview.example.com")
 
 	for _, name := range []string{"", "..", "../acme", "shop/../../acme", "*.preview.example.com"} {
-		code, _, errs := ran(t, "forget", name)
+		code, _, errs := ranIn(t, root, "forget", name)
 		if code != exitRefused {
 			t.Errorf("forget %q = %d, want %d: the argument is spent as a directory name under the proxy's store, so anything but a hostname is a path traversal into the account key beside it", name, code, exitRefused)
 		}
@@ -625,14 +625,13 @@ func TestForgettingRefusesANameThatIsAPathRatherThanAHostname(t *testing.T) {
 
 func TestForgettingTakesEveryHostnameOnePreviewClaimedInOneCall(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv(dataEnv, root)
 	going := []string{
 		stored(t, root, liveIssuer, "shop--pr-7--api.preview.example.com"),
 		stored(t, root, liveIssuer, "shop--pr-7--web.preview.example.com"),
 	}
 	staying := stored(t, root, liveIssuer, "shop--pr-9--web.preview.example.com")
 
-	if code, _, errs := ran(t, "forget",
+	if code, _, errs := ranIn(t, root, "forget",
 		"shop--pr-7--api.preview.example.com", "shop--pr-7--web.preview.example.com"); code != 0 {
 		t.Fatalf("forget = %d: %q", code, errs)
 	}
@@ -643,5 +642,72 @@ func TestForgettingTakesEveryHostnameOnePreviewClaimedInOneCall(t *testing.T) {
 	}
 	if !standing(t, staying) {
 		t.Error("the other branch's hostname went with them")
+	}
+}
+
+func TestForgettingRefusesAStoreItCannotRead(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a directory whatever its mode says")
+	}
+	root := t.TempDir()
+	certificates := filepath.Join(root, "caddy", "certificates")
+	if err := os.MkdirAll(certificates, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(certificates, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(certificates, 0o700) })
+
+	code, out, errs := ranIn(t, root, "forget", "shop--pr-7--web.preview.example.com")
+	if code != exitRefused {
+		t.Errorf("forget over a store it cannot read = %d, want %d: a store that answers neither its contents nor \"nothing here\" is not a teardown that removed anything, and reporting success over it leaves the pairs standing", code, exitRefused)
+	}
+	if out != "" {
+		t.Errorf("forget wrote %q, want nothing: it removed nothing", out)
+	}
+	if !strings.Contains(errs, "ocel-proxyctl") {
+		t.Errorf("forget refused with %q, and the deploy prints this line as the whole of why", errs)
+	}
+}
+
+func TestForgettingRefusesAPairItCannotRemove(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root unlinks inside a directory whatever its mode says")
+	}
+	root := t.TempDir()
+	const hostname = "shop--pr-7--web.preview.example.com"
+	stored(t, root, liveIssuer, hostname)
+	issuer := filepath.Join(root, "caddy", "certificates", liveIssuer)
+	if err := os.Chmod(issuer, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(issuer, 0o700) })
+
+	code, out, errs := ranIn(t, root, "forget", hostname)
+	if code != exitRefused {
+		t.Errorf("forget of a pair it cannot unlink = %d, want %d: the bytes are still there, and a teardown that says otherwise is the one term that keeps growing", code, exitRefused)
+	}
+	if out != "" {
+		t.Errorf("forget wrote %q, want nothing: it removed nothing, and the reporter prints this as what teardown took", out)
+	}
+	if !strings.Contains(errs, "ocel-proxyctl") {
+		t.Errorf("forget refused with %q, and the deploy prints this line as the whole of why", errs)
+	}
+}
+
+func TestForgettingRefusesTheSharedPreviewWildcardsOwnDirectory(t *testing.T) {
+	root := t.TempDir()
+	staying := stored(t, root, liveIssuer, "wildcard_.preview.example.com")
+
+	code, _, errs := ranIn(t, root, "forget", "wildcard_.preview.example.com")
+	if code != exitRefused {
+		t.Errorf("forget %q = %d, want %d: that is the directory the proxy writes a wildcard under, and it is the one certificate answering every preview this box serves", "wildcard_.preview.example.com", code, exitRefused)
+	}
+	if !strings.Contains(errs, "hostname") {
+		t.Errorf("forget refused with %q, and it never says what it will accept", errs)
+	}
+	if !standing(t, staying) {
+		t.Error("a refused forget still took the shared preview wildcard's pair")
 	}
 }

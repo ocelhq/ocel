@@ -26,10 +26,7 @@ const (
 	defaultSocket = "/run/caddy-admin.sock"
 )
 
-const (
-	dataEnv     = "OCEL_PROXY_DATA"
-	defaultData = "/data"
-)
+const proxyData = "/data"
 
 const (
 	exitRefused        = 2
@@ -56,9 +53,9 @@ const (
 	servingTimeout = 10 * time.Second
 )
 
-func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
+func main() { os.Exit(run(proxyData, os.Args[1:], os.Stdout, os.Stderr)) }
 
-func run(argv []string, out, errs io.Writer) int {
+func run(data string, argv []string, out, errs io.Writer) int {
 	socket := os.Getenv(socketEnv)
 	if socket == "" {
 		socket = defaultSocket
@@ -91,10 +88,6 @@ func run(argv []string, out, errs io.Writer) int {
 	case "forget":
 		if len(rest) == 0 {
 			return usage(errs)
-		}
-		data := os.Getenv(dataEnv)
-		if data == "" {
-			data = defaultData
 		}
 		return forget(data, rest, out, errs)
 	case "deploy":
@@ -147,12 +140,14 @@ func forget(root string, hostnames []string, out, errs io.Writer) int {
 	return 0
 }
 
+const wildcardDirectory = "wildcard_"
+
 func subject(hostname string) bool {
 	if hostname == "" || len(hostname) > 253 {
 		return false
 	}
 	for _, label := range strings.Split(hostname, ".") {
-		if label == "" {
+		if label == "" || strings.HasPrefix(label, wildcardDirectory) {
 			return false
 		}
 		for _, r := range label {
