@@ -91,6 +91,11 @@ func stillServing(said, image, digest string) bool {
 	return len(fields) > 2 && fields[2] == digest
 }
 
+func stoppedImage(said, image string) bool {
+	fields := strings.Fields(said)
+	return len(fields) >= 2 && fields[0] == "exited" && fields[1] == image
+}
+
 func servingCommand(name string) string {
 	return "docker inspect --type container --format " +
 		quoted(servingSelectors()) + " " +
@@ -114,6 +119,11 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 	} else {
 		if runningImage(said, spec.Image) {
 			return nil
+		}
+		if stoppedImage(said, spec.Image) {
+			_, err := h.ran(ctx, "start "+spec.App+" back up as "+spec.Name,
+				"docker start "+quoted(spec.Name)+" >/dev/null", nil, elevation)
+			return err
 		}
 		if len(spec.Declared) > 0 {
 			return providerkit.Refuse(providerkit.CodeNotReady,

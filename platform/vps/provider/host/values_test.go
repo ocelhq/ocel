@@ -426,3 +426,24 @@ func TestAPromotionOfAnAppDeclaringNoValueStandsItBackUp(t *testing.T) {
 		t.Error("a promotion of an app that declares no value left it down")
 	}
 }
+
+func TestAPromotionStartsTheStoppedContainerItRePointsAtRatherThanRefusingIt(t *testing.T) {
+	t.Parallel()
+
+	spec := promoted()
+	spec.Declared = []string{"API_TOKEN", "DATABASE_URL"}
+	stand := machine(nil)
+	imaging(stand, "exited "+appImage+" 7f3a9c1e2b4d")
+	if err := stand.host().StandUp(context.Background(), spec); err != nil {
+		t.Fatalf("StandUp() of a stopped container = %v, want it started back up: a deploy stops the container it replaces and never removes it, so a rollback re-points at the one that still holds the values its own deploy handed it", err)
+	}
+	joined := strings.Join(stand.commands(), "\n")
+	if !strings.Contains(joined, "docker start "+quoted(spec.Name)) {
+		t.Errorf("a promotion of a stopped container ran\n%s\nand never started it", joined)
+	}
+	for _, unwanted := range []string{quoted("run") + " " + quoted("--detach"), "docker rm"} {
+		if strings.Contains(joined, unwanted) {
+			t.Errorf("a promotion of a stopped container ran %q, and re-creating it is what loses every value that container was handed:\n%s", unwanted, joined)
+		}
+	}
+}
