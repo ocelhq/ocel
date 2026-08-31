@@ -183,8 +183,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, report edge.R
 }
 
 func (s *stack) terminating(ctx context.Context, pointer string, served map[string]string) ([]string, error) {
-	site := s.previewSite()
-	if !site.Serves() || pointer == edge.DefaultPointer {
+	if s.state.Class != edge.ClassPreview || pointer == edge.DefaultPointer {
 		return nil, nil
 	}
 	claims, err := s.e.machine.Claims(ctx)
@@ -197,7 +196,7 @@ func (s *stack) terminating(ctx context.Context, pointer string, served map[stri
 			held = append(held, claim.Hostname)
 		}
 	}
-	if len(served) > 0 {
+	if site := s.previewSite(); site.Serves() && len(served) > 0 {
 		held = append(held, site.Hosts(pointer, slices.Sorted(maps.Keys(served)))...)
 	}
 	slices.Sort(held)
