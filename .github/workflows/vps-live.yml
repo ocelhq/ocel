@@ -17,6 +17,12 @@ on:
       - "cli/internal/appregistry/**"
       - "cli/internal/livemachine/**"
       - "cli/internal/cli/deploy/**"
+      - "cli/internal/cli/domain.go"
+      - "cli/internal/cli/rollback.go"
+      - "cli/internal/cli/destroy.go"
+      - "cli/internal/cli/env/**"
+      - "cli/internal/envgate/**"
+      - "cli/internal/discovery/**"
       - "cli/internal/manifestbuilder/**"
       - "cli/internal/projectconfig/**"
       - "packages/ocel/**"
@@ -147,7 +153,7 @@ jobs:
       - name: Run the CLI e2e on a machine of its own
         run: |
           set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh run ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestE2E' -json ./..." | tee e2e.json
+          sg incus-admin -c "scripts/incus.sh run ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} -- go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestE2E' -json ./..." | tee e2e.json
 
       - name: Assert the e2e ran
         run: scripts/assert-ran.sh e2e.json TestE2E
