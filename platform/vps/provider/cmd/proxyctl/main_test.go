@@ -490,3 +490,158 @@ func TestAHandshakeThatFailedForAnyReasonButAMissingCertificateIsNotReportedAsPe
 		}
 	}
 }
+
+func stored(t *testing.T, root, issuer, subject string) string {
+	t.Helper()
+
+	held := filepath.Join(root, "caddy", "certificates", issuer, subject)
+	if err := os.MkdirAll(held, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{subject + ".crt", subject + ".key", subject + ".json"} {
+		if err := os.WriteFile(filepath.Join(held, name), []byte(name), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return held
+}
+
+func standing(t *testing.T, path string) bool {
+	t.Helper()
+
+	_, err := os.Stat(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	return err == nil
+}
+
+const liveIssuer = "acme-v02.api.letsencrypt.org-directory"
+
+func TestForgettingAHostnameTakesItsCertificateAndItsKeyOutOfTheProxysStore(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(dataEnv, root)
+	going := stored(t, root, liveIssuer, "shop--pr-7--web.preview.example.com")
+	staying := stored(t, root, liveIssuer, "shop--pr-9--web.preview.example.com")
+
+	code, out, errs := ran(t, "forget", "shop--pr-7--web.preview.example.com")
+	if code != 0 {
+		t.Fatalf("forget = %d: %q", code, errs)
+	}
+	if standing(t, going) {
+		t.Errorf("%s still stands, and the proxy's store grows one certificate and one private key per preview hostname ever served: a teardown that leaves them behind leaves bytes behind", going)
+	}
+	if !standing(t, staying) {
+		t.Errorf("%s went with it, and it belongs to a preview that is still up", staying)
+	}
+	if !strings.Contains(out, going) {
+		t.Errorf("forget wrote %q, want the path it removed: the deploy's reporter says what teardown took", out)
+	}
+}
+
+func TestForgettingReachesEveryIssuerTheProxyEverOrderedFrom(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(dataEnv, root)
+	hostname := "shop--pr-7--web.preview.example.com"
+	held := []string{
+		stored(t, root, liveIssuer, hostname),
+		stored(t, root, "acme-staging-v02.api.letsencrypt.org-directory", hostname),
+		stored(t, root, "local", hostname),
+	}
+
+	if code, _, errs := ran(t, "forget", hostname); code != 0 {
+		t.Fatalf("forget = %d: %q", code, errs)
+	}
+	for _, path := range held {
+		if standing(t, path) {
+			t.Errorf("%s still stands: an issuer that answered once has a directory of its own, and a box that changed issuers holds a pair under each", path)
+		}
+	}
+}
+
+func TestForgettingLeavesTheAcmeAccountKeyAndEveryOtherHostnameWhereTheyStand(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(dataEnv, root)
+	account := filepath.Join(root, "caddy", "acme", liveIssuer, "users", "default")
+	if err := os.MkdirAll(account, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(account, "default.key"), []byte("account"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stored(t, root, liveIssuer, "shop--pr-7--web.preview.example.com")
+
+	if code, _, errs := ran(t, "forget", "shop--pr-7--web.preview.example.com"); code != 0 {
+		t.Fatalf("forget = %d: %q", code, errs)
+	}
+	if !standing(t, filepath.Join(account, "default.key")) {
+		t.Errorf("the acme account key went with the certificate, and losing it re-triggers the ca's registered-domain ceiling for every hostname this box serves")
+	}
+}
+
+func TestForgettingAHostnameNothingWasEverIssuedForRemovesNothingAndRefusesNothing(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(dataEnv, root)
+	staying := stored(t, root, liveIssuer, "shop--pr-9--web.preview.example.com")
+
+	code, out, errs := ran(t, "forget", "shop--pr-7--web.preview.example.com")
+	if code != 0 {
+		t.Fatalf("forget of a hostname with no certificate = %d: %q; teardown calls this unconditionally and a refusal here breaks it", code, errs)
+	}
+	if out != "" {
+		t.Errorf("forget wrote %q, want nothing: it removed nothing", out)
+	}
+	if !standing(t, staying) {
+		t.Errorf("%s went with a hostname that was never issued for", staying)
+	}
+}
+
+func TestForgettingAStoreThatWasNeverWrittenToIsANoOp(t *testing.T) {
+	t.Setenv(dataEnv, t.TempDir())
+
+	if code, out, errs := ran(t, "forget", "shop--pr-7--web.preview.example.com"); code != 0 || out != "" {
+		t.Errorf("forget against a proxy that has obtained nothing = %d, %q: %q", code, out, errs)
+	}
+}
+
+func TestForgettingRefusesANameThatIsAPathRatherThanAHostname(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(dataEnv, root)
+	staying := stored(t, root, liveIssuer, "shop--pr-9--web.preview.example.com")
+
+	for _, name := range []string{"", "..", "../acme", "shop/../../acme", "*.preview.example.com"} {
+		code, _, errs := ran(t, "forget", name)
+		if code != exitRefused {
+			t.Errorf("forget %q = %d, want %d: the argument is spent as a directory name under the proxy's store, so anything but a hostname is a path traversal into the account key beside it", name, code, exitRefused)
+		}
+		if !strings.Contains(errs, "hostname") {
+			t.Errorf("forget %q refused with %q, and it never says what it will accept", name, errs)
+		}
+	}
+	if !standing(t, staying) {
+		t.Errorf("a refused forget still removed %s", staying)
+	}
+}
+
+func TestForgettingTakesEveryHostnameOnePreviewClaimedInOneCall(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(dataEnv, root)
+	going := []string{
+		stored(t, root, liveIssuer, "shop--pr-7--api.preview.example.com"),
+		stored(t, root, liveIssuer, "shop--pr-7--web.preview.example.com"),
+	}
+	staying := stored(t, root, liveIssuer, "shop--pr-9--web.preview.example.com")
+
+	if code, _, errs := ran(t, "forget",
+		"shop--pr-7--api.preview.example.com", "shop--pr-7--web.preview.example.com"); code != 0 {
+		t.Fatalf("forget = %d: %q", code, errs)
+	}
+	for _, path := range going {
+		if standing(t, path) {
+			t.Errorf("%s still stands: a preview is one hostname per app, and its teardown is one call rather than one per app", path)
+		}
+	}
+	if !standing(t, staying) {
+		t.Error("the other branch's hostname went with them")
+	}
+}
