@@ -1197,7 +1197,7 @@ func fakeDomainTargets(configured []string, host string) []string {
 const (
 	FakeDomainReadyAfterEnvVar = "OCEL_TEST_FAKE_DOMAIN_READY_AFTER"
 	FakeDomainCertEnvVar       = "OCEL_TEST_FAKE_DOMAIN_CERT"
-	fakeDomainRenewalEnvVar    = "OCEL_TEST_FAKE_DOMAIN_RENEWAL"
+	FakeDomainRenewalEnvVar    = "OCEL_TEST_FAKE_DOMAIN_RENEWAL"
 	FakeDomainExpiresEnvVar    = "OCEL_TEST_FAKE_DOMAIN_EXPIRES"
 	FakeDomainFailUntilEnvVar  = "OCEL_TEST_FAKE_DOMAIN_FAIL_UNTIL"
 )
@@ -1231,9 +1231,9 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *c
 				LastProbeOk:       ready,
 				LastProbeEdge:     "cloudflare",
 			},
-			RenewalStatus:  os.Getenv(fakeDomainRenewalEnvVar),
+			RenewalStatus:  os.Getenv(FakeDomainRenewalEnvVar),
 			ExpiresAt:      expires,
-			ExpiringSoon:   expires != 0 && os.Getenv(fakeDomainRenewalEnvVar) != "SUCCESS",
+			ExpiringSoon:   expires != 0 && os.Getenv(FakeDomainRenewalEnvVar) != "SUCCESS",
 			ServingPointer: "cloudflare",
 			Ready:          ready,
 		}
