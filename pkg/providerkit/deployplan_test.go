@@ -396,3 +396,21 @@ func TestAContainerAppPackedIntoFunctionsRefusesTheDeploy(t *testing.T) {
 		}
 	}
 }
+
+func TestReclaimTargetsLeaveAContainerReleaseToTheBoxThatHoldsIt(t *testing.T) {
+	t.Parallel()
+
+	gone, err := NewBuild(deploymentID, ProductionEnv, "gone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets, err := ReclaimTargets("shop", ProductionEnv,
+		[]string{"record:web/ocel/web@sha256:" + strings.Repeat("a", 64), "record:api/" + gone.String()},
+		nil, nil)
+	if err != nil {
+		t.Fatalf("ReclaimTargets() over a promotion carrying a container release = %v, want the release the box keeps by image reference left to it: a container app puts nothing in the artifact store and its container comes down with the pointer", err)
+	}
+	if len(targets) != 1 || targets[0].App != "api" {
+		t.Fatalf("ReclaimTargets() returned %+v, want only the function release", targets)
+	}
+}

@@ -247,6 +247,9 @@ func ReclaimTargets(slug, env string, removed, surviving, servingHere []string) 
 	for _, key := range removed {
 		app, identity, ok := splitRecordKey(key)
 		if !ok {
+			if containerRelease(key) {
+				continue
+			}
 			return nil, Refuse(CodeInvalid, "malformed removed record key %q, want %q", key, recordKeyPrefix+"app/identity")
 		}
 		release := identity.Release()
@@ -277,6 +280,11 @@ const recordKeyPrefix = "record:"
 type appRelease struct {
 	app     string
 	release string
+}
+
+func containerRelease(key string) bool {
+	app, identity, split := strings.Cut(strings.TrimPrefix(key, recordKeyPrefix), "/")
+	return split && app != "" && strings.Contains(identity, "@")
 }
 
 func splitRecordKey(key string) (string, Build, bool) {
