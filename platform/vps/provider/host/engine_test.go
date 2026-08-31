@@ -220,7 +220,7 @@ func TestAConfigMovedIntoPlaceIsWhatTheRunningProxyLoads(t *testing.T) {
 		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
 	}
 
-	if read := stood.drives(t, "flip", proxyConfigMount); strings.TrimSpace(read) != "" {
+	if read := stood.drives(t, "flip", ProxyConfigMount); strings.TrimSpace(read) != "" {
 		t.Logf("the flip said %q", strings.TrimSpace(read))
 	}
 

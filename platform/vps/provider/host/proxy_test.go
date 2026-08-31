@@ -395,7 +395,7 @@ func TestTheFileTheProxyIsStartedFromIsTheWholeOfWhatItServes(t *testing.T) {
 	if !split {
 		t.Fatalf("nothing in the run command starts caddy:\n%s", command)
 	}
-	if config != quoted("--config")+" "+quoted(proxyConfigMount) {
+	if config != quoted("--config")+" "+quoted(ProxyConfigMount) {
 		t.Errorf("caddy is started with %q, want nothing beyond --config: --resume is documented to use the last autosaved configuration, overriding --config, so the file every deploy replaces would be read and thrown away",
 			config)
 	}
@@ -406,8 +406,8 @@ func TestTheFileTheProxyIsStartedFromIsTheWholeOfWhatItServes(t *testing.T) {
 		t.Errorf("the proxy is handed something other than %s, the directory ocel writes %s in:\n%s\na deploy replaces that file by staging beside it and renaming, and a bind of the file itself pins the container to the inode it started on, so every flip after the first reloads whatever the box was seeded with",
 			proxyRoot, ProxyConfig, command)
 	}
-	if proxyConfigMount != proxyConfigDir+strings.TrimPrefix(ProxyConfig, proxyRoot) {
-		t.Errorf("the proxy is started from %s, which is not where %s lands under the directory it is handed", proxyConfigMount, ProxyConfig)
+	if ProxyConfigMount != proxyConfigDir+strings.TrimPrefix(ProxyConfig, proxyRoot) {
+		t.Errorf("the proxy is started from %s, which is not where %s lands under the directory it is handed", ProxyConfigMount, ProxyConfig)
 	}
 }
 

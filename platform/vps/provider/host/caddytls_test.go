@@ -80,7 +80,7 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 	if out, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
 	}
-	flip := exec.Command(dockerEngine, "exec", stood.name, ProxyHelperMount, "flip", proxyConfigMount)
+	flip := exec.Command(dockerEngine, "exec", stood.name, ProxyHelperMount, "flip", ProxyConfigMount)
 	if out, err := flip.CombinedOutput(); err != nil {
 		t.Fatalf("the proxy stood up as the box stands it would not take a config carrying an operator's pin, so every reshape on a box with one pinned — claim, release and retire alike — fails: %v\n%s\n%s",
 			err, out, logsOf(stood.name))

@@ -95,7 +95,7 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		return h.serving(rel, retired, err)
 	}
 	if _, err := h.ran(ctx, "reload the proxy's steady-state configuration",
-		words(helperCommand("flip", proxyConfigMount)), nil, elevation); err != nil {
+		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
 		return h.serving(rel, retired, err)
 	}
 	return nil
@@ -216,7 +216,7 @@ func releaseCommand(rel Release) []string {
 		"--health-check-path", rel.HealthPath,
 		"--deploy-timeout", seconds(rel.DeployTimeout),
 		"--drain-timeout", seconds(rel.DrainTimeout),
-		"--config", proxyConfigMount)
+		"--config", ProxyConfigMount)
 	if rel.Retire != "" && rel.Retire != rel.Target {
 		argv = append(argv, "--retire", rel.Retire)
 	}
@@ -274,7 +274,7 @@ func (h *Host) restore(ctx context.Context, previous, expected, elevation string
 		return err
 	}
 	_, err := h.ran(ctx, "put the proxy back onto the previous release",
-		words(helperCommand("flip", proxyConfigMount)), nil, elevation)
+		words(helperCommand("flip", ProxyConfigMount)), nil, elevation)
 	return err
 }
 

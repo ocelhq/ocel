@@ -39,7 +39,7 @@ const (
 	proxyHelperName  = "ocel-proxyctl"
 	proxyConfigName  = "caddy.json"
 	proxyConfigDir   = "/etc/caddy/ocel"
-	proxyConfigMount = proxyConfigDir + "/" + proxyConfigName
+	ProxyConfigMount = proxyConfigDir + "/" + proxyConfigName
 	ProxyHelperMount = "/ocel/" + proxyHelperName
 	proxyDataMount   = "/data"
 	proxyPinsMount   = "/etc/caddy/pins"
@@ -241,7 +241,7 @@ func containerWriting(attempts int, files []string) string {
 	for _, bind := range proxyBinds() {
 		argv = append(argv, "--volume", bind)
 	}
-	argv = append(argv, ProxyImage, "caddy", "run", "--config", proxyConfigMount)
+	argv = append(argv, ProxyImage, "caddy", "run", "--config", ProxyConfigMount)
 	return "set -e\n" +
 		bindsStanding(files) +
 		"docker rm --force " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
