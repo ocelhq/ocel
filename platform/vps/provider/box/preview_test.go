@@ -329,6 +329,45 @@ func TestRemovingAPreviewPointerTakesTheCertificatesBehindItsHostnamesWithIt(t *
 	}
 }
 
+func TestAPreviewWhoseGlobalBaseWentMissingStillForgetsTheCertificatesItsClaimsName(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	stood := aMachine()
+	front := box.New(stood, fake.NewRecords(), sshScope)
+	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard: %v", err)
+	}
+	spec := edge.StackSpec{Version: "test", Class: edge.ClassPreview, Slug: slug}
+	raised, err := front.Reconcile(ctx, spec, edge.StackState{GlobalPreview: previewBase})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	previewed(t, raised, "pr-7", "web")
+
+	want := make([]string, 0, 1)
+	for _, claim := range claimedOn(t, stood) {
+		want = append(want, claim.Hostname)
+	}
+	slices.Sort(want)
+	if len(want) == 0 {
+		t.Fatal("the promotion claimed no hostname, so this teardown has no certificate to leave behind and the assertion below is vacuous")
+	}
+
+	zeroed, err := front.Reconcile(ctx, spec, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile with no global preview base: %v", err)
+	}
+	if _, err := zeroed.RemovePointer(ctx, "pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+
+	if !slices.Equal(stood.forgotten, want) {
+		t.Errorf("the teardown forgot %v, want %v: the class alone decides whether a pointer holds preview hostnames, and the state's preview base is zeroed for every pointer of the class the moment one deploy stops being served on the shared base. Reading it here leaves the certificate and key of every hostname this pointer still claims sitting in the proxy's data",
+			stood.forgotten, want)
+	}
+}
+
 func TestATeardownThatFellOverLeavesThePointersHistoryStandingForTheNextRun(t *testing.T) {
 	t.Parallel()
 
