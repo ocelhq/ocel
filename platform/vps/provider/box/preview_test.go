@@ -477,3 +477,37 @@ func TestATeardownThatFailedOnTheCertificatesForgetsThemOnTheNextRun(t *testing.
 			stood.forgotten, want)
 	}
 }
+
+func TestAProjectsOwnPreviewDomainClaimsTheHostnamesTheKitPrintsForIt(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	stood := aMachine()
+	front := box.New(stood, fake.NewRecords(), sshScope)
+	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard: %v", err)
+	}
+	stack, err := front.Reconcile(ctx, edge.StackSpec{
+		Version: "test", Class: edge.ClassPreview, Slug: slug,
+		Domains: []string{edge.PreviewWildcard(previewBase)},
+	}, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	previewed(t, stack, "pr-7", "web")
+
+	var claimed []string
+	for _, claim := range claimedOn(t, stood) {
+		claimed = append(claimed, claim.Hostname)
+	}
+	want := edge.ProjectPreview(previewBase).Hosts("pr-7", []string{"web"})
+	if len(want) == 0 {
+		t.Fatal("a project preview site names no hostname for one app, so there is nothing here for the box to have claimed")
+	}
+	for _, hostname := range want {
+		if !slices.Contains(claimed, hostname) {
+			t.Errorf("the promotion claimed %v and never %s: a project that declares its own domains.preview is served on it and never under the shared base's slug prefix, and a hostname the box does not claim falls to the catch-all's 404",
+				claimed, hostname)
+		}
+	}
+}

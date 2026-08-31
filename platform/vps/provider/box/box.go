@@ -82,11 +82,23 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	next := prior
 	next.Slug = spec.Slug
 	next.Class = spec.Class
-	s := &stack{e: e, state: next}
+	s := &stack{e: e, state: next, declared: declaredPreviewBase(spec)}
 	if err := s.ledger().EnsureSchema(ctx); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+func declaredPreviewBase(spec edge.StackSpec) string {
+	if spec.Class != edge.ClassPreview {
+		return ""
+	}
+	for _, hostname := range spec.Domains {
+		if base, wild := strings.CutPrefix(hostname, "*."); wild {
+			return base
+		}
+	}
+	return ""
 }
 
 func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
