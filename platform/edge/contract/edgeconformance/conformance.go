@@ -212,7 +212,7 @@ func Run(t *testing.T, suite Suite) {
 		promote(t, stack, edge.Promotion{PromotionID: "held", Ts: 1, Builds: map[string]string{"web": "b1"}}, "")
 		promote(t, stack, edge.Promotion{PromotionID: "pointed", Ts: 2, Builds: map[string]string{"web": "b2"}}, pointer)
 
-		result, err := stack.RemovePointer(ctx, pointer)
+		result, err := stack.RemovePointer(ctx, pointer, edge.DiscardReporter())
 		if err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}
@@ -603,7 +603,7 @@ func runPreviews(t *testing.T, suite Suite) {
 			const pointer = "conformance-preview"
 			promote(t, stack, edge.Promotion{PromotionID: "previewed", Ts: 1, Builds: map[string]string{"web": "b1"}}, pointer)
 
-			if _, err := stack.RemovePointer(ctx, pointer); err != nil {
+			if _, err := stack.RemovePointer(ctx, pointer, edge.DiscardReporter()); err != nil {
 				t.Fatalf("RemovePointer: %v", err)
 			}
 			left, err := stack.Ledger().History(ctx, pointer)
@@ -613,7 +613,7 @@ func runPreviews(t *testing.T, suite Suite) {
 			if len(left) != 0 {
 				t.Errorf("history under %q = %v, want nothing once the preview is gone", pointer, left)
 			}
-			if _, err := stack.RemovePointer(ctx, pointer); err != nil {
+			if _, err := stack.RemovePointer(ctx, pointer, edge.DiscardReporter()); err != nil {
 				t.Fatalf("RemovePointer again: %v", err)
 			}
 		})

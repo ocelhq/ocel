@@ -346,7 +346,7 @@ func (s *Stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	return s.ledger.Promote(ctx, promotion, pointer, report)
 }
 
-func (s *Stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error) {
+func (s *Stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
 	return s.ledger.RemovePointer(ctx, pointer)
 }
 

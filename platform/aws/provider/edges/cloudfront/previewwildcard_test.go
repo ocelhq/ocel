@@ -429,7 +429,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		_, stack := previewing(t, w)
 		promotePreview(t, stack, previewPointer)
 
-		if _, err := stack.RemovePointer(context.Background(), previewPointer); err != nil {
+		if _, err := stack.RemovePointer(context.Background(), previewPointer, edge.DiscardReporter()); err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}
 		if held := previewRoutes(t, w); len(held) != 0 {

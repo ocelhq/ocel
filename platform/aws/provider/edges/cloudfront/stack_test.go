@@ -61,7 +61,7 @@ func TestRemovePointerLeavesTheHostnameServing(t *testing.T) {
 				t.Fatalf("Promote: %v", err)
 			}
 
-			if _, err := stack.RemovePointer(context.Background(), tc.pointer); err != nil {
+			if _, err := stack.RemovePointer(context.Background(), tc.pointer, edge.DiscardReporter()); err != nil {
 				t.Fatalf("RemovePointer: %v", err)
 			}
 

@@ -210,7 +210,7 @@ func TestRemovingAPreviewPointerTakesItsHostnamesOffTheBoxWithIt(t *testing.T) {
 	previewed(t, stack, "pr-7", "api", "web")
 	previewed(t, stack, "pr-9", "api", "web")
 
-	if _, err := stack.RemovePointer(context.Background(), "pr-7"); err != nil {
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	for _, claim := range claimedOn(t, stood) {
@@ -300,5 +300,86 @@ func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 	}
 	if held := claimedOn(t, stood); len(held) != 0 {
 		t.Errorf("a production promotion under pointer pr-7 on a box that knows a preview base claimed %v: the class is the whole of what decides whether a promotion claims a preview hostname, and the pointer and the base alone do not", held)
+	}
+}
+
+func TestRemovingAPreviewPointerTakesTheCertificatesBehindItsHostnamesWithIt(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	stack := previewStack(t, stood)
+	previewed(t, stack, "pr-7", "api", "web")
+	previewed(t, stack, "pr-9", "api", "web")
+
+	site := edge.SharedPreview(slug, previewBase)
+	want := site.Hosts("pr-7", []string{"api", "web"})
+	slices.Sort(want)
+
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+	if !slices.Equal(stood.forgotten, want) {
+		t.Fatalf("the teardown forgot %v, want %v: the proxy holds one certificate and one private key per hostname it ever terminated, so a teardown that takes the routes and leaves the pairs leaves bytes behind and grows with previews-ever", stood.forgotten, want)
+	}
+	for _, hostname := range site.Hosts("pr-9", []string{"api", "web"}) {
+		if slices.Contains(stood.forgotten, hostname) {
+			t.Errorf("%s was forgotten with another branch's preview, and it is still being served", hostname)
+		}
+	}
+}
+
+func TestRemovingAPreviewPointerSweepsTheImagesOfEveryAppItServed(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	stack := previewStack(t, stood)
+	previewed(t, stack, "pr-7", "api", "web")
+
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+	want := []string{"api ghcr.io/acme/api:b1", "web ghcr.io/acme/web:b1"}
+	if !slices.Equal(stood.reconciled, want) {
+		t.Fatalf("the teardown reconciled %v, want %v: the sweep is a deploy's final act and `ocel preview rm` is not a deploy, so a preview torn down on a box that is never deployed to again leaks its images forever", stood.reconciled, want)
+	}
+}
+
+func TestRemovingAPointerNothingWasEverPromotedUnderSweepsNothingAndRefusesNothing(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	stack := previewStack(t, stood)
+
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("RemovePointer of a preview that is already gone = %v, and teardown is run again on every retry", err)
+	}
+	if len(stood.reconciled) != 0 || len(stood.forgotten) != 0 {
+		t.Errorf("a preview that claimed nothing forgot %v and reconciled %v", stood.forgotten, stood.reconciled)
+	}
+}
+
+func TestRemovingAPreviewLeavesTheCatchAllStandingAndRendersItAsKeptWithAReason(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	stack := previewStack(t, stood)
+	previewed(t, stack, "pr-7", "web")
+	front := box.New(stood, fake.NewRecords(), sshScope)
+
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+
+	held, err := front.DomainOwner(context.Background(), edge.PreviewWildcard(previewBase))
+	if err != nil {
+		t.Fatalf("DomainOwner: %v", err)
+	}
+	if held != edge.PreviewEntryOwner {
+		t.Fatalf("the catch-all is owned by %q after a preview came down, want %q: it is a bootstrap item answering for every project this box serves, and taking it with one project's preview takes every other project's previews off the air",
+			held, edge.PreviewEntryOwner)
+	}
+	kept := front.SharedPreviewRemoval()
+	if kept.Action != edge.PlanKeep || kept.Reason == "" {
+		t.Errorf("the catch-all renders as %+v, want a kept row carrying why it is kept", kept)
 	}
 }

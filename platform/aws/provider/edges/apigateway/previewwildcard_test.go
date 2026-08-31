@@ -348,7 +348,7 @@ func TestRemovePointerTakesTheRuleAndTheAPI(t *testing.T) {
 	api := w.gateway.named(previewAPIName)
 	w.gateway.calls = nil
 
-	if _, err := stack.RemovePointer(ctx, previewPoint); err != nil {
+	if _, err := stack.RemovePointer(ctx, previewPoint, edge.DiscardReporter()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 

@@ -34,6 +34,8 @@ type machine struct {
 	stood       []host.Container
 	headed      []string
 	previewBase string
+	forgotten   []string
+	reconciled  []string
 	refuse      error
 }
 
@@ -58,6 +60,20 @@ func (m *machine) StandUp(_ context.Context, spec host.Container) error {
 func (m *machine) Promote(_ context.Context, _ providerkit.Class, app, coordinate string) error {
 	m.calls = append(m.calls, "head "+app+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)
+	return m.refuse
+}
+
+func (m *machine) Reconcile(_ context.Context, app, coordinate string, _ providerkit.Reporter) error {
+	m.calls = append(m.calls, "reconcile "+app+" over "+coordinate)
+	m.reconciled = append(m.reconciled, app+" "+coordinate)
+	return m.refuse
+}
+
+func (m *machine) ForgetCertificates(_ context.Context, hostnames []string, _ providerkit.Reporter) error {
+	for _, hostname := range hostnames {
+		m.calls = append(m.calls, "forget "+hostname)
+		m.forgotten = append(m.forgotten, hostname)
+	}
 	return m.refuse
 }
 
@@ -764,7 +780,7 @@ func TestRemovingAPointerTakesTheRoutesItPointedAt(t *testing.T) {
 		t.Fatalf("the promotion routed %v, and this test needs a route to remove", stood.upstream)
 	}
 
-	if _, err := stack.RemovePointer(context.Background(), ""); err != nil {
+	if _, err := stack.RemovePointer(context.Background(), "", edge.DiscardReporter()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	if len(stood.upstream) != 0 {
@@ -801,7 +817,7 @@ func TestRemovingAPointerTakesTheRouteOfAnAppTheLedgerNoLongerRemembers(t *testi
 		}
 	}
 
-	if _, err := stack.RemovePointer(context.Background(), ""); err != nil {
+	if _, err := stack.RemovePointer(context.Background(), "", edge.DiscardReporter()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	if len(stood.upstream) != 0 {
@@ -854,5 +870,30 @@ func TestABindNamingAnAppClaimsTheHostnameForThatAppAndTheSurfaceStillOwnsIt(t *
 	}
 	if owner != box.Surface(slug, edge.ClassProduction) {
 		t.Errorf("DomainOwner(%q) = %q, want the surface: the claim guard and the preview-entry check are both project-grained, so this answer stays surface-valued whatever app the hostname was declared under", hostname, owner)
+	}
+}
+
+func TestRemovingTheProductionPointerForgetsNoCertificateTheRemovalPlanSaysItKeeps(t *testing.T) {
+	t.Parallel()
+
+	const bound = "shop.example.com"
+
+	stood, front, stack := standing(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: bound}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+
+	if _, err := stack.RemovePointer(context.Background(), "", edge.DiscardReporter()); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+
+	kept := front.ProjectRemovals(edge.ProjectScope{Slug: slug, Class: edge.ClassProduction, Hostnames: []string{bound}})
+	if len(stood.forgotten) != 0 {
+		t.Fatalf("removing the production pointer forgot %v, and %v renders that certificate as kept with a reason: a bound hostname is bound again inside the certificate's life and served off it rather than ordered again",
+			stood.forgotten, kept)
 	}
 }

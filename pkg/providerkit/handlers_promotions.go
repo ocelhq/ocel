@@ -51,7 +51,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 			return err
 		}
 		report.Say(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
-		removed, err := session.stack.RemovePointer(ctx, pointer)
+		removed, err := session.stack.RemovePointer(ctx, pointer, report)
 		if err != nil {
 			return err
 		}

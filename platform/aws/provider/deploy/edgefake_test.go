@@ -279,7 +279,7 @@ func (s *recordingStack) Prune(_ context.Context, keepN int, pointer string) (ed
 	return result, nil
 }
 
-func (s *recordingStack) RemovePointer(_ context.Context, pointer string) (edge.PruneResult, error) {
+func (s *recordingStack) RemovePointer(_ context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
 	if err := s.checkAuth(); err != nil {
 		return edge.PruneResult{}, err
 	}
