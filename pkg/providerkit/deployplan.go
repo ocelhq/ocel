@@ -19,7 +19,6 @@ type DeployPlan struct {
 	Label   string
 	Pointer string
 
-
 	Infra naming.StackName
 	Apps  []AppEntry
 

@@ -467,6 +467,80 @@ func TestRunPreviewRm(t *testing.T) {
 	})
 }
 
+func TestRunPreviewPrune(t *testing.T) {
+	t.Run("with no flags it prunes the current branch's preview", func(t *testing.T) {
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		want, err := previewid.Resolve("feature/login", "")
+		if err != nil {
+			t.Fatalf("previewid.Resolve: %v", err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		opts := previewPruneOptions{keep: defaultPreviewPruneKeepN}
+		if err := runPreviewPrune(context.Background(), deps, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		if !strings.Contains(stdout.String(), "PRUNE project=test-app tier=TIER_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
+			t.Errorf("stdout = %q, want the prune echo for the current branch: a branch preview that cannot be named is one that only ever goes down whole", stdout.String())
+		}
+
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("--ref prunes the explicit ref", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "some-other-branch", "")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		want, err := previewid.Resolve("release/v2", "")
+		if err != nil {
+			t.Fatalf("previewid.Resolve: %v", err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		opts := previewPruneOptions{ref: "release/v2", keep: defaultPreviewPruneKeepN}
+		if err := runPreviewPrune(context.Background(), deps, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		if !strings.Contains(stdout.String(), "identity="+want.Key) {
+			t.Errorf("stdout = %q, want the prune echo for the explicit ref", stdout.String())
+		}
+	})
+
+	t.Run("--name prunes the named preview", func(t *testing.T) {
+		root, _ := clitest.SetUpDeployFixture(t)
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, nil)
+		stubGit(&deps, "feature/login", "")
+		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+		var stdout, stderr bytes.Buffer
+		opts := previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}
+		if err := runPreviewPrune(context.Background(), deps, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		if !strings.Contains(stdout.String(), "lifecycle=LIFECYCLE_PERSISTENT identity=staging") {
+			t.Errorf("stdout = %q, want the prune echo for the named preview", stdout.String())
+		}
+	})
+}
+
 func TestRunPreviewLs(t *testing.T) {
 	t.Run("it renders every environment", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
@@ -513,8 +587,8 @@ func TestPreviewEnvironmentFlags(t *testing.T) {
 				_, err := resolveUpEnvironment(clitest.NewDeps(), "", previewUpOptions{name: "staging", ref: "release/v2"})
 				return err
 			}},
-			{"rm", func() error {
-				_, err := resolveRmEnvironment(clitest.NewDeps(), "", previewRmOptions{name: "staging", ref: "release/v2"})
+			{"rm and prune", func() error {
+				_, err := resolvePreviewEnvironment(clitest.NewDeps(), "", "staging", "release/v2")
 				return err
 			}},
 		}
@@ -547,8 +621,8 @@ func TestPreviewEnvironmentFlags(t *testing.T) {
 				_, err := resolveUpEnvironment(clitest.NewDeps(), "", previewUpOptions{name: n})
 				return err
 			}},
-			{"rm", func(n string) error {
-				_, err := resolveRmEnvironment(clitest.NewDeps(), "", previewRmOptions{name: n})
+			{"rm and prune", func(n string) error {
+				_, err := resolvePreviewEnvironment(clitest.NewDeps(), "", n, "")
 				return err
 			}},
 		}
