@@ -110,9 +110,19 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, c
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 
-	go srv.RunDetector(ctx, func(err error) {
-		fmt.Fprintln(stderr, "upload detection:", err)
-	})
+	background, stopBackground := context.WithCancel(ctx)
+
+	detecting := make(chan struct{})
+	go func() {
+		defer close(detecting)
+		srv.RunDetector(background, func(err error) {
+			fmt.Fprintln(stderr, "upload detection:", err)
+		})
+	}()
+	defer func() {
+		stopBackground()
+		<-detecting
+	}()
 
 	if err := result.Claim(addr); err != nil {
 		return err
@@ -125,9 +135,14 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, c
 	}
 	srv.PushEnv(resolved)
 
-	if err := watchAndReResolve(ctx, srv, cfg, projectCfg.EnvVars, stdout, stderr); err != nil {
+	watching, err := watchAndReResolve(background, srv, cfg, projectCfg.EnvVars, stdout, stderr)
+	if err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)
 	}
+	defer func() {
+		stopBackground()
+		<-watching.Done()
+	}()
 
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
 	appCmd.Env = applyEnv(os.Environ(), resolved)
@@ -188,15 +203,15 @@ func reportLiveValues(stdout io.Writer, liveKeys []string) {
 	fmt.Fprintf(stdout, "resolved %s once, at startup. Deployed, a rotated value is picked up within a bounded window; here, restart `ocel dev` to pick one up.\n", strings.Join(keys, ", "))
 }
 
-func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) error {
+func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) (*watcher.Watcher, error) {
 	dirs, err := discovery.Dirs(cfg.Dir, cfg.Discovery.Paths)
 	if err != nil {
-		return fmt.Errorf("resolve watch directories: %w", err)
+		return nil, fmt.Errorf("resolve watch directories: %w", err)
 	}
 
 	set := watcher.Set{Dirs: dirs, Files: []string{filepath.Join(cfg.Dir, dotenv.FileName)}}
 
-	return watcher.Watch(ctx, set, watchDebounce, func() {
+	return watcher.Start(ctx, watcher.Config{Set: set, Debounce: watchDebounce, OnChange: func() {
 		srv.ResetManifest()
 		resolved, err := resolveOnce(ctx, srv, cfg, projectEnv, stdout, stderr)
 		if err != nil {
@@ -206,9 +221,9 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 			return
 		}
 		srv.PushEnv(resolved)
-	}, func(err error) {
+	}, OnError: func(err error) {
 		fmt.Fprintln(stderr, "watch error:", err)
-	})
+	}})
 }
 
 func runFollower(ctx context.Context, deps cmddeps.Deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {

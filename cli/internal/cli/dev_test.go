@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"slices"
 	"strings"
 	"sync"
@@ -204,6 +205,41 @@ func TestRunDev(t *testing.T) {
 				t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to carry a postgres link", raw)
 			}
 		})
+	})
+
+	t.Run("it joins the watcher and the detector before it returns", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses a POSIX shell fixture command")
+		}
+
+		resolveServer := newFakeResolveServer(t)
+		defer resolveServer.Close()
+
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
+
+		root := t.TempDir()
+		t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+
+		var stdout, stderr syncBuffer
+		err := runDev(context.Background(), deps, nil, root, []string{"sh", "-c", "exit 7"}, &stdout, &stderr, strings.NewReader(""))
+
+		var exitErr *exitsig.ExitError
+		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+			t.Fatalf("runDev err = %v, want exit 7; stderr=%s", err, stderr.String())
+		}
+
+		for _, frame := range []string{
+			"github.com/ocelhq/ocel/cli/internal/watcher.run",
+			"github.com/ocelhq/ocel/cli/internal/console/blob.(*Detector).Run",
+		} {
+			if stacks := goroutineStacks(t); strings.Contains(stacks, frame) {
+				t.Errorf("%s still running after runDev returned; it can still write into the project directory:\n%s", frame, stacks)
+			}
+		}
 	})
 
 	t.Run("a second run in the same root from a subdirectory becomes a follower and receives the pushed env", func(t *testing.T) {
@@ -655,6 +691,15 @@ export default { slug: "test-app" };
 func testProjectID(t *testing.T) string {
 	t.Helper()
 	return "proj_" + strings.ReplaceAll(t.Name(), "/", "_")
+}
+
+func goroutineStacks(t *testing.T) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := pprof.Lookup("goroutine").WriteTo(&buf, 1); err != nil {
+		t.Fatalf("goroutine profile: %v", err)
+	}
+	return buf.String()
 }
 
 func toMap(env []string) map[string]string {
