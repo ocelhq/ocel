@@ -67,6 +67,9 @@ func main() {
 		w.WriteHeader(health)
 		_, _ = io.WriteString(w, release)
 	})
+	mux.HandleFunc("/env", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, os.Getenv(r.URL.Query().Get("name")))
+	})
 	mux.HandleFunc("/hold", func(w http.ResponseWriter, r *http.Request) {
 		held, _ := strconv.Atoi(r.URL.Query().Get("s"))
 		time.Sleep(time.Duration(held) * time.Second)
