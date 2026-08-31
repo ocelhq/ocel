@@ -27,20 +27,13 @@ const (
 
 func teardownAt(pointer string) string { return teardownRepo + ":" + pointer }
 
-func onABoxServingPreviews(t *testing.T, pointers ...string) (machine, *vps.Provider, edge.EdgeStack) {
+func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack) {
 	t.Helper()
 
 	vm := live(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 	bootstrapped(t, vm, providerkit.ClassPreview)
 	fixtures(t, vm)
-	for _, pointer := range pointers {
-		if strings.TrimSpace(vm.ssh(t, "sudo docker image inspect "+teardownAt(pointer)+" >/dev/null 2>&1 && echo held || echo gone")) == "held" {
-			continue
-		}
-		vm.feeds(t, "sudo docker build -q -t "+teardownAt(pointer)+" - >/dev/null",
-			[]byte("FROM "+fixtureBase+"\nENV RELEASE="+pointer+"\n"))
-	}
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+"="+teardownApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 		vm.ssh(t, "sudo docker images -q --filter reference="+teardownRepo+":* | xargs -r sudo docker rmi -f >/dev/null 2>&1 || true")
@@ -101,9 +94,20 @@ func previewRef(t *testing.T, pointer string) providerkit.StackRef {
 	}
 }
 
-func previewUp(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer string, at int64) {
+func (vm machine) ships(t *testing.T, pointer string) {
 	t.Helper()
 
+	if strings.TrimSpace(vm.ssh(t, "sudo docker image inspect "+teardownAt(pointer)+" >/dev/null 2>&1 && echo held || echo gone")) == "held" {
+		return
+	}
+	vm.feeds(t, "sudo docker build -q -t "+teardownAt(pointer)+" - >/dev/null",
+		[]byte("FROM "+fixtureBase+"\nENV RELEASE="+pointer+"\n"))
+}
+
+func previewUp(t *testing.T, vm machine, p *vps.Provider, stack edge.EdgeStack, pointer string, at int64) {
+	t.Helper()
+
+	vm.ships(t, pointer)
 	ctx := context.Background()
 	build := previewBuild(t, pointer)
 	plan := providerkit.StackPlan{
@@ -224,9 +228,9 @@ func (vm machine) routedHosts(t *testing.T) []string {
 }
 
 func TestLiveAPreviewTornDownLeavesNoRouteNoCertificateAndNoImageBehind(t *testing.T) {
-	vm, p, stack := onABoxServingPreviews(t, "pr-7")
+	vm, p, stack := onABoxServingPreviews(t)
 
-	previewUp(t, p, stack, "pr-7", 1)
+	previewUp(t, vm, p, stack, "pr-7", 1)
 	hostname := teardownHostname("pr-7")
 	planted := vm.plants(t, hostname)
 
@@ -263,9 +267,9 @@ func TestLiveAPreviewTornDownLeavesNoRouteNoCertificateAndNoImageBehind(t *testi
 }
 
 func TestLiveTearingDownAPreviewTwiceRefusesNothingAndTakesNothingMore(t *testing.T) {
-	vm, p, stack := onABoxServingPreviews(t, "pr-7")
+	vm, p, stack := onABoxServingPreviews(t)
 
-	previewUp(t, p, stack, "pr-7", 1)
+	previewUp(t, vm, p, stack, "pr-7", 1)
 	vm.plants(t, teardownHostname("pr-7"))
 	previewRemove(t, p, stack, "pr-7")
 	settled := vm.certificates(t) + "\n" + vm.teardownImages(t)
@@ -278,10 +282,10 @@ func TestLiveTearingDownAPreviewTwiceRefusesNothingAndTakesNothingMore(t *testin
 }
 
 func TestLiveTearingDownOneOfFourLivePreviewsSweepsNoLivePreviewsImage(t *testing.T) {
-	vm, p, stack := onABoxServingPreviews(t, "pr-1", "pr-2", "pr-3", "pr-4")
+	vm, p, stack := onABoxServingPreviews(t)
 
 	for at, pointer := range []string{"pr-1", "pr-2", "pr-3", "pr-4"} {
-		previewUp(t, p, stack, pointer, int64(at)+1)
+		previewUp(t, vm, p, stack, pointer, int64(at)+1)
 	}
 	held := windowOf(t, vm, teardownApp, providerkit.ClassPreview)
 	if len(held) != 3 {
