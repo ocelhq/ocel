@@ -9,6 +9,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 )
 
 const containerTestImage = "ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -149,5 +150,26 @@ func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
 	}
 	if stacks == 0 {
 		t.Fatalf("the deploy wrote no app stack at all among %d entries, so the container it stood up was recorded nowhere", len(entries))
+	}
+}
+
+func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+
+	if result, _ := deploy(t, client, namingARegistry(containerDeployRequest("/"))); !result.GetSuccess() {
+		t.Fatalf("Deploy() of a container app = %q", result.GetError())
+	}
+
+	held := ledger.New(provider.Records(), providerkit.ClassProduction, "shop")
+	record, found, err := held.Record(context.Background(), "web", containerTestImage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatalf("the deployments ledger holds no record under %q, which is what a promotion carries for a container app: a promotion reads promotion.Builds and finds nothing, so every rollback and every re-point refuses by name", containerTestImage)
+	}
+	if record.Image == "" {
+		t.Errorf("the record under %q names no image, so a promotion reading it has nothing to put in front of the app", containerTestImage)
 	}
 }
