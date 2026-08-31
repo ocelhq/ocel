@@ -98,14 +98,13 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 
 	var root providerkit.Provider = p
 	for name, held := range map[string]bool{
-		"Warmer":            held[providerkit.Warmer](root),
-		"CodeEmbedder":      held[providerkit.CodeEmbedder](root),
-		"StackInspector":    held[providerkit.StackInspector](root),
-		"GrantVerifier":     held[providerkit.GrantVerifier](root),
-		"MembraneCrosser":   held[providerkit.MembraneCrosser](root),
-		"DeployPreflighter": held[providerkit.DeployPreflighter](root),
-		"MembraneSource":    held[providerkit.MembraneSource](root),
-		"ArtifactPacker":    held[providerkit.ArtifactPacker](root),
+		"Warmer":          held[providerkit.Warmer](root),
+		"CodeEmbedder":    held[providerkit.CodeEmbedder](root),
+		"StackInspector":  held[providerkit.StackInspector](root),
+		"GrantVerifier":   held[providerkit.GrantVerifier](root),
+		"MembraneCrosser": held[providerkit.MembraneCrosser](root),
+		"MembraneSource":  held[providerkit.MembraneSource](root),
+		"ArtifactPacker":  held[providerkit.ArtifactPacker](root),
 	} {
 		if held {
 			t.Errorf("the root carries %s, which the optional-set tier must be told to expect on it", name)
@@ -116,6 +115,12 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 	}
 	if !held[providerkit.Prober](root) {
 		t.Error("the root carries no Prober, and the settle then answers from what it just bound rather than from what the hostname serves")
+	}
+	if !held[providerkit.DeployPreflighter](root) {
+		t.Error("the root carries no DeployPreflighter, and a box then learns its engine, its disk, its proxy or its ports are not ready halfway through an image transfer")
+	}
+	if !held[providerkit.StandingChecker](root) {
+		t.Error("the root carries no StandingChecker, and `doctor` calls Preflight and DescribeBootstrap and nothing else: with no standing port there is nowhere for a verdict about the life of the box to arrive")
 	}
 }
 
