@@ -82,7 +82,8 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	next := prior
 	next.Slug = spec.Slug
 	next.Class = spec.Class
-	s := &stack{e: e, state: next, declared: declaredPreviewBase(spec)}
+	next.PreviewBase = declaredPreviewBase(spec)
+	s := &stack{e: e, state: next}
 	if err := s.ledger().EnsureSchema(ctx); err != nil {
 		return nil, err
 	}

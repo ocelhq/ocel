@@ -13,9 +13,8 @@ import (
 )
 
 type stack struct {
-	e        *Edge
-	state    edge.StackState
-	declared string
+	e     *Edge
+	state edge.StackState
 }
 
 var _ edge.EdgeStack = (*stack)(nil)
@@ -151,8 +150,8 @@ func (s *stack) previewSite() edge.PreviewSite {
 	if s.state.Class != edge.ClassPreview {
 		return edge.PreviewSite{}
 	}
-	if s.state.GlobalPreview == "" && s.declared != "" {
-		return edge.ProjectPreview(s.declared)
+	if s.state.GlobalPreview == "" && s.state.PreviewBase != "" {
+		return edge.ProjectPreview(s.state.PreviewBase)
 	}
 	return edge.SharedPreview(s.state.Slug, s.state.GlobalPreview)
 }
