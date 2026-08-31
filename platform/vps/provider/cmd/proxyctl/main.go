@@ -119,6 +119,7 @@ func usage(errs io.Writer) int {
 
 func netnsListeners(proc string, out, errs io.Writer) int {
 	var held []listeners.Listener
+	tables := 0
 	for _, name := range []string{listeners.TCPPath, listeners.TCP6Path} {
 		read, err := os.Open(filepath.Join(proc, strings.TrimPrefix(name, "/proc/")))
 		if errors.Is(err, fs.ErrNotExist) {
@@ -134,7 +135,13 @@ func netnsListeners(proc string, out, errs io.Writer) int {
 			fmt.Fprintf(errs, "ocel-proxyctl: %s: %v\n", name, err)
 			return exitUnattributable
 		}
+		tables++
 		held = append(held, found...)
+	}
+	if tables == 0 {
+		fmt.Fprintf(errs, "ocel-proxyctl: neither %s nor %s is there to read, so nothing was learned about what this namespace binds: an empty answer is read as a namespace with nothing bound in it\n",
+			listeners.TCPPath, listeners.TCP6Path)
+		return exitUnattributable
 	}
 	for _, line := range listeners.Lines(held) {
 		fmt.Fprintln(out, line)
