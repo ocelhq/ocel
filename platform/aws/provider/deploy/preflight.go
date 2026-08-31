@@ -5,13 +5,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 )
 
 func (r *Releaser) Preflight(ctx context.Context, pre providerkit.DeployPreflight) error {
-	if err := checkMembraneServices(pre.Resources, pre.Grants, membrane.Serves); err != nil {
-		return err
-	}
 	cfg, err := r.resolve.Release(ctx, Scope{Class: pre.Plan.Class, Slug: pre.Plan.Slug, Env: pre.Plan.Env, Edge: pre.Edge})
 	if err != nil {
 		return err

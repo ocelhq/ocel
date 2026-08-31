@@ -455,10 +455,6 @@ func (r *deployRun) checkNeeds(ctx context.Context) error {
 }
 
 func (r *deployRun) preflight(ctx context.Context, report Reporter) error {
-	preflighter, ok := r.provider.(DeployPreflighter)
-	if !ok {
-		return nil
-	}
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
@@ -466,6 +462,13 @@ func (r *deployRun) preflight(ctx context.Context, report Reporter) error {
 	grants, err := r.reader().Published(ctx)
 	if err != nil {
 		return err
+	}
+	if err := RefuseUnreachableLinks(r.provider.Vendor(), r.provider.Serves(), r.crossesMembrane, resources, grants); err != nil {
+		return Refuse(CodeInvalid, "%s", err)
+	}
+	preflighter, ok := r.provider.(DeployPreflighter)
+	if !ok {
+		return nil
 	}
 	apps, err := r.usage(resources, grants)
 	if err != nil {
