@@ -80,15 +80,15 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 	if out, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
 	}
-	flip := exec.Command(dockerEngine, "exec", ProxyContainer, ProxyHelperMount, "flip", proxyConfigMount)
+	flip := exec.Command(dockerEngine, "exec", stood.name, ProxyHelperMount, "flip", proxyConfigMount)
 	if out, err := flip.CombinedOutput(); err != nil {
 		t.Fatalf("the proxy stood up as the box stands it would not take a config carrying an operator's pin, so every reshape on a box with one pinned — claim, release and retire alike — fails: %v\n%s\n%s",
-			err, out, logsOf(ProxyContainer))
+			err, out, logsOf(stood.name))
 	}
 
 	var read []byte
 	for range 100 {
-		asked := exec.Command(dockerEngine, "exec", ProxyContainer, ProxyHelperMount, "leaf", "pr-7.preview.example.com")
+		asked := exec.Command(dockerEngine, "exec", stood.name, ProxyHelperMount, "leaf", "pr-7.preview.example.com")
 		if out, err := asked.Output(); err == nil {
 			read = out
 			break
@@ -96,7 +96,7 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 		time.Sleep(100 * time.Millisecond)
 	}
 	if len(read) == 0 {
-		t.Fatalf("the helper read no leaf off the proxy's own :443 for a hostname a pinned pair covers:\n%s", logsOf(ProxyContainer))
+		t.Fatalf("the helper read no leaf off the proxy's own :443 for a hostname a pinned pair covers:\n%s", logsOf(stood.name))
 	}
 	block, _ := pem.Decode(read)
 	if block == nil {
@@ -110,11 +110,11 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 		t.Errorf("the proxy served %q for pr-7.preview.example.com, want the pinned pair: a loaded certificate suppresses automatic management for its subject, so nothing here asks a CA",
 			leaf.Subject.CommonName)
 	}
-	if strings.Contains(logsOf(ProxyContainer), "obtain") {
-		t.Errorf("the proxy tried to obtain a certificate for a name a pinned pair already covers:\n%s", logsOf(ProxyContainer))
+	if strings.Contains(logsOf(stood.name), "obtain") {
+		t.Errorf("the proxy tried to obtain a certificate for a name a pinned pair already covers:\n%s", logsOf(stood.name))
 	}
-	if strings.Contains(logsOf(ProxyContainer), acmeDirectory) {
-		t.Errorf("the proxy reached a public CA from a package-level `go test`: this renders a claim for an example.com name, and what keeps the order off the wire is the load_files suppression this very test exists to check:\n%s", logsOf(ProxyContainer))
+	if strings.Contains(logsOf(stood.name), acmeDirectory) {
+		t.Errorf("the proxy reached a public CA from a package-level `go test`: this renders a claim for an example.com name, and what keeps the order off the wire is the load_files suppression this very test exists to check:\n%s", logsOf(stood.name))
 	}
 }
 
