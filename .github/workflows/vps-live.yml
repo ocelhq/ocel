@@ -10,6 +10,7 @@ on:
       - "cli/internal/prompt/**"
       - "cli/internal/cli/bootstrap/**"
       - "cli/internal/cli/preflight/**"
+      - "cli/internal/cli/doctor/**"
       - "cli/internal/imagebuild/**"
       - "cli/internal/appbuilder/**"
       - "cli/internal/appimages/**"

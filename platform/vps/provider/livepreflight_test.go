@@ -81,8 +81,7 @@ func (vm machine) waitsFor(t *testing.T, container string) {
 }
 
 func TestLiveADiskWithoutRoomForTheKeepWindowRefusesAndNamesTheGuess(t *testing.T) {
-	_, p := onABoxServingContainers(t)
-	vm := live(t)
+	vm, p := onABoxServingContainers(t)
 
 	root := strings.TrimSpace(vm.ssh(t, "sudo docker info --format '{{.DockerRootDir}}'"))
 	if root == "" {
