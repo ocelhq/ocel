@@ -5,11 +5,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
 
 const trustQuestion = "Trust that key and record"
+
+var owedABootstrap = regexp.MustCompile("⚠ not bootstrapped\n\\s+→ run `ocel bootstrap production`")
 
 func TestE2EFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *testing.T) {
 	run := e2e(t)
@@ -22,7 +25,7 @@ func TestE2EFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *testing.T)
 	if !strings.Contains(rendered, "SHA256:") {
 		t.Errorf("first contact never showed a fingerprint to decide on:\n%s", rendered)
 	}
-	if !strings.Contains(rendered, "not set up — run `ocel bootstrap production`") {
+	if !owedABootstrap.MatchString(rendered) {
 		t.Errorf("the accepted key did not re-drive the command it refused:\n%s", rendered)
 	}
 
