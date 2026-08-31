@@ -368,24 +368,46 @@ func TestAPreviewWhoseGlobalBaseWentMissingStillForgetsTheCertificatesItsClaimsN
 	}
 }
 
-func TestATeardownThatFellOverLeavesThePointersHistoryStandingForTheNextRun(t *testing.T) {
-	t.Parallel()
+func callsATeardownMakes(t *testing.T) []string {
+	t.Helper()
 
 	stood := aMachine()
 	stack := previewStack(t, stood)
 	previewed(t, stack, "pr-7", "api", "web")
-	stood.refuse = errors.New("the proxy answered nothing over its admin socket")
-
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err == nil {
-		t.Fatal("a teardown whose box calls all refused reported success")
+	stood.visited = nil
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
 	}
-
-	history, err := stack.Ledger().History(context.Background(), "pr-7")
-	if err != nil {
-		t.Fatalf("History: %v", err)
+	reached := stood.reached()
+	if len(reached) == 0 {
+		t.Fatal("a teardown reached no call on the box that this fake can refuse, so every case below would be vacuous")
 	}
-	if len(history) == 0 {
-		t.Fatal("a teardown that fell over took the pointer's history with it: every step this method can fail on runs before the ledger write, because the history is the only thing that names what the next run has left to reach")
+	return reached
+}
+
+func TestATeardownThatFellOverLeavesThePointersHistoryStandingForTheNextRun(t *testing.T) {
+	t.Parallel()
+
+	for _, call := range callsATeardownMakes(t) {
+		t.Run(call, func(t *testing.T) {
+			t.Parallel()
+
+			stood := aMachine()
+			stack := previewStack(t, stood)
+			previewed(t, stack, "pr-7", "api", "web")
+			stood.refuseOn(call, errors.New("the box answered nothing over its ssh session"))
+
+			if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err == nil {
+				t.Fatalf("a teardown whose %s refused reported success, and a step a teardown never makes is a step this table names for nothing", call)
+			}
+			history, err := stack.Ledger().History(context.Background(), "pr-7")
+			if err != nil {
+				t.Fatalf("History: %v", err)
+			}
+			if len(history) == 0 {
+				t.Fatalf("a teardown that fell over on %s took the pointer's history with it: the history is the only thing that names what the next run has left to reach, so every step that can fail runs before the ledger write and one moved after it is a step no retry can ever reach", call)
+			}
+		})
 	}
 }
 
@@ -436,11 +458,11 @@ func TestATeardownThatFailedOnTheCertificatesForgetsThemOnTheNextRun(t *testing.
 	stack := previewStack(t, stood)
 	previewed(t, stack, "pr-7", "api", "web")
 
-	stood.refuse = errors.New("the proxy answered nothing over its admin socket")
+	stood.refuseOn("ForgetCertificates", errors.New("the proxy answered nothing over its admin socket"))
 	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err == nil {
 		t.Fatal("a teardown whose certificate removal failed reported success, and the pairs it left are bytes nothing else will ever take")
 	}
-	stood.refuse = nil
+	stood.allowOn("ForgetCertificates")
 	stood.forgotten = nil
 
 	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {

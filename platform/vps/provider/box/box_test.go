@@ -35,43 +35,72 @@ type machine struct {
 	headed      []string
 	previewBase string
 	forgotten   []string
-	refuse      error
+	refusals    map[string]error
+	visited     []string
 }
 
 func aMachine() *machine {
-	return &machine{upstream: map[host.RouteKey]string{}, swept: map[string]bool{}}
+	return &machine{
+		upstream: map[host.RouteKey]string{},
+		swept:    map[string]bool{},
+		refusals: map[string]error{},
+	}
 }
 
-func (m *machine) Address(context.Context) (string, error) { return address, nil }
+func (m *machine) refuseOn(call string, err error) { m.refusals[call] = err }
+
+func (m *machine) allowOn(call string) { delete(m.refusals, call) }
+
+func (m *machine) refuse(call string) error {
+	m.visited = append(m.visited, call)
+	return m.refusals[call]
+}
+
+func (m *machine) reached() []string {
+	return slices.Compact(slices.Sorted(slices.Values(m.visited)))
+}
+
+func (m *machine) Address(context.Context) (string, error) {
+	return address, m.refuse("Address")
+}
 
 func (m *machine) Pins() []host.Pin { return m.pins }
 
 func (m *machine) HoldsImage(_ context.Context, coordinate string) (bool, error) {
+	if err := m.refuse("HoldsImage"); err != nil {
+		return false, err
+	}
 	return !m.swept[coordinate], nil
 }
 
 func (m *machine) StandUp(_ context.Context, spec host.Container) error {
 	m.calls = append(m.calls, "stand-up "+spec.Name)
 	m.stood = append(m.stood, spec)
-	return m.refuse
+	return m.refuse("StandUp")
 }
 
 func (m *machine) Promote(_ context.Context, _ providerkit.Class, app, coordinate string) error {
 	m.calls = append(m.calls, "head "+app+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)
-	return m.refuse
+	return m.refuse("Promote")
 }
 
 func (m *machine) ForgetCertificates(_ context.Context, hostnames []string, _ providerkit.Reporter) error {
+	if err := m.refuse("ForgetCertificates"); err != nil {
+		return err
+	}
 	for _, hostname := range hostnames {
 		m.calls = append(m.calls, "forget "+hostname)
 		m.forgotten = append(m.forgotten, hostname)
 	}
-	return m.refuse
+	return nil
 }
 
 func (m *machine) Serving(_ context.Context, key host.RouteKey) (string, error) {
 	m.calls = append(m.calls, "serving "+key.App)
+	if err := m.refuse("Serving"); err != nil {
+		return "", err
+	}
 	return m.upstream[key], nil
 }
 
@@ -79,11 +108,14 @@ func (m *machine) Release(_ context.Context, rel host.Release, _ providerkit.Rep
 	m.calls = append(m.calls, "release "+rel.App+" onto "+rel.Target)
 	m.releases = append(m.releases, rel)
 	m.upstream[rel.RouteKey] = rel.Target
-	return m.refuse
+	return m.refuse("Release")
 }
 
 func (m *machine) UnroutePointer(_ context.Context, owner, pointer string) error {
 	m.calls = append(m.calls, "unroute "+owner+"/"+pointer)
+	if err := m.refuse("UnroutePointer"); err != nil {
+		return err
+	}
 	maps.DeleteFunc(m.upstream, func(key host.RouteKey, _ string) bool {
 		return key.Owner == owner && key.Pointer == pointer
 	})
@@ -92,15 +124,24 @@ func (m *machine) UnroutePointer(_ context.Context, owner, pointer string) error
 
 func (m *machine) UnrouteSurface(_ context.Context, owner string) error {
 	m.calls = append(m.calls, "unroute "+owner)
+	if err := m.refuse("UnrouteSurface"); err != nil {
+		return err
+	}
 	maps.DeleteFunc(m.upstream, func(key host.RouteKey, _ string) bool { return key.Owner == owner })
 	return nil
 }
 
 func (m *machine) Claims(context.Context) ([]host.HostClaim, error) {
+	if err := m.refuse("Claims"); err != nil {
+		return nil, err
+	}
 	return slices.Clone(m.claims), nil
 }
 
 func (m *machine) ClaimHosts(_ context.Context, claims []host.HostClaim) error {
+	if err := m.refuse("ClaimHosts"); err != nil {
+		return err
+	}
 	for _, claim := range claims {
 		m.calls = append(m.calls, "claim "+claim.Hostname)
 		taken, err := host.Claiming(m.claims, claim)
@@ -114,6 +155,9 @@ func (m *machine) ClaimHosts(_ context.Context, claims []host.HostClaim) error {
 
 func (m *machine) DisclaimPointer(_ context.Context, owner, pointer string) error {
 	m.calls = append(m.calls, "disclaim "+owner+"/"+pointer)
+	if err := m.refuse("DisclaimPointer"); err != nil {
+		return err
+	}
 	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool {
 		return claim.Owner == owner && claim.Pointer == pointer
 	})
@@ -122,6 +166,9 @@ func (m *machine) DisclaimPointer(_ context.Context, owner, pointer string) erro
 
 func (m *machine) DisclaimHost(_ context.Context, hostname, owner string) error {
 	m.calls = append(m.calls, "disclaim "+hostname)
+	if err := m.refuse("DisclaimHost"); err != nil {
+		return err
+	}
 	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool {
 		return claim.Hostname == hostname && claim.Owner == owner
 	})
@@ -130,14 +177,22 @@ func (m *machine) DisclaimHost(_ context.Context, hostname, owner string) error 
 
 func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	m.calls = append(m.calls, "disclaim "+owner)
+	if err := m.refuse("DisclaimSurface"); err != nil {
+		return err
+	}
 	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool { return claim.Owner == owner })
 	return nil
 }
 
-func (m *machine) PreviewEntry(context.Context) (string, error) { return m.previewBase, nil }
+func (m *machine) PreviewEntry(context.Context) (string, error) {
+	return m.previewBase, m.refuse("PreviewEntry")
+}
 
 func (m *machine) InstallPreviewEntry(_ context.Context, base string) error {
 	m.calls = append(m.calls, "install preview entry "+base)
+	if err := m.refuse("InstallPreviewEntry"); err != nil {
+		return err
+	}
 	if m.previewBase != "" && m.previewBase != base {
 		return providerkit.Refuse(providerkit.CodeBusy,
 			"this box already answers previews on %s", edge.PreviewWildcard(m.previewBase))
@@ -148,6 +203,9 @@ func (m *machine) InstallPreviewEntry(_ context.Context, base string) error {
 
 func (m *machine) RemovePreviewEntry(_ context.Context, base string) error {
 	m.calls = append(m.calls, "remove preview entry "+base)
+	if err := m.refuse("RemovePreviewEntry"); err != nil {
+		return err
+	}
 	if m.previewBase == base {
 		m.previewBase = ""
 	}
