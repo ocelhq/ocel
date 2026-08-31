@@ -11,12 +11,15 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
+	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 )
 
 type admin struct {
@@ -749,7 +752,8 @@ func TestListenersNamesEverySocketBoundInsideThisNamespace(t *testing.T) {
 
 func TestListenersInAnEmptyNamespaceSaysNothingRatherThanFailing(t *testing.T) {
 	var out, errs strings.Builder
-	code := run(t.TempDir(), procWith(t, map[string]string{"tcp": "  sl  local_address\n"}), []string{"listeners"}, &out, &errs)
+	proc := procWith(t, map[string]string{"tcp": "  sl  local_address\n", "tcp6": "  sl  local_address\n"})
+	code := run(t.TempDir(), proc, []string{"listeners"}, &out, &errs)
 	if code != 0 {
 		t.Fatalf("listeners = %d, %q", code, errs.String())
 	}
@@ -758,10 +762,77 @@ func TestListenersInAnEmptyNamespaceSaysNothingRatherThanFailing(t *testing.T) {
 	}
 }
 
+func TestListenersRefusesANamespaceWhoseTablesItNeverRead(t *testing.T) {
+	var out, errs strings.Builder
+	code := run(t.TempDir(), procWith(t, nil), []string{"listeners"}, &out, &errs)
+	if code == 0 {
+		t.Fatalf("listeners = 0 having read neither %s nor %s, and an answer nothing was read for is read upstream as a namespace with nothing bound in it: %q",
+			listeners.TCPPath, listeners.TCP6Path, out.String())
+	}
+	if !strings.Contains(errs.String(), listeners.TCPPath) {
+		t.Errorf("listeners refused with %q, which names neither table it could not read", errs.String())
+	}
+}
+
+func TestListenersReadsTheOneTableThatIsThere(t *testing.T) {
+	var out, errs strings.Builder
+	if code := run(t.TempDir(), procWith(t, map[string]string{"tcp6": listeningTable}), []string{"listeners"}, &out, &errs); code != 0 {
+		t.Fatalf("listeners = %d over a namespace carrying only %s, and a kernel built without one family is not a namespace nothing was read from: %q",
+			code, listeners.TCP6Path, errs.String())
+	}
+	if !strings.Contains(out.String(), "0.0.0.0:80") {
+		t.Errorf("listeners said %q, want what the one readable table holds", out.String())
+	}
+}
+
 func TestListenersRefusesATableItCannotRead(t *testing.T) {
 	proc := procWith(t, map[string]string{"tcp": "  sl  local_address\n   0: zzzz:0050 0:0 0A 0 0 0\n"})
 	var out, errs strings.Builder
 	if code := run(t.TempDir(), proc, []string{"listeners"}, &out, &errs); code == 0 {
 		t.Errorf("listeners = 0 over a table it could not read, and an unreadable table would pass as an empty namespace: %q", out.String())
+	}
+}
+
+func dataTakers(t *testing.T) []string {
+	t.Helper()
+	read, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	taking := regexp.MustCompile(`\b([a-z][A-Za-z0-9]*)\(data[,)]`)
+	var found []string
+	for _, line := range strings.Split(string(read), "\n") {
+		if strings.HasPrefix(line, "func ") {
+			continue
+		}
+		for _, held := range taking.FindAllStringSubmatch(line, -1) {
+			if !slices.Contains(found, held[1]) {
+				found = append(found, held[1])
+			}
+		}
+	}
+	slices.Sort(found)
+	return found
+}
+
+func TestTheProxysDataDirectoryReachesOnlyTheVerbThatForgetsAPair(t *testing.T) {
+	found := dataTakers(t)
+	if len(found) == 0 {
+		t.Fatalf("nothing in main.go is handed %s, so the roster this bench holds it to proves nothing", proxyData)
+	}
+	if want := []string{"forget"}; !slices.Equal(found, want) {
+		t.Errorf("%s is handed to %v, want %v: caddy's storage layout under it is undocumented as an interface and is what a version bump rearranges, so forgetting a pair is the one thing that spends it and no verb answering what a certificate is reads it",
+			proxyData, found, want)
+	}
+}
+
+func TestNoVerbThatAnswersWhatACertificateIsCanReachTheDataDirectory(t *testing.T) {
+	for _, verb := range []string{"leaf", "upstreams", "config", "listeners", "flip", "deploy"} {
+		if slices.Contains(dataTakers(t), verb) {
+			t.Errorf("%s is handed %s, and an expiry read off the proxy's storage rather than off the served leaf breaks on the version bump that rearranges it", verb, proxyData)
+		}
+	}
+	if !slices.Contains(dataTakers(t), "forget") {
+		t.Fatalf("forget is handed no %s, so the exemption this bench names is not the one the code takes and the absences above are read over a window that holds nothing", proxyData)
 	}
 }
