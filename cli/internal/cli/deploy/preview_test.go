@@ -60,6 +60,9 @@ func TestRunPreviewUp(t *testing.T) {
 				t.Errorf("stdout = %q, want it to contain %q", out, sub)
 			}
 		}
+		if strings.Contains(out, "expires") {
+			t.Errorf("stdout = %q, and a listing that prints an expiry promises a teardown nothing performs: no reaper, no sweep, and on an agentless box nothing resident that could run one", out)
+		}
 
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
@@ -487,6 +490,9 @@ func TestRunPreviewLs(t *testing.T) {
 			if !strings.Contains(out, sub) {
 				t.Errorf("stdout = %q, want it to contain %q", out, sub)
 			}
+		}
+		if strings.Contains(out, "expires") {
+			t.Errorf("stdout = %q, and a listing that prints an expiry promises a teardown nothing performs: no reaper, no sweep, and on an agentless box nothing resident that could run one", out)
 		}
 
 		clitest.WaitForNoStaleSocket(t, sockPath)

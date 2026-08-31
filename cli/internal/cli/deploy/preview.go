@@ -508,12 +508,11 @@ func renderEnvironments(stdout io.Writer, envs []*contractv1.PreviewEnvironment)
 		return
 	}
 	for _, e := range envs {
-		fmt.Fprintf(stdout, "%s\t%s\t%s\tcreated %s\texpires %s\n",
+		fmt.Fprintf(stdout, "%s\t%s\t%s\tcreated %s\n",
 			e.GetIdentity(),
 			lifecycleTag(e.GetLifecycle()),
 			labelOrDash(e.GetLabel()),
 			runui.EpochDate(e.GetCreatedAt()),
-			runui.EpochDate(e.GetExpiresAt()),
 		)
 	}
 }

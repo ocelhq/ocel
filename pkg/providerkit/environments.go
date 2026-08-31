@@ -13,23 +13,19 @@ import (
 
 const ProductionEnv = "prod"
 
-const PreviewTTL = 7 * 24 * time.Hour
-
 type Environment struct {
 	Identity  string
 	Persisted bool
 	Label     string
 	CreatedAt int64
-	ExpiresAt int64
 }
 
 type EnvironmentMeta struct {
 	Label     string `json:"label,omitempty"`
 	CreatedAt int64  `json:"created_at,omitempty"`
-	ExpiresAt int64  `json:"expires_at,omitempty"`
 }
 
-func recordEnvironmentMeta(ctx context.Context, records RecordStore, class Class, slug, env, label string, ephemeral bool) error {
+func recordEnvironmentMeta(ctx context.Context, records RecordStore, class Class, slug, env, label string) error {
 	name := EnvironmentRecord(class, slug, env)
 	held, err := Held(ctx, records, name)
 	if err != nil {
@@ -41,13 +37,8 @@ func recordEnvironmentMeta(ctx context.Context, records RecordStore, class Class
 			return fmt.Errorf("read %s: %w", name, err)
 		}
 	}
-	now := time.Now().Unix()
 	if meta.CreatedAt == 0 {
-		meta.CreatedAt = now
-	}
-	meta.ExpiresAt = 0
-	if ephemeral {
-		meta.ExpiresAt = now + int64(PreviewTTL.Seconds())
+		meta.CreatedAt = time.Now().Unix()
 	}
 	if label != "" {
 		meta.Label = label
@@ -121,7 +112,6 @@ func previewEnvironments(ctx context.Context, records RecordStore, slug string) 
 			Persisted: persisted[identity],
 			Label:     meta[identity].Label,
 			CreatedAt: meta[identity].CreatedAt,
-			ExpiresAt: meta[identity].ExpiresAt,
 		})
 	}
 	return environments, nil
