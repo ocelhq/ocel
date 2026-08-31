@@ -82,7 +82,7 @@ func ran(t *testing.T, argv ...string) (int, string, string) {
 func ranIn(t *testing.T, data string, argv ...string) (int, string, string) {
 	t.Helper()
 	var out, errs strings.Builder
-	return run(data, argv, &out, &errs), out.String(), errs.String()
+	return run(data, t.TempDir(), argv, &out, &errs), out.String(), errs.String()
 }
 
 func configFile(t *testing.T, socket, body string) string {
@@ -709,5 +709,59 @@ func TestForgettingRefusesTheSharedPreviewWildcardsOwnDirectory(t *testing.T) {
 	}
 	if !standing(t, staying) {
 		t.Error("a refused forget still took the shared preview wildcard's pair")
+	}
+}
+
+func procWith(t *testing.T, tables map[string]string) string {
+	t.Helper()
+	proc := filepath.Join(t.TempDir(), "proc")
+	if err := os.MkdirAll(filepath.Join(proc, "net"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range tables {
+		if err := os.WriteFile(filepath.Join(proc, "net", name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return proc
+}
+
+const listeningTable = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 00000000:0050 00000000:0000 0A 00000000:00000000 00:00000000     0        0 1 1 0 100 0 0 10 0
+   1: 0100007F:07E3 00000000:0000 0A 00000000:00000000 00:00000000     0        0 2 1 0 100 0 0 10 0
+`
+
+func TestListenersNamesEverySocketBoundInsideThisNamespace(t *testing.T) {
+	proc := procWith(t, map[string]string{"tcp": listeningTable})
+
+	var out, errs strings.Builder
+	if code := run(t.TempDir(), proc, []string{"listeners"}, &out, &errs); code != 0 {
+		t.Fatalf("listeners = %d, %q", code, errs.String())
+	}
+	said := out.String()
+	if !strings.Contains(said, "0.0.0.0:80") {
+		t.Fatalf("listeners said %q, want the socket the table holds on 80: an empty answer would read as a clean namespace", said)
+	}
+	if !strings.Contains(said, "127.0.0.1:2019") {
+		t.Errorf("listeners said %q, and a loopback bind of the stock admin port is the exposure this verb exists to find", said)
+	}
+}
+
+func TestListenersInAnEmptyNamespaceSaysNothingRatherThanFailing(t *testing.T) {
+	var out, errs strings.Builder
+	code := run(t.TempDir(), procWith(t, map[string]string{"tcp": "  sl  local_address\n"}), []string{"listeners"}, &out, &errs)
+	if code != 0 {
+		t.Fatalf("listeners = %d, %q", code, errs.String())
+	}
+	if out.String() != "" {
+		t.Errorf("listeners said %q over a table with no listening row", out.String())
+	}
+}
+
+func TestListenersRefusesATableItCannotRead(t *testing.T) {
+	proc := procWith(t, map[string]string{"tcp": "  sl  local_address\n   0: zzzz:0050 0:0 0A 0 0 0\n"})
+	var out, errs strings.Builder
+	if code := run(t.TempDir(), proc, []string{"listeners"}, &out, &errs); code == 0 {
+		t.Errorf("listeners = 0 over a table it could not read, and an unreadable table would pass as an empty namespace: %q", out.String())
 	}
 }
