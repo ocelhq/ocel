@@ -14,7 +14,6 @@ func inspecting() map[string]string {
 		"what a proxy that did not come up reports":                 containerRising(3),
 		"what a bootstrap probes the proxy with":                    containerProbe(),
 		"what a preflight reads the proxy's state with":             stateCommand(ProxyContainer),
-		"what a preflight reads the disk headroom with":             headroomCommand([]string{"ocel-shop-web"}),
 	}
 }
 
@@ -47,6 +46,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 
 	held := inspecting()
 	held["the fact template a bootstrap compares the proxy against"] = ProxyFactTemplate
+	held["what a preflight reads the disk headroom with"] = headroomCommand([]string{"ocel-shop-web"})
 	for what, command := range held {
 		for _, leak := range []string{".Config.Env", ".Env}}", "{{json .}}", "--format '{{.}}'"} {
 			if strings.Contains(command, leak) {
@@ -69,7 +69,6 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 func inspectRosters() map[string][]string {
 	return map[string][]string{
 		"docker inspect":         {"containerProbe", "containerRising", "servingCommand", "stateCommand"},
-		"docker image inspect":   {"headroomCommand"},
 		"docker network inspect": {"command", "networkCommand", "networkProbe"},
 	}
 }

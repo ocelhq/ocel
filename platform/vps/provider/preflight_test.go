@@ -29,7 +29,7 @@ type scripted struct {
 
 const (
 	dataRoot     = "/var/lib/docker"
-	roomySaid    = "root=" + dataRoot + "\nfree=104857600\nrepo=ocel-shop-web\nsize=104857600\n"
+	roomySaid    = "root=" + dataRoot + "\nfree=104857600\nrepo=ocel-shop-web\nsize=100MB\n"
 	crampedSaid  = "root=" + dataRoot + "\nfree=1024\nrepo=ocel-shop-web\n"
 	deployedRepo = "ocel-shop-web"
 	deployedRef  = deployedRepo + ":r0a1b2c3d"

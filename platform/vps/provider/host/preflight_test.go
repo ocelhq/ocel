@@ -9,9 +9,9 @@ import (
 const headroomSaid = `root=/var/lib/docker
 free=1024
 repo=ocel-shop-web
-size=100
-size=300
-size=200
+size=100B
+size=300B
+size=200B
 `
 
 func TestTheKeepWindowIsTheOneTheHelperOnTheBoxEnforces(t *testing.T) {
@@ -43,20 +43,46 @@ func TestHeadroomIsReadOffTheLargestImageHeldAndTheSlotsLeft(t *testing.T) {
 	if held.Count != 3 || held.Largest != 300 {
 		t.Fatalf("readHeadroom() held %+v, want three images whose largest is 300", held)
 	}
-	if want := int64(300); held.Needs() != want {
-		t.Errorf("Needs() = %d, want %d: a full window leaves no unfilled slot and the incoming image is the one more", held.Needs(), want)
+	if want := int64(300); held.Measured() != want {
+		t.Errorf("Measured() = %d, want %d: a full window leaves no unfilled slot and the incoming image is the one more", held.Measured(), want)
 	}
 }
 
 func TestAnUnfilledWindowAsksForEverySlotItHasNotFilled(t *testing.T) {
 	t.Parallel()
 
-	room, err := readHeadroom("root=/var/lib/docker\nfree=1024\nrepo=ocel-shop-web\nsize=500\n")
+	room, err := readHeadroom("root=/var/lib/docker\nfree=1024\nrepo=ocel-shop-web\nsize=500B\n")
 	if err != nil {
 		t.Fatalf("readHeadroom() = %v", err)
 	}
-	if want := int64(500 * 3); room.Needs() != want {
-		t.Errorf("Needs() = %d, want %d: two slots are unfilled and the incoming image is a third", room.Needs(), want)
+	if want := int64(500 * 3); room.Repos["ocel-shop-web"].Measured() != want {
+		t.Errorf("Measured() = %d, want %d: two slots are unfilled and the incoming image is a third", room.Repos["ocel-shop-web"].Measured(), want)
+	}
+}
+
+func TestAMeasurementUnderTheFloorIsStillHeldToTheFloor(t *testing.T) {
+	t.Parallel()
+
+	room, err := readHeadroom("root=/var/lib/docker\nfree=1024\nrepo=ocel-shop-web\nsize=300B\n")
+	if err != nil {
+		t.Fatalf("readHeadroom() = %v", err)
+	}
+	if room.Needs() != FirstDeployFloor {
+		t.Errorf("Needs() = %d, want the floor %d: what a box already holds is no bound on the image this deploy has not built yet, and a 300 byte measurement would authorise a deploy onto a disk with nothing on it",
+			room.Needs(), FirstDeployFloor)
+	}
+	said := arithmetic(room)
+	if !strings.Contains(said, "guessed constant") {
+		t.Errorf("the refusal says %q, and the number it applied is the floor rather than the measurement it also names", said)
+	}
+}
+
+func TestAMeasurementOverTheFloorIsTheNumberApplied(t *testing.T) {
+	t.Parallel()
+
+	held := Held{Largest: FirstDeployFloor, Count: 1}
+	if want := int64(FirstDeployFloor) * 3; held.Needs() != want {
+		t.Errorf("Needs() = %d, want %d: a box holding images bigger than the floor is measured rather than guessed at", held.Needs(), want)
 	}
 }
 
@@ -119,5 +145,30 @@ func TestTheHeadroomReadNamesTheAppsFilterAndNotTheWholeStore(t *testing.T) {
 	}
 	if strings.Contains(command, "docker image ls --format") {
 		t.Errorf("the headroom read is %q and lists images under no filter", command)
+	}
+	if strings.Contains(command, "docker image inspect") {
+		t.Errorf("the headroom read is %q, and under the containerd image store every build the cli accepts writes into, `docker image inspect` answers the compressed content size rather than the bytes the image occupies on the data root", command)
+	}
+}
+
+func TestAnImageIsSizedByWhatItOccupiesRatherThanWhatItCompressesTo(t *testing.T) {
+	t.Parallel()
+
+	for said, want := range map[string]int64{
+		"717B":    717,
+		"8.37MB":  8_370_000,
+		"1.25GB":  1_250_000_000,
+		"2.5kB":   2500,
+		"1TB":     1_000_000_000_000,
+		"1.024PB": 1_024_000_000_000_000,
+	} {
+		if read, held := occupied(said); !held || read != want {
+			t.Errorf("occupied(%q) = %d, %t, want %d", said, read, held, want)
+		}
+	}
+	for _, said := range []string{"", "big", "8.37", "MB", "N/A", "8.37EB", "-1MB"} {
+		if read, held := occupied(said); held {
+			t.Errorf("occupied(%q) = %d, and a size this host did not answer is not a size", said, read)
+		}
 	}
 }
