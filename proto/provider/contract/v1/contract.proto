@@ -460,6 +460,8 @@ message PreflightResponse {
   BootstrapStatus bootstrap = 8;
 
   repeated string computes = 9;
+
+  repeated StandingCheck standing = 10;
 }
 
 message ResolveImageRegistryRequest {
@@ -488,6 +490,29 @@ message PreviewWildcard {
   bool route_installed = 5;
 
   CertificateState certificate = 6;
+
+  string renewal_status = 7;
+
+  int64 expires_at = 8;
+
+  bool expiring_soon = 9;
+}
+
+message StandingCheck {
+  enum Verdict {
+    VERDICT_UNSPECIFIED = 0;
+    VERDICT_PASS = 1;
+    VERDICT_OWED = 2;
+    VERDICT_FAIL = 3;
+  }
+
+  string subject = 1;
+
+  Verdict verdict = 2;
+
+  string finding = 3;
+
+  string fix = 4;
 }
 
 message DomainClaim {
