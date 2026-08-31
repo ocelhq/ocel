@@ -1021,3 +1021,37 @@ func TestRemovingAPreviewsDefaultPointerForgetsNoCertificate(t *testing.T) {
 			stood.forgotten, edge.DefaultPointer)
 	}
 }
+
+func TestAPromotionCarriesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(t *testing.T) {
+	t.Parallel()
+
+	stood, _, stack := standing(t)
+	if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
+		App:        "web",
+		Identity:   "b1",
+		Entry:      "/",
+		Image:      imageFor("web", "b1"),
+		Physical:   "shop-web-1111",
+		HealthPath: "/healthz",
+		Variables:  []edge.VariableRecord{{Key: "API_TOKEN"}, {Key: "DATABASE_URL"}},
+		Env:        map[string]string{"orders": "postgres"},
+	}); err != nil {
+		t.Fatalf("PutStaged: %v", err)
+	}
+
+	if err := stack.Promote(context.Background(), edge.Promotion{
+		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
+	}, "", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if len(stood.stood) != 1 {
+		t.Fatalf("the promotion stood up %d containers, want the one the record names", len(stood.stood))
+	}
+	spec := stood.stood[0]
+	if spec.Resolved {
+		t.Error("the promotion says it resolved the app's values, and it resolved none: a container standing under the values a since-changed deploy handed it would then read as replaceable")
+	}
+	if !slices.Equal(spec.Declared, []string{"API_TOKEN", "DATABASE_URL", "orders"}) {
+		t.Errorf("the promotion names %v of what the record says web was handed, and a box that is told none of them puts the app back with an empty environment rather than refusing", spec.Declared)
+	}
+}

@@ -40,7 +40,10 @@ type Container struct {
 	App   string
 	Image string
 	Class providerkit.Class
-	Env   map[string]string
+
+	Env      map[string]string
+	Resolved bool
+	Declared []string
 }
 
 func ContainerName(stack, app, deployment, image string) string {
@@ -75,14 +78,16 @@ func servingSelectors() string {
 	return "{{.State.Status}} " + LabelSelector(LabelRef) + " " + LabelSelector(LabelEnv)
 }
 
-func stillServing(said string, spec Container, digest string) bool {
+func runningImage(said, image string) bool {
 	fields := strings.Fields(said)
-	if len(fields) < 2 || fields[0] != "running" || fields[1] != spec.Image {
+	return len(fields) >= 2 && fields[0] == "running" && fields[1] == image
+}
+
+func stillServing(said, image, digest string) bool {
+	if !runningImage(said, image) {
 		return false
 	}
-	if len(spec.Env) == 0 {
-		return true
-	}
+	fields := strings.Fields(said)
 	return len(fields) > 2 && fields[2] == digest
 }
 
@@ -92,29 +97,41 @@ func servingCommand(name string) string {
 		quoted(name) + " 2>/dev/null || true"
 }
 
-func (h *Host) StandUp(ctx context.Context, spec Container) error {
+func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
 	}
-	digest, err := envDigest(spec.Env)
+	held, err := handing(spec)
 	if err != nil {
 		return err
 	}
-	if stillServing(h.said(ctx, servingCommand(spec.Name), elevation), spec, digest) {
-		return nil
+	said := h.said(ctx, servingCommand(spec.Name), elevation)
+	if spec.Resolved {
+		if stillServing(said, spec.Image, held.digest) {
+			return nil
+		}
+	} else {
+		if runningImage(said, spec.Image) {
+			return nil
+		}
+		if len(spec.Declared) > 0 {
+			return providerkit.Refuse(providerkit.CodeNotReady,
+				"%s no longer stands on this box, and %s declares %s: a container is handed the values its own deploy resolved, and a promotion carries none of them, so putting one back here would serve %s with an empty environment. Run `ocel deploy` to stand it up with its values",
+				spec.Name, spec.App, strings.Join(spec.Declared, ", "), spec.App)
+		}
 	}
 	if _, err := h.ran(ctx, "clear the name "+spec.Name,
 		"docker rm --force "+quoted(spec.Name)+" >/dev/null 2>&1 || true", nil, elevation); err != nil {
 		return err
 	}
-	held, err := h.hand(ctx, spec)
-	if err != nil {
+	defer func() { err = errors.Join(err, h.forget(ctx, held)) }()
+	if err := h.hand(ctx, held, spec); err != nil {
 		return err
 	}
 	_, stood := h.ran(ctx, "stand "+spec.App+" up as "+spec.Name,
 		words(containerRun(spec, held))+" >/dev/null", nil, elevation)
-	return errors.Join(stood, h.forget(ctx, held))
+	return stood
 }
 
 func (h *Host) TakeDown(ctx context.Context, name string) error {

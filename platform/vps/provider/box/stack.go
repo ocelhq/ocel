@@ -106,6 +106,18 @@ func (s *stack) standing(ctx context.Context, app, pointer string, promotion edg
 	return standing{key: s.routeKey(pointer, app), app: app, record: record}, true, nil
 }
 
+func declaredBy(record edge.DeploymentRecord) []string {
+	declared := make([]string, 0, len(record.Variables)+len(record.Env))
+	for _, variable := range record.Variables {
+		declared = append(declared, variable.Key)
+	}
+	for name := range record.Env {
+		declared = append(declared, name)
+	}
+	slices.Sort(declared)
+	return declared
+}
+
 func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) error {
 	record := held.record
 	if report != nil {
@@ -113,6 +125,7 @@ func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) 
 	}
 	if err := s.e.machine.StandUp(ctx, host.Container{
 		Name: record.Physical, App: held.app, Image: record.Image, Class: s.state.Class,
+		Declared: declaredBy(record),
 	}); err != nil {
 		return err
 	}

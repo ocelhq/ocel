@@ -22,7 +22,15 @@ type said struct{ lines []string }
 func (s *said) Say(message string)    { s.lines = append(s.lines, message) }
 func (s *said) Detail(message string) { s.lines = append(s.lines, message) }
 
-func (s *said) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+func (s *said) Span(name string, _, _ time.Time, err error, attrs ...providerkit.Attr) {
+	s.lines = append(s.lines, name)
+	if err != nil {
+		s.lines = append(s.lines, err.Error())
+	}
+	for _, attr := range attrs {
+		s.lines = append(s.lines, attr.Key, attr.Value)
+	}
+}
 
 func (s *said) at(fragment string) int {
 	return slices.IndexFunc(s.lines, func(line string) bool { return strings.Contains(line, fragment) })

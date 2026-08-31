@@ -17,8 +17,9 @@ const (
 func valued() Container {
 	spec := aContainer()
 	spec.Class = providerkit.ClassProduction
+	spec.Resolved = true
 	spec.Env = map[string]string{
-		"DATABASE_URL":                "postgres://app:hunter2@db.internal/orders",
+		"DATABASE_URL":                secretValue,
 		"API_TOKEN":                   sensitiveValue,
 		"REGION":                      "eu-west-1",
 		"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"password":"hunter2"}}`,
@@ -26,7 +27,14 @@ func valued() Container {
 	return spec
 }
 
-func handing(t *testing.T, spec Container) *bench {
+func promoted() Container {
+	spec := aContainer()
+	spec.Class = providerkit.ClassProduction
+	spec.Resolved = false
+	return spec
+}
+
+func standingWith(t *testing.T, spec Container) *bench {
 	t.Helper()
 	stand := machine(nil)
 	imaging(stand, "false ")
@@ -54,7 +62,7 @@ func TestAContainerIsHandedItsValuesInAFileRatherThanOnTheCommandLine(t *testing
 
 	spec := valued()
 	path := EnvFile(spec.Class, spec.Name)
-	stand := handing(t, spec)
+	stand := standingWith(t, spec)
 
 	command := ranContainer(t, stand)
 	if !strings.Contains(command, quoted("--env-file")+" "+quoted(path)) {
@@ -70,23 +78,51 @@ func TestAContainerIsHandedItsValuesInAFileRatherThanOnTheCommandLine(t *testing
 	}
 }
 
+func denyingDocker(stand *bench, held string) {
+	stand.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, dockerReach) {
+			return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, true
+		}
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, quoted(servingSelectors())) {
+			return session.Result{Stdout: held + "\n"}, true
+		}
+		return session.Result{}, false
+	}
+}
+
 func TestTheEnvFileIsWrittenAtSixHundredToTheDeployPrincipalWithNoElevation(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
 	path := EnvFile(spec.Class, spec.Name)
-	stand := handing(t, spec)
+	stand := machine(nil)
+	stand.facts.Root = false
+	denyingDocker(stand, "false ")
+	if err := stand.host().StandUp(context.Background(), spec); err != nil {
+		t.Fatalf("StandUp() = %v", err)
+	}
 
-	stand.mu.Lock()
-	defer stand.mu.Unlock()
+	run := ""
+	for _, command := range stand.commands() {
+		if strings.Contains(command, "--detach") && strings.Contains(command, "docker") {
+			run = command
+		}
+	}
+	if run == "" {
+		t.Fatalf("nothing stood a container up: %v", stand.commands())
+	}
+	if !strings.Contains(run, "sudo -n sh -c ") {
+		t.Fatalf("a login this bench gives no docker access to ran %q with no elevation, so this bench cannot tell an elevated command from a bare one and nothing it says about the env file's own elevation means anything", run)
+	}
+
 	written := ""
-	for _, command := range stand.ran {
+	for _, command := range stand.commands() {
 		if strings.Contains(command, "install") && strings.Contains(command, quoted(path)) {
 			written = command
 		}
 	}
 	if written == "" {
-		t.Fatalf("nothing wrote %s: %v", path, stand.ran)
+		t.Fatalf("nothing wrote %s: %v", path, stand.commands())
 	}
 	if !strings.Contains(written, "install -m 0600") {
 		t.Errorf("the env file is written by %q, and every value an app holds is readable by whoever the mode admits", written)
@@ -104,12 +140,16 @@ func TestTheEnvFileIsTakenBackOnTheSuccessPath(t *testing.T) {
 
 	spec := valued()
 	path := EnvFile(spec.Class, spec.Name)
-	stand := handing(t, spec)
+	stand := standingWith(t, spec)
 
-	if stand.at("rm -f "+quoted(path)) < 0 {
+	taken, ran := stand.at("rm -f "+quoted(path)), stand.at(quoted("--env-file"))
+	if taken < 0 {
 		t.Fatalf("a deploy that finished left %s standing: %v", path, stand.commands())
 	}
-	if stand.at("rm -f "+quoted(path)) < stand.at(quoted("--env-file")) {
+	if ran < 0 {
+		t.Fatalf("nothing ran a container off %s, so the order the two happen in proves nothing: %v", path, stand.commands())
+	}
+	if taken < ran {
 		t.Error("the env file is removed before the container that reads it is run")
 	}
 }
@@ -143,12 +183,62 @@ func TestTheEnvFileIsTakenBackWhenTheContainerCannotBeStoodUp(t *testing.T) {
 	}
 }
 
+func TestTheEnvFileIsTakenBackWhenTheWriteItselfFallsOver(t *testing.T) {
+	t.Parallel()
+
+	spec := valued()
+	path := EnvFile(spec.Class, spec.Name)
+	stand := machine(nil)
+	stand.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, quoted(servingSelectors())) {
+			return session.Result{Stdout: "false \n"}, true
+		}
+		if strings.Contains(command, "install -m 0600") {
+			return session.Result{Code: 1, Stderr: "no space left on device"}, true
+		}
+		return session.Result{}, false
+	}
+	if err := stand.host().StandUp(context.Background(), spec); err == nil {
+		t.Fatal("StandUp() over a write that fell over = nil")
+	}
+	if stand.at("install -m 0600") < 0 {
+		t.Fatalf("nothing tried to write %s, so this bench proves nothing about a write that fell over: %v", path, stand.commands())
+	}
+	if stand.at("rm -f "+quoted(path)) < 0 {
+		t.Fatalf("a write that fell over left %s to whatever `install` had already put on disk, and no deploy after this one takes it back: %v", path, stand.commands())
+	}
+}
+
+func TestTheEnvFileIsTakenBackWhenTheDeployIsInterrupted(t *testing.T) {
+	t.Parallel()
+
+	spec := valued()
+	path := EnvFile(spec.Class, spec.Name)
+	stand := machine(nil)
+	imaging(stand, "false ")
+	ctx, stop := context.WithCancel(context.Background())
+	stand.after = func(_ *bench, command string) {
+		if strings.Contains(command, "install -m 0600") {
+			stop()
+		}
+	}
+	if err := stand.host().StandUp(ctx, spec); err == nil {
+		t.Fatal("StandUp() over a deploy interrupted after the write = nil")
+	}
+	if stand.at("install -m 0600") < 0 {
+		t.Fatalf("nothing wrote %s before the interrupt, so what follows it proves nothing: %v", path, stand.commands())
+	}
+	if stand.at("rm -f "+quoted(path)) < 0 {
+		t.Fatalf("a deploy interrupted after the write left %s standing with every value in it: %v", path, stand.commands())
+	}
+}
+
 func TestNoValueTheDeployResolvesIsSpokenAnywhereButIntoTheFile(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
 	path := EnvFile(spec.Class, spec.Name)
-	stand := handing(t, spec)
+	stand := standingWith(t, spec)
 
 	file := wrote(t, stand, path)
 	for name, value := range spec.Env {
@@ -157,7 +247,7 @@ func TestNoValueTheDeployResolvesIsSpokenAnywhereButIntoTheFile(t *testing.T) {
 		}
 		for _, command := range stand.commands() {
 			if strings.Contains(command, value) {
-				t.Errorf("%s's value is spoken in %q, and a command a deploy renders reaches its progress output and its plan rows", name, command)
+				t.Errorf("%s's value is spoken in %q, which is a line this deploy puts on the wire and every login on this box reads out of `ps`", name, command)
 			}
 		}
 	}
@@ -198,16 +288,47 @@ func TestAValueNoEnvFileLineCanCarryIsRefusedRatherThanTruncated(t *testing.T) {
 	}
 }
 
+func TestTheLabelAContainerCarriesTellsOneAppsValuesFromAnothers(t *testing.T) {
+	t.Parallel()
+
+	spec := valued()
+	held, err := handing(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(held.digest) != envDigestLen {
+		t.Errorf("a container is labelled %q, want %d characters: the label is read back off a running container and compared as a whole", held.digest, envDigestLen)
+	}
+
+	elsewhere := spec
+	elsewhere.Name = spec.Name + "-two"
+	other, err := handing(elsewhere)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.digest == held.digest {
+		t.Errorf("two containers holding the same values are both labelled %q, and whoever reads the labels alone on this box or another learns that two apps hold one value set", held.digest)
+	}
+
+	empty, err := handing(promoted())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty.digest == "" {
+		t.Error("an app that resolved no value at all is labelled with nothing, and a container standing under the values a since-emptied deploy handed it would read as still serving")
+	}
+}
+
 func TestAContainerStandingUnderTheSameImageAndOtherValuesIsReplaced(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	digest, err := envDigest(spec.Env)
+	held, err := handing(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	stand := machine(nil)
-	imaging(stand, "running "+appImage+" "+digest)
+	imaging(stand, "running "+appImage+" "+held.digest)
 	if err := stand.host().StandUp(context.Background(), spec); err != nil {
 		t.Fatalf("StandUp() = %v", err)
 	}
@@ -227,11 +348,36 @@ func TestAContainerStandingUnderTheSameImageAndOtherValuesIsReplaced(t *testing.
 	}
 }
 
-func TestAPromotionThatNamesNoValuesKeepsTheContainerStanding(t *testing.T) {
+func TestADeployThatResolvedNoValueReplacesAContainerHoldingTheOnesItDropped(t *testing.T) {
 	t.Parallel()
 
-	spec := aContainer()
-	spec.Class = providerkit.ClassProduction
+	stood := valued()
+	held, err := handing(stood)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptied := stood
+	emptied.Env = nil
+
+	stand := machine(nil)
+	imaging(stand, "running "+appImage+" "+held.digest)
+	if err := stand.host().StandUp(context.Background(), emptied); err != nil {
+		t.Fatalf("StandUp() = %v", err)
+	}
+	joined := strings.Join(stand.commands(), "\n")
+	if !strings.Contains(joined, quoted("run")+" "+quoted("--detach")) {
+		t.Fatalf("a deploy that resolved no value at all kept the container standing with the values the deploy before it handed over, so removing the last value an app declares never reaches what serves it and DATABASE_URL goes on being served for the life of the release:\n%s", joined)
+	}
+	if strings.Contains(joined, "--env-file") {
+		t.Errorf("a deploy that resolved no value handed the container an env file:\n%s", joined)
+	}
+}
+
+func TestAPromotionKeepsTheContainerItRePointsAtRatherThanReRenderingIt(t *testing.T) {
+	t.Parallel()
+
+	spec := promoted()
+	spec.Declared = []string{"API_TOKEN", "DATABASE_URL"}
 	stand := machine(nil)
 	imaging(stand, "running "+appImage+" 7f3a9c1e2b4d")
 	if err := stand.host().StandUp(context.Background(), spec); err != nil {
@@ -241,5 +387,42 @@ func TestAPromotionThatNamesNoValuesKeepsTheContainerStanding(t *testing.T) {
 		if strings.Contains(command, quoted("run")+" "+quoted("--detach")) {
 			t.Errorf("re-pointing the proxy at a standing container ran %q, and the values it was stood up with are not the promotion's to re-render", command)
 		}
+	}
+}
+
+func TestAPromotionIsRefusedByNameRatherThanStandingAnAppUpWithNoValues(t *testing.T) {
+	t.Parallel()
+
+	spec := promoted()
+	spec.Declared = []string{"API_TOKEN", "DATABASE_URL"}
+	stand := machine(nil)
+	imaging(stand, "false ")
+
+	err := stand.host().StandUp(context.Background(), spec)
+	if err == nil {
+		t.Fatalf("a promotion that had to put %s back stood it up carrying none of the values it declares: %v", spec.Name, stand.commands())
+	}
+	for _, want := range []string{spec.App, "API_TOKEN", "DATABASE_URL", "ocel deploy"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal reads %q and never names %q", err, want)
+		}
+	}
+	for _, command := range stand.commands() {
+		if strings.Contains(command, quoted("run")+" "+quoted("--detach")) {
+			t.Errorf("a refused promotion still ran %q", command)
+		}
+	}
+}
+
+func TestAPromotionOfAnAppDeclaringNoValueStandsItBackUp(t *testing.T) {
+	t.Parallel()
+
+	stand := machine(nil)
+	imaging(stand, "false ")
+	if err := stand.host().StandUp(context.Background(), promoted()); err != nil {
+		t.Fatalf("StandUp() of an app that declares no value = %v, want a rollback of it to stand it back up", err)
+	}
+	if ranContainer(t, stand) == "" {
+		t.Error("a promotion of an app that declares no value left it down")
 	}
 }
