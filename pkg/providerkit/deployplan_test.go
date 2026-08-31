@@ -414,3 +414,19 @@ func TestReclaimTargetsLeaveAContainerReleaseToTheBoxThatHoldsIt(t *testing.T) {
 		t.Fatalf("ReclaimTargets() returned %+v, want only the function release", targets)
 	}
 }
+
+func TestReclaimTargetsRefuseAKeyThatIsNeitherABuildNorAnImageReference(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{
+		"record:web/garbage@",
+		"record:web/garbage@sha256:",
+		"record:web/@sha256:" + strings.Repeat("a", 64),
+		"record:web/garbage@sha256:" + strings.Repeat("z", 64),
+		"record:web/garbage@sha512:" + strings.Repeat("a", 128),
+	} {
+		if _, err := ReclaimTargets("shop", ProductionEnv, []string{key}, nil, nil); err == nil {
+			t.Errorf("ReclaimTargets() over %q returned no refusal, and a key that names neither a build nor a digest-pinned image reference is a corrupt key rather than a container release the box reclaims", key)
+		}
+	}
+}

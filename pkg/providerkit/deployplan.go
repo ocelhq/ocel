@@ -284,8 +284,18 @@ type appRelease struct {
 
 func containerRelease(key string) bool {
 	app, identity, split := strings.Cut(strings.TrimPrefix(key, recordKeyPrefix), "/")
-	return split && app != "" && strings.Contains(identity, "@")
+	if !split || app == "" {
+		return false
+	}
+	repository, digest, pinned := strings.Cut(identity, "@")
+	if !pinned || repository == "" {
+		return false
+	}
+	hex, sha256 := strings.CutPrefix(digest, "sha256:")
+	return sha256 && len(hex) == 64 && strings.IndexFunc(hex, notHex) < 0
 }
+
+func notHex(r rune) bool { return !strings.ContainsRune("0123456789abcdef", r) }
 
 func splitRecordKey(key string) (string, Build, bool) {
 	app, rendered, split := strings.Cut(strings.TrimPrefix(key, recordKeyPrefix), "/")
