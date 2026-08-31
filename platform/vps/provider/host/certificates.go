@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -72,6 +73,32 @@ func (h *Host) CertificateTrouble(ctx context.Context, hostname string) (bool, e
 		return true, nil
 	}
 	return true, limit.Refusal(hostname)
+}
+
+func (h *Host) ForgetCertificates(ctx context.Context, hostnames []string, report providerkit.Reporter) error {
+	if len(hostnames) == 0 {
+		return nil
+	}
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return err
+	}
+	said, err := h.ran(ctx, "forget what this box holds for "+strings.Join(hostnames, ", "),
+		words(helperCommand(append([]string{"forget"}, hostnames...)...)), nil, elevation)
+	if err != nil {
+		return err
+	}
+	if report == nil {
+		return nil
+	}
+	for line := range strings.Lines(said) {
+		removed := strings.TrimSpace(line)
+		if removed == "" {
+			continue
+		}
+		report.Detail("Removed " + removed + ": the pair this box's proxy obtained for a hostname it no longer answers")
+	}
+	return nil
 }
 
 func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, error) {

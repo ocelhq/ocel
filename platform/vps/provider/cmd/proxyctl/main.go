@@ -10,9 +10,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,6 +24,11 @@ import (
 const (
 	socketEnv     = "OCEL_PROXY_ADMIN"
 	defaultSocket = "/run/caddy-admin.sock"
+)
+
+const (
+	dataEnv     = "OCEL_PROXY_DATA"
+	defaultData = "/data"
 )
 
 const (
@@ -81,6 +88,15 @@ func run(argv []string, out, errs io.Writer) int {
 			return usage(errs)
 		}
 		return serving(servingAt, rest[0], out, errs)
+	case "forget":
+		if len(rest) == 0 {
+			return usage(errs)
+		}
+		data := os.Getenv(dataEnv)
+		if data == "" {
+			data = defaultData
+		}
+		return forget(data, rest, out, errs)
 	case "deploy":
 		return deploy(socket, rest, out, errs)
 	default:
@@ -90,9 +106,63 @@ func run(argv []string, out, errs io.Writer) int {
 
 func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "usage: ocel-proxyctl flip <config> | upstreams | config <path> | leaf <hostname> |")
+	fmt.Fprintln(errs, "       forget <hostname>... |")
 	fmt.Fprintln(errs, "       deploy --target <host:port> --health-check-path <path> --deploy-timeout <seconds>")
 	fmt.Fprintln(errs, "              --config <path> --drain-timeout <seconds> [--retire <host:port>]")
 	return exitRefused
+}
+
+func forget(root string, hostnames []string, out, errs io.Writer) int {
+	for _, hostname := range hostnames {
+		if !subject(hostname) {
+			fmt.Fprintf(errs, "ocel-proxyctl: %q is no hostname: forget spends its argument as a directory name under the proxy's certificate store, beside the acme account key that issues for every name on this box\n", hostname)
+			return exitRefused
+		}
+	}
+	certificates := filepath.Join(root, "caddy", "certificates")
+	issuers, err := os.ReadDir(certificates)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0
+	}
+	if err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+		return exitRefused
+	}
+	for _, issuer := range issuers {
+		if !issuer.IsDir() {
+			continue
+		}
+		for _, hostname := range hostnames {
+			held := filepath.Join(certificates, issuer.Name(), hostname)
+			if _, err := os.Stat(held); errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			if err := os.RemoveAll(held); err != nil {
+				fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+				return exitRefused
+			}
+			fmt.Fprintln(out, held)
+		}
+	}
+	return 0
+}
+
+func subject(hostname string) bool {
+	if hostname == "" || len(hostname) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(hostname, ".") {
+		if label == "" {
+			return false
+		}
+		for _, r := range label {
+			letter := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+			if !letter && !(r >= '0' && r <= '9') && r != '-' && r != '_' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func serving(at, hostname string, out, errs io.Writer) int {
