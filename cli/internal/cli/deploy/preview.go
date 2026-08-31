@@ -43,6 +43,7 @@ type previewRmOptions struct {
 }
 
 type previewPruneOptions struct {
+	ref  string
 	name string
 	keep int
 	yes  bool
@@ -129,13 +130,14 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 
 	var pruneOpts previewPruneOptions
 	prune := &cobra.Command{
-		Use:   "prune --name <preview>",
-		Short: "Delete a named preview's old deployments",
-		Long: "Delete a named preview's old deployments.\n\n" +
-			"Keeps the newest --keep deployments and whatever is live. Only named previews are pruned; " +
-			"a branch's preview goes down whole with `ocel preview rm`.",
-		Example: "  $ ocel preview prune --name staging\n" +
-			"  $ ocel preview prune --name staging --keep 5",
+		Use:   "prune",
+		Short: "Delete a preview's old deployments",
+		Long: "Delete a preview's old deployments.\n\n" +
+			"Keeps the newest --keep deployments and whatever is live. With no flags it prunes the " +
+			"current branch's preview; --name prunes a named one.",
+		Example: "  $ ocel preview prune\n" +
+			"  $ ocel preview prune --name staging\n" +
+			"  $ ocel preview prune --ref feature/checkout --keep 5",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
@@ -148,10 +150,10 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 			return runPreviewPrune(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
-	prune.Flags().StringVar(&pruneOpts.name, "name", "", "The named preview to prune")
+	prune.Flags().StringVar(&pruneOpts.ref, "ref", "", "Prune the preview for this git `ref` instead of the current branch")
+	prune.Flags().StringVar(&pruneOpts.name, "name", "", "Prune the named preview")
 	prune.Flags().IntVar(&pruneOpts.keep, "keep", defaultPreviewPruneKeepN, "How many recent deployments to keep (the live one always stays)")
 	cmddeps.Yes(prune, &pruneOpts.yes)
-	_ = prune.MarkFlagRequired("name")
 
 	cmd.AddCommand(up, rm, ls, prune)
 	return cmd
@@ -342,7 +344,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 
-	env, err := resolveRmEnvironment(deps, cwd, opts)
+	env, err := resolvePreviewEnvironment(deps, cwd, opts.name, opts.ref)
 	if err != nil {
 		return err
 	}
@@ -404,10 +406,7 @@ func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, st
 }
 
 func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewPruneOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	if opts.name == "" {
-		return fmt.Errorf("`ocel preview prune` needs --name: only named previews are pruned")
-	}
-	env, err := persistentPreviewEnvironment(opts.name)
+	env, err := resolvePreviewEnvironment(deps, cwd, opts.name, opts.ref)
 	if err != nil {
 		return err
 	}
@@ -430,7 +429,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 		if err := provider.Stream(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
 			return err
 		}
-		ui.Finish(fmt.Sprintf("Pruned preview %q", opts.name))
+		ui.Finish(fmt.Sprintf("Pruned preview %q", env.GetIdentity()))
 		return nil
 	})
 }
@@ -474,15 +473,14 @@ func resolveUpEnvironment(deps cmddeps.Deps, cwd string, opts previewUpOptions) 
 	}, nil
 }
 
-func resolveRmEnvironment(deps cmddeps.Deps, cwd string, opts previewRmOptions) (*environmentv1.Environment, error) {
-	if opts.name != "" && opts.ref != "" {
+func resolvePreviewEnvironment(deps cmddeps.Deps, cwd, name, ref string) (*environmentv1.Environment, error) {
+	if name != "" && ref != "" {
 		return nil, fmt.Errorf("pass --name or --ref, not both: a preview is either named or a branch's")
 	}
-	if opts.name != "" {
-		return persistentPreviewEnvironment(opts.name)
+	if name != "" {
+		return persistentPreviewEnvironment(name)
 	}
 
-	ref := opts.ref
 	if ref == "" {
 		branch, err := deps.CurrentGitBranch(cwd)
 		if err != nil {
