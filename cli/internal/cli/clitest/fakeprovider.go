@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -97,6 +98,9 @@ const (
 	fakeGlobalDomainGrammarEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_GRAMMAR"
 	FakeGlobalDomainProjectsEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROJECTS"
 	FakeGlobalDomainCertEnvVar      = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CERT"
+	FakeGlobalDomainRenewalEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RENEWAL"
+	FakeGlobalDomainExpiresEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_EXPIRES"
+	FakeStandingEnvVar              = "OCEL_TEST_FAKE_STANDING"
 	FakeGlobalDomainRecordsEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RECORDS"
 	FakeGlobalDomainOwedEnvVar      = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_OWED"
 	FakeGlobalDomainProbeEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROBE"
@@ -775,6 +779,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 	}
 	resp.Bootstrap = fakeBootstrap(req.GetRequiredTier())
 	resp.PreviewWildcard = fakeGlobalDomain()
+	resp.Standing = fakeStanding(req.GetDomains())
 	if p := os.Getenv(FakeCredProblemEnvVar); p != "" {
 		resp.CredentialProblems = append(resp.CredentialProblems, &contractv1.CredentialProblem{
 			Provider: p,
@@ -951,7 +956,11 @@ func fakeGlobalDomain() *contractv1.PreviewWildcard {
 	}
 	status, certID, _ := strings.Cut(os.Getenv(FakeGlobalDomainCertEnvVar), " ")
 	probeAt, probeEdge, probeOK := fakeGlobalDomainProbe()
+	expires, _ := strconv.ParseInt(os.Getenv(FakeGlobalDomainExpiresEnvVar), 10, 64)
 	return &contractv1.PreviewWildcard{
+		RenewalStatus:  os.Getenv(FakeGlobalDomainRenewalEnvVar),
+		ExpiresAt:      expires,
+		ExpiringSoon:   expires != 0 && time.Until(time.Unix(expires, 0)) < 30*24*time.Hour,
 		BaseDomain:     base,
 		EdgeScope:      os.Getenv(FakeGlobalDomainEdgeScopeEnvVar),
 		GrammarMin:     grammarMin,
@@ -967,6 +976,27 @@ func fakeGlobalDomain() *contractv1.PreviewWildcard {
 			LastProbeOk:       probeOK,
 		},
 	}
+}
+
+func fakeStanding(domains []string) []*contractv1.StandingCheck {
+	said := os.Getenv(FakeStandingEnvVar)
+	if said == "" {
+		return nil
+	}
+	checks := []*contractv1.StandingCheck{{
+		Subject: "203.0.113.10:80",
+		Verdict: contractv1.StandingCheck_VERDICT_PASS,
+		Finding: "something listens on port 80 and a connection from this machine succeeded — that is one path in",
+	}}
+	for _, host := range domains {
+		checks = append(checks, &contractv1.StandingCheck{
+			Subject: host,
+			Verdict: contractv1.StandingCheck_VERDICT_OWED,
+			Finding: host + " does not resolve; the record pointing it at 203.0.113.10 is owed",
+			Fix:     "add the record `ocel domain add` printed",
+		})
+	}
+	return checks
 }
 
 func splitList(raw string) []string {

@@ -270,6 +270,8 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainRecordsEnvVar, "*.preview.acme.com AAAA 100::")
 		t.Setenv(clitest.FakeGlobalDomainOwedEnvVar, "_ocel.preview.acme.com CNAME _target.acm-validations.aws")
 		t.Setenv(clitest.FakeGlobalDomainProbeEnvVar, "1755500000 cloudflare")
+		t.Setenv(clitest.FakeGlobalDomainRenewalEnvVar, "you placed it on this box and you renew it")
+		t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, "1755500000")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainLs(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
@@ -278,6 +280,7 @@ export default {
 		out := stdout.String()
 		for _, want := range []string{
 			"Certificate          ISSUED  arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+			"Renewal              expires 2025-08-18T06:53:20Z, you placed it on this box and you renew it — EXPIRING SOON",
 			"Records ocel wrote   *.preview.acme.com AAAA 100::",
 			"Records you own      _ocel.preview.acme.com CNAME _target.acm-validations.aws",
 			"Last probe           2025-08-18T06:53:20Z  x-ocel-edge: cloudflare",

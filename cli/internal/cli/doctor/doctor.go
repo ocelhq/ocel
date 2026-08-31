@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/fatih/color"
@@ -174,7 +175,65 @@ func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io
 	for _, tier := range tiers {
 		found.add(tierSection(tier, hosts[tier], answers))
 	}
+	if standing, held := standingSection(answers); held {
+		found.add(standing)
+	}
+	if certificates, held := certificateSection(answers); held {
+		found.add(certificates)
+	}
 	return found
+}
+
+func standingSection(got *answers) (section, bool) {
+	if len(got.standing) == 0 {
+		return section{}, false
+	}
+	s := section{name: "Standing"}
+	for _, check := range got.standing {
+		switch check.GetVerdict() {
+		case contractv1.StandingCheck_VERDICT_PASS:
+			s.pass(check.GetFinding())
+		case contractv1.StandingCheck_VERDICT_OWED:
+			s.warn(check.GetFinding(), check.GetFix())
+		default:
+			s.fail(check.GetFinding(), check.GetFix())
+		}
+	}
+	return s, true
+}
+
+func certificateSection(got *answers) (section, bool) {
+	s := section{name: "Certificates"}
+	for _, host := range got.hostnames {
+		renewalCheck(&s, host.GetHostname(), host.GetRenewalStatus(), host.GetExpiresAt(), host.GetExpiringSoon())
+	}
+	if wildcard := got.wildcard; wildcard.GetBaseDomain() != "" {
+		renewalCheck(&s, "*."+wildcard.GetBaseDomain(), wildcard.GetRenewalStatus(), wildcard.GetExpiresAt(), wildcard.GetExpiringSoon())
+	}
+	return s, len(s.checks) > 0
+}
+
+func renewalCheck(s *section, hostname, renewal string, expiresAt int64, soon bool) {
+	if renewal == "" && expiresAt == 0 {
+		return
+	}
+	text := hostname + " — " + renewalText(renewal, expiresAt)
+	if soon {
+		s.warn(text+" — EXPIRING SOON", "replace it before it expires; nothing here renews a certificate you pinned")
+		return
+	}
+	s.pass(text)
+}
+
+func renewalText(renewal string, expiresAt int64) string {
+	said := "no expiry reported"
+	if expiresAt != 0 {
+		said = "expires " + time.Unix(expiresAt, 0).UTC().Format(time.RFC3339)
+	}
+	if renewal == "" {
+		return said
+	}
+	return said + ", " + renewal
 }
 
 func skippedSection(name string) section {
@@ -264,12 +323,30 @@ type tierAnswer struct {
 }
 
 type answers struct {
-	pkg      string
-	problem  string
-	fix      string
-	identity *contractv1.Identity
-	problems []*contractv1.CredentialProblem
-	tiers    map[environmentv1.Tier]*tierAnswer
+	pkg       string
+	problem   string
+	fix       string
+	identity  *contractv1.Identity
+	problems  []*contractv1.CredentialProblem
+	tiers     map[environmentv1.Tier]*tierAnswer
+	standing  []*contractv1.StandingCheck
+	hostnames []*contractv1.ProductionHostname
+	wildcard  *contractv1.PreviewWildcard
+}
+
+func (a *answers) stand(checks []*contractv1.StandingCheck) {
+	for _, check := range checks {
+		seen := false
+		for _, held := range a.standing {
+			if held.GetSubject() == check.GetSubject() && held.GetFinding() == check.GetFinding() {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			a.standing = append(a.standing, check)
+		}
+	}
 }
 
 const upgradeProvider = "upgrade the provider pinned in this project"
@@ -305,6 +382,10 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 				got.identity = resp.GetIdentity()
 			}
 			got.keep(resp.GetCredentialProblems())
+			got.stand(resp.GetStanding())
+			if tier == environmentv1.Tier_TIER_PREVIEW {
+				got.wildcard = resp.GetPreviewWildcard()
+			}
 
 			planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: edgewire.Selection(cfg)})
 			if err != nil {
@@ -315,6 +396,25 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 				return err
 			}
 			got.tiers[tier] = &tierAnswer{status: planned.GetBootstrap()}
+			if tier != environmentv1.Tier_TIER_PRODUCTION || !planned.GetBootstrap().GetPresent() {
+				continue
+			}
+			configured := preflight.Configured(preflight.Hostnames(cfg, bootstrap.Name(tier)))
+			if len(configured) == 0 {
+				continue
+			}
+			bound, err := client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
+				Slug:       cfg.Slug,
+				Configured: configured,
+				Edge:       edgewire.Selection(cfg),
+			})
+			if err != nil {
+				if connect.CodeOf(err) == connect.CodeUnimplemented {
+					continue
+				}
+				return err
+			}
+			got.hostnames = bound.GetHostnames()
 		}
 		return nil
 	})

@@ -5,8 +5,10 @@ import (
 	"context"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
@@ -368,6 +370,73 @@ export default {
 		"  ⚠ no preview domain declared",
 		"Preview\n  – not set up — run `ocel bootstrap preview` to add previews\n",
 		"1 warning.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout missing %q; got:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunDoctorPrintsTheStandingFindingsAndTheCertificatesAndRefusesNothing(t *testing.T) {
+	root := healthyProject(t)
+	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+	t.Setenv(clitest.FakeStandingEnvVar, "1")
+	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.example.com")
+	t.Setenv(clitest.FakeGlobalDomainRenewalEnvVar, "you placed it on this box and you renew it")
+	t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, "4102444800")
+	t.Setenv(clitest.FakeDomainCertEnvVar, "SERVING proxy:shop.example.com")
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	var stdout, stderr bytes.Buffer
+	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	out := rendered(t, stdout.String())
+
+	if !strings.Contains(out, "Standing") || !strings.Contains(out, "Certificates") {
+		t.Fatalf("doctor printed neither section, so this run is not the window an absence can be read over:\n%s", out)
+	}
+	for _, want := range []string{
+		"  ✓ something listens on port 80",
+		"  ⚠ shop.example.com does not resolve; the record pointing it at 203.0.113.10 is owed",
+		"    → add the record `ocel domain add` printed",
+		"  ⚠ *.preview.example.com does not resolve",
+		"*.preview.example.com — expires 2100-01-01T00:00:00Z, you placed it on this box and you renew it",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout missing %q; got:\n%s", want, out)
+		}
+	}
+	if code := exitCode(t, err); code != 0 {
+		t.Errorf("exit code = %d over the output above, want 0: a standing check is a report and never a gate, and an owed record is the normal state", code)
+	}
+	if strings.Contains(out, failGlyph) {
+		t.Errorf("doctor refused something on a bootstrapped box whose only finding is an owed record:\n%s", out)
+	}
+}
+
+func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.T) {
+	root := healthyProject(t)
+	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.example.com")
+	t.Setenv(clitest.FakeGlobalDomainRenewalEnvVar, "you placed it on this box and you renew it")
+	t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, strconv.FormatInt(time.Now().Add(72*time.Hour).Unix(), 10))
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	var stdout, stderr bytes.Buffer
+	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	if code := exitCode(t, err); code != 0 {
+		t.Fatalf("exit code = %d, want a warning rather than a refusal; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	out := rendered(t, stdout.String())
+	for _, want := range []string{
+		"EXPIRING SOON",
+		"you placed it on this box and you renew it",
+		"    → replace it before it expires; nothing here renews a certificate you pinned",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q; got:\n%s", want, out)
