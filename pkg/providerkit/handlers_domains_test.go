@@ -671,3 +671,25 @@ func TestTheAppAHostnameWasDeclaredUnderReachesTheEdgeThatBindsIt(t *testing.T) 
 		t.Errorf("acme.com was bound naming app %q, want none: the project declared it project-wide, and what that means is the edge's to decide — API Gateway path-routes it to every app and attributing it to one would be wrong", app)
 	}
 }
+
+func TestGetHostnameStatusAnswersBeforeAProjectHasEverDeployed(t *testing.T) {
+	t.Parallel()
+	client, _ := contractServed(t, "1.0.0")
+
+	answered, err := client.GetHostnameStatus(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: configuredHosts("app.acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("GetHostnameStatus() before the first deploy = %v, want the declared hostnames reported as unbound: `ocel doctor` asks this of every bootstrapped project, and the state between `ocel bootstrap` and the first `ocel deploy` is the ordinary one", err)
+	}
+	if answered.GetReady() {
+		t.Error("GetHostnameStatus() called a hostname of a project that has never deployed ready")
+	}
+	if len(answered.GetHostnames()) != 1 || answered.GetHostnames()[0].GetHostname() != "app.acme.com" {
+		t.Errorf("GetHostnameStatus() = %+v, want the one hostname the project declares", answered.GetHostnames())
+	}
+	if !answered.GetHostnames()[0].GetDeclared() {
+		t.Error("GetHostnameStatus() reports the declared hostname as undeclared, so `ocel domain status` would print nothing about the one hostname the config names")
+	}
+}

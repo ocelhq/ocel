@@ -234,6 +234,9 @@ func (d *hostnames) removeTargets() ([]string, error) {
 
 func (h *handlers) GetHostnameStatus(ctx context.Context, req *contractv1.HostnameRequest) (*contractv1.GetHostnameStatusResponse, error) {
 	session, err := h.hostnames(ctx, req)
+	if undeployed(err) {
+		return declaredHostnames(req), nil
+	}
 	if err != nil {
 		return nil, RefusalError(err)
 	}
@@ -242,6 +245,14 @@ func (h *handlers) GetHostnameStatus(ctx context.Context, req *contractv1.Hostna
 		return nil, RefusalError(err)
 	}
 	return resp, nil
+}
+
+func declaredHostnames(req *contractv1.HostnameRequest) *contractv1.GetHostnameStatusResponse {
+	resp := &contractv1.GetHostnameStatusResponse{}
+	for _, hostname := range req.GetConfigured() {
+		resp.Hostnames = append(resp.Hostnames, &contractv1.ProductionHostname{Hostname: hostname.GetHostname(), Declared: true})
+	}
+	return resp
 }
 
 func (d *hostnames) status(ctx context.Context) (*contractv1.GetHostnameStatusResponse, error) {
