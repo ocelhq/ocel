@@ -85,6 +85,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	vm, p := onABoxServingContainers(t)
 
 	delivered := resolving(t, p)
+	delivered["RELEASE"] = "handed-by-the-deploy"
 	spoken := &said{}
 	standing, err := p.ProvisionContainers(context.Background(), liveValuePlan(t, "one", delivered), spoken)
 	if err != nil {
@@ -96,6 +97,9 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 		if got := vm.reads(t, physical, name); got != want {
 			t.Errorf("the app reads %s as %q off its own environment, want %q", name, got, want)
 		}
+	}
+	if got := vm.reads(t, physical, "RELEASE"); got != "handed-by-the-deploy" {
+		t.Errorf("the app reads RELEASE as %q: the image sets it in its own `ENV` line, and what the deploy hands a container outranks an image's defaults, deliberately", got)
 	}
 	if got := vm.reads(t, physical, "PORT"); got != host.AppPort {
 		t.Errorf("the app reads PORT as %q, and the port the provider injects outranks anything an env file names", got)
