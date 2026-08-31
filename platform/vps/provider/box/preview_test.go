@@ -511,3 +511,43 @@ func TestAProjectsOwnPreviewDomainClaimsTheHostnamesTheKitPrintsForIt(t *testing
 		}
 	}
 }
+
+func TestAStackOpenedFromItsOwnStateServesTheSamePreviewSiteItWasReconciledFor(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	stood := aMachine()
+	front := box.New(stood, fake.NewRecords(), sshScope)
+	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard: %v", err)
+	}
+	reconciled, err := front.Reconcile(ctx, edge.StackSpec{
+		Version: "test", Class: edge.ClassPreview, Slug: slug,
+		Domains: []string{edge.PreviewWildcard(previewBase)},
+	}, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	previewed(t, reconciled, "pr-7", "web")
+
+	opened, err := front.Open(reconciled.State())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	stood.refuseOn("ForgetCertificates", errors.New("the proxy answered nothing over its admin socket"))
+	if _, err := opened.RemovePointer(ctx, "pr-7", edge.DiscardReporter()); err == nil {
+		t.Fatal("a teardown whose certificate removal failed reported success, so the run below is not the one that has only the site left to read")
+	}
+	stood.allowOn("ForgetCertificates")
+	stood.forgotten = nil
+	if _, err := opened.RemovePointer(ctx, "pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("the second RemovePointer = %v", err)
+	}
+
+	want := edge.ProjectPreview(previewBase).Hosts("pr-7", []string{"web"})
+	slices.Sort(want)
+	if !slices.Equal(stood.forgotten, want) {
+		t.Errorf("a stack opened from its own state tore down %v, want %v: the first run disclaimed the hostnames before it fell over, so the second reads them off the preview site alone, and a stack whose site does not survive Open forgets a different project's names and leaves its own behind",
+			stood.forgotten, want)
+	}
+}

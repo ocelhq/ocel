@@ -57,13 +57,14 @@ type StackState struct {
 	Bound         []string          `json:"bound,omitempty"`
 	Records       []Record          `json:"records,omitempty"`
 	GlobalPreview string            `json:"globalPreview,omitempty"`
+	PreviewBase   string            `json:"previewBase,omitempty"`
 	Adapter       Private           `json:"adapter,omitzero"`
 }
 
 func (s StackState) Empty() bool {
 	return s.Slug == "" && s.Class == "" && s.Endpoint == "" && s.Secret == "" && s.OwnerToken == "" &&
 		s.Front == "" && len(s.Fronts) == 0 && len(s.Bound) == 0 && len(s.Records) == 0 &&
-		s.GlobalPreview == "" && s.Adapter.IsZero()
+		s.GlobalPreview == "" && s.PreviewBase == "" && s.Adapter.IsZero()
 }
 
 func (s StackState) Equal(other StackState) bool {
@@ -74,6 +75,7 @@ func (s StackState) Equal(other StackState) bool {
 		s.OwnerToken == other.OwnerToken &&
 		s.Front == other.Front &&
 		s.GlobalPreview == other.GlobalPreview &&
+		s.PreviewBase == other.PreviewBase &&
 		maps.Equal(s.Fronts, other.Fronts) &&
 		slices.Equal(s.Bound, other.Bound) &&
 		slices.Equal(s.Records, other.Records) &&
