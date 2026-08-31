@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 )
 
-const listenerCommand = "cat " + listeners.TCPPath + " " + listeners.TCP6Path + " 2>/dev/null || true"
+const listenerCommand = "cat " + listeners.TCPPath + " " + listeners.TCP6Path
 
 func (h *Host) ProxyListeners(ctx context.Context) ([]listeners.Listener, error) {
 	elevation, err := h.reachDocker(ctx)
@@ -23,7 +23,7 @@ func (h *Host) ProxyListeners(ctx context.Context) ([]listeners.Listener, error)
 }
 
 func (h *Host) Listening(ctx context.Context) ([]listeners.Listener, error) {
-	said, err := h.reach(ctx, "read what listens on this host", listenerCommand, nil)
+	said, err := h.ran(ctx, "read what listens on this host", listenerCommand, nil, "")
 	if err != nil {
 		return nil, err
 	}
