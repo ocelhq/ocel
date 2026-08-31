@@ -421,6 +421,7 @@ func renderGlobalDomain(out io.Writer, resp *contractv1.GetPreviewWildcardRespon
 	cert := domain.GetCertificate()
 	if id := cert.GetCertificateId(); id != "" {
 		fmt.Fprintf(out, "  Certificate          %s  %s\n", cert.GetCertificateStatus(), id)
+		fmt.Fprintf(out, "  Renewal              %s\n", wildcardRenewal(domain))
 	}
 	renderCertificateRecords(out, cert)
 	fmt.Fprintf(out, "  Last probe           %s\n", lastProbe(cert, "never — run `ocel domain use '"+wildcardOf(domain.GetBaseDomain())+"' --preview` to check the edge answers"))
@@ -701,16 +702,23 @@ func domainHostState(host *contractv1.ProductionHostname) string {
 	return "PENDING"
 }
 
+func wildcardRenewal(domain *contractv1.PreviewWildcard) string {
+	return renewalLine(domain.GetRenewalStatus(), domain.GetExpiresAt(), domain.GetExpiringSoon())
+}
+
 func domainRenewal(host *contractv1.ProductionHostname) string {
+	return renewalLine(host.GetRenewalStatus(), host.GetExpiresAt(), host.GetExpiringSoon())
+}
+
+func renewalLine(status string, expiresAt int64, soon bool) string {
 	expiry := "no expiry reported"
-	if at := host.GetExpiresAt(); at != 0 {
-		expiry = "expires " + epochRFC3339(at)
+	if expiresAt != 0 {
+		expiry = "expires " + epochRFC3339(expiresAt)
 	}
-	status := host.GetRenewalStatus()
 	if status == "" {
 		status = "not reported"
 	}
-	if host.GetExpiringSoon() {
+	if soon {
 		return fmt.Sprintf("%s, %s — EXPIRING SOON", expiry, status)
 	}
 	return fmt.Sprintf("%s, %s", expiry, status)
