@@ -60,7 +60,11 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err := s.ledger().Promote(ctx, promotion, pointer, report); err != nil {
 		return err
 	}
-	if err := s.e.machine.ClaimHosts(ctx, s.previewClaims(pointer, slices.Sorted(maps.Keys(promotion.Builds)))); err != nil {
+	claims, err := s.previewClaims(pointer, slices.Sorted(maps.Keys(promotion.Builds)))
+	if err != nil {
+		return err
+	}
+	if err := s.e.machine.ClaimHosts(ctx, claims); err != nil {
 		return err
 	}
 	for _, held := range ready {
@@ -134,23 +138,27 @@ func (s *stack) previewSite() edge.PreviewSite {
 	return edge.SharedPreview(s.state.Slug, s.state.GlobalPreview)
 }
 
-func (s *stack) previewClaims(pointer string, apps []string) []host.HostClaim {
+func (s *stack) previewClaims(pointer string, apps []string) ([]host.HostClaim, error) {
 	site := s.previewSite()
 	if !site.Serves() || len(apps) == 0 || named(pointer) == edge.DefaultPointer {
-		return nil
+		return nil, nil
 	}
-	if len(apps) < 2 {
-		apps = []string{""}
+	hostnames := site.Hosts(pointer, apps)
+	if err := site.LabelProblem(hostnames); err != nil {
+		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			"%s claims no preview hostname on this box: %s", s.surface(), err)
 	}
-	claims := make([]host.HostClaim, 0, len(apps))
-	for _, app := range apps {
-		if hostname := site.Host(pointer, app); hostname != "" {
-			claims = append(claims, host.HostClaim{
-				Hostname: hostname, Owner: s.surface(), Pointer: pointer, App: app,
-			})
+	claims := make([]host.HostClaim, 0, len(hostnames))
+	for _, hostname := range hostnames {
+		app := ""
+		if at := slices.IndexFunc(apps, func(app string) bool { return site.Host(pointer, app) == hostname }); at >= 0 {
+			app = apps[at]
 		}
+		claims = append(claims, host.HostClaim{
+			Hostname: hostname, Owner: s.surface(), Pointer: pointer, App: app,
+		})
 	}
-	return claims
+	return claims, nil
 }
 
 func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error) {
