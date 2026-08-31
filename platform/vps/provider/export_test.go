@@ -27,7 +27,8 @@ func (p *Provider) Resolving(look Lookup) { p.resolve = look }
 func (p *Provider) Reaching(dial Reach) { p.reaches = dial }
 
 func DNSVerdict(ctx context.Context, look Lookup, hostname, address string) providerkit.StandingCheck {
-	return dnsVerdict(ctx, look, hostname, address)
+	here, unread := look(ctx, address)
+	return dnsVerdict(ctx, look, hostname, address, here, unread)
 }
 
 func DNSVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []providerkit.StandingCheck {

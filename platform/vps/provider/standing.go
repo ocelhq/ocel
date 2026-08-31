@@ -16,14 +16,19 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 )
 
-const reachTimeout = 10 * time.Second
+const (
+	reachTimeout  = 10 * time.Second
+	lookupTimeout = 10 * time.Second
+)
 
 type Lookup func(ctx context.Context, hostname string) ([]netip.Addr, error)
 
 type Reach func(ctx context.Context, address string) error
 
 func systemLookup(ctx context.Context, hostname string) ([]netip.Addr, error) {
-	return net.DefaultResolver.LookupNetIP(ctx, "ip", hostname)
+	asking, stop := context.WithTimeout(ctx, lookupTimeout)
+	defer stop()
+	return net.DefaultResolver.LookupNetIP(asking, "ip", hostname)
 }
 
 func systemReach(ctx context.Context, address string) error {
@@ -51,7 +56,12 @@ func (p *Provider) reach() Reach {
 func (p *Provider) CheckStanding(ctx context.Context, req providerkit.StandingRequest) ([]providerkit.StandingCheck, error) {
 	address, err := p.host.Address(ctx)
 	if err != nil {
-		return nil, err
+		return []providerkit.StandingCheck{{
+			Subject: host.ProxyContainer,
+			Verdict: providerkit.StandingFail,
+			Finding: fmt.Sprintf("this box's own address could not be read, so nothing here could be judged against it: %v", err),
+			Fix:     "check the machine answers over ssh, then run this again",
+		}}, nil
 	}
 	checks := dnsVerdicts(ctx, p.lookup(), req.Hostnames, address)
 	checks = append(checks, reachVerdict(ctx, p.reach(), address))
@@ -60,7 +70,6 @@ func (p *Provider) CheckStanding(ctx context.Context, req providerkit.StandingRe
 }
 
 func dnsVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []providerkit.StandingCheck {
-	var checks []providerkit.StandingCheck
 	var asked []string
 	for _, hostname := range hostnames {
 		named := edge.ProbeHostname(hostname)
@@ -68,17 +77,23 @@ func dnsVerdicts(ctx context.Context, look Lookup, hostnames []string, address s
 			continue
 		}
 		asked = append(asked, named)
-		checks = append(checks, dnsVerdict(ctx, look, named, address))
+	}
+	if len(asked) == 0 {
+		return nil
+	}
+	here, unread := look(ctx, address)
+	checks := make([]providerkit.StandingCheck, 0, len(asked))
+	for _, named := range asked {
+		checks = append(checks, dnsVerdict(ctx, look, named, address, here, unread))
 	}
 	return checks
 }
 
-func dnsVerdict(ctx context.Context, look Lookup, hostname, address string) providerkit.StandingCheck {
+func dnsVerdict(ctx context.Context, look Lookup, hostname, address string, here []netip.Addr, unread error) providerkit.StandingCheck {
 	check := providerkit.StandingCheck{Subject: hostname}
-	here, err := look(ctx, address)
-	if err != nil {
+	if unread != nil {
 		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("%s could not be read as this box's own address, so where %s points cannot be judged against it: %v", address, hostname, err)
+		check.Finding = fmt.Sprintf("%s could not be read as this box's own address, so where %s points cannot be judged against it: %v", address, hostname, unread)
 		return check
 	}
 	found, err := look(ctx, hostname)
@@ -154,6 +169,13 @@ func (p *Provider) adminVerdict(ctx context.Context) providerkit.StandingCheck {
 		check.Verdict = providerkit.StandingFail
 		check.Finding = fmt.Sprintf("what listens inside %s could not be read, so whether the stock admin port is bound is unknown: %v", host.ProxyContainer, err)
 		check.Fix = "check the proxy is running, then run this again"
+		return check
+	}
+	if len(held) == 0 {
+		check.Verdict = providerkit.StandingFail
+		check.Finding = fmt.Sprintf("%s named no listening socket at all, and a proxy that is serving holds ports %s at minimum, so this is a namespace nothing was read out of rather than one with the stock admin port clean",
+			host.ProxyContainer, strings.Join(host.ProxyServing(), " and "))
+		check.Fix = "check the proxy is running with its own /proc mounted, then run this again"
 		return check
 	}
 	if bound := listeners.On(held, host.AdminPortNumber); len(bound) > 0 {

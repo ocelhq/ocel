@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const boxAddress = "203.0.113.10"
@@ -231,5 +232,56 @@ func TestAProxyThatCouldNotBeReadIsNotReadAsACleanNamespace(t *testing.T) {
 	})))
 	if check.Verdict == providerkit.StandingPass {
 		t.Fatalf("a proxy this box could not read passed as one with nothing bound on %s: %q", host.AdminPort, check.Finding)
+	}
+}
+
+type addressless struct{ *scripted }
+
+func (a addressless) Destination() session.Destination {
+	held := a.scripted.Destination()
+	held.Address = ""
+	return held
+}
+
+func TestABoxWhoseOwnAddressCouldNotBeReadReportsAndNeverRefuses(t *testing.T) {
+	t.Parallel()
+
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return addressless{boxSaying(nil)}, nil },
+	)
+	checks, err := p.CheckStanding(context.Background(), providerkit.StandingRequest{
+		Class:     providerkit.ClassProduction,
+		Hostnames: []string{"shop.example.com"},
+	})
+	if err != nil {
+		t.Fatalf("CheckStanding() = %v, and this same rpc runs on every `ocel deploy`: a standing concern is a report and never a gate", err)
+	}
+	if len(checks) == 0 {
+		t.Fatal("CheckStanding() answered nothing at all over a box whose address could not be read, and an empty report is read as a box with nothing wrong")
+	}
+	for _, check := range checks {
+		if check.Verdict != providerkit.StandingFail {
+			t.Errorf("check %+v passed over a box whose own address could not be read", check)
+		}
+	}
+	if !strings.Contains(checks[0].Finding, "address") {
+		t.Errorf("finding = %q, want the address read that failed named", checks[0].Finding)
+	}
+}
+
+func TestAProxyThatNamedNoSocketAtAllIsNotReadAsACleanNamespace(t *testing.T) {
+	t.Parallel()
+
+	check := adminCheck(t, standingOver(boxSaying(map[string]answer{"'listeners'": {stdout: ""}})))
+	if check.Verdict != providerkit.StandingFail {
+		t.Fatalf("verdict = %v (%q), want a failure: a running proxy always holds %s and %s, so a namespace naming nothing is one this box never read rather than one with a clean admin port",
+			check.Verdict, check.Finding, host.RenewalPort, "443")
+	}
+	if !strings.Contains(check.Finding, "no listening socket at all") {
+		t.Errorf("finding = %q, want it to say the proxy named nothing rather than to report the admin port clean", check.Finding)
+	}
+	if check.Fix == "" {
+		t.Error("a proxy that named no socket carries no fix, and there is nothing for an operator to do with the finding alone")
 	}
 }
