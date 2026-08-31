@@ -45,3 +45,16 @@ func TestACommandRunsWhileItsInputIsStillArriving(t *testing.T) {
 		t.Errorf("the command read %q, want %q", stdout, "carried")
 	}
 }
+
+func TestTwoSessionsToOneHostNeverShareAMaster(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no session on windows multiplexes")
+	}
+	first, second := multiplex(), multiplex()
+	if first == "" || second == "" {
+		t.Skip("this machine offers no cache directory to keep control sockets in")
+	}
+	if first == second {
+		t.Errorf("two sessions multiplex over %q, so the first Close() takes down the master the second is still running commands over", first)
+	}
+}

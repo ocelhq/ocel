@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -107,7 +108,8 @@ func (s *Session) Close() error {
 	if s.control == "" {
 		return nil
 	}
-	return exec.Command("ssh", append(s.args(), "-O", "exit", s.dest.Written)...).Run()
+	_, err := output(context.Background(), "ssh", append(s.args(), "-O", "exit", s.dest.Written)...)
+	return err
 }
 
 func (s *Session) args() []string {
@@ -138,8 +140,10 @@ func multiplex() string {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "%C-"+strconv.Itoa(os.Getpid()))
+	return filepath.Join(dir, "%C-"+strconv.Itoa(os.Getpid())+"-"+strconv.FormatUint(multiplexed.Add(1), 10))
 }
+
+var multiplexed atomic.Uint64
 
 func output(ctx context.Context, name string, args ...string) (string, error) {
 	stdout, stderr, code, err := run(ctx, nil, name, args...)
