@@ -17,6 +17,7 @@ on:
       - "cli/internal/appregistry/**"
       - "cli/internal/livemachine/**"
       - "cli/internal/cli/deploy/**"
+      - "cli/internal/cli/permissions/**"
       - "cli/internal/cli/domain.go"
       - "cli/internal/cli/rollback.go"
       - "cli/internal/cli/destroy.go"

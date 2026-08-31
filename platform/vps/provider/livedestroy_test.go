@@ -53,7 +53,7 @@ func (vm machine) running(t *testing.T, container string) bool {
 func (vm machine) runs(t *testing.T, container string) {
 	t.Helper()
 	vm.ssh(t, "sudo docker rm -f "+container+" >/dev/null 2>&1 || true")
-	vm.ssh(t, "sudo docker run -d --name "+container+" "+decoyImage+" sleep 900")
+	vm.ssh(t, "sudo docker run -d --name "+container+" "+decoyImage+" sleep 5400")
 	if !vm.running(t, container) {
 		t.Fatalf("%s is not running, so what a destroy does to a user's workloads cannot be proven on this machine", container)
 	}
