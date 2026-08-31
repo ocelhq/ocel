@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -138,19 +139,31 @@ type ProxyState struct {
 	Retiring    string
 }
 
+const (
+	dnsLabelMax = 63
+	dnsNameMax  = 253
+)
+
+var dnsLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+
 func PreviewBaseUsable(base string) error {
-	switch {
-	case base == "":
+	if base == "" {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"the shared preview entry on this box names no base domain, and a route with no host matcher of its own receives every hostname pointed at this machine, a mistyped production hostname included")
-	case strings.ContainsAny(base, "*/: "), strings.HasPrefix(base, "."), strings.HasSuffix(base, "."),
-		!strings.Contains(base, "."):
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%q is not a base domain this box can hang a preview catch-all under: the route matches %s and nothing else, so the base is the dotted name the wildcard label sits on",
-			base, edge.PreviewWildcard(base))
-	default:
-		return nil
 	}
+	named := strings.ToLower(base)
+	labels := strings.Split(named, ".")
+	usable := len(labels) > 1 && len(named)+len(edge.LivenessProbeLabel)+1 <= dnsNameMax
+	for _, label := range labels {
+		usable = usable && len(label) <= dnsLabelMax && dnsLabel.MatchString(label)
+	}
+	if !usable {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"%q is not a base domain this box can hang a preview catch-all under: the route matches %s and nothing else, so the base is a dotted dns name of labels no longer than %d bytes, short enough for %s to fit inside %d. %s is installed beside the catch-all and is the one preview route ocel does order a certificate for, so a base no resolver reads is an acme subject that can never be issued and an order retried for as long as the box stands",
+			base, edge.PreviewWildcard(base), dnsLabelMax, edge.ProbeHostname(edge.PreviewWildcard(base)), dnsNameMax,
+			edge.ProbeHostname(edge.PreviewWildcard(base)))
+	}
+	return nil
 }
 
 func Claiming(claims []HostClaim, taken HostClaim) ([]HostClaim, error) {

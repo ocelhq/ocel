@@ -98,9 +98,27 @@ func TestThePreviewEntryAndItsProbeAreTwoRoutesMatchingOneHostnameEach(t *testin
 func TestThePreviewCatchAllRendersItsSuffixRatherThanAnEmptyHostMatcher(t *testing.T) {
 	t.Parallel()
 
-	for _, base := range []string{"*.preview.example.com", "preview/example.com", "*", "example", "preview.example.com."} {
+	for what, base := range map[string]string{
+		"a wildcard for a base":         "*.preview.example.com",
+		"a path where a name goes":      "preview/example.com",
+		"a bare wildcard":               "*",
+		"a dotless name":                "example",
+		"a trailing dot":                "preview.example.com.",
+		"an empty label":                "preview..example.com",
+		"an underscore in a label":      "exam_ple.com",
+		"a label opening with a hyphen": "-preview.example.com",
+		"a label closing with a hyphen": "preview-.example.com",
+		"a label over 63 bytes":         strings.Repeat("a", 64) + ".example.com",
+		"a name the probe overflows":    strings.Repeat(strings.Repeat("a", 63)+".", 3) + strings.Repeat("b", 55) + ".com",
+	} {
 		if _, err := RenderProxyConfig(ProxyState{Grace: DrainWindow, PreviewBase: base}); err == nil {
-			t.Errorf("a preview entry on base %q renders, and a catch-all whose suffix is not a name receives more than one label under one base", base)
+			t.Errorf("a preview entry on base %q (%s) renders, and the probe route beside the catch-all is deliberately not skipped: an acme subject no CA can ever issue for is exactly the failing-order retry loop the exclusion exists to prevent, on a route the operator cannot see or remove short of releasing the base",
+				base, what)
+		}
+	}
+	for _, base := range []string{"PREVIEW.Example.COM", strings.Repeat("a", 63) + ".example.com"} {
+		if err := PreviewBaseUsable(base); err != nil {
+			t.Errorf("PreviewBaseUsable(%q) = %v, want nil: a label is 63 bytes and a name is read case-insensitively", base, err)
 		}
 	}
 	if err := PreviewBaseUsable(""); err == nil {
