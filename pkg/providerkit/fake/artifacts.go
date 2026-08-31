@@ -13,6 +13,8 @@ import (
 )
 
 type Artifacts struct {
+	journal *Journal
+
 	mu      sync.Mutex
 	objects map[providerkit.ArtifactRef][]byte
 }
@@ -56,6 +58,7 @@ func (a *Artifacts) Open(_ context.Context, ref providerkit.ArtifactRef) (io.Rea
 }
 
 func (a *Artifacts) RemovePrefix(_ context.Context, class providerkit.Class, prefix string, report providerkit.Reporter) error {
+	a.journal.note("remove-prefix " + prefix)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for ref := range maps.Keys(a.objects) {

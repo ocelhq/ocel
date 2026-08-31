@@ -12,6 +12,8 @@ import (
 )
 
 type Records struct {
+	journal *Journal
+
 	mu   sync.Mutex
 	seq  uint64
 	rows map[string]providerkit.Record
@@ -73,6 +75,7 @@ func (r *Records) Remove(_ context.Context, name providerkit.RecordName, expecte
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := name.String()
+	r.journal.note("forget " + key)
 	row, ok := r.rows[key]
 	if !ok {
 		return providerkit.ErrNoRecord

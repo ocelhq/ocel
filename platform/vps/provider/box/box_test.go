@@ -35,7 +35,6 @@ type machine struct {
 	headed      []string
 	previewBase string
 	forgotten   []string
-	reconciled  []string
 	refuse      error
 }
 
@@ -60,12 +59,6 @@ func (m *machine) StandUp(_ context.Context, spec host.Container) error {
 func (m *machine) Promote(_ context.Context, _ providerkit.Class, app, coordinate string) error {
 	m.calls = append(m.calls, "head "+app+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)
-	return m.refuse
-}
-
-func (m *machine) Reconcile(_ context.Context, app, coordinate string, _ providerkit.Reporter) error {
-	m.calls = append(m.calls, "reconcile "+app+" over "+coordinate)
-	m.reconciled = append(m.reconciled, app+" "+coordinate)
 	return m.refuse
 }
 
@@ -895,5 +888,78 @@ func TestRemovingTheProductionPointerForgetsNoCertificateTheRemovalPlanSaysItKee
 	if len(stood.forgotten) != 0 {
 		t.Fatalf("removing the production pointer forgot %v, and %v renders that certificate as kept with a reason: a bound hostname is bound again inside the certificate's life and served off it rather than ordered again",
 			stood.forgotten, kept)
+	}
+	held := keptCertificate(t, kept)
+	if held.Name != certs.ProxyHandle(bound) {
+		t.Errorf("the plan keeps %q, want the proxy's own handle for %s: the row a teardown shows is the store entry it is declining to touch", held.Name, bound)
+	}
+	if held.Reason == "" {
+		t.Errorf("%+v is kept with no reason, and a kept row is the whole of what tells the operator why bytes this teardown found are still there", held)
+	}
+}
+
+func keptCertificate(t *testing.T, groups []edge.PlanGroup) edge.PlanChange {
+	t.Helper()
+
+	var certificates []edge.PlanChange
+	for _, group := range groups {
+		for _, change := range group.Changes {
+			if change.Kind == box.CertificateKind {
+				certificates = append(certificates, change)
+			}
+		}
+	}
+	if len(certificates) != 1 {
+		t.Fatalf("the removal plan carries %d certificate rows, want the one behind the bound hostname: %v", len(certificates), groups)
+	}
+	if certificates[0].Action != edge.PlanKeep {
+		t.Fatalf("the plan renders %+v, want it kept: ocel placed no key in the proxy's store, so it removes none", certificates[0])
+	}
+	return certificates[0]
+}
+
+func TestRemovingAProductionPointerNamedByABranchForgetsNoPreviewCertificate(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	front := box.New(stood, fake.NewRecords(), sshScope)
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
+		Version: "test", Class: edge.ClassProduction, Slug: slug,
+	}, edge.StackState{GlobalPreview: previewBase})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	if err := stack.Promote(context.Background(), edge.Promotion{
+		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
+	}, "pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote under a pointer: %v", err)
+	}
+
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+	if len(stood.forgotten) != 0 {
+		t.Errorf("a production pointer's teardown forgot %v: the class is the whole of what decides whether a pointer carries preview hostnames, and a production promotion under a branch name claims none to forget",
+			stood.forgotten)
+	}
+}
+
+func TestRemovingAPreviewsDefaultPointerForgetsNoCertificate(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	stack := previewStack(t, stood)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+
+	if _, err := stack.RemovePointer(context.Background(), edge.DefaultPointer, edge.DiscardReporter()); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+	if len(stood.forgotten) != 0 {
+		t.Errorf("tearing the preview class's default pointer down forgot %v: a preview hostname is named for the branch that claimed it, and %s names no branch",
+			stood.forgotten, edge.DefaultPointer)
 	}
 }

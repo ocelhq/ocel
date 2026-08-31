@@ -1,9 +1,11 @@
 package providerkit
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -58,15 +60,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err := session.checkpoint(ctx); err != nil {
 			return err
 		}
-		targets, err := ReclaimTargets(req.GetSlug(), pointer,
-			removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
-		if err != nil {
-			return err
-		}
-		if err := reclaim(ctx, session.provider, req.GetSlug(), ClassPreview, targets, report); err != nil {
-			return err
-		}
-		if err := removePreviewInfra(ctx, session.provider, req.GetSlug(), pointer, report); err != nil {
+		if err := ReclaimPreview(ctx, session.provider, req.GetSlug(), pointer, removed, report); err != nil {
 			return err
 		}
 		if err := Forget(ctx, session.provider.Records(), EnvironmentRecord(ClassPreview, req.GetSlug(), pointer)); err != nil {
@@ -246,15 +240,62 @@ func flipBoundProto(flip *edge.FlipBound) *progressv1.FlipBound {
 	return &progressv1.FlipBound{TypicalMs: flip.Typical.Milliseconds(), Published: flip.Published}
 }
 
-func removePreviewInfra(ctx context.Context, provider Provider, slug, pointer string, report Reporter) error {
-	stack := naming.InfraStack(pointer)
-	_, standing, err := ReadStack(ctx, provider.Records(), ClassPreview, slug, stack)
-	if err != nil || !standing {
+func ReclaimPreview(ctx context.Context, provider Provider, slug, pointer string, removed edge.PruneResult, report Reporter) error {
+	targets, err := ReclaimTargets(slug, pointer,
+		removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
+	if err != nil {
 		return err
 	}
-	report.Say("Destroying " + stack.String())
-	if err := provider.Releases().Destroy(ctx, StackRef{Project: slug, Class: ClassPreview, Name: stack}, report); err != nil {
-		return fmt.Errorf("destroy %s: %w", stack, err)
+	if err := reclaim(ctx, provider, slug, ClassPreview, targets, report); err != nil {
+		return err
 	}
-	return ForgetStack(ctx, provider.Records(), ClassPreview, slug, stack)
+	return reclaimStanding(ctx, provider, slug, pointer,
+		removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys, report)
+}
+
+func reclaimStanding(ctx context.Context, provider Provider, slug, pointer string, surviving, servingHere []string, report Reporter) error {
+	entries, err := ReadStacks(ctx, provider.Records(), ClassPreview, slug)
+	if err != nil {
+		return err
+	}
+	standing := make([]StackEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Name.Env == pointer {
+			standing = append(standing, entry)
+		}
+	}
+	slices.SortStableFunc(standing, func(a, b StackEntry) int {
+		return cmp.Compare(infraLast(a.Name), infraLast(b.Name))
+	})
+	elsewhere, here := releasesOf(surviving), releasesOf(servingHere)
+
+	var errs []error
+	for _, entry := range standing {
+		report.Say("Destroying " + entry.Name.String())
+		ref := StackRef{Project: slug, Class: ClassPreview, Name: entry.Name}
+		if err := provider.Releases().Destroy(ctx, ref, report); err != nil {
+			errs = append(errs, fmt.Errorf("destroy %s: %w", entry.Name, err))
+			continue
+		}
+		if err := ForgetStack(ctx, provider.Records(), ClassPreview, slug, entry.Name); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if entry.Name.IsInfra() {
+			continue
+		}
+		for _, prefix := range reclaimedPrefixes(slug, pointer, entry.Name.App, entry.Name.Release, elsewhere, here) {
+			if err := provider.Artifacts().RemovePrefix(ctx, ClassPreview, prefix, report); err != nil {
+				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func infraLast(name naming.StackName) int {
+	if name.IsInfra() {
+		return 1
+	}
+	return 0
 }
