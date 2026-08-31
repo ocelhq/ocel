@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -46,13 +47,12 @@ type Headroom struct {
 	Repos map[string]Held
 }
 
-func (r Held) Needs() int64 {
-	if r.Count == 0 {
-		return FirstDeployFloor
-	}
+func (r Held) Measured() int64 {
 	slots := max(KeepWindow-r.Count, 0) + 1
 	return r.Largest * int64(slots)
 }
+
+func (r Held) Needs() int64 { return max(FirstDeployFloor, r.Measured()) }
 
 func (h Headroom) Needs() int64 {
 	var wanted int64
@@ -70,8 +70,8 @@ func headroomCommand(repositories []string) string {
 		"printf 'free=%s\\n' \"$(df -Pk \"$root\" | tail -n 1 | awk '{print $4}')\"\n")
 	for _, repository := range repositories {
 		written.WriteString("printf 'repo=%s\\n' " + quoted(repository) + "\n" +
-			"held=$(docker image ls --filter reference=" + quoted(repository+":*") + " --format '{{.ID}}' | sort -u)\n" +
-			"if [ -n \"$held\" ]; then docker image inspect --format 'size={{.Size}}' $held; fi\n")
+			"docker image ls --filter reference=" + quoted(repository+":*") + " --format '{{.ID}} {{.Size}}' |" +
+			" sort -u | sed 's/^[^ ]* /size=/'\n")
 	}
 	return written.String()
 }
@@ -97,8 +97,8 @@ func readHeadroom(rendered string) (Headroom, error) {
 			repository = value
 			room.Repos[repository] = Held{}
 		case "size":
-			size, err := strconv.ParseInt(value, 10, 64)
-			if err != nil {
+			size, read := occupied(value)
+			if !read {
 				return Headroom{}, unread("the size of an image held under "+repository, value)
 			}
 			held := room.Repos[repository]
@@ -111,6 +111,24 @@ func readHeadroom(rendered string) (Headroom, error) {
 		return Headroom{}, unread("the docker data root and what is free on it", strings.TrimSpace(rendered))
 	}
 	return room, nil
+}
+
+var occupation = map[string]int64{"B": 1, "kB": 1e3, "MB": 1e6, "GB": 1e9, "TB": 1e12, "PB": 1e15}
+
+func occupied(said string) (int64, bool) {
+	cut := strings.IndexFunc(said, func(r rune) bool { return r != '.' && (r < '0' || r > '9') })
+	if cut <= 0 {
+		return 0, false
+	}
+	scale, held := occupation[said[cut:]]
+	if !held {
+		return 0, false
+	}
+	value, err := strconv.ParseFloat(said[:cut], 64)
+	if err != nil {
+		return 0, false
+	}
+	return int64(math.Round(value * float64(scale))), true
 }
 
 func unread(what, said string) error {
@@ -153,17 +171,24 @@ func arithmetic(room Headroom) string {
 	written := make([]string, 0, len(room.Repos))
 	for _, repository := range slices.Sorted(keys(room.Repos)) {
 		held := room.Repos[repository]
-		if held.Count == 0 {
-			written = append(written, fmt.Sprintf(
-				"nothing is held under %s yet, and the plan a preflight is handed carries no size for the image it names, so %s is a guessed constant rather than a measurement",
-				repository, sized(FirstDeployFloor)))
+		if held.Measured() >= FirstDeployFloor {
+			written = append(written, measured(repository, held))
 			continue
 		}
 		written = append(written, fmt.Sprintf(
-			"the largest of the %d image(s) held under %s is %s, and this box keeps %d, so %d unfilled slot(s) plus the incoming one wants %s",
-			held.Count, repository, sized(held.Largest), KeepWindow, max(KeepWindow-held.Count, 0), sized(held.Needs())))
+			"%s, and the plan a preflight is handed carries no size for the image it names, so %s is a guessed constant rather than a measurement",
+			measured(repository, held), sized(FirstDeployFloor)))
 	}
 	return strings.Join(written, "; ")
+}
+
+func measured(repository string, held Held) string {
+	if held.Count == 0 {
+		return "nothing is held under " + repository + " yet"
+	}
+	return fmt.Sprintf(
+		"the largest of the %d image(s) held under %s is %s, and this box keeps %d, so %d unfilled slot(s) plus the incoming one measures %s",
+		held.Count, repository, sized(held.Largest), KeepWindow, max(KeepWindow-held.Count, 0), sized(held.Measured()))
 }
 
 func keys(held map[string]Held) func(func(string) bool) {
