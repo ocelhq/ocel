@@ -346,6 +346,10 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if strings.Contains(standing, "✗") {
 		t.Errorf("`ocel doctor` refused something on a bootstrapped box whose one owed thing is a dns record a human has not written:\n%s", standing)
 	}
+	if strings.Contains(standing, "\nCertificates\n") {
+		t.Errorf("`ocel doctor` printed a certificates section over %s, which is a reserved name nothing resolves and no acme issuer will ever answer for: a renewal reported for it is one read off something other than a certificate this box holds:\n%s",
+			e2eHostname, standing)
+	}
 
 	replanned := run.must(t, "bootstrap", "production", "--dry")
 	if !strings.Contains(replanned, "No infrastructure changes") {

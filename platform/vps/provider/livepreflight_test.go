@@ -67,6 +67,9 @@ func TestLiveAStandingBoxIsLetThroughAndAnEngineThatDoesNotAnswerIsNot(t *testin
 	if !strings.Contains(err.Error(), "docker") {
 		t.Errorf("PreflightDeploy() = %q, want the engine named", err)
 	}
+	if !strings.Contains(err.Error(), "then run this again") {
+		t.Errorf("PreflightDeploy() = %q, want the remedy named: a refusal an operator cannot act on is a wall", err)
+	}
 }
 
 func (vm machine) waitsFor(t *testing.T, container string) {
@@ -104,7 +107,7 @@ func TestLiveADiskWithoutRoomForTheKeepWindowRefusesAndNamesTheGuess(t *testing.
 		t.Fatalf("PreflightDeploy() let a deploy onto %s with %d KiB left, and a disk that fills while an image streams fails mid-transfer", root, keep)
 	}
 	said := err.Error()
-	for _, want := range []string{root, "guessed constant"} {
+	for _, want := range []string{root, "guessed constant", "Free space on " + root, "then run this again"} {
 		if !strings.Contains(said, want) {
 			t.Errorf("PreflightDeploy() = %q, want %q in it", said, want)
 		}
@@ -162,9 +165,9 @@ func TestLiveTheFourProxyStatesAreFourInducedConditionsAndFourMessages(t *testin
 				t.Fatalf("PreflightDeploy() let a deploy past a box where %s, and a deploy into a proxy that cannot be flipped is a green deploy nothing routes to", induced.what)
 			}
 			said := err.Error()
-			for _, want := range induced.wants {
+			for _, want := range append(induced.wants, "then run this again") {
 				if !strings.Contains(said, want) {
-					t.Errorf("where %s the refusal is %q, want %q in it", induced.what, said, want)
+					t.Errorf("where %s the refusal is %q, want %q in it: a refusal an operator cannot act on is a wall", induced.what, said, want)
 				}
 			}
 			for what, other := range held {
@@ -206,7 +209,7 @@ func (vm machine) deafens(t *testing.T) {
 		time.Sleep(250 * time.Millisecond)
 	}
 	vm.hears(t)
-	t.Skipf("a socket bound and not listening never appeared at %s, and this induction proves nothing without one", host.ProxyAdminSocket)
+	t.Fatalf("a socket bound and not listening never appeared at %s, and this induction proves nothing without one: a run that reports green having induced nothing is the shape this tier exists to rule out", host.ProxyAdminSocket)
 }
 
 func (vm machine) hears(t *testing.T) {
@@ -237,5 +240,10 @@ func TestLiveAForeignContainerHoldingPortEightyIsRefusedByName(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), foreignContainer) {
 		t.Errorf("PreflightDeploy() = %q, want %q named: a foreign listener is refused by name", err, foreignContainer)
+	}
+	for _, want := range []string{"stop " + foreignContainer, "move it off " + host.RenewalPort, "then run this again"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("PreflightDeploy() = %q, want %q in it: a refusal an operator cannot act on is a wall", err, want)
+		}
 	}
 }
