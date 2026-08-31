@@ -24,8 +24,19 @@ esac
 dir="${OCEL_RECORDS_ROOT:-/var/lib/ocel}/$class/records"
 [ -d "$dir" ] || abort "$dir stands as no record tier, and ocel bootstrap is what writes one"
 
+belongs() {
+	[ "$(id -u)" = 0 ] || return 0
+	p=$1
+	while [ "$p" != "$dir" ]; do
+		chown --reference="$dir" "$p" ||
+			abort "$p was written as root and could not be handed to whoever owns $dir, which is the login every deploy after this one reads it as"
+		p=$(dirname "$p")
+	done
+}
+
 lock="$dir/.lock"
 : >>"$lock"
+belongs "$lock"
 exec 9>"$lock"
 flock -x 9
 
@@ -87,6 +98,7 @@ write)
 	mint
 	stage "$f" "$rev" "$body"
 	mv -f "$staged" "$f"
+	belongs "$f"
 	printf '%s\n' "$rev"
 	;;
 pair)
@@ -110,6 +122,8 @@ pair)
 	stage "$second" "$tworev" "$two"
 	mv -f "$onestaged" "$first"
 	mv -f "$staged" "$second"
+	belongs "$first"
+	belongs "$second"
 	printf '%s\t%s\n' "$onerev" "$tworev"
 	;;
 remove)
@@ -131,6 +145,7 @@ list)
 	[ -d "$under" ] || exit 0
 	found="$dir/.list"
 	find "$under" -type f -name '*.rec' >"$found"
+	belongs "$found"
 	while IFS= read -r f; do
 		name=${f#"$dir/"}
 		emit "${name%.rec}" "$f"
