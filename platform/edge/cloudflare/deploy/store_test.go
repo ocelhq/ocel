@@ -351,7 +351,7 @@ func TestStorePointer(t *testing.T) {
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
-		result, err := stackOn(&provider{}, testState(srv.URL, "s3cr3t")).RemovePointer(t.Context(), "pr-42")
+		result, err := stackOn(&provider{}, testState(srv.URL, "s3cr3t")).RemovePointer(t.Context(), "pr-42", edge.DiscardReporter())
 		if err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}

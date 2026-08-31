@@ -265,7 +265,7 @@ func (r *projectRemoval) unbind(ctx context.Context, report Reporter) error {
 	}
 	for _, pointer := range r.pointers() {
 		report.Say(fmt.Sprintf("Removing pointer %q from the store", pointer))
-		if _, err := r.stack.RemovePointer(ctx, pointer); err != nil {
+		if _, err := r.stack.RemovePointer(ctx, pointer, report); err != nil {
 			errs = append(errs, fmt.Errorf("remove pointer %q before the origin it points at is destroyed: %w", pointer, err))
 		}
 	}

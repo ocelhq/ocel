@@ -225,7 +225,7 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promot
 	}, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
 	c, err := s.p.clientsFor(ctx)
 	if err != nil {
 		return edge.PruneResult{}, err

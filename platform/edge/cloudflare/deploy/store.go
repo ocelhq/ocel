@@ -67,7 +67,7 @@ func (s *stack) History(ctx context.Context, pointer string) ([]edge.HistoryEntr
 	return history, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
 	var result edge.PruneResult
 	if _, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
 		return edge.PruneResult{}, err

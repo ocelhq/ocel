@@ -103,7 +103,7 @@ type EdgeStack interface {
 
 	Promote(ctx context.Context, promotion Promotion, pointer string, report Reporter) error
 
-	RemovePointer(ctx context.Context, pointer string) (PruneResult, error)
+	RemovePointer(ctx context.Context, pointer string, report Reporter) (PruneResult, error)
 
 	BindDomain(ctx context.Context, binding DomainBinding) error
 
