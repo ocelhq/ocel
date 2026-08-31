@@ -80,3 +80,30 @@ func TestTheLogsARefusalQuotesAreBounded(t *testing.T) {
 		t.Errorf("a refusal quotes %q, and an unbounded log is a deploy's whole output", command)
 	}
 }
+
+func certifying() map[string]string {
+	return map[string]string{
+		"what doctor reads a served leaf with":   words(helperCommand("leaf", "shop.example.com")),
+		"what a pinned pair is read off":         "cat " + quoted(PinCertificate(ProxyPins+"/wildcard")),
+		"what a hostname's pair is forgotten by": words(helperCommand("forget", "shop.example.com")),
+	}
+}
+
+func TestNothingOnTheCertificatePathReadsTheProxysDataDirectory(t *testing.T) {
+	t.Parallel()
+
+	named := 0
+	for what, command := range certifying() {
+		if !strings.Contains(command, "shop.example.com") && !strings.Contains(command, ProxyPins) {
+			t.Fatalf("%s runs %q, which names neither the hostname nor %s, so this guard is reading a command that does nothing", what, command, ProxyPins)
+		}
+		named++
+		if strings.Contains(command, ProxyData) {
+			t.Errorf("%s runs %q and reaches into %s: caddy's storage layout is undocumented as an interface and is what a version bump rearranges, and expiry is read off the served leaf instead",
+				what, command, ProxyData)
+		}
+	}
+	if named != len(certifying()) {
+		t.Fatalf("this guard read %d of %d commands", named, len(certifying()))
+	}
+}

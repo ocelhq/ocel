@@ -240,14 +240,14 @@ func (h *Host) proxyTrouble(ctx context.Context, elevation, said string) error {
 	}
 
 	if _, err := h.ran(ctx, "ask whether the proxy's flip helper stands",
-		words(execCommand("test", "-x", ProxyHelperMount)), nil, elevation); err != nil {
+		words(execCommand("test -x "+quoted(ProxyHelperMount))), nil, elevation); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"%s is running on %s and carries no executable flip helper at %s, which is a bootstrap ocel never finished rather than a proxy that is down: %v\n"+
 				"Run `ocel bootstrap %s` to write the helper back, then run this again",
 			ProxyContainer, h.named(), ProxyHelperMount, err, providerkit.ClassProduction)
 	}
 	if _, err := h.ran(ctx, "ask whether the proxy's admin socket stands",
-		words(execCommand("test", "-S", ProxyAdminSocket)), nil, elevation); err != nil {
+		words(execCommand("test -S "+quoted(ProxyAdminSocket))), nil, elevation); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"%s is running on %s and there is no socket at %s, so the proxy never opened the admin endpoint this deploy flips it through: %v\n"+
 				"Run `ocel bootstrap %s` to write back the configuration that binds it, then run this again",
@@ -261,8 +261,8 @@ func (h *Host) proxyTrouble(ctx context.Context, elevation, said string) error {
 
 const caddySocketMode = "0600"
 
-func execCommand(argv ...string) []string {
-	return append([]string{"docker", "exec", ProxyContainer}, argv...)
+func execCommand(script string) []string {
+	return []string{"docker", "exec", ProxyContainer, "sh", "-c", script}
 }
 
 func stateField(state, label string) string {
