@@ -24,7 +24,9 @@ import (
 	"github.com/creack/pty"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -100,6 +102,13 @@ createServer((request, response) => {
   response.setHeader("content-type", "text/plain");
   if (asked.pathname === "/env") {
     response.end(process.env[asked.searchParams.get("name")] ?? "");
+    return;
+  }
+  if (asked.pathname === "/hold") {
+    setTimeout(
+      () => response.end(version),
+      Number(asked.searchParams.get("s") ?? 1) * 1000,
+    );
     return;
   }
   response.end(version);
@@ -309,6 +318,126 @@ func (j journey) over(t *testing.T, hostname, path string) reply {
 
 func (a reply) fromTheBox() bool {
 	return strings.Contains(a.headers, strings.ToLower(edge.HeaderEdge)+": "+host.EdgeName)
+}
+
+type flight struct {
+	status int
+	body   string
+	err    error
+}
+
+func (j journey) held(hostname, path string, patience time.Duration) flight {
+	request, err := http.NewRequest(http.MethodGet, "http://"+j.vm.addr+path, nil)
+	if err != nil {
+		return flight{err: err}
+	}
+	request.Host = hostname
+	client := &http.Client{
+		Timeout:       patience,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	said, err := client.Do(request)
+	if err != nil {
+		return flight{err: err}
+	}
+	defer func() { _ = said.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(said.Body, 1<<16))
+	return flight{status: said.StatusCode, body: strings.TrimSpace(string(body)), err: err}
+}
+
+type upstream struct {
+	Address     string `json:"address"`
+	NumRequests int    `json:"num_requests"`
+}
+
+func upstreams(read string) []upstream {
+	at := strings.Index(read, "[")
+	if at < 0 {
+		return nil
+	}
+	var held []upstream
+	if err := json.Unmarshal([]byte(read[at:]), &held); err != nil {
+		return nil
+	}
+	return held
+}
+
+type crossing struct {
+	answers  []flight
+	samples  []string
+	together bool
+	inflight bool
+	drained  int
+	stopped  int
+}
+
+func (j journey) underLoad(t *testing.T, hostname, retiring string, flipping func()) crossing {
+	t.Helper()
+
+	const beat = 500 * time.Millisecond
+	address := retiring + ":" + host.AppPort
+	stop := make(chan struct{})
+	var mu sync.Mutex
+	watched := crossing{drained: -1, stopped: -1}
+	var group sync.WaitGroup
+
+	const holders = 4
+	group.Add(holders + 1)
+	for range holders {
+		go func() {
+			defer group.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				answered := j.held(hostname, "/hold?s=6", 90*time.Second)
+				mu.Lock()
+				watched.answers = append(watched.answers, answered)
+				mu.Unlock()
+			}
+		}()
+	}
+	go func() {
+		defer group.Done()
+		for at := 0; ; at++ {
+			select {
+			case <-stop:
+				return
+			case <-time.After(beat):
+			}
+			read, _ := j.vm.attempt(j.vm.user, "sudo docker exec "+host.ProxyContainer+" "+host.ProxyHelperMount+
+				" upstreams 2>&1; echo '@@'; sudo docker inspect -f '{{.State.Status}}' "+quote(retiring)+" 2>/dev/null || true")
+			pool, state, _ := strings.Cut(read, "@@")
+			mu.Lock()
+			watched.samples = append(watched.samples, strings.TrimSpace(read))
+			held := upstreams(pool)
+			for _, one := range held {
+				if one.Address != address {
+					continue
+				}
+				watched.together = watched.together || len(held) > 1
+				watched.inflight = watched.inflight || one.NumRequests > 0
+				if one.NumRequests == 0 && watched.drained < 0 {
+					watched.drained = at
+				}
+			}
+			if watched.stopped < 0 && strings.TrimSpace(state) == "exited" {
+				watched.stopped = at
+			}
+			mu.Unlock()
+		}
+	}()
+
+	flipping()
+	time.Sleep(10 * time.Second)
+	close(stop)
+	group.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	return watched
 }
 
 func (j journey) serving(t *testing.T, hostname, want string) {
@@ -524,7 +653,8 @@ func plain(rendered string) string {
 
 const (
 	e2eDecoyContainer = "not-ocels-workload"
-	e2eDecoyImage     = "not-ocels-image:kept"
+	e2eDecoyLabel     = "not.ocels.workload"
+	e2eDecoyImage     = "alpine:3.20"
 	e2eDecoyProxy     = "not-ocels-caddy"
 	e2eDecoyProxyData = "/var/lib/not-ocels-caddy"
 )
@@ -538,10 +668,12 @@ type decoy struct {
 
 func (j journey) plants(t *testing.T) decoy {
 	t.Helper()
-	j.vm.runs(t, e2eDecoyContainer)
+	j.vm.ssh(t, "sudo docker rm -f "+e2eDecoyContainer+" >/dev/null 2>&1 || true")
+	j.vm.ssh(t, "sudo docker run -d --name "+e2eDecoyContainer+" --label "+e2eDecoyLabel+"=kept "+
+		decoyImage+" sleep 5400")
 	t.Cleanup(func() { j.vm.ssh(t, "sudo docker rm -f "+e2eDecoyContainer+" >/dev/null 2>&1 || true") })
 
-	j.vm.ssh(t, "sudo docker tag "+decoyImage+" "+e2eDecoyImage)
+	j.vm.ssh(t, "sudo docker pull "+quote(e2eDecoyImage))
 	t.Cleanup(func() { j.vm.ssh(t, "sudo docker rmi "+e2eDecoyImage+" >/dev/null 2>&1 || true") })
 
 	j.vm.ssh(t, "sudo install -d -m 0755 "+quote(e2eDecoyProxyData))
@@ -569,16 +701,49 @@ func (j journey) plants(t *testing.T) decoy {
 			t.Fatalf("%s is not on this machine before ocel deploys anything, so what ocel leaves of a user's own containers and images cannot be proven here", what)
 		}
 	}
-	if !j.vm.running(t, e2eDecoyProxy) {
-		t.Fatalf("%s is not running before ocel deploys anything, and a caddy the machine's owner ran themselves is what proves ocel's destroy takes only ocel's proxy", e2eDecoyProxy)
+	for _, standing := range []string{e2eDecoyContainer, e2eDecoyProxy} {
+		if !j.vm.running(t, standing) {
+			t.Fatalf("%s is not running before ocel deploys anything, and a container the machine's owner ran themselves is what proves ocel's destroy takes only what ocel put here", standing)
+		}
+	}
+	if ran := j.vm.inspects(t, "container", e2eDecoyContainer, "{{.Image}}"); ran == held.image {
+		t.Fatalf("%s is the image %s runs, so a container references it and it cannot fail the way an image the user pulled and never ran would", e2eDecoyImage, e2eDecoyContainer)
 	}
 	return held
 }
 
+func (j journey) gaveBack(t *testing.T, repository string) {
+	t.Helper()
+	if kept := j.labelled(t, e2eDecoyLabel); len(kept) == 0 {
+		t.Fatalf("this box lists no container at all under label %s, so the empty listing under %s is the emptiness of the command rather than of the label",
+			e2eDecoyLabel, host.LabelApp)
+	}
+	if standing := j.appContainers(t); len(standing) > 0 {
+		t.Errorf("containers %v still carry %s", standing, host.LabelApp)
+	}
+	if kept := j.appImages(t, decoyImage); len(kept) == 0 {
+		t.Fatalf("this box lists no image at all under %s, so the empty listing under %s is the emptiness of the command rather than of the repository", decoyImage, repository)
+	}
+	if swept := j.appImages(t, repository); len(swept) > 0 {
+		t.Errorf("%v still stand under %s, and a destroy empties the difference its own reference filter names", swept, repository)
+	}
+}
+
+func localAuthority(logged, hostname string) bool {
+	for _, line := range strings.Split(logged, "\n") {
+		if strings.Contains(line, "\"identifier\":\""+hostname+"\"") && strings.Contains(line, "\"issuer\":\"local\"") {
+			return true
+		}
+	}
+	return false
+}
+
 func (j journey) survived(t *testing.T, planted decoy) {
 	t.Helper()
-	if !j.vm.running(t, e2eDecoyProxy) {
-		t.Errorf("%s stopped somewhere in this journey, and a caddy the machine's owner installed under its own name is not ocel's to take", e2eDecoyProxy)
+	for _, standing := range []string{e2eDecoyContainer, e2eDecoyProxy} {
+		if !j.vm.running(t, standing) {
+			t.Errorf("%s stopped somewhere in this journey, and a container the machine's owner started under its own name is not ocel's to stop", standing)
+		}
 	}
 	for what, want := range map[string]string{
 		e2eDecoyContainer: planted.workload,
@@ -603,6 +768,11 @@ func (j journey) appContainers(t *testing.T) []string {
 	listed := j.vm.ssh(t, "sudo docker ps -a --filter label="+host.LabelApp+
 		" --format '{{.Names}} {{.Label \""+host.LabelRef+"\"}}' | sort")
 	return lines(listed)
+}
+
+func (j journey) labelled(t *testing.T, label string) []string {
+	t.Helper()
+	return lines(j.vm.ssh(t, "sudo docker ps -a --filter label="+label+" --format '{{.Names}}' | sort"))
 }
 
 func (j journey) appImages(t *testing.T, repository string) []string {
@@ -631,6 +801,76 @@ func (j journey) container(t *testing.T) string {
 		t.Fatalf("%d containers carry %s=%s, and this journey turns on there being exactly one: %v", len(running), host.LabelApp, e2eApp, running)
 	}
 	return running[0]
+}
+
+func redacted(rendered string, at, width int) string {
+	from := strings.LastIndex(rendered[:at], "\n") + 1
+	to := at + width
+	if end := strings.Index(rendered[to:], "\n"); end >= 0 {
+		to += end
+	} else {
+		to = len(rendered)
+	}
+	return rendered[from:at] + strings.Repeat("*", width) + rendered[at+width:to]
+}
+
+func digestIn(reference string) string {
+	at := strings.LastIndex(reference, "sha256")
+	if at < 0 || len(reference) < at+7+64 {
+		return ""
+	}
+	return reference[at+7:]
+}
+
+func firstLineOf(rendered, fragment string) string {
+	at := strings.Index(rendered, fragment)
+	if at < 0 {
+		return ""
+	}
+	line := rendered[at:]
+	if end := strings.Index(line, "\n"); end >= 0 {
+		line = line[:end]
+	}
+	return line
+}
+
+func (j journey) promotionOf(t *testing.T, ref string) string {
+	t.Helper()
+	held, err := kitledger.New(j.box(t).Records(), providerkit.ClassProduction, e2eSlug).
+		History(context.Background(), edge.DefaultPointer)
+	if err != nil {
+		t.Fatalf("read the promotions this box holds for %s: %v", e2eSlug, err)
+	}
+	digest := digestIn(ref)
+	if digest == "" {
+		t.Fatalf("%s carries no digest, and a promotion is looked up by the one thing a container label and a ledger identity spell the same way", ref)
+	}
+	for _, entry := range held {
+		if digestIn(entry.Builds[e2eApp]) == digest {
+			return entry.PromotionID
+		}
+	}
+	t.Fatalf("no promotion among %+v carries %s for %s, so there is no name a rollback to it could be asserted against", held, ref, e2eApp)
+	return ""
+}
+
+func (j journey) box(t *testing.T) *vps.Provider {
+	t.Helper()
+	p := vps.NewProvider(vps.Options{SSH: vps.Target{
+		Host: j.vm.addr, User: deployLogin, IdentityFile: j.vm.key, Config: j.vm.config,
+	}})
+	t.Cleanup(func() { _ = p.Close() })
+	return p
+}
+
+func (j journey) claims(t *testing.T, hostname string) string {
+	t.Helper()
+	if err := j.box(t).Host().ClaimHosts(context.Background(), []host.HostClaim{{
+		Hostname: hostname, Owner: boxedge.Surface(e2eSlug, edge.ClassPreview), Pointer: edge.DefaultPointer,
+	}}); err != nil {
+		t.Fatalf("claim %s on this box, so a release of the catch-all has a route beside it that it never touches: %v", hostname, err)
+	}
+	return hostname
 }
 
 func (j journey) rival(t *testing.T) journey {
@@ -727,6 +967,7 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	planted := run.plants(t)
 
 	run.vm.ssh(t, "sudo usermod -aG docker "+run.vm.user)
+	t.Cleanup(func() { run.vm.ssh(t, "sudo gpasswd -d "+run.vm.user+" docker >/dev/null 2>&1 || true") })
 
 	set := run.deploying(t, "env", "set", e2eSensitive, run.value)
 	if !strings.Contains(set, "Set "+e2eSensitive) {
@@ -741,6 +982,9 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		if !strings.Contains(drawn, row) {
 			t.Errorf("`ocel deploy --dry` drew no %q row, and every mutation a deploy performs on this box is a plan row sourced from an engine event:\n%s", row, drawn)
 		}
+	}
+	if !strings.Contains(drawn, "+ "+e2eApp+"  image") {
+		t.Errorf("`ocel deploy --dry` drew %s's image row without the create the engine's own answer decides, so the row is drawn off the plan rather than off what this box holds:\n%s", e2eApp, drawn)
 	}
 
 	deployed := run.deploying(t, "deploy", "--yes")
@@ -760,7 +1004,7 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		t.Fatalf("%s carries %s=%q, which names no repository the box could ever sweep under", container, host.LabelRef, ref)
 	}
 	if read := run.vm.reads(t, container, e2eSensitive); read != run.value {
-		t.Fatalf("%s reads %s as %q, want the value this deploy resolved: nothing below turns on a value the container never got", container, e2eSensitive, read)
+		t.Fatalf("%s does not read %s as the value this deploy resolved, and nothing below turns on a value the container never got", container, e2eSensitive)
 	}
 
 	envFile := host.EnvFile(class, container)
@@ -777,8 +1021,8 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 			t.Errorf("%s still holds %s after the deploy, and a file no deploy after this one takes back holds every value in plaintext", host.StateDir(class), left)
 		}
 	}
-	if strings.Contains(deployed, run.value) {
-		t.Errorf("the deploy printed the value it handed %s, and this transcript is what a ci log keeps:\n%s", e2eApp, deployed)
+	if at := strings.Index(deployed, run.value); at >= 0 {
+		t.Errorf("the deploy printed the value it handed %s at byte %d of its transcript, and this transcript is what a ci log keeps:\n%s", e2eApp, at, redacted(deployed, at, len(run.value)))
 	}
 	if !strings.Contains(deployed, e2eApp) {
 		t.Fatalf("the deploy transcript never even names %s, so it is no window a leaked value could have appeared in:\n%s", e2eApp, deployed)
@@ -798,19 +1042,6 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 			t.Errorf("`ocel domain add` never said %q, and a box's whole dns story is the record it owes and the honesty of its probe:\n%s", want, owed)
 		}
 	}
-	since := run.vm.proxyLogSince(t, written)
-	if !strings.Contains(since, "\"identifier\":\""+e2eHostname+"\"") {
-		t.Fatalf("the proxy logged no certificate work for %s while it was bound, so those logs are no window an acme order could have appeared in:\n%s", e2eHostname, since)
-	}
-	if !strings.Contains(since, "\"issuer\":\"local\"") {
-		t.Errorf("the proxy issued %s from something other than the box's own local authority:\n%s", e2eHostname, since)
-	}
-	for _, fired := range []string{"acme", "letsencrypt", "zerossl"} {
-		if strings.Contains(strings.ToLower(since), fired) {
-			t.Errorf("the proxy log names %q while binding %s, and ocel asks no certificate authority on a box:\n%s", fired, e2eHostname, since)
-		}
-	}
-
 	run.trusting(t)
 	bound := run.deploying(t, "domain", "add")
 	if !strings.Contains(bound, "Serving "+e2eHostname) {
@@ -822,7 +1053,7 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if !strings.Contains(reported, e2eHostname) {
 		t.Fatalf("`ocel domain status` names no hostname at all, so it is no window a certificate claim could be read out of:\n%s", reported)
 	}
-	for _, want := range []string{"proxy:" + e2eHostname, "ocel issues and renews nothing here", e2eHostname + " A " + run.vm.addr} {
+	for _, want := range []string{"proxy:" + e2eHostname, "no expiry reported", "ocel issues and renews nothing here", e2eHostname + " A " + run.vm.addr} {
 		if !strings.Contains(reported, want) {
 			t.Errorf("`ocel domain status` never said %q: what serves a hostname on a box, and who renews it, is the whole of what this command owes:\n%s", want, reported)
 		}
@@ -838,22 +1069,61 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		t.Errorf("the loaded configuration declares an on-demand tls policy:\n%s\nCaddy only warns when one carries no permission module and serves anyway, so a catch-all beside it is an unauthenticated acme trigger a stranger drives with a junk subdomain until this box is locked out of its own tls", loaded)
 	}
 
-	first := run.appContainers(t)
+	retired := run.container(t)
+	retiredRef := run.vm.inspects(t, "container", retired, host.LabelSelector(host.LabelRef))
 	run.fixture(t, "two")
-	if again := run.deploying(t, "deploy", "--yes"); !strings.Contains(again, "Deployed") {
-		t.Fatalf("the second `ocel deploy --yes` finished without deploying:\n%s", again)
+	var redeployed string
+	watched := run.underLoad(t, e2eHostname, retired, func() {
+		redeployed = run.deploying(t, "deploy", "--yes")
+	})
+	if !strings.Contains(redeployed, "Deployed") {
+		t.Fatalf("the second `ocel deploy --yes` finished without deploying:\n%s", redeployed)
 	}
 	run.serving(t, e2eHostname, "two")
-	retired := strings.Fields(first[0])[0]
+
+	crossed := map[string]int{}
+	for _, answered := range watched.answers {
+		if answered.err != nil {
+			t.Errorf("a request held open across the redeploy failed outright (%v), and a flip drops nothing", answered.err)
+			continue
+		}
+		if answered.status != http.StatusOK {
+			t.Errorf("a request held open across the redeploy answered %d %q, want the release it started against, with its original status", answered.status, answered.body)
+			continue
+		}
+		crossed[answered.body]++
+	}
+	if crossed["one"] == 0 || crossed["two"] == 0 {
+		t.Errorf("%d requests were held open across the redeploy and they answered %v, want some held against the release the flip retired and some against the one it promoted: a load that never spans the flip proves nothing about what the flip does to a request in flight",
+			len(watched.answers), crossed)
+	}
+	if !watched.together || !watched.inflight {
+		t.Errorf("%s stood beside the release that replaced it in the proxy's pool: %v, and was serving a request there: %v — want both, or a request that answered across the flip answered before it and proves nothing:\n%v",
+			retired, watched.together, watched.inflight, watched.samples)
+	}
+	if watched.drained < 0 {
+		t.Errorf("%s's in-flight count was never read as zero while it was retired, and the drain that waits for it is the whole of why the old container is stopped second:\n%v",
+			retired, watched.samples)
+	}
+	if watched.stopped < 0 {
+		t.Errorf("%s was never read as stopped while the flip ran, so nothing here says the drain finished before it went:\n%v", retired, watched.samples)
+	}
+	if watched.drained >= 0 && watched.stopped >= 0 && watched.drained > watched.stopped {
+		t.Errorf("%s was stopped at sample %d and its in-flight count only reached zero at %d, so a request it was still serving died with it:\n%v",
+			retired, watched.stopped, watched.drained, watched.samples)
+	}
 	if state := run.vm.state(t, retired); state != "exited" {
 		t.Errorf("%s reads %q after the deploy that replaced it, want it stopped and still standing: a rollback the ledger still offers has nothing to restart once it is removed", retired, state)
 	}
 	window := run.window(t, class)
-	if len(window) == 0 || len(window) > host.KeepWindow {
-		t.Fatalf("%s names %v, want between one and %d refs", host.ReleasesDir()+"/"+e2eApp+"/"+string(class), window, host.KeepWindow)
+	if len(window) != 2 || len(window) > host.KeepWindow {
+		t.Fatalf("%s names %v, want the two refs two deploys left, most-recent-first, inside a window of %d", host.ReleasesDir()+"/"+e2eApp+"/"+string(class), window, host.KeepWindow)
 	}
 	if serving := run.vm.inspects(t, "container", run.container(t), host.LabelSelector(host.LabelRef)); window[0] != serving {
 		t.Errorf("the keep window reads %v and %s serves %s, want the most recent ref first", window, e2eApp, serving)
+	}
+	if window[1] != retiredRef {
+		t.Errorf("the keep window reads %v and the release this deploy retired is %s, want the window ordered most-recent-first past its own first entry", window, retiredRef)
 	}
 
 	standingBefore := run.appContainers(t)
@@ -861,9 +1131,11 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if len(standingBefore) != 2 || len(imagesBefore) != 2 {
 		t.Fatalf("this box holds containers %v and images %v after two deploys, and a rollback that provisions nothing can only be read against both releases standing", standingBefore, imagesBefore)
 	}
+	previous := run.promotionOf(t, retiredRef)
 	rolled := run.deploying(t, "rollback")
-	if !strings.Contains(rolled, "Rolled back to promotion") {
-		t.Fatalf("`ocel rollback` said nothing about what it rolled back to:\n%s", rolled)
+	if !strings.Contains(rolled, "Rolled back to promotion "+previous) {
+		t.Errorf("`ocel rollback` said %q and never named %s, the promotion that carries %s, so a flip to any other release reads the same:\n%s",
+			firstLineOf(rolled, "Rolled back to promotion"), previous, retiredRef, rolled)
 	}
 	run.serving(t, e2eHostname, "one")
 	if after := run.appContainers(t); !slices.Equal(after, standingBefore) {
@@ -883,6 +1155,13 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		if !strings.Contains(taken, want) {
 			t.Errorf("a second project declaring %s was refused without saying %q, and a hostname belongs to one project:\n%s", e2eHostname, want, taken)
 		}
+	}
+	if after := run.appContainers(t); !slices.Equal(after, standingBefore) {
+		t.Errorf("the containers on this box read\n%v\nafter the refused deploy where they read\n%v\nbefore it: a claimed hostname is refused at preflight, before a byte crosses to the box and before a route moves", after, standingBefore)
+	}
+	if after := run.appImages(t, repository); !slices.Equal(after, imagesBefore) {
+		t.Errorf("the images under %s read\n%v\nafter the refused deploy where they read\n%v\nbefore it: a hostname another project holds is refused at preflight, before an image is streamed onto the box",
+			repository, after, imagesBefore)
 	}
 
 	if previewed := run.must(t, "bootstrap", "preview", "--yes"); !strings.Contains(previewed, "Bootstrapped") {
@@ -904,6 +1183,16 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if missed.status != http.StatusNotFound || !missed.fromTheBox() || missed.body != "" {
 		t.Errorf("an unclaimed hostname under %s was answered %d %q\n%s\nwant a bare 404 carrying %s: %s, naming no project and no other preview",
 			e2ePreviewBase, missed.status, missed.body, missed.headers, edge.HeaderEdge, host.EdgeName)
+	}
+	var wildcards []string
+	for _, served := range routed {
+		if strings.HasPrefix(served, "*.") {
+			wildcards = append(wildcards, served)
+		}
+	}
+	if !slices.Equal(wildcards, []string{wildcard}) {
+		t.Errorf("the loaded configuration carries the suffix rules %v, want exactly %s: every other route this box holds names a hostname in full, and a second wildcard is a second open door",
+			wildcards, wildcard)
 	}
 	if probed := run.over(t, edge.ProbeHostname(wildcard), "/"); !probed.fromTheBox() {
 		t.Errorf("%s was answered without %s: %s, and it is the hostname `ocel domain use --preview` reads the edge off:\n%s",
@@ -938,6 +1227,25 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		t.Errorf("the catch-all %s came down with one project's preview, and it answers for every project this box serves: %v", wildcard, left)
 	}
 
+	after := run.vm.proxyLogBytes(t)
+	if after <= written {
+		t.Fatalf("the proxy had logged %d bytes before this journey bound anything and %d after every hostname it binds, so its log is no window an acme order could have appeared in", written, after)
+	}
+	since := run.vm.proxyLogSince(t, written)
+	for _, bound := range []string{e2eHostname, previewHost} {
+		if !strings.Contains(since, "\"identifier\":\""+bound+"\"") {
+			t.Fatalf("the proxy logged no certificate work for %s across every bind this journey made, so those logs are no window an acme order could have appeared in:\n%s", bound, since)
+		}
+		if !localAuthority(since, bound) {
+			t.Errorf("the proxy issued %s from something other than the box's own local authority:\n%s", bound, since)
+		}
+	}
+	for _, fired := range []string{"acme", "letsencrypt", "zerossl"} {
+		if strings.Contains(strings.ToLower(since), fired) {
+			t.Errorf("the proxy log names %q across the binds this journey made, and ocel asks no certificate authority on a box:\n%s", fired, since)
+		}
+	}
+
 	if reached := run.vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+host.ProxyContainer+"/"); !strings.Contains(reached, "404") {
 		t.Fatalf("a container on the shared network could not reach the proxy on port %s at all (%q), so nothing it fails to reach on %s means anything",
 			host.RenewalPort, strings.TrimSpace(reached), host.AdminPort)
@@ -952,18 +1260,7 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 			t.Fatalf("`ocel destroy %s --yes` finished without destroying:\n%s", tier, destroyed)
 		}
 	}
-	if !run.vm.running(t, e2eDecoyContainer) {
-		t.Fatalf("%s is gone by the destroy leg, so this machine's docker answers nothing here and every emptiness read off it below is the emptiness of the command", e2eDecoyContainer)
-	}
-	if standing := run.appContainers(t); len(standing) > 0 {
-		t.Errorf("containers %v still carry %s after both destroys", standing, host.LabelApp)
-	}
-	if swept := run.appImages(t, repository); len(swept) > 0 {
-		t.Errorf("%v still stand under %s after both destroys, and a destroy empties the difference its own reference filter names", swept, repository)
-	}
-	if kept := run.appImages(t, decoyImage); len(kept) == 0 {
-		t.Fatalf("this box lists no image at all under %s, so the empty listing under %s is the emptiness of the command rather than of the repository", decoyImage, repository)
-	}
+	run.gaveBack(t, repository)
 	served := run.vm.routedHosts(t)
 	if !slices.Contains(served, wildcard) {
 		t.Fatalf("the loaded configuration routes %v and names not even the bootstrap-owned catch-all, so a hostname missing from it means nothing", served)
@@ -976,20 +1273,41 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	untouched := run.claims(t, "kept.ocel-vps-e2e.invalid")
+	before := run.vm.routedHosts(t)
+	if !slices.Contains(before, untouched) || !slices.Contains(before, wildcard) {
+		t.Fatalf("the loaded configuration routes %v and names not both %s and %s, so nothing read off it after the release means anything", before, wildcard, untouched)
+	}
 	if released := run.deploying(t, "domain", "release", "--preview", "--yes"); !strings.Contains(released, "Released "+wildcard) {
 		t.Fatalf("`ocel domain release --preview` never took %s down:\n%s", wildcard, released)
 	}
-	if left := run.vm.routedHosts(t); slices.Contains(left, wildcard) {
+	left := run.vm.routedHosts(t)
+	if !slices.Contains(left, untouched) {
+		t.Fatalf("the loaded configuration routes %v after `ocel domain release --preview` and names not even %s, which the release never touches, so the absence of the catch-all from it is the absence of every route", left, untouched)
+	}
+	if slices.Contains(left, wildcard) {
 		t.Errorf("the loaded configuration still routes %s after `ocel domain release --preview`: %v", wildcard, left)
 	}
 	if shed := run.must(t, "bootstrap", "destroy", "preview", "--yes"); !strings.Contains(shed, "Removed the preview bootstrap") {
 		t.Fatalf("`ocel bootstrap destroy preview --yes` finished without removing it:\n%s", shed)
 	}
-	destroyed := run.must(t, "bootstrap", "destroy", "production", "--yes")
+	const typing = "Type the environment name"
+	destroyed, err := run.onATerminal(t, []string{"bootstrap", "destroy", "production"}, typing, "production\r")
+	if err != nil {
+		t.Fatalf("`ocel bootstrap destroy production` on a terminal = %v\n%s", err, destroyed)
+	}
+	asked := strings.Index(destroyed, typing)
+	if asked < 0 {
+		t.Fatalf("`ocel bootstrap destroy production` never asked for the environment name, so there is no confirmation for anything to be named before:\n%s", destroyed)
+	}
 	for _, bearing := range []string{host.StateDir(class), host.SealKeyPath(class), host.ProxyData} {
-		if !strings.Contains(destroyed, bearing) {
+		switch at := strings.Index(destroyed, bearing); {
+		case at < 0:
 			t.Errorf("`ocel bootstrap destroy production` never named %s, and a user types the confirmation without knowing what is unrecoverable — %s holds every certificate this box was issued and the account key that issued them:\n%s",
 				bearing, host.ProxyData, destroyed)
+		case at > asked:
+			t.Errorf("`ocel bootstrap destroy production` named %s only after it asked for the environment name, and a user who has already typed it has already consented to something they were not shown:\n%s",
+				bearing, destroyed)
 		}
 	}
 
@@ -997,9 +1315,10 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if !owedABootstrap.MatchString(gone) {
 		t.Errorf("`ocel doctor` after a destroy still claims a bootstrap:\n%s", gone)
 	}
+	run.gaveBack(t, repository)
 	for _, taken := range []string{
-		host.ClassDir(class), host.StateDir(class), filepath.Dir(host.SealHelper),
-		host.ProxyData, host.ProxyConfig, host.ProxyHelper,
+		filepath.Dir(host.ClassDir(class)), host.ClassDir(class), host.StateDir(class),
+		filepath.Dir(host.SealHelper), host.ProxyData, host.ProxyConfig, host.ProxyHelper,
 	} {
 		if run.vm.stands(t, taken) {
 			t.Errorf("%s stands after a destroy, so the machine was not given back", taken)
