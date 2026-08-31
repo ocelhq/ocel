@@ -277,13 +277,28 @@ func TestAPreviewClaimsTheHostnamesThePreviewSiteItselfNames(t *testing.T) {
 func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	_, _, stack := standing(t)
+	stood, front, stack := standing(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	if held := claimedOn(t, stood); len(held) != 0 {
 		t.Errorf("a production promotion claimed %v", held)
+	}
+
+	pointed, err := front.Reconcile(context.Background(), edge.StackSpec{
+		Version: "test", Class: edge.ClassProduction, Slug: slug,
+	}, edge.StackState{GlobalPreview: previewBase})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	staged(t, pointed, "web", "b2", "shop-web-2222")
+	if err := pointed.Promote(context.Background(), edge.Promotion{
+		PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"},
+	}, "pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote under a pointer: %v", err)
+	}
+	if held := claimedOn(t, stood); len(held) != 0 {
+		t.Errorf("a production promotion under pointer pr-7 on a box that knows a preview base claimed %v: the class is the whole of what decides whether a promotion claims a preview hostname, and the pointer and the base alone do not", held)
 	}
 }
