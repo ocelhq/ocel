@@ -422,8 +422,6 @@ message ListEnvironmentsResponse {
 }
 
 message PreviewEnvironment {
-  reserved 5;
-
   string identity = 1;
   common.environment.v1.Lifecycle lifecycle = 2;
 
