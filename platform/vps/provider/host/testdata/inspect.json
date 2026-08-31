@@ -174,7 +174,8 @@
             "Entrypoint": null,
             "Labels": {
                 "ocel.app": "web",
-                "ocel.ref": "registry.example.com/web@sha256:0000"
+                "ocel.ref": "registry.example.com/web@sha256:0000",
+                "ocel.env": "7f3a9c1e2b4d"
             }
         },
         "NetworkSettings": {

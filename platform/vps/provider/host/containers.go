@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const AppPort = "8080"
@@ -15,6 +17,7 @@ const AppPort = "8080"
 const (
 	LabelApp = "ocel.app"
 	LabelRef = "ocel.ref"
+	LabelEnv = "ocel.env"
 )
 
 const (
@@ -36,6 +39,8 @@ type Container struct {
 	Name  string
 	App   string
 	Image string
+	Class providerkit.Class
+	Env   map[string]string
 }
 
 func ContainerName(stack, app, deployment, image string) string {
@@ -47,16 +52,19 @@ func ContainerName(stack, app, deployment, image string) string {
 	return naming.Sanitize(stack) + "-" + naming.Sanitize(app) + "-" + naming.Sanitize(identity[:min(len(identity), nameShort)])
 }
 
-func containerRun(spec Container) []string {
-	return []string{"docker", "run", "--detach",
+func containerRun(spec Container, held handoff) []string {
+	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
 		"--restart", appRestart,
 		"--network", ProxyNetwork,
 		"--label", LabelApp + "=" + spec.App,
 		"--label", LabelRef + "=" + spec.Image,
-		"--env", "PORT=" + AppPort,
-		spec.Image,
+		"--label", LabelEnv + "=" + held.digest,
 	}
+	if held.path != "" {
+		argv = append(argv, "--env-file", held.path)
+	}
+	return append(argv, "--env", "PORT="+AppPort, spec.Image)
 }
 
 func LabelSelector(label string) string {
@@ -64,7 +72,18 @@ func LabelSelector(label string) string {
 }
 
 func servingSelectors() string {
-	return "{{.State.Status}} " + LabelSelector(LabelRef)
+	return "{{.State.Status}} " + LabelSelector(LabelRef) + " " + LabelSelector(LabelEnv)
+}
+
+func stillServing(said string, spec Container, digest string) bool {
+	fields := strings.Fields(said)
+	if len(fields) < 2 || fields[0] != "running" || fields[1] != spec.Image {
+		return false
+	}
+	if len(spec.Env) == 0 {
+		return true
+	}
+	return len(fields) > 2 && fields[2] == digest
 }
 
 func servingCommand(name string) string {
@@ -78,15 +97,24 @@ func (h *Host) StandUp(ctx context.Context, spec Container) error {
 	if err != nil {
 		return err
 	}
-	if h.said(ctx, servingCommand(spec.Name), elevation) == "running "+spec.Image {
+	digest, err := envDigest(spec.Env)
+	if err != nil {
+		return err
+	}
+	if stillServing(h.said(ctx, servingCommand(spec.Name), elevation), spec, digest) {
 		return nil
 	}
 	if _, err := h.ran(ctx, "clear the name "+spec.Name,
 		"docker rm --force "+quoted(spec.Name)+" >/dev/null 2>&1 || true", nil, elevation); err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "stand "+spec.App+" up as "+spec.Name, words(containerRun(spec))+" >/dev/null", nil, elevation)
-	return err
+	held, err := h.hand(ctx, spec)
+	if err != nil {
+		return err
+	}
+	_, stood := h.ran(ctx, "stand "+spec.App+" up as "+spec.Name,
+		words(containerRun(spec, held))+" >/dev/null", nil, elevation)
+	return errors.Join(stood, h.forget(ctx, held))
 }
 
 func (h *Host) TakeDown(ctx context.Context, name string) error {
