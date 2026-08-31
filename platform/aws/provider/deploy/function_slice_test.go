@@ -450,8 +450,8 @@ func TestFunctionEnvKey(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := functionEnvKey(tc.typ, tc.userID); got != tc.wantName {
-				t.Errorf("functionEnvKey(%v, %s) = %q, want %q", tc.typ, tc.userID, got, tc.wantName)
+			if got := naming.ResourceEnvName(tc.typ, tc.userID); got != tc.wantName {
+				t.Errorf("naming.ResourceEnvName(%v, %s) = %q, want %q", tc.typ, tc.userID, got, tc.wantName)
 			}
 		})
 	}

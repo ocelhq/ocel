@@ -13,7 +13,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
@@ -344,10 +343,6 @@ func capDescription(described string, limit int) pulumi.String {
 		described = strings.ToValidUTF8(described[:limit], "")
 	}
 	return pulumi.String(described)
-}
-
-func functionEnvKey(t linksv1.LinkType, id string) string {
-	return fmt.Sprintf("OCEL_RESOURCE_%s_%s", naming.EnvFragment(t), id)
 }
 
 func artifactArchivePath(root, artifactPath string) string {
