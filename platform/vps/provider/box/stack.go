@@ -111,7 +111,9 @@ func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) 
 	if report != nil {
 		report.Say("Standing " + held.app + " back up as " + record.Physical + " from the image this host already holds")
 	}
-	if err := s.e.machine.StandUp(ctx, host.Container{Name: record.Physical, App: held.app, Image: record.Image}); err != nil {
+	if err := s.e.machine.StandUp(ctx, host.Container{
+		Name: record.Physical, App: held.app, Image: record.Image, Class: s.state.Class,
+	}); err != nil {
 		return err
 	}
 	if err := s.e.machine.Promote(ctx, s.state.Class, held.app, record.Image); err != nil {

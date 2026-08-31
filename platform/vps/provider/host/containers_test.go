@@ -188,11 +188,21 @@ func TestWhatIsAlreadyServingIsReadFromWhereADaemonKeepsIt(t *testing.T) {
 		t.Fatalf("the serving check reads %q and no longer asks the daemon for the format it reads", servingCommand(physical))
 	}
 	said := rendering(t, servingSelectors())
-	if !strings.HasSuffix(said, " "+fixtureRef) {
+	fields := strings.Fields(said)
+	if len(fields) != 3 || fields[1] != fixtureRef {
 		t.Errorf("a container labelled %s reads as %q, and a redeploy of the image already up would tear it down for the same one", fixtureRef, said)
 	}
-	if said == "running "+fixtureRef {
+	if strings.Contains(said, "<no value>") {
+		t.Errorf("a real container reads as %q: a selector that will not render answers with a word no digest and no ref equals, and every redeploy would then replace a container serving live traffic", said)
+	}
+	if fields[0] == "running" {
 		t.Errorf("a crash-looping container reads as %q, and a redeploy is kept off a container that serves nothing", said)
+	}
+	if !stillServing("running "+fixtureRef+" "+fields[2], Container{Image: fixtureRef, Env: map[string]string{"A": "1"}}, fields[2]) {
+		t.Errorf("a container standing under %q and the values it was handed reads as replaceable", said)
+	}
+	if stillServing("running "+fixtureRef+" "+fields[2], Container{Image: fixtureRef, Env: map[string]string{"A": "2"}}, "0000000000") {
+		t.Error("a container standing under values a deploy has since changed reads as still serving, and it would keep the old ones for the life of the release")
 	}
 }
 
