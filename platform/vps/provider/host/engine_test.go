@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func engineOrSkip(t *testing.T) {
@@ -58,10 +59,12 @@ func seenByTheEngine(t *testing.T) string {
 }
 
 type standingProxy struct {
-	dir    string
-	pins   string
-	helper string
-	here   func(string) string
+	name    string
+	network string
+	dir     string
+	pins    string
+	helper  string
+	here    func(string) string
 }
 
 func proxyStanding(t *testing.T) standingProxy {
@@ -69,6 +72,7 @@ func proxyStanding(t *testing.T) standingProxy {
 
 	engineOrSkip(t)
 	dir := seenByTheEngine(t)
+	name, network := probeName(t), probeName(t)+"-net"
 
 	arch, err := Architecture(runtime.GOARCH)
 	if err != nil {
@@ -87,15 +91,16 @@ func proxyStanding(t *testing.T) standingProxy {
 			t.Fatal(err)
 		}
 	}
-	stood := standingProxy{dir: dir, pins: pins, helper: helper, here: func(written string) string {
-		return strings.NewReplacer(ProxyPins, pins, proxyRoot, dir, ProxyHelper, helper).Replace(written)
+	stood := standingProxy{name: name, network: network, dir: dir, pins: pins, helper: helper, here: func(written string) string {
+		return strings.NewReplacer(ProxyPins, pins, proxyRoot, dir, ProxyHelper, helper,
+			quoted(ProxyContainer), quoted(name), quoted(ProxyNetwork), quoted(network)).Replace(written)
 	}}
 
-	if out, err := exec.Command(dockerEngine, "network", "create", ProxyNetwork).CombinedOutput(); err != nil {
+	if out, err := exec.Command(dockerEngine, "network", "create", network).CombinedOutput(); err != nil {
 		t.Fatalf("create the network every deploy resolves across: %v\n%s", err, out)
 	}
-	t.Cleanup(func() { exec.Command(dockerEngine, "network", "rm", ProxyNetwork).Run() })
-	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", ProxyContainer).Run() })
+	t.Cleanup(func() { exec.Command(dockerEngine, "network", "rm", network).Run() })
+	t.Cleanup(func() { taken(t, name) })
 
 	if out, err := exec.Command("/bin/sh", "-c", stood.here(containerCommand())).CombinedOutput(); err != nil {
 		t.Fatalf("the write that stands the proxy up = %v\n%s", err, out)
@@ -103,11 +108,24 @@ func proxyStanding(t *testing.T) standingProxy {
 	return stood
 }
 
+func taken(t *testing.T, name string) {
+	t.Helper()
+
+	exec.Command(dockerEngine, "rm", "--force", name).Run()
+	for range 100 {
+		if exec.Command(dockerEngine, "container", "inspect", name).Run() != nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Errorf("%s is still reported by the engine after a forced removal, and the ports and the name it holds are the next test's to take", name)
+}
+
 func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 	stood := proxyStanding(t)
 	dir, helper := stood.dir, stood.helper
 
-	rendered, err := exec.Command("/bin/sh", "-c", containerProbe()).Output()
+	rendered, err := exec.Command("/bin/sh", "-c", stood.here(containerProbe())).Output()
 	if err != nil {
 		t.Fatalf("probe the proxy this machine is running: %v", err)
 	}
@@ -117,14 +135,15 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 	}
 
 	stated := containerItem()
-	stated.Content = proxyFactsOver([]string{
+	stated.Name = stood.name
+	stated.Content = []byte(strings.Replace(string(proxyFactsOver([]string{
 		dir + ":" + proxyConfigDir + ":ro",
 		helper + ":" + ProxyHelperMount + ":ro",
 		stood.pins + ":" + proxyPinsMount + ":ro",
 		filepath.Join(dir, "data") + ":" + proxyDataMount,
-	})
+	})), "networks="+ProxyNetwork+" ", "networks="+stood.network+" ", 1))
 	if observed[stated.ID()] != stated.Digest() {
-		box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", ProxyFactTemplate, ProxyContainer).Output()
+		box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", ProxyFactTemplate, stood.name).Output()
 		t.Errorf("a real engine reports the proxy as something other than the item ocel writes it from, so every re-run plans an update over a proxy that stands:\n%s",
 			compared(canonical(string(box)), strings.TrimSpace(string(stated.Content))))
 	}
@@ -159,7 +178,7 @@ func compared(box, stated string) string {
 func (p standingProxy) drives(t *testing.T, argv ...string) string {
 	t.Helper()
 
-	run := exec.Command(dockerEngine, append([]string{"exec", ProxyContainer, ProxyHelperMount}, argv...)...)
+	run := exec.Command(dockerEngine, append([]string{"exec", p.name, ProxyHelperMount}, argv...)...)
 	said, err := run.Output()
 	if err != nil {
 		var stderr string
@@ -177,7 +196,7 @@ func (p standingProxy) standsApp(t *testing.T, upstream, body string) {
 	name, _, _ := strings.Cut(upstream, ":")
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
-		"--network", ProxyNetwork, ProxyImage,
+		"--network", p.network, ProxyImage,
 		"caddy", "respond", "--listen", ":"+AppPort, body).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
