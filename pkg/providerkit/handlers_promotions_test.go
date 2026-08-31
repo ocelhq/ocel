@@ -693,7 +693,7 @@ func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftStanding(t *testing.T)
 	deployed(t, provider, providerkit.ClassPreview, "shop")
 	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1")
 	stack := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
-	provider.Releaser().RefuseDestroy(errors.New("the box answered nothing"))
+	provider.Releaser().RefuseNextDestroy(errors.New("the box answered nothing"))
 
 	if result := removeEnvironment(t, client, "shop", "pr-7"); result.GetSuccess() {
 		t.Fatal("a teardown whose first destroy refused reported success")
