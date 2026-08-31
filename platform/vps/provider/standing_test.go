@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 const boxAddress = "203.0.113.10"
@@ -160,5 +161,75 @@ func TestTheReachVerdictFailsWhenNothingAnsweredAndNamesTheFirewall(t *testing.T
 	}
 	if !strings.Contains(check.Fix, "firewall") {
 		t.Errorf("fix = %q, want the firewall named", check.Fix)
+	}
+}
+
+func standingOver(machine *scripted) []providerkit.StandingCheck {
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	p.Resolving(stubResolver(map[string][]string{"box.invalid": {boxAddress}}))
+	p.Reaching(func(context.Context, string) error { return nil })
+	checks, err := p.CheckStanding(context.Background(), providerkit.StandingRequest{
+		Class: providerkit.ClassProduction,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return checks
+}
+
+func adminCheck(t *testing.T, checks []providerkit.StandingCheck) providerkit.StandingCheck {
+	t.Helper()
+	if len(checks) == 0 {
+		t.Fatal("CheckStanding() answered nothing at all, so there is no window to read a verdict out of")
+	}
+	for _, check := range checks {
+		if strings.Contains(check.Subject, host.AdminPort) {
+			return check
+		}
+	}
+	t.Fatalf("CheckStanding() answered %+v and none of it is about tcp %s inside the proxy", checks, host.AdminPort)
+	return providerkit.StandingCheck{}
+}
+
+func TestNothingOnTheStockAdminPortInsideTheProxyPasses(t *testing.T) {
+	t.Parallel()
+
+	check := adminCheck(t, standingOver(boxSaying(map[string]answer{"'listeners'": {stdout: "0.0.0.0:80\n[::]:443\n"}})))
+	if check.Verdict != providerkit.StandingPass {
+		t.Fatalf("verdict = %v (%q), want a pass where nothing is bound on %s", check.Verdict, check.Finding, host.AdminPort)
+	}
+	if !strings.Contains(check.Finding, host.ProxyAdminSocket) {
+		t.Errorf("finding = %q, want the socket the admin endpoint is reached over named", check.Finding)
+	}
+}
+
+func TestTheStockAdminPortBoundInsideTheProxyFails(t *testing.T) {
+	t.Parallel()
+
+	check := adminCheck(t, standingOver(boxSaying(map[string]answer{
+		"'listeners'": {stdout: "0.0.0.0:80\n0.0.0.0:" + host.AdminPort + "\n"},
+	})))
+	if check.Verdict != providerkit.StandingFail {
+		t.Fatalf("verdict = %v (%q), want a failure where the stock admin api is bound", check.Verdict, check.Finding)
+	}
+	if !strings.Contains(check.Finding, "0.0.0.0:"+host.AdminPort) {
+		t.Errorf("finding = %q, want the bind named", check.Finding)
+	}
+	if !strings.Contains(check.Finding, host.ProxyNetwork) {
+		t.Errorf("finding = %q, want what the exposure reaches named: every container on the shared network", check.Finding)
+	}
+}
+
+func TestAProxyThatCouldNotBeReadIsNotReadAsACleanNamespace(t *testing.T) {
+	t.Parallel()
+
+	check := adminCheck(t, standingOver(boxSaying(map[string]answer{
+		"'listeners'": {code: 1, stderr: "Error: No such container: " + host.ProxyContainer},
+	})))
+	if check.Verdict == providerkit.StandingPass {
+		t.Fatalf("a proxy this box could not read passed as one with nothing bound on %s: %q", host.AdminPort, check.Finding)
 	}
 }

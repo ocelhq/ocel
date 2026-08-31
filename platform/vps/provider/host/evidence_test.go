@@ -12,25 +12,32 @@ func inspecting() map[string]string {
 		"what a release that fell over captures as logs":            logCommand(physical),
 		"what a proxy that did not come up reports":                 containerRising(3),
 		"what a bootstrap probes the proxy with":                    containerProbe(),
+		"what a preflight reads the proxy's state with":             stateCommand(ProxyContainer),
+		"what a preflight reads the disk headroom with":             headroomCommand([]string{"ocel-shop-web"}),
 	}
 }
 
 func TestEveryInspectOnTheEvidencePathNamesTheFieldsItReads(t *testing.T) {
 	t.Parallel()
 
+	read := 0
 	for what, command := range inspecting() {
 		for at := 0; ; {
-			found := strings.Index(command[at:], "docker inspect")
+			found := strings.Index(command[at:], "inspect")
 			if found < 0 {
 				break
 			}
-			at += found + len("docker inspect")
+			at += found + len("inspect")
+			read++
 			line, _, _ := strings.Cut(command[at:], "\n")
 			if !strings.Contains(line, "--format") {
-				t.Errorf("%s runs `docker inspect%s`, which prints the container's whole configuration — its environment among it — into a deploy's output",
+				t.Errorf("%s runs `inspect%s`, which prints the whole of what it inspects — a container's environment among it — into a deploy's output",
 					what, line)
 			}
 		}
+	}
+	if read < len(inspecting()) {
+		t.Fatalf("this guard read %d inspects across %d commands, so it is passing over commands it never looked at", read, len(inspecting()))
 	}
 }
 
