@@ -3,6 +3,7 @@ package env
 import (
 	"context"
 	"errors"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"io"
 	"testing"
 
@@ -20,7 +21,7 @@ import (
 func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, runner *provider.Runner, values envwire.Values) error) {
 	t.Helper()
 	ctx := context.Background()
-	err := withEnvProvider(ctx, clitest.NewDeps(), root, opts, io.Discard, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	err := withEnvProvider(ctx, clitest.NewDeps(), root, opts, io.Discard, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		return drive(ctx, cfg.Slug, runner, envwire.Values{
 			Runner: runner,
 			Slug:   cfg.Slug,
