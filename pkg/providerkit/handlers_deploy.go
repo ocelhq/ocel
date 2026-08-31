@@ -628,7 +628,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 			if err != nil {
 				return err
 			}
-			values, err := r.appValues(entry, grants)
+			values, err := r.appValues(ctx, entry, grants)
 			if err != nil {
 				return err
 			}
@@ -812,7 +812,7 @@ func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Link, error) 
 	return grants, nil
 }
 
-func (r *deployRun) appValues(entry AppEntry, grants []Link) (AppValues, error) {
+func (r *deployRun) appValues(ctx context.Context, entry AppEntry, grants []Link) (AppValues, error) {
 	held := AppValues{
 		Plain:     map[string]string{},
 		Sensitive: map[string]string{},
@@ -835,6 +835,11 @@ func (r *deployRun) appValues(entry AppEntry, grants []Link) (AppValues, error) 
 		}
 		held.Owners[variable.GetKey()] = entry.App
 	}
+	delivered, err := r.deliver(ctx, entry, held)
+	if err != nil {
+		return AppValues{}, err
+	}
+	held.Delivered = delivered
 	return held, nil
 }
 
@@ -1136,6 +1141,7 @@ func linkPublished(name string, published values.Published) (Link, error) {
 	}
 	link := linkOf(message)
 	link.Version = published.Version
+	link.Wire = published.Value
 	return link, nil
 }
 

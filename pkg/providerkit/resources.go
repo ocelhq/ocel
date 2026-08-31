@@ -164,6 +164,15 @@ var linkTypes = map[linksv1.LinkType]LinkType{
 	linksv1.LinkType_LINK_TYPE_CUSTOM:   LinkCustom,
 }
 
+func WireLinkType(kind LinkType) linksv1.LinkType {
+	for wire, held := range linkTypes {
+		if held == kind {
+			return wire
+		}
+	}
+	return linksv1.LinkType_LINK_TYPE_UNSPECIFIED
+}
+
 func manifestResources(manifest *contractv1.Manifest) ([]Resource, error) {
 	declared := manifest.GetResources()
 	resources := make([]Resource, 0, len(declared))

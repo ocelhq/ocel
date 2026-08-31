@@ -296,10 +296,10 @@ func (r *release) appBundle(plan providerkit.StackPlan) (appBundle, error) {
 func (r *release) sealApp(project, app string, held providerkit.AppValues) (appBundle, error) {
 	links := make([]live.Link, 0, len(held.Links))
 	for _, link := range held.Links {
-		kind := wireLinkType(link.Type)
+		kind := providerkit.WireLinkType(link.Type)
 		links = append(links, live.Link{
 			Name:    link.Name,
-			Key:     functionEnvKey(kind, linkResource(link)),
+			Key:     naming.ResourceEnvName(kind, linkResource(link)),
 			Type:    kind,
 			Granted: link.Version,
 		})
@@ -316,16 +316,6 @@ func linkResource(link providerkit.Link) string {
 		return link.Resource
 	}
 	return link.Name
-}
-
-func wireLinkType(kind providerkit.LinkType) linksv1.LinkType {
-	switch kind {
-	case providerkit.LinkPostgres:
-		return linksv1.LinkType_LINK_TYPE_POSTGRES
-	case providerkit.LinkBucket:
-		return linksv1.LinkType_LINK_TYPE_BUCKET
-	}
-	return linksv1.LinkType_LINK_TYPE_CUSTOM
 }
 
 func (r *release) appEnv(plan providerkit.StackPlan, bundle appBundle, sessions sessionScope) map[string]string {

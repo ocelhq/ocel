@@ -285,7 +285,7 @@ func (s *Server) bucketResources(buckets []resourceregistry.Entry) []resolve.Res
 		out = append(out, resolve.Resource{
 			Name: b.Name,
 			Type: b.Type,
-			Env:  map[string]string{"OCEL_RESOURCE_" + naming.EnvFragment(b.Type) + "_" + b.Name: string(value)},
+			Env:  map[string]string{naming.ResourceEnvName(b.Type, b.Name): string(value)},
 		})
 	}
 	return out
