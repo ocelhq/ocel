@@ -42,8 +42,8 @@ var standingBox = map[string]answer{
 	"publish=443":                 {stdout: host.ProxyContainer + "\n"},
 	"'listeners'":                 {stdout: "0.0.0.0:80\n"},
 	"cat /proc/net/tcp":           {stdout: ""},
-	"'test' '-x' '" + host.ProxyHelperMount + "'": {},
-	"'test' '-S' '" + host.ProxyAdminSocket + "'": {},
+	"test -x":                     {},
+	"test -S":                     {},
 }
 
 func boxSaying(overrides map[string]answer) *scripted {
@@ -84,7 +84,7 @@ func (s *scripted) Preflight(context.Context) (session.Facts, error) {
 }
 
 func (s *scripted) Destination() session.Destination {
-	return session.Destination{Written: "ada@box.invalid", Address: "box.invalid", Port: 22, User: "ada"}
+	return session.Destination{Written: "box.invalid", Address: "box.invalid", Port: 22, User: "ada"}
 }
 
 func preflighting(machine *scripted) error {
@@ -174,12 +174,12 @@ func proxyStates() map[string]map[string]answer {
 		"the flip helper is not executable": {
 			"'upstreams'":    {code: 1, stderr: "exec: \"" + host.ProxyHelperMount + "\": permission denied"},
 			"docker inspect": {stdout: "Status=running ExitCode=0 OOMKilled=false Error= StartedAt=x FinishedAt= RestartCount=0"},
-			"'test' '-x' '" + host.ProxyHelperMount + "'": {code: 1, stderr: "no such file"},
+			"test -x":        {code: 1, stderr: "no such file"},
 		},
 		"the admin socket is not there": {
 			"'upstreams'":    {code: 1, stderr: "ocel-proxyctl: the proxy answered nothing over " + host.ProxyAdminSocket},
 			"docker inspect": {stdout: "Status=running ExitCode=0 OOMKilled=false Error= StartedAt=x FinishedAt= RestartCount=0"},
-			"'test' '-S' '" + host.ProxyAdminSocket + "'": {code: 1, stderr: "no such file"},
+			"test -S":        {code: 1, stderr: "no such file"},
 		},
 		"the admin socket is there and refusing": {
 			"'upstreams'":    {code: 1, stderr: "ocel-proxyctl: the proxy answered /reverse_proxy/upstreams with 403 Forbidden"},

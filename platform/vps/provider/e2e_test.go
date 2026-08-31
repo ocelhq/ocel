@@ -25,6 +25,8 @@ import (
 
 const e2eSlug = "ocel-vps-e2e"
 
+const e2eHostname = "ocel-vps-e2e.invalid"
+
 const patience = 8 * time.Minute
 
 type journey struct {
@@ -126,7 +128,7 @@ func (j journey) declaration(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return fmt.Sprintf("export default {\n  slug: %q,\n  provider: %s,\n};\n", e2eSlug, options)
+	return fmt.Sprintf("export default {\n  slug: %q,\n  provider: %s,\n  domains: { production: %q },\n};\n", e2eSlug, options, e2eHostname)
 }
 
 func repoRoot(t *testing.T) string {
@@ -328,6 +330,21 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	standing := run.must(t, "doctor")
 	if !strings.Contains(standing, "bootstrapped — schema") {
 		t.Fatalf("`ocel doctor` after an apply still calls production unbootstrapped:\n%s", standing)
+	}
+	if !strings.Contains(standing, "\nStanding\n") {
+		t.Fatalf("`ocel doctor` on a bootstrapped box printed no standing section, so there is no output an absence can be read over:\n%s", standing)
+	}
+	for _, verdict := range []string{
+		e2eHostname + " does not resolve",
+		"something listens on port " + host.RenewalPort,
+		"nothing listens on tcp " + host.AdminPort + " inside " + host.ProxyContainer,
+	} {
+		if !strings.Contains(standing, verdict) {
+			t.Errorf("`ocel doctor` never said %q, and this is the only command that runs thirty days after a deploy:\n%s", verdict, standing)
+		}
+	}
+	if strings.Contains(standing, "✗") {
+		t.Errorf("`ocel doctor` refused something on a bootstrapped box whose one owed thing is a dns record a human has not written:\n%s", standing)
 	}
 
 	replanned := run.must(t, "bootstrap", "production", "--dry")

@@ -40,6 +40,8 @@ const (
 	exitUnservable     = 6
 )
 
+const adminTimeout = 30 * time.Second
+
 const (
 	gateInterval  = 250 * time.Millisecond
 	gateAttempt   = 2 * time.Second
@@ -363,7 +365,7 @@ func speak(socket, method, path string, body []byte, out, errs io.Writer) int {
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	client := &http.Client{Transport: &http.Transport{
+	client := &http.Client{Timeout: adminTimeout, Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 		},
