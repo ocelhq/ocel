@@ -3,20 +3,34 @@ package host
 import (
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func handedTo(spec Container) handoff {
-	digest, err := envDigest(spec.Env)
+	held, err := handing(spec)
 	if err != nil {
 		panic(err)
 	}
-	return handoff{path: EnvFile(spec.Class, spec.Name), digest: digest}
+	return held
 }
+
+const (
+	appContainer   = "the app container a deploy stands up"
+	proxyContainer = "the proxy container a bootstrap runs"
+)
 
 func running() map[string]string {
 	return map[string]string{
-		"the app container a deploy stands up": words(containerRun(valued(), handedTo(valued()))),
-		"the proxy container a bootstrap runs": containerCommand(),
+		appContainer:   words(containerRun(valued(), handedTo(valued()))),
+		proxyContainer: words(proxyRun()),
+	}
+}
+
+func owed() map[string][]string {
+	return map[string][]string{
+		appContainer:   {EnvFile(valued().Class, valued().Name)},
+		proxyContainer: {proxyRoot, ProxyPins, ProxyData},
 	}
 }
 
@@ -54,32 +68,80 @@ func TestNoContainerIsRunPrivileged(t *testing.T) {
 	}
 }
 
-func TestNoContainerIsHandedTheKeyOrTheRecordsItSealed(t *testing.T) {
+func source(token string) string {
+	held := strings.Trim(token, "'")
+	if from, _, cut := strings.Cut(held, ":"); cut {
+		return from
+	}
+	return held
+}
+
+func underARoot(path string) bool {
+	for _, root := range []string{classRoot, stateRoot} {
+		if path == root || strings.HasPrefix(path, root+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func holds(held []string, path string) bool {
+	for _, one := range held {
+		if one == path {
+			return true
+		}
+	}
+	return false
+}
+
+func TestEveryPathAContainerIsToldAboutUnderTheKeyOrTheRecordsIsOneItIsOwed(t *testing.T) {
 	t.Parallel()
 
+	allowed := owed()
 	for what, command := range running() {
-		for _, held := range []string{classRoot, stateRoot} {
-			for _, mounting := range []string{quoted("--volume") + " " + quoted(held), "--volume " + held, "--mount", held + ":"} {
-				if strings.Contains(command, mounting) {
-					t.Errorf("%s runs %q and mounts %s: the seal key and every sealed record live under those paths, and neither is inside any container's mount namespace",
-						what, command, held)
+		if len(allowed[what]) == 0 {
+			t.Fatalf("%s is rendered by this bench and nothing says which paths under %s and %s it is owed, so what it names proves nothing",
+				what, classRoot, stateRoot)
+		}
+		named := 0
+		for _, token := range strings.Fields(command) {
+			path := source(token)
+			if !underARoot(path) {
+				continue
+			}
+			named++
+			if !holds(allowed[what], path) {
+				t.Errorf("%s runs %q and names %q, which is none of %v: the seal key, every sealed record and every other app's values live under %s and %s, and a run has business with nothing there but what it is owed",
+					what, command, path, allowed[what], classRoot, stateRoot)
+			}
+		}
+		if named == 0 {
+			t.Errorf("%s names no path under %s or %s at all, so this walk reads no token of it and would say the same of a run that mounted every one of them",
+				what, classRoot, stateRoot)
+		}
+	}
+}
+
+func TestNothingAContainerIsOwedIsTheKeyTheRecordsOrTheClassStateItself(t *testing.T) {
+	t.Parallel()
+
+	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+		for what, allowed := range owed() {
+			for _, path := range allowed {
+				for _, refused := range []string{ClassDir(class), RecordsDir(class), SealKeyPath(class)} {
+					if path == refused || strings.HasPrefix(path, refused+"/") {
+						t.Errorf("%s is owed %q, which stands under %s: the key that opens every sealed value and the records it sealed are what that path holds",
+							what, path, refused)
+					}
 				}
 			}
 		}
 	}
 }
 
-func TestTheEnvFileIsTheOnlyThingUnderTheStateRootAContainerIsToldAbout(t *testing.T) {
+func TestEveryContainerThisPackageRunsIsHeldToTheIsolationRules(t *testing.T) {
 	t.Parallel()
 
-	command := words(containerRun(valued(), handedTo(valued())))
-	for _, named := range strings.Fields(command) {
-		held := strings.Trim(named, "'")
-		if !strings.HasPrefix(held, stateRoot) {
-			continue
-		}
-		if held != EnvFile(valued().Class, valued().Name) {
-			t.Errorf("standing a container up names %q, and the env file is the only path under %s a run has any business with", held, stateRoot)
-		}
-	}
+	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "proxyRun"},
+		"a container run built somewhere this bench does not read is held to none of the rules in this file")
 }

@@ -58,7 +58,10 @@ func (recorder) Detail(string) {}
 
 func (recorder) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
-func (b *bench) dial(context.Context) (Conn, error) {
+func (b *bench) dial(ctx context.Context) (Conn, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.dials++

@@ -76,6 +76,18 @@ func liveValuePlan(t *testing.T, tag string, delivered map[string]string) provid
 	return plan
 }
 
+func (vm machine) proves(t *testing.T, path string) {
+	t.Helper()
+	vm.ssh(t, "sudo install -m 600 /dev/null "+quote(path))
+	if !vm.stands(t, path) {
+		t.Fatalf("this machine reads %s as gone with a file standing at it, so nothing it says about %s being gone after a deploy means anything", path, path)
+	}
+	vm.ssh(t, "sudo rm -f "+quote(path))
+	if vm.stands(t, path) {
+		t.Fatalf("this machine reads %s as standing after it was taken, so nothing it says about a path means anything", path)
+	}
+}
+
 func (vm machine) reads(t *testing.T, container, name string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 'http://"+container+":"+host.AppPort+"/env?name="+name+"'"))
@@ -106,6 +118,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	}
 
 	path := host.EnvFile(providerkit.ClassProduction, physical)
+	vm.proves(t, path)
 	if vm.stands(t, path) {
 		t.Errorf("%s survived the deploy that wrote it, and it holds every value the deploy resolved in plaintext", path)
 	}
@@ -137,6 +150,7 @@ func TestLiveTheEnvFileStandsAtSixHundredForTheDeployLoginForAsLongAsItExists(t 
 	watching := "until=$(( $(date +%s) + 180 ))\n" +
 		"while [ \"$(date +%s)\" -lt \"$until\" ]; do\n" +
 		"if [ -e " + quote(path) + " ]; then stat -c '%a %U' " + quote(path) + "; exit 0; fi\n" +
+		"sleep 0.05\n" +
 		"done\n" +
 		"echo missed"
 	watched := make(chan string, 1)
@@ -151,7 +165,8 @@ func TestLiveTheEnvFileStandsAtSixHundredForTheDeployLoginForAsLongAsItExists(t 
 	select {
 	case posture := <-watched:
 		if posture == "missed" {
-			t.Skip("the env file was written and taken back inside one pass of the watcher, so its posture was never sampled")
+			t.Fatalf("%s was never sampled while it stood: the deploy writes it, runs a container off it and takes it back over three round trips to this machine, so a watcher that missed all three read a path this deploy never wrote and every other reading of that path in this suite proves nothing",
+				path)
 		}
 		if posture != "600 "+deployLogin {
 			t.Errorf("%s stood at %q while it existed, want `600 %s`: every value the app holds is readable by whoever the mode and the owner admit",
@@ -193,6 +208,7 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 	}
 
 	path := host.EnvFile(providerkit.ClassProduction, physical)
+	vm.proves(t, path)
 	if vm.stands(t, path) {
 		t.Errorf("%s survived a deploy that fell over", path)
 	}
@@ -212,6 +228,7 @@ func TestLiveAContainerThatCannotBeStoodUpTakesItsEnvFileWithIt(t *testing.T) {
 	}
 
 	path := host.EnvFile(providerkit.ClassProduction, physical)
+	vm.proves(t, path)
 	if vm.stands(t, path) {
 		t.Errorf("%s survived a stand-up that never happened, and nothing after this deploy takes it back", path)
 	}

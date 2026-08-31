@@ -19,7 +19,7 @@ const (
 )
 
 func aContainer() Container {
-	return Container{Name: physical, App: "web", Image: appImage}
+	return Container{Name: physical, App: "web", Image: appImage, Resolved: true}
 }
 
 func imaging(b *bench, held string) {
@@ -86,7 +86,7 @@ func TestNoPortIsPublishedForAnAppContainerAndNoListenerIsAddedAnywhere(t *testi
 func TestAContainerAlreadyServingTheReleasesImageIsKeptRatherThanRecreated(t *testing.T) {
 	t.Parallel()
 
-	stand := stood(t, "running "+appImage)
+	stand := stood(t, "running "+appImage+" "+handedTo(aContainer()).digest)
 	for _, command := range stand.commands() {
 		if strings.Contains(command, quoted("run")+" "+quoted("--detach")) {
 			t.Errorf("a redeploy of a release already standing ran %q, and the container serving live traffic is torn down for one that is the same", command)
@@ -198,10 +198,10 @@ func TestWhatIsAlreadyServingIsReadFromWhereADaemonKeepsIt(t *testing.T) {
 	if fields[0] == "running" {
 		t.Errorf("a crash-looping container reads as %q, and a redeploy is kept off a container that serves nothing", said)
 	}
-	if !stillServing("running "+fixtureRef+" "+fields[2], Container{Image: fixtureRef, Env: map[string]string{"A": "1"}}, fields[2]) {
+	if !stillServing("running "+fixtureRef+" "+fields[2], fixtureRef, fields[2]) {
 		t.Errorf("a container standing under %q and the values it was handed reads as replaceable", said)
 	}
-	if stillServing("running "+fixtureRef+" "+fields[2], Container{Image: fixtureRef, Env: map[string]string{"A": "2"}}, "0000000000") {
+	if stillServing("running "+fixtureRef+" "+fields[2], fixtureRef, "0000000000") {
 		t.Error("a container standing under values a deploy has since changed reads as still serving, and it would keep the old ones for the life of the release")
 	}
 }

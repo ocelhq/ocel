@@ -58,6 +58,13 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 	}
 }
 
+func TestEveryInspectThisPackageRunsIsHeldToTheSelectorRules(t *testing.T) {
+	t.Parallel()
+
+	rendered(t, "docker inspect", []string{"containerProbe", "containerRising", "servingCommand", "stateCommand"},
+		"an inspect rendered somewhere this bench does not read is held to none of the rules in this file, and a bare one prints every value a container was handed")
+}
+
 func TestTheLogsARefusalQuotesAreBounded(t *testing.T) {
 	t.Parallel()
 

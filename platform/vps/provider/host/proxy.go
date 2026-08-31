@@ -227,7 +227,7 @@ func networkCommand() string {
 
 func containerCommand() string { return containerWriting(proxyRising, proxyFiles()) }
 
-func containerWriting(attempts int, files []string) string {
+func proxyRun() []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", ProxyContainer,
 		"--restart", proxyRestart,
@@ -241,7 +241,11 @@ func containerWriting(attempts int, files []string) string {
 	for _, bind := range proxyBinds() {
 		argv = append(argv, "--volume", bind)
 	}
-	argv = append(argv, ProxyImage, "caddy", "run", "--config", ProxyConfigMount)
+	return append(argv, ProxyImage, "caddy", "run", "--config", ProxyConfigMount)
+}
+
+func containerWriting(attempts int, files []string) string {
+	argv := proxyRun()
 	return "set -e\n" +
 		bindsStanding(files) +
 		"docker rm --force " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
