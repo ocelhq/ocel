@@ -47,6 +47,12 @@ const (
 )
 
 const (
+	AdminPort       = "2019"
+	AdminPortNumber = 2019
+	RenewalPort     = proxyPort
+)
+
+const (
 	ArchAMD64 = "amd64"
 	ArchARM64 = "arm64"
 )
@@ -211,6 +217,8 @@ func proxyPorts() map[string][]map[string]string {
 }
 
 func proxyServing() []string { return []string{proxyPort, proxyTLSPort} }
+
+func ProxyServing() []string { return proxyServing() }
 
 func marshalled(value any) string {
 	written, err := json.Marshal(value)

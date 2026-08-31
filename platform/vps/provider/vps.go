@@ -91,6 +91,8 @@ type Provider struct {
 	records *host.Records
 	sealer  *host.Sealer
 	probing *http.Client
+	resolve Lookup
+	reaches Reach
 
 	probed    sync.Mutex
 	unreached map[string]string

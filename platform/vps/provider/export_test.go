@@ -21,3 +21,19 @@ func Elevating(inner providerkit.Bootstrapper, gate func(context.Context) error)
 func (p *Provider) Host() *host.Host { return p.host }
 
 func (p *Provider) Probing(client *http.Client) { p.probing = client }
+
+func (p *Provider) Resolving(look Lookup) { p.resolve = look }
+
+func (p *Provider) Reaching(dial Reach) { p.reaches = dial }
+
+func DNSVerdict(ctx context.Context, look Lookup, hostname, address string) providerkit.StandingCheck {
+	return dnsVerdict(ctx, look, hostname, address)
+}
+
+func DNSVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []providerkit.StandingCheck {
+	return dnsVerdicts(ctx, look, hostnames, address)
+}
+
+func ReachVerdict(ctx context.Context, dial Reach, address string) providerkit.StandingCheck {
+	return reachVerdict(ctx, dial, address)
+}
