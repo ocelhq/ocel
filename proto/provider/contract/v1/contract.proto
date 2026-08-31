@@ -440,6 +440,10 @@ message PreflightRequest {
   EdgeSelection edge = 4;
 
   repeated string frameworks = 6;
+
+  bool standing = 7;
+
+  repeated string standing_domains = 8;
 }
 
 message PreflightResponse {

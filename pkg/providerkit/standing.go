@@ -2,6 +2,7 @@ package providerkit
 
 import (
 	"context"
+	"fmt"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -57,14 +58,18 @@ func verdictProto(verdict StandingVerdict) contractv1.StandingCheck_Verdict {
 	}
 }
 
-func (h *handlers) standingChecks(ctx context.Context, provider Provider, class Class, hostnames []string) ([]*contractv1.StandingCheck, error) {
+func (h *handlers) standingChecks(ctx context.Context, provider Provider, class Class, hostnames []string) []*contractv1.StandingCheck {
 	checker, held := provider.(StandingChecker)
 	if !held {
-		return nil, nil
+		return nil
 	}
 	checks, err := checker.CheckStanding(ctx, StandingRequest{Class: class, Hostnames: hostnames})
 	if err != nil {
-		return nil, err
+		return StandingProto([]StandingCheck{{
+			Verdict: StandingFail,
+			Finding: fmt.Sprintf("what stands on this box for the life of it could not be read, so none of it was judged: %v", err),
+			Fix:     "run `ocel doctor` once the machine answers again",
+		}})
 	}
-	return StandingProto(checks), nil
+	return StandingProto(checks)
 }

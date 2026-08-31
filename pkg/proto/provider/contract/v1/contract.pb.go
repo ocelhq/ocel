@@ -2814,14 +2814,16 @@ func (x *PreviewEnvironment) GetCreatedAt() int64 {
 }
 
 type PreflightRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequiredTier  v1.Tier                `protobuf:"varint,1,opt,name=required_tier,json=requiredTier,proto3,enum=common.environment.v1.Tier" json:"required_tier,omitempty"`
-	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
-	Domains       []string               `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty"`
-	Edge          *EdgeSelection         `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
-	Frameworks    []string               `protobuf:"bytes,6,rep,name=frameworks,proto3" json:"frameworks,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	RequiredTier    v1.Tier                `protobuf:"varint,1,opt,name=required_tier,json=requiredTier,proto3,enum=common.environment.v1.Tier" json:"required_tier,omitempty"`
+	Slug            string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	Domains         []string               `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty"`
+	Edge            *EdgeSelection         `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
+	Frameworks      []string               `protobuf:"bytes,6,rep,name=frameworks,proto3" json:"frameworks,omitempty"`
+	Standing        bool                   `protobuf:"varint,7,opt,name=standing,proto3" json:"standing,omitempty"`
+	StandingDomains []string               `protobuf:"bytes,8,rep,name=standing_domains,json=standingDomains,proto3" json:"standing_domains,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *PreflightRequest) Reset() {
@@ -2885,6 +2887,20 @@ func (x *PreflightRequest) GetEdge() *EdgeSelection {
 func (x *PreflightRequest) GetFrameworks() []string {
 	if x != nil {
 		return x.Frameworks
+	}
+	return nil
+}
+
+func (x *PreflightRequest) GetStanding() bool {
+	if x != nil {
+		return x.Standing
+	}
+	return false
+}
+
+func (x *PreflightRequest) GetStandingDomains() []string {
+	if x != nil {
+		return x.StandingDomains
 	}
 	return nil
 }
@@ -4329,7 +4345,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\tlifecycle\x18\x02 \x01(\x0e2 .common.environment.v1.LifecycleR\tlifecycle\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\x03R\tcreatedAt\"\x8b\x02\n" +
+	"created_at\x18\x04 \x01(\x03R\tcreatedAt\"\xd2\x02\n" +
 	"\x10PreflightRequest\x12J\n" +
 	"\rrequired_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\frequiredTier\x128\n" +
 	"\x04slug\x18\x02 \x01(\tB$\xbaH!\xd8\x01\x01r\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x18\n" +
@@ -4337,7 +4353,9 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x1e\n" +
 	"\n" +
 	"frameworks\x18\x06 \x03(\tR\n" +
-	"frameworks\"\xf9\x04\n" +
+	"frameworks\x12\x1a\n" +
+	"\bstanding\x18\a \x01(\bR\bstanding\x12)\n" +
+	"\x10standing_domains\x18\b \x03(\tR\x0fstandingDomains\"\xf9\x04\n" +
 	"\x11PreflightResponse\x12:\n" +
 	"\n" +
 	"infra_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\tinfraTier\x125\n" +
