@@ -956,7 +956,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, images ImagePlan,
 	record := edge.DeploymentRecord{
 		App:              entry.App,
 		Framework:        entry.Manifest.GetFramework(),
-		Identity:         entry.Build.String(),
+		Identity:         r.plan.Builds[entry.App],
 		DeploymentID:     entry.Build.DeploymentID(),
 		Entry:            entryFunction(r.manifest, entry.App),
 		Image:            images.Coordinate(entry.App),
