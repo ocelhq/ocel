@@ -447,3 +447,29 @@ func TestAPromotionStartsTheStoppedContainerItRePointsAtRatherThanRefusingIt(t *
 		}
 	}
 }
+
+func TestAPromotionStartsEveryStateDockerCanStartRatherThanRefusingIt(t *testing.T) {
+	t.Parallel()
+
+	for state, want := range map[string]string{
+		"created": "docker start ",
+		"exited":  "docker start ",
+		"paused":  "docker unpause ",
+	} {
+		spec := promoted()
+		spec.Declared = []string{"API_TOKEN", "DATABASE_URL"}
+		stand := machine(nil)
+		imaging(stand, state+" "+appImage+" 7f3a9c1e2b4d")
+		if err := stand.host().StandUp(context.Background(), spec); err != nil {
+			t.Errorf("StandUp() of a %s container = %v, want it put back into service: the container object still holds the environment its own deploy baked into it, and a promotion that refuses it loses every value a rollback exists to preserve", state, err)
+			continue
+		}
+		joined := strings.Join(stand.commands(), "\n")
+		if !strings.Contains(joined, want+quoted(spec.Name)) {
+			t.Errorf("a promotion of a %s container ran\n%s\nand never %s it", state, joined, strings.TrimSpace(want))
+		}
+		if strings.Contains(joined, "docker rm") {
+			t.Errorf("a promotion of a %s container removed it, and re-creating it is what loses every value it was handed:\n%s", state, joined)
+		}
+	}
+}
