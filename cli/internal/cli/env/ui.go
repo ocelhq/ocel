@@ -3,6 +3,7 @@ package env
 import (
 	"context"
 	"fmt"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"io"
 
 	"github.com/spf13/cobra"
@@ -34,7 +35,7 @@ func newUICommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		gate, err := discoverVariables(ctx, cfg, runner, opts, stderr)
 		if err != nil {
 			return err
