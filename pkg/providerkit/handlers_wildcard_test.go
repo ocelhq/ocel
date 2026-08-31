@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"slices"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -286,5 +287,57 @@ func TestRemovePreviewWildcardRefusesWhenNothingRecordsItsHolder(t *testing.T) {
 	}
 	if result.GetSuccess() {
 		t.Fatal("RemovePreviewWildcard() tore down a wildcard through a guessed edge")
+	}
+}
+
+func TestThePreviewWildcardCarriesWhoRenewsItAndWhenItExpires(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
+	seedWildcard(t, provider, providerkit.Wildcard{
+		BaseDomain: "preview.acme.com",
+		Edge:       fake.KindRelay,
+		Settled:    providerkit.Settled{Certificate: providerkit.Certificate{ID: "pem:/etc/ocel/preview/certs/wildcard"}},
+	})
+	expiry := time.Now().Add(9 * 24 * time.Hour).Unix()
+	provider.ReportCertificate(providerkit.CertificateHealth{
+		Terminates:   true,
+		Status:       "PINNED",
+		Renewal:      "you placed it on this box and you renew it",
+		ExpiresAt:    expiry,
+		ExpiringSoon: true,
+	})
+
+	got, err := client.GetPreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
+		Tier: environmentv1.Tier_TIER_PREVIEW,
+	})
+	if err != nil {
+		t.Fatalf("GetPreviewWildcard() error = %v", err)
+	}
+	assertWildcardRenewal(t, "GetPreviewWildcard()", got.GetWildcard(), expiry)
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PREVIEW,
+		Slug:         "shop",
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	assertWildcardRenewal(t, "Preflight()", resp.GetPreviewWildcard(), expiry)
+}
+
+func assertWildcardRenewal(t *testing.T, what string, held *contractv1.PreviewWildcard, expiry int64) {
+	t.Helper()
+	if held.GetBaseDomain() != "preview.acme.com" {
+		t.Fatalf("%s wildcard = %+v, want the seeded base domain", what, held)
+	}
+	if held.GetRenewalStatus() == "" {
+		t.Errorf("%s says nothing about who renews the wildcard, and a pinned pair is the one certificate nothing on the box renews", what)
+	}
+	if held.GetExpiresAt() != expiry {
+		t.Errorf("%s expires at %d, want %d", what, held.GetExpiresAt(), expiry)
+	}
+	if !held.GetExpiringSoon() {
+		t.Errorf("%s does not call a wildcard nine days out expiring soon", what)
 	}
 }

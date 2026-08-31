@@ -230,6 +230,7 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	}
 	wildcard := w.proto(ctx)
 	wildcard.Certificate = certificateState(w.held.Settled, w.held.Settled.Probe, nil, health.Status)
+	renewalOf(wildcard, health)
 	return &contractv1.GetPreviewWildcardResponse{
 		Wildcard: wildcard,
 		Projects: served,
@@ -245,7 +246,19 @@ func heldPreviewWildcard(ctx context.Context, provider Provider) (*contractv1.Pr
 		return nil, nil
 	}
 	w := &wildcards{provider: provider, records: provider.Records(), held: held}
-	return w.proto(ctx), nil
+	wildcard := w.proto(ctx)
+	health, err := inspectCertificate(ctx, provider, held.Edge, held.Hostname(), held.Settled.Certificate)
+	if err != nil {
+		return nil, err
+	}
+	renewalOf(wildcard, health)
+	return wildcard, nil
+}
+
+func renewalOf(wildcard *contractv1.PreviewWildcard, health CertificateHealth) {
+	wildcard.RenewalStatus = health.Renewal
+	wildcard.ExpiresAt = health.ExpiresAt
+	wildcard.ExpiringSoon = health.ExpiringSoon
 }
 
 func (w *wildcards) proto(ctx context.Context) *contractv1.PreviewWildcard {
