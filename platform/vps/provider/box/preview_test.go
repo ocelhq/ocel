@@ -226,6 +226,54 @@ func TestRemovingAPreviewPointerTakesItsHostnamesOffTheBoxWithIt(t *testing.T) {
 	}
 }
 
+func TestAPreviewHostnameDnsWillNotCarryIsRefusedRatherThanClaimed(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	stack := previewStack(t, stood)
+	over := strings.Repeat("b", edge.PreviewLabelMaxLen)
+	staged(t, stack, "web", "b1", slug+"-web-1")
+
+	err := stack.Promote(context.Background(), edge.Promotion{
+		PromotionID: "p-over", Ts: 1, Builds: map[string]string{"web": "b1"},
+	}, over, edge.DiscardReporter())
+	if err == nil {
+		t.Fatalf("a preview whose hostname carries a %d-character label was claimed on this box: DNS caps a label at %d, so the name resolves nowhere and its acme order can never succeed. The check lives in the CLI's preflight alone, and a caller that skips preflight reaches this",
+			len(slug)+len(edge.PreviewAppSeparator)+len(over), edge.PreviewLabelMaxLen)
+	}
+	if held := claimedOn(t, stood); len(held) != 0 {
+		t.Errorf("the refusal still left %v claimed on the box", held)
+	}
+}
+
+func TestAPreviewClaimsTheHostnamesThePreviewSiteItselfNames(t *testing.T) {
+	t.Parallel()
+
+	for what, apps := range map[string][]string{
+		"one app":  {"web"},
+		"two apps": {"api", "web"},
+	} {
+		stood := aMachine()
+		previewed(t, previewStack(t, stood), "pr-7", apps...)
+
+		site := edge.SharedPreview(slug, previewBase)
+		want := site.Hosts("pr-7", apps)
+		var held []string
+		for _, claim := range claimedOn(t, stood) {
+			held = append(held, claim.Hostname)
+			if claim.App != "" && site.Host("pr-7", claim.App) != claim.Hostname {
+				t.Errorf("%s: %s is claimed under app %q, and that is not the app the hostname is built from", what, claim.Hostname, claim.App)
+			}
+		}
+		slices.Sort(held)
+		slices.Sort(want)
+		if !slices.Equal(held, want) {
+			t.Errorf("%s: the box claims %v and the preview site names %v: the rule that a project of one app serves one hostname with no app segment lives in PreviewSite.Hosts, and a second copy of it here is one drift away from a CLI printing a URL this box does not route",
+				what, held, want)
+		}
+	}
+}
+
 func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 	t.Parallel()
 
