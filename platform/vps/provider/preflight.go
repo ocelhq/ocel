@@ -52,7 +52,7 @@ func refusing(found []error) error {
 		return providerkit.Refuse(providerkit.CodeNotReady, "%s", said[0])
 	default:
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"this box is not ready for a deploy, and nothing was built, transferred or flipped:\n\n%s", strings.Join(said, "\n\n"))
+			"this box is not ready for a deploy, and nothing was transferred or flipped:\n\n%s", strings.Join(said, "\n\n"))
 	}
 }
 

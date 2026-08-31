@@ -155,7 +155,7 @@ func arithmetic(room Headroom) string {
 		held := room.Repos[repository]
 		if held.Count == 0 {
 			written = append(written, fmt.Sprintf(
-				"nothing is held under %s yet, so the incoming image's size cannot be extrapolated and %s is a guessed constant rather than a measurement",
+				"nothing is held under %s yet, and the plan a preflight is handed carries no size for the image it names, so %s is a guessed constant rather than a measurement",
 				repository, sized(FirstDeployFloor)))
 			continue
 		}
