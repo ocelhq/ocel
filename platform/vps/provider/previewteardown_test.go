@@ -87,3 +87,27 @@ func TestForgettingReportsEachPairItTookOffTheBox(t *testing.T) {
 		t.Errorf("the teardown said %v, want the pair it took named: bytes left behind after a teardown are the term that keeps growing, so what was reclaimed is what the run has to show", spoken.lines)
 	}
 }
+
+func TestAHelperThatRefusesTheStoreIsSurfacedRatherThanCountedAsForgotten(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{refuses: func(command string) (session.Result, bool) {
+		if !strings.Contains(command, "'forget'") {
+			return session.Result{}, false
+		}
+		return session.Result{Code: 2, Stderr: "ocel-proxyctl: open /data/caddy/certificates: permission denied"}, true
+	}}
+	spoken := &said{}
+
+	err := overABox(t, machine).Host().ForgetCertificates(context.Background(),
+		[]string{"shop--pr-7--web.preview.example.com"}, spoken)
+	if err == nil {
+		t.Fatal("a helper that could not read the store reported the pairs forgotten, and the teardown then goes on to empty the ledger that names which hostnames are still to reach")
+	}
+	if !strings.Contains(err.Error(), "permission denied") {
+		t.Errorf("the refusal reads %q, and what the helper said is the whole of why this box kept the pairs", err)
+	}
+	if len(spoken.lines) != 0 {
+		t.Errorf("a refused forget still reported %v as taken off the box", spoken.lines)
+	}
+}
