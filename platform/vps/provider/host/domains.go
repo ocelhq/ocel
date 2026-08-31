@@ -186,7 +186,7 @@ func (h *Host) reshape(ctx context.Context, change func(ProxyState) (ProxyState,
 		return err
 	}
 	if _, err := h.ran(ctx, "load the hostnames this box claims onto the running proxy",
-		words(helperCommand("flip", proxyConfigMount)), nil, elevation); err != nil {
+		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
 		return h.reverted(ctx, held.text, written, err)
 	}
 	return nil

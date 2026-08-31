@@ -43,11 +43,11 @@ func probingConfig(t *testing.T, rendered []byte, joined ...string) func(hostnam
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	run := []string{"run", "--rm", "--detach", "--name", name,
 		"--publish", "127.0.0.1::80",
-		"--volume", config + ":" + proxyConfigMount + ":ro"}
+		"--volume", config + ":" + ProxyConfigMount + ":ro"}
 	for _, network := range joined {
 		run = append(run, "--network", network)
 	}
-	run = append(run, ProxyImage, "caddy", "run", "--config", proxyConfigMount)
+	run = append(run, ProxyImage, "caddy", "run", "--config", ProxyConfigMount)
 	stood, err := exec.Command(dockerEngine, run...).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run %s: %s", ProxyImage, stood)
@@ -168,17 +168,23 @@ func TestARealProxyAnswersEveryHostnameOneSurfaceClaimsOnTheAppItRuns(t *testing
 	}
 }
 
-func standingApp(t *testing.T, body string) (network, upstream string) {
+func standingNetwork(t *testing.T) string {
 	t.Helper()
 
 	engineOrSkip(t)
-	network, name := probeName(t)+"-net", probeName(t)+"-app"
+	network := probeName(t) + "-net"
 	exec.Command(dockerEngine, "network", "rm", network).Run()
 	if out, err := exec.Command(dockerEngine, "network", "create", network).CombinedOutput(); err != nil {
 		t.Skipf("this machine's engine will not create a network for the app the proxy forwards to: %s", out)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "network", "rm", network).Run() })
+	return network
+}
 
+func standingAppOn(t *testing.T, network, named, body string) string {
+	t.Helper()
+
+	name := probeName(t) + "-" + named
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
 		"--network", network, ProxyImage,
@@ -187,7 +193,14 @@ func standingApp(t *testing.T, body string) (network, upstream string) {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
-	return network, name + ":" + AppPort
+	return name + ":" + AppPort
+}
+
+func standingApp(t *testing.T, body string) (network, upstream string) {
+	t.Helper()
+
+	network = standingNetwork(t)
+	return network, standingAppOn(t, network, "app", body)
 }
 
 func TestARealProxyServesTheAppsBodyUnderTheHostnameAndNamesTheEdgeThatServedIt(t *testing.T) {

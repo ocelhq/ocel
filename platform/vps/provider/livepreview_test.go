@@ -2,6 +2,7 @@ package vps_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -111,19 +112,71 @@ func TestLiveTheLoadedConfigurationDeclaresNoOnDemandTlsPolicy(t *testing.T) {
 	}
 }
 
+const fellThrough = 410
+
+func tellingTheBoxsOwnRefusalApart(t *testing.T, vm machine) {
+	t.Helper()
+
+	before := vm.ssh(t, "sudo cat "+quote(host.ProxyConfig))
+	loads := func(document string) {
+		vm.ssh(t, "printf %s "+quote(base64.StdEncoding.EncodeToString([]byte(document)))+
+			" | base64 -d | sudo tee "+quote(host.ProxyConfig)+" >/dev/null")
+		vm.drives(t, "flip "+quote(host.ProxyConfigMount))
+	}
+
+	read := vm.loadedProxyConfig(t)
+	routes, held := nestedIn(t, read, "apps", "http", "servers", "ocel", "routes").([]any)
+	if !held || len(routes) == 0 {
+		t.Fatal("the loaded configuration carries no routes, so there is no box refusal behind the catch-all to tell it apart from")
+	}
+	behind, held := routes[len(routes)-1].(map[string]any)
+	if !held || behind["match"] != nil {
+		t.Fatalf("the last route this box loaded is %v, and the route the catch-all has to be told apart from is the matcher-less refusal standing behind every route ocel writes", behind)
+	}
+	answering, held := behind["handle"].([]any)
+	if !held || len(answering) != 1 {
+		t.Fatalf("the box's own refusal handles %v, want the one static response every unclaimed hostname reaches", behind["handle"])
+	}
+	refusal, held := answering[0].(map[string]any)
+	if !held {
+		t.Fatalf("the box's own refusal handles %v", answering[0])
+	}
+	refusal["status_code"] = fellThrough
+
+	written, err := json.Marshal(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { loads(before) })
+	loads(string(written))
+}
+
 func TestLiveTheCatchAllAnswersOneLabelUnderTheBaseAndNothingDeeper(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
 	previewEntryOn(t, vm)
+	tellingTheBoxsOwnRefusalApart(t, vm)
 
-	for what, hostname := range map[string]string{
-		"one label under the base":    "pr-7." + livePreviewBase,
-		"two labels under the base":   "pr-7.api." + livePreviewBase,
-		"a hostname outside the base": "pr-7.preview.example.invalid",
+	for _, reached := range []struct {
+		what     string
+		hostname string
+		caught   bool
+	}{
+		{"one label under the base", "pr-7." + livePreviewBase, true},
+		{"one label carrying the app separator", "shop--pr-7--web." + livePreviewBase, true},
+		{"two labels under the base", "pr-7.api." + livePreviewBase, false},
+		{"the base itself", livePreviewBase, false},
+		{"a hostname outside the base", "pr-7.preview.example.invalid", false},
 	} {
-		if status := vm.asksFor(t, hostname); status != http.StatusNotFound {
-			t.Errorf("%s (%s) was answered %d, want the bare 404 this box gives a hostname nothing on it claims", what, hostname, status)
+		status := vm.asksFor(t, reached.hostname)
+		switch {
+		case status != http.StatusNotFound && status != fellThrough:
+			t.Errorf("%s (%s) was answered %d, and this box answers every hostname either off the preview catch-all or off its own refusal behind it", reached.what, reached.hostname, status)
+		case (status == http.StatusNotFound) != reached.caught:
+			t.Errorf("%s (%s) was answered %d, and the catch-all %s it: caddy's host matcher spends a leading `*.` on exactly one label, which is the whole of what keeps a preview base from swallowing the names beneath it",
+				reached.what, reached.hostname, status,
+				map[bool]string{true: "did not catch", false: "caught"}[reached.caught])
 		}
 	}
 }
