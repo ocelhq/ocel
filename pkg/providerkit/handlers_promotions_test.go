@@ -634,6 +634,34 @@ func TestRemovingAPreviewSweepsTheImagesOfAStackItsLedgerNoLongerNames(t *testin
 	}
 }
 
+func TestAStackRecordThatWillNotBeForgottenStillHasItsArtifactsReclaimed(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassPreview, "shop")
+	stack := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
+	records, held := provider.Records().(*fake.Records)
+	if !held {
+		t.Fatalf("this test drives the record store's removal refusal and the provider holds a %T", provider.Records())
+	}
+	records.RefuseRemoval(providerkit.StackRecord(providerkit.ClassPreview, "shop", stack),
+		errors.New("the record store answered nothing"))
+
+	if result := removeEnvironment(t, client, "shop", "pr-7"); result.GetSuccess() {
+		t.Fatal("a teardown whose stack record would not be forgotten reported success")
+	}
+
+	prefix := (naming.Coordinate{Project: "shop", Env: "pr-7", App: "web", Release: releaseOf(t, buildIdentity(1))}).StoragePrefix()
+	journal := provider.Journal()
+	if len(journal) == 0 {
+		t.Fatal("the teardown reached the provider not at all, so the reclaim below is asserted over an empty run")
+	}
+	if !slices.Contains(journal, "remove-prefix "+prefix) {
+		t.Errorf("the teardown reached %v and never removed %s: the release behind this stack is already destroyed, so the artifacts under its prefix are bytes no later run names — the stack record standing is what the next run retries from, not a reason to leave them",
+			journal, prefix)
+	}
+}
+
 func TestAPreviewTeardownTakesItsAppStacksDownBeforeTheInfraTheyStandOn(t *testing.T) {
 	t.Parallel()
 

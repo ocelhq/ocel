@@ -279,7 +279,6 @@ func reclaimStanding(ctx context.Context, provider Provider, slug, pointer strin
 		}
 		if err := ForgetStack(ctx, provider.Records(), ClassPreview, slug, entry.Name); err != nil {
 			errs = append(errs, err)
-			continue
 		}
 		if entry.Name.IsInfra() {
 			continue

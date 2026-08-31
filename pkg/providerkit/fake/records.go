@@ -14,13 +14,20 @@ import (
 type Records struct {
 	journal *Journal
 
-	mu   sync.Mutex
-	seq  uint64
-	rows map[string]providerkit.Record
+	mu       sync.Mutex
+	seq      uint64
+	rows     map[string]providerkit.Record
+	refusals map[string]error
 }
 
 func NewRecords() *Records {
-	return &Records{rows: map[string]providerkit.Record{}}
+	return &Records{rows: map[string]providerkit.Record{}, refusals: map[string]error{}}
+}
+
+func (r *Records) RefuseRemoval(name providerkit.RecordName, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.refusals[name.String()] = err
 }
 
 func (r *Records) Read(_ context.Context, name providerkit.RecordName) (providerkit.Record, error) {
@@ -76,6 +83,9 @@ func (r *Records) Remove(_ context.Context, name providerkit.RecordName, expecte
 	defer r.mu.Unlock()
 	key := name.String()
 	r.journal.note("forget " + key)
+	if refused := r.refusals[key]; refused != nil {
+		return refused
+	}
 	row, ok := r.rows[key]
 	if !ok {
 		return providerkit.ErrNoRecord
