@@ -162,11 +162,11 @@ func (s *stack) previewClaims(pointer string, apps []string) ([]host.HostClaim, 
 }
 
 func (s *stack) RemovePointer(ctx context.Context, pointer string, report edge.Reporter) (edge.PruneResult, error) {
-	terminating, err := s.previewHostnames(ctx, named(pointer))
+	served, err := s.served(ctx, pointer)
 	if err != nil {
 		return edge.PruneResult{}, err
 	}
-	served, err := s.served(ctx, pointer)
+	terminating, err := s.terminating(ctx, named(pointer), served)
 	if err != nil {
 		return edge.PruneResult{}, err
 	}
@@ -176,12 +176,12 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, report edge.R
 	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
 	}
+	if err := s.e.machine.ForgetCertificates(ctx, terminating, report); err != nil {
+		return edge.PruneResult{}, err
+	}
 	removed, err := s.ledger().RemovePointer(ctx, pointer)
 	if err != nil {
 		return edge.PruneResult{}, err
-	}
-	if err := s.e.machine.ForgetCertificates(ctx, terminating, report); err != nil {
-		return removed, err
 	}
 	for _, app := range slices.Sorted(maps.Keys(served)) {
 		if err := s.e.machine.Reconcile(ctx, app, served[app], report); err != nil {
@@ -191,7 +191,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, report edge.R
 	return removed, nil
 }
 
-func (s *stack) previewHostnames(ctx context.Context, pointer string) ([]string, error) {
+func (s *stack) terminating(ctx context.Context, pointer string, served map[string]string) ([]string, error) {
 	if s.state.Class != edge.ClassPreview || pointer == edge.DefaultPointer {
 		return nil, nil
 	}
@@ -205,8 +205,11 @@ func (s *stack) previewHostnames(ctx context.Context, pointer string) ([]string,
 			held = append(held, claim.Hostname)
 		}
 	}
+	if site := s.previewSite(); site.Serves() && len(served) > 0 {
+		held = append(held, site.Hosts(pointer, slices.Sorted(maps.Keys(served)))...)
+	}
 	slices.Sort(held)
-	return held, nil
+	return slices.Compact(held), nil
 }
 
 func (s *stack) served(ctx context.Context, pointer string) (map[string]string, error) {

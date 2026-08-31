@@ -2,6 +2,7 @@ package box_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -381,5 +382,32 @@ func TestRemovingAPreviewLeavesTheCatchAllStandingAndRendersItAsKeptWithAReason(
 	kept := front.SharedPreviewRemoval()
 	if kept.Action != edge.PlanKeep || kept.Reason == "" {
 		t.Errorf("the catch-all renders as %+v, want a kept row carrying why it is kept", kept)
+	}
+}
+
+func TestATeardownThatFailedOnTheCertificatesForgetsThemOnTheNextRun(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	stack := previewStack(t, stood)
+	previewed(t, stack, "pr-7", "api", "web")
+
+	stood.refuse = errors.New("the proxy answered nothing over its admin socket")
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err == nil {
+		t.Fatal("a teardown whose certificate removal failed reported success, and the pairs it left are bytes nothing else will ever take")
+	}
+	stood.refuse = nil
+	stood.forgotten = nil
+
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("the second run = %v", err)
+	}
+
+	site := edge.SharedPreview(slug, previewBase)
+	want := site.Hosts("pr-7", []string{"api", "web"})
+	slices.Sort(want)
+	if !slices.Equal(stood.forgotten, want) {
+		t.Errorf("the second run forgot %v, want %v: the first run disclaimed the hostnames before it fell over, so a teardown that reads them off the claims alone can never reach them again",
+			stood.forgotten, want)
 	}
 }
