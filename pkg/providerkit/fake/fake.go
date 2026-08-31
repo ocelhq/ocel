@@ -31,6 +31,7 @@ type Provider struct {
 	preflightRefusal error
 	preflighted      []providerkit.DeployPreflight
 
+	journal   *Journal
 	options   Options
 	records   *Records
 	artifacts providerkit.ArtifactStore
@@ -38,6 +39,7 @@ type Provider struct {
 	sealer    *Sealer
 	bootstrap *Bootstrapper
 	releases  *Releaser
+	releasing providerkit.Releaser
 	creds     *Credentials
 	edges     *Edges
 	dns       *DNS
@@ -52,16 +54,20 @@ func New(_ context.Context, options providerkit.Options) (providerkit.Provider, 
 }
 
 func NewProvider(options Options) *Provider {
+	journal := &Journal{}
 	records := NewRecords()
+	records.journal = journal
 	artifacts := NewArtifacts()
+	artifacts.journal = journal
 	return &Provider{
+		journal:   journal,
 		options:   options,
 		records:   records,
 		artifacts: artifacts,
 		images:    NewImages(),
 		sealer:    NewSealer(),
 		bootstrap: NewBootstrapper(),
-		releases:  NewReleaser(artifacts),
+		releases:  NewReleaser(artifacts).journalling(journal),
 		creds:     NewCredentials(options.Region),
 		edges:     NewEdges(records),
 		dns:       NewDNS(),
@@ -103,7 +109,21 @@ func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
 
 func (p *Provider) Bootstrapper() *Bootstrapper { return p.bootstrap }
 
-func (p *Provider) Releases() providerkit.Releaser { return p.releases }
+func (p *Provider) Journal() []string { return p.journal.Entries() }
+
+func (p *Provider) Releasing(impl any) *Provider {
+	p.releasing = resources.Releaser(p.records, p.artifacts, impl)
+	return p
+}
+
+func (p *Provider) Releases() providerkit.Releaser {
+	if p.releasing != nil {
+		return p.releasing
+	}
+	return p.releases
+}
+
+func (p *Provider) Releaser() *Releaser { return p.releases }
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return p.artifacts }
 

@@ -15,7 +15,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
@@ -470,6 +472,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, providerkit.ClassPreview, "shop")
 	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1", "p2")
+	seedEnvironment(t, provider, "shop", naming.InfraStack("pr-7"))
 	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
 		providerkit.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
@@ -503,6 +506,151 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	name := providerkit.EnvironmentRecord(providerkit.ClassPreview, "shop", "pr-7")
 	if _, err := provider.Records().Read(context.Background(), name); !errors.Is(err, providerkit.ErrNoRecord) {
 		t.Errorf("reading %s after the removal = %v, want it forgotten with the environment it described", name, err)
+	}
+
+	release := releaseOf(t, buildIdentity(1))
+	inOrder(t, provider.Journal(),
+		"destroy "+naming.AppStack("pr-7", "web", release).String(),
+		"remove-prefix "+(naming.Coordinate{Project: "shop", Env: "pr-7", App: "web", Release: release}).StoragePrefix(),
+		"destroy "+naming.InfraStack("pr-7").String(),
+		"forget "+name.String())
+}
+
+func inOrder(t *testing.T, journal []string, want ...string) {
+	t.Helper()
+
+	at := -1
+	for _, entry := range want {
+		next := slices.Index(journal, entry)
+		if next < 0 {
+			t.Fatalf("the teardown never reached %q; it reached %v. `ocel preview rm` is four provider calls, and a step nothing asserts is a step that can be deleted", entry, journal)
+		}
+		if next <= at {
+			t.Fatalf("the teardown reached %q at %d, out of the order %v: a release is destroyed before the artifacts it read and the environment record that names it", entry, next, want)
+		}
+		at = next
+	}
+}
+
+func releaseOf(t *testing.T, identity string) naming.Release {
+	t.Helper()
+
+	build, err := providerkit.ParseBuild(identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return build.Release()
+}
+
+type sweeper struct {
+	mu         sync.Mutex
+	reconciled []string
+	forgotten  []string
+}
+
+func (s *sweeper) ProvisionContainers(context.Context, providerkit.StackPlan, providerkit.Reporter) ([]providerkit.AppContainer, error) {
+	return nil, nil
+}
+
+func (s *sweeper) RemoveContainers(context.Context, providerkit.StackRef, []providerkit.AppContainer, providerkit.Reporter) error {
+	return nil
+}
+
+func (s *sweeper) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, coordinate string, _ providerkit.Reporter) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reconciled = append(s.reconciled, app+" "+coordinate)
+	return nil
+}
+
+func (s *sweeper) ForgetReleases(_ context.Context, _ providerkit.StackRef, app string, _ providerkit.Reporter) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.forgotten = append(s.forgotten, app)
+	return nil
+}
+
+func (s *sweeper) swept() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.reconciled)
+}
+
+func seedContainerStack(t *testing.T, provider *fake.Provider, slug, pointer, app, image string) naming.StackName {
+	t.Helper()
+
+	release := releaseOf(t, buildIdentity(1))
+	name := naming.AppStack(pointer, app, release)
+	if err := providerkit.WriteStack(context.Background(), provider.Records(), providerkit.ClassPreview, slug, name, providerkit.Stack{
+		Kind:       providerkit.StackApp,
+		App:        app,
+		Release:    release.String(),
+		Identity:   buildIdentity(1),
+		Containers: []providerkit.AppContainer{{Name: app, Physical: name.String() + "-" + app, Image: image}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return name
+}
+
+func removeEnvironment(t *testing.T, client contractv1connect.ProviderServiceClient, slug, pointer string) *progressv1.ResultEvent {
+	t.Helper()
+
+	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug:        slug,
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: pointer},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func TestRemovingAPreviewSweepsTheImagesOfAStackItsLedgerNoLongerNames(t *testing.T) {
+	t.Parallel()
+
+	swept := &sweeper{}
+	provider := fake.NewProvider(fake.Options{Region: "nowhere"}).Releasing(swept)
+	client := servedProvider(t, "1.0.0", provider)
+	deployed(t, provider, providerkit.ClassPreview, "shop")
+	stack := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
+
+	if result := removeEnvironment(t, client, "shop", "pr-7"); !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %q", result.GetError())
+	}
+
+	if want := []string{"web ghcr.io/acme/web:pr-7"}; !slices.Equal(swept.swept(), want) {
+		t.Errorf("the teardown reconciled %v, want %v: this preview's ledger names none of its releases any more, and the sweep is otherwise a deploy's final act — a box that is never deployed to again holds this image forever", swept.swept(), want)
+	}
+	if _, standing, err := providerkit.ReadStack(context.Background(), provider.Records(),
+		providerkit.ClassPreview, "shop", stack); err != nil || standing {
+		t.Errorf("%s still stands after its preview came down (%v): a teardown that reads only what the ledger last named reports success over every container it left running", stack, err)
+	}
+}
+
+func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftStanding(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassPreview, "shop")
+	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1")
+	stack := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
+	provider.Releaser().RefuseDestroy(errors.New("the box answered nothing"))
+
+	if result := removeEnvironment(t, client, "shop", "pr-7"); result.GetSuccess() {
+		t.Fatal("a teardown whose first destroy refused reported success")
+	}
+	if result := removeEnvironment(t, client, "shop", "pr-7"); !result.GetSuccess() {
+		t.Fatalf("the second RemoveEnvironment() = %q", result.GetError())
+	}
+
+	if _, standing, err := providerkit.ReadStack(context.Background(), provider.Records(),
+		providerkit.ClassPreview, "shop", stack); err != nil || standing {
+		t.Errorf("%s still stands after a second teardown that reported success (%v): the first run emptied the ledger before it fell over, so a reclaim driven off the ledger's diff has nothing left to name and every container of this preview keeps running", stack, err)
 	}
 }
 

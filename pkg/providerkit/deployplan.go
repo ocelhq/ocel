@@ -250,17 +250,26 @@ func ReclaimTargets(slug, env string, removed, surviving, servingHere []string) 
 			return nil, Refuse(CodeInvalid, "malformed removed record key %q, want %q", key, recordKeyPrefix+"app/identity")
 		}
 		release := identity.Release()
-		target := ReclaimTarget{App: app, Build: identity, Stack: naming.AppStack(env, app, release)}
-		coordinate := naming.Coordinate{Project: naming.Sanitize(slug), Env: env, App: app, Release: release}
-		released := appRelease{app: app, release: release.String()}
-		if !elsewhere[released] {
-			target.Prefixes = append(target.Prefixes, coordinate.StoragePrefix())
-		} else if !here[released] {
-			target.Prefixes = append(target.Prefixes, coordinate.ISRPrefix())
-		}
-		targets = append(targets, target)
+		targets = append(targets, ReclaimTarget{
+			App:      app,
+			Build:    identity,
+			Stack:    naming.AppStack(env, app, release),
+			Prefixes: reclaimedPrefixes(slug, env, app, release, elsewhere, here),
+		})
 	}
 	return targets, nil
+}
+
+func reclaimedPrefixes(slug, env, app string, release naming.Release, elsewhere, here map[appRelease]bool) []string {
+	coordinate := naming.Coordinate{Project: naming.Sanitize(slug), Env: env, App: app, Release: release}
+	released := appRelease{app: app, release: release.String()}
+	switch {
+	case !elsewhere[released]:
+		return []string{coordinate.StoragePrefix()}
+	case !here[released]:
+		return []string{coordinate.ISRPrefix()}
+	}
+	return nil
 }
 
 const recordKeyPrefix = "record:"

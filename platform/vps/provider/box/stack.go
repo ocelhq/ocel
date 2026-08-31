@@ -179,20 +179,12 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, report edge.R
 	if err := s.e.machine.ForgetCertificates(ctx, terminating, report); err != nil {
 		return edge.PruneResult{}, err
 	}
-	removed, err := s.ledger().RemovePointer(ctx, pointer)
-	if err != nil {
-		return edge.PruneResult{}, err
-	}
-	for _, app := range slices.Sorted(maps.Keys(served)) {
-		if err := s.e.machine.Reconcile(ctx, app, served[app], report); err != nil {
-			return removed, err
-		}
-	}
-	return removed, nil
+	return s.ledger().RemovePointer(ctx, pointer)
 }
 
 func (s *stack) terminating(ctx context.Context, pointer string, served map[string]string) ([]string, error) {
-	if s.state.Class != edge.ClassPreview || pointer == edge.DefaultPointer {
+	site := s.previewSite()
+	if !site.Serves() || pointer == edge.DefaultPointer {
 		return nil, nil
 	}
 	claims, err := s.e.machine.Claims(ctx)
@@ -205,7 +197,7 @@ func (s *stack) terminating(ctx context.Context, pointer string, served map[stri
 			held = append(held, claim.Hostname)
 		}
 	}
-	if site := s.previewSite(); site.Serves() && len(served) > 0 {
+	if len(served) > 0 {
 		held = append(held, site.Hosts(pointer, slices.Sorted(maps.Keys(served)))...)
 	}
 	slices.Sort(held)

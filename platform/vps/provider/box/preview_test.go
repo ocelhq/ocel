@@ -329,23 +329,28 @@ func TestRemovingAPreviewPointerTakesTheCertificatesBehindItsHostnamesWithIt(t *
 	}
 }
 
-func TestRemovingAPreviewPointerSweepsTheImagesOfEveryAppItServed(t *testing.T) {
+func TestATeardownThatFellOverLeavesThePointersHistoryStandingForTheNextRun(t *testing.T) {
 	t.Parallel()
 
 	stood := aMachine()
 	stack := previewStack(t, stood)
 	previewed(t, stack, "pr-7", "api", "web")
+	stood.refuse = errors.New("the proxy answered nothing over its admin socket")
 
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
-		t.Fatalf("RemovePointer: %v", err)
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err == nil {
+		t.Fatal("a teardown whose box calls all refused reported success")
 	}
-	want := []string{"api ghcr.io/acme/api:b1", "web ghcr.io/acme/web:b1"}
-	if !slices.Equal(stood.reconciled, want) {
-		t.Fatalf("the teardown reconciled %v, want %v: the sweep is a deploy's final act and `ocel preview rm` is not a deploy, so a preview torn down on a box that is never deployed to again leaks its images forever", stood.reconciled, want)
+
+	history, err := stack.Ledger().History(context.Background(), "pr-7")
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	if len(history) == 0 {
+		t.Fatal("a teardown that fell over took the pointer's history with it: every step this method can fail on runs before the ledger write, because the history is the only thing that names what the next run has left to reach")
 	}
 }
 
-func TestRemovingAPointerNothingWasEverPromotedUnderSweepsNothingAndRefusesNothing(t *testing.T) {
+func TestRemovingAPointerNothingWasEverPromotedUnderTakesNothingAndRefusesNothing(t *testing.T) {
 	t.Parallel()
 
 	stood := aMachine()
@@ -354,8 +359,8 @@ func TestRemovingAPointerNothingWasEverPromotedUnderSweepsNothingAndRefusesNothi
 	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
 		t.Fatalf("RemovePointer of a preview that is already gone = %v, and teardown is run again on every retry", err)
 	}
-	if len(stood.reconciled) != 0 || len(stood.forgotten) != 0 {
-		t.Errorf("a preview that claimed nothing forgot %v and reconciled %v", stood.forgotten, stood.reconciled)
+	if len(stood.forgotten) != 0 {
+		t.Errorf("a preview that claimed nothing forgot %v", stood.forgotten)
 	}
 }
 

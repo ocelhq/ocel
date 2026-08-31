@@ -244,6 +244,8 @@ type Releaser struct {
 	Grants []providerkit.Grant
 
 	artifacts providerkit.ArtifactStore
+	journal   *Journal
+	refusal   error
 
 	mu      sync.Mutex
 	stacks  map[string]providerkit.StackResult
@@ -254,6 +256,11 @@ type Releaser struct {
 
 func NewReleaser(artifacts providerkit.ArtifactStore) *Releaser {
 	return &Releaser{artifacts: artifacts, stacks: map[string]providerkit.StackResult{}}
+}
+
+func (r *Releaser) journalling(journal *Journal) *Releaser {
+	r.journal = journal
+	return r
 }
 
 func (r *Releaser) Entering(hook func(providerkit.StackPlan) error) {
@@ -318,9 +325,21 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 	return result, nil
 }
 
-func (r *Releaser) Destroy(_ context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+func (r *Releaser) RefuseDestroy(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.refusal = err
+}
+
+func (r *Releaser) Destroy(_ context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+	r.journal.note("destroy " + ref.Name.String())
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.refusal != nil {
+		refused := r.refusal
+		r.refusal = nil
+		return refused
+	}
 	delete(r.stacks, stackKey(ref))
 	if report != nil {
 		report.Say("destroyed " + ref.Name.String())
