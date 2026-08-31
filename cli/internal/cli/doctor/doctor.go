@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -351,6 +352,21 @@ func (a *answers) stand(checks []*contractv1.StandingCheck) {
 
 const upgradeProvider = "upgrade the provider pinned in this project"
 
+func standingDomains(asking bool, cfg *projectconfig.Config) []string {
+	if !asking {
+		return nil
+	}
+	var named []string
+	for _, tier := range tiers {
+		for _, hostname := range preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))) {
+			if !slices.Contains(named, hostname) {
+				named = append(named, hostname)
+			}
+		}
+	}
+	return named
+}
+
 func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, stdout, stderr io.Writer) *answers {
 	got := &answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
 
@@ -363,12 +379,15 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 			return err
 		}
 		for _, tier := range tiers {
+			standing := tier == environmentv1.Tier_TIER_PRODUCTION
 			resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
-				RequiredTier: tier,
-				Slug:         cfg.Slug,
-				Domains:      preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))),
-				Frameworks:   preflight.Frameworks(cfg),
-				Edge:         edgewire.Selection(cfg),
+				RequiredTier:    tier,
+				Slug:            cfg.Slug,
+				Domains:         preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))),
+				Frameworks:      preflight.Frameworks(cfg),
+				Edge:            edgewire.Selection(cfg),
+				Standing:        standing,
+				StandingDomains: standingDomains(standing, cfg),
 			})
 			if err != nil {
 				if connect.CodeOf(err) == connect.CodeUnimplemented {

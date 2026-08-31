@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -35,20 +36,64 @@ func standingServed(t *testing.T, answer []providerkit.StandingCheck, refusal er
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
-		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
-		Slug:         "shop",
-		Domains:      []string{"shop.example.com", "www.example.com"},
+		RequiredTier:    environmentv1.Tier_TIER_PRODUCTION,
+		Slug:            "shop",
+		Domains:         []string{"shop.example.com"},
+		Standing:        true,
+		StandingDomains: []string{"shop.example.com", "www.example.com"},
 	})
-	if refusal != nil {
-		if err == nil {
-			t.Fatalf("Preflight() = %+v, want the refusal the standing port answered with", resp)
-		}
-		return provider, nil
-	}
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
 	}
 	return provider, resp
+}
+
+func TestTheStandingPortIsAskedAboutTheNamesTheCallerWillRenderRatherThanThisTiers(t *testing.T) {
+	t.Parallel()
+
+	provider, _ := standingServed(t, []providerkit.StandingCheck{
+		{Subject: "shop.example.com", Verdict: providerkit.StandingPass, Finding: "points here"},
+	}, nil)
+
+	if len(provider.asked) != 1 {
+		t.Fatalf("the standing port was asked %d times, want once per preflight", len(provider.asked))
+	}
+	if want := []string{"shop.example.com", "www.example.com"}; !slices.Equal(provider.asked[0].Hostnames, want) {
+		t.Errorf("the standing port was handed %v, want %v: what stands is one box's business and the caller renders one section over every tier, so asking per tier buys a dns round, a dial and an exec for each of them",
+			provider.asked[0].Hostnames, want)
+	}
+}
+
+func TestAPreflightThatWillRenderNoStandingSectionAsksTheBoxForNone(t *testing.T) {
+	t.Parallel()
+
+	provider := &standingProvider{
+		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
+		answer: []providerkit.StandingCheck{
+			{Subject: "shop.example.com", Verdict: providerkit.StandingPass, Finding: "points here"},
+		},
+	}
+	client := servedProvider(t, "1.2.3", provider)
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+		Domains:      []string{"shop.example.com", "www.example.com"},
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if !resp.GetInfrastructurePresent() {
+		t.Fatal("this preflight answered nothing about the bootstrap it just stood up, so the response is not the window an absence can be read over")
+	}
+	if len(provider.asked) != 0 {
+		t.Errorf("the standing port was asked %d times by a caller that renders none of it: every `ocel deploy` calls this rpc, and it pays for a dns round per hostname, a dial to the renewal port and an exec into the proxy for an answer it throws away",
+			len(provider.asked))
+	}
+	if len(resp.GetStanding()) != 0 {
+		t.Errorf("Preflight() carried %+v to a caller that asked for none of it", resp.GetStanding())
+	}
 }
 
 func TestPreflightHandsTheStandingPortEveryHostnameItWasAskedAbout(t *testing.T) {
@@ -129,8 +174,56 @@ func TestPreflightCarriesNoStandingChecksFromAProviderThatAnswersNone(t *testing
 	}
 }
 
-func TestPreflightSurfacesAStandingPortThatCouldNotAnswer(t *testing.T) {
+func TestAStandingPortThatCouldNotAnswerIsReportedAndNeverGates(t *testing.T) {
 	t.Parallel()
 
-	standingServed(t, nil, errors.New("the machine did not answer"))
+	_, resp := standingServed(t, nil, errors.New("the machine did not answer"))
+
+	if !resp.GetInfrastructurePresent() {
+		t.Fatal("a standing port that could not answer took the preflight's verdict with it, and every `ocel deploy` calls this same rpc: a standing concern is a report and never a gate")
+	}
+	carried := resp.GetStanding()
+	if len(carried) != 1 {
+		t.Fatalf("Preflight() carried %d standing checks over a port that could not answer, want the one that says so", len(carried))
+	}
+	if carried[0].GetVerdict() != contractv1.StandingCheck_VERDICT_FAIL {
+		t.Errorf("verdict = %v, want a failure: a check nothing could be read for is not a check that passed", carried[0].GetVerdict())
+	}
+	if !strings.Contains(carried[0].GetFinding(), "the machine did not answer") {
+		t.Errorf("finding = %q, want what the standing port said carried into the report rather than swallowed", carried[0].GetFinding())
+	}
+}
+
+func TestADeployProceedsAgainstABoxWhoseStandingFailed(t *testing.T) {
+	builtProject(t)
+
+	provider := &standingProvider{
+		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
+		answer: []providerkit.StandingCheck{
+			{Subject: "shop.example.com", Verdict: providerkit.StandingFail, Finding: "points somewhere else", Fix: "move the record"},
+		},
+	}
+	client := servedProvider(t, "1.2.3", provider)
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+		Domains:      []string{"shop.example.com"},
+		Standing:     true,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if len(resp.GetStanding()) != 1 || resp.GetStanding()[0].GetVerdict() != contractv1.StandingCheck_VERDICT_FAIL {
+		t.Fatalf("Preflight() carried %+v, and this deploy is not running against the failing verdict the test is about", resp.GetStanding())
+	}
+
+	result, _, err := deployStream(t, client, deployRequest())
+	if err != nil {
+		t.Fatalf("Deploy() = %v against a box whose standing verdict failed, want it to proceed: a standing check reports and never gates", err)
+	}
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() reported %q against a box whose standing verdict failed, want it to proceed: a standing check reports and never gates", result.GetError())
+	}
 }
