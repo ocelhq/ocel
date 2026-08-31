@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -106,7 +107,7 @@ func (h *Host) InstallPreviewEntry(ctx context.Context, base string) error {
 	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
 		if state.PreviewBase != "" && state.PreviewBase != base {
 			return ProxyState{}, providerkit.Refuse(providerkit.CodeBusy,
-				"this box already answers previews on %s, and every preview hostname it serves is a name under that base: release it with `ocel domain release --preview` first, or raising %s here takes every live preview off the air with nothing telling the projects that lost them",
+				"this box already answers previews on %s, and every preview hostname it serves is a name under that base: take those previews down with `ocel preview rm` and release the base with `ocel domain release --preview` first, or raising %s here takes every live preview off the air with nothing telling the projects that lost them",
 				edge.PreviewWildcard(state.PreviewBase), edge.PreviewWildcard(base))
 		}
 		state.PreviewBase = base
@@ -116,11 +117,29 @@ func (h *Host) InstallPreviewEntry(ctx context.Context, base string) error {
 
 func (h *Host) RemovePreviewEntry(ctx context.Context, base string) error {
 	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
-		if state.PreviewBase == base {
-			state.PreviewBase = ""
+		if state.PreviewBase != base {
+			return state, nil
 		}
+		if held := claimedUnder(state.Claims, base); len(held) > 0 {
+			return ProxyState{}, providerkit.Refuse(providerkit.CodeBusy,
+				"this box still claims %s under %s: releasing the base takes the catch-all down and leaves every one of those hostnames routed and renewing, and raising a second base beside them installs a second catch-all over sites that are still live. Take them down with `ocel preview rm` first",
+				strings.Join(held, ", "), edge.PreviewWildcard(base))
+		}
+		state.PreviewBase = ""
 		return state, nil
 	})
+}
+
+func claimedUnder(claims []HostClaim, base string) []string {
+	under := "." + strings.ToLower(base)
+	held := make([]string, 0, len(claims))
+	for _, claim := range claims {
+		if strings.HasSuffix(strings.ToLower(claim.Hostname), under) {
+			held = append(held, claim.Hostname)
+		}
+	}
+	slices.Sort(held)
+	return held
 }
 
 func (h *Host) proxyState(ctx context.Context) (ProxyState, proxyDocument, error) {

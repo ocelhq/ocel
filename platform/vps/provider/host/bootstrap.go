@@ -32,7 +32,7 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 		return providerkit.Bootstrap{}, err
 	}
 	if read.standing(KindProxyConfig, ProxyConfig) {
-		if _, _, err := b.host.proxyState(ctx); err != nil {
+		if err := b.assertsNoOnDemandTLS(ctx); err != nil {
 			return providerkit.Bootstrap{}, err
 		}
 	}
@@ -49,6 +49,11 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 			Writer:        read.Stamp.Writer,
 		}},
 	}, nil
+}
+
+func (b Bootstrapper) assertsNoOnDemandTLS(ctx context.Context) error {
+	_, _, err := b.host.proxyState(ctx)
+	return err
 }
 
 func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {

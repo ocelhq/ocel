@@ -17,8 +17,13 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 		if strings.HasPrefix(req.Hostname, "*.") {
 			return providerkit.Certificate{}, nil
 		}
-		if err := p.host.CertificateTrouble(ctx, req.Hostname); err != nil {
-			return providerkit.Certificate{}, err
+		read, trouble := p.host.CertificateTrouble(ctx, req.Hostname)
+		if trouble != nil {
+			return providerkit.Certificate{}, trouble
+		}
+		if !read && req.Report != nil {
+			req.Report.Say("this box's engine did not answer, so whether its proxy is already refused by the CA for " +
+				req.Hostname + " was not read: an order the ceiling refuses surfaces on the next deploy rather than here")
 		}
 		return providerkit.Certificate{ID: certs.ProxyHandle(req.Hostname)}, nil
 	}
