@@ -65,11 +65,6 @@ func (w *Watcher) Paths() []string { return w.fsw.WatchList() }
 
 func (w *Watcher) Done() <-chan struct{} { return w.done }
 
-func Watch(ctx context.Context, set Set, debounce time.Duration, onChange func(), onError func(error)) error {
-	_, err := Start(ctx, Config{Set: set, Debounce: debounce, OnChange: onChange, OnError: onError})
-	return err
-}
-
 func Start(ctx context.Context, cfg Config) (*Watcher, error) {
 	if cfg.newTimer == nil {
 		cfg.newTimer = newRealTimer
