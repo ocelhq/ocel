@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -466,6 +467,9 @@ func (r *deployRun) preflight(ctx context.Context, report Reporter) error {
 	if err := RefuseUnreachableLinks(r.provider.Vendor(), r.provider.Serves(), r.crossesMembrane, resources, grants); err != nil {
 		return Refuse(CodeInvalid, "%s", err)
 	}
+	if err := r.refuseContainerValues(ctx); err != nil {
+		return err
+	}
 	preflighter, ok := r.provider.(DeployPreflighter)
 	if !ok {
 		return nil
@@ -693,7 +697,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 			if err := r.embed(ctx, entry, result.Functions, report); err != nil {
 				return err
 			}
-			if err := r.stage(ctx, entry, images, result.Functions, result.Containers, grants); err != nil {
+			if err := r.stage(ctx, entry, images, values, result.Functions, result.Containers, grants); err != nil {
 				return err
 			}
 			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, Stack{
@@ -789,8 +793,13 @@ func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Link, error) 
 		if !used[link.Name] {
 			continue
 		}
-		if !slices.ContainsFunc(grants, func(held Link) bool { return held.Name == link.Name }) {
+		at := slices.IndexFunc(grants, func(held Link) bool { return held.Name == link.Name })
+		if at < 0 {
 			grants = append(grants, link)
+			continue
+		}
+		if len(grants[at].Wire) == 0 {
+			grants[at].Wire = link.Wire
 		}
 	}
 	slices.SortFunc(grants, func(a, b Link) int {
@@ -813,6 +822,19 @@ func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Link, error) 
 }
 
 func (r *deployRun) appValues(ctx context.Context, entry AppEntry, grants []Link) (AppValues, error) {
+	held, err := r.manifestValues(entry, grants)
+	if err != nil {
+		return AppValues{}, err
+	}
+	delivered, err := r.deliver(ctx, entry, held)
+	if err != nil {
+		return AppValues{}, err
+	}
+	held.Delivered = delivered
+	return held, nil
+}
+
+func (r *deployRun) manifestValues(entry AppEntry, grants []Link) (AppValues, error) {
 	held := AppValues{
 		Plain:     map[string]string{},
 		Sensitive: map[string]string{},
@@ -835,11 +857,6 @@ func (r *deployRun) appValues(ctx context.Context, entry AppEntry, grants []Link
 		}
 		held.Owners[variable.GetKey()] = entry.App
 	}
-	delivered, err := r.deliver(ctx, entry, held)
-	if err != nil {
-		return AppValues{}, err
-	}
-	held.Delivered = delivered
 	return held, nil
 }
 
@@ -913,7 +930,24 @@ func (r *deployRun) warm(ctx context.Context, functions []Function, report Repor
 	return warmer.Warm(ctx, targets, report)
 }
 
-func (r *deployRun) stage(ctx context.Context, entry AppEntry, images ImagePlan, functions []Function, containers []AppContainer, grants []Link) error {
+func declaredVariables(held AppValues) []edge.VariableRecord {
+	names := make([]string, 0, len(held.Plain)+len(held.Sensitive)+len(held.Secrets))
+	names = append(names, slices.Sorted(maps.Keys(held.Plain))...)
+	names = append(names, slices.Sorted(maps.Keys(held.Sensitive))...)
+	folders := make(map[string]string, len(held.Secrets))
+	for _, secret := range held.Secrets {
+		names = append(names, secret.Key)
+		folders[secret.Key] = secret.Folder
+	}
+	slices.Sort(names)
+	declared := make([]edge.VariableRecord, 0, len(names))
+	for _, name := range names {
+		declared = append(declared, edge.VariableRecord{Key: name, Folder: folders[name]})
+	}
+	return declared
+}
+
+func (r *deployRun) stage(ctx context.Context, entry AppEntry, images ImagePlan, values AppValues, functions []Function, containers []AppContainer, grants []Link) error {
 	urls := make(map[string]string, len(functions))
 	for _, fn := range functions {
 		urls[fn.Name] = fn.URL
@@ -933,6 +967,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, images ImagePlan,
 		IsrPrefix:        coordinate.ISRPrefix(),
 		CreatedAt:        time.Now().Unix(),
 		ValueFingerprint: entry.Build.Fingerprint(),
+		Variables:        declaredVariables(values),
 		Needs:            r.needs[entry.App].Needs,
 		SupportInEffect:  r.needs[entry.App].InEffect,
 		Waived:           r.needs[entry.App].Waived,

@@ -2,6 +2,9 @@ package providerkit
 
 import (
 	"context"
+	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -115,6 +118,30 @@ type AppValues struct {
 	Owners    map[string]string
 	Folder    string
 	Delivered map[string]string
+}
+
+func (v AppValues) String() string {
+	return fmt.Sprintf("values folder %q plain %v sensitive %v secrets %v links %v delivered %d entries [redacted]",
+		v.Folder, slices.Sorted(maps.Keys(v.Plain)), slices.Sorted(maps.Keys(v.Sensitive)),
+		secretNames(v.Secrets), linkNames(v.Links), len(v.Delivered))
+}
+
+func (v AppValues) GoString() string { return v.String() }
+
+func secretNames(refs []SecretRef) []string {
+	names := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		names = append(names, ref.Key)
+	}
+	return names
+}
+
+func linkNames(links []Link) []string {
+	names := make([]string, 0, len(links))
+	for _, link := range links {
+		names = append(names, link.Name)
+	}
+	return names
 }
 
 type SecretRef struct {

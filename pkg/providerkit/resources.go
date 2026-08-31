@@ -165,12 +165,16 @@ var linkTypes = map[linksv1.LinkType]LinkType{
 }
 
 func WireLinkType(kind LinkType) linksv1.LinkType {
-	for wire, held := range linkTypes {
-		if held == kind {
-			return wire
-		}
+	switch kind {
+	case LinkPostgres:
+		return linksv1.LinkType_LINK_TYPE_POSTGRES
+	case LinkBucket:
+		return linksv1.LinkType_LINK_TYPE_BUCKET
+	case LinkCustom:
+		return linksv1.LinkType_LINK_TYPE_CUSTOM
+	default:
+		return linksv1.LinkType_LINK_TYPE_CUSTOM
 	}
-	return linksv1.LinkType_LINK_TYPE_UNSPECIFIED
 }
 
 func manifestResources(manifest *contractv1.Manifest) ([]Resource, error) {
