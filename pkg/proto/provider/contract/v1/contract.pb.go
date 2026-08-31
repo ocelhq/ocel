@@ -2699,7 +2699,6 @@ type PreviewEnvironment struct {
 	Lifecycle     v1.Lifecycle           `protobuf:"varint,2,opt,name=lifecycle,proto3,enum=common.environment.v1.Lifecycle" json:"lifecycle,omitempty"`
 	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
 	CreatedAt     int64                  `protobuf:"varint,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	ExpiresAt     int64                  `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2758,13 +2757,6 @@ func (x *PreviewEnvironment) GetLabel() string {
 func (x *PreviewEnvironment) GetCreatedAt() int64 {
 	if x != nil {
 		return x.CreatedAt
-	}
-	return 0
-}
-
-func (x *PreviewEnvironment) GetExpiresAt() int64 {
-	if x != nil {
-		return x.ExpiresAt
 	}
 	return 0
 }
@@ -4179,15 +4171,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x17ListEnvironmentsRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\"h\n" +
 	"\x18ListEnvironmentsResponse\x12L\n" +
-	"\fenvironments\x18\x01 \x03(\v2(.provider.contract.v1.PreviewEnvironmentR\fenvironments\"\xc4\x01\n" +
+	"\fenvironments\x18\x01 \x03(\v2(.provider.contract.v1.PreviewEnvironmentR\fenvironments\"\xa5\x01\n" +
 	"\x12PreviewEnvironment\x12\x1a\n" +
 	"\bidentity\x18\x01 \x01(\tR\bidentity\x12>\n" +
 	"\tlifecycle\x18\x02 \x01(\x0e2 .common.environment.v1.LifecycleR\tlifecycle\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\x03R\tcreatedAt\x12\x1d\n" +
-	"\n" +
-	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"\x8b\x02\n" +
+	"created_at\x18\x04 \x01(\x03R\tcreatedAt\"\x8b\x02\n" +
 	"\x10PreflightRequest\x12J\n" +
 	"\rrequired_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\frequiredTier\x128\n" +
 	"\x04slug\x18\x02 \x01(\tB$\xbaH!\xd8\x01\x01r\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x18\n" +

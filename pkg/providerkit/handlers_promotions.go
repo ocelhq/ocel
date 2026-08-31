@@ -31,7 +31,6 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 			Lifecycle: lifecycleOf(environment.Persisted),
 			Label:     environment.Label,
 			CreatedAt: environment.CreatedAt,
-			ExpiresAt: environment.ExpiresAt,
 		})
 	}
 	return resp, nil

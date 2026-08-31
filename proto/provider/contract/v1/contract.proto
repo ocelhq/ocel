@@ -428,7 +428,6 @@ message PreviewEnvironment {
   string label = 3;
 
   int64 created_at = 4;
-  int64 expires_at = 5;
 }
 
 message PreflightRequest {

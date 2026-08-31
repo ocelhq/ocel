@@ -965,7 +965,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 				return nil
 			}
 			return recordEnvironmentMeta(ctx, r.provider.Records(),
-				r.plan.Class, r.plan.Slug, r.plan.Env, r.plan.Label, r.plan.Ephemeral)
+				r.plan.Class, r.plan.Slug, r.plan.Env, r.plan.Label)
 		})
 	}); err != nil {
 		return nil, err

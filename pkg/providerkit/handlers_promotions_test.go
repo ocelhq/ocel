@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -387,11 +388,11 @@ func TestListEnvironmentsCarriesWhatTheDeployRecordedAboutEachPreview(t *testing
 	)
 	before := time.Now().Unix()
 	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
-		providerkit.ClassPreview, "shop", "pr-7", "pr-123", true); err != nil {
+		providerkit.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
 	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
-		providerkit.ClassPreview, "shop", "staging", "", false); err != nil {
+		providerkit.ClassPreview, "shop", "staging", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -411,12 +412,13 @@ func TestListEnvironmentsCarriesWhatTheDeployRecordedAboutEachPreview(t *testing
 	if preview.GetCreatedAt() < before {
 		t.Errorf("pr-7 was created at %d, want the moment the deploy recorded it", preview.GetCreatedAt())
 	}
-	if want := preview.GetCreatedAt() + int64(providerkit.PreviewTTL.Seconds()); preview.GetExpiresAt() != want {
-		t.Errorf("pr-7 expires at %d, want %d: an ephemeral preview lives a preview's lifetime from its deploy",
-			preview.GetExpiresAt(), want)
+	stamped := string(environmentRecordBytes(t, provider, "shop", "pr-7"))
+	if !strings.Contains(stamped, "created_at") {
+		t.Fatalf("the record a preview deploy wrote reads %s and carries nothing this test can read an absence out of", stamped)
 	}
-	if persistent := environments["staging"]; persistent.GetExpiresAt() != 0 {
-		t.Errorf("staging expires at %d, want never: a persistent preview stands until it is removed", persistent.GetExpiresAt())
+	if strings.Contains(stamped, "expires") {
+		t.Errorf("the record a preview deploy wrote reads %s, and an expiry stamped there has exactly one class of reader: `ocel preview ls` prints it, and nothing on any box or in any account ever compares it to a clock",
+			stamped)
 	}
 }
 
@@ -425,13 +427,13 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 	_, provider := contractServed(t, "1.0.0")
 	ctx := context.Background()
 	if err := providerkit.RecordEnvironmentMeta(ctx, provider.Records(),
-		providerkit.ClassPreview, "shop", "pr-7", "pr-123", true); err != nil {
+		providerkit.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
 	first := readEnvironmentMeta(t, provider, "shop", "pr-7")
 
 	if err := providerkit.RecordEnvironmentMeta(ctx, provider.Records(),
-		providerkit.ClassPreview, "shop", "pr-7", "", true); err != nil {
+		providerkit.ClassPreview, "shop", "pr-7", ""); err != nil {
 		t.Fatal(err)
 	}
 	second := readEnvironmentMeta(t, provider, "shop", "pr-7")
@@ -440,23 +442,24 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 		t.Errorf("the second deploy moved the creation to %d, want it left at %d: a preview is created once",
 			second.CreatedAt, first.CreatedAt)
 	}
-	if second.ExpiresAt < first.ExpiresAt {
-		t.Errorf("the second deploy expires at %d, want no earlier than %d: deploying to a preview extends it",
-			second.ExpiresAt, first.ExpiresAt)
-	}
 	if second.Label != "pr-123" {
 		t.Errorf("the second deploy labelled the preview %q, want the label kept: this deploy names none", second.Label)
 	}
 }
 
-func readEnvironmentMeta(t *testing.T, provider *fake.Provider, slug, env string) providerkit.EnvironmentMeta {
+func environmentRecordBytes(t *testing.T, provider *fake.Provider, slug, env string) []byte {
 	t.Helper()
 	held, err := provider.Records().Read(context.Background(), providerkit.EnvironmentRecord(providerkit.ClassPreview, slug, env))
 	if err != nil {
 		t.Fatal(err)
 	}
+	return held.Bytes
+}
+
+func readEnvironmentMeta(t *testing.T, provider *fake.Provider, slug, env string) providerkit.EnvironmentMeta {
+	t.Helper()
 	var meta providerkit.EnvironmentMeta
-	if err := json.Unmarshal(held.Bytes, &meta); err != nil {
+	if err := json.Unmarshal(environmentRecordBytes(t, provider, slug, env), &meta); err != nil {
 		t.Fatal(err)
 	}
 	return meta
@@ -468,7 +471,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	deployed(t, provider, providerkit.ClassPreview, "shop")
 	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1", "p2")
 	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
-		providerkit.ClassPreview, "shop", "pr-7", "pr-123", true); err != nil {
+		providerkit.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
 
