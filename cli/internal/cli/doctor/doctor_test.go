@@ -386,6 +386,8 @@ func TestRunDoctorPrintsTheStandingFindingsAndTheCertificatesAndRefusesNothing(t
 	t.Setenv(clitest.FakeGlobalDomainRenewalEnvVar, "you placed it on this box and you renew it")
 	t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, "4102444800")
 	t.Setenv(clitest.FakeDomainCertEnvVar, "SERVING proxy:shop.example.com")
+	t.Setenv(clitest.FakeDomainRenewalEnvVar, "SUCCESS")
+	t.Setenv(clitest.FakeDomainExpiresEnvVar, "4102444800")
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
@@ -403,6 +405,7 @@ func TestRunDoctorPrintsTheStandingFindingsAndTheCertificatesAndRefusesNothing(t
 		"    → add the record `ocel domain add` printed",
 		"  ⚠ *.preview.example.com does not resolve",
 		"*.preview.example.com — expires 2100-01-01T00:00:00Z, you placed it on this box and you renew it",
+		"shop.example.com — expires 2100-01-01T00:00:00Z, SUCCESS",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q; got:\n%s", want, out)
