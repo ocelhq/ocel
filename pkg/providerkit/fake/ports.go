@@ -325,7 +325,7 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 	return result, nil
 }
 
-func (r *Releaser) RefuseDestroy(err error) {
+func (r *Releaser) RefuseNextDestroy(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.refusal = err
