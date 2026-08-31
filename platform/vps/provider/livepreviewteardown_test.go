@@ -160,24 +160,8 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	if err != nil {
 		t.Fatalf("RemovePointer(%s) = %v", pointer, err)
 	}
-	targets, err := providerkit.ReclaimTargets(teardownSlug, pointer,
-		removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
-	if err != nil {
-		t.Fatalf("ReclaimTargets(%s) = %v", pointer, err)
-	}
-	for _, target := range targets {
-		ref := providerkit.StackRef{Project: teardownSlug, Class: providerkit.ClassPreview, Name: target.Stack}
-		if err := p.Releases().Destroy(ctx, ref, spoken); err != nil {
-			t.Fatalf("Destroy(%s) = %v", target.Stack, err)
-		}
-		if err := providerkit.ForgetStack(ctx, p.Records(), providerkit.ClassPreview, teardownSlug, target.Stack); err != nil {
-			t.Fatalf("ForgetStack(%s) = %v", target.Stack, err)
-		}
-		for _, prefix := range target.Prefixes {
-			if err := p.Artifacts().RemovePrefix(ctx, providerkit.ClassPreview, prefix, spoken); err != nil {
-				t.Fatalf("RemovePrefix(%s) = %v: a container app puts nothing in the store, and teardown calls this on every release it reclaims", prefix, err)
-			}
-		}
+	if err := providerkit.ReclaimPreview(ctx, p, teardownSlug, pointer, removed, spoken); err != nil {
+		t.Fatalf("ReclaimPreview(%s) = %v", pointer, err)
 	}
 	infra := providerkit.StackRef{Project: teardownSlug, Class: providerkit.ClassPreview, Name: naming.InfraStack(pointer)}
 	if err := p.Releases().Destroy(ctx, infra, spoken); err != nil {
@@ -200,7 +184,8 @@ func (vm machine) plants(t *testing.T, hostname string) string {
 func (vm machine) certificates(t *testing.T) string {
 	t.Helper()
 
-	return vm.ssh(t, "sudo find "+quote(host.ProxyData+"/caddy/certificates")+" -mindepth 2 -maxdepth 2 -type d -printf '%f\\n' 2>/dev/null | sort")
+	return vm.ssh(t, "sudo find "+quote(host.ProxyData+"/caddy/certificates")+" -mindepth 2 -maxdepth 2 -type d -name "+
+		quote(teardownSlug+"--*")+" -printf '%f\\n' 2>/dev/null | sort")
 }
 
 func (vm machine) teardownImages(t *testing.T) string {
@@ -266,8 +251,11 @@ func TestLiveAPreviewTornDownLeavesNoRouteNoCertificateAndNoImageBehind(t *testi
 	if held := vm.teardownImages(t); strings.Contains(held, teardownAt("pr-7")) {
 		t.Errorf("the box still holds %s: %q. The sweep is a deploy's final act, and this box may never be deployed to again", teardownAt("pr-7"), held)
 	}
-	if status := vm.asksFor(t, hostname); status != 404 {
-		t.Errorf("%s was answered %d after its preview came down, want the 404 every unclaimed hostname under the base falls through to", hostname, status)
+	answered := vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: "+hostname)+" http://"+host.ProxyContainer+"/")
+	if !strings.Contains(answered, "404") ||
+		!strings.Contains(strings.ToLower(answered), strings.ToLower(host.EdgeHeader)+": "+host.EdgeName) {
+		t.Errorf("%s was answered\n%s\nafter its preview came down, want the catch-all's 404 carrying %s: %s. A 404 from a route this teardown was meant to remove reads the same on the status line alone",
+			hostname, answered, host.EdgeHeader, host.EdgeName)
 	}
 	if wildcard := edge.PreviewWildcard(livePreviewBase); !slices.Contains(vm.routedHosts(t), wildcard) {
 		t.Errorf("the catch-all %s went down with one project's preview, and it is a bootstrap item answering for every project this box serves: %v", wildcard, vm.routedHosts(t))
