@@ -314,7 +314,7 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 
 	class := providerkit.ClassProduction
 	fresh := run.must(t, "doctor")
-	if !strings.Contains(fresh, "not set up — run `ocel bootstrap production`") {
+	if !owedABootstrap.MatchString(fresh) {
 		t.Fatalf("`ocel doctor` on a machine nothing has written to said:\n%s", fresh)
 	}
 
@@ -394,7 +394,7 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	}
 
 	gone := run.must(t, "doctor")
-	if !strings.Contains(gone, "not set up — run `ocel bootstrap production`") {
+	if !owedABootstrap.MatchString(gone) {
 		t.Errorf("`ocel doctor` after a destroy still claims a bootstrap:\n%s", gone)
 	}
 	for _, taken := range []string{host.ClassDir(class), host.StateDir(class), filepath.Dir(host.SealHelper)} {
