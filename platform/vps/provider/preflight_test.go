@@ -3,6 +3,7 @@ package vps_test
 import (
 	"context"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -34,34 +35,60 @@ const (
 	deployedRef  = deployedRepo + ":r0a1b2c3d"
 )
 
-var standingBox = map[string]answer{
-	"docker version":              {},
-	"docker info":                 {stdout: roomySaid},
-	"'upstreams'":                 {stdout: "[]\n"},
-	"publish=" + host.RenewalPort: {stdout: host.ProxyContainer + "\n"},
-	"publish=443":                 {stdout: host.ProxyContainer + "\n"},
-	"'listeners'":                 {stdout: "0.0.0.0:80\n"},
-	"cat /proc/net/tcp":           {stdout: ""},
-	"test -x":                     {},
-	"test -S":                     {},
+type scriptedAnswer struct {
+	naming string
+	said   answer
+}
+
+func standingBox() []scriptedAnswer {
+	return []scriptedAnswer{
+		{"docker version", answer{}},
+		{"docker info", answer{stdout: roomySaid}},
+		{"docker inspect", answer{stdout: "Status=running ExitCode=0 OOMKilled=false Error= StartedAt=x FinishedAt= RestartCount=0"}},
+		{"'upstreams'", answer{stdout: "[]\n"}},
+		{"'listeners'", answer{stdout: "0.0.0.0:80\n"}},
+		{"publish=" + host.RenewalPort, answer{stdout: host.ProxyContainer + "\n"}},
+		{"publish=443", answer{stdout: host.ProxyContainer + "\n"}},
+		{"cat /proc/net/tcp", answer{stdout: ""}},
+		{"test -x", answer{}},
+		{"test -S", answer{}},
+	}
 }
 
 func boxSaying(overrides map[string]answer) *scripted {
-	held := map[string]answer{}
-	for key, said := range standingBox {
-		held[key] = said
+	held := standingBox()
+	for at, one := range held {
+		if said, named := overrides[one.naming]; named {
+			held[at].said = said
+		}
 	}
-	for key, said := range overrides {
-		held[key] = said
+	for naming, said := range overrides {
+		if !slices.ContainsFunc(held, func(one scriptedAnswer) bool { return one.naming == naming }) {
+			held = append(held, scriptedAnswer{naming, said})
+		}
 	}
 	return &scripted{answer: func(command string) (answer, bool) {
-		for key, said := range held {
-			if strings.Contains(command, key) {
-				return said, true
+		for _, one := range held {
+			if strings.Contains(command, one.naming) {
+				return one.said, true
 			}
 		}
 		return answer{}, false
 	}}
+}
+
+func TestNoTwoThingsThisBenchScriptsAreNamedByTheSameCommand(t *testing.T) {
+	t.Parallel()
+
+	held := standingBox()
+	for _, one := range held {
+		for _, other := range held {
+			if one.naming != other.naming && strings.Contains(one.naming, other.naming) {
+				t.Errorf("this bench answers %q and %q, and the first holds the second: whichever is reached first wins, and a bench that answers a different command on a different run proves nothing about either",
+					one.naming, other.naming)
+			}
+		}
+	}
 }
 
 func (s *scripted) Stream(_ context.Context, command string, _ io.Reader) (session.Result, error) {
