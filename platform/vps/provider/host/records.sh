@@ -24,17 +24,33 @@ esac
 dir="${OCEL_RECORDS_ROOT:-/var/lib/ocel}/$class/records"
 [ -d "$dir" ] || abort "$dir stands as no record tier, and ocel bootstrap is what writes one"
 
+ours() {
+	if [ -L "$1" ]; then
+		abort "$1 is a symlink, and ocel neither reads, writes nor hands ownership through a name it did not create"
+	fi
+	case $1 in
+	*/../* | */..) abort "$1 climbs out of $dir, and ocel keeps records nowhere else" ;;
+	esac
+	case $1 in
+	"$dir"/*) ;;
+	*) abort "$1 stands outside $dir, and ocel keeps records nowhere else" ;;
+	esac
+}
+
 belongs() {
 	[ "$(id -u)" = 0 ] || return 0
+	local p
 	p=$1
 	while [ "$p" != "$dir" ]; do
-		chown --reference="$dir" "$p" ||
+		ours "$p"
+		chown -h --reference="$dir" "$p" ||
 			abort "$p was written as root and could not be handed to whoever owns $dir, which is the login every deploy after this one reads it as"
 		p=$(dirname "$p")
 	done
 }
 
 lock="$dir/.lock"
+ours "$lock"
 : >>"$lock"
 belongs "$lock"
 exec 9>"$lock"
@@ -66,7 +82,9 @@ checked() {
 stage() {
 	staged="$1.staged"
 	mkdir -p "$(dirname "$1")"
+	ours "$staged"
 	printf '%s\n%s\n' "$2" "$3" >"$staged"
+	belongs "$staged"
 }
 
 prune() {
@@ -85,12 +103,14 @@ case "$verb" in
 read)
 	[ $# -eq 1 ] || usage
 	f=$(fileof "$1")
+	ours "$f"
 	[ -f "$f" ] || exit 3
 	printf '%s\t%s\n' "$(head -n1 "$f")" "$(sed -n 2p "$f")"
 	;;
 write)
 	[ $# -eq 2 ] || usage
 	f=$(fileof "$1")
+	ours "$f"
 	readrev "$f"
 	[ "$held" = "$2" ] || exit 4
 	body=$(cat)
@@ -98,13 +118,14 @@ write)
 	mint
 	stage "$f" "$rev" "$body"
 	mv -f "$staged" "$f"
-	belongs "$f"
 	printf '%s\n' "$rev"
 	;;
 pair)
 	[ $# -eq 4 ] || usage
 	first=$(fileof "$1")
 	second=$(fileof "$3")
+	ours "$first"
+	ours "$second"
 	readrev "$first"
 	[ "$held" = "$2" ] || exit 4
 	readrev "$second"
@@ -122,13 +143,12 @@ pair)
 	stage "$second" "$tworev" "$two"
 	mv -f "$onestaged" "$first"
 	mv -f "$staged" "$second"
-	belongs "$first"
-	belongs "$second"
 	printf '%s\t%s\n' "$onerev" "$tworev"
 	;;
 remove)
 	[ $# -eq 2 ] || usage
 	f=$(fileof "$1")
+	ours "$f"
 	[ -f "$f" ] || exit 3
 	readrev "$f"
 	[ "$held" = "$2" ] || exit 4
@@ -141,9 +161,11 @@ list)
 	under=$dir
 	if [ $# -eq 1 ] && [ -n "$1" ]; then
 		under="$dir/$1"
+		ours "$under"
 	fi
 	[ -d "$under" ] || exit 0
 	found="$dir/.list"
+	ours "$found"
 	find "$under" -type f -name '*.rec' >"$found"
 	belongs "$found"
 	while IFS= read -r f; do
