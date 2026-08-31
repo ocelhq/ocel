@@ -112,3 +112,31 @@ func TestAProxyWithNothingToSayCertifiesAsItAlwaysDid(t *testing.T) {
 		t.Errorf("Certificate() = %+v, want the handle the proxy obtains and renews under", cert)
 	}
 }
+
+func TestABoxWhoseEngineCannotBeReachedIsNotReadAsABoxWithNothingToSay(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	machine.refuses = func(command string) (session.Result, bool) {
+		if strings.Contains(command, "docker version") {
+			return session.Result{Code: 125, Stderr: "Cannot connect to the Docker daemon"}, true
+		}
+		return session.Result{}, false
+	}
+	spoken := &saying{Reporter: edge.DiscardReporter()}
+	if _, err := certifying(machine).Certificate(context.Background(), providerkit.CertificateRequest{
+		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Report: spoken,
+	}); err != nil {
+		t.Fatalf("Certificate() = %v: minting the handle the proxy renews under asks the box for nothing, and the ceiling read is best effort beside it", err)
+	}
+	if !strings.Contains(strings.Join(spoken.said, "\n"), "did not answer") {
+		t.Errorf("a box whose engine answered nothing said %v, and a read that never happened is reported as a proxy with nothing to say: the two are the same silence and only one of them means the CA is not refusing", spoken.said)
+	}
+}
+
+type saying struct {
+	edge.Reporter
+	said []string
+}
+
+func (s *saying) Say(message string) { s.said = append(s.said, message) }

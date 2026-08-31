@@ -328,6 +328,30 @@ func TestInstallingThePreviewEntryTwiceWritesTheProxyOnce(t *testing.T) {
 	}
 }
 
+func TestReleasingThePreviewBaseIsRefusedWhileHostnamesUnderItStillStand(t *testing.T) {
+	t.Parallel()
+
+	claimed := "shop--pr-7." + previewBase
+	state := previewing()
+	state.Claims = append(slices.Clone(state.Claims), previewClaim("pr-7", "", claimed))
+	stood := claimingBox(t, state)
+
+	err := stood.host().RemovePreviewEntry(context.Background(), previewBase)
+	if err == nil {
+		t.Fatal("the base was released with preview hostnames still claimed under it: the catch-all goes and the claims stay, so their routes keep answering and the proxy keeps renewing a certificate for each of them against a base nothing owns, and the next base raised beside them installs a second catch-all over sites that are still live")
+	}
+	if !strings.Contains(err.Error(), claimed) {
+		t.Errorf("the refusal reads %q and names none of the hostnames standing in the way", err)
+	}
+	held, err := ReadProxyState([]byte(stood.held))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if held.PreviewBase != previewBase {
+		t.Errorf("%s answers previews on %q after a refused release, want %q", ProxyConfig, held.PreviewBase, previewBase)
+	}
+}
+
 func TestABoxServingOnePreviewBaseRefusesASecondByName(t *testing.T) {
 	t.Parallel()
 

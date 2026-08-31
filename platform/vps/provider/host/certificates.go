@@ -62,16 +62,16 @@ func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, erro
 	return []byte(read), nil
 }
 
-func (h *Host) CertificateTrouble(ctx context.Context, hostname string) error {
+func (h *Host) CertificateTrouble(ctx context.Context, hostname string) (bool, error) {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
-		return nil
+		return false, nil
 	}
 	limit, said := certs.RateLimited(h.said(ctx, logCommand(ProxyContainer), elevation))
 	if !said || !limit.Covers(hostname) || limit.Spent(time.Now()) {
-		return nil
+		return true, nil
 	}
-	return limit.Refusal(hostname)
+	return true, limit.Refusal(hostname)
 }
 
 func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, error) {
