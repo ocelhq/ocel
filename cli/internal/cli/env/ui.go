@@ -3,7 +3,6 @@ package env
 import (
 	"context"
 	"fmt"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"io"
 
 	"github.com/spf13/cobra"
@@ -15,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func newUICommand(deps cmddeps.Deps) *cobra.Command {

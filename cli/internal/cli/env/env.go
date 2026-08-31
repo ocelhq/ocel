@@ -229,7 +229,7 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 }
 
 func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
@@ -246,6 +246,10 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 			return nil
 		}
 		fmt.Fprintf(stdout, "Removed %s.\n", describeCell(key, opts))
+		if preflight.RunsAContainer(cfg, standing.GetComputes()) {
+			fmt.Fprintln(stdout,
+				"This project runs on container compute, which carries nothing of ocel's to re-read a value: the container serving now still holds what its deploy handed it, and it goes on serving that until the next deploy. Run `ocel deploy` to stop serving it.")
+		}
 		return nil
 	})
 }
