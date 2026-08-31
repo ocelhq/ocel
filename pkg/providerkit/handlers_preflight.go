@@ -57,6 +57,10 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		if err != nil {
 			return nil, RefusalError(err)
 		}
+		resp.Standing, err = h.standingChecks(ctx, provider, class, req.GetDomains())
+		if err != nil {
+			return nil, RefusalError(err)
+		}
 		if class == ClassPreview {
 			resp.PreviewWildcard, err = heldPreviewWildcard(ctx, provider)
 			if err != nil {
