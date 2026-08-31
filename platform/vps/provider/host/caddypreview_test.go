@@ -368,20 +368,24 @@ func TestABoxServingOnePreviewBaseRefusesASecondByName(t *testing.T) {
 func TestAPreviewBaseNoPublicCaWillIssueForIsManagedInternallyAndReachesNoCaAtAll(t *testing.T) {
 	state := routed()
 	state.PreviewBase = internalBase
-	ask := probingConfig(t, mustRender(t, state))
+	ask := probingConfig(t, issuedByNobody(t, mustRender(t, state)))
 	ask("pr-7." + internalBase)
 
 	probe := edge.ProbeHostname(edge.PreviewWildcard(internalBase))
-	const managing = "enabling automatic TLS certificate management"
+	const obtained = "certificate obtained successfully"
 	var logs string
 	for range 100 {
-		if logs = logsOf(probeName(t)); managed(logs, managing, probe) {
+		if logs = logsOf(probeName(t)); managed(logs, obtained, probe) {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if !managed(logs, managing, probe) {
-		t.Fatalf("the proxy manages certificates for nothing naming %s, so this window carries no subject collection to read an absence out of:\n%s", probe, logs)
+	if !managed(logs, obtained, probe) {
+		t.Fatalf("the proxy holds no certificate for %s, so nothing here was decided after the issuance decision and every absence below is read off a window that never reached one:\n%s", probe, logs)
+	}
+	if strings.Contains(logs, unreachableCA) {
+		t.Errorf("a hostname under %s was taken to an acme issuer rather than caddy's internal one: what keeps this package off a public CA is that a base no public CA will issue for is managed internally, and this config points every acme policy at a directory that answers nothing precisely so the wrong answer costs a failed order rather than a real one:\n%s",
+			internalBase, logs)
 	}
 	if strings.Contains(logs, acmeDirectory) {
 		t.Errorf("a preview base under %s reached a public CA, so the live tier cannot use one to install a preview entry without putting a real order on the wire from CI:\n%s",
