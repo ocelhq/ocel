@@ -472,7 +472,8 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, providerkit.ClassPreview, "shop")
 	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1", "p2")
-	seedEnvironment(t, provider, "shop", naming.InfraStack("pr-7"))
+	outlived := naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7)))
+	seedEnvironment(t, provider, "shop", outlived, naming.InfraStack("pr-7"))
 	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
 		providerkit.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
@@ -512,6 +513,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	inOrder(t, provider.Journal(),
 		"destroy "+naming.AppStack("pr-7", "web", release).String(),
 		"remove-prefix "+(naming.Coordinate{Project: "shop", Env: "pr-7", App: "web", Release: release}).StoragePrefix(),
+		"destroy "+outlived.String(),
 		"destroy "+naming.InfraStack("pr-7").String(),
 		"forget "+name.String())
 }
@@ -629,6 +631,30 @@ func TestRemovingAPreviewSweepsTheImagesOfAStackItsLedgerNoLongerNames(t *testin
 	if _, standing, err := providerkit.ReadStack(context.Background(), provider.Records(),
 		providerkit.ClassPreview, "shop", stack); err != nil || standing {
 		t.Errorf("%s still stands after its preview came down (%v): a teardown that reads only what the ledger last named reports success over every container it left running", stack, err)
+	}
+}
+
+func TestAPreviewTeardownTakesItsAppStacksDownBeforeTheInfraTheyStandOn(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassPreview, "shop")
+	app := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
+	infra := naming.InfraStack("pr-7")
+	seedEnvironment(t, provider, "shop", infra)
+
+	if result := removeEnvironment(t, client, "shop", "pr-7"); !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %q", result.GetError())
+	}
+
+	journal := provider.Journal()
+	standing, underneath := slices.Index(journal, "destroy "+app.String()), slices.Index(journal, "destroy "+infra.String())
+	if standing < 0 || underneath < 0 {
+		t.Fatalf("the teardown reached %v, want it to destroy both %s and %s: neither ordering is asserted over a run that took only one of them down", journal, app, infra)
+	}
+	if standing > underneath {
+		t.Errorf("the teardown destroyed %s at %d and %s at %d: an app stack reads the network, the secrets and the database its preview's infra stack owns, so taking the infra first leaves the app's own removal reaching resources that are already gone",
+			infra, underneath, app, standing)
 	}
 }
 
