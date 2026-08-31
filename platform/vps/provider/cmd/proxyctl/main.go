@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
+	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 )
 
 const (
@@ -26,7 +27,10 @@ const (
 	defaultSocket = "/run/caddy-admin.sock"
 )
 
-const proxyData = "/data"
+const (
+	proxyData = "/data"
+	procRoot  = "/proc"
+)
 
 const (
 	exitRefused        = 2
@@ -53,9 +57,9 @@ const (
 	servingTimeout = 10 * time.Second
 )
 
-func main() { os.Exit(run(proxyData, os.Args[1:], os.Stdout, os.Stderr)) }
+func main() { os.Exit(run(proxyData, procRoot, os.Args[1:], os.Stdout, os.Stderr)) }
 
-func run(data string, argv []string, out, errs io.Writer) int {
+func run(data, proc string, argv []string, out, errs io.Writer) int {
 	socket := os.Getenv(socketEnv)
 	if socket == "" {
 		socket = defaultSocket
@@ -85,6 +89,11 @@ func run(data string, argv []string, out, errs io.Writer) int {
 			return usage(errs)
 		}
 		return serving(servingAt, rest[0], out, errs)
+	case "listeners":
+		if len(rest) != 0 {
+			return usage(errs)
+		}
+		return netnsListeners(proc, out, errs)
 	case "forget":
 		if len(rest) == 0 {
 			return usage(errs)
@@ -99,10 +108,36 @@ func run(data string, argv []string, out, errs io.Writer) int {
 
 func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "usage: ocel-proxyctl flip <config> | upstreams | config <path> | leaf <hostname> |")
+	fmt.Fprintln(errs, "       listeners |")
 	fmt.Fprintln(errs, "       forget <hostname>... |")
 	fmt.Fprintln(errs, "       deploy --target <host:port> --health-check-path <path> --deploy-timeout <seconds>")
 	fmt.Fprintln(errs, "              --config <path> --drain-timeout <seconds> [--retire <host:port>]")
 	return exitRefused
+}
+
+func netnsListeners(proc string, out, errs io.Writer) int {
+	var held []listeners.Listener
+	for _, name := range []string{listeners.TCPPath, listeners.TCP6Path} {
+		read, err := os.Open(filepath.Join(proc, strings.TrimPrefix(name, "/proc/")))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+			return exitRefused
+		}
+		found, err := listeners.Parse(read)
+		_ = read.Close()
+		if err != nil {
+			fmt.Fprintf(errs, "ocel-proxyctl: %s: %v\n", name, err)
+			return exitUnattributable
+		}
+		held = append(held, found...)
+	}
+	for _, line := range listeners.Lines(held) {
+		fmt.Fprintln(out, line)
+	}
+	return 0
 }
 
 func forget(root string, hostnames []string, out, errs io.Writer) int {
