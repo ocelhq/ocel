@@ -5,9 +5,10 @@
 | `journeys`    | one example on one target, through the real `ocel` binary, over HTTP |
 | `next-compat` | Next.js's own deployment-adapter harness, by workflow dispatch only  |
 
-Unit tests live beside the code they cover, in vitest for TypeScript and `go test` for Go;
-the Go provider suites (`TestLive*`) and lifecycle suites (`TestLifecycle*`) stay in the
-provider packages and the CLI, and run from the provider workflows.
+Unit tests live beside the code they cover, in vitest for TypeScript and `go test` for Go.
+The Go provider suites (`TestLive*`) stay in the provider packages and, for the image build
+and the container dry run, in the CLI; the lifecycle suites (`TestLifecycle*`) stay in the
+provider packages alone. Both run from the provider workflows.
 
 ## Running one journey locally
 
@@ -56,6 +57,8 @@ pnpm --filter @ocel-tests/journeys cell --example express --target vps
 
 `pnpm --filter @ocel-tests/journeys sweep --target <target>` reclaims what a run that died
 left behind, and only projects the harness named.
+
+`--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
 Real clouds are reached by workflow dispatch only; nothing run from here spends a real
 account.
