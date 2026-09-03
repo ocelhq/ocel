@@ -13,6 +13,7 @@ export const CUSTOM_LINK_TYPE = "custom";
 export const LINK_NAMES = [LINK_NAME, CUSTOM_LINK_NAME] as const;
 
 const NOTHING_PUBLISHED = "nothing has published a record under that name";
+const NOTHING_AT_ALL = "Nothing at all is published to";
 
 const VPC_ACCESS_POLICY_ARN =
   "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole";
@@ -191,6 +192,10 @@ export async function refuse(cell: CellContext): Promise<void> {
   assert.ok(
     output.includes(NOTHING_PUBLISHED),
     `the refusal does not say why it stopped: ${output}`,
+  );
+  assert.ok(
+    output.includes(NOTHING_AT_ALL),
+    `the refusal does not confirm nothing at all is published yet: ${output}`,
   );
 }
 
