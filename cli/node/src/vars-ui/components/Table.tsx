@@ -15,8 +15,10 @@ import {
 } from "../model";
 import {
   addVariant,
+  applyDrop,
   baselines,
   drafts,
+  dropTarget,
   dropVariant,
   erase,
   expanded,
@@ -33,9 +35,63 @@ import {
 } from "../store";
 import { Icon } from "./Icons";
 
+function carriesFile(event: DragEvent): boolean {
+  const types = event.dataTransfer?.types ?? [];
+  return [...types].some((type) => type === "Files" || type === "text/plain");
+}
+
+interface DropHandlers {
+  onDragOver: (event: DragEvent) => void;
+  onDragLeave: (event: DragEvent) => void;
+  onDrop: (event: DragEvent) => void;
+}
+
+function dropHandlers(folder: string): DropHandlers {
+  return {
+    onDragOver: (event) => {
+      if (!carriesFile(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer!.dropEffect = "copy";
+      if (dropTarget.value !== folder) dropTarget.value = folder;
+    },
+    onDragLeave: (event) => {
+      if (
+        event.currentTarget instanceof Element &&
+        event.relatedTarget instanceof Node &&
+        event.currentTarget.contains(event.relatedTarget)
+      ) {
+        return;
+      }
+      if (dropTarget.value === folder) dropTarget.value = null;
+    },
+    onDrop: (event) => {
+      if (!carriesFile(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const file = event.dataTransfer?.files[0];
+      if (file) {
+        void file.text().then((text) => applyDrop(file.name, text, folder));
+        return;
+      }
+      const text = event.dataTransfer?.getData("text/plain") ?? "";
+      applyDrop("the dropped text", text, folder);
+    },
+  };
+}
+
 export function Table() {
+  const target = dropTarget.value;
+  const drop = dropHandlers("");
   return (
-    <div class="scroller">
+    <div
+      class="scroller"
+      data-drop={target === ""}
+      data-dragging={target !== null}
+      onDragOver={drop.onDragOver}
+      onDragLeave={drop.onDragLeave}
+      onDrop={drop.onDrop}
+    >
       <table class="vars">
         <thead>
           <tr>
@@ -123,6 +179,8 @@ function KeyGroup({ row }: { row: KeyRow }) {
 
 function ChildRow({ variant }: { variant: Variant }) {
   const { folder, environment } = variant.at;
+  const scoped = variant.kind === "folder";
+  const drop = scoped ? dropHandlers(folder) : undefined;
   return (
     <tr
       class="row child"
@@ -130,6 +188,10 @@ function ChildRow({ variant }: { variant: Variant }) {
       data-owed={variant.owed}
       data-orphaned={variant.orphaned}
       data-dirty={isDirty(variant.at, drafts.value, baselines.value)}
+      data-drop={scoped && dropTarget.value === folder}
+      onDragOver={drop?.onDragOver}
+      onDragLeave={drop?.onDragLeave}
+      onDrop={drop?.onDrop}
     >
       <th scope="row" class="cell-key">
         {folder !== "" && (

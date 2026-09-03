@@ -239,7 +239,74 @@ select {
 }
 
 .scroller {
+  position: relative;
   overflow-x: auto;
+  outline: 2px dashed transparent;
+  outline-offset: 6px;
+  transition: outline-color 0.12s ease-out;
+}
+
+.scroller[data-dragging="true"] {
+  outline-color: var(--rule-strong);
+}
+
+.scroller[data-drop="true"] {
+  outline-color: var(--ink);
+}
+
+.scroller[data-drop="true"]::after {
+  content: "drop to fill root values";
+  position: absolute;
+  top: calc(var(--step) * 1.5);
+  right: calc(var(--step) * 1.5);
+  padding: 2px 8px;
+  border-radius: 2px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  pointer-events: none;
+}
+
+.row[data-drop="true"] {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  outline: 2px dashed var(--ink);
+  outline-offset: -2px;
+}
+
+.notice {
+  display: flex;
+  gap: var(--step);
+  align-items: flex-start;
+  margin: 0 0 calc(var(--step) * 1.5);
+  padding: calc(var(--step) * 1.25) calc(var(--step) * 1.5);
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--ink);
+  background: var(--sheet);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+}
+
+.notice-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.notice p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.notice p + p {
+  margin-top: calc(var(--step) * 0.5);
+  color: var(--ink-soft);
+}
+
+.notice code {
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .vars {

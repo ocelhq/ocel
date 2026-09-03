@@ -1,8 +1,10 @@
-import { doneLabel, owedCount, plural } from "../model";
+import { doneLabel, folderName, names, owedCount, plural } from "../model";
 import {
   collapseAll,
   dirty,
   discard,
+  dismissDrop,
+  dropped,
   expandAll,
   farewell,
   hideAll,
@@ -18,6 +20,43 @@ import { Drawer } from "./Drawer";
 import { Icon, Sprite } from "./Icons";
 import { Masthead } from "./Masthead";
 import { Table } from "./Table";
+
+function DropNotice() {
+  const drop = dropped.value;
+  if (!drop) return null;
+  const where = folderName(drop.folder);
+  return (
+    <div class="notice" role="status">
+      <div class="notice-body">
+        <p>
+          <Icon name="file" /> {drop.name}:{" "}
+          {drop.fills.length === 0
+            ? `nothing to fill in ${where}.`
+            : `${plural(drop.fills.length, "row")} filled in ${where} — unsaved until you save.`}
+        </p>
+        {drop.undeclared.length > 0 && (
+          <p>
+            Ignored {plural(drop.undeclared.length, "key")} this project does not
+            declare: <code>{names(drop.undeclared)}</code>. Keys come from{" "}
+            <code>defineEnv</code> in app code; this page cannot create one.
+          </p>
+        )}
+        {drop.skipped.map((skip) => (
+          <p key={skip.key}>Skipped {skip.key}: {skip.reason}.</p>
+        ))}
+      </div>
+      <button
+        type="button"
+        class="iconbtn"
+        title="dismiss"
+        aria-label="dismiss this notice"
+        onClick={dismissDrop}
+      >
+        <Icon name="x" />
+      </button>
+    </div>
+  );
+}
 
 export function App() {
   if (farewell.value !== null) {
@@ -62,6 +101,7 @@ export function App() {
             </button>
           </div>
         </div>
+        <DropNotice />
         <Table />
       </div>
       <Drawer />
