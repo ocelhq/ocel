@@ -1,5 +1,5 @@
 import { EDGE_ISR_TITLE } from "../nextCache";
-import { cellKey, planTests, REDEPLOY_TITLE, ROLLBACK_TITLE, UP_TITLE } from "../plan";
+import { DESTROY_TITLE, planTests, REDEPLOY_TITLE, ROLLBACK_TITLE, UP_TITLE } from "../plan";
 import { specForTarget } from "../spec";
 import { CONTRACT_LEGS } from "./keys";
 import type { Expectations } from "./types";
@@ -15,7 +15,7 @@ const PULUMI_SERIALIZATION = "https://github.com/ocelhq/ocel/issues/856";
 
 const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
 
-const LEG_MARKERS = new Set([REDEPLOY_TITLE, ROLLBACK_TITLE]);
+const LEG_MARKERS = new Set([UP_TITLE, DESTROY_TITLE, REDEPLOY_TITLE, ROLLBACK_TITLE]);
 
 export const EDGE_ENV = "OCEL_AWS_EDGE";
 
@@ -33,11 +33,11 @@ function ladderIssueFor(cell: string): string | undefined {
 
 function upOnly(issue: string): Expectations {
   const listed: Expectations = {};
-  for (const example of specForTarget("aws")) {
-    for (const app of example.apps) {
-      const cell = cellKey(example.name, app);
-      listed[cell] = { [UP_TITLE]: ladderIssueFor(cell) ?? issue };
+  for (const test of planTests(specForTarget("aws"), ["up"])) {
+    if (test.title !== UP_TITLE) {
+      continue;
     }
+    listed[test.cell] = { [UP_TITLE]: ladderIssueFor(test.cell) ?? issue };
   }
   return listed;
 }
