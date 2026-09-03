@@ -2,9 +2,10 @@ import { spawn } from "node:child_process";
 import { cp, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import { redact, REDACTED } from "./contract";
-import { ocelBin, treeDir } from "./paths";
+import { exampleDir, ocelBin, treeDir } from "./paths";
 import type { Leg } from "./spec";
 import type { CellContext } from "./targets/types";
+import { siblingDirs } from "./workspace";
 
 const NEVER_COPIED = new Set([".git", ".next", ".ocel", "dist", "node_modules", "output"]);
 
@@ -27,8 +28,25 @@ export async function copyTree(source: string, dest: string): Promise<string> {
   return dest;
 }
 
+export function treeRoot(cell: CellContext, target: string): string {
+  return treeDir(cell.runId, target, cell.example.name);
+}
+
+export function configTree(cell: CellContext, target: string): string {
+  const root = treeRoot(cell, target);
+  return siblingDirs(cell.example).length === 0 ? root : path.join(root, cell.example.dir);
+}
+
 export async function workTree(cell: CellContext, target: string): Promise<string> {
-  return copyTree(cell.dir, treeDir(cell.runId, target, cell.example.name));
+  const siblings = siblingDirs(cell.example);
+  if (siblings.length === 0) {
+    return copyTree(cell.dir, treeRoot(cell, target));
+  }
+  await rm(treeRoot(cell, target), { recursive: true, force: true });
+  for (const sibling of siblings) {
+    await copyTree(exampleDir(sibling), path.join(treeRoot(cell, target), sibling));
+  }
+  return copyTree(cell.dir, configTree(cell, target));
 }
 
 export async function spawnOcel(

@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { rm } from "node:fs/promises";
+import { access, rm } from "node:fs/promises";
 import { createServer } from "node:net";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   applyConsoleEnvDefaults,
@@ -9,8 +10,9 @@ import {
 } from "@ocel-tests/shared/env";
 import { INITIAL_GREETING, redact, SECRET_TOKEN } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
-import { runOcel, workTree } from "../ocel";
+import { runOcel, treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
+import { appCommand, migrateCommand, siblingDirs, stateComplaint } from "../workspace";
 import type { CellContext, Deployment, Target } from "./types";
 
 const HEALTH_TIMEOUT_MS = 120_000;
@@ -21,9 +23,11 @@ const START_CONSOLE = [
   "pnpm --filter @console/web dev",
 ].join(" && ");
 
-type Running = { port: number; dir: string; child: ChildProcess; output: () => string };
+type Running = { app: string; port: number; child: ChildProcess; output: () => string };
 
-const running = new Map<string, Running>();
+type Standing = { dir: string; apps: Running[] };
+
+const running = new Map<string, Standing>();
 
 let seeded: Promise<string> | undefined;
 
@@ -73,13 +77,12 @@ async function accessToken(): Promise<string> {
   return seeded;
 }
 
-function childEnv(token: string, cell: CellContext, port: number): NodeJS.ProcessEnv {
+function childEnv(token: string, cell: CellContext): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     OCEL_ACCESS_TOKEN: token,
     OCEL_API_URL: consoleUrl(),
     OCEL_JOURNEY_RUN: cell.runId,
-    PORT: String(port),
   };
   for (const name of HARNESS_ONLY_ENV) {
     delete env[name];
@@ -104,22 +107,16 @@ async function waitForHealth(url: string, cell: Running): Promise<void> {
   throw new Error(`${url} never became healthy:\n${redact(cell.output())}`);
 }
 
-async function up(cell: CellContext): Promise<Deployment> {
-  const token = await accessToken();
+async function serve(
+  cell: CellContext,
+  dir: string,
+  env: NodeJS.ProcessEnv,
+  app: string,
+): Promise<Running> {
   const port = await freePort();
-  const env = childEnv(token, cell, port);
-  const dir = await workTree(cell, "dev");
-
-  await runOcel(cell, dir, "up", "console-link", ["console", "link", "--create", cell.slug], env);
-  await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
-  await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
-  if (cell.example.suites.includes("product")) {
-    await runOcel(cell, dir, "up", "migrate", ["run", "--", "pnpm", "migrate"], env);
-  }
-
-  const child = spawn(ocelBin, ["dev", "--", "pnpm", "start"], {
+  const child = spawn(ocelBin, ["dev", "--", ...appCommand(cell.example, app)], {
     cwd: dir,
-    env,
+    env: { ...env, PORT: String(port), APP_NAME: app },
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -130,24 +127,55 @@ async function up(cell: CellContext): Promise<Deployment> {
   child.stdout?.on("data", capture);
   child.stderr?.on("data", capture);
 
-  const handle: Running = { port, dir, child, output: () => captured };
-  running.set(cell.slug, handle);
-
-  const baseUrl = `http://127.0.0.1:${port}`;
+  const handle: Running = { app, port, child, output: () => captured };
   try {
-    await waitForHealth(`${baseUrl}/health`, handle);
+    await waitForHealth(`http://127.0.0.1:${port}/health`, handle);
   } finally {
-    await cell.evidence.write("up", "dev.log", captured);
+    await cell.evidence.write("up", `dev-${app}.log`, captured);
   }
-  const [only, ...rest] = cell.example.apps;
-  if (!only || rest.length > 0) {
-    throw new Error(`the dev target serves one app, and ${cell.example.name} declares ${cell.example.apps.length}`);
+  return handle;
+}
+
+async function stateStaysHome(cell: CellContext, dir: string): Promise<void> {
+  const holding: string[] = [];
+  for (const candidate of [dir, ...siblingDirs(cell.example).map((s) => path.join(dir, "..", s))]) {
+    try {
+      await access(path.join(candidate, ".ocel"));
+      holding.push(candidate);
+    } catch {}
   }
-  const urls = new Map([[only, baseUrl]]);
+  const complaint = stateComplaint(dir, holding);
+  if (complaint) {
+    throw new Error(complaint);
+  }
+}
+
+async function up(cell: CellContext): Promise<Deployment> {
+  const token = await accessToken();
+  const env = childEnv(token, cell);
+  const dir = await workTree(cell, "dev");
+
+  await runOcel(cell, dir, "up", "console-link", ["console", "link", "--create", cell.slug], env);
+  await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
+  await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
+  if (cell.example.suites.includes("product")) {
+    await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand(cell.example)], env);
+  }
+
+  const standing: Standing = { dir, apps: [] };
+  running.set(cell.slug, standing);
+  const urls = new Map<string, string>();
+  for (const app of cell.example.apps) {
+    const handle = await serve(cell, dir, env, app);
+    standing.apps.push(handle);
+    urls.set(app, `http://127.0.0.1:${handle.port}`);
+  }
+  await stateStaysHome(cell, dir);
+
   await cell.evidence.write(
     "up",
     "deployment.json",
-    `${JSON.stringify({ slug: cell.slug, port, dir, apps: Object.fromEntries(urls) }, null, 2)}\n`,
+    `${JSON.stringify({ slug: cell.slug, dir, apps: Object.fromEntries(urls) }, null, 2)}\n`,
   );
 
   return {
@@ -177,13 +205,15 @@ async function stop(handle: Running): Promise<void> {
 }
 
 async function destroy(cell: CellContext): Promise<void> {
-  const handle = running.get(cell.slug);
-  if (!handle) {
+  const standing = running.get(cell.slug);
+  if (!standing) {
     return;
   }
-  await stop(handle);
-  await cell.evidence.write("destroy", "dev.log", handle.output());
-  await rm(handle.dir, { recursive: true, force: true });
+  for (const handle of standing.apps) {
+    await stop(handle);
+    await cell.evidence.write("destroy", `dev-${handle.app}.log`, handle.output());
+  }
+  await rm(treeRoot(cell, "dev"), { recursive: true, force: true });
 }
 
 async function answering(port: number): Promise<boolean> {
@@ -209,9 +239,11 @@ async function consoleProjects(): Promise<string[]> {
 
 async function list(): Promise<string[]> {
   const live = new Set(await consoleProjects());
-  for (const [slug, handle] of running) {
-    if (await answering(handle.port)) {
-      live.add(slug);
+  for (const [slug, standing] of running) {
+    for (const handle of standing.apps) {
+      if (await answering(handle.port)) {
+        live.add(slug);
+      }
     }
   }
   return [...live];
