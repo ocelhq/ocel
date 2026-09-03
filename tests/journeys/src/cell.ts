@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { runJourney } from "./journey";
 import { parseShard } from "./shard";
 import { specByName } from "./spec";
 import { targetNamed } from "./targets";
@@ -17,7 +17,7 @@ function flag(argv: string[], name: string): string | undefined {
   return value;
 }
 
-function main(argv: string[]): number {
+async function main(argv: string[]): Promise<number> {
   const exampleName = flag(argv, "example");
   const targetName = flag(argv, "target");
   if (!exampleName || !targetName) {
@@ -31,24 +31,15 @@ function main(argv: string[]): number {
     throw new Error(`the ${example.name} example does not run on ${target.name}`);
   }
 
-  const run = spawnSync(
-    "pnpm",
-    ["vitest", "run", `tests/${example.name}.journey.test.ts`],
-    {
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        OCEL_TARGET: target.name,
-        OCEL_EXAMPLES: example.name,
-      },
-    },
-  );
-  return run.status ?? 1;
+  return runJourney(target, [example]);
 }
 
-try {
-  process.exitCode = main(process.argv.slice(2));
-} catch (error) {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exitCode = 1;
-}
+main(process.argv.slice(2)).then(
+  (code) => {
+    process.exitCode = code;
+  },
+  (error) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  },
+);

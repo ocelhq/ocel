@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { UP_TITLE } from "./plan";
-import { reconcile, type TestOutcome, type TestResult } from "./reconcile";
+import { exitCodeFor, reconcile, type TestOutcome, type TestResult } from "./reconcile";
 
 const ISSUE = "https://github.com/ocelhq/ocel/issues/851";
 
@@ -115,5 +115,23 @@ describe("reconciliation", () => {
       "never-ran",
       "never-ran",
     ]);
+  });
+});
+
+describe("exit code", () => {
+  it("is zero for a run that only passed or failed as listed", () => {
+    expect(exitCodeFor(["ok", "expected-failure", "blocked"])).toBe(0);
+  });
+
+  it("is one for every verdict the account refuses", () => {
+    for (const verdict of [
+      "unexpected-failure",
+      "listed-and-passed",
+      "never-ran",
+      "disabled",
+      "unplanned",
+    ] as const) {
+      expect(exitCodeFor(["ok", verdict])).toBe(1);
+    }
   });
 });

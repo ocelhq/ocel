@@ -21,3 +21,7 @@ export function evidenceDir(runId: string, target: string, example: string): str
 export function treeDir(runId: string, target: string, example: string): string {
   return path.join(outputRoot, runId, target, "trees", example);
 }
+
+export function verdictFile(runId: string, target: string): string {
+  return path.join(outputRoot, runId, target, "verdict.json");
+}

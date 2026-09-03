@@ -6,7 +6,7 @@
   "scripts": {
     "cell": "tsx src/cell.ts",
     "test": "vitest run --config vitest.unit.config.ts",
-    "journey": "vitest run",
+    "journey": "tsx src/journey.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
