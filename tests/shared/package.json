@@ -1,0 +1,21 @@
+{
+  "name": "@ocel-tests/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./env": "./src/env.ts",
+    "./seed": "./src/seed.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@console/auth": "workspace:*",
+    "@console/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  }
+}

@@ -1,13 +1,13 @@
+import { applyConsoleEnvDefaults } from "@ocel-tests/shared/env";
 import type { TestProject } from "vitest/node";
-import { applyDevEnvDefaults } from "./env";
 
 export default async function setup(project: TestProject) {
-  applyDevEnvDefaults();
+  applyConsoleEnvDefaults();
 
   let token = process.env.OCEL_ACCESS_TOKEN;
   if (!token) {
-    const { seed } = await import("./seed");
-    token = (await seed()).token;
+    const { seed } = await import("@ocel-tests/shared/seed");
+    token = (await seed("E2E")).token;
   }
 
   project.provide("accessToken", token);

@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "seed": "tsx src/seed-cli.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@console/auth": "workspace:*",
-    "@console/db": "workspace:*",
+    "@ocel-tests/shared": "workspace:*",
     "ocel": "workspace:^"
   },
   "devDependencies": {

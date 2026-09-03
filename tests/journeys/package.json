@@ -10,8 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@console/auth": "workspace:*",
-    "@console/db": "workspace:*",
+    "@ocel-tests/shared": "workspace:*",
     "ocel": "workspace:^"
   },
   "devDependencies": {
