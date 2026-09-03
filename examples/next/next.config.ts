@@ -1,13 +1,19 @@
 import type { NextConfig } from "next";
+import { APP, productionHostname } from "./lib/hostname";
+
+const selfHosted = productionHostname(APP);
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
+
+  deploymentId: process.env.NEXT_DEPLOYMENT_ID,
 
   images: {
     qualities: [75],
     deviceSizes: [640, 1080],
     imageSizes: [64],
-    remotePatterns: [{ protocol: "https", hostname: "web.**" }],
+    minimumCacheTTL: 60,
+    remotePatterns: selfHosted ? [{ protocol: "https", hostname: selfHosted }] : [],
   },
 
   async headers() {

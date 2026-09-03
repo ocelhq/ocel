@@ -8,7 +8,7 @@ export default async function CacheStatic() {
   return (
     <main>
       <h1>cache static</h1>
-      <Stamp scope="static" cached={at} live={at} />
+      <Stamp scope="static" cached={at} />
     </main>
   );
 }
