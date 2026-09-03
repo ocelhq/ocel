@@ -1,12 +1,16 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { access, rm } from "node:fs/promises";
+import { access, cp, rm, symlink } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { SECRET_TOKEN } from "../contract";
-import { applyConsoleEnvDefaults, consoleUrl } from "../env";
+import {
+  applyConsoleEnvDefaults,
+  consoleUrl,
+  HARNESS_ONLY_ENV,
+} from "@ocel-tests/shared/env";
+import { INITIAL_GREETING, redact, REDACTED, SECRET_TOKEN } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
-import { ocelBin } from "../paths";
+import { ocelBin, treeDir } from "../paths";
 import type { Leg } from "../spec";
 import type { CellContext, Deployment, Target } from "./types";
 
@@ -41,20 +45,18 @@ async function freePort(): Promise<number> {
   });
 }
 
-async function consoleReachable(): Promise<boolean> {
-  try {
-    await fetch(`${consoleUrl()}/api/projects`, { method: "GET" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function guard(): Promise<ExpectationEnvironment> {
-  if (!(await consoleReachable())) {
-    throw new Error(
-      `the console is not answering at ${consoleUrl()}; the journey harness never starts it. Run: ${START_CONSOLE}`,
-    );
+  const url = `${consoleUrl()}/api/projects`;
+  const because = (said: string) =>
+    new Error(`${url} ${said}; the journey harness never starts it. Run: ${START_CONSOLE}`);
+  let res: Response;
+  try {
+    res = await fetch(url, { method: "GET" });
+  } catch (error) {
+    throw because(`is not answering (${String(error)})`);
+  }
+  if (res.status !== 401) {
+    throw because(`answered ${res.status}, and the console answers an unauthorized list with 401`);
   }
   return "dev";
 }
@@ -66,42 +68,47 @@ async function accessToken(): Promise<string> {
     if (existing) {
       return existing;
     }
-    const { auth } = await import("@console/auth/next");
-    const suffix = crypto.randomUUID();
-    const signUp = await auth.api.signUpEmail({
-      body: {
-        name: "Journey User",
-        email: `journey-${suffix}@example.test`,
-        password: "password1234",
-      },
-    });
-    if (!signUp.token) {
-      throw new Error("signUpEmail did not return a session token");
-    }
-    const org = await auth.api.createOrganization({
-      body: { name: "Journey Org", slug: `journey-org-${suffix}` },
-      headers: new Headers({ Authorization: `Bearer ${signUp.token}` }),
-    });
-    if (!org) {
-      throw new Error("createOrganization did not return an organization");
-    }
-    return signUp.token;
+    const { seed } = await import("@ocel-tests/shared/seed");
+    return (await seed("Journey")).token;
   })();
   return seeded;
 }
 
 function childEnv(token: string, cell: CellContext, port: number): NodeJS.ProcessEnv {
-  return {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     OCEL_ACCESS_TOKEN: token,
     OCEL_API_URL: consoleUrl(),
     OCEL_JOURNEY_RUN: cell.runId,
     PORT: String(port),
   };
+  for (const name of HARNESS_ONLY_ENV) {
+    delete env[name];
+  }
+  return env;
+}
+
+function maskArgs(args: string[]): string {
+  const shown = args.map((arg, index) =>
+    args[0] === "env" && args[1] === "set" && index === 3 ? REDACTED : arg,
+  );
+  return redact(shown.join(" "));
+}
+
+async function workTree(cell: CellContext, target: string): Promise<string> {
+  const dest = treeDir(cell.runId, target, cell.example.name);
+  await rm(dest, { recursive: true, force: true });
+  await cp(cell.dir, dest, {
+    recursive: true,
+    filter: (source) => path.basename(source) !== "node_modules",
+  });
+  await symlink(path.join(cell.dir, "node_modules"), path.join(dest, "node_modules"), "dir");
+  return dest;
 }
 
 async function runOcel(
   cell: CellContext,
+  dir: string,
   leg: Leg,
   name: string,
   args: string[],
@@ -109,7 +116,7 @@ async function runOcel(
 ): Promise<void> {
   const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(
     (resolve, reject) => {
-      const child = spawn(ocelBin, args, { cwd: cell.dir, env });
+      const child = spawn(ocelBin, args, { cwd: dir, env });
       let stdout = "";
       let stderr = "";
       child.stdout.on("data", (chunk) => {
@@ -126,7 +133,7 @@ async function runOcel(
   await cell.evidence.write(leg, `${name}.stderr`, result.stderr);
   if (result.code !== 0) {
     throw new Error(
-      `ocel ${args.join(" ")} exited ${result.code}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+      `ocel ${maskArgs(args)} exited ${result.code}\nstdout: ${redact(result.stdout)}\nstderr: ${redact(result.stderr)}`,
     );
   }
 }
@@ -135,7 +142,7 @@ async function waitForHealth(url: string, cell: Running): Promise<void> {
   const deadline = Date.now() + HEALTH_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (cell.child.exitCode !== null || cell.child.signalCode !== null) {
-      throw new Error(`ocel dev exited before ${url} answered:\n${cell.output()}`);
+      throw new Error(`ocel dev exited before ${url} answered:\n${redact(cell.output())}`);
     }
     try {
       const res = await fetch(url);
@@ -145,22 +152,24 @@ async function waitForHealth(url: string, cell: Running): Promise<void> {
     } catch {}
     await delay(500);
   }
-  throw new Error(`${url} never became healthy:\n${cell.output()}`);
+  throw new Error(`${url} never became healthy:\n${redact(cell.output())}`);
 }
 
 async function up(cell: CellContext): Promise<Deployment> {
   const token = await accessToken();
   const port = await freePort();
   const env = childEnv(token, cell, port);
+  const dir = await workTree(cell, "dev");
 
-  await runOcel(cell, "up", "console-link", ["console", "link", "--create", cell.slug], env);
-  await runOcel(cell, "up", "env-set", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
+  await runOcel(cell, dir, "up", "console-link", ["console", "link", "--create", cell.slug], env);
+  await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
+  await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
   if (cell.example.suites.includes("product")) {
-    await runOcel(cell, "up", "migrate", ["run", "--", "pnpm", "migrate"], env);
+    await runOcel(cell, dir, "up", "migrate", ["run", "--", "pnpm", "migrate"], env);
   }
 
   const child = spawn(ocelBin, ["dev", "--", "pnpm", "start"], {
-    cwd: cell.dir,
+    cwd: dir,
     env,
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
@@ -172,7 +181,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   child.stdout?.on("data", capture);
   child.stderr?.on("data", capture);
 
-  const handle: Running = { port, dir: cell.dir, child, output: () => captured };
+  const handle: Running = { port, dir, child, output: () => captured };
   running.set(cell.slug, handle);
 
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -181,13 +190,27 @@ async function up(cell: CellContext): Promise<Deployment> {
   } finally {
     await cell.evidence.write("up", "dev.log", captured);
   }
+  const [only, ...rest] = cell.example.apps;
+  if (!only || rest.length > 0) {
+    throw new Error(`the dev target serves one app, and ${cell.example.name} declares ${cell.example.apps.length}`);
+  }
+  const urls = new Map([[only, baseUrl]]);
   await cell.evidence.write(
     "up",
     "deployment.json",
-    `${JSON.stringify({ slug: cell.slug, port, apps: { [cell.example.apps[0]!]: baseUrl } }, null, 2)}\n`,
+    `${JSON.stringify({ slug: cell.slug, port, dir, apps: Object.fromEntries(urls) }, null, 2)}\n`,
   );
 
-  return { baseUrl: () => baseUrl, fetch: (...args) => fetch(...args) };
+  return {
+    baseUrl: (app) => {
+      const url = urls.get(app);
+      if (!url) {
+        throw new Error(`${cell.example.name} has no app named ${app} on dev`);
+      }
+      return url;
+    },
+    fetch: (...args) => fetch(...args),
+  };
 }
 
 async function stop(handle: Running): Promise<void> {
@@ -206,11 +229,12 @@ async function stop(handle: Running): Promise<void> {
 
 async function destroy(cell: CellContext): Promise<void> {
   const handle = running.get(cell.slug);
-  if (handle) {
-    await stop(handle);
-    await cell.evidence.write("destroy", "dev.log", handle.output());
+  if (!handle) {
+    return;
   }
-  await rm(path.join(cell.dir, ".ocel", "console.json"), { force: true });
+  await stop(handle);
+  await cell.evidence.write("destroy", "dev.log", handle.output());
+  await rm(path.join(handle.dir, ".ocel", "console.json"), { force: true });
 }
 
 async function bound(dir: string): Promise<boolean> {

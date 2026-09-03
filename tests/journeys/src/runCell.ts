@@ -5,6 +5,7 @@ import {
   contractRows,
   INITIAL_GREETING,
   REDEPLOY_GREETING,
+  secretGuarded,
 } from "./contract";
 import { evidence } from "./evidence";
 import { currentRunIdentity, projectSlug } from "./identity";
@@ -56,7 +57,6 @@ export function describeCell(example: ExampleSpec) {
 
   const tearDown = once(async () => {
     await target.destroy(cell);
-    return target.list();
   });
 
   function contractContext(app: string) {
@@ -65,7 +65,7 @@ export function describeCell(example: ExampleSpec) {
       app,
       baseUrl: deployment.baseUrl(app),
       greeting,
-      fetch: deployment.fetch,
+      fetch: secretGuarded(deployment.fetch),
     };
   }
 
@@ -126,7 +126,8 @@ export function describeCell(example: ExampleSpec) {
     for (const app of example.apps) {
       describe(cellKey(example.name, app), () => {
         it(DESTROY_TITLE, async () => {
-          const remaining = await tearDown();
+          await tearDown();
+          const remaining = await target.list();
           assert.ok(
             !remaining.includes(slug),
             `${slug} still exists on ${target.name} after destroy: ${remaining.join(", ")}`,

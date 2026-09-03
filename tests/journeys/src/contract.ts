@@ -4,9 +4,10 @@ import type { AnyUploader, Bucket } from "ocel/blob";
 import { createUploadClient } from "ocel/blob/client";
 import type { Suite } from "./spec";
 
-export const INITIAL_GREETING = "hello";
+export const INITIAL_GREETING = "journey-hello";
 export const REDEPLOY_GREETING = "redeployed";
 export const SECRET_TOKEN = "journey-secret-never-in-a-body";
+export const REDACTED = "<redacted>";
 
 const OCEL_SVG_BYTES = 365;
 const LARGE_BYTES = 5 * 1024 * 1024;
@@ -25,13 +26,29 @@ export type ContractRow = {
   run: (ctx: ContractContext) => Promise<void>;
 };
 
+export function redact(text: string): string {
+  return text.split(SECRET_TOKEN).join(REDACTED);
+}
+
+function requestUrl(input: Parameters<typeof fetch>[0]): string {
+  return input instanceof Request ? input.url : String(input);
+}
+
+export function secretGuarded(inner: typeof fetch): typeof fetch {
+  return async (input, init) => {
+    const res = await inner(input, init);
+    const bytes = Buffer.from(await res.clone().arrayBuffer());
+    assert.ok(
+      !bytes.includes(SECRET_TOKEN),
+      `${requestUrl(input)} leaked the secret value in its body`,
+    );
+    return res;
+  };
+}
+
 async function json(ctx: ContractContext, path: string, init?: RequestInit) {
   const res = await ctx.fetch(`${ctx.baseUrl}${path}`, init);
   const text = await res.text();
-  assert.ok(
-    !text.includes(SECRET_TOKEN),
-    `${path} leaked the secret value in its body`,
-  );
   return { res, text, body: text.length > 0 ? JSON.parse(text) : undefined };
 }
 
@@ -192,7 +209,7 @@ export const contract: ContractRow[] = [
       assert.equal(res.status, 200);
       const probe = body as { greeting: string; hasSecret: boolean; arch: string };
       assert.equal(probe.greeting, ctx.greeting);
-      assert.equal(typeof probe.hasSecret, "boolean");
+      assert.equal(probe.hasSecret, true);
       assert.ok(probe.arch.length > 0);
     },
   },
@@ -215,15 +232,7 @@ export const contract: ContractRow[] = [
       const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/stream`);
       assert.equal(res.status, 200);
       assert.ok(res.body, "the stream carried no body");
-      const decoder = new TextDecoder();
-      const chunks: string[] = [];
-      for await (const part of res.body as unknown as AsyncIterable<Uint8Array>) {
-        for (const line of decoder.decode(part, { stream: true }).split("\n")) {
-          if (line.length > 0) {
-            chunks.push(line);
-          }
-        }
-      }
+      const chunks = (await res.text()).split("\n").filter((line) => line.length > 0);
       assert.deepEqual(chunks, [
         "ocel-stream-1",
         "ocel-stream-2",
