@@ -24,6 +24,11 @@ inputs:
     description: How long the session lives. Must outlive the calling job.
     required: false
     default: "7200"
+  guard-script:
+    description: >-
+      Path, from the workspace, to the account guard this run's checkout layout
+      puts the script at.
+    required: true
   expected-aws-account-id:
     description: The only AWS account this workflow may deploy into.
     required: true
@@ -63,4 +68,4 @@ runs:
       env:
         EXPECTED_AWS_ACCOUNT_ID: ${{ inputs.expected-aws-account-id }}
         EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ inputs.expected-cloudflare-account-id }}
-      run: adapter/tests/next-compat/guard-accounts.sh
+      run: ${{ inputs.guard-script }}

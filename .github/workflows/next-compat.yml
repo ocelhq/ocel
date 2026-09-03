@@ -61,6 +61,7 @@ jobs:
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-build-${{ github.run_id }}
+          guard-script: adapter/tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
@@ -160,6 +161,7 @@ jobs:
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-sweep-${{ github.run_id }}
+          guard-script: adapter/tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
@@ -205,6 +207,7 @@ jobs:
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-smoke-${{ github.run_id }}
+          guard-script: adapter/tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
@@ -351,6 +354,7 @@ jobs:
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-${{ github.run_id }}-${{ strategy.job-index }}
           role-duration-seconds: "21600"
+          guard-script: adapter/tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
@@ -504,6 +508,7 @@ jobs:
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-tier-${{ matrix.tier }}-${{ github.run_id }}
+          guard-script: adapter/tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
           managed-session-policies: ${{ steps.tier-policy.outputs.arns }}
@@ -582,6 +587,7 @@ jobs:
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-destroy-${{ github.run_id }}
+          guard-script: adapter/tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
