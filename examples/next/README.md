@@ -5,6 +5,9 @@ uploader named `document` that takes images and PDFs under `documents/` and writ
 when an upload completes, a plain `GREETING` and a secret `SECRET_TOKEN`. The declarations
 sit in `ocel/`, and each one is the provisioning step.
 
+It doubles as the fixture the journey suites under [`tests/`](../../tests) drive through
+the real binary, so it also carries a framework surface of no use to the product.
+
 ## Run it
 
 ```bash
@@ -19,16 +22,3 @@ OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --con
 ```
 
 `ocel destroy` takes it all down again.
-
-`src/probes.ts` is the test surface — mounted at `/api/probes` by one catch-all route,
-driven by the suites under [`tests/`](../../tests), and of no use to the product.
-
-The framework surface is grouped by behaviour: `/routing`, `/mw`, `/stream`, `/actions`,
-`/runtime`, `/cache` and `/draft` as pages, with their handlers under `/api/next`. Side
-effects land in postgres rather than in a module-level counter, because a serverless
-deployment throws the module away between requests; `/api/next/state` reads them back,
-and `/api/next/upstream/:key` is the counting upstream the cached pages call.
-
-The caching a deployment gives the app is only visible once it is deployed, so `/cache`
-answers with request-time values under `ocel dev` and with cache tiers behind the Ocel
-router (#898).

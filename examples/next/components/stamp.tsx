@@ -5,12 +5,12 @@ export function Stamp({
 }: {
   scope: string;
   cached: string | number;
-  live: string | number;
+  live?: string | number;
 }) {
   return (
     <div>
       <span data-ocel={`${scope}:cached`}>{cached}</span>
-      <span data-ocel={`${scope}:live`}>{live}</span>
+      {live === undefined ? null : <span data-ocel={`${scope}:live`}>{live}</span>}
     </div>
   );
 }

@@ -8,7 +8,7 @@ export default async function CachePath() {
   return (
     <main>
       <h1>cache path</h1>
-      <Stamp scope="path" cached={at} live={at} />
+      <Stamp scope="path" cached={at} />
     </main>
   );
 }

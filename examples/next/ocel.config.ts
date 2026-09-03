@@ -1,23 +1,17 @@
 import type { AppConfig } from "ocel/config";
 import { defineConfig } from "ocel/config";
-
-const run = process.env.OCEL_JOURNEY_RUN;
-const slug = run ? `j-${run}-next` : "next";
+import { APP, productionHostname, projectSlug } from "./lib/hostname";
 
 const config = defineConfig({
-  slug,
-  apps: [{ name: "web", framework: "next", path: "." }],
+  slug: projectSlug(),
+  apps: [{ name: APP, framework: "next", path: "." }],
 });
 
 export function zonedApps(): AppConfig[] | undefined {
-  const zone = process.env.OCEL_JOURNEY_ZONE;
-  if (!zone) {
-    return config.apps;
-  }
-  return config.apps?.map((app) => ({
-    ...app,
-    domains: { production: `${app.name}.${slug}.${zone}` },
-  }));
+  return config.apps?.map((app) => {
+    const production = productionHostname(app.name);
+    return production ? { ...app, domains: { production } } : app;
+  });
 }
 
 export default config;
