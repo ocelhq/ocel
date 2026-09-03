@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  coordinateLine,
+  addressKey,
+  dirtyEntries,
   doneLabel,
   held,
+  isDirty,
   names,
   owedChildren,
   owedCount,
+  reduceSave,
+  saveSummary,
   tallyLine,
   treeOf,
-  verdictLine,
   type Address,
+  type SaveResult,
   type MatrixCell,
   type MatrixRow,
   type State,
@@ -204,41 +208,89 @@ describe("names", () => {
   });
 });
 
-describe("coordinateLine", () => {
-  const r = row("K", []);
+describe("dirtyEntries", () => {
+  const rows = treeOf(
+    stateOf(
+      [
+        row("A", [cell({ set: true, version: 3 }), cell({ folder: "/web", set: true, version: 1 })]),
+        row("B", [cell({ state: "required" })]),
+      ],
+      ["staging"],
+    ),
+    [at("A", "", "staging")],
+  );
+  const key = (a: Address) => addressKey(a);
 
-  it("names the environment when one is addressed", () => {
-    expect(coordinateLine(r, cell({ folder: "/web" }), "staging")).toBe(
-      "/web · plain · read by staging alone",
-    );
+  it("is empty when no draft differs from its baseline", () => {
+    expect(dirtyEntries(rows, new Map(), new Map())).toEqual([]);
+    expect(
+      dirtyEntries(rows, new Map([[key(at("A")), "x"]]), new Map([[key(at("A")), "x"]])),
+    ).toEqual([]);
   });
 
-  it("lists which environments do not read the base value", () => {
-    expect(coordinateLine(r, cell({}), "")).toBe(
-      "root · plain · all environments read it",
-    );
-    expect(
-      coordinateLine(
-        r,
-        cell({ overrides: [{ environment: "staging", version: 1 }] }),
-        "",
-      ),
-    ).toBe("root · plain · all environments except staging");
+  it("carries the version each dirty row was read at, in table order", () => {
+    const drafts = new Map([
+      [key(at("B")), "new"],
+      [key(at("A", "/web")), "web"],
+      [key(at("A", "", "staging")), "stage"],
+      [key(at("A")), ""],
+    ]);
+    expect(dirtyEntries(rows, drafts, new Map())).toEqual([
+      { at: at("A", "", "staging"), value: "stage", version: 0 },
+      { at: at("A", "/web"), value: "web", version: 1 },
+      { at: at("B"), value: "new", version: 0 },
+    ]);
+  });
+
+  it("treats clearing a revealed value as a change to empty", () => {
+    const baselines = new Map([[key(at("A")), "old"]]);
+    const drafts = new Map([[key(at("A")), ""]]);
+    expect(dirtyEntries(rows, drafts, baselines)).toEqual([
+      { at: at("A"), value: "", version: 3 },
+    ]);
+    expect(isDirty(at("A"), drafts, baselines)).toBe(true);
   });
 });
 
-describe("verdictLine", () => {
-  it("prefers the orphan verdict over everything", () => {
-    expect(verdictLine(cell({ set: true }), "gone", true, true)).toMatch(
-      /gone no longer exists/,
-    );
+describe("reduceSave", () => {
+  const drafts = new Map([
+    [addressKey(at("A")), "a"],
+    [addressKey(at("B")), "b"],
+    [addressKey(at("C")), "c"],
+    [addressKey(at("D")), "d"],
+  ]);
+  const results: SaveResult[] = [
+    { at: at("A"), ok: true },
+    { at: at("B"), ok: false, status: 409, message: "moved" },
+    { at: at("C"), ok: false, status: 502, message: "store down" },
+  ];
+
+  it("clears saved drafts and keeps the rest, marking why", () => {
+    const out = reduceSave(drafts, new Map(), results);
+    expect([...out.drafts.keys()]).toEqual([
+      addressKey(at("B")),
+      addressKey(at("C")),
+      addressKey(at("D")),
+    ]);
+    expect(out.problems.get(addressKey(at("B")))).toEqual({ kind: "conflict", message: "moved" });
+    expect(out.problems.get(addressKey(at("C")))).toEqual({ kind: "error", message: "store down" });
+    expect([out.saved, out.conflicted, out.failed]).toEqual([1, 1, 1]);
   });
 
-  it("tells a required empty root apart from an optional one", () => {
-    expect(verdictLine(cell({ state: "required" }), "", false, false)).toBe(
-      "No value is set, and this cell is required.",
+  it("drops an old problem once its row saves", () => {
+    const stale = new Map([[addressKey(at("A")), { kind: "conflict" as const, message: "was" }]]);
+    const out = reduceSave(drafts, stale, [{ at: at("A"), ok: true }]);
+    expect(out.problems.size).toBe(0);
+  });
+
+  it("summarises the batch honestly", () => {
+    expect(saveSummary(reduceSave(drafts, new Map(), [{ at: at("A"), ok: true }]))).toBe(
+      "Saved 1 change.",
     );
-    expect(verdictLine(cell({}), "", false, false)).toMatch(/overrides the root/);
+    expect(saveSummary(reduceSave(drafts, new Map(), results))).toBe(
+      "Saved 1 of 3 changes; 1 changed underneath you and 1 failed — those rows stay unsaved.",
+    );
+    expect(saveSummary(reduceSave(drafts, new Map(), []))).toBe("Nothing to save.");
   });
 });
 

@@ -1,23 +1,28 @@
 import type { JSX } from "preact";
 
 import {
+  addressKey,
+  baselineOf,
+  isDirty,
   names,
   owedChildren,
   plural,
   readBy,
-  sameAddress,
   type KeyRow,
   type Variant,
   type VariantOption,
 } from "../model";
 import {
   addVariant,
-  address,
+  baselines,
+  drafts,
+  dropVariant,
   erase,
   expanded,
   hoveredApp,
+  problems,
   saving,
-  selected,
+  setDraft,
   toggle,
   tree,
 } from "../store";
@@ -51,36 +56,8 @@ export function Table() {
   );
 }
 
-function interactive(event: Event): boolean {
-  return (
-    event.target instanceof Element &&
-    event.target.closest("button, select, input, a, label") !== null
-  );
-}
-
-function pickable(variant: Variant): boolean {
+function editable(variant: Variant): boolean {
   return variant.state !== "forbidden" || variant.set;
-}
-
-type RowProps = JSX.HTMLAttributes<HTMLTableRowElement> & {
-  "data-selected"?: boolean;
-};
-
-function rowProps(variant: Variant): RowProps {
-  if (!pickable(variant)) return {};
-  const picked = selected.value;
-  return {
-    tabIndex: 0,
-    "data-selected": picked !== null && sameAddress(picked, variant.at),
-    onClick: (event) => {
-      if (!interactive(event)) address(variant.at);
-    },
-    onKeyDown: (event) => {
-      if (event.key !== "Enter" || interactive(event)) return;
-      event.preventDefault();
-      address(variant.at);
-    },
-  };
 }
 
 function KeyGroup({ row }: { row: KeyRow }) {
@@ -96,8 +73,8 @@ function KeyGroup({ row }: { row: KeyRow }) {
       <tr
         class="row parent"
         data-owed={row.root.owed}
+        data-dirty={isDirty(row.root.at, drafts.value, baselines.value)}
         aria-expanded={open}
-        {...rowProps(row.root)}
       >
         <th scope="row" class="cell-key">
           <button
@@ -126,7 +103,9 @@ function KeyGroup({ row }: { row: KeyRow }) {
         <td class="cell-value">
           <Value variant={row.root} scope={row.scope} />
         </td>
-        <td class="cell-tools" />
+        <td class="cell-tools">
+          <Tools variant={row.root} />
+        </td>
       </tr>
       {open &&
         row.children.map((child) => (
@@ -145,7 +124,7 @@ function ChildRow({ variant }: { variant: Variant }) {
       data-kind={variant.kind}
       data-owed={variant.owed}
       data-orphaned={variant.orphaned}
-      {...rowProps(variant)}
+      data-dirty={isDirty(variant.at, drafts.value, baselines.value)}
     >
       <th scope="row" class="cell-key">
         {folder !== "" && (
@@ -176,26 +155,22 @@ function ChildRow({ variant }: { variant: Variant }) {
         <Value variant={variant} scope={[]} />
       </td>
       <td class="cell-tools">
-        {variant.orphaned && (
-          <button
-            type="button"
-            class="iconbtn"
-            data-tone="owed"
-            title={`remove the ${environment} value — ${environment} no longer exists`}
-            aria-label={`remove the ${environment} value of ${variant.at.key}`}
-            disabled={saving.value}
-            onClick={() => void erase(variant.at, variant.version)}
-          >
-            <Icon name="trash" />
-          </button>
-        )}
+        <Tools variant={variant} />
       </td>
     </tr>
   );
 }
 
+function describe(variant: Variant): string {
+  const { key, folder, environment } = variant.at;
+  const where = folder === "" ? "the root" : folder;
+  return environment === ""
+    ? `${key} in ${where}`
+    : `${key} in ${where} for ${environment}`;
+}
+
 function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
-  if (variant.state === "forbidden" && !variant.set) {
+  if (!editable(variant)) {
     return (
       <span class="unset">
         {variant.kind === "root" && scope.length > 0
@@ -204,14 +179,47 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
       </span>
     );
   }
+  const key = addressKey(variant.at);
+  const draft = drafts.value.get(key) ?? baselineOf(variant.at, baselines.value);
+  const dirty = isDirty(variant.at, drafts.value, baselines.value);
+  const problem = problems.value.get(key);
   return (
-    <>
-      {variant.set ? (
-        <span class="stored">set · v{variant.version}</span>
-      ) : variant.owed ? (
-        <span class="owed-text">required, not set</span>
-      ) : (
-        <span class="unset">not set</span>
+    <div class="value" data-dirty={dirty}>
+      <div class="value-line">
+        <span class="status">
+          {variant.set ? (
+            <span class="stored">set · v{variant.version}</span>
+          ) : variant.owed ? (
+            <span class="owed-text">required</span>
+          ) : (
+            <span class="unset">not set</span>
+          )}
+        </span>
+        <input
+          type="text"
+          class="value-input"
+          value={draft}
+          autocomplete="off"
+          spellcheck={false}
+          disabled={variant.orphaned}
+          placeholder={variant.set ? "replace the value that is set" : ""}
+          aria-label={`value of ${describe(variant)}`}
+          onInput={(event) => setDraft(variant.at, event.currentTarget.value)}
+        />
+        {dirty && <span class="tag">unsaved</span>}
+        {problem && (
+          <span class="tag" data-tone="owed">
+            {problem.kind === "conflict" ? "conflict" : "failed"}
+          </span>
+        )}
+      </div>
+      {problem && (
+        <span class="fault">
+          <Icon name="warning" />
+          {problem.kind === "conflict"
+            ? `This value changed since the page read it — it is now v${variant.version}. Save again to replace what is there now.`
+            : problem.message}
+        </span>
       )}
       {variant.orphaned && (
         <span class="fault">
@@ -224,7 +232,42 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
           fails its schema: {variant.problem}
         </span>
       )}
-    </>
+    </div>
+  );
+}
+
+function Tools({ variant }: { variant: Variant }) {
+  const busy = saving.value;
+  if (variant.extra) {
+    return (
+      <button
+        type="button"
+        class="iconbtn"
+        title="dismiss this empty row"
+        aria-label={`dismiss the empty row for ${describe(variant)}`}
+        onClick={() => dropVariant(variant.at)}
+      >
+        <Icon name="x" />
+      </button>
+    );
+  }
+  if (!variant.set) return null;
+  return (
+    <button
+      type="button"
+      class="iconbtn"
+      data-tone={variant.orphaned ? "owed" : undefined}
+      title={
+        variant.orphaned
+          ? `remove the ${variant.at.environment} value — ${variant.at.environment} no longer exists`
+          : "remove this value"
+      }
+      aria-label={`remove the value of ${describe(variant)}`}
+      disabled={busy}
+      onClick={() => void erase(variant.at, variant.version)}
+    >
+      <Icon name="trash" />
+    </button>
   );
 }
 
