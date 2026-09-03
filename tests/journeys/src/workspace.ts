@@ -17,6 +17,18 @@ export function appCommand(example: ExampleSpec, app: string): string[] {
   return ["pnpm", "--dir", appPath(example, app), "run", "start"];
 }
 
+export async function setAppNames(
+  example: ExampleSpec,
+  run: (name: string, args: string[]) => Promise<unknown>,
+): Promise<void> {
+  for (const app of example.apps) {
+    const folder = appFolder(example, app);
+    if (folder) {
+      await run(`env-app-${app}`, ["env", "set", "APP_NAME", app, "--folder", folder]);
+    }
+  }
+}
+
 export function migrateCommand(example: ExampleSpec): string[] {
   const [first] = example.apps;
   if (!first) {
