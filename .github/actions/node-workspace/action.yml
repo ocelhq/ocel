@@ -1,10 +1,18 @@
 name: Node workspace
 description: >-
-  pnpm, Node, Bun and an installed workspace, with the turbo task cache
-  restored from earlier runs so build, typecheck and test only redo what
-  changed.
+  pnpm, Node, Bun and an installed workspace, with turbo pointed at the
+  remote cache so build, typecheck and test only redo what changed since
+  any earlier run.
 
 inputs:
+  turbo-token:
+    description: Token for the turbo remote cache. Empty disables remote caching.
+    required: false
+    default: ""
+  turbo-team:
+    description: Team slug the remote cache belongs to.
+    required: false
+    default: ""
   registry-url:
     description: npm registry to configure for publishing.
     required: false
@@ -37,10 +45,12 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: pnpm install --frozen-lockfile
 
-    - uses: actions/cache@v4
-      with:
-        path: ${{ inputs.working-directory }}/.turbo/cache
-        key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
-        restore-keys: |
-          turbo-${{ runner.os }}-${{ github.job }}-
-          turbo-${{ runner.os }}-
+    - name: Point turbo at the remote cache
+      if: inputs.turbo-token != ''
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.turbo-token }}
+        TEAM: ${{ inputs.turbo-team }}
+      run: |
+        echo "TURBO_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+        echo "TURBO_TEAM=$TEAM" >> "$GITHUB_ENV"

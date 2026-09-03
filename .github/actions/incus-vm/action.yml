@@ -5,6 +5,10 @@ description: >-
   and a Docker daemon keeping images in containerd.
 
 inputs:
+  turbo-token:
+    default: ""
+  turbo-team:
+    default: ""
   gobuildcache-bucket:
     default: ""
   gobuildcache-region:
@@ -31,6 +35,9 @@ runs:
         role-to-assume: ${{ inputs.gobuildcache-role-to-assume }}
 
     - uses: ./.github/actions/node-workspace
+      with:
+        turbo-token: ${{ inputs.turbo-token }}
+        turbo-team: ${{ inputs.turbo-team }}
 
     - name: The node bundle the CLI binary is built around
       shell: bash

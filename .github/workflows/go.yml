@@ -66,6 +66,9 @@ jobs:
 
       - if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
         uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: The ocel package the cli e2e deploys against
         if: matrix.module == 'cli'

@@ -92,14 +92,6 @@ jobs:
         working-directory: nextjs
         run: pnpm playwright install --with-deps chromium
 
-      - uses: actions/cache@v4
-        with:
-          path: adapter/.turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-${{ github.job }}-
-            turbo-${{ runner.os }}-
-
       - name: Install & build the adapter workspace
         working-directory: adapter
         run: |
