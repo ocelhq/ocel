@@ -1,14 +1,3 @@
-import {
-  CaretRightIcon,
-  CopyIcon,
-  FolderIcon,
-  HouseIcon,
-  KeyIcon,
-  LockIcon,
-  StackIcon,
-  WarningIcon,
-} from "@phosphor-icons/react";
-
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -41,7 +30,7 @@ import {
   toggleCopy,
   toggleOverwriting,
 } from "../store";
-import { Chip, SectionLabel } from "./Chip";
+import { Chip, Glyph, SectionLabel } from "./Chip";
 
 export function CopyPanel() {
   const dialog = useValue(copying);
@@ -62,38 +51,32 @@ function Panel({ here }: { here: string }) {
   const branches = copyTree(plan);
   const nothing = branches.length + plan.unreadable.length + plan.skipped.length === 0;
   return (
-    <SheetContent data-slot="copy-panel" className="gap-0 sm:max-w-2xl">
-      <SheetHeader className="border-b border-border p-6">
-        <SheetTitle className="font-mono text-base normal-case tracking-tight">
-          Copy from {dialog.tier}
-        </SheetTitle>
+    <SheetContent data-slot="copy-panel" className="gap-0 data-[side=right]:sm:max-w-2xl">
+      <SheetHeader className="border-b border-border p-6 pr-14">
+        <SheetTitle>Copy from {dialog.tier}</SheetTitle>
         <SheetDescription>A one-time copy into {here}. Nothing stays linked.</SheetDescription>
       </SheetHeader>
       <div className="flex-1 overflow-y-auto p-6 text-sm">
-        <div className="mb-6 flex items-center gap-4 border border-border p-3">
+        <div className="mb-6 flex items-center gap-4 border border-border bg-card p-3">
           <div className="flex flex-col">
-            <span className="font-mono text-[11px] tracking-[0.1em] text-dim uppercase">Source</span>
-            <span className="font-mono">{dialog.tier}</span>
+            <SectionLabel className="mb-0 text-[11px]">Source</SectionLabel>
+            <span className="font-mono text-[13px]">{dialog.tier}</span>
           </div>
-          <span className="font-mono text-dim" aria-hidden="true">
-            →
-          </span>
+          <Glyph className="text-muted-foreground">→</Glyph>
           <div className="flex flex-col">
-            <span className="font-mono text-[11px] tracking-[0.1em] text-dim uppercase">
-              Destination
-            </span>
-            <span className="font-mono text-primary">{here}</span>
+            <SectionLabel className="mb-0 text-[11px]">Destination</SectionLabel>
+            <span className="font-mono text-[13px] text-primary">{here}</span>
           </div>
         </div>
 
         {nothing ? (
-          <p className="text-muted-foreground">
+          <p className="font-sans text-[13.5px] text-body">
             {dialog.tier} holds no value for a key this project declares.
           </p>
         ) : (
           <>
             <SectionLabel>Values to copy</SectionLabel>
-            <label className="mb-3 inline-flex cursor-pointer items-center gap-2 text-xs">
+            <label className="mb-3 inline-flex cursor-pointer items-center gap-2 font-mono text-xs">
               <Checkbox
                 checked={dialog.overwriting}
                 disabled={busy || plan.overwrites.length === 0}
@@ -119,10 +102,7 @@ function Panel({ here }: { here: string }) {
               {plan.unreadable.map((cell) => (
                 <li key={addressKey(cell.at)} className="flex flex-wrap items-center gap-2">
                   <Where at={cell.at} />
-                  <span className="inline-flex items-center gap-1 text-xs text-destructive">
-                    <WarningIcon className="size-3.5" />
-                    {cell.error}
-                  </span>
+                  <span className="font-mono text-xs text-destructive">△ {cell.error}</span>
                 </li>
               ))}
             </ul>
@@ -135,15 +115,17 @@ function Panel({ here }: { here: string }) {
             <ul className="space-y-2">
               {plan.skipped.map((skip, index) => (
                 <li key={index} className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-xs">{skip.key}</span>
-                  <span className="text-xs text-muted-foreground">{skip.reason}</span>
+                  <span className="font-mono text-[13px]">{skip.key}</span>
+                  <span className="font-sans text-[13.5px] text-body">{skip.reason}</span>
                 </li>
               ))}
             </ul>
           </>
         )}
 
-        {dialog.error && <p className="mt-4 text-destructive">{dialog.error}</p>}
+        {dialog.error && (
+          <p className="mt-4 font-mono text-xs text-destructive">△ {dialog.error}</p>
+        )}
       </div>
       <SheetFooter className="flex-row items-center border-t border-border p-4">
         <span className="font-mono text-xs text-muted-foreground">{plural(count, "value")} chosen</span>
@@ -157,7 +139,6 @@ function Panel({ here }: { here: string }) {
           disabled={busy || count === 0}
           onClick={() => void confirmCopy()}
         >
-          <CopyIcon />
           {busy ? "Copying…" : `Copy ${plural(count, "value")}`}
         </Button>
       </SheetFooter>
@@ -176,12 +157,12 @@ function Branch({ branch }: { branch: CopyBranch }) {
       <div className="flex items-center gap-2 py-2">
         <button
           type="button"
-          className="inline-flex size-6 items-center justify-center text-muted-foreground"
+          className="inline-flex size-6 items-center justify-center font-mono text-muted-foreground hover:text-primary"
           aria-expanded={open}
           aria-label={`${open ? "collapse" : "expand"} ${folderName(branch.folder)}`}
           onClick={() => toggleBranch(branch.folder)}
         >
-          <CaretRightIcon className={cn("size-3.5 transition-transform", open && "rotate-90")} weight="bold" />
+          {open ? "▾" : "▸"}
         </button>
         <label className="inline-flex cursor-pointer items-center gap-2">
           <Checkbox
@@ -194,19 +175,12 @@ function Branch({ branch }: { branch: CopyBranch }) {
               )
             }
           />
-          {branch.folder === "" ? (
-            <HouseIcon className="size-4 text-muted-foreground" />
-          ) : (
-            <FolderIcon className="size-4 text-muted-foreground" />
-          )}
-          <span className="font-mono text-xs">
-            {branch.folder === "" ? "/" : branch.folder.slice(1)}
-          </span>
+          <span className="font-mono text-[13px]">{branch.folder === "" ? "/" : branch.folder}</span>
         </label>
-        <span className="text-xs text-muted-foreground">{plural(branch.cells.length, "value")}</span>
+        <span className="font-mono text-xs text-muted-foreground">{plural(branch.cells.length, "value")}</span>
       </div>
       {open && (
-        <ul className="mb-2 ml-8 space-y-1.5">
+        <ul className="mb-2 ml-8 space-y-2">
           {branch.cells.map((cell) => (
             <Leaf key={addressKey(cell.at)} cell={cell} />
           ))}
@@ -221,32 +195,21 @@ function Leaf({ cell }: { cell: CopyCell }) {
   const key = addressKey(cell.at);
   const locked = cell.hereSet && !dialog.overwriting;
   return (
-    <li className={cn("flex flex-col gap-1", locked && "opacity-50")}>
+    <li className={cn("flex flex-col gap-1", locked && "opacity-45")}>
       <label className="inline-flex cursor-pointer flex-wrap items-center gap-2">
         <Checkbox
           checked={dialog.chosen.has(key)}
           disabled={dialog.busy || locked}
           onCheckedChange={() => toggleCopy([cell.at])}
         />
-        {cell.class === "secret" ? (
-          <LockIcon className="size-4 text-muted-foreground" />
-        ) : (
-          <KeyIcon className="size-4 text-muted-foreground" />
-        )}
-        <span className="font-mono text-xs">{cell.at.key}</span>
-        {cell.at.environment !== "" && (
-          <Chip>
-            <StackIcon />
-            {cell.at.environment}
-          </Chip>
-        )}
+        <span className="font-mono text-[13px]">{cell.at.key}</span>
+        {cell.class !== "plain" && <Chip tone="muted">{cell.class}</Chip>}
+        {cell.at.environment !== "" && <Chip>{cell.at.environment}</Chip>}
         {cell.hereSet && <Chip tone="muted">already set</Chip>}
       </label>
       <span className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 pl-6.5 font-mono text-xs">
         <Here cell={cell} />
-        <span className="text-dim" aria-hidden="true">
-          →
-        </span>
+        <Glyph className="text-muted-foreground">→</Glyph>
         <There cell={cell} />
       </span>
     </li>
@@ -256,17 +219,9 @@ function Leaf({ cell }: { cell: CopyCell }) {
 function Where({ at }: { at: Address }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
-      <span className="font-mono text-xs">{at.key}</span>
-      <Chip>
-        {at.folder === "" ? <HouseIcon /> : <FolderIcon />}
-        {folderName(at.folder)}
-      </Chip>
-      {at.environment !== "" && (
-        <Chip>
-          <StackIcon />
-          {at.environment}
-        </Chip>
-      )}
+      <span className="font-mono text-[13px]">{at.key}</span>
+      <Chip>{folderName(at.folder)}</Chip>
+      {at.environment !== "" && <Chip>{at.environment}</Chip>}
     </span>
   );
 }
