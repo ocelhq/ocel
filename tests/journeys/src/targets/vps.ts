@@ -1,24 +1,28 @@
 import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
-import { INITIAL_GREETING, SECRET_TOKEN } from "../contract";
+import { INITIAL_GREETING, redact, REDACTED, SECRET_TOKEN } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
-import { appHostname } from "../identity";
+import { appHostname, HARNESS_PREFIX } from "../identity";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
 import type { Leg } from "../spec";
 import { type Gateway, openGateway } from "./gateway";
 import type { CellContext, Deployment, Target } from "./types";
 
-const ZONE = "localhost";
+const DEFAULT_ZONE = "localhost";
 const CONFIG = "ocel.vps.config.ts";
 const DEPLOY_LOGIN = "ocel-deploy";
 const INCUS_MARKER = "/dev/virtio-ports/org.linuxcontainers.incus";
 const PROJECT_RECORDS = "/var/lib/ocel/production/records/projects/production";
 const PROXY_ROOT = "/var/lib/ocel/proxy/data/caddy/pki/authorities/local/root.crt";
-const HARNESS_PREFIX = "j-";
+const NO_RECORDS_TIER = "no-records-tier";
+const ROOT_WAIT_MS = 180_000;
+const ROOT_FIRST_WAIT_MS = 500;
+const ROOT_LONGEST_WAIT_MS = 5_000;
 
 const BRING_A_BOX_UP = [
   "scripts/incus.sh create <name>",
@@ -26,13 +30,17 @@ const BRING_A_BOX_UP = [
   "export OCEL_VPS_HOST=$OCEL_INCUS_ADDR OCEL_VPS_USER=$OCEL_INCUS_USER OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY",
 ].join("\n  ");
 
-type Box = { host: string; user: string; identityFile: string };
+export type Box = { host: string; user: string; identityFile: string };
 
 type Standing = { dir: string; gateway: Gateway; env: NodeJS.ProcessEnv };
 
 const standing = new Map<string, Standing>();
 
 let bootstrapped: Promise<void> | undefined;
+
+let resolvedBox: Box | undefined;
+
+let resolvedZone: string | undefined;
 
 const ran = promisify(execFile);
 
@@ -49,12 +57,35 @@ export function boxEnvironment(said: string): ExpectationEnvironment {
   );
 }
 
+export function journeyZone(env: NodeJS.ProcessEnv): string {
+  return env.OCEL_JOURNEY_ZONE?.trim() || DEFAULT_ZONE;
+}
+
+export function issuedByTheBox(zone: string): boolean {
+  return zone === DEFAULT_ZONE || zone.endsWith(`.${DEFAULT_ZONE}`);
+}
+
+export function recordFile(slug: string): string {
+  const encoded = Array.from(Buffer.from(slug, "utf8"), (byte, at) => {
+    const char = String.fromCharCode(byte);
+    const plain = /^[A-Za-z0-9\-_.]$/.test(char) && !(at === 0 && char === ".");
+    return plain ? char : `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;
+  }).join("");
+  return `${encoded}.rec`;
+}
+
 export function slugsOf(listing: string): string[] {
+  if (listing.trim() === NO_RECORDS_TIER) {
+    throw new Error(
+      `${PROJECT_RECORDS} does not exist on the box, so nothing here can tell a box that holds ` +
+        "no harness project from one this listing failed to read",
+    );
+  }
   return listing
     .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.endsWith(".rec"))
-    .map((line) => decodeURIComponent(line.slice(0, -".rec".length)));
+    .map((line) => line.trim().split("/").pop() ?? "")
+    .filter((name) => name.endsWith(".rec"))
+    .map((name) => decodeURIComponent(name.slice(0, -".rec".length)));
 }
 
 export function strandedSlugs(slugs: string[], runId: string): string[] {
@@ -62,7 +93,18 @@ export function strandedSlugs(slugs: string[], runId: string): string[] {
   return slugs.filter((slug) => slug.startsWith(HARNESS_PREFIX) && !slug.startsWith(mine));
 }
 
-function box(): Box {
+export function sshRefusal(target: Box, login: string, command: string, error: unknown): Error {
+  const said = error as { code?: number | string; stderr?: unknown };
+  const shown = (text: string) => redact(text).split(target.identityFile).join(REDACTED);
+  const status = said?.code === undefined ? "without a status" : `${said.code}`;
+  const stderr = typeof said?.stderr === "string" ? shown(said.stderr).trim() : "";
+  return new Error(
+    `ssh ${login}@${target.host} exited ${status} running ${shown(command)}` +
+      `${stderr ? `\n${stderr}` : ""}`,
+  );
+}
+
+function readBox(): Box {
   const host = process.env.OCEL_VPS_HOST;
   const user = process.env.OCEL_VPS_USER;
   const identityFile = process.env.OCEL_VPS_IDENTITY_FILE;
@@ -75,22 +117,36 @@ function box(): Box {
   return { host, user, identityFile };
 }
 
-async function ssh(target: Box, login: string, command: string): Promise<string> {
-  const { stdout } = await ran("ssh", [
-    "-i",
-    target.identityFile,
-    "-o",
-    "IdentitiesOnly=yes",
-    "-o",
-    "BatchMode=yes",
-    "-o",
-    "StrictHostKeyChecking=accept-new",
-    "-o",
-    "ConnectTimeout=10",
-    `${login}@${target.host}`,
-    command,
-  ]);
-  return stdout;
+function box(): Box {
+  resolvedBox ??= readBox();
+  return resolvedBox;
+}
+
+function zone(): string {
+  resolvedZone ??= journeyZone(process.env);
+  return resolvedZone;
+}
+
+export async function ssh(target: Box, login: string, command: string): Promise<string> {
+  try {
+    const { stdout } = await ran("ssh", [
+      "-i",
+      target.identityFile,
+      "-o",
+      "IdentitiesOnly=yes",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "StrictHostKeyChecking=accept-new",
+      "-o",
+      "ConnectTimeout=10",
+      `${login}@${target.host}`,
+      command,
+    ]);
+    return stdout;
+  } catch (error) {
+    throw sshRefusal(target, login, command, error);
+  }
 }
 
 async function guard(): Promise<ExpectationEnvironment> {
@@ -100,8 +156,8 @@ async function guard(): Promise<ExpectationEnvironment> {
     said = await ssh(target, target.user, `test -e ${INCUS_MARKER} && echo incus || echo real`);
   } catch (error) {
     throw new Error(
-      `${target.user}@${target.host} does not answer over ssh (${String(error)}), ` +
-        `and the journey harness never brings a box up. Run:\n  ${BRING_A_BOX_UP}`,
+      `${target.user}@${target.host} does not answer over ssh, and the journey harness never ` +
+        `brings a box up. Run:\n  ${BRING_A_BOX_UP}\n\n${(error as Error).message}`,
     );
   }
   return boxEnvironment(said);
@@ -122,10 +178,11 @@ function boxEnv(login: string): NodeJS.ProcessEnv {
 }
 
 function childEnv(cell: CellContext, login: string): NodeJS.ProcessEnv {
-  return { ...boxEnv(login), OCEL_JOURNEY_RUN: cell.runId, OCEL_JOURNEY_ZONE: ZONE };
+  return { ...boxEnv(login), OCEL_JOURNEY_RUN: cell.runId, OCEL_JOURNEY_ZONE: zone() };
 }
 
-async function boxConfig(dir: string, slug: string): Promise<string> {
+async function boxConfig(dir: string, slug: string, login: string): Promise<string> {
+  const target = box();
   await mkdir(dir, { recursive: true });
   await writeFile(
     path.join(dir, "ocel.config.ts"),
@@ -136,9 +193,9 @@ export default defineConfig({
   slug: ${JSON.stringify(slug)},
   provider: vps({
     ssh: {
-      host: process.env.OCEL_VPS_HOST ?? "",
-      user: process.env.OCEL_VPS_USER ?? "",
-      identityFile: process.env.OCEL_VPS_IDENTITY_FILE ?? "",
+      host: ${JSON.stringify(target.host)},
+      user: ${JSON.stringify(login)},
+      identityFile: ${JSON.stringify(target.identityFile)},
     },
   }),
   apps: [],
@@ -153,10 +210,15 @@ async function setup(): Promise<void> {
   await guard();
   const target = box();
   bootstrapped ??= (async () => {
-    const dir = await boxConfig(path.join(outputRoot, "vps", "box"), "j-journey-bootstrap");
+    const dir = await boxConfig(
+      path.join(outputRoot, "vps", "box"),
+      `${HARNESS_PREFIX}journey-bootstrap`,
+      target.user,
+    );
     const args = ["bootstrap", "production", "--yes"];
     const result = await spawnOcel(dir, args, boxEnv(target.user));
-    await writeFile(path.join(dir, "bootstrap.log"), `${result.stdout}${result.stderr}`, "utf8");
+    const log = redact(`${result.stdout}${result.stderr}`);
+    await writeFile(path.join(dir, "bootstrap.log"), log, "utf8");
     if (result.code !== 0) {
       throw exitedBadly(args, result);
     }
@@ -165,53 +227,51 @@ async function setup(): Promise<void> {
 }
 
 async function trusted(cell: CellContext): Promise<string | undefined> {
+  if (!issuedByTheBox(zone())) {
+    return undefined;
+  }
   const target = box();
-  let root: string;
-  try {
-    root = await ssh(target, target.user, `sudo cat ${PROXY_ROOT}`);
-  } catch {
-    return undefined;
+  const deadline = Date.now() + ROOT_WAIT_MS;
+  let wait = ROOT_FIRST_WAIT_MS;
+  while (true) {
+    const root = await ssh(target, target.user, `sudo cat ${PROXY_ROOT} 2>/dev/null || true`);
+    if (root.includes("BEGIN CERTIFICATE")) {
+      await cell.evidence.write("up", "proxy-root.pem", root);
+      return path.join(cell.evidence.dir, "up", "proxy-root.pem");
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `${PROXY_ROOT} holds no issuing root ${ROOT_WAIT_MS / 1000}s after the deploy, and every ` +
+          `hostname on ${zone()} is settled against a certificate this box issues itself`,
+      );
+    }
+    await delay(wait);
+    wait = Math.min(wait * 2, ROOT_LONGEST_WAIT_MS);
   }
-  if (!root.includes("BEGIN CERTIFICATE")) {
-    return undefined;
-  }
-  await cell.evidence.write("up", "proxy-root.pem", root);
-  return path.join(cell.evidence.dir, "up", "proxy-root.pem");
 }
 
 async function bindDomains(cell: CellContext, started: Standing): Promise<void> {
-  const args = ["--config", CONFIG, "domain", "add"];
-  const through = (root: string | undefined): NodeJS.ProcessEnv => ({
+  const root = await trusted(cell);
+  await runOcel(cell, started.dir, "up", "domain-add", ["--config", CONFIG, "domain", "add"], {
     ...started.env,
     HTTPS_PROXY: started.gateway.tunnelUrl,
     ...(root ? { SSL_CERT_FILE: root } : {}),
   });
-  const before = await trusted(cell);
-  try {
-    await runOcel(cell, started.dir, "up", "domain-add", args, through(before));
-    return;
-  } catch (refused) {
-    const minted = before ? undefined : await trusted(cell);
-    if (!minted) {
-      throw refused;
-    }
-    await runOcel(cell, started.dir, "up", "domain-add-trusted", args, through(minted));
-  }
 }
 
 async function deployment(cell: CellContext, started: Standing): Promise<Deployment> {
   const urls = new Map<string, string>();
   for (const app of cell.example.apps) {
-    const hostname = appHostname(app, cell.slug, ZONE);
+    const hostname = appHostname(app, cell.slug, zone());
     if (!hostname) {
-      throw new Error(`${app} has no hostname on ${ZONE}`);
+      throw new Error(`${app} has no hostname on ${zone()}`);
     }
     urls.set(app, await started.gateway.serving(hostname));
   }
   await cell.evidence.write(
     "up",
     "deployment.json",
-    `${JSON.stringify({ slug: cell.slug, zone: ZONE, apps: Object.fromEntries(urls) }, null, 2)}\n`,
+    `${JSON.stringify({ slug: cell.slug, zone: zone(), apps: Object.fromEntries(urls) }, null, 2)}\n`,
   );
   return {
     baseUrl: (app) => {
@@ -274,6 +334,16 @@ async function rollback(cell: CellContext): Promise<Deployment> {
   return deployment(cell, started);
 }
 
+async function stillRecorded(slug: string): Promise<boolean> {
+  const target = box();
+  const said = await ssh(
+    target,
+    DEPLOY_LOGIN,
+    `test -e '${PROJECT_RECORDS}/${recordFile(slug)}' && echo held || echo gone`,
+  );
+  return said.trim() === "held";
+}
+
 async function destroy(cell: CellContext): Promise<void> {
   const started = standing.get(cell.slug);
   if (!started) {
@@ -284,7 +354,7 @@ async function destroy(cell: CellContext): Promise<void> {
   try {
     await runOcel(cell, started.dir, "destroy", "destroy", args, started.env);
   } catch (refused) {
-    if (await stands(cell.slug)) {
+    if (await stillRecorded(cell.slug)) {
       throw refused;
     }
   } finally {
@@ -294,12 +364,12 @@ async function destroy(cell: CellContext): Promise<void> {
 
 async function list(): Promise<string[]> {
   const target = box();
-  const listing = await ssh(target, DEPLOY_LOGIN, `ls -1 ${PROJECT_RECORDS} 2>/dev/null || true`);
+  const listing = await ssh(
+    target,
+    DEPLOY_LOGIN,
+    `test -d '${PROJECT_RECORDS}' && { ls -1d '${PROJECT_RECORDS}'/${HARNESS_PREFIX}*.rec 2>/dev/null || true; } || echo ${NO_RECORDS_TIER}`,
+  );
   return slugsOf(listing);
-}
-
-async function stands(slug: string): Promise<boolean> {
-  return (await list()).includes(slug);
 }
 
 async function sweep(runId: string): Promise<void> {
@@ -312,7 +382,7 @@ async function sweep(runId: string): Promise<void> {
   }
   const stranded = strandedSlugs(await list(), runId);
   for (const slug of stranded) {
-    const dir = await boxConfig(path.join(outputRoot, "vps", "sweep", slug), slug);
+    const dir = await boxConfig(path.join(outputRoot, "vps", "sweep", slug), slug, DEPLOY_LOGIN);
     await ocel(dir, ["destroy", "production", "--yes"], boxEnv(DEPLOY_LOGIN));
   }
 }
@@ -329,6 +399,6 @@ export const vpsTarget: Target = {
   rollback,
   destroy,
   list,
-  stands,
+  stands: stillRecorded,
   sweep,
 };

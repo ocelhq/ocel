@@ -1,5 +1,7 @@
 import { userInfo } from "node:os";
 
+export const HARNESS_PREFIX = "j-";
+
 export function runIdentity(
   env: NodeJS.ProcessEnv,
   username: string,
@@ -16,7 +18,7 @@ export function currentRunIdentity(): string {
 }
 
 export function projectSlug(example: string, run: string): string {
-  return `j-${run}-${example}`;
+  return `${HARNESS_PREFIX}${run}-${example}`;
 }
 
 export function appHostname(

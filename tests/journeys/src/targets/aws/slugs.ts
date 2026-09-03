@@ -1,4 +1,4 @@
-export const HARNESS_PREFIX = "j-";
+import { HARNESS_PREFIX } from "../../identity";
 
 export type Stranded = { slug: string; run: string; example: string };
 

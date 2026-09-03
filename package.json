@@ -26,6 +26,7 @@
     "@ocel/provider-aws": "workspace:^",
     "@ocel/provider-vps": "workspace:^",
     "@types/node": "^26.1.1",
-    "ocel": "workspace:*"
+    "ocel": "workspace:*",
+    "zod": "^4.4.3"
   }
 }
