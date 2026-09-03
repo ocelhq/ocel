@@ -287,7 +287,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: journey-evidence-dev
-          path: tests/journeys/output
+          path: |
+            tests/journeys/output
+            !tests/journeys/output/**/trees/**/node_modules/**
           if-no-files-found: warn
 
   aws:
@@ -400,7 +402,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: journey-evidence-aws-${{ matrix.edge.name }}
-          path: tests/journeys/output
+          path: |
+            tests/journeys/output
+            !tests/journeys/output/**/trees/**/node_modules/**
           if-no-files-found: warn
 
   vps:
@@ -492,5 +496,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: journey-evidence-vps
-          path: tests/journeys/output
+          path: |
+            tests/journeys/output
+            !tests/journeys/output/**/trees/**/node_modules/**
           if-no-files-found: warn
