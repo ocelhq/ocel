@@ -246,7 +246,7 @@ export default {
 		{
 			name: "a class mismatch refuses without deploying",
 			env:  map[string]string{clitest.FakeInfraTierEnvVar: "preview", clitest.FakeInfraPresentEnvVar: "1"},
-			want: "ocel deploy can only run against production infrastructure",
+			want: "this command needs production infrastructure",
 		},
 		{
 			name: "absent infrastructure refuses without deploying",

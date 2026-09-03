@@ -456,6 +456,9 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 		if _, ok := New().(edge.CredentialVerifier); !ok {
 			t.Fatal("cloudflare provider does not implement edge.CredentialVerifier")
 		}
+		if _, ok := New().(edge.EntitlementChecker); !ok {
+			t.Fatal("cloudflare provider does not implement edge.EntitlementChecker")
+		}
 	})
 }
 

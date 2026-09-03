@@ -137,7 +137,7 @@ func TestRunRollback(t *testing.T) {
 		if err == nil {
 			t.Fatal("runRollback err = nil, want a class-mismatch error")
 		}
-		if !strings.Contains(err.Error(), "ocel deploy can only run against production infrastructure") {
+		if !strings.Contains(err.Error(), "this command needs production infrastructure") {
 			t.Errorf("err = %v, want the concrete class-mismatch message", err)
 		}
 		if strings.Contains(stdout.String(), "Rolled back") {

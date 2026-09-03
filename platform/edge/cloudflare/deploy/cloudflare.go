@@ -405,8 +405,16 @@ func (p *provider) VerifyCredentials(ctx context.Context) (edge.CredentialIdenti
 	if _, err := p.client.Accounts.Get(ctx, accounts.AccountGetParams{AccountID: cf.F(accountID)}); err != nil {
 		return edge.CredentialIdentity{}, fmt.Errorf("%s was rejected by Cloudflare for account %s: %w", envAPIToken, accountID, err)
 	}
-	plan, entitlement := p.workersPlan(ctx, accountID)
-	return edge.CredentialIdentity{Account: accountID, Plan: plan, CodeEntitlement: entitlement}, nil
+	return edge.CredentialIdentity{Account: accountID}, nil
+}
+
+func (p *provider) CodeEntitlement(ctx context.Context) (edge.CodeEntitlement, error) {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return edge.CodeEntitlement{}, fmt.Errorf("%s is not set", envAccountID)
+	}
+	plan, granted := p.workersPlan(ctx, accountID)
+	return edge.CodeEntitlement{Plan: plan, Granted: granted}, nil
 }
 
 const workersPaidPlan = "Workers Paid"

@@ -9,12 +9,12 @@ import (
 
 type freePlanEdge struct {
 	*fakeEdge
-	verifications int
+	checks int
 }
 
-func (f *freePlanEdge) VerifyCredentials(context.Context) (edge.CredentialIdentity, error) {
-	f.verifications++
-	return edge.CredentialIdentity{Account: "acct-1", Plan: "Workers Free", CodeEntitlement: edge.EntitlementWithheld}, nil
+func (f *freePlanEdge) CodeEntitlement(context.Context) (edge.CodeEntitlement, error) {
+	f.checks++
+	return edge.CodeEntitlement{Plan: "Workers Free", Granted: edge.EntitlementWithheld}, nil
 }
 
 func TestRunNeverAsksWhatThePlanEntitles(t *testing.T) {
@@ -26,8 +26,8 @@ func TestRunNeverAsksWhatThePlanEntitles(t *testing.T) {
 			if err := Run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), class, everything(), nil, nil); err != nil {
 				t.Fatalf("run: %v", err)
 			}
-			if ed.verifications != 0 {
-				t.Errorf("bootstrap asked the edge to verify credentials %d times; a free plan bootstraps like any other", ed.verifications)
+			if ed.checks != 0 {
+				t.Errorf("bootstrap asked the edge what its plan entitles %d times; a free plan bootstraps like any other", ed.checks)
 			}
 		})
 	}

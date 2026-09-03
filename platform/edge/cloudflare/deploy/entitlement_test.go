@@ -36,7 +36,7 @@ func entitlementProvider(t *testing.T, subscriptions string, status int) *provid
 	)}
 }
 
-func TestVerifyCredentialsReportsWhatThePlanEntitles(t *testing.T) {
+func TestCodeEntitlementReportsWhatThePlanEntitles(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		subscriptions string
@@ -81,18 +81,15 @@ func TestVerifyCredentialsReportsWhatThePlanEntitles(t *testing.T) {
 			t.Setenv(envAPIToken, "tok")
 
 			p := entitlementProvider(t, tc.subscriptions, tc.status)
-			id, err := p.VerifyCredentials(t.Context())
+			got, err := p.CodeEntitlement(t.Context())
 			if err != nil {
-				t.Fatalf("VerifyCredentials: %v", err)
+				t.Fatalf("CodeEntitlement: %v", err)
 			}
-			if id.Account != "acct-1" {
-				t.Errorf("Account = %q, want acct-1", id.Account)
+			if got.Granted != tc.want {
+				t.Errorf("Granted = %q, want %q", got.Granted, tc.want)
 			}
-			if id.CodeEntitlement != tc.want {
-				t.Errorf("CodeEntitlement = %q, want %q", id.CodeEntitlement, tc.want)
-			}
-			if tc.wantPlan != "" && id.Plan != tc.wantPlan {
-				t.Errorf("Plan = %q, want %q", id.Plan, tc.wantPlan)
+			if tc.wantPlan != "" && got.Plan != tc.wantPlan {
+				t.Errorf("Plan = %q, want %q", got.Plan, tc.wantPlan)
 			}
 		})
 	}
