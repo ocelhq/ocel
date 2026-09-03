@@ -51,7 +51,12 @@ export function describeCell(example: ExampleSpec) {
   let deployment: Deployment | undefined;
   let greeting = INITIAL_GREETING;
 
+  let setupFailure: { error: unknown } | undefined;
+
   const bringUp = once(async () => {
+    if (setupFailure) {
+      throw setupFailure.error;
+    }
     deployment = await target.up(cell);
   });
 
@@ -84,7 +89,9 @@ export function describeCell(example: ExampleSpec) {
 
   describe(example.name, () => {
     beforeAll(async () => {
-      await target.setup();
+      await target.setup().catch((error: unknown) => {
+        setupFailure = { error };
+      });
     }, timeout);
 
     afterAll(async () => {

@@ -56,14 +56,6 @@ describe("reconciliation", () => {
     expect(report.failures.map((row) => row.verdict)).toContain("unexpected-failure");
   });
 
-  it.each(["skipped", "todo", "only"] as const)("fails on a %s test", (outcome) => {
-    const results = allRan();
-    results[1] = result("GET /health answers", outcome);
-    const report = reconcile({ planned, results, expectations: {} });
-    expect(report.failed).toBe(true);
-    expect(report.failures.map((row) => row.verdict)).toContain("disabled");
-  });
-
   it("fails a disabled test even when it is listed", () => {
     const results = allRan();
     results[1] = result("GET /health answers", "skipped");
@@ -103,10 +95,10 @@ describe("reconciliation", () => {
     ]);
   });
 
-  it("blocks the rows vitest skipped behind a listed up, whatever order they arrive in", () => {
+  it("blocks the rows that failed behind a listed up, whatever order they arrive in", () => {
     const results: TestResult[] = [
-      result("GET /health answers", "skipped"),
-      result("destroy", "skipped"),
+      result("GET /health answers", "failed"),
+      result("destroy", "failed"),
       result(UP_TITLE, "failed"),
     ];
     const expectations = { "express/web": { [UP_TITLE]: ISSUE } };
@@ -121,13 +113,13 @@ describe("reconciliation", () => {
     }
   });
 
-  it("blocks the skipped rows behind an unlisted up, and fails on the up alone", () => {
+  it("blocks the rows that failed behind an unlisted up, and fails on the up alone", () => {
     const report = reconcile({
       planned,
       results: [
         result(UP_TITLE, "failed"),
-        result("GET /health answers", "skipped"),
-        result("destroy", "skipped"),
+        result("GET /health answers", "failed"),
+        result("destroy", "failed"),
       ],
       expectations: {},
     });
@@ -139,22 +131,24 @@ describe("reconciliation", () => {
     expect(exitCodeFor(report.rows.map((row) => row.verdict))).toBe(1);
   });
 
-  it("fails a skipped row in a cell that came up", () => {
-    const results = allRan();
-    results[1] = result("GET /health answers", "skipped");
-    const report = reconcile({ planned, results, expectations: {} });
-    expect(report.rows.map((row) => row.verdict)).toEqual(["ok", "disabled", "ok"]);
-    expect(exitCodeFor(report.rows.map((row) => row.verdict))).toBe(1);
-  });
+  it.each(["skipped", "todo", "only"] as const)(
+    "fails on a %s row wherever it appears, including behind a listed up",
+    (outcome) => {
+      const cameUp = allRan();
+      cameUp[1] = result("GET /health answers", outcome);
+      const clean = reconcile({ planned, results: cameUp, expectations: {} });
+      expect(clean.rows.map((row) => row.verdict)).toEqual(["ok", "disabled", "ok"]);
+      expect(exitCodeFor(clean.rows.map((row) => row.verdict))).toBe(1);
 
-  it.each(["todo", "only"] as const)("fails on a %s row behind a listed up", (outcome) => {
-    const report = reconcile({
-      planned,
-      results: [result(UP_TITLE, "failed"), result("GET /health answers", outcome)],
-      expectations: { "express/web": { [UP_TITLE]: ISSUE } },
-    });
-    expect(report.failures.map((row) => row.verdict)).toEqual(["disabled"]);
-  });
+      const blocked = reconcile({
+        planned,
+        results: [result(UP_TITLE, "failed"), result("GET /health answers", outcome)],
+        expectations: { "express/web": { [UP_TITLE]: ISSUE } },
+      });
+      expect(blocked.failures.map((row) => row.verdict)).toEqual(["disabled"]);
+      expect(exitCodeFor(blocked.rows.map((row) => row.verdict))).toBe(1);
+    },
+  );
 
   it("fails a cell whose up failed unlisted", () => {
     const report = reconcile({
