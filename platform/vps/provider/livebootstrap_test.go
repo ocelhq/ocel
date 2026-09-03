@@ -22,6 +22,10 @@ func (vm machine) sshAs(t *testing.T, login, command string) string {
 	t.Helper()
 	rendered, err := vm.attempt(login, command)
 	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && len(exit.Stderr) > 0 {
+			t.Fatalf("ssh %s@%s %q: %v: %s", login, vm.addr, command, err, strings.TrimSpace(string(exit.Stderr)))
+		}
 		t.Fatalf("ssh %s@%s %q: %v", login, vm.addr, command, err)
 	}
 	return rendered
