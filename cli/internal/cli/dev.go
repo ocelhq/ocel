@@ -31,7 +31,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/watcher"
 )
 
-var watchDebounce = 300 * time.Millisecond
+var (
+	watchDebounce = 300 * time.Millisecond
+	startWatching = watchAndReResolve
+)
 
 var devCmd = &cobra.Command{
 	Use:   "dev -- <command> [args...]",
@@ -133,9 +136,7 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, c
 	if err != nil {
 		return err
 	}
-	srv.PushEnv(resolved)
-
-	watching, err := watchAndReResolve(background, srv, cfg, projectCfg.EnvVars, stdout, stderr)
+	watching, err := startWatching(background, srv, cfg, projectCfg.EnvVars, stdout, stderr)
 	if err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)
 	}
@@ -143,6 +144,7 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, c
 		stopBackground()
 		<-watching.Done()
 	}()
+	srv.PushEnv(resolved)
 
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
 	appCmd.Env = applyEnv(os.Environ(), resolved)

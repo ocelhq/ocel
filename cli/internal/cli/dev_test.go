@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +26,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/watcher"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -564,6 +567,75 @@ export default { slug: "test-app" };
 
 		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=restored\n")
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "restored")
+
+		cancelFollower()
+		select {
+		case <-followerDone:
+		case <-time.After(5 * time.Second):
+			t.Fatal("follower runDev did not exit after cancellation")
+		}
+
+		cancelLeader()
+		select {
+		case <-leaderDone:
+		case <-time.After(5 * time.Second):
+			t.Fatal("leader runDev did not exit after cancellation")
+		}
+	})
+
+	t.Run("an edit made the instant a follower sees the first push is still watched", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses a POSIX shell fixture command")
+		}
+
+		stalled := startWatching
+		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) (*watcher.Watcher, error) {
+			time.Sleep(300 * time.Millisecond)
+			return stalled(ctx, srv, cfg, projectEnv, stdout, stderr)
+		}
+		t.Cleanup(func() { startWatching = stalled })
+
+		resolveServer := newFakeResolveServer(t)
+		defer resolveServer.Close()
+
+		root := t.TempDir()
+		t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+		deps := newDeps()
+		withCredentials(&deps, resolveServer.URL)
+		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+
+		leaderCtx, cancelLeader := context.WithCancel(context.Background())
+		defer cancelLeader()
+
+		var leaderStdout, leaderStderr syncBuffer
+		leaderDone := make(chan error, 1)
+		go func() {
+			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+		}()
+
+		waitForLockfile(t, root)
+
+		envDumpPath := filepath.Join(root, "follower-env.out")
+		followerAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
+
+		followerCtx, cancelFollower := context.WithCancel(context.Background())
+		defer cancelFollower()
+		followerDone := make(chan error, 1)
+		var followerStdout, followerStderr bytes.Buffer
+		go func() {
+			followerDone <- runDev(followerCtx, deps, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+		}()
+
+		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
+
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=second\n")
+		waitForEnvValue(t, envDumpPath, "API_TOKEN", "second")
 
 		cancelFollower()
 		select {
