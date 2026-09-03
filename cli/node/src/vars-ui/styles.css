@@ -206,7 +206,16 @@ select {
   align-items: baseline;
 }
 
+.tools-gap {
+  width: 1px;
+  align-self: stretch;
+  background: var(--rule-strong);
+}
+
 .linkish {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
   padding: 0;
   border: 0;
   background: none;
@@ -342,6 +351,10 @@ select {
 .iconbtn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.iconbtn[aria-pressed="true"] {
+  color: var(--ink);
 }
 
 .iconbtn[data-tone="owed"] {

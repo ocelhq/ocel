@@ -6,13 +6,16 @@ import {
   baselineOf,
   dirtyEntries,
   reduceSave,
+  revealable,
   saveSummary,
   treeOf,
+  variantsOf,
   type Address,
   type AppResolution,
   type Problem,
   type SaveResult,
   type State,
+  type Variant,
 } from "./model";
 
 export const state = signal<State | null>(null);
@@ -25,11 +28,16 @@ export const extras = signal<readonly Address[]>([]);
 
 export const drafts = signal<ReadonlyMap<string, string>>(new Map());
 export const baselines = signal<ReadonlyMap<string, string>>(new Map());
+export const revealErrors = signal<ReadonlyMap<string, string>>(new Map());
 export const problems = signal<ReadonlyMap<string, Problem>>(new Map());
 export const outcome = signal<{ text: string; tone?: "owed" } | null>(null);
 
 export const tree = computed(() =>
   state.value ? treeOf(state.value, extras.value) : [],
+);
+
+export const variants = computed(
+  () => new Map(variantsOf(tree.value).map((v) => [addressKey(v.at), v])),
 );
 
 export const dirty = computed(() =>
@@ -99,6 +107,65 @@ export function discard(): void {
   outcome.value = null;
 }
 
+interface Revealed {
+  values: (Address & { value: string })[];
+  errors: (Address & { error: string })[];
+}
+
+export async function reveal(cells: readonly Address[]): Promise<void> {
+  const asked = cells.filter((at) => {
+    const variant = variants.value.get(addressKey(at));
+    return variant !== undefined && revealable(variant);
+  });
+  if (asked.length === 0) return;
+  let read: Revealed;
+  try {
+    read = await api<Revealed>("POST", "/api/reveal", { cells: asked });
+  } catch (thrown) {
+    const errors = new Map(revealErrors.value);
+    for (const at of asked) errors.set(addressKey(at), message(thrown));
+    revealErrors.value = errors;
+    return;
+  }
+  const values = new Map(baselines.value);
+  const errors = new Map(revealErrors.value);
+  for (const found of read.values) {
+    values.set(addressKey(found), found.value);
+    errors.delete(addressKey(found));
+  }
+  for (const failed of read.errors) {
+    errors.set(addressKey(failed), failed.error);
+    values.delete(addressKey(failed));
+  }
+  baselines.value = values;
+  revealErrors.value = errors;
+}
+
+export function hide(cells: readonly Address[]): void {
+  const values = new Map(baselines.value);
+  const errors = new Map(revealErrors.value);
+  for (const at of cells) {
+    values.delete(addressKey(at));
+    errors.delete(addressKey(at));
+  }
+  baselines.value = values;
+  revealErrors.value = errors;
+}
+
+function everyRevealable(): Address[] {
+  return variantsOf(tree.value)
+    .filter(revealable)
+    .map((variant: Variant) => variant.at);
+}
+
+export function revealAll(): Promise<void> {
+  return reveal(everyRevealable());
+}
+
+export function hideAll(): void {
+  hide(everyRevealable());
+}
+
 async function attempt(at: Address, run: () => Promise<unknown>): Promise<SaveResult> {
   try {
     await run();
@@ -111,6 +178,14 @@ async function attempt(at: Address, run: () => Promise<unknown>): Promise<SaveRe
       message: message(thrown),
     };
   }
+}
+
+function settle(results: SaveResult[]): ReturnType<typeof reduceSave> {
+  const reduced = reduceSave(drafts.value, baselines.value, problems.value, results);
+  drafts.value = reduced.drafts;
+  baselines.value = reduced.baselines;
+  problems.value = reduced.problems;
+  return reduced;
 }
 
 export async function save(): Promise<void> {
@@ -131,13 +206,16 @@ export async function save(): Promise<void> {
       ),
     );
     await refresh();
-    const reduced = reduceSave(drafts.value, problems.value, results);
-    drafts.value = reduced.drafts;
-    problems.value = reduced.problems;
+    const reduced = settle(results);
     outcome.value = {
       text: saveSummary(reduced),
       ...(reduced.saved < results.length && { tone: "owed" as const }),
     };
+    await reveal(
+      results
+        .filter((result) => !result.ok && result.status === 409)
+        .map((result) => result.at),
+    );
   } finally {
     saving.value = false;
   }
@@ -152,9 +230,8 @@ export async function erase(at: Address, version: number): Promise<void> {
       api("DELETE", `/api/value?${query(at)}&version=${version}`),
     );
     await refresh();
-    const reduced = reduceSave(drafts.value, problems.value, [result]);
-    drafts.value = reduced.drafts;
-    problems.value = reduced.problems;
+    settle([result]);
+    if (result.ok) hide([at]);
     outcome.value = result.ok
       ? { text: `Removed the value of ${at.key}.` }
       : { text: `Could not remove the value of ${at.key}: ${result.message}`, tone: "owed" };

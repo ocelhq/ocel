@@ -8,6 +8,7 @@ import {
   owedChildren,
   plural,
   readBy,
+  revealable,
   type KeyRow,
   type Variant,
   type VariantOption,
@@ -20,7 +21,10 @@ import {
   erase,
   expanded,
   hoveredApp,
+  hide,
   problems,
+  reveal,
+  revealErrors,
   saving,
   setDraft,
   toggle,
@@ -180,9 +184,12 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
     );
   }
   const key = addressKey(variant.at);
+  const revealed = baselines.value.has(key);
   const draft = drafts.value.get(key) ?? baselineOf(variant.at, baselines.value);
   const dirty = isDirty(variant.at, drafts.value, baselines.value);
   const problem = problems.value.get(key);
+  const unreadable = revealErrors.value.get(key);
+  const secret = variant.class === "secret";
   return (
     <div class="value" data-dirty={dirty}>
       <div class="value-line">
@@ -202,7 +209,15 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
           autocomplete="off"
           spellcheck={false}
           disabled={variant.orphaned}
-          placeholder={variant.set ? "replace the value that is set" : ""}
+          placeholder={
+            !variant.set
+              ? ""
+              : secret
+                ? "overwrite the secret"
+                : revealed
+                  ? ""
+                  : "••••••••"
+          }
           aria-label={`value of ${describe(variant)}`}
           onInput={(event) => setDraft(variant.at, event.currentTarget.value)}
         />
@@ -217,8 +232,14 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
         <span class="fault">
           <Icon name="warning" />
           {problem.kind === "conflict"
-            ? `This value changed since the page read it — it is now v${variant.version}. Save again to replace what is there now.`
+            ? `This value changed since the page read it — now ${stored(variant, revealed ? baselines.value.get(key) : undefined)}. Save again to replace it.`
             : problem.message}
+        </span>
+      )}
+      {unreadable && (
+        <span class="fault">
+          <Icon name="warning" />
+          could not reveal: {unreadable}
         </span>
       )}
       {variant.orphaned && (
@@ -236,8 +257,15 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
   );
 }
 
+function stored(variant: Variant, value: string | undefined): string {
+  if (variant.class === "secret") return `set · v${variant.version} (a secret stays out of the browser)`;
+  if (value === undefined) return `v${variant.version}`;
+  return `v${variant.version}: ${value}`;
+}
+
 function Tools({ variant }: { variant: Variant }) {
   const busy = saving.value;
+  const revealed = baselines.value.has(addressKey(variant.at));
   if (variant.extra) {
     return (
       <button
@@ -253,21 +281,37 @@ function Tools({ variant }: { variant: Variant }) {
   }
   if (!variant.set) return null;
   return (
-    <button
-      type="button"
-      class="iconbtn"
-      data-tone={variant.orphaned ? "owed" : undefined}
-      title={
-        variant.orphaned
-          ? `remove the ${variant.at.environment} value — ${variant.at.environment} no longer exists`
-          : "remove this value"
-      }
-      aria-label={`remove the value of ${describe(variant)}`}
-      disabled={busy}
-      onClick={() => void erase(variant.at, variant.version)}
-    >
-      <Icon name="trash" />
-    </button>
+    <>
+      {revealable(variant) && (
+        <button
+          type="button"
+          class="iconbtn"
+          aria-pressed={revealed}
+          title={revealed ? "hide the value" : "reveal the value"}
+          aria-label={`${revealed ? "hide" : "reveal"} the value of ${describe(variant)}`}
+          onClick={() =>
+            revealed ? hide([variant.at]) : void reveal([variant.at])
+          }
+        >
+          <Icon name={revealed ? "eyeOff" : "eye"} />
+        </button>
+      )}
+      <button
+        type="button"
+        class="iconbtn"
+        data-tone={variant.orphaned ? "owed" : undefined}
+        title={
+          variant.orphaned
+            ? `remove the ${variant.at.environment} value — ${variant.at.environment} no longer exists`
+            : "remove this value"
+        }
+        aria-label={`remove the value of ${describe(variant)}`}
+        disabled={busy}
+        onClick={() => void erase(variant.at, variant.version)}
+      >
+        <Icon name="trash" />
+      </button>
+    </>
   );
 }
 

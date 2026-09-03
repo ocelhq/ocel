@@ -10,9 +10,11 @@ import {
   owedChildren,
   owedCount,
   reduceSave,
+  revealable,
   saveSummary,
   tallyLine,
   treeOf,
+  variantsOf,
   type Address,
   type SaveResult,
   type MatrixCell,
@@ -175,6 +177,21 @@ describe("treeOf", () => {
     expect(tree[1]?.options.map((o) => o.label)).toEqual(["/web", "staging in /web"]);
   });
 
+  it("carries the class down so a secret is never revealable", () => {
+    const tree = treeOf(
+      stateOf([
+        row("S", [cell({ set: true, version: 1 }), cell({ folder: "/web", set: true, version: 1 })], { class: "secret" }),
+        row("P", [cell({ set: true, version: 1 }), cell({ folder: "/web" })]),
+      ]),
+      [],
+    );
+    expect(variantsOf(tree).map((v) => [v.at.key, v.at.folder, v.class, revealable(v)])).toEqual([
+      ["S", "", "secret", false],
+      ["S", "/web", "secret", false],
+      ["P", "", "plain", true],
+    ]);
+  });
+
   it("treats a reference as set", () => {
     const tree = treeOf(
       stateOf([row("A", [cell({ reference: { slug: "other", folder: "", key: "A" } })])]),
@@ -266,7 +283,7 @@ describe("reduceSave", () => {
   ];
 
   it("clears saved drafts and keeps the rest, marking why", () => {
-    const out = reduceSave(drafts, new Map(), results);
+    const out = reduceSave(drafts, new Map(), new Map(), results);
     expect([...out.drafts.keys()]).toEqual([
       addressKey(at("B")),
       addressKey(at("C")),
@@ -279,18 +296,28 @@ describe("reduceSave", () => {
 
   it("drops an old problem once its row saves", () => {
     const stale = new Map([[addressKey(at("A")), { kind: "conflict" as const, message: "was" }]]);
-    const out = reduceSave(drafts, stale, [{ at: at("A"), ok: true }]);
+    const out = reduceSave(drafts, new Map(), stale, [{ at: at("A"), ok: true }]);
     expect(out.problems.size).toBe(0);
   });
 
+  it("moves a saved draft into its baseline when the row was revealed", () => {
+    const revealed = new Map([[addressKey(at("A")), "old"]]);
+    const out = reduceSave(drafts, revealed, new Map(), [
+      { at: at("A"), ok: true },
+      { at: at("B"), ok: true },
+    ]);
+    expect(out.baselines.get(addressKey(at("A")))).toBe("a");
+    expect(out.baselines.has(addressKey(at("B")))).toBe(false);
+  });
+
   it("summarises the batch honestly", () => {
-    expect(saveSummary(reduceSave(drafts, new Map(), [{ at: at("A"), ok: true }]))).toBe(
+    expect(saveSummary(reduceSave(drafts, new Map(), new Map(), [{ at: at("A"), ok: true }]))).toBe(
       "Saved 1 change.",
     );
-    expect(saveSummary(reduceSave(drafts, new Map(), results))).toBe(
+    expect(saveSummary(reduceSave(drafts, new Map(), new Map(), results))).toBe(
       "Saved 1 of 3 changes; 1 changed underneath you and 1 failed — those rows stay unsaved.",
     );
-    expect(saveSummary(reduceSave(drafts, new Map(), []))).toBe("Nothing to save.");
+    expect(saveSummary(reduceSave(drafts, new Map(), new Map(), []))).toBe("Nothing to save.");
   });
 });
 
