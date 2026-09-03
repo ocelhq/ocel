@@ -42,7 +42,6 @@ jobs:
             cli/go.sum
 
       - name: Setup gobuildcache
-        if: steps.reach.outputs.run == 'true'
         uses: ./.github/actions/gobuildcache
         with:
           bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}

@@ -70,7 +70,7 @@ jobs:
           cache-dependency-path: |
             adapter/cli/go.sum
             adapter/platform/aws/provider/go.sum
-            adapter/cloud/edge/cloudflare/go.sum
+            adapter/platform/edge/cloudflare/deploy/go.sum
             adapter/pkg/proto/go.sum
             adapter/sdk/go.sum
 
