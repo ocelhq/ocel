@@ -12,11 +12,3 @@ export function expectationsFor(environment: ExpectationEnvironment): Expectatio
   }
   return file;
 }
-
-export function expectedIssue(
-  expectations: Expectations,
-  cell: string,
-  title: string,
-): string | undefined {
-  return expectations[cell]?.[title];
-}
