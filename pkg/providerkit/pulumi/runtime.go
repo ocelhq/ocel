@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 
 	"github.com/blang/semver"
@@ -45,18 +46,38 @@ func install(ctx context.Context, report providerkit.Reporter) (auto.PulumiComma
 	if err != nil {
 		return nil, err
 	}
-
 	opts := &auto.PulumiCommandOptions{Version: version, Root: root}
-
-	if _, err := auto.NewPulumiCommand(opts); err != nil && report != nil {
+	if command, err := auto.NewPulumiCommand(opts); err == nil {
+		return command, nil
+	}
+	if report != nil {
 		report.Say(fmt.Sprintf("Downloading Pulumi runtime %s (one-time setup)…", PinnedVersion))
 	}
 
-	command, err := auto.InstallPulumiCommand(ctx, opts)
-	if err != nil {
+	staging := root + "-" + strconv.Itoa(os.Getpid())
+	defer func() { _ = os.RemoveAll(staging) }()
+	if _, err := auto.InstallPulumiCommand(ctx, &auto.PulumiCommandOptions{Version: version, Root: staging}); err != nil {
 		return nil, fmt.Errorf("install Pulumi runtime %s: %w", PinnedVersion, err)
 	}
+	if err := settle(staging, root); err != nil {
+		return nil, fmt.Errorf("install Pulumi runtime %s: %w", PinnedVersion, err)
+	}
+	command, err := auto.NewPulumiCommand(opts)
+	if err != nil {
+		return nil, fmt.Errorf("install Pulumi runtime %s into %s: %w", PinnedVersion, root, err)
+	}
 	return command, nil
+}
+
+func settle(staging, root string) error {
+	err := os.Rename(staging, root)
+	if err == nil {
+		return nil
+	}
+	if _, stat := os.Stat(root); stat == nil {
+		return nil
+	}
+	return err
 }
 
 func installRoot(version semver.Version) (string, error) {
@@ -65,7 +86,7 @@ func installRoot(version semver.Version) (string, error) {
 		return "", fmt.Errorf("resolve home directory: %w", err)
 	}
 	root := filepath.Join(home, cacheDirName, "pulumi", version.String())
-	if err := os.MkdirAll(root, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(root), 0o755); err != nil {
 		return "", fmt.Errorf("create Pulumi runtime dir: %w", err)
 	}
 	return root, nil
