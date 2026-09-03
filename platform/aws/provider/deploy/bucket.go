@@ -123,19 +123,21 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		return err
 	}
 
-	if _, err := s3.NewBucketCorsConfigurationV2(ctx, naming.ResourceID(at.Kind, at.Name, "cors"), &s3.BucketCorsConfigurationV2Args{
-		Bucket: bucket.ID(),
-		CorsRules: s3.BucketCorsConfigurationV2CorsRuleArray{
-			&s3.BucketCorsConfigurationV2CorsRuleArgs{
-				AllowedMethods: pulumi.ToStringArray(args.CORS.AllowedMethods),
-				AllowedOrigins: pulumi.ToStringArray(args.CORS.AllowedOrigins),
-				AllowedHeaders: pulumi.ToStringArray(args.CORS.AllowedHeaders),
-				ExposeHeaders:  pulumi.ToStringArray(args.CORS.ExposeHeaders),
-				MaxAgeSeconds:  pulumi.Int(args.CORS.MaxAgeSeconds),
+	if len(args.CORS.AllowedOrigins) > 0 {
+		if _, err := s3.NewBucketCorsConfigurationV2(ctx, naming.ResourceID(at.Kind, at.Name, "cors"), &s3.BucketCorsConfigurationV2Args{
+			Bucket: bucket.ID(),
+			CorsRules: s3.BucketCorsConfigurationV2CorsRuleArray{
+				&s3.BucketCorsConfigurationV2CorsRuleArgs{
+					AllowedMethods: pulumi.ToStringArray(args.CORS.AllowedMethods),
+					AllowedOrigins: pulumi.ToStringArray(args.CORS.AllowedOrigins),
+					AllowedHeaders: pulumi.ToStringArray(args.CORS.AllowedHeaders),
+					ExposeHeaders:  pulumi.ToStringArray(args.CORS.ExposeHeaders),
+					MaxAgeSeconds:  pulumi.Int(args.CORS.MaxAgeSeconds),
+				},
 			},
-		},
-	}); err != nil {
-		return err
+		}); err != nil {
+			return err
+		}
 	}
 
 	completerRole, err := newServiceRole(ctx,

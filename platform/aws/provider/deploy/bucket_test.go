@@ -348,3 +348,30 @@ func TestSessionStatement(t *testing.T) {
 		}
 	})
 }
+
+func TestBucketCORSFollowsTheDeclaredOrigins(t *testing.T) {
+	const corsToken = "aws:s3/bucketCorsConfigurationV2:BucketCorsConfigurationV2"
+
+	registered := func(t *testing.T, spec *providerkit.BucketSpec) bool {
+		t.Helper()
+		rec := recordTags(t, func(ctx *pulumi.Context) error {
+			return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(spec), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		})
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		_, ok := rec.inputs[corsToken+"::bucket-uploads-cors"]
+		return ok
+	}
+
+	t.Run("a bucket declaring no origins gets no CORS configuration", func(t *testing.T) {
+		if registered(t, &providerkit.BucketSpec{}) {
+			t.Error("a CORS configuration with no allowed origins was registered; S3 rejects one, so the deploy fails on every account")
+		}
+	})
+
+	t.Run("a bucket declaring origins gets one", func(t *testing.T) {
+		if !registered(t, &providerkit.BucketSpec{AllowedOrigins: []string{"https://app.example.com"}}) {
+			t.Error("no CORS configuration was registered for a bucket that declares an allowed origin")
+		}
+	})
+}
