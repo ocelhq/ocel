@@ -1,7 +1,18 @@
-import { collapseAll, error, expandAll, farewell, state } from "../store";
+import { doneLabel, owedCount, plural } from "../model";
+import {
+  collapseAll,
+  dirty,
+  discard,
+  expandAll,
+  farewell,
+  leave,
+  outcome,
+  save,
+  saving,
+  state,
+} from "../store";
 import { Apps } from "./Apps";
 import { Sprite } from "./Icons";
-import { Inspector } from "./Inspector";
 import { Masthead } from "./Masthead";
 import { Table } from "./Table";
 
@@ -13,6 +24,8 @@ export function App() {
   if (!current) {
     return <p class="loading">Reading this project’s variables…</p>;
   }
+  const pending = dirty.value.length;
+  const busy = saving.value;
   return (
     <div class="frame">
       <Sprite />
@@ -40,11 +53,38 @@ export function App() {
           </div>
         </div>
         <Table />
-        <p class="outcome" aria-live="polite" data-tone={error.value ? "owed" : undefined}>
-          {error.value}
-        </p>
       </div>
-      <Inspector current={current} />
+      <footer class="bar">
+        <div class="bar-actions">
+          <button
+            type="button"
+            class="primary"
+            disabled={busy || pending === 0}
+            onClick={() => void save()}
+          >
+            {busy
+              ? "Saving…"
+              : pending === 0
+                ? "Nothing to save"
+                : `Save ${plural(pending, "change")}`}
+          </button>
+          {pending > 0 && (
+            <button type="button" class="linkish" disabled={busy} onClick={discard}>
+              discard changes
+            </button>
+          )}
+          <p
+            class="outcome"
+            aria-live="polite"
+            data-tone={outcome.value?.tone}
+          >
+            {outcome.value?.text}
+          </p>
+        </div>
+        <button type="button" class="done" disabled={busy} onClick={leave}>
+          {doneLabel(owedCount(current))}
+        </button>
+      </footer>
     </div>
   );
 }

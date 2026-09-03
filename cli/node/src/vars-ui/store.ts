@@ -3,19 +3,19 @@ import { computed, signal } from "@preact/signals";
 import { api, ApiError, query } from "./api";
 import {
   addressKey,
-  sameAddress,
+  baselineOf,
+  dirtyEntries,
+  reduceSave,
+  saveSummary,
   treeOf,
   type Address,
   type AppResolution,
+  type Problem,
+  type SaveResult,
   type State,
-  type Version,
 } from "./model";
 
 export const state = signal<State | null>(null);
-export const selected = signal<Address | null>(null);
-export const versions = signal<Version[]>([]);
-export const draft = signal("");
-export const error = signal("");
 export const hoveredApp = signal<AppResolution | null>(null);
 export const saving = signal(false);
 export const farewell = signal<string | null>(null);
@@ -23,15 +23,39 @@ export const farewell = signal<string | null>(null);
 export const expanded = signal<ReadonlySet<string>>(new Set());
 export const extras = signal<readonly Address[]>([]);
 
+export const drafts = signal<ReadonlyMap<string, string>>(new Map());
+export const baselines = signal<ReadonlyMap<string, string>>(new Map());
+export const problems = signal<ReadonlyMap<string, Problem>>(new Map());
+export const outcome = signal<{ text: string; tone?: "owed" } | null>(null);
+
 export const tree = computed(() =>
   state.value ? treeOf(state.value, extras.value) : [],
+);
+
+export const dirty = computed(() =>
+  dirtyEntries(tree.value, drafts.value, baselines.value),
 );
 
 export async function load(): Promise<void> {
   try {
     state.value = await api<State>("GET", "/api/state");
   } catch (thrown) {
-    farewell.value = `Could not read this project's variables: ${thrown instanceof Error ? thrown.message : String(thrown)}`;
+    farewell.value = `Could not read this project's variables: ${message(thrown)}`;
+  }
+}
+
+function message(thrown: unknown): string {
+  return thrown instanceof Error ? thrown.message : String(thrown);
+}
+
+async function refresh(): Promise<void> {
+  try {
+    state.value = await api<State>("GET", "/api/state");
+  } catch (thrown) {
+    outcome.value = {
+      text: `The page could not re-read the variables, so what is on screen may be out of date: ${message(thrown)}`,
+      tone: "owed",
+    };
   }
 }
 
@@ -53,60 +77,90 @@ export function addVariant(at: Address): void {
   const known = new Set(extras.value.map(addressKey));
   if (!known.has(addressKey(at))) extras.value = [...extras.value, at];
   if (!expanded.value.has(at.key)) toggle(at.key);
-  address(at);
 }
 
-async function refreshHistory(): Promise<void> {
-  versions.value = [];
-  const at = selected.value;
-  if (!at) return;
-  const read = await api<{ versions: Version[] }>(
-    "GET",
-    `/api/history?${query(at)}`,
-  );
-  if (selected.value && sameAddress(selected.value, at)) {
-    versions.value = read.versions;
+export function dropVariant(at: Address): void {
+  const key = addressKey(at);
+  extras.value = extras.value.filter((extra) => addressKey(extra) !== key);
+  setDraft(at, baselineOf(at, baselines.value));
+}
+
+export function setDraft(at: Address, value: string): void {
+  const key = addressKey(at);
+  const next = new Map(drafts.value);
+  if (value === baselineOf(at, baselines.value)) next.delete(key);
+  else next.set(key, value);
+  drafts.value = next;
+}
+
+export function discard(): void {
+  drafts.value = new Map();
+  problems.value = new Map();
+  outcome.value = null;
+}
+
+async function attempt(at: Address, run: () => Promise<unknown>): Promise<SaveResult> {
+  try {
+    await run();
+    return { at, ok: true };
+  } catch (thrown) {
+    return {
+      at,
+      ok: false,
+      status: thrown instanceof ApiError ? thrown.status : 0,
+      message: message(thrown),
+    };
   }
 }
 
-export function address(at: Address | null): void {
-  selected.value = at;
-  draft.value = "";
-  error.value = "";
-  versions.value = [];
-  void refreshHistory().catch(() => {
-  });
-}
-
-export async function mutate(run: () => Promise<void>): Promise<void> {
+export async function save(): Promise<void> {
+  const pending = dirty.value;
+  if (pending.length === 0 || saving.value) return;
   saving.value = true;
-  error.value = "";
+  outcome.value = null;
   try {
-    await run();
-    state.value = await api<State>("GET", "/api/state");
-    draft.value = "";
-    await refreshHistory();
-  } catch (thrown) {
-    error.value = thrown instanceof Error ? thrown.message : String(thrown);
-    if (thrown instanceof ApiError && thrown.status === 409) {
-      error.value =
-        "This value changed since the page read it; the page is showing it again — make your change against the value that is there now.";
-      try {
-        state.value = await api<State>("GET", "/api/state");
-        await refreshHistory();
-      } catch {
-        error.value = `${error.value} The page could not re-read this cell either, so what is on screen may still be out of date.`;
-      }
-    }
+    const results = await Promise.all(
+      pending.map((draft) =>
+        attempt(draft.at, () =>
+          api("PUT", "/api/value", {
+            ...draft.at,
+            value: draft.value,
+            version: draft.version,
+          }),
+        ),
+      ),
+    );
+    await refresh();
+    const reduced = reduceSave(drafts.value, problems.value, results);
+    drafts.value = reduced.drafts;
+    problems.value = reduced.problems;
+    outcome.value = {
+      text: saveSummary(reduced),
+      ...(reduced.saved < results.length && { tone: "owed" as const }),
+    };
   } finally {
     saving.value = false;
   }
 }
 
-export function erase(at: Address, version: number): Promise<void> {
-  return mutate(() =>
-    api("DELETE", `/api/value?${query(at)}&version=${version}`),
-  );
+export async function erase(at: Address, version: number): Promise<void> {
+  if (saving.value) return;
+  saving.value = true;
+  outcome.value = null;
+  try {
+    const result = await attempt(at, () =>
+      api("DELETE", `/api/value?${query(at)}&version=${version}`),
+    );
+    await refresh();
+    const reduced = reduceSave(drafts.value, problems.value, [result]);
+    drafts.value = reduced.drafts;
+    problems.value = reduced.problems;
+    outcome.value = result.ok
+      ? { text: `Removed the value of ${at.key}.` }
+      : { text: `Could not remove the value of ${at.key}: ${result.message}`, tone: "owed" };
+  } finally {
+    saving.value = false;
+  }
 }
 
 export function leave(): void {
