@@ -43,6 +43,30 @@ export const spec: ExampleSpec[] = [
     suites: ["health", "static", "product", "probes"],
     apps: ["web"],
   },
+  {
+    name: "hono",
+    dir: "hono",
+    framework: "hono",
+    kind: "composite",
+    suites: ["health", "static", "product", "probes"],
+    apps: ["web"],
+  },
+  {
+    name: "fastify",
+    dir: "fastify",
+    framework: "fastify",
+    kind: "composite",
+    suites: ["health", "static", "product", "probes"],
+    apps: ["web"],
+  },
+  {
+    name: "next",
+    dir: "next",
+    framework: "next",
+    kind: "composite",
+    suites: ["health", "static", "product", "probes"],
+    apps: ["web"],
+  },
 ];
 
 export function specForTarget(target: TargetName): ExampleSpec[] {
