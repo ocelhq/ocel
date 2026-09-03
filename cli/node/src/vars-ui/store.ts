@@ -1,8 +1,10 @@
-import { signal } from "@preact/signals";
+import { computed, signal } from "@preact/signals";
 
 import { api, ApiError, query } from "./api";
 import {
+  addressKey,
   sameAddress,
+  treeOf,
   type Address,
   type AppResolution,
   type State,
@@ -18,12 +20,40 @@ export const hoveredApp = signal<AppResolution | null>(null);
 export const saving = signal(false);
 export const farewell = signal<string | null>(null);
 
+export const expanded = signal<ReadonlySet<string>>(new Set());
+export const extras = signal<readonly Address[]>([]);
+
+export const tree = computed(() =>
+  state.value ? treeOf(state.value, extras.value) : [],
+);
+
 export async function load(): Promise<void> {
   try {
     state.value = await api<State>("GET", "/api/state");
   } catch (thrown) {
     farewell.value = `Could not read this project's variables: ${thrown instanceof Error ? thrown.message : String(thrown)}`;
   }
+}
+
+export function toggle(key: string): void {
+  const next = new Set(expanded.value);
+  if (!next.delete(key)) next.add(key);
+  expanded.value = next;
+}
+
+export function expandAll(): void {
+  expanded.value = new Set(tree.value.map((row) => row.key));
+}
+
+export function collapseAll(): void {
+  expanded.value = new Set();
+}
+
+export function addVariant(at: Address): void {
+  const known = new Set(extras.value.map(addressKey));
+  if (!known.has(addressKey(at))) extras.value = [...extras.value, at];
+  if (!expanded.value.has(at.key)) toggle(at.key);
+  address(at);
 }
 
 async function refreshHistory(): Promise<void> {
@@ -71,6 +101,12 @@ export async function mutate(run: () => Promise<void>): Promise<void> {
   } finally {
     saving.value = false;
   }
+}
+
+export function erase(at: Address, version: number): Promise<void> {
+  return mutate(() =>
+    api("DELETE", `/api/value?${query(at)}&version=${version}`),
+  );
 }
 
 export function leave(): void {
