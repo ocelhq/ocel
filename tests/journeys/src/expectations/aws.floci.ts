@@ -1,4 +1,4 @@
-import { DESTROY_TITLE, planTests, REDEPLOY_TITLE, ROLLBACK_TITLE, UP_TITLE } from "../plan";
+import { DESTROY_TITLE, planTests, REDEPLOY_TITLE, REFUSE_TITLE, ROLLBACK_TITLE, UP_TITLE } from "../plan";
 import { type Leg, specForTarget } from "../spec";
 import type { Expectations } from "./types";
 
@@ -7,6 +7,8 @@ const STAGE_VARIABLES = "https://github.com/ocelhq/ocel/issues/854";
 const NO_STREAMED_BODY = "https://github.com/ocelhq/ocel/issues/851";
 const CLOUDFRONT_STUB = "https://github.com/ocelhq/ocel/issues/852";
 const NO_CLOUDFLARE_API = "https://github.com/ocelhq/ocel/issues/860";
+const SST_UTIL = "https://github.com/ocelhq/ocel/issues/857";
+const PULUMI_SERIALIZATION = "https://github.com/ocelhq/ocel/issues/856";
 
 const LEGS: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"];
 
@@ -18,9 +20,27 @@ export const EDGE_ENV = "OCEL_AWS_EDGE";
 
 const DEFAULT_EDGE = "cloudfront";
 
+const LADDER_ISSUES: Record<string, { issue: string; publishPasses: boolean }> = {
+  "with-sst": { issue: SST_UTIL, publishPasses: true },
+  "with-pulumi": { issue: PULUMI_SERIALIZATION, publishPasses: false },
+};
+
+function ladderIssueFor(cell: string): { issue: string; publishPasses: boolean } | undefined {
+  const [example] = cell.split("/");
+  return example ? LADDER_ISSUES[example] : undefined;
+}
+
 function listing(issueFor: (title: string) => string): Expectations {
   const listed: Expectations = {};
   for (const test of planTests(specForTarget("aws"), LEGS)) {
+    const ladder = ladderIssueFor(test.cell);
+    if (ladder) {
+      const passes = test.title === REFUSE_TITLE || (ladder.publishPasses && test.title.startsWith("publish · "));
+      if (!passes) {
+        (listed[test.cell] ??= {})[test.title] = ladder.issue;
+      }
+      continue;
+    }
     (listed[test.cell] ??= {})[test.title] = issueFor(test.title);
   }
   return listed;
