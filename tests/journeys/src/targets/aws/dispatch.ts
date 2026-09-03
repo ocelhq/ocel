@@ -10,8 +10,12 @@ export function emulatorAddress(endpoint: string): Address {
   } catch {
     throw new Error(`${endpoint} is not a URL, so no emulator address can be read from it`);
   }
-  const port = url.port === "" ? (url.protocol === "https:" ? 443 : 80) : Number(url.port);
-  return { hostname: url.hostname, port };
+  if (url.protocol !== "http:") {
+    throw new Error(
+      `${endpoint} is not plain HTTP, and the emulator dispatcher speaks nothing else`,
+    );
+  }
+  return { hostname: url.hostname, port: url.port === "" ? 80 : Number(url.port) };
 }
 
 export function emulatorFetch(endpoint: string): typeof fetch {
