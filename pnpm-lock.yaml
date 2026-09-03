@@ -1356,6 +1356,9 @@ importers:
       ocel:
         specifier: workspace:^
         version: link:../../packages/ocel
+      undici:
+        specifier: ^7.18.2
+        version: 7.28.0
     devDependencies:
       '@types/node':
         specifier: ^20
