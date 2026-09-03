@@ -17,6 +17,28 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+func TestStateBackendURLCarriesTheEndpointTheAccountIsReachedOn(t *testing.T) {
+	t.Setenv("AWS_ENDPOINT_URL", "")
+	t.Setenv("AWS_ENDPOINT_URL_S3", "")
+	if got := stateBackendURL("state", "hello"); got != "s3://state/hello" {
+		t.Fatalf("with no endpoint the backend is %q, want the bare bucket path", got)
+	}
+
+	t.Setenv("AWS_ENDPOINT_URL", "http://127.0.0.1:4566")
+	got := stateBackendURL("state", "hello")
+	want := "s3://state/hello?disableSSL=true&endpoint=127.0.0.1%3A4566&s3ForcePathStyle=true"
+	if got != want {
+		t.Fatalf("with AWS_ENDPOINT_URL set the backend is\n %q\nwant\n %q", got, want)
+	}
+
+	t.Setenv("AWS_ENDPOINT_URL_S3", "https://s3.example.test")
+	got = stateBackendURL("state", "hello")
+	want = "s3://state/hello?endpoint=s3.example.test&s3ForcePathStyle=true"
+	if got != want {
+		t.Fatalf("the S3-specific endpoint wins and https keeps TLS; got %q, want %q", got, want)
+	}
+}
+
 type stubBootstrapper struct{ err error }
 
 func (stubBootstrapper) Catalogue() []providerkit.Feature { return nil }

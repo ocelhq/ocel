@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -295,7 +296,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	root := projectRoot()
 	cfg := deploy.Config{
 		Region:        p.aws.Region,
-		BackendURL:    naming.StateBackendURL(held.StateBucket, scope.Slug),
+		BackendURL:    stateBackendURL(held.StateBucket, scope.Slug),
 		Passphrase:    params.Passphrase,
 		PulumiProject: naming.PulumiProject(scope.Slug),
 		Secrets:       secretsmanager.NewFromConfig(p.aws),
@@ -463,3 +464,23 @@ var (
 	_ awsports.Keys              = (*Provider)(nil)
 	_ awsports.Stores            = (*Provider)(nil)
 )
+
+func stateBackendURL(bucket, slug string) string {
+	backend := naming.StateBackendURL(bucket, slug)
+	endpoint := os.Getenv("AWS_ENDPOINT_URL_S3")
+	if endpoint == "" {
+		endpoint = os.Getenv("AWS_ENDPOINT_URL")
+	}
+	if endpoint == "" {
+		return backend
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Host == "" {
+		return backend
+	}
+	query := url.Values{"endpoint": {parsed.Host}, "s3ForcePathStyle": {"true"}}
+	if parsed.Scheme == "http" {
+		query.Set("disableSSL", "true")
+	}
+	return backend + "?" + query.Encode()
+}
