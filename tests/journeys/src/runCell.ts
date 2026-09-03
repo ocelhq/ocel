@@ -115,7 +115,7 @@ export function describeCell(example: ExampleSpec) {
         ladderConsumeTitle(leg, row.title),
         async () => {
           await triggerBeforeUp();
-          await row.run(cell, contractContext(app));
+          await row.run(cell, contractContext(app, leg));
         },
         timeout,
       );
