@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -29,6 +30,20 @@ const scratchDirName = ".ocel"
 const initHint = "run `ocel init` to create one"
 
 var defaultDiscoveryPaths = []string{"ocel"}
+
+func discoveryPathsFor(apps []App) []string {
+	paths := slices.Clone(defaultDiscoveryPaths)
+	for _, app := range apps {
+		if app.Path == "" {
+			continue
+		}
+		under := filepath.ToSlash(filepath.Join(app.Path, defaultDiscoveryPaths[0]))
+		if !slices.Contains(paths, under) {
+			paths = append(paths, under)
+		}
+	}
+	return paths
+}
 
 type Discovery struct {
 	Paths []string
@@ -311,11 +326,6 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 		return nil, fmt.Errorf("%s has an invalid \"slug\": %w", configPath, err)
 	}
 
-	paths := raw.Discovery.Paths
-	if len(paths) == 0 {
-		paths = defaultDiscoveryPaths
-	}
-
 	var provider *ProviderDescriptor
 	if raw.Provider != nil {
 		options := raw.Provider.Options
@@ -345,6 +355,10 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 	apps, err := normalizeApps(raw)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
+	}
+	paths := raw.Discovery.Paths
+	if len(paths) == 0 {
+		paths = discoveryPathsFor(apps)
 	}
 
 	domains, err := normalizeDomains(raw.Domains)
