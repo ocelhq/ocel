@@ -218,7 +218,7 @@ function byteDiff(a, b) {
 }
 
 export function deployURL(result) {
-  const url = result?.appUrls?.[0];
+  const url = (result?.apps ?? []).flatMap((app) => app?.urls ?? [])[0];
   if (!url) {
     throw new Error(`deploy result carries no app URL: ${JSON.stringify(result ?? null)}`);
   }

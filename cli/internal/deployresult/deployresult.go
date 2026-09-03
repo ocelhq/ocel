@@ -22,7 +22,6 @@ type Result struct {
 	Environment   Environment `json:"environment"`
 	PromotionID   string      `json:"promotionId"`
 	Tag           string      `json:"tag,omitempty"`
-	AppURLs       []string    `json:"appUrls"`
 	Apps          []App       `json:"apps"`
 	DeployedAt    time.Time   `json:"deployedAt"`
 }
@@ -33,9 +32,10 @@ type Environment struct {
 }
 
 type App struct {
-	Name         string `json:"name"`
-	BuildID      string `json:"buildId,omitempty"`
-	DeploymentID string `json:"deploymentId,omitempty"`
+	Name         string   `json:"name"`
+	BuildID      string   `json:"buildId,omitempty"`
+	DeploymentID string   `json:"deploymentId,omitempty"`
+	URLs         []string `json:"urls"`
 }
 
 func Path(projectDir string) string {
@@ -47,11 +47,13 @@ func Write(projectDir string, r Result) error {
 	if r.DeployedAt.IsZero() {
 		r.DeployedAt = time.Now().UTC()
 	}
-	if r.AppURLs == nil {
-		r.AppURLs = []string{}
-	}
 	if r.Apps == nil {
 		r.Apps = []App{}
+	}
+	for at := range r.Apps {
+		if r.Apps[at].URLs == nil {
+			r.Apps[at].URLs = []string{}
+		}
 	}
 
 	doc, err := json.MarshalIndent(r, "", "  ")

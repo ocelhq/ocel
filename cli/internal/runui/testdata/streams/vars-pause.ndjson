@@ -7,4 +7,4 @@
 {"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"Building project"}}}
 {"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"▲ Next.js 15.4.2\n ✓ Compiled successfully"}}}
 {"operation":{"span":{"spanId":"BgAAAAAAAAA=","parentSpanId":"AQAAAAAAAAA=","name":"building","startTimeUnixNano":"1000000000","endTimeUnixNano":"5000000000","status":"SPAN_STATUS_OK","attributes":[{"key":"ATTRIBUTE_KEY_RETRY_COUNT","value":"1"}]}}}
-{"result":{"success":true,"headline":"Deployed","durationMs":"12000","appUrls":["https://acme.example.com"]}}
+{"result":{"success":true,"headline":"Deployed","durationMs":"12000","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]}]}}

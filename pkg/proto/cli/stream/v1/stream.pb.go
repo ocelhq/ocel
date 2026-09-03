@@ -484,7 +484,6 @@ type RunResultEvent struct {
 	DurationMs  int64                  `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	LogPath     string                 `protobuf:"bytes,4,opt,name=log_path,json=logPath,proto3" json:"log_path,omitempty"`
 	Headline    string                 `protobuf:"bytes,5,opt,name=headline,proto3" json:"headline,omitempty"`
-	AppUrls     []string               `protobuf:"bytes,6,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
 	UrlNote     string                 `protobuf:"bytes,7,opt,name=url_note,json=urlNote,proto3" json:"url_note,omitempty"`
 	FlipBound   *v11.FlipBound         `protobuf:"bytes,8,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
 	Interrupted bool                   `protobuf:"varint,9,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
@@ -557,13 +556,6 @@ func (x *RunResultEvent) GetHeadline() string {
 		return x.Headline
 	}
 	return ""
-}
-
-func (x *RunResultEvent) GetAppUrls() []string {
-	if x != nil {
-		return x.AppUrls
-	}
-	return nil
 }
 
 func (x *RunResultEvent) GetUrlNote() string {
@@ -684,7 +676,7 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xe3\x02\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xc8\x02\n" +
 	"\x0eRunResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06detail\x18\x02 \x01(\tR\x06detail\x12\x1f\n" +
@@ -692,7 +684,6 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"durationMs\x12\x19\n" +
 	"\blog_path\x18\x04 \x01(\tR\alogPath\x12\x1a\n" +
 	"\bheadline\x18\x05 \x01(\tR\bheadline\x12\x19\n" +
-	"\bapp_urls\x18\x06 \x03(\tR\aappUrls\x12\x19\n" +
 	"\burl_note\x18\a \x01(\tR\aurlNote\x12<\n" +
 	"\n" +
 	"flip_bound\x18\b \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x12 \n" +

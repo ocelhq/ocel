@@ -163,7 +163,7 @@ Same command with three changes — this leaves the deployment up:
   least one test must match**, or Jest never runs `beforeAll` and nothing
   deploys.
 
-Take the app URL from `.ocel/deploy-result.json` (`appUrls[0]`). One preview per
+Take the app URL from `.ocel/deploy-result.json` (the first `urls` entry under `apps`). One preview per
 suite, shared by everything debugging it.
 
 **Nothing tears this down automatically.** When finished, take the ref and slug

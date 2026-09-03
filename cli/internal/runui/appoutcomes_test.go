@@ -47,7 +47,7 @@ func TestRunResultCarriesTheProviderAppOutcomes(t *testing.T) {
 				{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED},
 				{App: "admin", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED},
 			},
-			finish: func(s *Session) { s.Deployed("Deployed", nil, "", Flip{}, nil, nil) },
+			finish: func(s *Session) { s.Deployed("Deployed", "", Flip{}, nil, nil) },
 			want:   []string{"web=APP_OUTCOME_SUCCEEDED", "admin=APP_OUTCOME_SUCCEEDED"},
 		},
 		{

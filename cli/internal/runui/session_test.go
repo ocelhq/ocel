@@ -175,7 +175,11 @@ func TestSession(t *testing.T) {
 			Log: &progressv1.LogEvent{Message: "pulumi engine line"},
 		}})
 		s.Event(closeProvisioning())
-		s.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{}, nil, nil)
+		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+			Success: true,
+			Apps:    []*progressv1.AppResult{{App: "web", Urls: []string{"https://app.example.workers.dev"}}},
+		}}})
+		s.Deployed("Deployed", "", Flip{}, nil, nil)
 
 		got := out.String()
 		for _, want := range []string{
@@ -833,7 +837,7 @@ func TestFormatAxis(t *testing.T) {
 
 		s.Building()
 		s.Event(progress("Uploading function artifacts"))
-		s.Deployed("Deployed", []string{"https://app.example.workers.dev"}, "", Flip{}, nil, nil)
+		s.Deployed("Deployed", "", Flip{}, nil, nil)
 
 		lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
 		if len(lines) != 4 {
@@ -1240,7 +1244,7 @@ func TestAnOrphanWhoseStageIsNeverDeclaredNeverCommits(t *testing.T) {
 	}})
 	s.Event(declareProvisioning())
 	s.Event(closeProvisioning())
-	s.Deployed("Deployed", nil, "", Flip{}, nil, nil)
+	s.Deployed("Deployed", "", Flip{}, nil, nil)
 
 	got := out.String()
 	for _, unwanted := range []string{"a stage nothing ever declared", "no stage at all"} {

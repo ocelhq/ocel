@@ -36,7 +36,7 @@ if (result.slug !== state.slug) {
 }
 
 console.error(`${LOG_PREFIX} the consuming app deployed; it binds ${state.link} from the publisher's record`);
-for (const url of result.appUrls ?? []) {
+for (const url of (result.apps ?? []).flatMap((app) => app?.urls ?? [])) {
   console.log(url);
 }
 

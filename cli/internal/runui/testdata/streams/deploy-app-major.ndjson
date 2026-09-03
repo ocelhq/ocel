@@ -26,4 +26,4 @@
 {"operation":{"stagePlan":{"stages":[{"id":"DAAAAAAAAAA=","parentId":"BQAAAAAAAAA=","phase":"PHASE_FINALIZING"}]}}}
 {"operation":{"progress":{"stageId":"DAAAAAAAAAA=","message":"promoting r7 to production"}}}
 {"operation":{"span":{"spanId":"DAAAAAAAAAA=","parentSpanId":"BQAAAAAAAAA=","name":"finalizing","startTimeUnixNano":"52000000000","endTimeUnixNano":"54000000000","status":"SPAN_STATUS_OK"}}}
-{"result":{"success":true,"headline":"Deployed","appUrls":["https://acme.example.com"],"durationMs":"54000"}}
+{"result":{"success":true,"headline":"Deployed","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]}],"durationMs":"54000"}}

@@ -282,7 +282,7 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 	s.Emit(progressEvent(phase, "uploading", 1, u32(2)))
 	s.Emit(spanEvent(phase, false, time.Second))
 	s.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
-		Success: true, Headline: "Deployed", AppUrls: []string{"https://app.example.workers.dev"},
+		Success: true, Headline: "Deployed", Apps: []*progressv1.AppResult{{App: "web", Urls: []string{"https://app.example.workers.dev"}}},
 	}}})
 
 	if got := out.String(); strings.Contains(got, "\x1b[") {

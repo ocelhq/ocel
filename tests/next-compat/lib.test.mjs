@@ -270,11 +270,18 @@ describe("withPinnedTypeScript", () => {
 
 describe("deployURL", () => {
   it("takes the first featured app URL", () => {
-    expect(deployURL({ appUrls: ["https://a.example.com", "https://b.example.com"] })).toBe("https://a.example.com");
+    expect(
+      deployURL({
+        apps: [
+          { name: "web", urls: [] },
+          { name: "api", urls: ["https://a.example.com", "https://b.example.com"] },
+        ],
+      }),
+    ).toBe("https://a.example.com");
   });
 
   it("refuses a result with no URL, naming what it read", () => {
-    expect(() => deployURL({ appUrls: [] })).toThrow(/no app URL/i);
+    expect(() => deployURL({ apps: [{ name: "web", urls: [] }] })).toThrow(/no app URL/i);
     expect(() => deployURL({})).toThrow(/no app URL/i);
   });
 });
