@@ -87,6 +87,22 @@ export function describeCell(example: ExampleSpec) {
     }
   }
 
+  function perApp(title: string, work: () => Promise<void>) {
+    for (const app of example.apps) {
+      describe(cellKey(example.name, app), () => {
+        it(title, work, timeout);
+      });
+    }
+  }
+
+  function contractPerApp(leg: Leg) {
+    for (const app of example.apps) {
+      describe(cellKey(example.name, app), () => {
+        contractLeg(leg, app, rows);
+      });
+    }
+  }
+
   describe(example.name, () => {
     beforeAll(async () => {
       await target.setup().catch((error: unknown) => {
@@ -98,48 +114,45 @@ export function describeCell(example: ExampleSpec) {
       await tearDown().catch(() => undefined);
     }, timeout);
 
-    for (const app of example.apps) {
-      describe(cellKey(example.name, app), () => {
-        it(UP_TITLE, async () => {
-          await bringUp();
-        }, timeout);
+    perApp(UP_TITLE, async () => {
+      await bringUp();
+    });
+    contractPerApp("contract");
 
-        contractLeg("contract", app, rows);
-
-        if (target.legs.includes("redeploy")) {
-          const redeploy = target.redeploy;
-          assert.ok(redeploy, `${target.name} declares a redeploy leg without a redeploy`);
-          it(REDEPLOY_TITLE, async () => {
-            await bringUp();
-            deployment = await redeploy(cell, REDEPLOY_GREETING);
-            greeting = REDEPLOY_GREETING;
-          }, timeout);
-          contractLeg("redeploy", app, rows);
-        }
-
-        if (target.legs.includes("rollback")) {
-          const rollback = target.rollback;
-          assert.ok(rollback, `${target.name} declares a rollback leg without a rollback`);
-          it(ROLLBACK_TITLE, async () => {
-            await bringUp();
-            deployment = await rollback(cell, INITIAL_GREETING);
-            greeting = INITIAL_GREETING;
-          }, timeout);
-          contractLeg("rollback", app, rows);
-        }
+    if (target.legs.includes("redeploy")) {
+      const redeploy = target.redeploy;
+      assert.ok(redeploy, `${target.name} declares a redeploy leg without a redeploy`);
+      const redeployed = once(async () => {
+        deployment = await redeploy(cell, REDEPLOY_GREETING);
+        greeting = REDEPLOY_GREETING;
       });
+      perApp(REDEPLOY_TITLE, async () => {
+        await bringUp();
+        await redeployed();
+      });
+      contractPerApp("redeploy");
     }
 
-    for (const app of example.apps) {
-      describe(cellKey(example.name, app), () => {
-        it(DESTROY_TITLE, async () => {
-          await tearDown();
-          assert.ok(
-            !(await target.stands(slug)),
-            `${slug} still exists on ${target.name} after destroy`,
-          );
-        }, timeout);
+    if (target.legs.includes("rollback")) {
+      const rollback = target.rollback;
+      assert.ok(rollback, `${target.name} declares a rollback leg without a rollback`);
+      const rolledBack = once(async () => {
+        deployment = await rollback(cell, INITIAL_GREETING);
+        greeting = INITIAL_GREETING;
       });
+      perApp(ROLLBACK_TITLE, async () => {
+        await bringUp();
+        await rolledBack();
+      });
+      contractPerApp("rollback");
     }
+
+    perApp(DESTROY_TITLE, async () => {
+      await tearDown();
+      assert.ok(
+        !(await target.stands(slug)),
+        `${slug} still exists on ${target.name} after destroy`,
+      );
+    });
   });
 }

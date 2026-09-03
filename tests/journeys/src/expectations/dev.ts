@@ -25,4 +25,27 @@ export const dev: Expectations = {
     "the upload protocol stores a document and /api/documents lists it": UPLOAD_KEY,
     destroy: NO_PROJECT_DELETE,
   },
+  "hello-express/web": {
+    up: ENV_SET_NEEDS_PROVIDER,
+    destroy: NO_PROJECT_DELETE,
+  },
+  "hello-next/web": {
+    up: ENV_SET_NEEDS_PROVIDER,
+    destroy: NO_PROJECT_DELETE,
+  },
+  "workspace/next": {
+    up: ENV_SET_NEEDS_PROVIDER,
+    "the upload protocol stores a document and /api/documents lists it": UPLOAD_KEY,
+    destroy: NO_PROJECT_DELETE,
+  },
+  "workspace/express": {
+    up: ENV_SET_NEEDS_PROVIDER,
+    "the upload protocol stores a document and /api/documents lists it": UPLOAD_KEY,
+    destroy: NO_PROJECT_DELETE,
+  },
+  "workspace/hono": {
+    up: ENV_SET_NEEDS_PROVIDER,
+    "the upload protocol stores a document and /api/documents lists it": UPLOAD_KEY,
+    destroy: NO_PROJECT_DELETE,
+  },
 };

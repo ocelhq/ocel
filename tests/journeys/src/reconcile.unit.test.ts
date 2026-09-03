@@ -165,6 +165,57 @@ describe("reconciliation", () => {
   });
 });
 
+describe("a multi-app cell", () => {
+  const apps = ["next", "express", "hono"];
+  const workspacePlan = apps.flatMap((app) => [
+    { cell: `workspace/${app}`, title: UP_TITLE, leg: "up" as const },
+    { cell: `workspace/${app}`, title: "GET /health answers", leg: "contract" as const },
+  ]);
+
+  function ran(app: string, title: string, outcome: TestOutcome): TestResult {
+    return { cell: `workspace/${app}`, title, outcome };
+  }
+
+  it("keeps one app red without reddening the others", () => {
+    const report = reconcile({
+      planned: workspacePlan,
+      results: [
+        ...apps.map((app) => ran(app, UP_TITLE, "passed")),
+        ran("next", "GET /health answers", "failed"),
+        ran("express", "GET /health answers", "passed"),
+        ran("hono", "GET /health answers", "passed"),
+      ],
+      expectations: {},
+    });
+    expect(report.failures).toHaveLength(1);
+    expect(report.failures[0]).toMatchObject({
+      cell: "workspace/next",
+      verdict: "unexpected-failure",
+    });
+    expect(
+      report.rows.filter((row) => row.cell !== "workspace/next").every((row) => row.verdict === "ok"),
+    ).toBe(true);
+  });
+
+  it("lists an issue against one app alone", () => {
+    const report = reconcile({
+      planned: workspacePlan,
+      results: [
+        ...apps.map((app) => ran(app, UP_TITLE, "passed")),
+        ran("next", "GET /health answers", "failed"),
+        ran("express", "GET /health answers", "passed"),
+        ran("hono", "GET /health answers", "passed"),
+      ],
+      expectations: { "workspace/next": { "GET /health answers": ISSUE } },
+    });
+    expect(report.failed).toBe(false);
+    expect(report.rows.find((row) => row.cell === "workspace/next" && row.issue)).toMatchObject({
+      verdict: "expected-failure",
+      issue: ISSUE,
+    });
+  });
+});
+
 describe("exit code", () => {
   it("is zero for a run that only passed or failed as listed", () => {
     expect(exitCodeFor(["ok", "expected-failure", "blocked"])).toBe(0);
