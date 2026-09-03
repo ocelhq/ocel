@@ -1,5 +1,6 @@
 import { doneLabel, folderName, names, owedCount, plural } from "../model";
 import {
+  abandon,
   collapseAll,
   copyLoading,
   dirty,
@@ -8,14 +9,19 @@ import {
   dropped,
   expandAll,
   farewell,
+  finishError,
+  finishing,
   hideAll,
   leave,
+  leaveDiscarding,
   openCopy,
   outcome,
+  resume,
   revealAll,
   save,
   saving,
   state,
+  unfilled,
 } from "../store";
 import { Apps } from "./Apps";
 import { CopyDialog } from "./CopyDialog";
@@ -61,6 +67,58 @@ function DropNotice() {
   );
 }
 
+function Banner() {
+  const current = state.value;
+  const recovery = current?.recovery;
+  if (!current || !recovery) return null;
+  const left = unfilled.value.length;
+  return (
+    <div class="banner" role="status">
+      <Icon name="warning" />
+      <p>
+        Deploy <code>{recovery.deploy}</code> of {current.slug} · {current.tier}{" "}
+        is waiting on {plural(recovery.owed.length, "cell")} it was refused.{" "}
+        {left === 0
+          ? "Every one now holds a value; save and resume below."
+          : `${plural(left, "cell")} still ${left === 1 ? "needs" : "need"} a value — they sit at the top.`}
+      </p>
+    </div>
+  );
+}
+
+function Finish({ recovery }: { recovery: boolean }) {
+  const pending = dirty.value.length;
+  const busy = saving.value || finishing.value;
+  if (!recovery) {
+    return pending > 0 ? (
+      <button type="button" class="done" disabled={busy} onClick={leaveDiscarding}>
+        Return without saving
+      </button>
+    ) : (
+      <button type="button" class="done" disabled={busy} onClick={leave}>
+        {doneLabel(owedCount(state.value!))}
+      </button>
+    );
+  }
+  const left = unfilled.value.length;
+  return (
+    <div class="finish">
+      <button
+        type="button"
+        class="primary"
+        disabled={busy || left > 0}
+        title={left > 0 ? `${plural(left, "cell")} the deploy needs ${left === 1 ? "is" : "are"} still empty or invalid` : undefined}
+        onClick={() => void resume()}
+      >
+        {finishing.value ? "Resuming…" : "Save and resume the deploy"}
+      </button>
+      <button type="button" class="linkish abandon" disabled={busy} onClick={() => void abandon()}>
+        Abandon the deploy — this fails the deploy
+      </button>
+    </div>
+  );
+}
+
 export function App() {
   if (farewell.value !== null) {
     return <p class="farewell">{farewell.value}</p>;
@@ -70,12 +128,14 @@ export function App() {
     return <p class="loading">Reading this project’s variables…</p>;
   }
   const pending = dirty.value.length;
-  const busy = saving.value;
+  const busy = saving.value || finishing.value;
+  const recovery = current.recovery !== undefined;
   return (
     <div class="frame">
       <Sprite />
       <div class="sheet">
         <Masthead current={current} />
+        <Banner />
         <p class="eyebrow">
           Apps{" "}
           <span class="axis">— each reads its own folder, then the root</span>
@@ -119,20 +179,32 @@ export function App() {
       </div>
       <Drawer />
       <CopyDialog />
-      <footer class="bar">
+      <footer class="bar" data-recovery={recovery}>
         <div class="bar-actions">
-          <button
-            type="button"
-            class="primary"
-            disabled={busy || pending === 0}
-            onClick={() => void save()}
-          >
-            {busy
-              ? "Saving…"
-              : pending === 0
-                ? "Nothing to save"
-                : `Save ${plural(pending, "change")}`}
-          </button>
+          {!recovery && (
+            <button
+              type="button"
+              class="primary"
+              disabled={busy || pending === 0}
+              onClick={() => void save()}
+            >
+              {saving.value
+                ? "Saving…"
+                : pending === 0
+                  ? "Nothing to save"
+                  : `Save ${plural(pending, "change")}`}
+            </button>
+          )}
+          {recovery && pending > 0 && (
+            <button
+              type="button"
+              class="done"
+              disabled={busy}
+              onClick={() => void save()}
+            >
+              {saving.value ? "Saving…" : `Save ${plural(pending, "change")}`}
+            </button>
+          )}
           {pending > 0 && (
             <button type="button" class="linkish" disabled={busy} onClick={discard}>
               discard changes
@@ -141,14 +213,12 @@ export function App() {
           <p
             class="outcome"
             aria-live="polite"
-            data-tone={outcome.value?.tone}
+            data-tone={outcome.value?.tone ?? (finishError.value ? "owed" : undefined)}
           >
-            {outcome.value?.text}
+            {[outcome.value?.text, finishError.value].filter(Boolean).join(" ")}
           </p>
         </div>
-        <button type="button" class="done" disabled={busy} onClick={leave}>
-          {doneLabel(owedCount(current))}
-        </button>
+        <Finish recovery={recovery} />
       </footer>
     </div>
   );

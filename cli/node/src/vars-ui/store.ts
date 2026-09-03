@@ -8,12 +8,15 @@ import {
   baselineOf,
   dirtyEntries,
   names,
+  owedSet,
   planCopy,
   plural,
   reduceSave,
   revealable,
   saveSummary,
+  sortOwedFirst,
   treeOf,
+  unfilledOwed,
   variantsOf,
   type Address,
   type AppResolution,
@@ -71,12 +74,29 @@ export const dirty = computed(() =>
   dirtyEntries(tree.value, drafts.value, baselines.value),
 );
 
+export const owed = computed(() => owedSet(state.value?.recovery));
+
+export const ordered = computed(() => sortOwedFirst(tree.value, owed.value));
+
+export const unfilled = computed(() =>
+  unfilledOwed(tree.value, owed.value, drafts.value, baselines.value),
+);
+
+export const finishing = signal(false);
+export const finishError = signal<string | null>(null);
+
 export async function load(): Promise<void> {
   try {
     state.value = await api<State>("GET", "/api/state");
   } catch (thrown) {
     farewell.value = `Could not read this project's variables: ${message(thrown)}`;
+    return;
   }
+  const open = new Set(expanded.value);
+  for (const cell of state.value.recovery?.owed ?? []) {
+    if (cell.folder !== "") open.add(cell.key);
+  }
+  expanded.value = open;
 }
 
 function message(thrown: unknown): string {
@@ -424,4 +444,50 @@ export function leave(): void {
   void api("POST", "/api/done").catch(() => {
   });
   farewell.value = "Returned to the terminal. You can close this tab.";
+}
+
+export function leaveDiscarding(): void {
+  discard();
+  leave();
+}
+
+export async function resume(): Promise<void> {
+  if (finishing.value || saving.value) return;
+  finishing.value = true;
+  finishError.value = null;
+  try {
+    if (dirty.value.length > 0) {
+      await save();
+      if (dirty.value.length > 0) {
+        finishError.value =
+          "Some rows did not save, so the deploy cannot resume yet; sort them out above and try again.";
+        return;
+      }
+    }
+    if (unfilled.value.length > 0) {
+      finishError.value = `The deploy still needs ${plural(unfilled.value.length, "cell")} filled.`;
+      return;
+    }
+    await api("POST", "/api/done");
+    farewell.value = "Saved. The deploy is resuming in the terminal; you can close this tab.";
+  } catch (thrown) {
+    finishError.value = message(thrown);
+  } finally {
+    finishing.value = false;
+  }
+}
+
+export async function abandon(): Promise<void> {
+  if (finishing.value) return;
+  finishing.value = true;
+  finishError.value = null;
+  try {
+    await api("POST", "/api/abandon");
+    farewell.value =
+      "Abandoned. The deploy fails in the terminal with the cells it was refused; you can close this tab.";
+  } catch (thrown) {
+    finishError.value = message(thrown);
+  } finally {
+    finishing.value = false;
+  }
 }
