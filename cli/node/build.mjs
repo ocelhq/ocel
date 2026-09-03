@@ -1,7 +1,9 @@
+import tailwind from "@tailwindcss/postcss";
 import { build } from "esbuild";
-import { copyFile, mkdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import postcss from "postcss";
 
 import { runtimeFiles } from "../../frameworks/next/adapter/scripts/runtime-files.mjs";
 
@@ -39,9 +41,15 @@ await build({
   format: "esm",
   target: "es2022",
   jsx: "automatic",
-  jsxImportSource: "preact",
+  tsconfig: join(platformDir, "tsconfig.vars-ui.json"),
   minify: true,
 });
+const sheet = join(platformDir, "src/vars-ui/styles.css");
+const compiled = await postcss([tailwind({ optimize: { minify: true } })]).process(
+  await readFile(sheet, "utf8"),
+  { from: sheet, to: join(dist, "vars-ui/app.css") },
+);
+await writeFile(join(dist, "vars-ui/app.css"), compiled.css);
 await copyFile(
   join(platformDir, "src/vars-ui/index.html"),
   join(dist, "vars-ui/index.html"),

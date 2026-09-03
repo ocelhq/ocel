@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "lib": ["ESNext"],
+    "lib": [
+      "ESNext"
+    ],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "esModuleInterop": true,
@@ -10,11 +12,19 @@
     "strict": true,
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
-    "types": ["node"],
-
-    "noEmit": true
+    "types": [
+      "node"
+    ],
+    "noEmit": true,
+    "paths": {
+      "@/*": [
+        "./src/vars-ui/*"
+      ]
+    }
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/**/*"
+  ],
   "exclude": [
     "node_modules",
     "dist",
