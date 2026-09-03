@@ -11,14 +11,15 @@ usage() {
     cat <<'EOF'
 usage: scripts/act.sh [workflow ...]
 
-Runs the PR gates locally before anything is pushed. build, go, journey and
-provider-aws replay through nektos/act as workflow_dispatch, so every step runs
-regardless of what changed — a superset of the PR run. provider-vps runs its
-workflow's commands natively (incus wants systemd and KVM an act container
-cannot host; the CI runner executes it un-containered too), and so does the
-journey workflow's own vps lane, which is why journey replays its dev and aws
-lanes only. The remote Go build cache is wired in from your local credentials,
-so a green run both proves the change and leaves the cache warm for CI.
+Runs the PR gates locally before anything is pushed. build, go and provider-aws
+replay through nektos/act as workflow_dispatch, so every step runs regardless
+of what changed — a superset of the PR run. journey replays its dev and aws
+lanes the same way, with the changes job's lane filter forced to dev and aws;
+its vps lane runs natively instead, alongside provider-vps, since incus wants
+systemd and KVM an act container cannot host (the CI runner executes both
+un-containered too). The remote Go build cache is wired in from your local
+credentials, so a green run both proves the change and leaves the cache warm
+for CI.
 
   workflows: build go journey provider-aws provider-vps    (default: all five)
 
@@ -94,6 +95,27 @@ run_provider_vps() {
         incus_run "scripts/incus.sh run ocel-act-lifecycle-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestLifecycle' -json ./..." | tee "$out/lifecycle.json" &&
         scripts/assert-ran.sh "$out/lifecycle.json" TestLifecycle || status=$?
     rm -rf "$out"
+    return $status
+}
+
+run_journey_vps() {
+    eval "$(mise env -s bash 2>/dev/null || true)"
+    [ -e /dev/kvm ] || die "the journey vps lane needs /dev/kvm"
+    incus_run "incus list" >/dev/null || die "the journey vps lane needs a working incus (incus admin init --auto)"
+    pnpm install --frozen-lockfile &&
+        pnpm --filter ocel build &&
+        node scripts/build-native.mjs --host --target cli &&
+        node scripts/build-native.mjs --host --target provider-vps || return $?
+    local vm=ocel-act-journey-vps-$$ status=0
+    incus_run "scripts/incus.sh create $vm" || return $?
+    eval "$(incus_run "scripts/incus.sh info $vm")"
+    OCEL_TARGET=vps \
+        OCEL_VPS_HOST="$OCEL_INCUS_ADDR" \
+        OCEL_VPS_USER="$OCEL_INCUS_USER" \
+        OCEL_VPS_IDENTITY_FILE="$OCEL_INCUS_KEY" \
+        OCEL_BIN="$PWD/packages/native-lib/cli-linux-x64/bin/ocel" \
+        pnpm --filter @ocel-tests/journeys journey || status=$?
+    incus_run "scripts/incus.sh destroy $vm" || echo "act.sh: could not destroy $vm" >&2
     return $status
 }
 
@@ -173,6 +195,7 @@ for wf in "${selected[@]}"; do
     fi
     if [ "$wf" = journey ]; then
         docker compose -p "$COMPOSE_PROJECT" down -v --remove-orphans >/dev/null 2>&1 || true
+        run_journey_vps || failed+=("journey-vps")
     fi
 done
 
