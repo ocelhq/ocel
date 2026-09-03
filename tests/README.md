@@ -56,6 +56,32 @@ pnpm --filter @ocel-tests/journeys sweep --target aws
 
 `--shard <index>/<total>` is accepted and validated; it selects nothing yet.
 
+For `vps` that is a box the run can reach over SSH, and on a laptop that is an incus VM:
+
+```
+go -C cli build -o bin/ocel ./ocel
+node scripts/build-native.mjs --host --target provider-vps
+scripts/incus.sh create journey
+eval "$(scripts/incus.sh info journey)"
+export OCEL_VPS_HOST=$OCEL_INCUS_ADDR OCEL_VPS_USER=$OCEL_INCUS_USER OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY
+pnpm --filter @ocel-tests/journeys cell --example express --target vps
+```
+
+Those three variables are the only place a host is ever named: the example's
+`ocel.vps.config.ts` reads them, and nothing about a box is committed. The target
+bootstraps the box as the login you name and deploys as `ocel-deploy`, the login the
+bootstrap creates; it serves each app at `<app>.<slug>.localhost`, which the box's own
+proxy issues a certificate for and the harness reaches through the box's address.
+
+A dead run leaves its project on the box. Reclaim every stranded harness project — every
+`j-` slug that is not this run's — with:
+
+```
+pnpm --filter @ocel-tests/journeys sweep --target vps
+```
+
+The sweep refuses a box that is not the disposable incus one.
+
 Real clouds are reached by workflow dispatch only. Nothing here spends a real account.
 
 A cell that is expected to fail is listed in `journeys/src/expectations/<environment>.ts`

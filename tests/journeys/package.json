@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ocel-tests/shared": "workspace:*",
+    "@ocel/provider-vps": "workspace:^",
     "ocel": "workspace:^",
     "undici": "^7.18.2"
   },
