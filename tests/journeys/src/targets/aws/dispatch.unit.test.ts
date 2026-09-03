@@ -16,10 +16,10 @@ describe("emulatorAddress", () => {
       hostname: "floci.internal",
       port: 80,
     });
-    assert.deepEqual(emulatorAddress("https://floci.internal"), {
-      hostname: "floci.internal",
-      port: 443,
-    });
+  });
+
+  it("refuses a scheme it would not dial", () => {
+    assert.throws(() => emulatorAddress("https://floci.internal"), /not plain HTTP/);
   });
 
   it("refuses something that is not a URL", () => {
