@@ -1,3 +1,5 @@
+import { pulumiHooks } from "./targets/aws/ladder-pulumi";
+import { sstHooks } from "./targets/aws/ladder-sst";
 import type { CellContext } from "./targets/types";
 
 export type Framework = "express" | "hono" | "fastify" | "next";
@@ -89,6 +91,35 @@ export const spec: ExampleSpec[] = [
     kind: "workspace",
     suites: ["health", "static", "product", "probes"],
     apps: ["next", "express", "hono"],
+  },
+  {
+    name: "with-transforms",
+    dir: "with-transforms",
+    framework: "express",
+    kind: "ladder",
+    suites: ["health", "static", "links"],
+    apps: ["web"],
+    targets: ["aws"],
+  },
+  {
+    name: "with-sst",
+    dir: "with-sst",
+    framework: "express",
+    kind: "ladder",
+    suites: ["health", "static", "links"],
+    apps: ["web"],
+    targets: ["aws"],
+    hooks: sstHooks,
+  },
+  {
+    name: "with-pulumi",
+    dir: "with-pulumi",
+    framework: "express",
+    kind: "ladder",
+    suites: ["health", "static", "links"],
+    apps: ["web"],
+    targets: ["aws"],
+    hooks: pulumiHooks,
   },
 ];
 

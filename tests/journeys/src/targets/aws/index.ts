@@ -9,6 +9,8 @@ import { specForTarget } from "../../spec";
 import { migrateCommand, setAppNames } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
 import { emulatorFetch } from "./dispatch";
+import { pulumiSweep } from "./ladder-pulumi";
+import { sstSweep } from "./ladder-sst";
 import { place } from "./place";
 import { sweepable } from "./slugs";
 import { awsStore, type Store } from "./store";
@@ -112,7 +114,7 @@ async function cellTree(cell: CellContext): Promise<string> {
 }
 
 async function up(cell: CellContext): Promise<Deployment> {
-  const dir = await workTree(cell, "aws");
+  const dir = await cellTree(cell);
   const env = childEnv(dir, cell.runId);
 
   await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
@@ -212,6 +214,21 @@ async function sweep(runId: string): Promise<void> {
   for (const stranded of reclaim) {
     if (left.has(stranded.slug)) {
       complaints.push(`${stranded.slug} still stands after the sweep destroyed it`);
+    }
+  }
+
+  const ladderSweeps: Array<[string, (runId: string) => Promise<void>]> = [
+    ["with-sst", sstSweep],
+    ["with-pulumi", pulumiSweep],
+  ];
+  for (const [name, sweepLadder] of ladderSweeps) {
+    if (!examples.some((example) => example.name === name)) {
+      continue;
+    }
+    try {
+      await sweepLadder(runId);
+    } catch (error) {
+      complaints.push(`${name} ladder sweep: ${String(error)}`);
     }
   }
 
