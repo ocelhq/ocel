@@ -200,7 +200,7 @@ func TestADryRunNeverOpensTheVarsUI(t *testing.T) {
 			deps := clitest.NewDeps()
 			terminalStdin(&deps)
 			served := 0
-			deps.ServeVarsUI = func(context.Context, *projectconfig.Config, *provider.Runner, bool, *envgate.Gate) (*varsui.Session, error) {
+			deps.ServeVarsUI = func(context.Context, *projectconfig.Config, *provider.Runner, bool, *envgate.Gate, *varsui.Recovery) (*varsui.Session, error) {
 				served++
 				return nil, errors.New("a dry run must never serve the variables UI")
 			}

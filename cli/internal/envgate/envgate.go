@@ -22,13 +22,21 @@ type Address struct {
 
 type Stored struct {
 	Address
-	Version int64
+	Version   int64
+	Reference *Reference
+}
+
+type Reference struct {
+	Slug   string `json:"slug"`
+	Folder string `json:"folder"`
+	Key    string `json:"key"`
 }
 
 type Override struct {
-	Environment string `json:"environment"`
-	Version     int64  `json:"version"`
-	Orphaned    bool   `json:"orphaned,omitempty"`
+	Environment string     `json:"environment"`
+	Version     int64      `json:"version"`
+	Orphaned    bool       `json:"orphaned,omitempty"`
+	Reference   *Reference `json:"reference,omitempty"`
 }
 
 func Orphaned(environments []string, environment string) bool {
@@ -59,6 +67,7 @@ type Gate struct {
 	mu          sync.Mutex
 	cells       []Stored
 	overrides   map[Cell][]Override
+	references  map[Cell]*Reference
 	definitions []*resourcesv1.VariableDefinition
 	problems    []*resourcesv1.VariableProblem
 
@@ -82,12 +91,16 @@ func (g *Gate) Prefetch(ctx context.Context) error {
 
 	var cells []Stored
 	overrides := map[Cell][]Override{}
+	references := map[Cell]*Reference{}
 	for _, row := range stored {
 		if row.Environment == "" {
 			cells = append(cells, row)
+			if row.Reference != nil {
+				references[row.Cell] = row.Reference
+			}
 			continue
 		}
-		overrides[row.Cell] = append(overrides[row.Cell], Override{Environment: row.Environment, Version: row.Version})
+		overrides[row.Cell] = append(overrides[row.Cell], Override{Environment: row.Environment, Version: row.Version, Reference: row.Reference})
 	}
 	for _, forCell := range overrides {
 		slices.SortFunc(forCell, func(a, b Override) int { return cmp.Compare(a.Environment, b.Environment) })
@@ -97,6 +110,7 @@ func (g *Gate) Prefetch(ctx context.Context) error {
 	defer g.mu.Unlock()
 	g.cells = cells
 	g.overrides = overrides
+	g.references = references
 	g.plaintext = nil
 	return nil
 }

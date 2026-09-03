@@ -19,15 +19,15 @@ import (
 
 const RootApp = "this project's app"
 
-func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
+func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
 	assets, err := node.VarsUI()
 	if err != nil {
 		return nil, fmt.Errorf("read the bundled variables UI: %w", err)
 	}
 
-	tier := environmentv1.Tier_TIER_PRODUCTION
+	tier, other := environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW
 	if preview {
-		tier = environmentv1.Tier_TIER_PREVIEW
+		tier, other = other, tier
 	}
 	store := Values{
 		Runner: runner,
@@ -47,9 +47,11 @@ func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provide
 		Assets:       assets,
 		Gate:         gate,
 		Store:        store,
+		Other:        Values{Runner: runner, Slug: cfg.Slug, Tier: other},
 		Slug:         cfg.Slug,
 		Preview:      preview,
 		Environments: environments,
+		Recovery:     recovery,
 	})
 }
 
@@ -113,16 +115,37 @@ func (v Values) List(ctx context.Context) ([]envgate.Stored, error) {
 				Cell:        envgate.Cell{Key: c.GetKey(), Folder: c.GetFolder()},
 				Environment: c.GetEnvironment(),
 			},
-			Version: value.GetVersion(),
+			Version:   value.GetVersion(),
+			Reference: referenceOf(value.GetTarget()),
 		})
 	}
 	return stored, nil
 }
 
-func (v Values) Reveal(ctx context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
+func referenceOf(target *envvarsv1.Coordinate) *envgate.Reference {
+	if target == nil {
+		return nil
+	}
+	return &envgate.Reference{Slug: target.GetSlug(), Folder: target.GetFolder(), Key: target.GetKey()}
+}
+
+func (v Values) Read(ctx context.Context, rows []envgate.Address) (map[envgate.Address]string, error) {
+	resp, err := v.reveal(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
+	found := make(map[envgate.Address]string, len(resp.GetValues()))
+	for _, value := range resp.GetValues() {
+		c := value.GetMetadata().GetCoordinate()
+		found[envgate.Address{Cell: envgate.Cell{Key: c.GetKey(), Folder: c.GetFolder()}, Environment: c.GetEnvironment()}] = value.GetValue()
+	}
+	return found, nil
+}
+
+func (v Values) reveal(ctx context.Context, rows []envgate.Address) (*envvarsv1.RevealValuesResponse, error) {
 	named := make([]*envvarsv1.Coordinate, 0, len(rows))
 	for _, row := range rows {
-		named = append(named, &envvarsv1.Coordinate{Slug: v.Slug, Folder: row.Cell.Folder, Key: row.Cell.Key, Environment: row.Environment})
+		named = append(named, v.coordinate(row))
 	}
 	vars, err := v.Runner.Vars()
 	if err != nil {
@@ -135,6 +158,14 @@ func (v Values) Reveal(ctx context.Context, rows []envgate.Address) (map[envgate
 	})
 	if err != nil {
 		return nil, errors.New(err.Error())
+	}
+	return resp, nil
+}
+
+func (v Values) Reveal(ctx context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
+	resp, err := v.reveal(ctx, rows)
+	if err != nil {
+		return nil, err
 	}
 
 	found := make(map[envgate.Cell]string, len(resp.GetValues()))

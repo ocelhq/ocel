@@ -25,6 +25,7 @@ type gateRecovery struct {
 
 	newGate func() *envgate.Gate
 
+	command string
 	compute string
 
 	ui *runui.Session
@@ -33,30 +34,32 @@ type gateRecovery struct {
 }
 
 func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contractv1.Manifest, error) {
-	run := runtrace.FromContext(ctx)
-	for attempt := 0; ; attempt++ {
-		gate := r.newGate()
+	gate := r.newGate()
+	manifest, err := r.attempt(ctx, gate, prebuilt, 0)
 
-		attemptCtx := ctx
-		var span trace.Span
-		if run != nil {
-			attemptCtx, span = run.StartSpan(ctx, "build", runtrace.AttrRetryCount.Int(attempt))
-		}
-		manifest, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.ui, r.compute)
-		endAttemptSpan(span, err)
-
-		var refusal *envgate.Refusal
-		if !r.enabled || !errors.As(err, &refusal) {
-			return manifest, err
-		}
-		if err := r.fill(ctx, gate, refusal); err != nil {
-			return nil, err
-		}
+	var refusal *envgate.Refusal
+	if !r.enabled || !errors.As(err, &refusal) {
+		return manifest, err
 	}
+	if err := r.fill(ctx, gate, refusal); err != nil {
+		return nil, err
+	}
+	return r.attempt(ctx, r.newGate(), prebuilt, 1)
+}
+
+func (r gateRecovery) attempt(ctx context.Context, gate *envgate.Gate, prebuilt bool, retry int) (*contractv1.Manifest, error) {
+	attemptCtx := ctx
+	var span trace.Span
+	if run := runtrace.FromContext(ctx); run != nil {
+		attemptCtx, span = run.StartSpan(ctx, "build", runtrace.AttrRetryCount.Int(retry))
+	}
+	manifest, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.ui, r.compute)
+	endAttemptSpan(span, err)
+	return manifest, err
 }
 
 func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *envgate.Refusal) error {
-	varsSession, err := r.deps.ServeVarsUI(ctx, r.cfg, r.runner, r.preview, gate)
+	varsSession, err := r.deps.ServeVarsUI(ctx, r.cfg, r.runner, r.preview, gate, r.recovery(refusal))
 	if err != nil {
 		return err
 	}
@@ -85,6 +88,14 @@ func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *env
 	default:
 		return waitErr
 	}
+}
+
+func (r gateRecovery) recovery(refusal *envgate.Refusal) *varsui.Recovery {
+	owed := make([]envgate.Cell, 0, len(refusal.Problems))
+	for _, problem := range refusal.Problems {
+		owed = append(owed, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
+	}
+	return &varsui.Recovery{Deploy: r.command, Owed: owed}
 }
 
 func endAttemptSpan(span trace.Span, err error) {

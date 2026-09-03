@@ -47,8 +47,8 @@ type varsUISessions struct {
 func captureVarsUI(deps *cmddeps.Deps) *varsUISessions {
 	sessions := &varsUISessions{}
 	prev := deps.ServeVarsUI
-	deps.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate) (*varsui.Session, error) {
-		session, err := prev(ctx, cfg, runner, preview, gate)
+	deps.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
+		session, err := prev(ctx, cfg, runner, preview, gate, recovery)
 		if err == nil {
 			sessions.mu.Lock()
 			sessions.all = append(sessions.all, session)
@@ -377,7 +377,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		}
 	})
 
-	t.Run("a replacement that still fails the schema does not slip through", func(t *testing.T) {
+	t.Run("a replacement that still fails the schema fails the deploy without reopening the UI", func(t *testing.T) {
 		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		envSet(t, root, "STRIPE_API_KEY", "nope", envOptions{})
 		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_INVALID","detail":"must start with sk_"}]`)
@@ -386,7 +386,6 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var mu sync.Mutex
 		var opened []string
 		recordBrowser(&deps, &opened, &mu)
-		sessions := captureVarsUI(&deps)
 		built := false
 		stubAppBuildRecorder(&deps, &built)
 
@@ -401,13 +400,11 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		setCell(t, address, token, "STRIPE_API_KEY", "also_nope")
 		markDone(t, address, token)
 
-		awaitVarsUI(t, &out, 2)
-		sessions.abandon(t, 2)
-
 		select {
 		case err := <-done:
-			if err == nil {
-				t.Fatalf("runDeploy err = nil, want the second invalid value refused; stdout=%s", out.String())
+			var exit *exitsig.ExitError
+			if !errors.As(err, &exit) || exit.Code == 0 {
+				t.Fatalf("runDeploy err = %v, want the second invalid value refused with a non-zero exit; stdout=%s", err, out.String())
 			}
 		case <-time.After(60 * time.Second):
 			t.Fatal("runDeploy never returned")
@@ -418,20 +415,27 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		if strings.Contains(out.String(), "Deployed") {
 			t.Errorf("stdout = %q, want no deploy to have completed", out.String())
 		}
+		if urls := varsUIURL.FindAllString(out.String(), -1); len(urls) != 1 {
+			t.Errorf("the UI was offered %d times, want once per deploy: %q", len(urls), out.String())
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(opened) != 1 {
+			t.Errorf("opened = %v, want the browser launched exactly once", opened)
+		}
 		if strings.Contains(out.String(), "also_nope") || strings.Contains(out.String(), "nope") {
 			t.Errorf("stdout = %q, want no variable value ever printed", out.String())
 		}
 	})
 
-	t.Run("a reopened UI shows what is still owed", func(t *testing.T) {
+	t.Run("returning with a cell still owed is refused, and abandoning fails the deploy once", func(t *testing.T) {
 		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
-		problems := problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"},{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
+		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"},{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
 		deps := clitest.NewDeps()
 		terminalStdin(&deps)
 		var mu sync.Mutex
 		var opened []string
 		recordBrowser(&deps, &opened, &mu)
-		sessions := captureVarsUI(&deps)
 		built := false
 		stubAppBuildRecorder(&deps, &built)
 
@@ -447,27 +451,57 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 			t.Fatalf("stdout = %q, want the first refusal to name both cells", first)
 		}
 		setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
-		clitest.WriteFile(t, problems, `[{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
+
+		req, err := http.NewRequest(http.MethodPost, address+"/api/done", nil)
+		if err != nil {
+			t.Fatalf("build the done request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("mark the matrix done: %v", err)
+		}
+		refusal, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != http.StatusConflict || !strings.Contains(string(refusal), "DATABASE_URL") {
+			t.Fatalf("done with a cell owed = %d %q, want %d naming DATABASE_URL", res.StatusCode, refusal, http.StatusConflict)
+		}
+		if strings.Contains(string(refusal), "STRIPE_API_KEY") {
+			t.Errorf("refusal = %q, want a cell the developer already filled not shown as owed", refusal)
+		}
+
 		before := out.String()
-		markDone(t, address, token)
-
-		awaitVarsUI(t, &out, 2)
-		reopened := strings.TrimPrefix(out.String(), before)
-		if !strings.Contains(reopened, "DATABASE_URL") {
-			t.Errorf("reopened block = %q, want it to name the cell that is still owed", reopened)
+		abandon, err := http.NewRequest(http.MethodPost, address+"/api/abandon", nil)
+		if err != nil {
+			t.Fatalf("build the abandon request: %v", err)
 		}
-		if strings.Contains(reopened, "STRIPE_API_KEY") {
-			t.Errorf("reopened block = %q, want a cell the developer already filled not shown as owed", reopened)
+		abandon.Header.Set("Authorization", "Bearer "+token)
+		if res, err := http.DefaultClient.Do(abandon); err != nil {
+			t.Fatalf("abandon: %v", err)
+		} else {
+			res.Body.Close()
 		}
 
-		sessions.abandon(t, 2)
 		select {
 		case err := <-done:
-			if err == nil {
-				t.Fatal("runDeploy err = nil, want the still-incomplete matrix refused")
+			var exit *exitsig.ExitError
+			if !errors.As(err, &exit) || exit.Code == 0 {
+				t.Fatalf("runDeploy err = %v, want the abandoned deploy to exit non-zero", err)
 			}
 		case <-time.After(60 * time.Second):
 			t.Fatal("runDeploy never returned")
+		}
+		tail := strings.TrimPrefix(out.String(), before) + stderr.String()
+		if !strings.Contains(tail, "DATABASE_URL") || !strings.Contains(tail, "closed before the matrix was complete") {
+			t.Errorf("output after abandoning = %q, want the owed cell and the abandonment named", tail)
+		}
+		if urls := varsUIURL.FindAllString(out.String(), -1); len(urls) != 1 {
+			t.Errorf("the UI was offered %d times, want once per deploy", len(urls))
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(opened) != 1 {
+			t.Errorf("opened = %v, want the browser launched exactly once", opened)
 		}
 		if built {
 			t.Error("the app was built with a required variable still missing")

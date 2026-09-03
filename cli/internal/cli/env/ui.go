@@ -59,7 +59,7 @@ func serveAndOpenVarsUI(
 	gate *envgate.Gate,
 	stdout io.Writer,
 ) (*varsui.Session, error) {
-	varsSession, err := deps.ServeVarsUI(ctx, cfg, runner, preview, gate)
+	varsSession, err := deps.ServeVarsUI(ctx, cfg, runner, preview, gate, nil)
 	if err != nil {
 		return nil, err
 	}
