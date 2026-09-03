@@ -22,6 +22,7 @@ import {
   expanded,
   hoveredApp,
   hide,
+  openDrawer,
   problems,
   reveal,
   revealErrors,
@@ -108,7 +109,7 @@ function KeyGroup({ row }: { row: KeyRow }) {
           <Value variant={row.root} scope={row.scope} />
         </td>
         <td class="cell-tools">
-          <Tools variant={row.root} />
+          {editable(row.root) && <Tools variant={row.root} />}
         </td>
       </tr>
       {open &&
@@ -279,9 +280,18 @@ function Tools({ variant }: { variant: Variant }) {
       </button>
     );
   }
-  if (!variant.set) return null;
   return (
     <>
+      <button
+        type="button"
+        class="iconbtn"
+        aria-haspopup="dialog"
+        title="details and history"
+        aria-label={`details and history of ${describe(variant)}`}
+        onClick={() => openDrawer(variant.at)}
+      >
+        <Icon name="info" />
+      </button>
       {revealable(variant) && (
         <button
           type="button"
@@ -296,21 +306,23 @@ function Tools({ variant }: { variant: Variant }) {
           <Icon name={revealed ? "eyeOff" : "eye"} />
         </button>
       )}
-      <button
-        type="button"
-        class="iconbtn"
-        data-tone={variant.orphaned ? "owed" : undefined}
-        title={
-          variant.orphaned
-            ? `remove the ${variant.at.environment} value — ${variant.at.environment} no longer exists`
-            : "remove this value"
-        }
-        aria-label={`remove the value of ${describe(variant)}`}
-        disabled={busy}
-        onClick={() => void erase(variant.at, variant.version)}
-      >
-        <Icon name="trash" />
-      </button>
+      {variant.set && (
+        <button
+          type="button"
+          class="iconbtn"
+          data-tone={variant.orphaned ? "owed" : undefined}
+          title={
+            variant.orphaned
+              ? `remove the ${variant.at.environment} value — ${variant.at.environment} no longer exists`
+              : "remove this value"
+          }
+          aria-label={`remove the value of ${describe(variant)}`}
+          disabled={busy}
+          onClick={() => void erase(variant.at, variant.version)}
+        >
+          <Icon name="trash" />
+        </button>
+      )}
     </>
   );
 }

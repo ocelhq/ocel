@@ -16,6 +16,7 @@ import {
   type SaveResult,
   type State,
   type Variant,
+  type Version,
 } from "./model";
 
 export const state = signal<State | null>(null);
@@ -31,6 +32,10 @@ export const baselines = signal<ReadonlyMap<string, string>>(new Map());
 export const revealErrors = signal<ReadonlyMap<string, string>>(new Map());
 export const problems = signal<ReadonlyMap<string, Problem>>(new Map());
 export const outcome = signal<{ text: string; tone?: "owed" } | null>(null);
+
+export const drawer = signal<Address | null>(null);
+export const history = signal<Version[] | null>(null);
+export const historyError = signal<string | null>(null);
 
 export const tree = computed(() =>
   state.value ? treeOf(state.value, extras.value) : [],
@@ -238,6 +243,28 @@ export async function erase(at: Address, version: number): Promise<void> {
   } finally {
     saving.value = false;
   }
+}
+
+export function openDrawer(at: Address): void {
+  drawer.value = at;
+  history.value = null;
+  historyError.value = null;
+  void api<{ versions: Version[] }>("GET", `/api/history?${query(at)}`).then(
+    (read) => {
+      if (drawer.value && addressKey(drawer.value) === addressKey(at)) {
+        history.value = read.versions;
+      }
+    },
+    (thrown: unknown) => {
+      if (drawer.value && addressKey(drawer.value) === addressKey(at)) {
+        historyError.value = message(thrown);
+      }
+    },
+  );
+}
+
+export function closeDrawer(): void {
+  drawer.value = null;
 }
 
 export function leave(): void {
