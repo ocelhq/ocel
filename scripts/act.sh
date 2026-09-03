@@ -5,23 +5,23 @@ IMAGE="${OCEL_ACT_IMAGE:-ghcr.io/catthehacker/ubuntu:act-latest}"
 DOCKER_SOCK="${OCEL_ACT_DOCKER_SOCK:-/var/run/docker.sock}"
 COMPOSE_PROJECT=ocel-act
 E2E_PORTS=(5432 5433 3000 9000 9001 8000)
-ALL_WORKFLOWS=(build go e2e aws-live vps-live)
+ALL_WORKFLOWS=(build go e2e provider-aws provider-vps)
 
 usage() {
     cat <<'EOF'
 usage: scripts/act.sh [workflow ...]
 
 Runs the PR gates locally before anything is pushed. build, go, e2e and
-aws-live replay through nektos/act as workflow_dispatch, so every step runs
-regardless of what changed — a superset of the PR run. vps-live runs its
+provider-aws replay through nektos/act as workflow_dispatch, so every step runs
+regardless of what changed — a superset of the PR run. provider-vps runs its
 workflow's commands natively (incus wants systemd and KVM an act container
 cannot host; the CI runner executes it un-containered too). The remote Go
 build cache is wired in from your local credentials, so a green run both
 proves the change and leaves the cache warm for CI.
 
-  workflows: build go e2e aws-live vps-live    (default: all five)
+  workflows: build go e2e provider-aws provider-vps    (default: all five)
 
-e2e and aws-live drive the host docker daemon. e2e needs the dev compose
+e2e and provider-aws drive the host docker daemon. e2e needs the dev compose
 stack's ports free — stop it first (docker compose stop); e2e's own stack
 runs under the ocel-act compose project and is torn down afterwards.
 EOF
@@ -79,10 +79,10 @@ incus_run() {
     fi
 }
 
-run_vps_live() {
+run_provider_vps() {
     eval "$(mise env -s bash 2>/dev/null || true)"
-    [ -e /dev/kvm ] || die "vps-live needs /dev/kvm"
-    incus_run "incus list" >/dev/null || die "vps-live needs a working incus (incus admin init --auto)"
+    [ -e /dev/kvm ] || die "provider-vps needs /dev/kvm"
+    incus_run "incus list" >/dev/null || die "provider-vps needs a working incus (incus admin init --auto)"
     local out status=0
     out=$(mktemp -d)
     pnpm install --frozen-lockfile &&
@@ -90,8 +90,8 @@ run_vps_live() {
         go generate -C cli ./... &&
         incus_run "scripts/incus.sh run ocel-act-live-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./..." | tee "$out/live.json" &&
         scripts/assert-ran.sh "$out/live.json" TestLive &&
-        incus_run "scripts/incus.sh run ocel-act-e2e-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestE2E' -json ./..." | tee "$out/e2e.json" &&
-        scripts/assert-ran.sh "$out/e2e.json" TestE2E || status=$?
+        incus_run "scripts/incus.sh run ocel-act-lifecycle-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestLifecycle' -json ./..." | tee "$out/lifecycle.json" &&
+        scripts/assert-ran.sh "$out/lifecycle.json" TestLifecycle || status=$?
     rm -rf "$out"
     return $status
 }
@@ -143,8 +143,8 @@ fi
 failed=()
 for wf in "${selected[@]}"; do
     echo "act.sh: ▸ $wf"
-    if [ "$wf" = vps-live ]; then
-        run_vps_live || failed+=("$wf")
+    if [ "$wf" = provider-vps ]; then
+        run_provider_vps || failed+=("$wf")
         continue
     fi
     container_opts="--init"

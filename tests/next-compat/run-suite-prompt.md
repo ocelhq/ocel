@@ -1,9 +1,9 @@
 # Running one Next.js deploy-adapter e2e suite locally
 
-The `test-e2e-deploy` workflow runs the matrix. Locally you run **one suite** —
+The `next-compat` workflow runs the matrix. Locally you run **one suite** —
 to reproduce a CI failure, or to stage a live preview to debug against.
 
-Read `scripts/e2e-next/README.md` first for the account setup this depends on.
+Read `tests/next-compat/README.md` first for the account setup this depends on.
 
 ## Paths
 
@@ -114,9 +114,9 @@ NEXT_TEST_JOB=1 \
 NEXT_TEST_MODE=deploy \
 NEXT_E2E_TEST_TIMEOUT=600000 \
 NEXT_TELEMETRY_DISABLED=1 \
-NEXT_TEST_DEPLOY_SCRIPT_PATH=/home/vndaba/Dev/ocelhq/scripts/e2e-next/deploy.mjs \
-NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH=/home/vndaba/Dev/ocelhq/scripts/e2e-next/logs.mjs \
-NEXT_TEST_CLEANUP_SCRIPT_PATH=/home/vndaba/Dev/ocelhq/scripts/e2e-next/cleanup.mjs \
+NEXT_TEST_DEPLOY_SCRIPT_PATH=/home/vndaba/Dev/ocelhq/tests/next-compat/deploy.mjs \
+NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH=/home/vndaba/Dev/ocelhq/tests/next-compat/logs.mjs \
+NEXT_TEST_CLEANUP_SCRIPT_PATH=/home/vndaba/Dev/ocelhq/tests/next-compat/cleanup.mjs \
 pnpm jest --runInBand <SUITE_PATH>
 ```
 
@@ -191,7 +191,7 @@ every test app. If that returns anything, or to reclaim the whole project:
 
 ```bash
 ADAPTER_DIR=… OCEL_E2E_SIDECAR_DIR=… \
-  node scripts/e2e-next/project-teardown.mjs <slug>
+  node tests/next-compat/project-teardown.mjs <slug>
 ```
 
 `project-teardown.mjs` is the only path that reliably clears everything,

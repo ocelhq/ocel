@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
-const e2eSlug = "ocel-aws-e2e"
+const lifecycleSlug = "ocel-aws-e2e"
 
 const patience = 15 * time.Minute
 
@@ -32,7 +32,7 @@ type journey struct {
 	cache    string
 }
 
-func e2e(t *testing.T) journey {
+func lifecycle(t *testing.T) journey {
 	t.Helper()
 	a := live(t)
 
@@ -91,7 +91,7 @@ func (j journey) declaration(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return fmt.Sprintf("export default {\n  slug: %q,\n  provider: %s,\n};\n", e2eSlug, options)
+	return fmt.Sprintf("export default {\n  slug: %q,\n  provider: %s,\n};\n", lifecycleSlug, options)
 }
 
 func repoRoot(t *testing.T) string {
@@ -171,8 +171,8 @@ func plain(rendered string) string {
 	return strings.ReplaceAll(escapes.ReplaceAllString(rendered, ""), "\r\n", "\n")
 }
 
-func TestE2ETheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *testing.T) {
-	run := e2e(t)
+func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *testing.T) {
+	run := lifecycle(t)
 	class := providerkit.ClassProduction
 	run.account.emptied(t, class)
 	ctx := context.Background()

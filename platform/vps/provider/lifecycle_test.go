@@ -31,15 +31,15 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-const e2eSlug = "ocel-vps-e2e"
+const lifecycleSlug = "ocel-vps-e2e"
 
 const (
-	e2eHostname    = "ocel-vps-e2e.localhost"
-	e2ePreviewBase = "preview.ocel-vps-e2e.localhost"
-	e2eApp         = "web"
-	e2ePreview     = "staging"
-	e2eSensitive   = "E2E_LEDGER_URL"
-	e2eDeployFile  = "ocel.deploy.config.ts"
+	lifecycleHostname    = "ocel-vps-e2e.localhost"
+	lifecyclePreviewBase = "preview.ocel-vps-e2e.localhost"
+	lifecycleApp         = "web"
+	lifecyclePreview     = "staging"
+	lifecycleSensitive   = "E2E_LEDGER_URL"
+	lifecycleDeployFile  = "ocel.deploy.config.ts"
 )
 
 const patience = 8 * time.Minute
@@ -57,7 +57,7 @@ type journey struct {
 	value    string
 }
 
-func e2e(t *testing.T) journey {
+func lifecycle(t *testing.T) journey {
 	t.Helper()
 	vm := live(t)
 
@@ -79,7 +79,7 @@ func e2e(t *testing.T) journey {
 	build(t, ".", filepath.Join(run.installed(), "bin", "deploy"), "./cmd/deploy")
 	write(t, filepath.Join(run.installed(), "package.json"), run.manifest(t))
 	write(t, filepath.Join(run.project, "ocel.config.ts"), run.declaration(t, vm.user))
-	write(t, filepath.Join(run.project, e2eDeployFile), run.declaration(t, host.DeployUser()))
+	write(t, filepath.Join(run.project, lifecycleDeployFile), run.declaration(t, host.DeployUser()))
 
 	return run
 }
@@ -90,7 +90,7 @@ func (j journey) fixture(t *testing.T, release string) {
 		"{\n  \"name\": \"e2e-app\",\n  \"version\": %q,\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"start\": \"node server.js\" }\n}\n", release))
 }
 
-const e2eServer = `import { createServer } from "node:http";
+const lifecycleServer = `import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 
 const { version } = JSON.parse(
@@ -118,9 +118,9 @@ createServer((request, response) => {
 func (j journey) declares(t *testing.T, release string) {
 	t.Helper()
 	j.fixture(t, release)
-	write(t, filepath.Join(j.project, "app", "server.js"), e2eServer)
+	write(t, filepath.Join(j.project, "app", "server.js"), lifecycleServer)
 	write(t, filepath.Join(j.project, "ocel", "vars.ts"), fmt.Sprintf(
-		"import { defineEnv } from \"ocel/env\";\n\nexport const env = defineEnv({\n  %s: { class: \"sensitive\" },\n});\n", e2eSensitive))
+		"import { defineEnv } from \"ocel/env\";\n\nexport const env = defineEnv({\n  %s: { class: \"sensitive\" },\n});\n", lifecycleSensitive))
 	if err := os.Symlink(filepath.Join(repoRoot(t), "packages", "ocel"), filepath.Join(j.project, "node_modules", "ocel")); err != nil && !os.IsExist(err) {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func (j journey) declaration(t *testing.T, login string) string {
 		t.Fatal(err)
 	}
 	apps, err := json.Marshal([]map[string]any{{
-		"name":    e2eApp,
+		"name":    lifecycleApp,
 		"path":    "app",
 		"compute": "container",
 		"health":  map[string]any{"path": "/"},
@@ -199,7 +199,7 @@ func (j journey) declaration(t *testing.T, login string) string {
 		t.Fatal(err)
 	}
 	return fmt.Sprintf("export default {\n  slug: %q,\n  provider: %s,\n  apps: %s,\n  domains: { production: %q, preview: %q },\n};\n",
-		e2eSlug, options, apps, e2eHostname, "*."+e2ePreviewBase)
+		lifecycleSlug, options, apps, lifecycleHostname, "*."+lifecyclePreviewBase)
 }
 
 func repoRoot(t *testing.T) string {
@@ -269,12 +269,12 @@ func (j journey) env() []string {
 
 func (j journey) deploying(t *testing.T, args ...string) string {
 	t.Helper()
-	return j.must(t, append([]string{"-c", e2eDeployFile}, args...)...)
+	return j.must(t, append([]string{"-c", lifecycleDeployFile}, args...)...)
 }
 
 func (j journey) refused(t *testing.T, args ...string) string {
 	t.Helper()
-	rendered, err := j.run(t, append([]string{"-c", e2eDeployFile}, args...)...)
+	rendered, err := j.run(t, append([]string{"-c", lifecycleDeployFile}, args...)...)
 	if err == nil {
 		t.Fatalf("ocel %s succeeded, and the whole point of this step is that it is refused:\n%s", strings.Join(args, " "), rendered)
 	}
@@ -652,11 +652,11 @@ func plain(rendered string) string {
 }
 
 const (
-	e2eDecoyContainer = "not-ocels-workload"
-	e2eDecoyLabel     = "not.ocels.workload"
-	e2eDecoyImage     = "public.ecr.aws/docker/library/alpine:3.20"
-	e2eDecoyProxy     = "not-ocels-caddy"
-	e2eDecoyProxyData = "/var/lib/not-ocels-caddy"
+	lifecycleDecoyContainer = "not-ocels-workload"
+	lifecycleDecoyLabel     = "not.ocels.workload"
+	lifecycleDecoyImage     = "public.ecr.aws/docker/library/alpine:3.20"
+	lifecycleDecoyProxy     = "not-ocels-caddy"
+	lifecycleDecoyProxyData = "/var/lib/not-ocels-caddy"
 )
 
 type decoy struct {
@@ -668,55 +668,55 @@ type decoy struct {
 
 func (j journey) plants(t *testing.T) decoy {
 	t.Helper()
-	j.vm.ssh(t, "sudo docker rm -f "+e2eDecoyContainer+" >/dev/null 2>&1 || true")
-	j.vm.ssh(t, "sudo docker run -d --name "+e2eDecoyContainer+" --label "+e2eDecoyLabel+"=kept "+
+	j.vm.ssh(t, "sudo docker rm -f "+lifecycleDecoyContainer+" >/dev/null 2>&1 || true")
+	j.vm.ssh(t, "sudo docker run -d --name "+lifecycleDecoyContainer+" --label "+lifecycleDecoyLabel+"=kept "+
 		decoyImage+" sleep 5400")
-	t.Cleanup(func() { j.vm.ssh(t, "sudo docker rm -f "+e2eDecoyContainer+" >/dev/null 2>&1 || true") })
+	t.Cleanup(func() { j.vm.ssh(t, "sudo docker rm -f "+lifecycleDecoyContainer+" >/dev/null 2>&1 || true") })
 
-	j.vm.ssh(t, "sudo docker pull "+quote(e2eDecoyImage))
-	t.Cleanup(func() { j.vm.ssh(t, "sudo docker rmi "+e2eDecoyImage+" >/dev/null 2>&1 || true") })
+	j.vm.ssh(t, "sudo docker pull "+quote(lifecycleDecoyImage))
+	t.Cleanup(func() { j.vm.ssh(t, "sudo docker rmi "+lifecycleDecoyImage+" >/dev/null 2>&1 || true") })
 
-	j.vm.ssh(t, "sudo install -d -m 0755 "+quote(e2eDecoyProxyData))
-	j.vm.ssh(t, "printf 'a caddy this machine already ran\n' | sudo install -m 0644 /dev/stdin "+quote(e2eDecoyProxyData+"/caddy.json"))
-	j.vm.ssh(t, "sudo docker rm -f "+e2eDecoyProxy+" >/dev/null 2>&1 || true")
-	j.vm.ssh(t, "sudo docker run -d --name "+e2eDecoyProxy+" --entrypoint sleep -v "+
-		quote(e2eDecoyProxyData)+":/data "+quote(host.ProxyImage)+" 3000")
+	j.vm.ssh(t, "sudo install -d -m 0755 "+quote(lifecycleDecoyProxyData))
+	j.vm.ssh(t, "printf 'a caddy this machine already ran\n' | sudo install -m 0644 /dev/stdin "+quote(lifecycleDecoyProxyData+"/caddy.json"))
+	j.vm.ssh(t, "sudo docker rm -f "+lifecycleDecoyProxy+" >/dev/null 2>&1 || true")
+	j.vm.ssh(t, "sudo docker run -d --name "+lifecycleDecoyProxy+" --entrypoint sleep -v "+
+		quote(lifecycleDecoyProxyData)+":/data "+quote(host.ProxyImage)+" 3000")
 	t.Cleanup(func() {
-		j.vm.ssh(t, "sudo docker rm -f "+e2eDecoyProxy+" >/dev/null 2>&1 || true")
-		j.vm.ssh(t, "sudo rm -rf "+quote(e2eDecoyProxyData))
+		j.vm.ssh(t, "sudo docker rm -f "+lifecycleDecoyProxy+" >/dev/null 2>&1 || true")
+		j.vm.ssh(t, "sudo rm -rf "+quote(lifecycleDecoyProxyData))
 	})
 
 	held := decoy{
-		workload: j.vm.inspects(t, "container", e2eDecoyContainer, "{{.Id}}"),
-		image:    j.vm.holds(t, e2eDecoyImage),
-		proxy:    j.vm.inspects(t, "container", e2eDecoyProxy, "{{.Id}}"),
-		data:     j.vm.ssh(t, "sudo sha256sum "+quote(e2eDecoyProxyData+"/caddy.json")),
+		workload: j.vm.inspects(t, "container", lifecycleDecoyContainer, "{{.Id}}"),
+		image:    j.vm.holds(t, lifecycleDecoyImage),
+		proxy:    j.vm.inspects(t, "container", lifecycleDecoyProxy, "{{.Id}}"),
+		data:     j.vm.ssh(t, "sudo sha256sum "+quote(lifecycleDecoyProxyData+"/caddy.json")),
 	}
 	for what, id := range map[string]string{
-		e2eDecoyContainer: held.workload,
-		e2eDecoyImage:     held.image,
-		e2eDecoyProxy:     held.proxy,
+		lifecycleDecoyContainer: held.workload,
+		lifecycleDecoyImage:     held.image,
+		lifecycleDecoyProxy:     held.proxy,
 	} {
 		if id == "" {
 			t.Fatalf("%s is not on this machine before ocel deploys anything, so what ocel leaves of a user's own containers and images cannot be proven here", what)
 		}
 	}
-	for _, standing := range []string{e2eDecoyContainer, e2eDecoyProxy} {
+	for _, standing := range []string{lifecycleDecoyContainer, lifecycleDecoyProxy} {
 		if !j.vm.running(t, standing) {
 			t.Fatalf("%s is not running before ocel deploys anything, and a container the machine's owner ran themselves is what proves ocel's destroy takes only what ocel put here", standing)
 		}
 	}
-	if ran := j.vm.inspects(t, "container", e2eDecoyContainer, "{{.Image}}"); ran == held.image {
-		t.Fatalf("%s is the image %s runs, so a container references it and it cannot fail the way an image the user pulled and never ran would", e2eDecoyImage, e2eDecoyContainer)
+	if ran := j.vm.inspects(t, "container", lifecycleDecoyContainer, "{{.Image}}"); ran == held.image {
+		t.Fatalf("%s is the image %s runs, so a container references it and it cannot fail the way an image the user pulled and never ran would", lifecycleDecoyImage, lifecycleDecoyContainer)
 	}
 	return held
 }
 
 func (j journey) gaveBack(t *testing.T, repository string) {
 	t.Helper()
-	if kept := j.labelled(t, e2eDecoyLabel); len(kept) == 0 {
+	if kept := j.labelled(t, lifecycleDecoyLabel); len(kept) == 0 {
 		t.Fatalf("this box lists no container at all under label %s, so the empty listing under %s is the emptiness of the command rather than of the label",
-			e2eDecoyLabel, host.LabelApp)
+			lifecycleDecoyLabel, host.LabelApp)
 	}
 	if standing := j.appContainers(t); len(standing) > 0 {
 		t.Errorf("containers %v still carry %s", standing, host.LabelApp)
@@ -740,26 +740,26 @@ func localAuthority(logged, hostname string) bool {
 
 func (j journey) survived(t *testing.T, planted decoy) {
 	t.Helper()
-	for _, standing := range []string{e2eDecoyContainer, e2eDecoyProxy} {
+	for _, standing := range []string{lifecycleDecoyContainer, lifecycleDecoyProxy} {
 		if !j.vm.running(t, standing) {
 			t.Errorf("%s stopped somewhere in this journey, and a container the machine's owner started under its own name is not ocel's to stop", standing)
 		}
 	}
 	for what, want := range map[string]string{
-		e2eDecoyContainer: planted.workload,
-		e2eDecoyProxy:     planted.proxy,
+		lifecycleDecoyContainer: planted.workload,
+		lifecycleDecoyProxy:     planted.proxy,
 	} {
 		if after := j.vm.inspects(t, "container", what, "{{.Id}}"); after != want {
 			t.Errorf("%s reads %q after both bootstrap destroys where it read %q, and a container ocel never ran is not ocel's to take", what, after, want)
 		}
 	}
-	if after := j.vm.inspects(t, "image", e2eDecoyImage, "{{.Id}}"); after != planted.image {
+	if after := j.vm.inspects(t, "image", lifecycleDecoyImage, "{{.Id}}"); after != planted.image {
 		t.Errorf("%s reads %q after both bootstrap destroys where it read %q: ocel prunes no images wholesale, and removes only what the difference under its own reference filter names",
-			e2eDecoyImage, after, planted.image)
+			lifecycleDecoyImage, after, planted.image)
 	}
-	if after := j.vm.ssh(t, "sudo sha256sum "+quote(e2eDecoyProxyData+"/caddy.json")); after != planted.data {
+	if after := j.vm.ssh(t, "sudo sha256sum "+quote(lifecycleDecoyProxyData+"/caddy.json")); after != planted.data {
 		t.Errorf("%s reads\n%s\nafter both bootstrap destroys where it read\n%s\nand the data directory of a proxy ocel did not install is not ocel's to edit",
-			e2eDecoyProxyData, after, planted.data)
+			lifecycleDecoyProxyData, after, planted.data)
 	}
 }
 
@@ -791,14 +791,14 @@ func lines(rendered string) []string {
 
 func (j journey) window(t *testing.T, class providerkit.Class) []string {
 	t.Helper()
-	return lines(j.vm.sshAs(t, host.DeployUser(), "cat "+quote(host.ReleasesDir()+"/"+e2eApp+"/"+string(class))))
+	return lines(j.vm.sshAs(t, host.DeployUser(), "cat "+quote(host.ReleasesDir()+"/"+lifecycleApp+"/"+string(class))))
 }
 
 func (j journey) container(t *testing.T) string {
 	t.Helper()
-	running := lines(j.vm.ssh(t, "sudo docker ps --filter label="+host.LabelApp+"="+e2eApp+" --format '{{.Names}}'"))
+	running := lines(j.vm.ssh(t, "sudo docker ps --filter label="+host.LabelApp+"="+lifecycleApp+" --format '{{.Names}}'"))
 	if len(running) != 1 {
-		t.Fatalf("%d containers carry %s=%s, and this journey turns on there being exactly one: %v", len(running), host.LabelApp, e2eApp, running)
+		t.Fatalf("%d containers carry %s=%s, and this journey turns on there being exactly one: %v", len(running), host.LabelApp, lifecycleApp, running)
 	}
 	return running[0]
 }
@@ -836,21 +836,21 @@ func firstLineOf(rendered, fragment string) string {
 
 func (j journey) promotionOf(t *testing.T, ref string) string {
 	t.Helper()
-	held, err := kitledger.New(j.box(t).Records(), providerkit.ClassProduction, e2eSlug).
+	held, err := kitledger.New(j.box(t).Records(), providerkit.ClassProduction, lifecycleSlug).
 		History(context.Background(), edge.DefaultPointer)
 	if err != nil {
-		t.Fatalf("read the promotions this box holds for %s: %v", e2eSlug, err)
+		t.Fatalf("read the promotions this box holds for %s: %v", lifecycleSlug, err)
 	}
 	digest := digestIn(ref)
 	if digest == "" {
 		t.Fatalf("%s carries no digest, and a promotion is looked up by the one thing a container label and a ledger identity spell the same way", ref)
 	}
 	for _, entry := range held {
-		if digestIn(entry.Builds[e2eApp]) == digest {
+		if digestIn(entry.Builds[lifecycleApp]) == digest {
 			return entry.PromotionID
 		}
 	}
-	t.Fatalf("no promotion among %+v carries %s for %s, so there is no name a rollback to it could be asserted against", held, ref, e2eApp)
+	t.Fatalf("no promotion among %+v carries %s for %s, so there is no name a rollback to it could be asserted against", held, ref, lifecycleApp)
 	return ""
 }
 
@@ -866,7 +866,7 @@ func (j journey) box(t *testing.T) *vps.Provider {
 func (j journey) claims(t *testing.T, hostname string) string {
 	t.Helper()
 	if err := j.box(t).Host().ClaimHosts(context.Background(), []host.HostClaim{{
-		Hostname: hostname, Owner: boxedge.Surface(e2eSlug, edge.ClassPreview), Pointer: edge.DefaultPointer,
+		Hostname: hostname, Owner: boxedge.Surface(lifecycleSlug, edge.ClassPreview), Pointer: edge.DefaultPointer,
 	}}); err != nil {
 		t.Fatalf("claim %s on this box, so a release of the catch-all has a route beside it that it never touches: %v", hostname, err)
 	}
@@ -886,17 +886,17 @@ func (j journey) rival(t *testing.T) journey {
 	if err := os.Symlink(filepath.Join(j.project, "app"), filepath.Join(rival.project, "app")); err != nil && !os.IsExist(err) {
 		t.Fatal(err)
 	}
-	written := strings.Replace(rival.declaration(t, host.DeployUser()), "slug: "+strconv.Quote(e2eSlug), "slug: "+strconv.Quote(e2eSlug+"-rival"), 1)
-	write(t, filepath.Join(rival.project, e2eDeployFile), written)
+	written := strings.Replace(rival.declaration(t, host.DeployUser()), "slug: "+strconv.Quote(lifecycleSlug), "slug: "+strconv.Quote(lifecycleSlug+"-rival"), 1)
+	write(t, filepath.Join(rival.project, lifecycleDeployFile), written)
 	return rival
 }
 
-func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.T) {
-	run := e2e(t)
+func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.T) {
+	run := lifecycle(t)
 	run.trusts(t)
 	run.declares(t, "one")
-	run.resolving(t, e2eHostname, edge.ProbeHostname("*."+e2ePreviewBase),
-		e2ePreview+"."+e2ePreviewBase, "unclaimed."+e2ePreviewBase)
+	run.resolving(t, lifecycleHostname, edge.ProbeHostname("*."+lifecyclePreviewBase),
+		lifecyclePreview+"."+lifecyclePreviewBase, "unclaimed."+lifecyclePreviewBase)
 	run.vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
 
 	class := providerkit.ClassProduction
@@ -922,7 +922,7 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		t.Fatalf("`ocel doctor` on a bootstrapped box printed no standing section, so there is no output an absence can be read over:\n%s", standing)
 	}
 	for _, verdict := range []string{
-		e2eHostname + " resolves to " + run.vm.addr + ", which is this box",
+		lifecycleHostname + " resolves to " + run.vm.addr + ", which is this box",
 		"something listens on port " + host.RenewalPort,
 		"nothing listens on tcp " + host.AdminPort + " inside " + host.ProxyContainer,
 	} {
@@ -969,42 +969,42 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	run.vm.ssh(t, "sudo usermod -aG docker "+run.vm.user)
 	t.Cleanup(func() { run.vm.ssh(t, "sudo gpasswd -d "+run.vm.user+" docker >/dev/null 2>&1 || true") })
 
-	set := run.deploying(t, "env", "set", e2eSensitive, run.value)
-	if !strings.Contains(set, "Set "+e2eSensitive) {
-		t.Fatalf("`ocel env set %s` said nothing about setting it:\n%s", e2eSensitive, set)
+	set := run.deploying(t, "env", "set", lifecycleSensitive, run.value)
+	if !strings.Contains(set, "Set "+lifecycleSensitive) {
+		t.Fatalf("`ocel env set %s` said nothing about setting it:\n%s", lifecycleSensitive, set)
 	}
 
 	drawn := run.must(t, "deploy", "--dry")
 	if !strings.Contains(drawn, "Proposed changes to production") {
 		t.Fatalf("`ocel deploy --dry` drew no plan, so there is no plan an image row can be read out of:\n%s", drawn)
 	}
-	for _, row := range []string{e2eApp + "  image", "promotion " + edge.DefaultPointer, e2eApp + "  deployment"} {
+	for _, row := range []string{lifecycleApp + "  image", "promotion " + edge.DefaultPointer, lifecycleApp + "  deployment"} {
 		if !strings.Contains(drawn, row) {
 			t.Errorf("`ocel deploy --dry` drew no %q row, and every mutation a deploy performs on this box is a plan row sourced from an engine event:\n%s", row, drawn)
 		}
 	}
-	if !strings.Contains(drawn, "+ "+e2eApp+"  image") {
-		t.Errorf("`ocel deploy --dry` drew %s's image row without the create the engine's own answer decides, so the row is drawn off the plan rather than off what this box holds:\n%s", e2eApp, drawn)
+	if !strings.Contains(drawn, "+ "+lifecycleApp+"  image") {
+		t.Errorf("`ocel deploy --dry` drew %s's image row without the create the engine's own answer decides, so the row is drawn off the plan rather than off what this box holds:\n%s", lifecycleApp, drawn)
 	}
 
 	deployed := run.deploying(t, "deploy", "--yes")
 	if !strings.Contains(deployed, "Deployed") {
 		t.Fatalf("`ocel deploy --yes` finished without deploying:\n%s", deployed)
 	}
-	if want := "Sending " + e2eApp + "'s image to " + run.vm.addr; !strings.Contains(deployed, want) {
+	if want := "Sending " + lifecycleApp + "'s image to " + run.vm.addr; !strings.Contains(deployed, want) {
 		t.Errorf("the deploy never reported %q, and the transfer of an image onto this box is the one mutation nothing else would name:\n%s", want, deployed)
 	}
 	container := run.container(t)
-	if held := run.vm.inspects(t, "container", container, host.LabelSelector(host.LabelApp)); held != e2eApp {
-		t.Errorf("%s carries %s=%q, want %q: the label is the join key retention reconciles over", container, host.LabelApp, held, e2eApp)
+	if held := run.vm.inspects(t, "container", container, host.LabelSelector(host.LabelApp)); held != lifecycleApp {
+		t.Errorf("%s carries %s=%q, want %q: the label is the join key retention reconciles over", container, host.LabelApp, held, lifecycleApp)
 	}
 	ref := run.vm.inspects(t, "container", container, host.LabelSelector(host.LabelRef))
 	repository, named := host.Repository(ref)
 	if !named {
 		t.Fatalf("%s carries %s=%q, which names no repository the box could ever sweep under", container, host.LabelRef, ref)
 	}
-	if read := run.vm.reads(t, container, e2eSensitive); read != run.value {
-		t.Fatalf("%s does not read %s as the value this deploy resolved, and nothing below turns on a value the container never got", container, e2eSensitive)
+	if read := run.vm.reads(t, container, lifecycleSensitive); read != run.value {
+		t.Fatalf("%s does not read %s as the value this deploy resolved, and nothing below turns on a value the container never got", container, lifecycleSensitive)
 	}
 
 	envFile := host.EnvFile(class, container)
@@ -1022,21 +1022,21 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		}
 	}
 	if at := strings.Index(deployed, run.value); at >= 0 {
-		t.Errorf("the deploy printed the value it handed %s at byte %d of its transcript, and this transcript is what a ci log keeps:\n%s", e2eApp, at, redacted(deployed, at, len(run.value)))
+		t.Errorf("the deploy printed the value it handed %s at byte %d of its transcript, and this transcript is what a ci log keeps:\n%s", lifecycleApp, at, redacted(deployed, at, len(run.value)))
 	}
-	if !strings.Contains(deployed, e2eApp) {
-		t.Fatalf("the deploy transcript never even names %s, so it is no window a leaked value could have appeared in:\n%s", e2eApp, deployed)
+	if !strings.Contains(deployed, lifecycleApp) {
+		t.Fatalf("the deploy transcript never even names %s, so it is no window a leaked value could have appeared in:\n%s", lifecycleApp, deployed)
 	}
 	if !strings.Contains(deployed, "`ocel domain add`") {
-		t.Errorf("the deploy that creates the edge surface never said what binds %s:\n%s", e2eHostname, deployed)
+		t.Errorf("the deploy that creates the edge surface never said what binds %s:\n%s", lifecycleHostname, deployed)
 	}
 
 	written := run.vm.proxyLogBytes(t)
 	owed := run.refused(t, "domain", "add")
 	for _, want := range []string{
-		"A     " + e2eHostname + "  " + run.vm.addr,
+		"A     " + lifecycleHostname + "  " + run.vm.addr,
 		"has no DNS writer configured",
-		e2eHostname + " does not answer as the box edge yet",
+		lifecycleHostname + " does not answer as the box edge yet",
 	} {
 		if !strings.Contains(owed, want) {
 			t.Errorf("`ocel domain add` never said %q, and a box's whole dns story is the record it owes and the honesty of its probe:\n%s", want, owed)
@@ -1044,16 +1044,16 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	}
 	run.trusting(t)
 	bound := run.deploying(t, "domain", "add")
-	if !strings.Contains(bound, "Serving "+e2eHostname) {
-		t.Fatalf("`ocel domain add` never settled %s once this machine trusted the root the box issues from:\n%s", e2eHostname, bound)
+	if !strings.Contains(bound, "Serving "+lifecycleHostname) {
+		t.Fatalf("`ocel domain add` never settled %s once this machine trusted the root the box issues from:\n%s", lifecycleHostname, bound)
 	}
-	run.serving(t, e2eHostname, "one")
+	run.serving(t, lifecycleHostname, "one")
 
 	reported := run.deploying(t, "domain", "status")
-	if !strings.Contains(reported, e2eHostname) {
+	if !strings.Contains(reported, lifecycleHostname) {
 		t.Fatalf("`ocel domain status` names no hostname at all, so it is no window a certificate claim could be read out of:\n%s", reported)
 	}
-	for _, want := range []string{"proxy:" + e2eHostname, "no expiry reported", "ocel issues and renews nothing here", e2eHostname + " A " + run.vm.addr} {
+	for _, want := range []string{"proxy:" + lifecycleHostname, "no expiry reported", "ocel issues and renews nothing here", lifecycleHostname + " A " + run.vm.addr} {
 		if !strings.Contains(reported, want) {
 			t.Errorf("`ocel domain status` never said %q: what serves a hostname on a box, and who renews it, is the whole of what this command owes:\n%s", want, reported)
 		}
@@ -1062,7 +1062,7 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(loaded), e2eHostname) {
+	if !strings.Contains(string(loaded), lifecycleHostname) {
 		t.Fatalf("the loaded configuration names no hostname this journey bound, so it is no window a tls policy could be read out of:\n%s", loaded)
 	}
 	if strings.Contains(string(loaded), "on_demand") {
@@ -1073,13 +1073,13 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	retiredRef := run.vm.inspects(t, "container", retired, host.LabelSelector(host.LabelRef))
 	run.fixture(t, "two")
 	var redeployed string
-	watched := run.underLoad(t, e2eHostname, retired, func() {
+	watched := run.underLoad(t, lifecycleHostname, retired, func() {
 		redeployed = run.deploying(t, "deploy", "--yes")
 	})
 	if !strings.Contains(redeployed, "Deployed") {
 		t.Fatalf("the second `ocel deploy --yes` finished without deploying:\n%s", redeployed)
 	}
-	run.serving(t, e2eHostname, "two")
+	run.serving(t, lifecycleHostname, "two")
 
 	crossed := map[string]int{}
 	for _, answered := range watched.answers {
@@ -1117,10 +1117,10 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	}
 	window := run.window(t, class)
 	if len(window) != 2 || len(window) > host.KeepWindow {
-		t.Fatalf("%s names %v, want the two refs two deploys left, most-recent-first, inside a window of %d", host.ReleasesDir()+"/"+e2eApp+"/"+string(class), window, host.KeepWindow)
+		t.Fatalf("%s names %v, want the two refs two deploys left, most-recent-first, inside a window of %d", host.ReleasesDir()+"/"+lifecycleApp+"/"+string(class), window, host.KeepWindow)
 	}
 	if serving := run.vm.inspects(t, "container", run.container(t), host.LabelSelector(host.LabelRef)); window[0] != serving {
-		t.Errorf("the keep window reads %v and %s serves %s, want the most recent ref first", window, e2eApp, serving)
+		t.Errorf("the keep window reads %v and %s serves %s, want the most recent ref first", window, lifecycleApp, serving)
 	}
 	if window[1] != retiredRef {
 		t.Errorf("the keep window reads %v and the release this deploy retired is %s, want the window ordered most-recent-first past its own first entry", window, retiredRef)
@@ -1137,7 +1137,7 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		t.Errorf("`ocel rollback` said %q and never named %s, the promotion that carries %s, so a flip to any other release reads the same:\n%s",
 			firstLineOf(rolled, "Rolled back to promotion"), previous, retiredRef, rolled)
 	}
-	run.serving(t, e2eHostname, "one")
+	run.serving(t, lifecycleHostname, "one")
 	if after := run.appContainers(t); !slices.Equal(after, standingBefore) {
 		t.Errorf("the containers on this box read\n%v\nafter a rollback that read\n%v\nbefore it: a rollback ensures the promotion's containers are running and then flips, and provisions nothing",
 			after, standingBefore)
@@ -1151,9 +1151,9 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 
 	rival := run.rival(t)
 	taken := rival.refused(t, "deploy", "--yes")
-	for _, want := range []string{e2eHostname + " is held by " + boxedge.Surface(e2eSlug, edge.ClassProduction), "another project already serves a hostname this project declares"} {
+	for _, want := range []string{lifecycleHostname + " is held by " + boxedge.Surface(lifecycleSlug, edge.ClassProduction), "another project already serves a hostname this project declares"} {
 		if !strings.Contains(taken, want) {
-			t.Errorf("a second project declaring %s was refused without saying %q, and a hostname belongs to one project:\n%s", e2eHostname, want, taken)
+			t.Errorf("a second project declaring %s was refused without saying %q, and a hostname belongs to one project:\n%s", lifecycleHostname, want, taken)
 		}
 	}
 	if after := run.appContainers(t); !slices.Equal(after, standingBefore) {
@@ -1167,7 +1167,7 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if previewed := run.must(t, "bootstrap", "preview", "--yes"); !strings.Contains(previewed, "Bootstrapped") {
 		t.Fatalf("`ocel bootstrap preview --yes` finished without bootstrapping:\n%s", previewed)
 	}
-	wildcard := edge.PreviewWildcard(e2ePreviewBase)
+	wildcard := edge.PreviewWildcard(lifecyclePreviewBase)
 	if used := run.deploying(t, "domain", "use", wildcard, "--preview"); !strings.Contains(used, "Previews are served on "+wildcard) {
 		t.Fatalf("`ocel domain use %s --preview` never installed the entry every project's previews fall to:\n%s", wildcard, used)
 	}
@@ -1179,10 +1179,10 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if !listed || len(skipped) != 1 || skipped[0] != wildcard {
 		t.Errorf("automatic https skips %v, want exactly %s: it is the one route on this box that must never be acme-eligible, and stock Caddy would order a wildcard it cannot obtain forever", skipped, wildcard)
 	}
-	missed := run.over(t, "unclaimed."+e2ePreviewBase, "/")
+	missed := run.over(t, "unclaimed."+lifecyclePreviewBase, "/")
 	if missed.status != http.StatusNotFound || !missed.fromTheBox() || missed.body != "" {
 		t.Errorf("an unclaimed hostname under %s was answered %d %q\n%s\nwant a bare 404 carrying %s: %s, naming no project and no other preview",
-			e2ePreviewBase, missed.status, missed.body, missed.headers, edge.HeaderEdge, host.EdgeName)
+			lifecyclePreviewBase, missed.status, missed.body, missed.headers, edge.HeaderEdge, host.EdgeName)
 	}
 	var wildcards []string
 	for _, served := range routed {
@@ -1199,22 +1199,22 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 			edge.ProbeHostname(wildcard), edge.HeaderEdge, host.EdgeName, probed.headers)
 	}
 
-	if held := run.deploying(t, "env", "set", e2eSensitive, run.value, "--preview"); !strings.Contains(held, "Set "+e2eSensitive) {
-		t.Fatalf("`ocel env set %s --preview` said nothing about setting it:\n%s", e2eSensitive, held)
+	if held := run.deploying(t, "env", "set", lifecycleSensitive, run.value, "--preview"); !strings.Contains(held, "Set "+lifecycleSensitive) {
+		t.Fatalf("`ocel env set %s --preview` said nothing about setting it:\n%s", lifecycleSensitive, held)
 	}
-	if up := run.deploying(t, "preview", "up", "--name", e2ePreview, "--yes"); !strings.Contains(up, "Preview "+e2ePreview+" is up") {
-		t.Fatalf("`ocel preview up --name %s` finished without a preview:\n%s", e2ePreview, up)
+	if up := run.deploying(t, "preview", "up", "--name", lifecyclePreview, "--yes"); !strings.Contains(up, "Preview "+lifecyclePreview+" is up") {
+		t.Fatalf("`ocel preview up --name %s` finished without a preview:\n%s", lifecyclePreview, up)
 	}
-	previewHost := e2ePreview + "." + e2ePreviewBase
+	previewHost := lifecyclePreview + "." + lifecyclePreviewBase
 	run.serving(t, previewHost, "two")
-	if listed := run.deploying(t, "preview", "ls"); !strings.Contains(listed, e2ePreview) {
-		t.Errorf("`ocel preview ls` never listed %s:\n%s", e2ePreview, listed)
+	if listed := run.deploying(t, "preview", "ls"); !strings.Contains(listed, lifecyclePreview) {
+		t.Errorf("`ocel preview ls` never listed %s:\n%s", lifecyclePreview, listed)
 	}
 	if !slices.Contains(run.vm.routedHosts(t), previewHost) {
 		t.Fatalf("the loaded configuration routes %v and names no %s, so nothing below about it falling back means anything", run.vm.routedHosts(t), previewHost)
 	}
-	if removed := run.deploying(t, "preview", "rm", "--name", e2ePreview, "--yes"); !strings.Contains(removed, e2ePreview) {
-		t.Errorf("`ocel preview rm --name %s` said nothing about what it tore down:\n%s", e2ePreview, removed)
+	if removed := run.deploying(t, "preview", "rm", "--name", lifecyclePreview, "--yes"); !strings.Contains(removed, lifecyclePreview) {
+		t.Errorf("`ocel preview rm --name %s` said nothing about what it tore down:\n%s", lifecyclePreview, removed)
 	}
 	fell := run.over(t, previewHost, "/")
 	if fell.status != http.StatusNotFound || !fell.fromTheBox() || fell.body != "" {
@@ -1232,7 +1232,7 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 		t.Fatalf("the proxy had logged %d bytes before this journey bound anything and %d after every hostname it binds, so its log is no window an acme order could have appeared in", written, after)
 	}
 	since := run.vm.proxyLogSince(t, written)
-	for _, bound := range []string{e2eHostname, previewHost} {
+	for _, bound := range []string{lifecycleHostname, previewHost} {
 		if !strings.Contains(since, "\"identifier\":\""+bound+"\"") {
 			t.Fatalf("the proxy logged no certificate work for %s across every bind this journey made, so those logs are no window an acme order could have appeared in:\n%s", bound, since)
 		}
@@ -1265,8 +1265,8 @@ func TestE2ETheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *testing.
 	if !slices.Contains(served, wildcard) {
 		t.Fatalf("the loaded configuration routes %v and names not even the bootstrap-owned catch-all, so a hostname missing from it means nothing", served)
 	}
-	if slices.Contains(served, e2eHostname) {
-		t.Errorf("%s is still routed after `ocel destroy production`: %v", e2eHostname, served)
+	if slices.Contains(served, lifecycleHostname) {
+		t.Errorf("%s is still routed after `ocel destroy production`: %v", lifecycleHostname, served)
 	}
 
 	trusted, err := os.ReadFile(run.store)

@@ -1,18 +1,18 @@
 ---
 name: e2e-next-narrow
-description: Drive scripts/e2e-next/baseline-manifest.json down — verify its entries, cluster what is still red, fix and promote. Usage — /e2e-next-narrow [focus and notes]
+description: Drive tests/next-compat/baseline-manifest.json down — verify its entries, cluster what is still red, fix and promote. Usage — /e2e-next-narrow [focus and notes]
 disable-model-invocation: true
 ---
 
 # e2e-next-narrow
 
-The work list is `scripts/e2e-next/baseline-manifest.json` itself. `$ARGUMENTS` is a
+The work list is `tests/next-compat/baseline-manifest.json` itself. `$ARGUMENTS` is a
 focus — which suites or symptoms to weight first, what landed since the last recording,
 what to distrust. With no arguments, pick the order yourself. The session is **AFK**: put
 every question you have in your first reply, then decide the rest yourself and keep going.
 
-Read `scripts/e2e-next/run-suite-prompt.md` (isolation model, preflight, screening a
-suite, reading a result) and `scripts/e2e-next/README.md` (what the manifest is, how
+Read `tests/next-compat/run-suite-prompt.md` (isolation model, preflight, screening a
+suite, reading a result) and `tests/next-compat/README.md` (what the manifest is, how
 promotion works) before wave 1. This file is only the orchestration on top of them.
 
 Sibling skill: `e2e-next-fix` starts from a CI run and asks *what broke*. This one starts
@@ -27,13 +27,13 @@ the files they write. An agent that shells out and summarises burns a context wi
 nothing and dies with the session. Spend agents on diagnosing an unknown failure and on
 writing the fix.
 
-Every suite run is `scripts/e2e-next/run-one.sh`, one invocation per suite:
+Every suite run is `tests/next-compat/run-one.sh`, one invocation per suite:
 
 ```bash
 OUT=<scratch>/wave-1
 for suite in <suites>; do
   RUN_ID=$RUN_ID OUT_DIR=$OUT NEXT_DIR=… OCEL_E2E_SIDECAR_DIR=… STAGE=1 \
-    nohup scripts/e2e-next/run-one.sh "$suite" >/dev/null 2>&1 &
+    nohup tests/next-compat/run-one.sh "$suite" >/dev/null 2>&1 &
 done
 until ! pgrep -f '[r]un-one.sh' >/dev/null; do sleep 60; done
 ```
@@ -102,7 +102,7 @@ they share a cause.
 5. **Verify in the shell**: re-run every suite the cluster claims, from the fixer's
    worktree (`ADAPTER_DIR=<worktree>`, **no** `STAGE`, **no** `ONLY`). `fragment.json` is
    the verdict, and only a full-suite run produces one that can be promoted from.
-6. **Promote**: delete the now-passing cases from `scripts/e2e-next/baseline-manifest.json`
+6. **Promote**: delete the now-passing cases from `tests/next-compat/baseline-manifest.json`
    on the fixer's branch, dropping a suite entry once its `failed` empties and dropping a
    `runtimeError` entry outright to re-enable the file. Never re-record a whole baseline —
    that adopts every new failure alongside the fix.

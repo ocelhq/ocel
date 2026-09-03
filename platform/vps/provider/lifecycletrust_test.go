@@ -14,8 +14,8 @@ const trustQuestion = "Trust that key and record"
 
 var owedABootstrap = regexp.MustCompile("⚠ not bootstrapped\n\\s+→ run `ocel bootstrap production`")
 
-func TestE2EFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *testing.T) {
-	run := e2e(t)
+func TestLifecycleFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *testing.T) {
+	run := lifecycle(t)
 	run.forgets(t)
 
 	rendered, err := run.onATerminal(t, []string{"doctor"}, trustQuestion, "y")
@@ -41,8 +41,8 @@ func TestE2EFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *testing.T)
 	}
 }
 
-func TestE2EAChangedHostKeyIsRefusedOutrightAndNothingIsAsked(t *testing.T) {
-	run := e2e(t)
+func TestLifecycleAChangedHostKeyIsRefusedOutrightAndNothingIsAsked(t *testing.T) {
+	run := lifecycle(t)
 	decoy := run.decoys(t)
 	write(t, run.store, decoy)
 

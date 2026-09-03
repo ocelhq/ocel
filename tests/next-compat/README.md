@@ -4,7 +4,7 @@ Runs Next.js's official [deployment-adapter compatibility harness][docs]
 (`NEXT_TEST_MODE=deploy`) against the Ocel Next adapter, deploying real
 infrastructure hundreds of times per run.
 
-`.github/workflows/test-e2e-deploy.yml` drives it and is the source of truth for
+`.github/workflows/next-compat.yml` drives it and is the source of truth for
 what runs. **Manual dispatch only.** Inputs: `nextjsRef` (must match the `next`
 version the adapter pins) and `recordBaseline`.
 
@@ -107,7 +107,7 @@ every new failure alongside it.
 ## Assertions run by hand
 
 Not wired into the workflow. Run each against a real deployment; their pure
-halves are covered by `pnpm --filter @ocel-scripts/e2e-next test`, which proves
+halves are covered by `pnpm --filter @ocel-tests/next-compat test`, which proves
 the comparison and not the Lambda.
 
 | script                          | how to run                                                    |
@@ -160,7 +160,7 @@ stranded run no longer blocks another from deploying previews.
 
 ```bash
 ADAPTER_DIR=… OCEL_E2E_SIDECAR_DIR=… \
-  node scripts/e2e-next/project-teardown.mjs e2e-<run id>
+  node tests/next-compat/project-teardown.mjs e2e-<run id>
 ```
 
 ## Debugging a failing suite

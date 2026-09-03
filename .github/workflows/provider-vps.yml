@@ -1,4 +1,4 @@
-name: VPS Live
+name: Provider VPS
 
 on:
   pull_request:
@@ -29,17 +29,16 @@ on:
       - "cli/internal/projectconfig/**"
       - "packages/ocel/**"
       - "pkg/naming/**"
-      - "examples/express-container/**"
       - "proto/**"
       - "pnpm-lock.yaml"
       - "scripts/incus.sh"
       - "scripts/assert-ran.sh"
-      - ".github/workflows/vps-live.yml"
+      - ".github/workflows/provider-vps.yml"
       - ".github/actions/incus-vm/**"
   workflow_dispatch:
 
 concurrency:
-  group: vps-live-${{ github.event.pull_request.number || github.ref }}
+  group: provider-vps-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -125,13 +124,13 @@ jobs:
         if: always()
         run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
 
-  e2e:
+  lifecycle:
     if: github.event.action != 'closed'
-    name: vps cli e2e
+    name: vps lifecycle
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      VM: ocel-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      VM: ocel-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -143,13 +142,13 @@ jobs:
           gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
-      - name: Run the CLI e2e on a machine of its own
+      - name: Run the lifecycle suite on a machine of its own
         run: |
           set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh run $VM -- go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestE2E' -json ./..." | tee e2e.json
+          sg incus-admin -c "scripts/incus.sh run $VM -- go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestLifecycle' -json ./..." | tee lifecycle.json
 
-      - name: Assert the e2e ran
-        run: scripts/assert-ran.sh e2e.json TestE2E
+      - name: Assert the lifecycle suite ran
+        run: scripts/assert-ran.sh lifecycle.json TestLifecycle
 
       - name: No VM left behind
         if: always()

@@ -109,7 +109,7 @@ function stageSmokeApp() {
   run("stage-smoke-app.mjs", process.execPath, [
     script("stage-smoke-app.mjs"),
     required("NEXTJS_DIR"),
-    join(adapterDir(), "scripts", "e2e-next", "smoke-app"),
+    join(adapterDir(), "tests", "next-compat", "smoke-app"),
     outFile,
   ], {
     cwd: adapterDir(),
@@ -145,7 +145,7 @@ function run(label, command, args, options) {
 }
 
 function script(name) {
-  return join(adapterDir(), "scripts", "e2e-next", name);
+  return join(adapterDir(), "tests", "next-compat", name);
 }
 
 function adapterDir() {

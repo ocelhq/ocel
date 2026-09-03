@@ -1,17 +1,17 @@
 ---
 name: e2e-next-fix
-description: Debug, fix and verify Next.js deploy-adapter e2e failures from a test-e2e-deploy run. Usage — /e2e-next-fix <github run id> [notes]
+description: Debug, fix and verify Next.js deploy-adapter e2e failures from a next-compat run. Usage — /e2e-next-fix <github run id> [notes]
 disable-model-invocation: true
 ---
 
 # e2e-next-fix
 
-`$1` is a `test-e2e-deploy` run id on GitHub. Everything after it is notes — what to
+`$1` is a `next-compat` run id on GitHub. Everything after it is notes — what to
 weight, what landed since that run, what to distrust. The session is **AFK**: put every
 question you have in your first reply, then decide the rest yourself and keep going.
 
-Read `scripts/e2e-next/run-suite-prompt.md` (isolation model, preflight, reading a
-result) and `scripts/e2e-next/README.md` (baseline promotion) before wave 1. This file is
+Read `tests/next-compat/run-suite-prompt.md` (isolation model, preflight, reading a
+result) and `tests/next-compat/README.md` (baseline promotion) before wave 1. This file is
 only the orchestration on top of them.
 
 ## Division of labour
@@ -22,13 +22,13 @@ the files they write. An agent that shells out and summarises burns a context wi
 nothing and dies with the session. Spend agents on diagnosing an unknown failure and on
 writing the fix.
 
-Every suite run is `scripts/e2e-next/run-one.sh`, one invocation per suite:
+Every suite run is `tests/next-compat/run-one.sh`, one invocation per suite:
 
 ```bash
 OUT=<scratch>/wave-1
 for suite in <suites>; do
   RUN_ID=$RUN_ID OUT_DIR=$OUT NEXT_DIR=… OCEL_E2E_SIDECAR_DIR=… STAGE=1 \
-    nohup scripts/e2e-next/run-one.sh "$suite" >/dev/null 2>&1 &
+    nohup tests/next-compat/run-one.sh "$suite" >/dev/null 2>&1 &
 done
 until ! pgrep -f '[r]un-one.sh' >/dev/null; do sleep 60; done
 ```
@@ -74,7 +74,7 @@ they share a cause.
    in the stack. Invoke the `gh-stack` skill for the stack mechanics.
 5. **Verify in the shell**: re-run every suite the cluster claims, from the fixer's
    worktree (`ADAPTER_DIR=<worktree>`, no `STAGE`). `fragment.json` is the verdict.
-6. **Promote**: delete the now-passing cases from `scripts/e2e-next/baseline-manifest.json`
+6. **Promote**: delete the now-passing cases from `tests/next-compat/baseline-manifest.json`
    on the fixer's branch, dropping a suite entry once its `failed` empties. Never re-record
    a whole baseline — that adopts every new failure alongside the fix.
 7. **Tear the wave down** before starting the next: every `staged.txt` reconciled.

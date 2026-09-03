@@ -1,8 +1,8 @@
-name: E2E session
+name: Real AWS session
 description: >-
   Node, pnpm and a short-lived AWS role session guarded to the expected AWS and
-  Cloudflare accounts — the preamble every job of test-e2e-deploy that touches
-  the disposable e2e accounts needs.
+  Cloudflare accounts — the preamble every job that reaches the disposable
+  real-aws accounts needs.
 
 inputs:
   node-version:
@@ -63,4 +63,4 @@ runs:
       env:
         EXPECTED_AWS_ACCOUNT_ID: ${{ inputs.expected-aws-account-id }}
         EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ inputs.expected-cloudflare-account-id }}
-      run: adapter/scripts/e2e-next/guard-accounts.sh
+      run: adapter/tests/next-compat/guard-accounts.sh
