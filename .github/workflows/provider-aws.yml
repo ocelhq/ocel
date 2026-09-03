@@ -49,6 +49,9 @@ jobs:
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
       - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: The function payloads the provider embeds
         run: go generate -C platform/aws/provider ./...

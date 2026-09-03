@@ -67,6 +67,8 @@ jobs:
           gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
           gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: Pick this shard's tests
         run: |
@@ -111,6 +113,8 @@ jobs:
           gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
           gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: Run the build pipeline against a machine's own daemon
         run: |
@@ -141,6 +145,8 @@ jobs:
           gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
           gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: Run the lifecycle suite on a machine of its own
         run: |
