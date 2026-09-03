@@ -18,6 +18,7 @@ packages:
 allowBuilds:
   '@bufbuild/buf': true
   aws-sdk: false
+  better-sqlite3: false
   esbuild: true
   protobufjs: false
   sharp: true
