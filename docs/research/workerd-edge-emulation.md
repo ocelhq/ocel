@@ -6,7 +6,9 @@ Code facts are cited as `path:line` against `main` at `c818ed9a`. Cloudflare fac
 developers.cloudflare.com, the `cloudflare/workers-sdk` and `cloudflare/workerd` repositories. Every
 "observed" claim below was run on this machine against the versions the repo's own lockfile pins:
 `miniflare@4.20260708.1` / `@cloudflare/workerd-linux-64@1.20260708.1` (via `wrangler@4.110.0`) and
-`miniflare@4.20260310.0` / `workerd@1.20260310.1` (via `@cloudflare/vitest-pool-workers@0.12.4`).
+`miniflare@4.20260310.0` / `workerd@1.20260310.1` (via `@cloudflare/vitest-pool-workers`, declared
+`^0.12.4`, resolved 0.12.21). A few limit measurements in §4.2 were taken on `miniflare@4.20260730.0`
+and are marked where they differ in provenance; nothing here was tested on miniflare 5.
 
 ## Short answer
 
@@ -29,10 +31,11 @@ developers.cloudflare.com, the `cloudflare/workers-sdk` and `cloudflare/workerd`
   (`platform/edge/cloudflare/workers/entry/vitest.config.mts:11`,
   `platform/edge/cloudflare/workers/entry/test/edge.test.ts`). There is **no KV binding anywhere** in
   the tree, so KV fidelity is a non-question.
-- **What is not emulatable is the network, not the runtime**: zone worker routes, proxied DNS,
-  Universal SSL, custom domains, `workers.dev` subdomains, tiered caching and colo behaviour. Ocel's
-  edge provider spends most of `platform/edge/cloudflare/deploy/hostname.go` on exactly those, so a
-  local edge cannot run the Go provider's attach path — it has to substitute for it.
+- **What is not emulatable is the network, not the runtime**: zones, proxied DNS, Universal SSL,
+  custom domains, `workers.dev` subdomains, tiered caching and colo behaviour. Ocel's edge provider
+  spends most of `platform/edge/cloudflare/deploy/hostname.go` on exactly those, so a local edge
+  cannot run the Go provider's attach path — it has to substitute for it. **Route patterns themselves
+  are emulated**, wildcards included, so the preview-host path does get real coverage (§4.1).
 - **The real gap is not Cloudflare, it is AWS.** The edge worker's cache entrypoint builds AWS
   endpoints from the region alone —
   `https://${bucket}.s3.${region}.amazonaws.com/` and `https://dynamodb.${region}.amazonaws.com/`
@@ -216,25 +219,56 @@ Ocel binds none of these.
 The gaps split cleanly: **workerd reproduces the runtime; nothing reproduces Cloudflare's network or
 its enforcement.**
 
-### 4.1 No network, so no routing
+### 4.1 No network — but route *matching* is real
 
-There is no zone, no route table, no proxied DNS record, no Universal SSL, no custom domain and no
-`workers.dev` subdomain. Miniflare serves one HTTP listener and dispatches whatever arrives to the
-worker; `request.url` and the `Host` header are whatever the caller sends. Observed: dispatching with
-`host: app.example.com` reaches the worker with that host intact, which is all the entry worker's
-preview decoders and deployment lookup need (`src/index.ts:295-320`).
+There is no zone, no proxied DNS record, no Universal SSL, no custom domain and no `workers.dev`
+subdomain.
 
-This is not a fidelity loss for the *worker*; it is a fidelity loss for `deploy/hostname.go`. A local
-edge cannot test "did we attach the route to the right zone", "is the record orange-clouded"
-(`hostname.go:199-215`), or the Universal SSL multi-label warning (`hostname.go:51-53`). Those stay
-dispatch-only against a real account.
+**Route patterns, however, are emulated.** Miniflare's per-worker `routes: string[]` option takes
+Cloudflare route patterns and dispatches by them. Observed (§6.7), with three workers:
+
+| Request host | Matched |
+|---|---|
+| `app.example.com` (route `app.example.com/*`) | `APP` |
+| `abc--web.preview.example.com` (route `*.preview.example.com/*`) | `PREVIEW` |
+| `other.example.com` (no route) | first worker in the list |
+
+**The wildcard case is the one that matters**: `*.preview.example.com/*` is exactly the shape
+`deploy/previewwildcard.go` installs for `ocel-preview-entry`, and it matched a real
+`slug--pointer` preview label. So a local edge can host the shared preview entry worker and the
+per-app workers side by side and let route matching pick between them — the preview-host decoding in
+`src/preview.ts` gets end-to-end coverage, not just unit coverage.
+
+Two details a harness must get right:
+
+- Under `dispatchFetch`, `request.url` carries the intended host but `request.headers.get("host")`
+  stays `127.0.0.1:PORT`. Ocel is safe here because the entry worker reads
+  `new URL(request.url).host` (`src/index.ts:295`), not the header — but anything that reads the
+  header will see the wrong value.
+- Unmatched requests fall through to the first worker rather than 404ing, so the ordering of the
+  `workers` array is load-bearing.
+
+`wrangler dev` is a different story from the Miniflare API: it only routes by routes when
+`dev.routeRequestsByRoutes` is set, and that defaults to false; what routes do there by default is
+feed `--infer-origin-from-routes` (default true), which rewrites the origin the worker sees —
+<https://developers.cloudflare.com/workers/wrangler/commands/workers/>. A harness should therefore
+drive the Miniflare API directly, not `wrangler dev`.
+
+What remains a genuine fidelity loss is `deploy/hostname.go`, not the worker: a local edge cannot test
+"did we attach the route to the right zone", "is the record orange-clouded" (`hostname.go:199-215`),
+or the Universal SSL multi-label warning (`hostname.go:51-53`). Those stay dispatch-only against a
+real account.
 
 ### 4.2 No limits are enforced
 
-Production caps subrequests at "50/request" on free and "10,000/request (up to 10M)" on paid, and CPU
-time at "10 ms" free / "5 min (default: 30 seconds)" paid —
+Production caps subrequests at "50/request" on free and "10,000/request (up to 10M)" on paid, CPU time
+at "10 ms" free / "5 min (default: 30 seconds)" paid, and "Each Worker invocation can have up to six
+connections simultaneously waiting for response headers" —
 <https://developers.cloudflare.com/workers/platform/limits/>. Observed locally: **120 sequential
-subrequests all completed**, and a **5-second busy loop returned 200**. A journey that passes locally
+subrequests all completed**, a **5-second busy loop returned 200**, **30 parallel fetches opened 30
+concurrent origin connections** (production allows six), and a 40-second busy loop also returned 200.
+`workerd serve` exposes no CPU, memory or subrequest flag, and `limits.cpu_ms` in wrangler config is
+ignored locally. A journey that passes locally
 can therefore still exceed limits in production. The entry worker's fan-out is bounded by the routing
 manifest rather than by request shape, so this is a low-probability trap — but it is a real one, and
 it means the emulator can never certify "this deployment fits in the budget".
@@ -246,7 +280,12 @@ no local analogue: "the contents of the cache do not replicate outside of the or
 center", "`cache.put` is not compatible with tiered caching", and `stale-while-revalidate` /
 `stale-if-error` "are not supported" with `cache.put()`/`cache.match()` —
 <https://developers.cloudflare.com/workers/runtime-apis/cache/>. So a local run has exactly one
-"colo" and a cache that never evicts under memory pressure. Tests can assert *that* an entry was
+"colo" and a cache that never evicts under memory pressure. Three concrete divergences: **`Age` is
+always 0** — miniflare never ages an entry, so anything that reasons about entry age is untestable;
+`no-store` or a past `Expires` makes `match()` return `undefined` where production returns a 413; and
+`fetch(url, { cf: { cacheTtl, cacheEverything } })` is not honoured locally — two identical calls both
+reach the origin. Ocel uses `caches.default` explicitly rather than `cf.cacheTtl`
+(`src/index.ts:339,343,354`), so the last one does not bite today. Tests can assert *that* an entry was
 written and *that* a second request hits; they cannot assert edge coherence timing, which is the
 interesting part of the ISR story.
 
@@ -255,8 +294,12 @@ interesting part of the ISR story.
 Miniflare populates `request.cf` by fetching it "from a trusted Cloudflare endpoint" — the reference
 page describes the `cf` option as managing exactly that, with caching and a custom-file override.
 Observed on this machine, an unconfigured instance returned live geo: `colo: "JNB"`, `country: "KE"`,
-`asOrganization: "Safaricom Limited"`. In CI that is a **network call on startup and a
-non-deterministic value**. Any harness must pass `cf: false` or a fixed object.
+`asOrganization: "Safaricom Limited"`. In CI that is a **network call on startup and a runner-dependent
+value** — the blob is cached for 30 days under `node_modules/.mf/cf.json`, so it is stable within a
+machine and different between machines. The fetch is skipped when `NODE_ENV=test`, which is why the
+repo's vitest suites are unaffected; a standalone harness is not so lucky. Turn it off with
+`CLOUDFLARE_CF_FETCH_ENABLED=false`, pin it with `CLOUDFLARE_CF_FETCH_PATH`, or pass `cf: false` /
+a fixed object to the constructor.
 
 ### 4.5 workerd version drift
 
@@ -286,7 +329,19 @@ making it the top-level entrypoint. The fix is one wrapper module re-exporting o
 treats `.js` as CommonJS by default). Worth knowing before someone concludes the bundle "doesn't run
 locally".
 
-### 4.7 The AWS side, which is the actual blocker
+### 4.7 Three outbound traps
+
+- **workerd does not fall back to `::1` for `localhost`.** Against a server bound only to `[::1]`,
+  `fetch("http://[::1]:PORT/")` succeeds while both `http://localhost:PORT/` and
+  `http://127.0.0.1:PORT/` fail with `Network connection lost.` This runs opposite to the usual Node
+  behaviour. Bind the emulated origin on `127.0.0.1` or `0.0.0.0` and address it as `127.0.0.1`.
+- **`fetchMock` passes unmatched requests through to the real network** until `disableNetConnect()` is
+  called — a live-network hazard in CI, and the opposite of the safe default one would assume.
+- **A function-style `outboundService` breaks `cloudflare:sockets` `connect()`** (`Stream was
+  cancelled.`). Use a `{ network }` designator if raw sockets are needed. Ocel's edge does not use
+  `connect()` today, so this is a note for a future origin target rather than a present problem.
+
+### 4.8 The AWS side, which is the actual blocker
 
 The entry worker's `CacheEntrypoint` — the RPC surface handed to loaded edge workers for Next's
 `use cache` — builds AWS endpoints from the region alone:
@@ -440,6 +495,13 @@ calls, both in-memory and with `cachePersist` pointed at a directory.
 `asOrganization: "Safaricom Limited"`, `clientTcpRtt: 55`). 120 sequential subrequests all succeeded;
 a 5-second CPU busy loop returned 200 in 5002 ms.
 
+### 6.7 Route matching
+
+Three workers, two with `routes` (`app.example.com/*` and `*.preview.example.com/*`), one without.
+`app.example.com/some/path` → the `app` worker; `abc--web.preview.example.com/some/path` → the
+preview worker; `other.example.com/some/path` → the first worker in the array. `request.url` carried
+the dispatched host in every case; `request.headers.get("host")` did not.
+
 ## 7. Gaps, in the order they would bite
 
 1. **S3/DynamoDB endpoints are hardcoded** (`src/cache-entrypoint.ts:42,133`). Until an endpoint
@@ -447,16 +509,18 @@ a 5-second CPU busy loop returned 200 in 5002 ms.
    AWS or must be scoped out. This is the one code change the emulation actually requires.
 2. **floci's port mapping vs LocalStack's advertised function-URL port** (`scripts/floci.sh:74`).
    Mechanical, but it decides whether records can be used as LocalStack reports them.
-3. **`cf` must be pinned** (`cf: false` or a fixed object) or every CI run makes a network call and
-   sees different geo.
+3. **`cf` must be pinned** (`CLOUDFLARE_CF_FETCH_ENABLED=false`, or `cf: false`/a fixed object) or a
+   standalone harness makes a network call on startup and sees runner-dependent geo. Likewise
+   `fetchMock.disableNetConnect()`, and bind the origin on `127.0.0.1` rather than `::1` (§4.7).
 4. **The bundle needs a wrapper module** to boot under bare miniflare (§4.6), plus `modulesRules` for
    ESM. Two lines, but non-obvious.
 5. **Who writes the deployment record.** The Go client posts to the deployments-store over plain HTTP
    with a bearer token and no scheme enforcement (`deploy/store.go:172-186`), so a locally-hosted
    deployments-store worker can be seeded by the *real* code path. That is the honest option; a
    hand-written stub (as in §6.1) is the fast one and skips the store's own logic.
-6. **What substitutes for `deploy/hostname.go`.** Routes, DNS, SSL and custom domains have no local
-   analogue. Either the harness drives the worker directly and the Go attach path stays dispatch-only,
+6. **What substitutes for `deploy/hostname.go`.** Route *patterns* are emulated (§4.1), but zones, DNS,
+   SSL and custom domains are not. Either the harness drives the workers directly and the Go attach
+   path stays dispatch-only,
    or a new `edge.Kind` satisfying `edgeconformance` is written for local runs — a much larger
    commitment.
 7. **Limits and cache coherence are unassertable locally** (§4.2, §4.3). Journeys should not claim to
