@@ -3,27 +3,32 @@ import { describe, expect, it } from "vitest";
 import {
   addressKey,
   applyDotenv,
+  catalogueOf,
+  copyTree,
   dirtyEntries,
   doneLabel,
+  environmentsOf,
   held,
   isDirty,
+  listingOf,
   names,
-  owedChildren,
+  overrideOptions,
   owedCount,
   owedSet,
   planCopy,
   readersOf,
   reduceSave,
   referenceLine,
+  removeSummary,
   revealable,
   saveSummary,
   sizeLine,
-  sortOwedFirst,
   tallyLine,
-  treeOf,
   unfilledOwed,
+  variantAt,
   variantsOf,
   type Address,
+  type Lens,
   type SaveResult,
   type MatrixCell,
   type MatrixRow,
@@ -64,6 +69,16 @@ const at = (key: string, folder = "", environment = ""): Address => ({
   environment,
 });
 
+const lens = (over: Partial<Lens> = {}): Lens => ({
+  folder: "",
+  environment: "",
+  query: "",
+  owedOnly: false,
+  ...over,
+});
+
+const none = new Set<string>();
+
 describe("owedCount", () => {
   it("counts required empty cells and cells with a problem", () => {
     const current = stateOf([
@@ -92,25 +107,9 @@ describe("held", () => {
   });
 });
 
-describe("treeOf", () => {
-  it("makes one row per declared key with the root cell as its value", () => {
-    const tree = treeOf(
-      stateOf([row("A", [cell({ set: true, version: 3 }), cell({ folder: "/web" })])]),
-      [],
-    );
-    expect(tree).toHaveLength(1);
-    expect(tree[0]?.root).toMatchObject({
-      at: at("A"),
-      kind: "root",
-      set: true,
-      version: 3,
-      owed: false,
-    });
-    expect(tree[0]?.children).toEqual([]);
-  });
-
-  it("nests a folder cell only when it is set, required, faulty or overridden", () => {
-    const tree = treeOf(
+describe("catalogueOf", () => {
+  it("holds every root cell and only the folder cells that are set, required, faulty or overridden", () => {
+    const catalogue = catalogueOf(
       stateOf(
         [
           row("A", [cell({}), cell({ folder: "/web" }), cell({ folder: "/api", set: true, version: 1 })]),
@@ -123,78 +122,65 @@ describe("treeOf", () => {
       ),
       [],
     );
-    expect(tree.map((r) => r.children.map((c) => c.at))).toEqual([
-      [at("A", "/api")],
-      [at("B", "/web")],
-      [at("C", "/web")],
-      [at("D", "/web"), at("D", "/web", "qa")],
+    expect([...catalogue.variants.keys()]).toEqual([
+      "A  ",
+      "A /api ",
+      "B  ",
+      "B /web ",
+      "C  ",
+      "C /web ",
+      "D  ",
+      "D /web ",
+      "D /web qa",
     ]);
-    expect(tree[1]?.root.state).toBe("forbidden");
-    expect(tree[1]?.children[0]).toMatchObject({ kind: "folder", owed: true });
-    expect(tree[2]?.children[0]?.problem).toBe("too short");
-    expect(tree[3]?.children[1]).toMatchObject({ kind: "environment", set: true, version: 1 });
+    expect(catalogue.variants.get("B  ")?.state).toBe("forbidden");
+    expect(catalogue.variants.get("B /web ")).toMatchObject({ kind: "folder", owed: true });
+    expect(catalogue.variants.get("C /web ")?.problem).toBe("too short");
+    expect(catalogue.variants.get("D /web qa")).toMatchObject({ kind: "environment", set: true, version: 1 });
   });
 
-  it("lists root overrides before folder variants and flags orphans", () => {
-    const tree = treeOf(
-      stateOf(
-        [
-          row("A", [
-            cell({ set: true, version: 5, overrides: [{ environment: "gone", version: 2, orphaned: true }] }),
-            cell({ folder: "/web", set: true, version: 1 }),
-          ]),
-        ],
-        ["staging"],
-      ),
+  it("anchors a key with no root cell on a forbidden root", () => {
+    const catalogue = catalogueOf(
+      stateOf([row("W", [cell({ folder: "/web", set: true, version: 1 })])]),
       [],
     );
-    expect(tree[0]?.children.map((c) => [c.at.folder, c.at.environment, c.orphaned])).toEqual([
-      ["", "gone", true],
-      ["/web", "", false],
-    ]);
+    expect(catalogue.variants.get("W  ")).toMatchObject({ kind: "root", state: "forbidden", set: false });
   });
 
-  it("materialises asked-for variants as empty extras and dedupes real ones", () => {
-    const tree = treeOf(
+  it("flags orphaned overrides", () => {
+    const catalogue = catalogueOf(
+      stateOf([
+        row("A", [
+          cell({ set: true, version: 5, overrides: [{ environment: "gone", version: 2, orphaned: true }] }),
+        ]),
+      ]),
+      [],
+    );
+    expect(catalogue.variants.get("A  gone")?.orphaned).toBe(true);
+  });
+
+  it("materialises asked-for addresses as empty extras and never duplicates a real one", () => {
+    const catalogue = catalogueOf(
       stateOf([row("A", [cell({}), cell({ folder: "/web", set: true, version: 1 })])], ["staging"]),
       [at("A", "/web"), at("A", "", "staging"), at("A", "/web", "staging")],
     );
-    expect(tree[0]?.children.map((c) => [c.at.folder, c.at.environment, c.extra, c.set])).toEqual([
+    expect(variantsOf(catalogue).map((v) => [v.at.folder, v.at.environment, v.extra, v.set])).toEqual([
+      ["", "", false, false],
       ["", "staging", true, false],
       ["/web", "", false, true],
       ["/web", "staging", true, false],
     ]);
   });
 
-  it("offers the folders and environments a key can still gain", () => {
-    const tree = treeOf(
-      stateOf(
-        [
-          row("A", [cell({}), cell({ folder: "/web", set: true, version: 1 }), cell({ folder: "/api" })]),
-          row("B", [cell({ state: "forbidden" }), cell({ folder: "/web" }), cell({ folder: "/api", state: "forbidden" })], { scope: ["/web"] }),
-        ],
-        ["staging"],
-        ["", "/web", "/api"],
-      ),
-      [at("A", "", "staging")],
-    );
-    expect(tree[0]?.options.map((o) => o.label)).toEqual([
-      "/api",
-      "staging in /web",
-      "staging in /api",
-    ]);
-    expect(tree[1]?.options.map((o) => o.label)).toEqual(["/web", "staging in /web"]);
-  });
-
   it("carries the class down so a secret is never revealable", () => {
-    const tree = treeOf(
+    const catalogue = catalogueOf(
       stateOf([
         row("S", [cell({ set: true, version: 1 }), cell({ folder: "/web", set: true, version: 1 })], { class: "secret" }),
         row("P", [cell({ set: true, version: 1 }), cell({ folder: "/web" })]),
       ]),
       [],
     );
-    expect(variantsOf(tree).map((v) => [v.at.key, v.at.folder, v.class, revealable(v)])).toEqual([
+    expect(variantsOf(catalogue).map((v) => [v.at.key, v.at.folder, v.class, revealable(v)])).toEqual([
       ["S", "", "secret", false],
       ["S", "/web", "secret", false],
       ["P", "", "plain", true],
@@ -202,21 +188,105 @@ describe("treeOf", () => {
   });
 
   it("treats a reference as set", () => {
-    const tree = treeOf(
+    const catalogue = catalogueOf(
       stateOf([row("A", [cell({ reference: { slug: "other", folder: "", key: "A" } })])]),
       [],
     );
-    expect(tree[0]?.root).toMatchObject({ set: true, reference: { slug: "other" } });
+    expect(catalogue.variants.get("A  ")).toMatchObject({ set: true, reference: { slug: "other" } });
   });
 
-  it("counts owed children", () => {
-    const tree = treeOf(
-      stateOf(
-        [row("B", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], { scope: ["/web"] })],
-      ),
+  it("answers any declared address on demand, as an extra when the catalogue lacks it", () => {
+    const catalogue = catalogueOf(
+      stateOf([row("A", [cell({ set: true, version: 2 }), cell({ folder: "/web" })])], ["qa"]),
       [],
     );
-    expect(owedChildren(tree[0]!)).toBe(1);
+    expect(variantAt(catalogue, at("A"))).toMatchObject({ extra: false, version: 2 });
+    expect(variantAt(catalogue, at("A", "/web", "qa"))).toMatchObject({ extra: true, set: false });
+    expect(variantAt(catalogue, at("A", "/nope"))).toBeUndefined();
+    expect(variantAt(catalogue, at("Z"))).toBeUndefined();
+  });
+});
+
+describe("listingOf", () => {
+  const current = stateOf(
+    [
+      row("A", [cell({ set: true, version: 3, overrides: [{ environment: "qa", version: 1 }] }), cell({ folder: "/web" }), cell({ folder: "/api", set: true, version: 1 })]),
+      row("B", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" }), cell({ folder: "/api", state: "forbidden" })], { scope: ["/web"] }),
+      row("C", [cell({ state: "required" }), cell({ folder: "/web" })]),
+      row("S", [cell({ set: true, version: 1 })], { class: "secret" }),
+    ],
+    ["qa", "staging"],
+    ["", "/web", "/api"],
+  );
+  const catalogue = catalogueOf(current, []);
+
+  it("lists folders and root keys at the root, keeping a scoped key as a pointer", () => {
+    const listing = listingOf(current, catalogue, none, lens());
+    expect(listing.flat).toBe(false);
+    expect(listing.folders).toEqual([
+      { folder: "/web", keys: 3, owed: 1 },
+      { folder: "/api", keys: 1, owed: 0 },
+    ]);
+    expect(listing.keys.map((line) => [line.row.key, line.variant.state, line.inherits, line.overrides])).toEqual([
+      ["A", "optional", null, ["qa"]],
+      ["B", "forbidden", null, []],
+      ["C", "required", null, []],
+      ["S", "optional", null, []],
+    ]);
+  });
+
+  it("lists a folder's keys with what they inherit from the root", () => {
+    const listing = listingOf(current, catalogue, none, lens({ folder: "/web" }));
+    expect(listing.folders).toEqual([]);
+    expect(listing.keys.map((line) => [line.row.key, line.variant.at.folder, line.inherits, line.variant.extra])).toEqual([
+      ["A", "/web", "root", true],
+      ["B", "/web", null, false],
+      ["C", "/web", "root", true],
+    ]);
+  });
+
+  it("shows an environment's overrides, or what falls through to the base", () => {
+    const listing = listingOf(current, catalogue, none, lens({ environment: "qa" }));
+    expect(listing.keys.map((line) => [line.row.key, line.variant.at.environment, line.inherits, line.variant.set])).toEqual([
+      ["A", "qa", null, true],
+      ["B", "", null, false],
+      ["C", "qa", "base", false],
+      ["S", "qa", "base", false],
+    ]);
+  });
+
+  it("flattens across folders when searching", () => {
+    const listing = listingOf(current, catalogue, none, lens({ folder: "/api", query: " b " }));
+    expect(listing.flat).toBe(true);
+    expect(listing.folders).toEqual([]);
+    expect(listing.keys.map((line) => addressKey(line.variant.at))).toEqual(["B /web "]);
+  });
+
+  it("flattens to the cells a deploy is owed, wherever they live", () => {
+    const owed = owedSet({ deploy: "dpl_1", owed: [{ key: "C", folder: "" }, { key: "B", folder: "/web" }] });
+    const listing = listingOf(current, catalogue, owed, lens({ folder: "/api", owedOnly: true }));
+    expect(listing.flat).toBe(true);
+    expect(listing.keys.map((line) => [addressKey(line.variant.at), line.needed])).toEqual([
+      ["B /web ", true],
+      ["C  ", true],
+    ]);
+  });
+
+  it("offers an override only for environments the address lacks", () => {
+    expect(overrideOptions(current, catalogue, at("A"))).toEqual(["staging"]);
+    expect(overrideOptions(current, catalogueOf(current, [at("A", "", "staging")]), at("A"))).toEqual([]);
+    expect(overrideOptions(current, catalogue, at("C", "/web"))).toEqual(["qa", "staging"]);
+  });
+
+  it("lists orphaned environments after the live ones", () => {
+    const orphaned = stateOf(
+      [row("A", [cell({ set: true, version: 1, overrides: [{ environment: "gone", version: 1, orphaned: true }] })])],
+      ["qa"],
+    );
+    expect(environmentsOf(orphaned)).toEqual([
+      { name: "qa", orphaned: false },
+      { name: "gone", orphaned: true },
+    ]);
   });
 });
 
@@ -228,20 +298,20 @@ describe("readersOf", () => {
   ];
 
   it("names every app for an unscoped key, since each reads the root", () => {
-    const tree = treeOf(stateOf([row("A", [cell({}), cell({ folder: "/web" })])]), []);
-    expect(readersOf(tree[0]!, apps).map((a) => a.name)).toEqual(["web", "api", "root-app"]);
+    expect(readersOf(row("A", [cell({}), cell({ folder: "/web" })]), apps).map((a) => a.name)).toEqual([
+      "web",
+      "api",
+      "root-app",
+    ]);
   });
 
   it("names only the apps bound to a scoped key's folders", () => {
-    const tree = treeOf(
-      stateOf(
-        [row("B", [cell({ state: "forbidden" }), cell({ folder: "/web" }), cell({ folder: "/api", state: "forbidden" })], { scope: ["/web"] })],
-        [],
-        ["", "/web", "/api"],
-      ),
-      [],
+    const scoped = row(
+      "B",
+      [cell({ state: "forbidden" }), cell({ folder: "/web" }), cell({ folder: "/api", state: "forbidden" })],
+      { scope: ["/web"] },
     );
-    expect(readersOf(tree[0]!, apps).map((a) => a.name)).toEqual(["web"]);
+    expect(readersOf(scoped, apps).map((a) => a.name)).toEqual(["web"]);
   });
 });
 
@@ -260,7 +330,7 @@ describe("sizeLine", () => {
 });
 
 describe("applyDotenv", () => {
-  const rows = treeOf(
+  const catalogue = catalogueOf(
     stateOf(
       [
         row("A", [cell({ set: true, version: 1 }), cell({ folder: "/web" })]),
@@ -281,7 +351,7 @@ describe("applyDotenv", () => {
   ];
 
   it("fills root rows, overwrites secrets, skips references and reports the rest", () => {
-    const out = applyDotenv(rows, entries, "");
+    const out = applyDotenv(catalogue, entries, "");
     expect(out.fills).toEqual([
       { at: at("A"), value: "a", materialise: false },
       { at: at("S"), value: "s", materialise: false },
@@ -292,8 +362,8 @@ describe("applyDotenv", () => {
     expect(out.skipped[1]?.reason).toBe("nothing reads W in root");
   });
 
-  it("scopes to a folder and asks to materialise cells the tree does not show", () => {
-    const out = applyDotenv(rows, entries, "/web");
+  it("scopes to a folder and asks to materialise cells the catalogue lacks", () => {
+    const out = applyDotenv(catalogue, entries, "/web");
     expect(out.fills).toEqual([
       { at: at("A", "/web"), value: "a", materialise: true },
       { at: at("S", "/web"), value: "s", materialise: true },
@@ -305,7 +375,7 @@ describe("applyDotenv", () => {
 });
 
 describe("planCopy", () => {
-  const rows = treeOf(
+  const catalogue = catalogueOf(
     stateOf(
       [
         row("A", [cell({ set: true, version: 4 }), cell({ folder: "/web" })]),
@@ -326,7 +396,7 @@ describe("planCopy", () => {
   });
 
   it("fills empty cells, marks set ones as overwrites, and keeps versions read here", () => {
-    const plan = planCopy(rows, ["staging"], [
+    const plan = planCopy(catalogue, ["staging"], [
       other({ key: "A", value: "a-there" }),
       other({ key: "A", folder: "/web", value: "a-web" }),
       other({ key: "S", class: "secret" }),
@@ -340,17 +410,21 @@ describe("planCopy", () => {
       { at: at("S"), class: "secret", there: undefined, hereSet: false, hereVersion: 0, materialise: false },
       { at: at("A", "", "staging"), class: "plain", there: "a-staging", hereSet: false, hereVersion: 0, materialise: true },
     ]);
+    expect(copyTree(plan).map((branch) => [branch.folder, branch.cells.map((c) => addressKey(c.at))])).toEqual([
+      ["", ["S  ", "A  staging", "A  "]],
+      ["/web", ["A /web "]],
+    ]);
   });
 
   it("lists unreadable cells rather than dropping them", () => {
-    const plan = planCopy(rows, [], [other({ key: "A", error: "timed out" })]);
+    const plan = planCopy(catalogue, [], [other({ key: "A", error: "timed out" })]);
     expect(plan.unreadable).toEqual([{ at: at("A"), error: "timed out" }]);
     expect(plan.fills).toEqual([]);
     expect(plan.overwrites).toEqual([]);
   });
 
   it("skips what cannot land here and says why", () => {
-    const plan = planCopy(rows, [], [
+    const plan = planCopy(catalogue, [], [
       other({ key: "NOPE", value: "x" }),
       other({ key: "W", value: "x" }),
       other({ key: "A", environment: "gone", value: "x" }),
@@ -366,7 +440,7 @@ describe("planCopy", () => {
 });
 
 describe("recovery", () => {
-  const rows = treeOf(
+  const catalogue = catalogueOf(
     stateOf(
       [
         row("A", [cell({ set: true, version: 1 }), cell({ folder: "/web" })]),
@@ -387,13 +461,8 @@ describe("recovery", () => {
     ],
   });
 
-  it("sorts rows the deploy needs to the top without dropping the rest", () => {
-    expect(sortOwedFirst(rows, owed).map((r) => r.key)).toEqual(["B", "C", "D", "A"]);
-    expect(sortOwedFirst(rows, owedSet(undefined)).map((r) => r.key)).toEqual(["A", "B", "C", "D"]);
-  });
-
   it("counts an owed cell as filled once it is set and valid, or holds a draft", () => {
-    expect(unfilledOwed(rows, owed, new Map(), new Map()).map((v) => v.at)).toEqual([
+    expect(unfilledOwed(catalogue, owed, new Map(), new Map()).map((v) => v.at)).toEqual([
       at("B"),
       at("C"),
       at("D", "/web"),
@@ -403,7 +472,7 @@ describe("recovery", () => {
       [addressKey(at("C")), "fixed"],
       [addressKey(at("D", "/web")), "d"],
     ]);
-    expect(unfilledOwed(rows, owed, drafts, new Map())).toEqual([]);
+    expect(unfilledOwed(catalogue, owed, drafts, new Map())).toEqual([]);
   });
 });
 
@@ -422,7 +491,7 @@ describe("names", () => {
 });
 
 describe("dirtyEntries", () => {
-  const rows = treeOf(
+  const catalogue = catalogueOf(
     stateOf(
       [
         row("A", [cell({ set: true, version: 3 }), cell({ folder: "/web", set: true, version: 1 })]),
@@ -435,20 +504,20 @@ describe("dirtyEntries", () => {
   const key = (a: Address) => addressKey(a);
 
   it("is empty when no draft differs from its baseline", () => {
-    expect(dirtyEntries(rows, new Map(), new Map())).toEqual([]);
+    expect(dirtyEntries(catalogue, new Map(), new Map())).toEqual([]);
     expect(
-      dirtyEntries(rows, new Map([[key(at("A")), "x"]]), new Map([[key(at("A")), "x"]])),
+      dirtyEntries(catalogue, new Map([[key(at("A")), "x"]]), new Map([[key(at("A")), "x"]])),
     ).toEqual([]);
   });
 
-  it("carries the version each dirty row was read at, in table order", () => {
+  it("carries the version each dirty row was read at, in matrix order", () => {
     const drafts = new Map([
       [key(at("B")), "new"],
       [key(at("A", "/web")), "web"],
       [key(at("A", "", "staging")), "stage"],
       [key(at("A")), ""],
     ]);
-    expect(dirtyEntries(rows, drafts, new Map())).toEqual([
+    expect(dirtyEntries(catalogue, drafts, new Map())).toEqual([
       { at: at("A", "", "staging"), value: "stage", version: 0 },
       { at: at("A", "/web"), value: "web", version: 1 },
       { at: at("B"), value: "new", version: 0 },
@@ -456,7 +525,7 @@ describe("dirtyEntries", () => {
   });
 
   it("never includes a referenced cell, whatever its draft says", () => {
-    const linked = treeOf(
+    const linked = catalogueOf(
       stateOf([row("R", [cell({ reference: { slug: "billing", folder: "/api", key: "R" } })])]),
       [],
     );
@@ -466,7 +535,7 @@ describe("dirtyEntries", () => {
   it("treats clearing a revealed value as a change to empty", () => {
     const baselines = new Map([[key(at("A")), "old"]]);
     const drafts = new Map([[key(at("A")), ""]]);
-    expect(dirtyEntries(rows, drafts, baselines)).toEqual([
+    expect(dirtyEntries(catalogue, drafts, baselines)).toEqual([
       { at: at("A"), value: "", version: 3 },
     ]);
     expect(isDirty(at("A"), drafts, baselines)).toBe(true);
@@ -523,15 +592,22 @@ describe("reduceSave", () => {
     );
     expect(saveSummary(reduceSave(drafts, new Map(), new Map(), []))).toBe("Nothing to save.");
   });
+
+  it("summarises a removal the same way", () => {
+    expect(removeSummary(reduceSave(new Map(), new Map(), new Map(), [{ at: at("A"), ok: true }]))).toBe(
+      "Removed 1 value.",
+    );
+    expect(removeSummary(reduceSave(new Map(), new Map(), new Map(), results))).toBe(
+      "Removed 1 of 3 values; 1 changed underneath you and 1 failed — see the marked rows.",
+    );
+  });
 });
 
 describe("labels", () => {
   it("pluralise the owed count", () => {
     expect(tallyLine(0)).toBe("every required cell is filled");
     expect(tallyLine(1)).toBe("1 cell to fill");
-    expect(doneLabel(0)).toBe("Done — return to the terminal");
-    expect(doneLabel(3)).toBe(
-      "Return to the terminal with 3 cells still to fill",
-    );
+    expect(doneLabel(0)).toBe("Return to the terminal");
+    expect(doneLabel(3)).toBe("Return with 3 cells still to fill");
   });
 });

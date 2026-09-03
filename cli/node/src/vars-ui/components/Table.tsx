@@ -1,270 +1,400 @@
-import type { JSX } from "preact";
+import { useRef } from "preact/hooks";
 
 import {
   addressKey,
   baselineOf,
+  editable,
+  folderName,
   isDirty,
   names,
-  owedChildren,
+  overrideOptions,
   plural,
   readBy,
   referenceLine,
   revealable,
-  type KeyRow,
+  type FolderLine,
+  type KeyLine,
   type Reference,
   type Variant,
-  type VariantOption,
 } from "../model";
 import {
-  addVariant,
-  applyDrop,
+  addOverride,
+  askRemoval,
   baselines,
+  catalogue,
+  copyLoading,
+  copyValue,
+  dismiss,
   drafts,
-  dropTarget,
-  dropVariant,
-  erase,
-  expanded,
-  hoveredApp,
+  dragging,
+  environment,
+  environments,
+  folder,
+  go,
   hide,
+  hoveredApp,
+  importFile,
+  listing,
+  openCopy,
   openDrawer,
-  ordered,
-  owed,
+  owedOnly,
+  pickEnvironment,
   problems,
   reveal,
   revealErrors,
   saving,
+  search,
+  selectVisible,
+  selected,
   setDraft,
-  toggle,
+  setSearch,
+  shown,
+  state,
+  toggleRevealVisible,
+  toggleSelected,
+  visible,
+  applyDrop,
 } from "../store";
 import { Icon } from "./Icons";
+import { Menu, type MenuSection } from "./Menu";
 
 function carriesFile(event: DragEvent): boolean {
   const types = event.dataTransfer?.types ?? [];
   return [...types].some((type) => type === "Files" || type === "text/plain");
 }
 
-interface DropHandlers {
-  onDragOver: (event: DragEvent) => void;
-  onDragLeave: (event: DragEvent) => void;
-  onDrop: (event: DragEvent) => void;
-}
-
-function dropHandlers(folder: string): DropHandlers {
-  return {
-    onDragOver: (event) => {
-      if (!carriesFile(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.dataTransfer!.dropEffect = "copy";
-      if (dropTarget.value !== folder) dropTarget.value = folder;
-    },
-    onDragLeave: (event) => {
-      if (
-        event.currentTarget instanceof Element &&
-        event.relatedTarget instanceof Node &&
-        event.currentTarget.contains(event.relatedTarget)
-      ) {
-        return;
-      }
-      if (dropTarget.value === folder) dropTarget.value = null;
-    },
-    onDrop: (event) => {
-      if (!carriesFile(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const file = event.dataTransfer?.files[0];
-      if (file) {
-        void file.text().then((text) => applyDrop(file.name, text, folder));
-        return;
-      }
-      const text = event.dataTransfer?.getData("text/plain") ?? "";
-      applyDrop("the dropped text", text, folder);
-    },
-  };
-}
-
 export function Table() {
-  const target = dropTarget.value;
-  const drop = dropHandlers("");
+  const current = state.value!;
+  const list = listing.value;
+  const into = folder.value;
   return (
-    <div
-      class="scroller"
-      data-drop={target === ""}
-      data-dragging={target !== null}
-      onDragOver={drop.onDragOver}
-      onDragLeave={drop.onDragLeave}
-      onDrop={drop.onDrop}
+    <section
+      class="card"
+      data-dragging={dragging.value}
+      onDragOver={(event) => {
+        if (!carriesFile(event)) return;
+        event.preventDefault();
+        event.dataTransfer!.dropEffect = "copy";
+        if (!dragging.value) dragging.value = true;
+      }}
+      onDragLeave={(event) => {
+        if (
+          event.currentTarget instanceof Element &&
+          event.relatedTarget instanceof Node &&
+          event.currentTarget.contains(event.relatedTarget)
+        ) {
+          return;
+        }
+        dragging.value = false;
+      }}
+      onDrop={(event) => {
+        if (!carriesFile(event)) return;
+        event.preventDefault();
+        const file = event.dataTransfer?.files[0];
+        if (file) {
+          importFile(file);
+          return;
+        }
+        applyDrop("the dropped text", event.dataTransfer?.getData("text/plain") ?? "", into);
+      }}
     >
+      <Toolbar />
       <table class="vars">
         <thead>
           <tr>
-            <th scope="col" class="cell-key">
-              variable
+            <th scope="col" class="cell-pick">
+              <input
+                type="checkbox"
+                aria-label="select every row"
+                checked={visible.value.length > 0 && selected.value.size === visible.value.length}
+                disabled={visible.value.length === 0}
+                onChange={(event) => selectVisible(event.currentTarget.checked)}
+              />
             </th>
-            <th scope="col" class="cell-class">
-              class
+            <th scope="col" class="cell-key">
+              Name
             </th>
             <th scope="col" class="cell-value">
-              value
+              Value
             </th>
             <th scope="col" class="cell-tools">
-              <span class="visually-hidden">actions</span>
+              <button
+                type="button"
+                class="btn btn-ghost btn-small"
+                aria-pressed={shown.value}
+                disabled={visible.value.filter(revealable).length === 0}
+                onClick={toggleRevealVisible}
+              >
+                <Icon name={shown.value ? "eyeOff" : "eye"} />
+                {shown.value ? "Hide values" : "Reveal values"}
+              </button>
             </th>
           </tr>
         </thead>
-        {ordered.value.map((row) => (
-          <KeyGroup row={row} key={row.key} />
-        ))}
+        <tbody>
+          {list.folders.map((line) => (
+            <FolderRow line={line} key={line.folder} />
+          ))}
+          {list.keys.map((line) => (
+            <KeyRow line={line} flat={list.flat} key={addressKey(line.variant.at)} />
+          ))}
+        </tbody>
       </table>
+      {list.folders.length === 0 && list.keys.length === 0 && <Empty />}
+      <footer class="card-foot">
+        <span class="counts">
+          {!list.flat && (
+            <>
+              <Icon name="folder" /> {list.folders.length}
+              <span class="counts-gap" />
+            </>
+          )}
+          <Icon name="key" /> {list.keys.length}
+        </span>
+        <span class="hint">
+          <Icon name="file" />
+          Drop a .env file on this table to fill {folderName(into)} values
+        </span>
+      </footer>
+      {dragging.value && (
+        <div class="dropzone" aria-hidden="true">
+          <Icon name="upload" />
+          <p>Drop to fill {folderName(into)} values</p>
+          <p class="dropzone-sub">
+            Keys the project declares fill in as unsaved drafts; nothing is written until you save
+          </p>
+        </div>
+      )}
+      {current.recovery && list.keys.length === 0 && owedOnly.value && (
+        <p class="empty-note">Every cell the deploy needs has a value. Save and resume below.</p>
+      )}
+    </section>
+  );
+}
+
+function Toolbar() {
+  const current = state.value!;
+  const picker = useRef<HTMLInputElement>(null);
+  const list = listing.value;
+  return (
+    <div class="toolbar">
+      <label class="select">
+        <Icon name="environment" />
+        <select
+          value={environment.value}
+          aria-label="environment"
+          onChange={(event) => pickEnvironment(event.currentTarget.value)}
+        >
+          <option value="">Base</option>
+          {environments.value.map((env) => (
+            <option value={env.name} key={env.name}>
+              {env.orphaned ? `${env.name} · no longer exists` : env.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <nav class="crumbs" aria-label="folder">
+        <button
+          type="button"
+          class="crumb"
+          aria-current={!list.flat && folder.value === "" ? "page" : undefined}
+          onClick={() => go("")}
+        >
+          <Icon name="home" />
+          <span>/</span>
+        </button>
+        {!list.flat && folder.value !== "" && (
+          <>
+            <span class="crumb-sep">›</span>
+            <span class="crumb" aria-current="page">
+              <Icon name="folder" />
+              {folder.value.slice(1)}
+            </span>
+          </>
+        )}
+        {owedOnly.value && (
+          <>
+            <span class="crumb-sep">›</span>
+            <span class="crumb" aria-current="page" data-tone="owed">
+              <Icon name="warning" />
+              {plural(list.keys.length, "cell")} the deploy needs
+            </span>
+          </>
+        )}
+        {!owedOnly.value && list.flat && (
+          <>
+            <span class="crumb-sep">›</span>
+            <span class="crumb" aria-current="page">
+              <Icon name="search" />
+              results across every folder
+            </span>
+          </>
+        )}
+      </nav>
+      <span class="toolbar-gap" />
+      <label class="search">
+        <Icon name="search" />
+        <input
+          type="search"
+          placeholder="Search by name"
+          value={search.value}
+          onInput={(event) => setSearch(event.currentTarget.value)}
+        />
+      </label>
+      <input
+        type="file"
+        accept=".env,text/plain"
+        class="visually-hidden"
+        ref={picker}
+        tabIndex={-1}
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = "";
+          if (file) importFile(file);
+        }}
+      />
+      <button type="button" class="btn" onClick={() => picker.current?.click()}>
+        <Icon name="upload" />
+        Import .env
+      </button>
+      <button
+        type="button"
+        class="btn"
+        disabled={copyLoading.value}
+        onClick={() => void openCopy()}
+      >
+        <Icon name="copy" />
+        {copyLoading.value ? "Reading…" : `Copy from ${current.other}`}
+      </button>
     </div>
   );
 }
 
-function editable(variant: Variant): boolean {
-  return variant.state !== "forbidden" || variant.set;
+function Empty() {
+  const current = state.value!;
+  if (search.value.trim() !== "") {
+    return <p class="empty-note">No variable is named like “{search.value.trim()}”.</p>;
+  }
+  if (current.matrix.rows.length === 0) {
+    return (
+      <p class="empty-note">
+        This project declares no variables yet. Keys come from <code>defineEnv</code> in app
+        code; this page cannot create one.
+      </p>
+    );
+  }
+  return <p class="empty-note">Nothing reads a variable in {folderName(folder.value)}.</p>;
 }
 
-function needed(variant: Variant): boolean {
-  return owed.value.has(addressKey(variant.at));
-}
-
-function Needed() {
+function FolderRow({ line }: { line: FolderLine }) {
   return (
-    <span class="badge" data-tone="owed">
-      <Icon name="warning" />
-      the deploy needs this
-    </span>
-  );
-}
-
-function KeyGroup({ row }: { row: KeyRow }) {
-  const open = expanded.value.has(row.key);
-  const owedBelow = owedChildren(row);
-  const app = hoveredApp.value;
-  const rootNeeded = needed(row.root);
-  return (
-    <tbody
-      class="group"
-      data-expanded={open}
-      data-dim={app !== null && !readBy(row, app)}
-    >
-      <tr
-        class="row parent"
-        data-owed={row.root.owed || rootNeeded}
-        data-dirty={isDirty(row.root.at, drafts.value, baselines.value)}
-        aria-expanded={open}
-      >
-        <th scope="row" class="cell-key">
-          <button
-            type="button"
-            class="toggle"
-            aria-expanded={open}
-            aria-label={`${open ? "collapse" : "expand"} ${row.key}`}
-            onClick={() => toggle(row.key)}
-          >
-            <Icon name="chevron" />
-          </button>
-          <span class="key">{row.key}</span>
-          {row.children.length > 0 && (
-            <span class="count" data-owed={owedBelow > 0}>
-              {plural(row.children.length, "variant")}
-              {owedBelow > 0 && ` · ${owedBelow} owed`}
-            </span>
-          )}
-          {rootNeeded && <Needed />}
-        </th>
-        <td class="cell-class">
-          {row.class}
-          {row.scope.length > 0 && (
-            <span class="scope"> · scoped to {names(row.scope)}</span>
-          )}
-        </td>
-        <td class="cell-value">
-          <Value variant={row.root} scope={row.scope} />
-        </td>
-        <td class="cell-tools">
-          {editable(row.root) && <Tools variant={row.root} />}
-        </td>
-      </tr>
-      {open &&
-        row.children.map((child) => (
-          <ChildRow variant={child} key={`${child.at.folder} ${child.at.environment}`} />
-        ))}
-      {open && <AddRow row={row} />}
-    </tbody>
-  );
-}
-
-function ChildRow({ variant }: { variant: Variant }) {
-  const { folder, environment } = variant.at;
-  const scoped = variant.kind === "folder";
-  const drop = scoped ? dropHandlers(folder) : undefined;
-  return (
-    <tr
-      class="row child"
-      data-kind={variant.kind}
-      data-owed={variant.owed || needed(variant)}
-      data-orphaned={variant.orphaned}
-      data-dirty={isDirty(variant.at, drafts.value, baselines.value)}
-      data-drop={scoped && dropTarget.value === folder}
-      onDragOver={drop?.onDragOver}
-      onDragLeave={drop?.onDragLeave}
-      onDrop={drop?.onDrop}
-    >
+    <tr class="row folder-row" onClick={() => go(line.folder)}>
+      <td class="cell-pick" />
       <th scope="row" class="cell-key">
-        {folder !== "" && (
-          <span class="badge" data-kind="folder">
-            <Icon name="folder" />
-            {folder}
+        <button
+          type="button"
+          class="folder-link"
+          onClick={(event) => {
+            event.stopPropagation();
+            go(line.folder);
+          }}
+        >
+          <Icon name="folder" />
+          <span class="key">{line.folder.slice(1)}</span>
+        </button>
+        {line.owed > 0 && (
+          <span class="chip" data-tone="owed">
+            {plural(line.owed, "cell")} to fill
           </span>
         )}
-        {environment !== "" && (
-          <span
-            class="badge"
-            data-kind="environment"
-            data-tone={variant.orphaned ? "owed" : undefined}
-          >
-            <Icon name="environment" />
-            {environment}
-          </span>
-        )}
-        {variant.orphaned && (
-          <span class="badge" data-tone="owed">
-            <Icon name="warning" />
-            orphaned
-          </span>
-        )}
-        {needed(variant) && <Needed />}
       </th>
-      <td class="cell-class" />
       <td class="cell-value">
-        <Value variant={variant} scope={[]} />
+        <span class="muted">{plural(line.keys, "key")}</span>
       </td>
       <td class="cell-tools">
-        <Tools variant={variant} />
+        <Icon name="chevron" />
       </td>
     </tr>
   );
 }
 
 function describe(variant: Variant): string {
-  const { key, folder, environment } = variant.at;
-  const where = folder === "" ? "the root" : folder;
-  return environment === ""
-    ? `${key} in ${where}`
-    : `${key} in ${where} for ${environment}`;
+  const { key, folder: where, environment: env } = variant.at;
+  const place = where === "" ? "the root" : where;
+  return env === "" ? `${key} in ${place}` : `${key} in ${place} for ${env}`;
 }
 
-function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
-  if (!editable(variant)) {
-    return (
-      <span class="unset">
-        {variant.kind === "root" && scope.length > 0
-          ? `scoped to ${names(scope)}`
-          : "nothing reads it here"}
-      </span>
-    );
-  }
+function KeyRow({ line, flat }: { line: KeyLine; flat: boolean }) {
+  const { row, variant } = line;
+  const key = addressKey(variant.at);
+  const app = hoveredApp.value;
+  const open = editable(variant);
+  const picked = selected.value.has(key);
+  return (
+    <tr
+      class="row key-row"
+      data-owed={variant.owed || line.needed}
+      data-dirty={isDirty(variant.at, drafts.value, baselines.value)}
+      data-selected={picked}
+      data-dim={app !== null && !readBy(row, app)}
+    >
+      <td class="cell-pick">
+        {open && (
+          <input
+            type="checkbox"
+            aria-label={`select ${describe(variant)}`}
+            checked={picked}
+            onChange={() => toggleSelected(variant.at)}
+          />
+        )}
+      </td>
+      <th scope="row" class="cell-key">
+        <span class="name">
+          <Icon
+            name={row.class === "secret" ? "lock" : row.class === "sensitive" ? "shield" : "key"}
+          />
+          <span class="key">{row.key}</span>
+        </span>
+        {flat && (
+          <button type="button" class="chip chip-link" onClick={() => go(variant.at.folder)}>
+            <Icon name={variant.at.folder === "" ? "home" : "folder"} />
+            {folderName(variant.at.folder)}
+          </button>
+        )}
+        {row.class !== "plain" && <span class="chip">{row.class}</span>}
+        {(variant.owed || line.needed) && (
+          <span class="chip" data-tone="owed">
+            {line.needed ? "deploy needs this" : "required"}
+          </span>
+        )}
+        {row.scope && row.scope.length > 0 && (
+          <span class="chip" title={`only ${names(row.scope)} read it`}>
+            scoped
+          </span>
+        )}
+      </th>
+      <td class="cell-value">
+        {open ? (
+          <Value line={line} />
+        ) : (
+          <span class="muted">
+            only in{" "}
+            {(row.scope ?? []).map((where) => (
+              <button type="button" class="chip chip-link" key={where} onClick={() => go(where)}>
+                <Icon name="folder" />
+                {where.slice(1)}
+              </button>
+            ))}
+          </span>
+        )}
+      </td>
+      <td class="cell-tools">{open && <Actions line={line} />}</td>
+    </tr>
+  );
+}
+
+function Value({ line }: { line: KeyLine }) {
+  const { variant } = line;
   const key = addressKey(variant.at);
   const revealed = baselines.value.has(key);
   if (variant.reference) {
@@ -275,18 +405,10 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
   const problem = problems.value.get(key);
   const unreadable = revealErrors.value.get(key);
   const secret = variant.class === "secret";
+  const stamp = variant.set ? `set · v${variant.version}` : "not set";
   return (
     <div class="value" data-dirty={dirty}>
       <div class="value-line">
-        <span class="status">
-          {variant.set ? (
-            <span class="stored">set · v{variant.version}</span>
-          ) : variant.owed ? (
-            <span class="owed-text">required</span>
-          ) : (
-            <span class="unset">not set</span>
-          )}
-        </span>
         <input
           type="text"
           class="value-input"
@@ -294,9 +416,16 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
           autocomplete="off"
           spellcheck={false}
           disabled={variant.orphaned}
+          title={stamp}
           placeholder={
             !variant.set
-              ? ""
+              ? line.inherits === "root"
+                ? "inherits the root value"
+                : line.inherits === "base"
+                  ? "inherits the base value"
+                  : variant.owed || line.needed
+                    ? "required"
+                    : "not set"
               : secret
                 ? "overwrite the secret"
                 : revealed
@@ -306,10 +435,34 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
           aria-label={`value of ${describe(variant)}`}
           onInput={(event) => setDraft(variant.at, event.currentTarget.value)}
         />
-        {dirty && <span class="tag">unsaved</span>}
+        {dirty && <span class="chip chip-ink">unsaved</span>}
         {problem && (
-          <span class="tag" data-tone="owed">
+          <span class="chip" data-tone="owed">
             {problem.kind === "conflict" ? "conflict" : "failed"}
+          </span>
+        )}
+        {!dirty && line.inherits === "root" && <span class="chip">inherits root</span>}
+        {!dirty && line.inherits === "base" && <span class="chip">inherits base</span>}
+        {variant.kind === "environment" && variant.set && !variant.orphaned && (
+          <span class="chip chip-env">
+            <Icon name="environment" />
+            override
+          </span>
+        )}
+        {variant.orphaned && (
+          <span class="chip" data-tone="owed">
+            <Icon name="warning" />
+            orphaned
+          </span>
+        )}
+        {variant.at.environment === "" && line.overrides.length > 0 && (
+          <span
+            class="chip chip-env"
+            data-tone={line.orphaned ? "owed" : undefined}
+            title={`overridden in ${names(line.overrides)}${line.orphaned ? "; an override names an environment that no longer exists" : ""}`}
+          >
+            <Icon name="environment" />
+            {line.overrides.length === 1 ? line.overrides[0] : plural(line.overrides.length, "override")}
           </span>
         )}
       </div>
@@ -317,7 +470,7 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
         <span class="fault">
           <Icon name="warning" />
           {problem.kind === "conflict"
-            ? `This value changed since the page read it — now ${stored(variant, revealed ? baselines.value.get(key) : undefined)}. Nothing was written here; decide again against what is there now.`
+            ? `Changed underneath you — now ${stored(variant, revealed ? baselines.value.get(key) : undefined)}. Nothing was written; decide again.`
             : problem.message}
         </span>
       )}
@@ -349,14 +502,15 @@ function Linked({ variant, reference }: { variant: Variant; reference: Reference
   return (
     <div class="value reference">
       <div class="value-line">
-        <span class="status">
-          <span class="stored">set · v{variant.version}</span>
-        </span>
-        <span class="badge" data-kind="reference">
+        <span class="chip chip-ink" title={`set · v${variant.version}`}>
           <Icon name="link" />
           reads {referenceLine(reference)}
         </span>
-        {value !== undefined && <span class="resolved">{value}</span>}
+        {value !== undefined ? (
+          <span class="resolved">{value}</span>
+        ) : (
+          <span class="muted">••••••••</span>
+        )}
       </div>
       {unreadable && (
         <span class="fault">
@@ -364,121 +518,92 @@ function Linked({ variant, reference }: { variant: Variant; reference: Reference
           source unreadable: {unreadable}
         </span>
       )}
-      <span class="terminal">
-        Change it with <code>ocel env ref {variant.at.key} …</code> in the terminal.
-      </span>
     </div>
   );
 }
 
 function stored(variant: Variant, value: string | undefined): string {
-  if (variant.class === "secret") return `set · v${variant.version} (a secret stays out of the browser)`;
+  if (variant.class === "secret") return `v${variant.version} (a secret stays out of the browser)`;
   if (value === undefined) return `v${variant.version}`;
   return `v${variant.version}: ${value}`;
 }
 
-function Tools({ variant }: { variant: Variant }) {
+function Actions({ line }: { line: KeyLine }) {
+  const { variant } = line;
+  const current = state.value!;
   const busy = saving.value;
   const revealed = baselines.value.has(addressKey(variant.at));
-  if (variant.extra) {
-    return (
-      <button
-        type="button"
-        class="iconbtn"
-        title="dismiss this empty row"
-        aria-label={`dismiss the empty row for ${describe(variant)}`}
-        onClick={() => dropVariant(variant.at)}
-      >
-        <Icon name="x" />
-      </button>
-    );
-  }
+  const env = variant.at.environment;
+  const removal =
+    variant.orphaned
+      ? `Remove the ${env} override — ${env} no longer exists`
+      : env === ""
+        ? "Remove value"
+        : `Remove the ${env} override`;
+  const sections: MenuSection[] = [
+    {
+      label: "Insights",
+      items: [
+        { label: "Details and history", icon: "history", onSelect: () => openDrawer(variant.at) },
+      ],
+    },
+    {
+      label: "Manage",
+      items: [
+        ...overrideOptions(current, catalogue.value, variant.at).map((name) => ({
+          label: `Override for ${name}`,
+          icon: "environment" as const,
+          onSelect: () => addOverride({ ...variant.at, environment: name }),
+        })),
+        ...(revealable(variant)
+          ? [{ label: "Copy value", icon: "copy" as const, onSelect: () => void copyValue(variant.at) }]
+          : []),
+        ...(variant.extra
+          ? [{ label: "Dismiss this empty row", icon: "x" as const, onSelect: () => dismiss(variant.at) }]
+          : []),
+      ],
+    },
+    {
+      items:
+        variant.set && !variant.reference
+          ? [
+              {
+                label: removal,
+                icon: "trash" as const,
+                danger: true,
+                disabled: busy,
+                onSelect: () => askRemoval([variant.at]),
+              },
+            ]
+          : [],
+    },
+  ];
   return (
-    <>
-      <button
-        type="button"
-        class="iconbtn"
-        aria-haspopup="dialog"
-        title="details and history"
-        aria-label={`details and history of ${describe(variant)}`}
-        onClick={() => openDrawer(variant.at)}
-      >
-        <Icon name="info" />
-      </button>
+    <span class="cluster">
       {revealable(variant) && (
         <button
           type="button"
           class="iconbtn"
           aria-pressed={revealed}
-          title={revealed ? "hide the value" : "reveal the value"}
+          title={revealed ? "Hide the value" : "Reveal the value"}
           aria-label={`${revealed ? "hide" : "reveal"} the value of ${describe(variant)}`}
-          onClick={() =>
-            revealed ? hide([variant.at]) : void reveal([variant.at])
-          }
+          onClick={() => (revealed ? hide([variant.at]) : void reveal([variant.at]))}
         >
           <Icon name={revealed ? "eyeOff" : "eye"} />
         </button>
       )}
-      {variant.set && !variant.reference && (
-        <button
-          type="button"
-          class="iconbtn"
-          data-tone={variant.orphaned ? "owed" : undefined}
-          title={
-            variant.orphaned
-              ? `remove the ${variant.at.environment} value — ${variant.at.environment} no longer exists`
-              : "remove this value"
-          }
-          aria-label={`remove the value of ${describe(variant)}`}
-          disabled={busy}
-          onClick={() => void erase(variant.at, variant.version)}
-        >
-          <Icon name="trash" />
-        </button>
-      )}
-    </>
+      <button
+        type="button"
+        class="iconbtn"
+        aria-haspopup="dialog"
+        title="Details and history"
+        aria-label={`details and history of ${describe(variant)}`}
+        onClick={() => openDrawer(variant.at)}
+      >
+        <Icon name="info" />
+      </button>
+      <Menu label={`actions for ${describe(variant)}`} sections={sections} />
+    </span>
   );
 }
 
-function AddRow({ row }: { row: KeyRow }) {
-  const folders = row.options.filter((option) => option.at.environment === "");
-  const environments = row.options.filter(
-    (option) => option.at.environment !== "",
-  );
-  const choose = (event: JSX.TargetedEvent<HTMLSelectElement>) => {
-    const option = row.options[Number(event.currentTarget.value)];
-    event.currentTarget.value = "";
-    if (option) addVariant(option.at);
-  };
-  const group = (label: string, items: VariantOption[]) =>
-    items.length > 0 && (
-      <optgroup label={label}>
-        {items.map((option) => (
-          <option value={row.options.indexOf(option)} key={option.label}>
-            {option.label}
-          </option>
-        ))}
-      </optgroup>
-    );
-  return (
-    <tr class="row add">
-      <td colspan={4}>
-        {row.options.length === 0 ? (
-          <span class="unset">every folder and environment already has a row</span>
-        ) : (
-          <label class="add-variant">
-            <Icon name="plus" />
-            <span>add a variant</span>
-            <select value="" onChange={choose}>
-              <option value="" disabled>
-                choose a folder or environment
-              </option>
-              {group("folder", folders)}
-              {group("environment", environments)}
-            </select>
-          </label>
-        )}
-      </td>
-    </tr>
-  );
-}

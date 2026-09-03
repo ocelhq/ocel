@@ -7,17 +7,19 @@ import {
   readersOf,
   referenceLine,
   sizeLine,
+  variantAt,
   whenLine,
-  type KeyRow,
+  type MatrixRow,
   type Variant,
 } from "../model";
 import {
+  catalogue,
   closeDrawer,
   drawer,
   history,
   historyError,
+  problems,
   state,
-  tree,
 } from "../store";
 import { Icon } from "./Icons";
 
@@ -34,7 +36,7 @@ export function Drawer() {
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (panel.current?.contains(target)) return;
-      if (target.closest("[aria-haspopup='dialog']")) return;
+      if (target.closest("[aria-haspopup='dialog'],[role='menu']")) return;
       closeDrawer();
     };
     window.addEventListener("keydown", onKey);
@@ -50,21 +52,20 @@ export function Drawer() {
   }, [at]);
 
   if (!at) return null;
-  const row = tree.value.find((candidate) => candidate.key === at.key);
-  const variant = [row?.root, ...(row?.children ?? [])].find(
-    (candidate) => candidate && addressKey(candidate.at) === addressKey(at),
-  );
+  const row = catalogue.value.rows.find((candidate) => candidate.key === at.key);
+  const variant = variantAt(catalogue.value, at);
   if (!row || !variant) return null;
+  const problem = problems.value.get(addressKey(at));
 
   return (
     <aside
-      class="drawer"
+      class="panel"
       role="dialog"
       aria-labelledby="drawer-title"
       tabIndex={-1}
       ref={panel}
     >
-      <div class="drawer-head">
+      <div class="panel-head">
         <div>
           <h2 id="drawer-title">{row.key}</h2>
           <Where variant={variant} />
@@ -72,48 +73,46 @@ export function Drawer() {
         <button
           type="button"
           class="iconbtn"
-          title="close"
+          title="Close"
           aria-label="close the details"
           onClick={closeDrawer}
         >
           <Icon name="x" />
         </button>
       </div>
-      <Facts row={row} variant={variant} />
-      {variant.problem && (
-        <p class="problem">The value here fails its schema: {variant.problem}</p>
-      )}
-      <p class="eyebrow">History</p>
-      <History />
+      <div class="panel-body">
+        <Facts row={row} variant={variant} />
+        {variant.problem && (
+          <p class="problem">The value here fails its schema: {variant.problem}</p>
+        )}
+        {problem && (
+          <p class="problem">
+            {problem.kind === "conflict"
+              ? `This value changed since the page read it. Nothing was written here; decide again against what is there now: ${problem.message}`
+              : problem.message}
+          </p>
+        )}
+        <p class="eyebrow">History</p>
+        <History />
+      </div>
     </aside>
   );
 }
 
 function Where({ variant }: { variant: Variant }) {
   const { folder, environment } = variant.at;
-  if (folder === "" && environment === "") {
-    return <p class="coordinate">root · every environment</p>;
-  }
   return (
-    <div class="badges">
-      {folder !== "" && (
-        <span class="badge" data-kind="folder">
-          <Icon name="folder" />
-          {folder}
-        </span>
-      )}
-      {environment !== "" && (
-        <span
-          class="badge"
-          data-kind="environment"
-          data-tone={variant.orphaned ? "owed" : undefined}
-        >
-          <Icon name="environment" />
-          {environment}
-        </span>
-      )}
+    <div class="chips">
+      <span class="chip">
+        <Icon name={folder === "" ? "home" : "folder"} />
+        {folderName(folder)}
+      </span>
+      <span class="chip chip-env">
+        <Icon name="environment" />
+        {environment === "" ? "base" : environment}
+      </span>
       {variant.orphaned && (
-        <span class="badge" data-tone="owed">
+        <span class="chip" data-tone="owed">
           <Icon name="warning" />
           orphaned
         </span>
@@ -122,20 +121,21 @@ function Where({ variant }: { variant: Variant }) {
   );
 }
 
-function Facts({ row, variant }: { row: KeyRow; variant: Variant }) {
+function Facts({ row, variant }: { row: MatrixRow; variant: Variant }) {
   const apps = state.value?.matrix.apps ?? [];
   const readers = readersOf(row, apps);
+  const scope = row.scope ?? [];
   return (
     <dl class="facts">
-      <dt>class</dt>
+      <dt>Class</dt>
       <dd>{row.class}</dd>
-      <dt>scope</dt>
+      <dt>Scope</dt>
       <dd>
-        {row.scope.length === 0
-          ? "every folder — the root value unless a folder sets its own"
-          : `only ${names(row.scope)}`}
+        {scope.length === 0
+          ? "every folder; the root value unless a folder sets its own"
+          : `only ${names(scope)}`}
       </dd>
-      <dt>here</dt>
+      <dt>Here</dt>
       <dd>
         {variant.set
           ? `set · v${variant.version}`
@@ -145,28 +145,32 @@ function Facts({ row, variant }: { row: KeyRow; variant: Variant }) {
       </dd>
       {variant.reference && (
         <>
-          <dt>source</dt>
+          <dt>Source</dt>
           <dd>
-            <span class="badge" data-kind="reference">
+            <span class="chip chip-ink">
               <Icon name="link" />
               {referenceLine(variant.reference)}
             </span>
-            <span class="terminal">
-              {" "}
-              live — edits there change what this project reads; change the link with{" "}
-              <code>ocel env ref</code>
-            </span>
+            <p class="terminal">
+              Live: edits there change what this project reads. Change the link with{" "}
+              <code>ocel env ref {variant.at.key} …</code> in the terminal.
+            </p>
           </dd>
         </>
       )}
-      <dt>read by</dt>
+      <dt>Read by</dt>
       <dd>
         {readers.length === 0 ? (
-          <span class="unset">no app binds a folder that reads it</span>
+          <span class="muted">no app binds a folder that reads it</span>
         ) : (
-          <span class="readers">
+          <span class="chips">
             {readers.map((app) => (
-              <span class="badge" key={app.name} title={`${app.name} reads ${folderName(app.folder)}, then root`}>
+              <span
+                class="chip"
+                key={app.name}
+                title={`${app.name} reads ${folderName(app.folder)}, then root`}
+              >
+                <Icon name="app" />
                 {app.name}
               </span>
             ))}
@@ -182,9 +186,9 @@ function History() {
     return <p class="problem">Could not read the history: {historyError.value}</p>;
   }
   const versions = history.value;
-  if (versions === null) return <p class="empty">Reading…</p>;
+  if (versions === null) return <p class="muted">Reading…</p>;
   if (versions.length === 0) {
-    return <p class="empty">No versions stored yet — nothing has been saved here.</p>;
+    return <p class="muted">No versions stored yet; nothing has been saved here.</p>;
   }
   return (
     <ul class="history">

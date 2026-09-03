@@ -1,30 +1,33 @@
-import { doneLabel, folderName, names, owedCount, plural } from "../model";
+import { folderName, names, plural } from "../model";
 import {
   abandon,
-  collapseAll,
-  copyLoading,
+  askRemoval,
+  cancelRemoval,
+  clearSelection,
+  confirmRemoval,
   dirty,
   discard,
   dismissDrop,
   dropped,
-  expandAll,
   farewell,
   finishError,
   finishing,
-  hideAll,
-  leave,
-  leaveDiscarding,
-  openCopy,
+  hideSelected,
   outcome,
+  owedOnly,
+  removing,
   resume,
-  revealAll,
+  revealSelected,
   save,
   saving,
+  selected,
+  showOwed,
   state,
   unfilled,
+  variants,
 } from "../store";
 import { Apps } from "./Apps";
-import { CopyDialog } from "./CopyDialog";
+import { CopyPanel } from "./CopyPanel";
 import { Drawer } from "./Drawer";
 import { Icon, Sprite } from "./Icons";
 import { Masthead } from "./Masthead";
@@ -36,12 +39,13 @@ function DropNotice() {
   const where = folderName(drop.folder);
   return (
     <div class="notice" role="status">
+      <Icon name="file" />
       <div class="notice-body">
         <p>
-          <Icon name="file" /> {drop.name}:{" "}
+          <strong>{drop.name}</strong>:{" "}
           {drop.fills.length === 0
             ? `nothing to fill in ${where}.`
-            : `${plural(drop.fills.length, "row")} filled in ${where} — unsaved until you save.`}
+            : `${plural(drop.fills.length, "row")} filled in ${where}, unsaved until you save.`}
         </p>
         {drop.undeclared.length > 0 && (
           <p>
@@ -57,7 +61,7 @@ function DropNotice() {
       <button
         type="button"
         class="iconbtn"
-        title="dismiss"
+        title="Dismiss"
         aria-label="dismiss this notice"
         onClick={dismissDrop}
       >
@@ -76,46 +80,143 @@ function Banner() {
     <div class="banner" role="status">
       <Icon name="warning" />
       <p>
-        Deploy <code>{recovery.deploy}</code> of {current.slug} · {current.tier}{" "}
-        is waiting on {plural(recovery.owed.length, "cell")} it was refused.{" "}
+        Deploy <code>{recovery.deploy}</code> is waiting on{" "}
+        {plural(recovery.owed.length, "cell")} it was refused.{" "}
         {left === 0
           ? "Every one now holds a value; save and resume below."
-          : `${plural(left, "cell")} still ${left === 1 ? "needs" : "need"} a value — they sit at the top.`}
+          : `${plural(left, "cell")} still ${left === 1 ? "needs" : "need"} a value.`}
       </p>
+      <label class="switch">
+        <input
+          type="checkbox"
+          checked={owedOnly.value}
+          onChange={(event) => showOwed(event.currentTarget.checked)}
+        />
+        Show only what the deploy needs
+      </label>
     </div>
   );
 }
 
-function Finish({ recovery }: { recovery: boolean }) {
-  const pending = dirty.value.length;
-  const busy = saving.value || finishing.value;
-  if (!recovery) {
-    return pending > 0 ? (
-      <button type="button" class="done" disabled={busy} onClick={leaveDiscarding}>
-        Return without saving
-      </button>
-    ) : (
-      <button type="button" class="done" disabled={busy} onClick={leave}>
-        {doneLabel(owedCount(state.value!))}
-      </button>
-    );
-  }
-  const left = unfilled.value.length;
+function BulkBar() {
+  const picked = selected.value;
+  if (picked.size === 0) return null;
+  const cells = [...picked]
+    .map((key) => variants.value.get(key))
+    .filter((v) => v !== undefined)
+    .map((v) => v!.at);
+  const removable = cells.filter((at) => {
+    const v = variants.value.get(`${at.key} ${at.folder} ${at.environment}`);
+    return v !== undefined && v.set && !v.reference;
+  });
   return (
-    <div class="finish">
+    <div class="bulk" role="toolbar" aria-label="selected rows">
+      <span class="bulk-count">{picked.size} selected</span>
+      <button type="button" class="btn btn-ghost btn-small" onClick={clearSelection}>
+        Unselect all
+      </button>
+      <span class="bulk-gap" />
+      <button type="button" class="btn btn-small" onClick={() => void revealSelected()}>
+        <Icon name="eye" />
+        Reveal
+      </button>
+      <button type="button" class="btn btn-small" onClick={hideSelected}>
+        <Icon name="eyeOff" />
+        Hide
+      </button>
       <button
         type="button"
-        class="primary"
-        disabled={busy || left > 0}
-        title={left > 0 ? `${plural(left, "cell")} the deploy needs ${left === 1 ? "is" : "are"} still empty or invalid` : undefined}
-        onClick={() => void resume()}
+        class="btn btn-small btn-danger"
+        disabled={removable.length === 0 || saving.value}
+        onClick={() => askRemoval(removable)}
       >
-        {finishing.value ? "Resuming…" : "Save and resume the deploy"}
-      </button>
-      <button type="button" class="linkish abandon" disabled={busy} onClick={() => void abandon()}>
-        Abandon the deploy — this fails the deploy
+        <Icon name="trash" />
+        Remove {removable.length > 0 ? plural(removable.length, "value") : "values"}
       </button>
     </div>
+  );
+}
+
+function Confirm() {
+  const asked = removing.value;
+  if (!asked) return null;
+  const busy = saving.value;
+  return (
+    <div class="scrim" onPointerDown={(event) => event.target === event.currentTarget && cancelRemoval()}>
+      <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="remove-title">
+        <h2 id="remove-title">Remove {plural(asked.cells.length, "value")}?</h2>
+        <p class="muted">
+          The stored value goes away for {names(asked.cells.map((cell) => cell.at.key))}. History
+          keeps the versions; nothing else on this page is touched.
+        </p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-danger" disabled={busy} onClick={() => void confirmRemoval()}>
+            <Icon name="trash" />
+            {busy ? "Removing…" : "Remove"}
+          </button>
+          <button type="button" class="btn" disabled={busy} onClick={cancelRemoval}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Bar({ recovery }: { recovery: boolean }) {
+  const pending = dirty.value.length;
+  const busy = saving.value || finishing.value;
+  const said = [outcome.value?.text, finishError.value].filter(Boolean).join(" ");
+  if (!recovery && pending === 0 && said === "") return null;
+  const left = unfilled.value.length;
+  return (
+    <footer class="bar" data-recovery={recovery}>
+      <div class="bar-actions">
+        {pending > 0 && (
+          <>
+            <span class="bar-count">{plural(pending, "unsaved change")}</span>
+            <button
+              type="button"
+              class={recovery ? "btn" : "btn btn-primary"}
+              disabled={busy}
+              onClick={() => void save()}
+            >
+              {saving.value ? "Saving…" : "Save"}
+            </button>
+            <button type="button" class="btn btn-ghost" disabled={busy} onClick={discard}>
+              Discard
+            </button>
+          </>
+        )}
+        <p
+          class="outcome"
+          aria-live="polite"
+          data-tone={outcome.value?.tone ?? (finishError.value ? "owed" : undefined)}
+        >
+          {said}
+        </p>
+      </div>
+      {recovery && (
+        <div class="finish">
+          <button
+            type="button"
+            class="btn btn-primary"
+            disabled={busy || left > 0}
+            title={
+              left > 0
+                ? `${plural(left, "cell")} the deploy needs ${left === 1 ? "is" : "are"} still empty or invalid`
+                : undefined
+            }
+            onClick={() => void resume()}
+          >
+            {finishing.value ? "Resuming…" : "Save and resume the deploy"}
+          </button>
+          <button type="button" class="btn btn-ghost btn-danger-text" disabled={busy} onClick={() => void abandon()}>
+            Abandon the deploy
+          </button>
+        </div>
+      )}
+    </footer>
   );
 }
 
@@ -127,8 +228,6 @@ export function App() {
   if (!current) {
     return <p class="loading">Reading this project’s variables…</p>;
   }
-  const pending = dirty.value.length;
-  const busy = saving.value || finishing.value;
   const recovery = current.recovery !== undefined;
   return (
     <div class="frame">
@@ -136,90 +235,15 @@ export function App() {
       <div class="sheet">
         <Masthead current={current} />
         <Banner />
-        <p class="eyebrow">
-          Apps{" "}
-          <span class="axis">— each reads its own folder, then the root</span>
-        </p>
         <Apps current={current} />
-        <div class="toolbar">
-          <p class="eyebrow">
-            Variables{" "}
-            <span class="axis">
-              — one row per key; folder and environment variants nest under it
-            </span>
-          </p>
-          <div class="tools">
-            <button type="button" class="linkish" onClick={expandAll}>
-              expand all
-            </button>
-            <button type="button" class="linkish" onClick={collapseAll}>
-              collapse all
-            </button>
-            <span class="tools-gap" />
-            <button type="button" class="linkish" onClick={() => void revealAll()}>
-              <Icon name="eye" /> reveal all
-            </button>
-            <button type="button" class="linkish" onClick={hideAll}>
-              hide all
-            </button>
-            <span class="tools-gap" />
-            <button
-              type="button"
-              class="linkish"
-              disabled={copyLoading.value}
-              onClick={() => void openCopy()}
-            >
-              <Icon name="copy" />{" "}
-              {copyLoading.value ? "reading…" : `copy from ${current.other}`}
-            </button>
-          </div>
-        </div>
         <DropNotice />
         <Table />
       </div>
+      <BulkBar />
+      <Bar recovery={recovery} />
       <Drawer />
-      <CopyDialog />
-      <footer class="bar" data-recovery={recovery}>
-        <div class="bar-actions">
-          {!recovery && (
-            <button
-              type="button"
-              class="primary"
-              disabled={busy || pending === 0}
-              onClick={() => void save()}
-            >
-              {saving.value
-                ? "Saving…"
-                : pending === 0
-                  ? "Nothing to save"
-                  : `Save ${plural(pending, "change")}`}
-            </button>
-          )}
-          {recovery && pending > 0 && (
-            <button
-              type="button"
-              class="done"
-              disabled={busy}
-              onClick={() => void save()}
-            >
-              {saving.value ? "Saving…" : `Save ${plural(pending, "change")}`}
-            </button>
-          )}
-          {pending > 0 && (
-            <button type="button" class="linkish" disabled={busy} onClick={discard}>
-              discard changes
-            </button>
-          )}
-          <p
-            class="outcome"
-            aria-live="polite"
-            data-tone={outcome.value?.tone ?? (finishError.value ? "owed" : undefined)}
-          >
-            {[outcome.value?.text, finishError.value].filter(Boolean).join(" ")}
-          </p>
-        </div>
-        <Finish recovery={recovery} />
-      </footer>
+      <CopyPanel />
+      <Confirm />
     </div>
   );
 }
