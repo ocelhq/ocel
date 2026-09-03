@@ -731,37 +731,6 @@ importers:
         specifier: ^5
         version: 5.9.3
 
-  examples/next-cache-lab:
-    dependencies:
-      '@ocel/provider-aws':
-        specifier: workspace:^
-        version: link:../../packages/provider-aws
-      next:
-        specifier: 16.2.10
-        version: 16.2.10(@opentelemetry/api@1.9.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      ocel:
-        specifier: workspace:^
-        version: link:../../packages/ocel
-      react:
-        specifier: 19.2.4
-        version: 19.2.4
-      react-dom:
-        specifier: 19.2.4
-        version: 19.2.4(react@19.2.4)
-    devDependencies:
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      '@types/react':
-        specifier: ^19
-        version: 19.2.17
-      '@types/react-dom':
-        specifier: ^19
-        version: 19.2.3(@types/react@19.2.17)
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
   examples/with-pulumi:
     dependencies:
       '@ocel/provider-aws':
