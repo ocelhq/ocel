@@ -215,6 +215,9 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		}
 
 		ui.Building()
+		browser := deps.BrowserReachable(stdin)
+		scope := envwire.Scope(cfg, true, env.GetIdentity())
+		scope.Browser = browser
 		recovery := gateRecovery{
 			deps:    deps,
 			cfg:     cfg,
@@ -225,12 +228,12 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 					Runner: runner,
 					Slug:   cfg.Slug,
 					Tier:   environmentv1.Tier_TIER_PREVIEW,
-				}, envwire.Scope(cfg, true, env.GetIdentity()))
+				}, scope)
 			},
 			command: "ocel preview up",
 			compute: compute,
 			ui:      ui,
-			enabled: !opts.dry && canOpenVarsUI(deps, stdin),
+			enabled: !opts.dry && browser,
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {

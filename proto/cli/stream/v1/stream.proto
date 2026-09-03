@@ -57,9 +57,25 @@ message Party {
 
 // A pause the run opened for a human. `url` is where they answer.
 message WaitingEvent {
-  string reason = 1;
-
   string url = 2;
+
+  VariablesOwed owed = 3;
+}
+
+// The variables a run is owed before it can build, one cell per entry, and
+// the one command that fills them in.
+message VariablesOwed {
+  repeated OwedVariable cells = 1;
+
+  string remedy = 2;
+}
+
+message OwedVariable {
+  string key = 1;
+
+  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
+
+  string reason = 3;
 }
 
 // The end of a pause.
@@ -86,6 +102,8 @@ message RunResultEvent {
 
   // common.progress.v1.ResultEvent.apps as the provider reported it.
   repeated common.progress.v1.AppResult apps = 10;
+
+  VariablesOwed owed = 11;
 }
 
 enum DiagnosticLevel {

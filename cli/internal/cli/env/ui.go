@@ -27,21 +27,21 @@ func newUICommand(deps cmddeps.Deps) *cobra.Command {
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvUI(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvUI(ctx, deps, cwd, opts, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	previewFlag(cmd, &opts)
 	return cmd
 }
 
-func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
+func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
 	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		gate, err := discoverVariables(ctx, cfg, runner, opts, stderr)
 		if err != nil {
 			return err
 		}
 
-		varsSession, err := serveAndOpenVarsUI(deps, ctx, cfg, runner, opts.preview, gate, stdout)
+		varsSession, err := serveAndOpenVarsUI(deps, ctx, cfg, runner, opts.preview, gate, stdin, stdout)
 		if err != nil {
 			return err
 		}
@@ -57,6 +57,7 @@ func serveAndOpenVarsUI(
 	runner *provider.Runner,
 	preview bool,
 	gate *envgate.Gate,
+	stdin io.Reader,
 	stdout io.Writer,
 ) (*varsui.Session, error) {
 	varsSession, err := deps.ServeVarsUI(ctx, cfg, runner, preview, gate, nil)
@@ -65,6 +66,9 @@ func serveAndOpenVarsUI(
 	}
 
 	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, varsSession.URL)
+	if !deps.BrowserReachable(stdin) {
+		return varsSession, nil
+	}
 	if err := deps.OpenBrowser(varsSession.URL); err != nil {
 		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
 	}

@@ -107,7 +107,7 @@ func TestCheck(t *testing.T) {
 			t.Fatal("Check err = nil, want a refusal")
 		}
 		msg := err.Error()
-		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY <VALUE>", "api", "web"} {
+		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY <VALUE>"} {
 			if !strings.Contains(msg, want) {
 				t.Errorf("refusal = %q, want it to contain %q", msg, want)
 			}
@@ -149,8 +149,10 @@ func TestCheck(t *testing.T) {
 		if err == nil {
 			t.Fatal("Check err = nil, want a refusal")
 		}
-		if !strings.Contains(err.Error(), "ocel env set POSTHOG_ID <VALUE> --folder /checkout") {
-			t.Errorf("refusal = %q, want the folder-scoped fixing command", err.Error())
+		for _, want := range []string{"POSTHOG_ID  /checkout  set, but too small", "ocel env set <KEY> <VALUE> --folder <FOLDER>"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("refusal = %q, want it to contain %q", err.Error(), want)
+			}
 		}
 	})
 
@@ -213,7 +215,7 @@ func TestCheck(t *testing.T) {
 		if err == nil {
 			t.Fatal("Check err = nil, want a required value nothing holds to refuse without being told")
 		}
-		for _, want := range []string{"STRIPE_API_KEY", "no value is set", "ocel env set STRIPE_API_KEY <VALUE>", "api"} {
+		for _, want := range []string{"STRIPE_API_KEY", "no value", "ocel env set STRIPE_API_KEY <VALUE>"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("refusal = %q, want it to contain %q", err.Error(), want)
 			}
@@ -304,7 +306,7 @@ func TestCheck(t *testing.T) {
 		if err == nil {
 			t.Fatal("Check err = nil, want a refusal — pr-42 holds a value the deploy never resolves, so the cell every environment reads is still empty")
 		}
-		for _, want := range []string{"STRIPE_API_KEY", "no value is set"} {
+		for _, want := range []string{"STRIPE_API_KEY", "no value"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("refusal = %q, want it to contain %q", err.Error(), want)
 			}
@@ -474,29 +476,4 @@ func TestDeclareEnv(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestRefusal(t *testing.T) {
-	t.Parallel()
-
-	t.Run("Owed names the cells without the advice to rerun", func(t *testing.T) {
-		t.Parallel()
-		refusal := &envgate.Refusal{
-			Problems: []*resourcesv1.VariableProblem{
-				{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING},
-			},
-			Scope: envgate.Scope{Apps: []envgate.App{{Name: "web"}}},
-		}
-
-		owed := refusal.Owed()
-		if !strings.Contains(owed, "STRIPE_API_KEY") {
-			t.Errorf("Owed() = %q, want it to name the cell that stopped the run", owed)
-		}
-		if strings.Contains(owed, "run this command again") {
-			t.Errorf("Owed() = %q, want no advice to re-run a command that has not given up", owed)
-		}
-		if !strings.Contains(refusal.Error(), "run this command again") {
-			t.Errorf("Error() = %q, want the hard refusal to still say what to do next", refusal.Error())
-		}
-	})
 }

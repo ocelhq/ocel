@@ -3,6 +3,7 @@ package runui
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"strings"
 	"time"
 	"unicode"
@@ -503,8 +504,9 @@ func (p *projector) identity(m protoreflect.Message) []string {
 func (p *projector) waiting(m protoreflect.Message) []string {
 	ev := m.Interface().(*streamv1.WaitingEvent)
 	out := append(p.strand(warnMark, "paused"), "")
-	out = append(out, strings.Split(strings.TrimRight(ev.GetReason(), "\n"), "\n")...)
+	out = append(out, envgate.Lines(ev.GetOwed().GetCells(), p.owedPaint())...)
 	return append(out,
+		"",
 		"  Fill them in at:",
 		"",
 		"    "+ev.GetUrl(),
@@ -546,7 +548,16 @@ func (p *projector) result(m protoreflect.Message) []string {
 	}
 
 	out := p.strand(failMark, "failed")
-	out = append(out, "", failMark+" "+headlineOr(ev, "Failed"))
+	if owed := ev.GetOwed(); owed != nil {
+		out = append(out, "")
+		out = append(out, envgate.Lines(owed.GetCells(), p.owedPaint())...)
+		out = append(out, "", envgate.RemedyLine(owed.GetRemedy()))
+		if ev.GetDetail() != "" {
+			out = append(out, "")
+		}
+	} else {
+		out = append(out, "", failMark+" "+headlineOr(ev, "Failed"))
+	}
 	out = append(out, detailLines(ev.GetDetail())...)
 	return append(out, p.logPointer("Full log", ev.GetLogPath())...)
 }
@@ -597,6 +608,13 @@ func unservedApp(app *progressv1.AppResult) string {
 		return "failed"
 	}
 	return "no public url"
+}
+
+func (p *projector) owedPaint() envgate.Paint {
+	return envgate.Paint{
+		Fail:  func(s string) string { return p.style(color.FgRed).Sprint(s) },
+		Faint: p.faint,
+	}
 }
 
 func headlineOr(ev *streamv1.RunResultEvent, fallback string) string {

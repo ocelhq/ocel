@@ -3,12 +3,7 @@ stages:
     Building
 plan:
 waits:
-  waiting 1 variable is not ready — nothing has been built.
-
-  STRIPE_API_KEY (project root), read by web
-    no value is set
-    fix: ocel env set STRIPE_API_KEY <VALUE>
-
+  waiting 1 owed, remedy "ocel env ui"
   resumed the page was answered
 results:
   success=true interrupted=false headline="Deployed" detail="" duration_ms=12000

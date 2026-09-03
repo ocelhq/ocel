@@ -3,6 +3,7 @@ package cmddeps
 import (
 	"context"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -36,6 +37,12 @@ type Deps struct {
 	ConfigPath          func() string
 	Presentation        func(w io.Writer) runui.Presentation
 	Interrupt           func(ctx context.Context, stderr io.Writer) (context.Context, context.CancelFunc)
+}
+
+const NoBrowserEnvVar = "OCEL_NO_BROWSER"
+
+func (d Deps) BrowserReachable(stdin io.Reader) bool {
+	return os.Getenv(NoBrowserEnvVar) == "" && d.StdinIsTerminal(stdin)
 }
 
 const YesUsage = "Consent in advance to any confirmation this command would ask for"

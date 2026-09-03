@@ -58,6 +58,7 @@ type Scope struct {
 	Apps        []App
 	Preview     bool
 	Environment string
+	Browser     bool
 }
 
 type Gate struct {

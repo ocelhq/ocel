@@ -367,7 +367,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		}
 
 		tail := strings.TrimPrefix(out.String(), before) + stderr.String()
-		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY <VALUE>", "closed before the matrix was complete"} {
+		for _, want := range []string{"STRIPE_API_KEY", "Fill them in: ocel env ui", "closed before the matrix was complete"} {
 			if !strings.Contains(tail, want) {
 				t.Errorf("output after the UI closed = %q, want it to contain %q", tail, want)
 			}
@@ -517,13 +517,13 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		}{
 			{name: "off a terminal", opts: deployOptions{}},
 			{name: "off a terminal with --yes", opts: deployOptions{yes: true}},
-			{name: noBrowserEnvVar, terminal: true, opts: deployOptions{}, env: "1"},
-			{name: noBrowserEnvVar + "=anything", terminal: true, opts: deployOptions{yes: true}, env: "true"},
+			{name: cmddeps.NoBrowserEnvVar, terminal: true, opts: deployOptions{}, env: "1"},
+			{name: cmddeps.NoBrowserEnvVar + "=anything", terminal: true, opts: deployOptions{yes: true}, env: "true"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 				t.Setenv("OCEL_TEST_ENV_PROBLEMS", missingStripeKey)
-				t.Setenv(noBrowserEnvVar, tc.env)
+				t.Setenv(cmddeps.NoBrowserEnvVar, tc.env)
 				deps := clitest.NewDeps()
 				if tc.terminal {
 					terminalStdin(&deps)
