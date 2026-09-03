@@ -107,6 +107,9 @@ async function echoProbe(request: Request, url: URL): Promise<Response> {
 
 async function largeIn(request: Request): Promise<Response> {
   const body = Buffer.from(await request.arrayBuffer());
+  if (body.byteLength > MAX_BODY) {
+    return json({ error: "bad request" }, { status: 413 });
+  }
   return json({
     bytes: body.byteLength,
     sha256: createHash("sha256").update(body).digest("hex"),
