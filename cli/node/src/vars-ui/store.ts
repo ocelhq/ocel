@@ -7,6 +7,9 @@ import {
   applyDotenv,
   baselineOf,
   dirtyEntries,
+  names,
+  planCopy,
+  plural,
   reduceSave,
   revealable,
   saveSummary,
@@ -14,7 +17,9 @@ import {
   variantsOf,
   type Address,
   type AppResolution,
+  type CopyPlan,
   type DropOutcome,
+  type OtherValue,
   type Problem,
   type SaveResult,
   type State,
@@ -38,6 +43,17 @@ export const outcome = signal<{ text: string; tone?: "owed" } | null>(null);
 
 export const dropTarget = signal<string | null>(null);
 export const dropped = signal<(DropOutcome & { name: string }) | null>(null);
+
+export interface CopyDialog {
+  tier: string;
+  plan: CopyPlan;
+  chosen: ReadonlySet<string>;
+  busy: boolean;
+  error: string | null;
+}
+
+export const copying = signal<CopyDialog | null>(null);
+export const copyLoading = signal(false);
 
 export const drawer = signal<Address | null>(null);
 export const history = signal<Version[] | null>(null);
@@ -278,6 +294,108 @@ export function applyDrop(name: string, text: string, folder: string): void {
 
 export function dismissDrop(): void {
   dropped.value = null;
+}
+
+export async function openCopy(): Promise<void> {
+  const current = state.value;
+  if (!current || copyLoading.value) return;
+  copyLoading.value = true;
+  outcome.value = null;
+  try {
+    const other = await api<{ tier: string; values: OtherValue[] }>("GET", "/api/other");
+    const plan = planCopy(tree.value, current.environments, other.values);
+    copying.value = {
+      tier: other.tier,
+      plan,
+      chosen: new Set(plan.fills.map((cell) => addressKey(cell.at))),
+      busy: false,
+      error: null,
+    };
+  } catch (thrown) {
+    outcome.value = {
+      text: `Could not read the ${current.other} values: ${message(thrown)}`,
+      tone: "owed",
+    };
+  } finally {
+    copyLoading.value = false;
+  }
+}
+
+export function toggleCopy(at: Address): void {
+  const dialog = copying.value;
+  if (!dialog || dialog.busy) return;
+  const chosen = new Set(dialog.chosen);
+  const key = addressKey(at);
+  if (!chosen.delete(key)) chosen.add(key);
+  copying.value = { ...dialog, chosen };
+}
+
+export function closeCopy(): void {
+  if (copying.value?.busy) return;
+  copying.value = null;
+}
+
+interface CopyResult extends Address {
+  saved: boolean;
+  conflict?: boolean;
+  error?: string;
+}
+
+export async function confirmCopy(): Promise<void> {
+  const dialog = copying.value;
+  if (!dialog || dialog.busy) return;
+  const cells = [...dialog.plan.fills, ...dialog.plan.overwrites].filter((cell) =>
+    dialog.chosen.has(addressKey(cell.at)),
+  );
+  if (cells.length === 0) return;
+  copying.value = { ...dialog, busy: true, error: null };
+  saving.value = true;
+  try {
+    const answer = await api<{ results: CopyResult[] }>("POST", "/api/copy", {
+      cells: cells.map((cell) => ({ ...cell.at, version: cell.hereVersion })),
+    });
+    const added = [...extras.value];
+    const known = new Set(added.map(addressKey));
+    const open = new Set(expanded.value);
+    for (const cell of cells) {
+      if (cell.materialise && !known.has(addressKey(cell.at))) {
+        added.push(cell.at);
+        known.add(addressKey(cell.at));
+      }
+      if (cell.at.folder !== "" || cell.at.environment !== "") open.add(cell.at.key);
+    }
+    extras.value = added;
+    expanded.value = open;
+    await refresh();
+    const results: SaveResult[] = answer.results.map((result) => {
+      const at = { key: result.key, folder: result.folder, environment: result.environment };
+      if (result.saved) return { at, ok: true };
+      return {
+        at,
+        ok: false,
+        status: result.conflict ? 409 : 0,
+        message: result.error ?? "the copy failed",
+      };
+    });
+    const reduced = settle(results);
+    const total = results.length;
+    const why: string[] = [];
+    if (reduced.conflicted > 0) why.push(`${reduced.conflicted} changed here underneath you`);
+    if (reduced.failed > 0) why.push(`${reduced.failed} failed`);
+    outcome.value =
+      reduced.saved === total
+        ? { text: `Copied ${plural(total, "value")} from ${dialog.tier}.` }
+        : {
+            text: `Copied ${reduced.saved} of ${plural(total, "value")} from ${dialog.tier}; ${names(why)} — see the marked rows.`,
+            tone: "owed",
+          };
+    copying.value = null;
+    await reveal(results.filter((r) => !r.ok && r.status === 409).map((r) => r.at));
+  } catch (thrown) {
+    copying.value = { ...dialog, busy: false, error: message(thrown) };
+  } finally {
+    saving.value = false;
+  }
 }
 
 export function openDrawer(at: Address): void {

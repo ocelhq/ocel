@@ -1,6 +1,7 @@
 import { doneLabel, folderName, names, owedCount, plural } from "../model";
 import {
   collapseAll,
+  copyLoading,
   dirty,
   discard,
   dismissDrop,
@@ -9,6 +10,7 @@ import {
   farewell,
   hideAll,
   leave,
+  openCopy,
   outcome,
   revealAll,
   save,
@@ -16,6 +18,7 @@ import {
   state,
 } from "../store";
 import { Apps } from "./Apps";
+import { CopyDialog } from "./CopyDialog";
 import { Drawer } from "./Drawer";
 import { Icon, Sprite } from "./Icons";
 import { Masthead } from "./Masthead";
@@ -99,12 +102,23 @@ export function App() {
             <button type="button" class="linkish" onClick={hideAll}>
               hide all
             </button>
+            <span class="tools-gap" />
+            <button
+              type="button"
+              class="linkish"
+              disabled={copyLoading.value}
+              onClick={() => void openCopy()}
+            >
+              <Icon name="copy" />{" "}
+              {copyLoading.value ? "reading…" : `copy from ${current.other}`}
+            </button>
           </div>
         </div>
         <DropNotice />
         <Table />
       </div>
       <Drawer />
+      <CopyDialog />
       <footer class="bar">
         <div class="bar-actions">
           <button

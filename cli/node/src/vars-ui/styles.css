@@ -787,6 +787,110 @@ select {
   font-size: 0.8125rem;
 }
 
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--step) * 3);
+  background: rgba(16, 23, 28, 0.45);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--step) * 1.5);
+  width: min(48rem, 100%);
+  max-height: calc(100vh - var(--step) * 6);
+  padding: calc(var(--step) * 3) calc(var(--step) * 4);
+  overflow-y: auto;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  background: var(--sheet);
+  box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.5);
+}
+
+.dialog h2 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.dialog .eyebrow {
+  margin: calc(var(--step) * 1.5) 0 calc(var(--step) * 0.5);
+}
+
+.diff {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+}
+
+.diff-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--step) * 0.5) calc(var(--step) * 2);
+  align-items: baseline;
+  padding: calc(var(--step) * 0.75) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.diff-row[data-tone="owed"] .key {
+  color: var(--owed);
+}
+
+.diff-pick {
+  display: inline-flex;
+  gap: var(--step);
+  align-items: baseline;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.diff-pick input {
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+.diff-where {
+  display: inline-flex;
+  gap: calc(var(--step) * 0.75);
+  align-items: baseline;
+}
+
+.diff-where .badge {
+  margin: 0;
+}
+
+.diff-values {
+  display: flex;
+  flex: 1 1 20rem;
+  flex-wrap: wrap;
+  gap: var(--step);
+  align-items: baseline;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.diff-values .arrow {
+  color: var(--ink-soft);
+}
+
+.diff-values .there {
+  color: var(--ink);
+}
+
+.dialog-actions {
+  display: flex;
+  gap: calc(var(--step) * 2);
+  align-items: center;
+  margin-top: calc(var(--step) * 1.5);
+}
+
 .farewell {
   padding: calc(var(--step) * 6);
   font-family: var(--mono);

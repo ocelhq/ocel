@@ -10,6 +10,7 @@ import {
   names,
   owedChildren,
   owedCount,
+  planCopy,
   readersOf,
   reduceSave,
   revealable,
@@ -22,6 +23,7 @@ import {
   type SaveResult,
   type MatrixCell,
   type MatrixRow,
+  type OtherValue,
   type State,
 } from "./model";
 
@@ -288,6 +290,67 @@ describe("applyDotenv", () => {
       { at: at("W", "/web"), value: "w", materialise: false },
     ]);
     expect(out.skipped).toEqual([]);
+  });
+});
+
+describe("planCopy", () => {
+  const rows = treeOf(
+    stateOf(
+      [
+        row("A", [cell({ set: true, version: 4 }), cell({ folder: "/web" })]),
+        row("S", [cell({}), cell({ folder: "/web" })], { class: "secret" }),
+        row("R", [cell({ reference: { slug: "billing", folder: "", key: "R" } }), cell({ folder: "/web" })]),
+        row("W", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], { scope: ["/web"] }),
+      ],
+      ["staging"],
+    ),
+    [],
+  );
+  const other = (over: Partial<OtherValue> & { key: string }): OtherValue => ({
+    folder: "",
+    environment: "",
+    version: 1,
+    class: "plain",
+    ...over,
+  });
+
+  it("fills empty cells, marks set ones as overwrites, and keeps versions read here", () => {
+    const plan = planCopy(rows, ["staging"], [
+      other({ key: "A", value: "a-there" }),
+      other({ key: "A", folder: "/web", value: "a-web" }),
+      other({ key: "S", class: "secret" }),
+      other({ key: "A", environment: "staging", value: "a-staging" }),
+    ]);
+    expect(plan.overwrites).toEqual([
+      { at: at("A"), class: "plain", there: "a-there", hereSet: true, hereVersion: 4, materialise: false },
+    ]);
+    expect(plan.fills).toEqual([
+      { at: at("A", "/web"), class: "plain", there: "a-web", hereSet: false, hereVersion: 0, materialise: true },
+      { at: at("S"), class: "secret", there: undefined, hereSet: false, hereVersion: 0, materialise: false },
+      { at: at("A", "", "staging"), class: "plain", there: "a-staging", hereSet: false, hereVersion: 0, materialise: true },
+    ]);
+  });
+
+  it("lists unreadable cells rather than dropping them", () => {
+    const plan = planCopy(rows, [], [other({ key: "A", error: "timed out" })]);
+    expect(plan.unreadable).toEqual([{ at: at("A"), error: "timed out" }]);
+    expect(plan.fills).toEqual([]);
+    expect(plan.overwrites).toEqual([]);
+  });
+
+  it("skips what cannot land here and says why", () => {
+    const plan = planCopy(rows, [], [
+      other({ key: "NOPE", value: "x" }),
+      other({ key: "W", value: "x" }),
+      other({ key: "A", environment: "gone", value: "x" }),
+      other({ key: "R", value: "x" }),
+    ]);
+    expect(plan.skipped.map((s) => s.reason)).toEqual([
+      "NOPE is not declared here",
+      "nothing reads W in root here",
+      "no environment named gone exists here",
+      "R in root reads billing here; a copy would break the link",
+    ]);
   });
 });
 
