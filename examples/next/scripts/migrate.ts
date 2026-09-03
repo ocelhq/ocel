@@ -23,7 +23,6 @@ async function main() {
     CREATE TABLE IF NOT EXISTS next_state (
       key        TEXT        PRIMARY KEY,
       count      INTEGER     NOT NULL DEFAULT 0,
-      value      TEXT,
       first_seen TIMESTAMPTZ NOT NULL DEFAULT now(),
       last_seen  TIMESTAMPTZ NOT NULL DEFAULT now()
     )
