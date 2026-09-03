@@ -104,8 +104,9 @@ func TestAnAppRoutingAtItsOriginCarriesTheManifestItRoutesBy(t *testing.T) {
 	}
 }
 
-func TestAnEdgeThatRunsCodeLeavesTheOriginNothingToRouteBy(t *testing.T) {
-	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, []byte(`{}`))
+func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveRoutedBy(t *testing.T) {
+	manifest := []byte(`{"routes":[]}`)
+	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, manifest)
 	query := servingQuery(root, "web", providerkit.FrameworkNext)
 	query.EdgeRunsCode = true
 
@@ -115,6 +116,21 @@ func TestAnEdgeThatRunsCodeLeavesTheOriginNothingToRouteBy(t *testing.T) {
 	}
 	if facts.Routing != nil {
 		t.Errorf("Routing = %+v where the edge runs the code, want the origin left out of routing", facts.Routing)
+	}
+	if facts.EdgeRouting == nil || !bytes.Equal(facts.EdgeRouting.Manifest, manifest) {
+		t.Fatalf("EdgeRouting = %+v, want the manifest the edge serves static assets and routes by", facts.EdgeRouting)
+	}
+}
+
+func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToRouteBy(t *testing.T) {
+	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, []byte(`{}`))
+
+	facts, err := providerkit.ServingFactsFor(servingQuery(root, "web", providerkit.FrameworkNext))
+	if err != nil {
+		t.Fatalf("ServingFactsFor() = %v", err)
+	}
+	if facts.EdgeRouting != nil {
+		t.Errorf("EdgeRouting = %+v where the origin routes, want the edge left out of routing", facts.EdgeRouting)
 	}
 }
 

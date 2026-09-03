@@ -697,7 +697,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 			if err := r.embed(ctx, entry, result.Functions, report); err != nil {
 				return err
 			}
-			if err := r.stage(ctx, entry, images, values, result.Functions, result.Containers, grants); err != nil {
+			if err := r.stage(ctx, entry, facts, images, values, result.Functions, result.Containers, grants); err != nil {
 				return err
 			}
 			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, Stack{
@@ -947,13 +947,18 @@ func declaredVariables(held AppValues) []edge.VariableRecord {
 	return declared
 }
 
-func (r *deployRun) stage(ctx context.Context, entry AppEntry, images ImagePlan, values AppValues, functions []Function, containers []AppContainer, grants []Link) error {
+func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFacts, images ImagePlan, values AppValues, functions []Function, containers []AppContainer, grants []Link) error {
 	urls := make(map[string]string, len(functions))
 	for _, fn := range functions {
 		urls[fn.Name] = fn.URL
 	}
 	coordinate := r.plan.coordinate(entry.App, entry.Build.Release())
+	var routing any
+	if facts.EdgeRouting != nil {
+		routing = json.RawMessage(facts.EdgeRouting.Manifest)
+	}
 	record := edge.DeploymentRecord{
+		RoutingManifest:  routing,
 		App:              entry.App,
 		Framework:        entry.Manifest.GetFramework(),
 		Identity:         r.plan.Builds[entry.App],

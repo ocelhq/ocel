@@ -38,6 +38,7 @@ type ServingQuery struct {
 
 type ServingFacts struct {
 	Routing     *RoutingPlan
+	EdgeRouting *RoutingPlan
 	Guard       *OriginGuard
 	ISR         *ISRPlan
 	Bytecode    *BytecodePlan
@@ -59,7 +60,11 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 	if err != nil {
 		return ServingFacts{}, err
 	}
-	facts.Routing = routing
+	if q.EdgeRunsCode {
+		facts.EdgeRouting = routing
+	} else {
+		facts.Routing = routing
+	}
 	guard, err := guardFor(q)
 	if err != nil {
 		return ServingFacts{}, err
@@ -93,9 +98,6 @@ func crossesMembrane(crosses func(LinkType) bool, grants []Link) bool {
 }
 
 func routingFor(q ServingQuery) (*RoutingPlan, error) {
-	if q.EdgeRunsCode {
-		return nil, nil
-	}
 	desc, present, err := ReadServeDescriptor(q.Root, q.App)
 	if err != nil {
 		return nil, err
@@ -105,15 +107,15 @@ func routingFor(q ServingQuery) (*RoutingPlan, error) {
 	}
 	if desc.Entry == "" {
 		return nil, Refuse(CodeInvalid,
-			"app %s routes at its origin but its build names no entry route; rebuild the app", q.App)
+			"app %s declares edge routing but its build names no entry route; rebuild the app", q.App)
 	}
 	raw, err := os.ReadFile(filepath.Join(AppArtifactRoot(q.Root, q.App), edge.RoutingManifestFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, Refuse(CodeInvalid,
-			"app %s routes at its origin but its build wrote no %s; rebuild the app", q.App, edge.RoutingManifestFile)
+			"app %s declares edge routing but its build wrote no %s; rebuild the app", q.App, edge.RoutingManifestFile)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read the routing manifest %s hosts at its origin: %w", q.App, err)
+		return nil, fmt.Errorf("read the routing manifest %s routes by: %w", q.App, err)
 	}
 	return &RoutingPlan{Entry: desc.Entry, Manifest: raw}, nil
 }
