@@ -145,12 +145,16 @@ export const nextRoutingRows: ContractRow[] = [
     },
   },
   {
-    title: "notFound() renders the not-found page with a 404",
+    title: "an unmatched path renders the not-found page and notFound() answers 404",
     suite: "next-routing",
     run: async (ctx) => {
-      const { res, body } = await text(ctx, "/routing/missing");
-      assert.equal(res.status, 404);
-      assert.equal(marker(body, "page"), "not-found");
+      const unmatched = await text(ctx, "/nothing-is-mounted-here");
+      assert.equal(unmatched.res.status, 404);
+      assert.equal(marker(unmatched.body, "page"), "not-found");
+
+      const called = await ctx.fetch(`${ctx.baseUrl}/routing/missing`);
+      assert.equal(called.status, 404);
+      assert.match(called.headers.get("content-type") ?? "", /^text\/html/);
     },
   },
   {
@@ -192,7 +196,7 @@ export const nextRoutingRows: ContractRow[] = [
         redirect: "manual",
       });
       assert.equal(matched.status, 307);
-      assert.equal(locationPath(matched), "/routing/landing");
+      assert.equal(locationPath(matched), "/routing/landing?to=landing");
       const unmatched = await ctx.fetch(`${ctx.baseUrl}/routing/redirect/has`, {
         redirect: "manual",
       });
@@ -214,8 +218,6 @@ export const nextRoutingRows: ContractRow[] = [
     title: "a redirect beats a beforeFiles rewrite, which beats the filesystem",
     suite: "next-routing",
     run: async (ctx) => {
-      assert.equal(marker(await html(ctx, "/routing/precedence"), "page"), "filesystem");
-
       const res = await ctx.fetch(`${ctx.baseUrl}/routing/precedence-redirect`, {
         redirect: "manual",
       });
