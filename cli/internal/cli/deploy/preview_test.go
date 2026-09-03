@@ -288,7 +288,7 @@ export default {
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a class-mismatch error")
 		}
-		if !strings.Contains(stdout.String(), "ocel preview can only run against preview infrastructure") {
+		if !strings.Contains(stdout.String(), "this command needs preview infrastructure") {
 			t.Errorf("stdout = %q, want the concrete class-mismatch message", stdout.String())
 		}
 		if strings.Contains(stdout.String(), "DEPLOY ") {

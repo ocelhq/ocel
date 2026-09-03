@@ -147,9 +147,16 @@ type CredentialVerifier interface {
 }
 
 type CredentialIdentity struct {
-	Account         string
-	Plan            string
-	CodeEntitlement Entitlement
+	Account string
+}
+
+type EntitlementChecker interface {
+	CodeEntitlement(ctx context.Context) (CodeEntitlement, error)
+}
+
+type CodeEntitlement struct {
+	Plan    string
+	Granted Entitlement
 }
 
 type Entitlement string

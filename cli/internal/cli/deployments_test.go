@@ -87,7 +87,7 @@ func TestRunDeploymentsLs(t *testing.T) {
 		if err == nil {
 			t.Fatal("runPromotionsLs err = nil, want a class-mismatch error")
 		}
-		if !strings.Contains(err.Error(), "ocel deploy can only run against production infrastructure") {
+		if !strings.Contains(err.Error(), "this command needs production infrastructure") {
 			t.Errorf("err = %v, want the concrete class-mismatch message", err)
 		}
 	})
@@ -140,7 +140,7 @@ func TestRunDeploymentsPrune(t *testing.T) {
 			t.Fatal("runPromotionsPrune err = nil, want a class-mismatch failure")
 		}
 		out := stdout.String()
-		if !strings.Contains(out, "ocel deploy can only run against production infrastructure") {
+		if !strings.Contains(out, "this command needs production infrastructure") {
 			t.Errorf("stdout = %q, want the concrete class-mismatch message", out)
 		}
 		if strings.Contains(out, "Reclaimed") {

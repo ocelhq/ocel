@@ -42,20 +42,20 @@ func TestCheckTier_Mismatches(t *testing.T) {
 	}
 }
 
-func TestCheckTier_ErrorNamesTheCommandAndInfra(t *testing.T) {
+func TestCheckTier_ErrorNamesTheInfraAndTheBootstrap(t *testing.T) {
 	err := checkTier(environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW)
 	if err == nil {
 		t.Fatal("expected error")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "ocel preview") {
-		t.Errorf("error should name the command, got %q", msg)
-	}
 	if !strings.Contains(msg, "preview infrastructure") {
 		t.Errorf("error should name preview infrastructure, got %q", msg)
 	}
 	if !strings.Contains(msg, "ocel bootstrap preview") {
 		t.Errorf("error should tell the user how to fix it, got %q", msg)
+	}
+	if strings.Contains(msg, "ocel preview can only") {
+		t.Errorf("error names a command the caller may not have run, got %q", msg)
 	}
 
 	err = checkTier(environmentv1.Tier_TIER_PREVIEW, environmentv1.Tier_TIER_PRODUCTION)
@@ -63,10 +63,13 @@ func TestCheckTier_ErrorNamesTheCommandAndInfra(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	msg = err.Error()
-	if !strings.Contains(msg, "ocel deploy") {
-		t.Errorf("error should name the command, got %q", msg)
-	}
 	if !strings.Contains(msg, "production infrastructure") {
 		t.Errorf("error should name production infrastructure, got %q", msg)
+	}
+	if !strings.Contains(msg, "ocel bootstrap production") {
+		t.Errorf("error should tell the user how to fix it, got %q", msg)
+	}
+	if strings.Contains(msg, "ocel deploy can only") {
+		t.Errorf("error names a command the caller may not have run, got %q", msg)
 	}
 }

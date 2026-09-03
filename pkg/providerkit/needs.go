@@ -131,8 +131,8 @@ func (c NeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (Need
 		return nil, nil
 	}
 	records := NeedRecords{}
-	verifier, verifies := c.Edge.(edge.CredentialVerifier)
-	entitlement := onceVerified(ctx, verifier)
+	checker, entitles := c.Edge.(edge.EntitlementChecker)
+	entitlement := onceChecked(ctx, checker)
 
 	for _, app := range manifest.GetApps() {
 		name := app.GetName()
@@ -143,7 +143,7 @@ func (c NeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (Need
 		if !present {
 			continue
 		}
-		record, err := c.forApp(name, desc, verifies, entitlement)
+		record, err := c.forApp(name, desc, entitles, entitlement)
 		if err != nil {
 			return nil, err
 		}
@@ -155,8 +155,8 @@ func (c NeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (Need
 func (c NeedCheck) forApp(
 	name string,
 	desc edge.ServeDescriptor,
-	verifies bool,
-	entitlement func() (edge.CredentialIdentity, error),
+	entitles bool,
+	entitlement func() (edge.CodeEntitlement, error),
 ) (NeedRecord, error) {
 	var record NeedRecord
 	for _, need := range declaredNeeds(desc) {
@@ -167,17 +167,17 @@ func (c NeedCheck) forApp(
 		waived := slices.Contains(c.AllowDegraded, string(need))
 		serves := edge.Supports(c.Edge, need)
 
-		if serves && verifies && slices.Contains(edge.CodeNeeds(), need) {
-			identity, err := entitlement()
+		if serves && entitles && slices.Contains(edge.CodeNeeds(), need) {
+			granted, err := entitlement()
 			switch {
 			case err != nil:
 				return NeedRecord{}, &EdgeEntitlementError{App: name, Need: need, Edge: c.Edge.Kind(), Err: err}
-			case identity.CodeEntitlement == edge.EntitlementGranted,
-				identity.CodeEntitlement == edge.EntitlementUnknown:
+			case granted.Granted == edge.EntitlementGranted,
+				granted.Granted == edge.EntitlementUnknown:
 			case waived:
 				serves = false
 			default:
-				return NeedRecord{}, &EdgeEntitlementError{App: name, Need: need, Edge: c.Edge.Kind(), Plan: identity.Plan}
+				return NeedRecord{}, &EdgeEntitlementError{App: name, Need: need, Edge: c.Edge.Kind(), Plan: granted.Plan}
 			}
 		}
 
@@ -217,16 +217,16 @@ func declaredNeeds(desc edge.ServeDescriptor) []edge.Need {
 	return ordered
 }
 
-func onceVerified(ctx context.Context, verifier edge.CredentialVerifier) func() (edge.CredentialIdentity, error) {
-	var identity edge.CredentialIdentity
+func onceChecked(ctx context.Context, checker edge.EntitlementChecker) func() (edge.CodeEntitlement, error) {
+	var entitlement edge.CodeEntitlement
 	var err error
 	asked := false
-	return func() (edge.CredentialIdentity, error) {
+	return func() (edge.CodeEntitlement, error) {
 		if !asked {
 			asked = true
-			identity, err = verifier.VerifyCredentials(ctx)
+			entitlement, err = checker.CodeEntitlement(ctx)
 		}
-		return identity, err
+		return entitlement, err
 	}
 }
 
