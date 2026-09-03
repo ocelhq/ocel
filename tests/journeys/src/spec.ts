@@ -1,3 +1,5 @@
+import type { ContractContext } from "./contract";
+import { ladderRows } from "./targets/aws/ladder";
 import { pulumiHooks } from "./targets/aws/ladder-pulumi";
 import { sstHooks } from "./targets/aws/ladder-sst";
 import type { CellContext } from "./targets/types";
@@ -19,10 +21,23 @@ export type TargetName = "dev" | "aws" | "vps";
 
 export type Leg = "up" | "contract" | "redeploy" | "rollback" | "destroy";
 
+export type LadderPhase = "publish" | "consume" | "outlive" | "prune";
+
+export type LadderRow = {
+  title: string;
+  phase: LadderPhase;
+  run: (cell: CellContext, live?: ContractContext) => Promise<void>;
+};
+
+export function ladderTitle(phase: LadderPhase, title: string): string {
+  return `${phase} · ${title}`;
+}
+
 export type LadderHooks = {
   refuse?: (cell: CellContext) => Promise<void>;
   beforeUp?: (cell: CellContext) => Promise<void>;
   afterDestroy?: (cell: CellContext) => Promise<void>;
+  rows?: LadderRow[];
 };
 
 export type ExampleSpec = {
@@ -109,7 +124,7 @@ export const spec: ExampleSpec[] = [
     suites: ["health", "static", "links"],
     apps: ["web"],
     targets: ["aws"],
-    hooks: sstHooks,
+    hooks: { ...sstHooks, rows: ladderRows },
   },
   {
     name: "with-pulumi",
@@ -119,7 +134,7 @@ export const spec: ExampleSpec[] = [
     suites: ["health", "static", "links"],
     apps: ["web"],
     targets: ["aws"],
-    hooks: pulumiHooks,
+    hooks: { ...pulumiHooks, rows: ladderRows },
   },
 ];
 
