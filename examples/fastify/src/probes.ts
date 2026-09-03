@@ -6,7 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { env } from "../ocel/vars";
 
 const MAX_SLEEP_MS = 30_000;
-const MAX_BODY = 8 * 1024 * 1024;
+export const MAX_BODY = 8 * 1024 * 1024;
 const STREAM_CHUNKS = 5;
 const STREAM_INTERVAL_MS = 200;
 const STREAM_END = "ocel-stream-end";
