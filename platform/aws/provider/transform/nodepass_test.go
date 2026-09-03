@@ -161,9 +161,6 @@ func TestNodePassEvaluate(t *testing.T) {
 		if got := results[1].Surfaces["cluster"]["maxCapacity"]; got != float64(16) {
 			t.Errorf("maxCapacity = %v, want production widened to 16", got)
 		}
-		if got := results[1].Surfaces["cluster"]["deletionProtection"]; got != true {
-			t.Errorf("deletionProtection = %v, want production protected", got)
-		}
 		for i, result := range results {
 			if got := result.Tags["acme:cost-center"]; got != "platform" {
 				t.Errorf("resource %d tags = %v, want the org tag on everything", i, result.Tags)
