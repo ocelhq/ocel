@@ -1,0 +1,24 @@
+import type { TargetName } from "../spec";
+import { devTarget } from "./dev";
+import type { Target } from "./types";
+
+export type { CellContext, Deployment, Target } from "./types";
+
+const targets: Partial<Record<TargetName, Target>> = { dev: devTarget };
+
+export function targetNamed(name: string): Target {
+  const target = targets[name as TargetName];
+  if (!target) {
+    const known = Object.keys(targets).join(", ");
+    throw new Error(`no journey target named ${name} (${known})`);
+  }
+  return target;
+}
+
+export function selectedTarget(): Target {
+  const name = process.env.OCEL_TARGET;
+  if (!name) {
+    throw new Error("set OCEL_TARGET to the target this process drives");
+  }
+  return targetNamed(name);
+}
