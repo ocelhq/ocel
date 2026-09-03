@@ -24,6 +24,26 @@ func masterUserSecret(args pulumi.MockResourceArgs) resource.PropertyMap {
 	}
 }
 
+func TestPostgresRefusesAClusterWithNoManagedSecret(t *testing.T) {
+	noSecret := func(args pulumi.MockResourceArgs) resource.PropertyMap {
+		if args.TypeToken != "aws:rds/cluster:Cluster" {
+			return nil
+		}
+		return resource.PropertyMap{"masterUserSecrets": resource.NewArrayProperty(nil)}
+	}
+
+	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
+		return registerPostgres(ctx, "shop", "prod", "db--main", translatePostgres(&providerkit.PostgresSpec{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
+	}, pulumi.WithMocks("shop", "prod--infra", &tagRecorder{outputs: noSecret}))
+
+	if err == nil {
+		t.Fatal("registerPostgres() accepted a cluster with no managed master user secret; reading the first of none panics the provider process")
+	}
+	if !strings.Contains(err.Error(), "managed master user secret") {
+		t.Errorf("registerPostgres() error = %v, want it to name the missing secret", err)
+	}
+}
+
 func TestPostgresComponentTags(t *testing.T) {
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
 		err := registerPostgres(ctx, "shop", "prod", "db--main", translatePostgres(&providerkit.PostgresSpec{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
