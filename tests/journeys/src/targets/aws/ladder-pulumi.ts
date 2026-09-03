@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { copyTree, workTree } from "../../ocel";
 import { exampleDir, outputRoot, treeDir } from "../../paths";
@@ -27,7 +27,9 @@ async function pulumiEnv(runId: string): Promise<NodeJS.ProcessEnv> {
     PULUMI_CONFIG_PASSPHRASE: "journey",
   };
   if (where.world === "floci") {
-    env.PULUMI_BACKEND_URL = `file://${path.join(outputRoot, runId, "aws", "pulumi-state")}`;
+    const state = path.join(outputRoot, runId, "aws", "pulumi-state");
+    await mkdir(state, { recursive: true });
+    env.PULUMI_BACKEND_URL = `file://${state}`;
   }
   return env;
 }
@@ -35,6 +37,12 @@ async function pulumiEnv(runId: string): Promise<NodeJS.ProcessEnv> {
 async function pulumi(dir: string, args: string[], env: NodeJS.ProcessEnv): Promise<string> {
   const result = await spawnBin("pulumi", args, dir, env);
   return result.stdout;
+}
+
+async function stackExists(dir: string, stack: string, env: NodeJS.ProcessEnv): Promise<boolean> {
+  const raw = await pulumi(dir, ["stack", "ls", "--json"], env);
+  const stacks = JSON.parse(raw) as Array<{ name?: string }>;
+  return stacks.some((row) => row.name === stack);
 }
 
 async function configureStack(dir: string, stack: string, env: NodeJS.ProcessEnv): Promise<void> {
@@ -94,6 +102,9 @@ export async function pulumiSweep(runId: string): Promise<void> {
   try {
     const stack = `j-${runId}`;
     const env = await pulumiEnv(runId);
+    if (!(await stackExists(dir, stack, env))) {
+      return;
+    }
     await pulumi(dir, ["stack", "select", stack], env);
     await pulumi(dir, ["destroy", "--yes"], env);
     await pulumi(dir, ["stack", "rm", "--yes"], env);
