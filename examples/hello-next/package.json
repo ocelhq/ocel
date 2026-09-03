@@ -1,0 +1,26 @@
+{
+  "name": "@ocel-examples/hello-next",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "next dev",
+    "build": "next build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ocel/provider-aws": "workspace:^",
+    "@ocel/provider-vps": "workspace:^",
+    "next": "16.2.10",
+    "ocel": "workspace:^",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}
