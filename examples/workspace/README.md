@@ -13,8 +13,8 @@ the three hostnames belongs to it.
 
 ```bash
 pnpm install
-ocel run -- pnpm --dir ../express migrate
-APP_NAME=next ocel dev -- pnpm --dir ../next dev
+ocel run -- pnpm --dir ../next migrate
+APP_NAME=next ocel dev -- pnpm --dir ../next start
 APP_NAME=express ocel dev -- pnpm --dir ../express start
 APP_NAME=hono ocel dev -- pnpm --dir ../hono start
 ```
