@@ -93,7 +93,6 @@ func TestLocate(t *testing.T) {
 		suffix := hostPlatformSuffix(t)
 
 		projectDir := t.TempDir()
-		writeFakeProvider(t, projectDir, "@ocel/provider-aws")
 		platformPkg := "@ocel/provider-aws-" + suffix
 		want := writeFakeBinary(t, projectDir, platformPkg, "deploy")
 
@@ -163,28 +162,12 @@ func TestLocate(t *testing.T) {
 		}
 	})
 
-	t.Run("errors when the provider package is not installed", func(t *testing.T) {
-		t.Parallel()
-		requireNode(t)
-
-		_, err := Locate(context.Background(), t.TempDir(), "@ocel/provider-aws")
-		if err == nil {
-			t.Fatal("Locate() err = nil, want an error")
-		}
-		if !strings.Contains(err.Error(), "@ocel/provider-aws") {
-			t.Fatalf("error %q does not name the missing provider package", err.Error())
-		}
-	})
-
 	t.Run("errors when the platform package is not installed", func(t *testing.T) {
 		t.Parallel()
 		requireNode(t)
 		suffix := hostPlatformSuffix(t)
 
-		projectDir := t.TempDir()
-		writeFakeProvider(t, projectDir, "@ocel/provider-aws")
-
-		_, err := Locate(context.Background(), projectDir, "@ocel/provider-aws")
+		_, err := Locate(context.Background(), t.TempDir(), "@ocel/provider-aws")
 		if err == nil {
 			t.Fatal("Locate() err = nil, want an error")
 		}
@@ -204,7 +187,6 @@ func TestLocate(t *testing.T) {
 		repoRoot := repoRootDir(t)
 
 		projectDir := t.TempDir()
-		writeFakeProvider(t, projectDir, "@ocel/provider-aws")
 		binDir := filepath.Join(projectDir, "node_modules", "@ocel/provider-aws-"+suffix, "bin")
 		if err := os.MkdirAll(binDir, 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", binDir, err)

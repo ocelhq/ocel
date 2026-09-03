@@ -37,26 +37,21 @@ switch (platform) {
 const platformPackage = `${packageName}-${platformSuffix}`;
 const binary = platform === "win32" ? `${binaryName}.exe` : binaryName;
 
-const installHint = `Run \`npm install ${packageName}\` (or add it as a dependency via your package manager).`;
-
 const providerDir = (require.resolve.paths(packageName) || [])
   .map((dir) => join(dir, packageName, "package.json"))
   .filter(existsSync)
   .map((manifest) => realpathSync(dirname(manifest)))[0];
 
-if (!providerDir) {
-  console.error(`Failed to locate ${packageName} from ${process.cwd()}. ${installHint}`);
-  process.exit(1);
-}
+const searchFrom = providerDir ? [providerDir, process.cwd()] : [process.cwd()];
 
 try {
   const binaryPath = require.resolve(join(platformPackage, "bin", binary), {
-    paths: [providerDir],
+    paths: searchFrom,
   });
   process.stdout.write(binaryPath);
 } catch (e) {
   console.error(
-    `Failed to locate binary for ${platformPackage} from ${providerDir}. Is ${packageName} installed with its platform package? ${installHint}`,
+    `Failed to locate binary for ${platformPackage} from ${searchFrom.join(", ")}. Is ${packageName} installed? Run \`npm install ${packageName}\` (or add it as a dependency via your package manager).`,
   );
   process.exit(1);
 }
