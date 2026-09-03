@@ -12,7 +12,6 @@ packages:
   - packages/native-lib/*
   - scripts/*
   - examples/*
-  - "!examples/express-container"
   - tests/*
 
 allowBuilds:

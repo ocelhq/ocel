@@ -1,6 +1,6 @@
 # Next.js deploy-adapter e2e coverage report
 
-**Reads a completed `test-e2e-deploy` run on GitHub** and turns it into a
+**Reads a completed `next-compat` run on GitHub** and turns it into a
 coverage report: overall pass rate, suites ranked by failures, failures clustered
 by root cause, and a fix order that avoids debugging the same defect twice.
 

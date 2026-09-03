@@ -1,4 +1,4 @@
-name: AWS Live
+name: Provider AWS
 
 on:
   pull_request:
@@ -12,11 +12,11 @@ on:
       - "pnpm-lock.yaml"
       - "scripts/floci.sh"
       - "scripts/assert-ran.sh"
-      - ".github/workflows/aws-live.yml"
+      - ".github/workflows/provider-aws.yml"
   workflow_dispatch:
 
 concurrency:
-  group: aws-live-${{ github.event.pull_request.number || github.ref }}
+  group: provider-aws-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -83,17 +83,17 @@ jobs:
           pnpm --filter ocel build
           go generate -C cli ./...
 
-      - name: Run the CLI e2e on an emulator of its own
+      - name: Run the lifecycle suite on an emulator of its own
         run: |
           set -euo pipefail
-          scripts/floci.sh run "ocel-aws-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -C platform/aws/provider -race -count=1 -timeout 30m -run '^TestE2E' -json ./... | tee e2e.json
+          scripts/floci.sh run "ocel-aws-lifecycle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -C platform/aws/provider -race -count=1 -timeout 30m -run '^TestLifecycle' -json ./... | tee lifecycle.json
 
-      - name: Assert the e2e ran
-        run: scripts/assert-ran.sh e2e.json TestE2E
+      - name: Assert the lifecycle suite ran
+        run: scripts/assert-ran.sh lifecycle.json TestLifecycle
 
       - name: No emulator left behind
         if: always()
         run: |
-          for name in "ocel-aws-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "ocel-aws-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; do
+          for name in "ocel-aws-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "ocel-aws-lifecycle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; do
             scripts/floci.sh destroy "$name" || echo "could not destroy $name"
           done

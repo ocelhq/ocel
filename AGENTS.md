@@ -78,9 +78,9 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
   the repo — never a vendor SDK, the CLI, the SDK or the console.
 - **`proto/`** — source of truth for the wire format. Bindings are **generated** — never
   hand-edit generated output.
-- **`scripts/`** — development and release tooling, and the e2e harnesses.
-- **`examples/`, `tests/`** — sample apps used as fixtures, and the dev-server suites
-  that drive them. Suites that deploy live in `scripts/`, never here.
+- **`scripts/`** — development and release tooling, and the emulator and ladder scripts.
+- **`examples/`, `tests/`** — sample apps used as fixtures, and the suites that drive
+  them through the real binary: the dev-server suite and the Next compatibility harness.
 - **`docs/agents/`** — configuration the agent skills read. Not product documentation;
   nothing that explains the code belongs here.
 - **`.github/`** — CI. **`.changeset/`** — the release mechanism; the workflow runs the

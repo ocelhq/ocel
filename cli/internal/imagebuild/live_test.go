@@ -105,9 +105,9 @@ func TestLiveADockerfileBuildLandsTheSameCoordinateAsARailpackOne(t *testing.T) 
 	}
 }
 
-const journeyFixture = "../../../examples/express-container"
+const journeyFixture = "testdata/express"
 
-func TestLiveTheExpressFixtureTheBoxJourneyDeploysBuildsAndServesItsVersion(t *testing.T) {
+func TestLiveTheExpressFixtureBuildsAndServesItsVersion(t *testing.T) {
 	vm := livemachine.Require(t)
 	vm.Engine(t)
 	vm.Forward(t)
@@ -115,7 +115,7 @@ func TestLiveTheExpressFixtureTheBoxJourneyDeploysBuildsAndServesItsVersion(t *t
 	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(),
 		imagebuild.App{Name: "web", Dir: journeyFixture})
 	if err != nil {
-		t.Fatalf("Build() of the express fixture a box journey deploys = %v", err)
+		t.Fatalf("Build() of the express fixture = %v", err)
 	}
 
 	want := declaredVersion(t)

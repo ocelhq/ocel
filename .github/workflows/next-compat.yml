@@ -1,4 +1,4 @@
-name: test-e2e-deploy
+name: next-compat
 
 on:
   workflow_dispatch:
@@ -13,12 +13,12 @@ on:
         type: boolean
 
 concurrency:
-  group: test-e2e-deploy
+  group: real-aws
   cancel-in-progress: false
 
 env:
   BASELINE_MANIFEST: test/ocel-deploy-tests-manifest.json
-  ADAPTER_BASELINE: scripts/e2e-next/baseline-manifest.json
+  ADAPTER_BASELINE: tests/next-compat/baseline-manifest.json
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
   # FIXME: must match pinnedPulumiVersion in platform/aws/provider/pulumiruntime/runtime.go —
@@ -54,7 +54,7 @@ jobs:
           path: nextjs
           fetch-depth: 25
 
-      - uses: ./adapter/.github/actions/e2e-session
+      - uses: ./adapter/.github/actions/real-aws-session
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -153,7 +153,7 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
-      - uses: ./adapter/.github/actions/e2e-session
+      - uses: ./adapter/.github/actions/real-aws-session
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -164,12 +164,12 @@ jobs:
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Reclaim every e2e project that is not this run's
-        run: node adapter/scripts/e2e-next/sweep-projects.mjs
+        run: node adapter/tests/next-compat/sweep-projects.mjs
 
       - name: Reconcile the shared preview entry worker
         env:
           OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_PREVIEW_DOMAIN }}
-        run: node adapter/scripts/e2e-next/reconcile-entry.mjs
+        run: node adapter/tests/next-compat/reconcile-entry.mjs
 
   smoke:
     name: Smoke (one app through deploy/logs, kept as the run's canary)
@@ -198,7 +198,7 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
-      - uses: ./adapter/.github/actions/e2e-session
+      - uses: ./adapter/.github/actions/real-aws-session
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -219,7 +219,7 @@ jobs:
       - name: Stage the smoke app
         run: |
           set -euo pipefail
-          node adapter/scripts/e2e-next/stage-smoke-app.mjs nextjs adapter/scripts/e2e-next/smoke-app "$RUNNER_TEMP/smoke-app-dir"
+          node adapter/tests/next-compat/stage-smoke-app.mjs nextjs adapter/tests/next-compat/smoke-app "$RUNNER_TEMP/smoke-app-dir"
           app=$(cat "$RUNNER_TEMP/smoke-app-dir")
           echo "SMOKE_APP=$app" >> "$GITHUB_ENV"
           echo "staged in $app"
@@ -230,7 +230,7 @@ jobs:
           NEXT_TEST_DIR: ${{ env.SMOKE_APP }}
         run: |
           set -euo pipefail
-          url=$(node "$ADAPTER_DIR/scripts/e2e-next/deploy.mjs")
+          url=$(node "$ADAPTER_DIR/tests/next-compat/deploy.mjs")
           echo "SMOKE_URL=$url" >> "$GITHUB_ENV"
           echo "deployed to $url"
 
@@ -251,7 +251,7 @@ jobs:
       - name: Assert the ISR route's cache entry is rewritten
         env:
           NEXT_TEST_DEPLOY_URL: ${{ env.SMOKE_URL }}
-        run: node "$ADAPTER_DIR/scripts/e2e-next/assert-isr.mjs"
+        run: node "$ADAPTER_DIR/tests/next-compat/assert-isr.mjs"
 
       # A 200 from / cannot see whether node middleware ever ran at all — the
       # top-level-await bug this guards against 502'd every matched request,
@@ -259,7 +259,7 @@ jobs:
       - name: Assert node middleware (proxy.ts) actually runs
         env:
           NEXT_TEST_DEPLOY_URL: ${{ env.SMOKE_URL }}
-        run: node "$ADAPTER_DIR/scripts/e2e-next/assert-proxy.mjs"
+        run: node "$ADAPTER_DIR/tests/next-compat/assert-proxy.mjs"
 
       - name: Assert the logs script emits all three markers
         working-directory: ${{ env.SMOKE_APP }}
@@ -268,7 +268,7 @@ jobs:
           NEXT_TEST_DEPLOY_URL: ${{ env.SMOKE_URL }}
         run: |
           set -euo pipefail
-          node "$ADAPTER_DIR/scripts/e2e-next/logs.mjs" > logs.txt
+          node "$ADAPTER_DIR/tests/next-compat/logs.mjs" > logs.txt
           for marker in BUILD_ID DEPLOYMENT_ID IMMUTABLE_ASSET_TOKEN; do
             line=$(grep -m1 "^$marker: " logs.txt || true)
             if [ -z "$line" ]; then
@@ -343,7 +343,7 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
-      - uses: ./adapter/.github/actions/e2e-session
+      - uses: ./adapter/.github/actions/real-aws-session
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -371,7 +371,7 @@ jobs:
         run: cp "adapter/$ADAPTER_BASELINE" "nextjs/$BASELINE_MANIFEST"
 
       - name: Assert the manifest chain puts the same suites in scope the baseline assumes
-        run: node adapter/scripts/e2e-next/assert-filter-scope.mjs nextjs "$TESTS_FILTERS"
+        run: node adapter/tests/next-compat/assert-filter-scope.mjs nextjs "$TESTS_FILTERS"
 
       - name: Run deploy tests
         working-directory: nextjs
@@ -387,9 +387,9 @@ jobs:
           NEXT_TEST_EMIT_ALL_OUTPUT: ${{ inputs.recordBaseline && '1' || '' }}
 
           ADAPTER_DIR: ${{ github.workspace }}/adapter
-          NEXT_TEST_DEPLOY_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-next/deploy.mjs
-          NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-next/logs.mjs
-          NEXT_TEST_CLEANUP_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-next/cleanup.mjs
+          NEXT_TEST_DEPLOY_SCRIPT_PATH: ${{ github.workspace }}/adapter/tests/next-compat/deploy.mjs
+          NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH: ${{ github.workspace }}/adapter/tests/next-compat/logs.mjs
+          NEXT_TEST_CLEANUP_SCRIPT_PATH: ${{ github.workspace }}/adapter/tests/next-compat/cleanup.mjs
 
           OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
           OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
@@ -404,7 +404,7 @@ jobs:
         run: |
           set -euo pipefail
           group="$(echo '${{ matrix.group }}' | tr '/' '-')"
-          node adapter/scripts/e2e-next/merge-baseline.mjs collect \
+          node adapter/tests/next-compat/merge-baseline.mjs collect \
             nextjs "$RUNNER_TEMP/deploy-tests.log" "baseline-$group.json"
           echo "BASELINE_FRAGMENT=baseline-$group.json" >> "$GITHUB_ENV"
 
@@ -456,7 +456,7 @@ jobs:
       - name: Ask the provider what this tier may do
         run: |
           set -euo pipefail
-          node adapter/scripts/e2e-next/credential-tier.mjs \
+          node adapter/tests/next-compat/credential-tier.mjs \
             policy-parts ${{ matrix.tier }} "$RUNNER_TEMP/tier-policy" \
             > "$RUNNER_TEMP/tier-policy-parts"
 
@@ -497,7 +497,7 @@ jobs:
             exit 1
           fi
 
-      - uses: ./adapter/.github/actions/e2e-session
+      - uses: ./adapter/.github/actions/real-aws-session
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -518,7 +518,7 @@ jobs:
           "$root/bin/pulumi" version
 
       - name: Run what this tier's credentials must cover
-        run: node adapter/scripts/e2e-next/credential-tier.mjs run ${{ matrix.tier }}
+        run: node adapter/tests/next-compat/credential-tier.mjs run ${{ matrix.tier }}
 
       - name: Assume a session that can take the policies back down
         if: ${{ always() }}
@@ -575,7 +575,7 @@ jobs:
           key: build-${{ github.sha }}-${{ github.run_id }}
           fail-on-cache-miss: true
 
-      - uses: ./adapter/.github/actions/e2e-session
+      - uses: ./adapter/.github/actions/real-aws-session
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -586,7 +586,7 @@ jobs:
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Destroy the project this run deployed into
-        run: node adapter/scripts/e2e-next/project-teardown.mjs
+        run: node adapter/tests/next-compat/project-teardown.mjs
 
   baseline:
     name: Merge the recorded baseline
@@ -612,7 +612,7 @@ jobs:
       - name: Merge every group's fragment
         run: |
           set -euo pipefail
-          node adapter/scripts/e2e-next/merge-baseline.mjs merge baseline-manifest.json fragments/*.json
+          node adapter/tests/next-compat/merge-baseline.mjs merge baseline-manifest.json fragments/*.json
 
       - name: Upload the merged baseline for review
         uses: actions/upload-artifact@v4

@@ -11,7 +11,7 @@ export function linkSidecar(dir, sidecarDir) {
         `sidecar has no ${name} package at ${target}. A sidecar packed before ` +
           `@ocel/sdk folded into the root ocel package carries only @ocel/*; ` +
           `repack it from the ocel and @ocel/provider-aws* tarballs — see ` +
-          `"Repacking the sidecar" in scripts/e2e-next/README.md.`,
+          `"Repacking the sidecar" in tests/next-compat/README.md.`,
       );
     }
     const link = join(modules, name);

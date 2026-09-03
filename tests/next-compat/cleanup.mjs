@@ -43,7 +43,7 @@ if (res.error || res.signal || res.status !== 0) {
       `[ocel-e2e] its Lambdas and stacks are still live; remove them by running ` +
       `\`ocel preview rm --ref ${ref} --yes\` from a directory whose ocel.config.ts ` +
       `declares slug: "${slug}", or take the whole project with ` +
-      `\`node scripts/e2e-next/project-teardown.mjs ${slug}\``,
+      `\`node tests/next-compat/project-teardown.mjs ${slug}\``,
   );
   process.exit(1);
 }
