@@ -17,7 +17,7 @@ import (
 
 const (
 	liveRegistryImage = "registry:2.8.3"
-	liveHtpasswdImage = "httpd:2.4-alpine"
+	liveHtpasswdImage = "public.ecr.aws/docker/library/httpd:2.4-alpine"
 	liveRegistryLogin = "ocel-live"
 	pullRepository    = "live-pull"
 	pullNamespace     = "live"
