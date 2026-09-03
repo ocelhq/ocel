@@ -19,7 +19,7 @@ export type Store = {
   stands(slug: string): Promise<boolean>;
 };
 
-function cliAt(endpoint: string | undefined): Cli {
+export function cliAt(endpoint: string | undefined): Cli {
   return async (args) => {
     const { stdout } = await run(
       "aws",
@@ -34,7 +34,7 @@ function cliAt(endpoint: string | undefined): Cli {
   };
 }
 
-function said(error: unknown): string {
+export function said(error: unknown): string {
   const stderr = (error as { stderr?: unknown })?.stderr;
   return `${typeof stderr === "string" ? stderr : ""}\n${String(error)}`;
 }
@@ -49,36 +49,36 @@ function slugOf(sk: string): string {
 
 type Page = { Items?: Array<{ sk?: { S?: string } }>; NextToken?: string };
 
-export function awsStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Store {
-  async function varsTable(): Promise<string | undefined> {
-    let name: string;
-    try {
-      name = await cli([
-        "cloudformation",
-        "describe-stacks",
-        "--stack-name",
-        BOOTSTRAP_STACK,
-        "--query",
-        "Stacks[0].Outputs[?OutputKey=='VarsTableName']|[0].OutputValue",
-        "--output",
-        "text",
-      ]);
-    } catch (error) {
-      if (noSuchStack(error)) {
-        return undefined;
-      }
-      throw new Error(
-        `the ${BOOTSTRAP_STACK} stack could not be read, so nothing can be said about which projects stand:${said(error)}`,
-      );
+export async function varsTable(cli: Cli): Promise<string | undefined> {
+  let name: string;
+  try {
+    name = await cli([
+      "cloudformation",
+      "describe-stacks",
+      "--stack-name",
+      BOOTSTRAP_STACK,
+      "--query",
+      "Stacks[0].Outputs[?OutputKey=='VarsTableName']|[0].OutputValue",
+      "--output",
+      "text",
+    ]);
+  } catch (error) {
+    if (noSuchStack(error)) {
+      return undefined;
     }
-    if (name === "" || name === "None") {
-      throw new Error(
-        `the ${BOOTSTRAP_STACK} stack stands but publishes no VarsTableName output, so nothing can be said about which projects stand`,
-      );
-    }
-    return name;
+    throw new Error(
+      `the ${BOOTSTRAP_STACK} stack could not be read, so nothing can be said about which projects stand:${said(error)}`,
+    );
   }
+  if (name === "" || name === "None") {
+    throw new Error(
+      `the ${BOOTSTRAP_STACK} stack stands but publishes no VarsTableName output, so nothing can be said about which projects stand`,
+    );
+  }
+  return name;
+}
 
+export function awsStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Store {
   async function query(table: string, partition: string, slug?: string): Promise<string[]> {
     const found: string[] = [];
     let start: string | undefined;
@@ -119,7 +119,7 @@ export function awsStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Store {
     },
 
     async deployedSlugs() {
-      const table = await varsTable();
+      const table = await varsTable(cli);
       if (!table) {
         return [];
       }
@@ -133,7 +133,7 @@ export function awsStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Store {
     },
 
     async stands(slug) {
-      const table = await varsTable();
+      const table = await varsTable(cli);
       if (!table) {
         return false;
       }
