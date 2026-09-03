@@ -51,6 +51,16 @@ func shellQuoted(arg string) string {
 
 func (vm machine) hashed(t *testing.T, password string) string {
 	t.Helper()
+	var pulled error
+	for attempt := range 3 {
+		if _, pulled = vm.attempt(vm.user, "sudo docker pull -q "+liveHtpasswdImage); pulled == nil {
+			break
+		}
+		time.Sleep(time.Duration(attempt+1) * 2 * time.Second)
+	}
+	if pulled != nil {
+		t.Fatalf("pull %s onto the machine, three tries: %v", liveHtpasswdImage, pulled)
+	}
 	rendered, err := vm.feeding(vm.user, password+"\n",
 		"sudo docker run --rm -i --entrypoint htpasswd "+liveHtpasswdImage+" -niB "+liveRegistryLogin)
 	if err != nil {
