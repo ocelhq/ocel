@@ -1,0 +1,23 @@
+{
+  "name": "expr",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "express": "~5.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "~5.0.0",
+    "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}
