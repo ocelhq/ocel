@@ -1,20 +1,21 @@
-import { DESTROY_TITLE, planTests, REDEPLOY_TITLE, REFUSE_TITLE, ROLLBACK_TITLE, UP_TITLE } from "../plan";
-import { type Leg, specForTarget } from "../spec";
+import { EDGE_ISR_TITLE } from "../nextCache";
+import { cellKey, planTests, REDEPLOY_TITLE, ROLLBACK_TITLE, UP_TITLE } from "../plan";
+import { specForTarget } from "../spec";
+import { CONTRACT_LEGS } from "./keys";
 import type { Expectations } from "./types";
 
 const NO_MASTER_SECRET = "https://github.com/ocelhq/ocel/issues/884";
 const STAGE_VARIABLES = "https://github.com/ocelhq/ocel/issues/854";
 const NO_STREAMED_BODY = "https://github.com/ocelhq/ocel/issues/851";
+const EDGE_RUNTIME_ISR = "https://github.com/ocelhq/ocel/issues/899";
 const CLOUDFRONT_STUB = "https://github.com/ocelhq/ocel/issues/852";
-const NO_CLOUDFLARE_API = "https://github.com/ocelhq/ocel/issues/860";
+const NO_CLOUDFLARE_API = "https://github.com/ocelhq/ocel/issues/904";
 const SST_UTIL = "https://github.com/ocelhq/ocel/issues/857";
 const PULUMI_SERIALIZATION = "https://github.com/ocelhq/ocel/issues/856";
 
-const LEGS: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"];
-
-const LEG_TITLES = new Set([UP_TITLE, REDEPLOY_TITLE, ROLLBACK_TITLE, DESTROY_TITLE]);
-
 const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
+
+const LEG_MARKERS = new Set([REDEPLOY_TITLE, ROLLBACK_TITLE]);
 
 export const EDGE_ENV = "OCEL_AWS_EDGE";
 
@@ -30,31 +31,45 @@ function ladderIssueFor(cell: string): string | undefined {
   return example ? LADDER_ISSUES[example] : undefined;
 }
 
-function listing(issueFor: (title: string) => string): Expectations {
+function upOnly(issue: string): Expectations {
   const listed: Expectations = {};
-  for (const test of planTests(specForTarget("aws"), LEGS)) {
-    const issue = ladderIssueFor(test.cell);
-    if (issue) {
-      if (test.title !== REFUSE_TITLE) {
-        (listed[test.cell] ??= {})[test.title] = issue;
-      }
+  for (const example of specForTarget("aws")) {
+    for (const app of example.apps) {
+      const cell = cellKey(example.name, app);
+      listed[cell] = { [UP_TITLE]: ladderIssueFor(cell) ?? issue };
+    }
+  }
+  return listed;
+}
+
+function contractIssueFor(title: string): string {
+  if (title.endsWith(STREAM_ROW)) {
+    return NO_STREAMED_BODY;
+  }
+  if (title.endsWith(EDGE_ISR_TITLE)) {
+    return EDGE_RUNTIME_ISR;
+  }
+  return STAGE_VARIABLES;
+}
+
+function apiGateway(): Expectations {
+  const listed = upOnly(NO_MASTER_SECRET);
+  for (const test of planTests(specForTarget("aws"), CONTRACT_LEGS)) {
+    if (ladderIssueFor(test.cell) || LEG_MARKERS.has(test.title)) {
       continue;
     }
-    (listed[test.cell] ??= {})[test.title] = issueFor(test.title);
+    const cell = listed[test.cell];
+    if (cell) {
+      cell[test.title] = contractIssueFor(test.title);
+    }
   }
   return listed;
 }
 
 const byEdge: Record<string, () => Expectations> = {
-  "api-gateway": () =>
-    listing((title) => {
-      if (LEG_TITLES.has(title)) {
-        return NO_MASTER_SECRET;
-      }
-      return title.endsWith(STREAM_ROW) ? NO_STREAMED_BODY : STAGE_VARIABLES;
-    }),
-  cloudfront: () => listing(() => CLOUDFRONT_STUB),
-  cloudflare: () => listing(() => NO_CLOUDFLARE_API),
+  "api-gateway": apiGateway,
+  cloudfront: () => upOnly(CLOUDFRONT_STUB),
+  cloudflare: () => upOnly(NO_CLOUDFLARE_API),
 };
 
 export function awsFloci(edge: string | undefined): Expectations {
