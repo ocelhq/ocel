@@ -37,7 +37,7 @@ const nextConfig: NextConfig = {
         missing: [{ type: "header", key: "x-ocel-stay" }],
       },
       {
-        source: "/routing/precedence-redirect",
+        source: "/routing/precedence/redirected",
         destination: "/routing/landing",
         permanent: false,
       },
@@ -48,7 +48,7 @@ const nextConfig: NextConfig = {
     return {
       beforeFiles: [
         { source: "/routing/rewrite/before", destination: "/routing/target/before" },
-        { source: "/routing/precedence-redirect", destination: "/routing/target/before" },
+        { source: "/routing/precedence/:slug", destination: "/routing/target/precedence" },
       ],
       afterFiles: [
         { source: "/routing/rewrite/after", destination: "/routing/target/after" },
