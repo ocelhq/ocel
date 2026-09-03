@@ -48,22 +48,10 @@ jobs:
           region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.10.0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+      - uses: ./.github/actions/node-workspace
 
       - name: The function payloads the provider embeds
-        run: |
-          set -euo pipefail
-          pnpm install --frozen-lockfile
-          go generate -C platform/aws/provider ./...
+        run: go generate -C platform/aws/provider ./...
 
       - name: Pull the emulator both suites run against
         run: docker pull floci/floci:latest
@@ -79,7 +67,7 @@ jobs:
       - name: The node bundle the CLI binary is built around
         run: |
           set -euo pipefail
-          pnpm --filter ocel build
+          pnpm turbo run build --filter=ocel
           go generate -C cli ./...
 
       - name: Run the lifecycle suite on an emulator of its own

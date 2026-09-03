@@ -100,10 +100,9 @@ build_lambda() {
 rm -rf "$dist"
 mkdir -p "$dist"
 
-rm -rf "$root/platform/aws/membrane/dist"
 (
   cd "$root"
-  pnpm --filter @platform/aws-membrane build
+  pnpm exec turbo run build zip --filter=@platform/aws-membrane --filter='./platform/aws/functions/*'
 )
 mkdir -p "$stage/layer/ocel"
 build_lambda ./cmd/membrane/bootstrap "$stage/layer/ocel/bootstrap"
@@ -115,10 +114,6 @@ build_lambda ./cmd/uploadcompleter "$stage/upload-completer/bootstrap"
 pack "$stage/upload-completer" "$dist/upload-completer.zip"
 
 for fn in $functions; do
-  (
-    cd "$root"
-    pnpm --filter "@platform/aws-$fn" zip
-  )
   cp "$root/platform/aws/functions/$fn/dist/$fn.zip" "$dist/$fn.zip"
 done
 

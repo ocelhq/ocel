@@ -1,9 +1,7 @@
-export function esbuildArgs(entry, outfile) {
+export function bunArgs(entry, outfile) {
   return [
     entry,
-    "--bundle",
-    "--platform=node",
-    "--target=node22",
+    "--target=node",
     "--format=esm",
     `--outfile=${outfile}`,
   ];

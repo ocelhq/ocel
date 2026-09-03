@@ -5,7 +5,7 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync }
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { esbuildArgs } from "./bundle.mjs";
+import { bunArgs } from "./bundle.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const sharp = JSON.parse(
@@ -20,8 +20,8 @@ mkdirSync(stage, { recursive: true });
 mkdirSync(out, { recursive: true });
 
 execFileSync(
-  "pnpm",
-  ["exec", "esbuild", ...esbuildArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))],
+  "bun",
+  ["build", ...bunArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))],
   { cwd: root, stdio: "inherit" },
 );
 

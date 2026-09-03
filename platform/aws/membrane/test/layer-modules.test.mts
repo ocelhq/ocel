@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -8,7 +7,6 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 
 const execFileAsync = promisify(execFile);
 const pkgDir = resolve(import.meta.dirname, "..");
-const tsc = createRequire(import.meta.url).resolve("typescript/bin/tsc");
 
 const specifierPattern =
   /\b(?:import|export)\b[^"'`;]*?\bfrom\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']/g;
@@ -17,8 +15,7 @@ let dist: string;
 
 beforeAll(async () => {
   dist = await mkdtemp(join(tmpdir(), "ocel-layer-"));
-  await execFileAsync(process.execPath, [tsc, "--outDir", dist], { cwd: pkgDir });
-  await execFileAsync(process.execPath, ["scripts/bundle-modules.mjs", relative(pkgDir, dist)], {
+  await execFileAsync("bun", ["scripts/bundle-modules.mjs", relative(pkgDir, dist)], {
     cwd: pkgDir,
   });
 }, 120_000);

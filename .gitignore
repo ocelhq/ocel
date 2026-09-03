@@ -208,3 +208,6 @@ mise.local.toml
 # `go build` inside the helper's own directory; the embedded copies are built into
 # platform/vps/provider/host/dist by host/generate.sh.
 platform/vps/provider/cmd/proxyctl/proxyctl
+
+# Turborepo
+.turbo

@@ -41,19 +41,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.10.0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/node-workspace
 
       - name: Create/update Version PR
         uses: changesets/action@v1
@@ -108,22 +96,10 @@ jobs:
           region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.10.0
+      - uses: ./.github/actions/node-workspace
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: pnpm --filter @cli/node typecheck
-        run: pnpm --filter @cli/node typecheck
+      - name: Typecheck the node side of the cli
+        run: pnpm turbo run typecheck --filter=@cli/node
 
       - name: Read release version
         id: version
@@ -155,20 +131,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: ./.github/actions/node-workspace
         with:
-          version: 11.10.0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
           registry-url: https://registry.npmjs.org
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Download binary artifacts
         uses: actions/download-artifact@v4
@@ -187,14 +152,8 @@ jobs:
           chmod +x packages/native-lib/cli-darwin-x64/bin/ocel
           chmod +x packages/native-lib/cli-linux-x64/bin/ocel
 
-      - name: Build ocel (tsc)
-        run: pnpm --filter ocel build
-
-      - name: Build @ocel/sst (tsc)
-        run: pnpm --filter @ocel/sst build
-
-      - name: Build @ocel/pulumi (tsc)
-        run: pnpm --filter @ocel/pulumi build
+      - name: Build the published packages
+        run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
 
       - name: Publish packages
         run: |

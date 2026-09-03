@@ -10,8 +10,10 @@ on:
       - "platform/**"
       - "packages/ocel/**"
       - "pnpm-lock.yaml"
+      - "turbo.json"
       - ".github/workflows/go.yml"
       - ".github/actions/gobuildcache/**"
+      - ".github/actions/node-workspace/**"
   workflow_dispatch:
 
 concurrency:
@@ -62,28 +64,13 @@ jobs:
           region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
-      - name: Setup pnpm
-        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.10.0
+      - if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
+        uses: ./.github/actions/node-workspace
 
-      - name: Setup Node
-        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
-        working-directory: .
-        run: pnpm install --frozen-lockfile
-
-      - name: pnpm --filter ocel build
+      - name: The ocel package the cli e2e deploys against
         if: matrix.module == 'cli'
         working-directory: .
-        run: pnpm --filter ocel build
+        run: pnpm turbo run build --filter=ocel
 
       - name: go generate (embedded dist)
         if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider' || matrix.module == 'platform/vps/provider'

@@ -7,7 +7,7 @@ all: cli provider lib
 generate: proto
 
 lib:
-	pnpm -F=ocel -F=@framework/next-adapter -F=@platform/cf-entry -F=@platform/cf-deployments-store build
+	pnpm turbo run build --filter=ocel --filter=@cli/node
 
 cli:
 	node scripts/build-native.mjs --host --target cli

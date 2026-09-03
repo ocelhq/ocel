@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { esbuildArgs } from "./bundle.mjs";
+import { bunArgs } from "./bundle.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const out = join(root, "dist", "zip");
@@ -12,8 +12,8 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
 execFileSync(
-  "pnpm",
-  ["exec", "esbuild", ...esbuildArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))],
+  "bun",
+  ["build", ...bunArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))],
   { cwd: root, stdio: "inherit" },
 );
 
