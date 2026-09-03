@@ -1,7 +1,20 @@
+import type { Input } from "@pulumi/pulumi";
+
 /** A provider-native permission an app receives along with the link's properties. */
 export interface Grant {
   actions: string[];
   resources: string[];
+  label?: string;
+}
+
+/**
+ * A grant as it is written in a Pulumi program, where the resource a permission
+ * names is an output of the resource being linked and is resolved before the
+ * record is published.
+ */
+export interface GrantInput {
+  actions: string[];
+  resources: Input<string>[];
   label?: string;
 }
 
