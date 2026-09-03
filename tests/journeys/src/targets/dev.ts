@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { access, cp, rm, symlink } from "node:fs/promises";
+import { cp, rm, symlink } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -21,6 +21,8 @@ const START_CONSOLE = [
   "pnpm --filter @console/db db:push",
   "pnpm --filter @console/web dev",
 ].join(" && ");
+
+const NEVER_COPIED = new Set([".git", ".next", ".ocel", "dist", "node_modules", "output"]);
 
 type Running = { port: number; dir: string; child: ChildProcess; output: () => string };
 
@@ -100,7 +102,7 @@ async function workTree(cell: CellContext, target: string): Promise<string> {
   await rm(dest, { recursive: true, force: true });
   await cp(cell.dir, dest, {
     recursive: true,
-    filter: (source) => path.basename(source) !== "node_modules",
+    filter: (source) => !NEVER_COPIED.has(path.basename(source)),
   });
   await symlink(path.join(cell.dir, "node_modules"), path.join(dest, "node_modules"), "dir");
   return dest;
@@ -234,16 +236,7 @@ async function destroy(cell: CellContext): Promise<void> {
   }
   await stop(handle);
   await cell.evidence.write("destroy", "dev.log", handle.output());
-  await rm(path.join(handle.dir, ".ocel", "console.json"), { force: true });
-}
-
-async function bound(dir: string): Promise<boolean> {
-  try {
-    await access(path.join(dir, ".ocel", "console.json"));
-    return true;
-  } catch {
-    return false;
-  }
+  await rm(handle.dir, { recursive: true, force: true });
 }
 
 async function answering(port: number): Promise<boolean> {
@@ -255,14 +248,26 @@ async function answering(port: number): Promise<boolean> {
   }
 }
 
+async function consoleProjects(): Promise<string[]> {
+  const token = await accessToken();
+  const res = await fetch(`${consoleUrl()}/api/projects`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(`the console answered ${res.status} listing this account's projects`);
+  }
+  const projects = (await res.json()) as Array<{ slug: string }>;
+  return projects.map((project) => project.slug);
+}
+
 async function list(): Promise<string[]> {
-  const live: string[] = [];
+  const live = new Set(await consoleProjects());
   for (const [slug, handle] of running) {
-    if ((await answering(handle.port)) || (await bound(handle.dir))) {
-      live.push(slug);
+    if (await answering(handle.port)) {
+      live.add(slug);
     }
   }
-  return live;
+  return [...live];
 }
 
 export const devTarget: Target = {
