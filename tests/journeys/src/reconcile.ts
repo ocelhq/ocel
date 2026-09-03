@@ -75,13 +75,13 @@ function verdictFor(
     return listed ? "blocked" : "never-ran";
   }
   if (DISABLED.has(result.outcome)) {
-    return result.outcome === "skipped" && blocking !== "none" ? "blocked" : "disabled";
+    return "disabled";
   }
   if (result.outcome === "failed") {
     if (issue) {
       return "expected-failure";
     }
-    return listed ? "blocked" : "unexpected-failure";
+    return blocking === "none" ? "unexpected-failure" : "blocked";
   }
   if (issue) {
     return listed ? "ok" : "listed-and-passed";
