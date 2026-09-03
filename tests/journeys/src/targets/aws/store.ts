@@ -47,7 +47,41 @@ function slugOf(sk: string): string {
   return sk.endsWith("#") ? sk.slice(0, -1) : sk;
 }
 
-type Page = { Items?: Array<{ sk?: { S?: string } }>; NextToken?: string };
+type Page = { Items?: Array<Record<string, unknown>>; NextToken?: string };
+
+async function queryPartition(
+  cli: Cli,
+  table: string,
+  pk: string,
+  skPrefix?: string,
+): Promise<Array<Record<string, unknown>>> {
+  const found: Array<Record<string, unknown>> = [];
+  let start: string | undefined;
+  do {
+    const raw = await cli([
+      "dynamodb",
+      "query",
+      "--table-name",
+      table,
+      "--consistent-read",
+      "--key-condition-expression",
+      skPrefix === undefined ? "pk = :pk" : "pk = :pk AND begins_with(sk, :sk)",
+      "--expression-attribute-values",
+      JSON.stringify(
+        skPrefix === undefined
+          ? { ":pk": { S: pk } }
+          : { ":pk": { S: pk }, ":sk": { S: skPrefix } },
+      ),
+      ...(start ? ["--starting-token", start] : []),
+      "--output",
+      "json",
+    ]);
+    const page = JSON.parse(raw) as Page;
+    found.push(...(page.Items ?? []));
+    start = page.NextToken;
+  } while (start);
+  return found;
+}
 
 export async function varsTable(cli: Cli): Promise<string | undefined> {
   let name: string;
@@ -81,35 +115,12 @@ export async function varsTable(cli: Cli): Promise<string | undefined> {
 export function awsStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Store {
   async function query(table: string, partition: string, slug?: string): Promise<string[]> {
     const found: string[] = [];
-    let start: string | undefined;
-    do {
-      const raw = await cli([
-        "dynamodb",
-        "query",
-        "--table-name",
-        table,
-        "--consistent-read",
-        "--key-condition-expression",
-        slug === undefined ? "pk = :pk" : "pk = :pk AND begins_with(sk, :sk)",
-        "--expression-attribute-values",
-        JSON.stringify(
-          slug === undefined
-            ? { ":pk": { S: partition } }
-            : { ":pk": { S: partition }, ":sk": { S: slug } },
-        ),
-        ...(start ? ["--starting-token", start] : []),
-        "--output",
-        "json",
-      ]);
-      const page = JSON.parse(raw) as Page;
-      for (const item of page.Items ?? []) {
-        const one = slugOf(item.sk?.S ?? "");
-        if (one !== "") {
-          found.push(one);
-        }
+    for (const item of await queryPartition(cli, table, partition, slug)) {
+      const one = slugOf((item.sk as { S?: string } | undefined)?.S ?? "");
+      if (one !== "") {
+        found.push(one);
       }
-      start = page.NextToken;
-    } while (start);
+    }
     return found;
   }
 
@@ -179,35 +190,13 @@ type RawItem = { sk: string; body: string };
 
 async function queryItems(cli: Cli, table: string, pk: string, skPrefix: string): Promise<RawItem[]> {
   const found: RawItem[] = [];
-  let start: string | undefined;
-  do {
-    const raw = await cli([
-      "dynamodb",
-      "query",
-      "--table-name",
-      table,
-      "--consistent-read",
-      "--key-condition-expression",
-      "pk = :pk AND begins_with(sk, :sk)",
-      "--expression-attribute-values",
-      JSON.stringify({ ":pk": { S: pk }, ":sk": { S: skPrefix } }),
-      ...(start ? ["--starting-token", start] : []),
-      "--output",
-      "json",
-    ]);
-    const page = JSON.parse(raw) as {
-      Items?: Array<{ sk?: { S?: string }; body?: { B?: string } }>;
-      NextToken?: string;
-    };
-    for (const item of page.Items ?? []) {
-      const sk = item.sk?.S;
-      const body = item.body?.B;
-      if (sk && body) {
-        found.push({ sk, body: Buffer.from(body, "base64").toString("utf8") });
-      }
+  for (const item of await queryPartition(cli, table, pk, skPrefix)) {
+    const sk = (item.sk as { S?: string } | undefined)?.S;
+    const body = (item.body as { B?: string } | undefined)?.B;
+    if (sk && body) {
+      found.push({ sk, body: Buffer.from(body, "base64").toString("utf8") });
     }
-    start = page.NextToken;
-  } while (start);
+  }
   return found;
 }
 
