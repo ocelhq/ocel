@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import type { ContractContext } from "../../contract";
 import { contractRows } from "../../contract";
 import { ocel, spawnOcel, workTree } from "../../ocel";
+import type { LadderRow } from "../../spec";
 import type { CellContext } from "../types";
 import { place } from "./place";
 import { awsLinkStore, awsStore, type Cli, cliAt, said } from "./store";
@@ -17,18 +17,6 @@ const NOTHING_PUBLISHED = "nothing has published a record under that name";
 
 const VPC_ACCESS_POLICY_ARN =
   "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole";
-
-export type LadderPhase = "publish" | "consume" | "outlive" | "prune";
-
-export type LadderRow = {
-  title: string;
-  phase: LadderPhase;
-  run: (cell: CellContext, live?: ContractContext) => Promise<void>;
-};
-
-export function ladderTitle(phase: LadderPhase, title: string): string {
-  return `${phase} · ${title}`;
-}
 
 export type PublishedPlacement = { subnetIds: string[]; securityGroupIds: string[] };
 
