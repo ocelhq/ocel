@@ -295,7 +295,7 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
         <span class="fault">
           <Icon name="warning" />
           {problem.kind === "conflict"
-            ? `This value changed since the page read it — now ${stored(variant, revealed ? baselines.value.get(key) : undefined)}. Save again to replace it.`
+            ? `This value changed since the page read it — now ${stored(variant, revealed ? baselines.value.get(key) : undefined)}. Nothing was written here; decide again against what is there now.`
             : problem.message}
         </span>
       )}
