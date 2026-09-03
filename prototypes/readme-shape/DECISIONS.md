@@ -24,8 +24,9 @@ Proposed body:
 Stays: `floci.sh`, `incus.sh`, `assert-ran.sh`, `act.sh`, `gobuildcache-setup.sh`,
 `build-native.mjs`, `verify-next-bundle.mjs`. The two emulator scripts and the
 accounting script serve the Go provider and lifecycle workflows, which the map
-keeps in Go. The journey harness calls `floci.sh` and `incus.sh` the same way
-the workflows do (`run <name> -- cmd`), so one bring-up lives in one place.
+keeps in Go. The journey harness does not start emulators: a developer runs
+`floci.sh`/`incus.sh` before a cell, the workflow runs them before the matrix,
+and a cell fails fast naming the command when its emulator is absent.
 `assert-ran.sh` reads `go test -json`; the vitest account is the harness's own
 reporter and does not reuse it.
 
