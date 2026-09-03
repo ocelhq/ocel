@@ -1,9 +1,10 @@
 # Tests
 
-| suite      | what it drives                                                      |
-| ---------- | ------------------------------------------------------------------- |
-| `journeys` | one example on one target, through the real `ocel` binary, over HTTP |
-| `dev`      | the dev-server suites the `dev` target replaces                      |
+| suite         | what it drives                                                       |
+| ------------- | -------------------------------------------------------------------- |
+| `journeys`    | one example on one target, through the real `ocel` binary, over HTTP |
+| `dev`         | the dev-server suites the `dev` target replaces                      |
+| `next-compat` | Next.js's own deployment-adapter harness, by workflow dispatch only  |
 
 Unit tests live beside the code they cover, in vitest for TypeScript and `go test`
 for Go. The Go provider suites (`TestLive*`) and lifecycle suites (`TestE2E*`) stay
