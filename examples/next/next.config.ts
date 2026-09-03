@@ -3,6 +3,13 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
 
+  images: {
+    qualities: [75],
+    deviceSizes: [640, 1080],
+    imageSizes: [64],
+    remotePatterns: [{ protocol: "https", hostname: "web.**" }],
+  },
+
   async headers() {
     return [
       {
