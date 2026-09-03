@@ -301,3 +301,72 @@ func TestPreflightTreatsTheSharedPreviewEntryAsNobodysClaim(t *testing.T) {
 		t.Fatalf("Preflight() reported %+v for the wildcard every project's previews share, want it unclaimed", claims)
 	}
 }
+
+func TestPreflightNamesTheEdgeScopeTheEdgeCredentialsReach(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.2.3")
+	provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{Account: "acct-42"}, nil)
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if resp.GetIdentity().GetEdgeScope() != "acct-42" {
+		t.Errorf("Preflight() edge scope = %q, want the account the edge credentials answered for", resp.GetIdentity().GetEdgeScope())
+	}
+	if len(resp.GetCredentialProblems()) != 0 {
+		t.Errorf("Preflight() reported %v, want edge credentials that answered to be no problem", resp.GetCredentialProblems())
+	}
+}
+
+func TestPreflightReportsEdgeCredentialsThatWouldNotAnswer(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.2.3")
+	provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{}, errors.New("token expired"))
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v, want the edge's refusal reported beside the rest of the run", err)
+	}
+	problems := resp.GetCredentialProblems()
+	if len(problems) != 1 {
+		t.Fatalf("Preflight() reported %d credential problems, want the edge's own", len(problems))
+	}
+	if problems[0].GetProvider() != string(fake.KindRelay) {
+		t.Errorf("credential problem names %q, want the edge whose credentials were refused", problems[0].GetProvider())
+	}
+	if !strings.Contains(problems[0].GetMessage(), "could not authenticate: token expired") {
+		t.Errorf("credential problem message = %q, want the edge's own wording", problems[0].GetMessage())
+	}
+	if resp.GetIdentity().GetEdgeScope() != "" {
+		t.Errorf("Preflight() edge scope = %q, want none from credentials that never answered", resp.GetIdentity().GetEdgeScope())
+	}
+	if resp.GetIdentity().GetAccount() == "" {
+		t.Error("Preflight() dropped the origin identity over an edge that would not authenticate")
+	}
+}
+
+func TestPreflightLeavesTheEdgeScopeEmptyWhenNoEdgeVerifiesCredentials(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if resp.GetIdentity().GetEdgeScope() != "" {
+		t.Errorf("Preflight() edge scope = %q, want none: no edge here answers for credentials of its own", resp.GetIdentity().GetEdgeScope())
+	}
+	if len(resp.GetCredentialProblems()) != 0 {
+		t.Errorf("Preflight() reported %v, want an edge that verifies nothing to be no problem", resp.GetCredentialProblems())
+	}
+}

@@ -12,8 +12,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
@@ -79,7 +79,7 @@ func runPromotionsLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout,
 	}
 
 	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
-		if err := preflight.Tier(ctx, runui.Plain(deps.Presentation(stdout), stdout), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
+		if err := bootstrap.Ready(ctx, runui.Plain(deps.Presentation(stdout), stdout), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
 		}
 
@@ -106,7 +106,7 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keep
 	}
 
 	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel deployments prune", cfg, yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		if err := preflight.Tier(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
+		if err := bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
 		}
 

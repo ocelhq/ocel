@@ -756,8 +756,8 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 			Provider:  os.Getenv(FakeIDProviderEnvVar),
 			Account:   os.Getenv(FakeIDAccountEnvVar),
 			EdgeScope: os.Getenv(FakeIDEdgeScopeEnvVar),
+			Location:  os.Getenv(FakeIDRegionEnvVar),
 			Details: []*contractv1.Detail{
-				{Label: "region", Value: os.Getenv(FakeIDRegionEnvVar)},
 				{Label: "profile", Value: os.Getenv(FakeIDProfileEnvVar)},
 			},
 		},

@@ -4,6 +4,7 @@ package cli.stream.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1";
 
 import "buf/validate/validate.proto";
+import "common/environment/v1/environment.proto";
 import "common/plan/v1/plan.proto";
 import "common/progress/v1/progress.proto";
 
@@ -26,7 +27,32 @@ message RunEvent {
 
     // Text belonging to the run rather than to any stage.
     DiagnosticEvent diagnostic = 6;
+
+    // Where the run acts, told once before anything else happens.
+    IdentityEvent identity = 7;
   }
+}
+
+message IdentityEvent {
+  string project = 1;
+
+  common.environment.v1.Tier tier = 2;
+
+  Party origin = 3;
+
+  // Absent when the project has no edge.
+  Party edge = 4;
+}
+
+// One account a run acts in, at the origin cloud or at the edge.
+message Party {
+  string vendor = 1;
+
+  string account = 2;
+
+  string principal = 3;
+
+  string location = 4;
 }
 
 // A pause the run opened for a human. `url` is where they answer.

@@ -111,7 +111,8 @@ func TestRunEnvSet(t *testing.T) {
 
 		t.Run("--reveal prints exactly the value so it is scriptable", func(t *testing.T) {
 			var revealed bytes.Buffer
-			if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &revealed, &revealed); err != nil {
+			var chatter bytes.Buffer
+			if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &revealed, &chatter); err != nil {
 				t.Fatalf("runEnvGet --reveal err = %v; out=%s", err, revealed.String())
 			}
 			if strings.TrimSpace(revealed.String()) != "sk_live_secret" {
@@ -140,7 +141,8 @@ func TestRunEnvSet(t *testing.T) {
 				opts := tc.opts
 				opts.reveal = true
 				var stdout bytes.Buffer
-				if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", opts, &stdout, &stdout); err != nil {
+				var chatter bytes.Buffer
+				if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", opts, &stdout, &chatter); err != nil {
 					t.Fatalf("runEnvGet err = %v; out=%s", err, stdout.String())
 				}
 				if got := strings.TrimSpace(stdout.String()); got != tc.want {
@@ -247,7 +249,8 @@ func TestRunEnvSet(t *testing.T) {
 		}
 
 		var out bytes.Buffer
-		if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &out, &out); err != nil {
+		var chatter bytes.Buffer
+		if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &out, &chatter); err != nil {
 			t.Fatalf("runEnvGet err = %v; out=%s", err, out.String())
 		}
 		if strings.TrimSpace(out.String()) != "ph_two" {
@@ -338,7 +341,8 @@ func TestRunEnvGet(t *testing.T) {
 		}
 
 		var folder bytes.Buffer
-		if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &folder, &folder); err != nil {
+		var chatter bytes.Buffer
+		if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &folder, &chatter); err != nil {
 			t.Fatalf("runEnvGet in /web err = %v", err)
 		}
 		if strings.TrimSpace(folder.String()) != "web-id" {
@@ -370,7 +374,8 @@ func TestRunEnvGet(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 
 		var production bytes.Buffer
-		if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &production, &production); err != nil {
+		var chatter bytes.Buffer
+		if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &production, &chatter); err != nil {
 			t.Fatalf("runEnvGet err = %v; out=%s", err, production.String())
 		}
 		if got := strings.TrimSpace(production.String()); got != "sk_live_secret" {
@@ -512,7 +517,8 @@ func TestRunEnvHistory(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				var stdout bytes.Buffer
-				if err := runEnvHistory(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", opts, &stdout, &stdout); err != nil {
+				var chatter bytes.Buffer
+				if err := runEnvHistory(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", opts, &stdout, &chatter); err != nil {
 					t.Fatalf("runEnvHistory(reveal=%v) err = %v; out=%s", opts.reveal, err, stdout.String())
 				}
 				out := stdout.String()

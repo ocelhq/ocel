@@ -34,13 +34,14 @@ func whoami(ctx context.Context, live surveyor) (providerkit.Identity, error) {
 		return providerkit.Identity{}, err
 	}
 	dest := live.Destination()
+	key := live.HostKey()
 	return providerkit.Identity{
 		Provider:  Vendor,
-		Account:   live.HostKey().Fingerprint,
-		Principal: dest.Principal(),
+		Account:   dest.Written,
+		Principal: dest.User,
 		Details: named([]providerkit.Detail{
+			{Label: "host key", Value: strings.TrimSpace(key.Type + " " + key.Fingerprint)},
 			{Label: "address", Value: fmt.Sprintf("%s port %d", dest.Address, dest.Port)},
-			{Label: "host key", Value: live.HostKey().Type},
 			{Label: "os", Value: facts.OS},
 			{Label: "arch", Value: facts.Arch},
 			{Label: "elevation", Value: elevation(facts)},

@@ -8,6 +8,7 @@ package streamv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	v12 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	v11 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -85,6 +86,7 @@ type RunEvent struct {
 	//	*RunEvent_Resumed
 	//	*RunEvent_Result
 	//	*RunEvent_Diagnostic
+	//	*RunEvent_Identity
 	Event         isRunEvent_Event `protobuf_oneof:"event"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -181,6 +183,15 @@ func (x *RunEvent) GetDiagnostic() *DiagnosticEvent {
 	return nil
 }
 
+func (x *RunEvent) GetIdentity() *IdentityEvent {
+	if x != nil {
+		if x, ok := x.Event.(*RunEvent_Identity); ok {
+			return x.Identity
+		}
+	}
+	return nil
+}
+
 type isRunEvent_Event interface {
 	isRunEvent_Event()
 }
@@ -211,6 +222,11 @@ type RunEvent_Diagnostic struct {
 	Diagnostic *DiagnosticEvent `protobuf:"bytes,6,opt,name=diagnostic,proto3,oneof"`
 }
 
+type RunEvent_Identity struct {
+	// Where the run acts, told once before anything else happens.
+	Identity *IdentityEvent `protobuf:"bytes,7,opt,name=identity,proto3,oneof"`
+}
+
 func (*RunEvent_Plan) isRunEvent_Event() {}
 
 func (*RunEvent_Operation) isRunEvent_Event() {}
@@ -223,6 +239,146 @@ func (*RunEvent_Result) isRunEvent_Event() {}
 
 func (*RunEvent_Diagnostic) isRunEvent_Event() {}
 
+func (*RunEvent_Identity) isRunEvent_Event() {}
+
+type IdentityEvent struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Project string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	Tier    v12.Tier               `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Origin  *Party                 `protobuf:"bytes,3,opt,name=origin,proto3" json:"origin,omitempty"`
+	// Absent when the project has no edge.
+	Edge          *Party `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IdentityEvent) Reset() {
+	*x = IdentityEvent{}
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentityEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentityEvent) ProtoMessage() {}
+
+func (x *IdentityEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentityEvent.ProtoReflect.Descriptor instead.
+func (*IdentityEvent) Descriptor() ([]byte, []int) {
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *IdentityEvent) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetTier() v12.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v12.Tier(0)
+}
+
+func (x *IdentityEvent) GetOrigin() *Party {
+	if x != nil {
+		return x.Origin
+	}
+	return nil
+}
+
+func (x *IdentityEvent) GetEdge() *Party {
+	if x != nil {
+		return x.Edge
+	}
+	return nil
+}
+
+// One account a run acts in, at the origin cloud or at the edge.
+type Party struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Vendor        string                 `protobuf:"bytes,1,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	Account       string                 `protobuf:"bytes,2,opt,name=account,proto3" json:"account,omitempty"`
+	Principal     string                 `protobuf:"bytes,3,opt,name=principal,proto3" json:"principal,omitempty"`
+	Location      string                 `protobuf:"bytes,4,opt,name=location,proto3" json:"location,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Party) Reset() {
+	*x = Party{}
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Party) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Party) ProtoMessage() {}
+
+func (x *Party) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Party.ProtoReflect.Descriptor instead.
+func (*Party) Descriptor() ([]byte, []int) {
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Party) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *Party) GetAccount() string {
+	if x != nil {
+		return x.Account
+	}
+	return ""
+}
+
+func (x *Party) GetPrincipal() string {
+	if x != nil {
+		return x.Principal
+	}
+	return ""
+}
+
+func (x *Party) GetLocation() string {
+	if x != nil {
+		return x.Location
+	}
+	return ""
+}
+
 // A pause the run opened for a human. `url` is where they answer.
 type WaitingEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -234,7 +390,7 @@ type WaitingEvent struct {
 
 func (x *WaitingEvent) Reset() {
 	*x = WaitingEvent{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[1]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -246,7 +402,7 @@ func (x *WaitingEvent) String() string {
 func (*WaitingEvent) ProtoMessage() {}
 
 func (x *WaitingEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[1]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -259,7 +415,7 @@ func (x *WaitingEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitingEvent.ProtoReflect.Descriptor instead.
 func (*WaitingEvent) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{1}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *WaitingEvent) GetReason() string {
@@ -286,7 +442,7 @@ type ResumedEvent struct {
 
 func (x *ResumedEvent) Reset() {
 	*x = ResumedEvent{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[2]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -298,7 +454,7 @@ func (x *ResumedEvent) String() string {
 func (*ResumedEvent) ProtoMessage() {}
 
 func (x *ResumedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[2]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -311,7 +467,7 @@ func (x *ResumedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumedEvent.ProtoReflect.Descriptor instead.
 func (*ResumedEvent) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{2}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ResumedEvent) GetReason() string {
@@ -340,7 +496,7 @@ type RunResultEvent struct {
 
 func (x *RunResultEvent) Reset() {
 	*x = RunResultEvent{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[3]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -352,7 +508,7 @@ func (x *RunResultEvent) String() string {
 func (*RunResultEvent) ProtoMessage() {}
 
 func (x *RunResultEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[3]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -365,7 +521,7 @@ func (x *RunResultEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunResultEvent.ProtoReflect.Descriptor instead.
 func (*RunResultEvent) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{3}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RunResultEvent) GetSuccess() bool {
@@ -449,7 +605,7 @@ type DiagnosticEvent struct {
 
 func (x *DiagnosticEvent) Reset() {
 	*x = DiagnosticEvent{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[4]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -461,7 +617,7 @@ func (x *DiagnosticEvent) String() string {
 func (*DiagnosticEvent) ProtoMessage() {}
 
 func (x *DiagnosticEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[4]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -474,7 +630,7 @@ func (x *DiagnosticEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiagnosticEvent.ProtoReflect.Descriptor instead.
 func (*DiagnosticEvent) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{4}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DiagnosticEvent) GetCode() string {
@@ -502,7 +658,7 @@ var File_cli_stream_v1_stream_proto protoreflect.FileDescriptor
 
 const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\n" +
-	"\x1acli/stream/v1/stream.proto\x12\rcli.stream.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19common/plan/v1/plan.proto\x1a!common/progress/v1/progress.proto\"\xfd\x02\n" +
+	"\x1acli/stream/v1/stream.proto\x12\rcli.stream.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x19common/plan/v1/plan.proto\x1a!common/progress/v1/progress.proto\"\xb9\x03\n" +
 	"\bRunEvent\x120\n" +
 	"\x04plan\x18\x01 \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04plan\x12B\n" +
 	"\toperation\x18\x02 \x01(\v2\".common.progress.v1.OperationEventH\x00R\toperation\x127\n" +
@@ -511,8 +667,19 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x06result\x18\x05 \x01(\v2\x1d.cli.stream.v1.RunResultEventH\x00R\x06result\x12@\n" +
 	"\n" +
 	"diagnostic\x18\x06 \x01(\v2\x1e.cli.stream.v1.DiagnosticEventH\x00R\n" +
-	"diagnosticB\x0e\n" +
-	"\x05event\x12\x05\xbaH\x02\b\x01\"8\n" +
+	"diagnostic\x12:\n" +
+	"\bidentity\x18\a \x01(\v2\x1c.cli.stream.v1.IdentityEventH\x00R\bidentityB\x0e\n" +
+	"\x05event\x12\x05\xbaH\x02\b\x01\"\xb2\x01\n" +
+	"\rIdentityEvent\x12\x18\n" +
+	"\aproject\x18\x01 \x01(\tR\aproject\x12/\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12,\n" +
+	"\x06origin\x18\x03 \x01(\v2\x14.cli.stream.v1.PartyR\x06origin\x12(\n" +
+	"\x04edge\x18\x04 \x01(\v2\x14.cli.stream.v1.PartyR\x04edge\"s\n" +
+	"\x05Party\x12\x16\n" +
+	"\x06vendor\x18\x01 \x01(\tR\x06vendor\x12\x18\n" +
+	"\aaccount\x18\x02 \x01(\tR\aaccount\x12\x1c\n" +
+	"\tprincipal\x18\x03 \x01(\tR\tprincipal\x12\x1a\n" +
+	"\blocation\x18\x04 \x01(\tR\blocation\"8\n" +
 	"\fWaitingEvent\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\"&\n" +
@@ -554,34 +721,41 @@ func file_cli_stream_v1_stream_proto_rawDescGZIP() []byte {
 }
 
 var file_cli_stream_v1_stream_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_cli_stream_v1_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_cli_stream_v1_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(DiagnosticLevel)(0),       // 0: cli.stream.v1.DiagnosticLevel
 	(*RunEvent)(nil),           // 1: cli.stream.v1.RunEvent
-	(*WaitingEvent)(nil),       // 2: cli.stream.v1.WaitingEvent
-	(*ResumedEvent)(nil),       // 3: cli.stream.v1.ResumedEvent
-	(*RunResultEvent)(nil),     // 4: cli.stream.v1.RunResultEvent
-	(*DiagnosticEvent)(nil),    // 5: cli.stream.v1.DiagnosticEvent
-	(*v1.ChangePlan)(nil),      // 6: common.plan.v1.ChangePlan
-	(*v11.OperationEvent)(nil), // 7: common.progress.v1.OperationEvent
-	(*v11.FlipBound)(nil),      // 8: common.progress.v1.FlipBound
-	(*v11.AppResult)(nil),      // 9: common.progress.v1.AppResult
+	(*IdentityEvent)(nil),      // 2: cli.stream.v1.IdentityEvent
+	(*Party)(nil),              // 3: cli.stream.v1.Party
+	(*WaitingEvent)(nil),       // 4: cli.stream.v1.WaitingEvent
+	(*ResumedEvent)(nil),       // 5: cli.stream.v1.ResumedEvent
+	(*RunResultEvent)(nil),     // 6: cli.stream.v1.RunResultEvent
+	(*DiagnosticEvent)(nil),    // 7: cli.stream.v1.DiagnosticEvent
+	(*v1.ChangePlan)(nil),      // 8: common.plan.v1.ChangePlan
+	(*v11.OperationEvent)(nil), // 9: common.progress.v1.OperationEvent
+	(v12.Tier)(0),              // 10: common.environment.v1.Tier
+	(*v11.FlipBound)(nil),      // 11: common.progress.v1.FlipBound
+	(*v11.AppResult)(nil),      // 12: common.progress.v1.AppResult
 }
 var file_cli_stream_v1_stream_proto_depIdxs = []int32{
-	6, // 0: cli.stream.v1.RunEvent.plan:type_name -> common.plan.v1.ChangePlan
-	7, // 1: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
-	2, // 2: cli.stream.v1.RunEvent.waiting:type_name -> cli.stream.v1.WaitingEvent
-	3, // 3: cli.stream.v1.RunEvent.resumed:type_name -> cli.stream.v1.ResumedEvent
-	4, // 4: cli.stream.v1.RunEvent.result:type_name -> cli.stream.v1.RunResultEvent
-	5, // 5: cli.stream.v1.RunEvent.diagnostic:type_name -> cli.stream.v1.DiagnosticEvent
-	8, // 6: cli.stream.v1.RunResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
-	9, // 7: cli.stream.v1.RunResultEvent.apps:type_name -> common.progress.v1.AppResult
-	0, // 8: cli.stream.v1.DiagnosticEvent.level:type_name -> cli.stream.v1.DiagnosticLevel
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	8,  // 0: cli.stream.v1.RunEvent.plan:type_name -> common.plan.v1.ChangePlan
+	9,  // 1: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
+	4,  // 2: cli.stream.v1.RunEvent.waiting:type_name -> cli.stream.v1.WaitingEvent
+	5,  // 3: cli.stream.v1.RunEvent.resumed:type_name -> cli.stream.v1.ResumedEvent
+	6,  // 4: cli.stream.v1.RunEvent.result:type_name -> cli.stream.v1.RunResultEvent
+	7,  // 5: cli.stream.v1.RunEvent.diagnostic:type_name -> cli.stream.v1.DiagnosticEvent
+	2,  // 6: cli.stream.v1.RunEvent.identity:type_name -> cli.stream.v1.IdentityEvent
+	10, // 7: cli.stream.v1.IdentityEvent.tier:type_name -> common.environment.v1.Tier
+	3,  // 8: cli.stream.v1.IdentityEvent.origin:type_name -> cli.stream.v1.Party
+	3,  // 9: cli.stream.v1.IdentityEvent.edge:type_name -> cli.stream.v1.Party
+	11, // 10: cli.stream.v1.RunResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
+	12, // 11: cli.stream.v1.RunResultEvent.apps:type_name -> common.progress.v1.AppResult
+	0,  // 12: cli.stream.v1.DiagnosticEvent.level:type_name -> cli.stream.v1.DiagnosticLevel
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_cli_stream_v1_stream_proto_init() }
@@ -596,6 +770,7 @@ func file_cli_stream_v1_stream_proto_init() {
 		(*RunEvent_Resumed)(nil),
 		(*RunEvent_Result)(nil),
 		(*RunEvent_Diagnostic)(nil),
+		(*RunEvent_Identity)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -603,7 +778,7 @@ func file_cli_stream_v1_stream_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_stream_v1_stream_proto_rawDesc), len(file_cli_stream_v1_stream_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

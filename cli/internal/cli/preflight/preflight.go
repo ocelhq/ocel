@@ -7,16 +7,35 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func Run(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
+	resp, err := announce(ctx, rep, runner, cfg, required, slug, domains, frameworks)
+	if err != nil {
+		return nil, err
+	}
+	if !resp.GetInfrastructurePresent() {
+		return nil, fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
+	}
+	if err := checkTier(resp.GetInfraTier(), required); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func Announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier) error {
+	_, err := announce(ctx, rep, runner, cfg, required, cfg.Slug, nil, Frameworks(cfg))
+	return err
+}
+
+func announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string) (*contractv1.PreflightResponse, error) {
 	client, err := runner.Client()
 	if err != nil {
 		return nil, err
@@ -34,27 +53,11 @@ func Run(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *
 	if err != nil {
 		return nil, err
 	}
-	if rep.Presentation().TTY {
-		rep.Diagnostic(identityBanner(resp.GetIdentity()))
-	}
+	rep.Identity(IdentityEvent(cfg, required, resp.GetIdentity()))
 	if err := credentialProblems(resp.GetCredentialProblems()); err != nil {
 		return nil, err
 	}
-	if !resp.GetInfrastructurePresent() {
-		return nil, fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
-	}
-	if err := checkTier(resp.GetInfraTier(), required); err != nil {
-		return nil, err
-	}
 	return resp, nil
-}
-
-func Tier(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string) error {
-	resp, err := Run(ctx, rep, runner, cfg, required, "", nil, Frameworks(cfg), bootstrapHint)
-	if err != nil {
-		return err
-	}
-	return bootstrap.PlanFor(resp.GetBootstrap()).Refusal(required)
 }
 
 func Credentials(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string) error {
@@ -148,39 +151,27 @@ func infraLabel(tier environmentv1.Tier) string {
 	}
 }
 
-func identityBanner(id *contractv1.Identity) string {
-	if id == nil {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("Running with:\n")
-	wrote := false
-	if line := originIdentityLine(id); line != "" {
-		fmt.Fprintf(&b, "  %-11s %s\n", id.GetProvider(), line)
-		wrote = true
+func IdentityEvent(cfg *projectconfig.Config, tier environmentv1.Tier, id *contractv1.Identity) *streamv1.IdentityEvent {
+	ev := &streamv1.IdentityEvent{Project: cfg.Slug, Tier: tier}
+	if id.GetProvider() != "" || id.GetAccount() != "" || id.GetPrincipal() != "" || id.GetLocation() != "" {
+		ev.Origin = &streamv1.Party{
+			Vendor:    strings.ToLower(id.GetProvider()),
+			Account:   id.GetAccount(),
+			Principal: id.GetPrincipal(),
+			Location:  id.GetLocation(),
+		}
 	}
 	if scope := id.GetEdgeScope(); scope != "" {
-		fmt.Fprintf(&b, "  %-11s account=%s\n", "Edge", scope)
-		wrote = true
+		ev.Edge = &streamv1.Party{Vendor: edgeVendor(cfg), Account: scope}
 	}
-	if !wrote {
-		return ""
-	}
-	return b.String()
+	return ev
 }
 
-func originIdentityLine(id *contractv1.Identity) string {
-	if id.GetAccount() == "" {
-		return ""
+func edgeVendor(cfg *projectconfig.Config) string {
+	if kind := string(cfg.EdgeKind()); kind != "" {
+		return kind
 	}
-	parts := []string{"account=" + id.GetAccount()}
-	if principal := id.GetPrincipal(); principal != "" {
-		parts = append(parts, "identity="+principal)
-	}
-	for _, detail := range id.GetDetails() {
-		parts = append(parts, detail.GetLabel()+"="+detail.GetValue())
-	}
-	return strings.Join(parts, "  ")
+	return "edge"
 }
 
 func credentialProblems(problems []*contractv1.CredentialProblem) error {

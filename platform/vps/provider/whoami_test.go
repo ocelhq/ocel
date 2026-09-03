@@ -44,8 +44,20 @@ func TestWhoamiAnswersForTheLoginEveryDeployRunsAs(t *testing.T) {
 		t.Fatalf("Whoami() = %v, want the identity of %s: a bootstrapped host runs every deploy as that login and grants it no passwordless sudo, and a preflight that cannot say who is calling returns before it says anything else — no bootstrap standing, no known slugs, and no claim on a hostname another project on the box already serves",
 			err, "ocel-deploy")
 	}
-	if identity.Principal != "ocel-deploy@box.example" {
-		t.Errorf("Whoami().Principal = %q, want the login and the host it answered from", identity.Principal)
+	if identity.Principal != "ocel-deploy" {
+		t.Errorf("Whoami().Principal = %q, want the login every deploy runs as", identity.Principal)
+	}
+	if identity.Account != "box.example" {
+		t.Errorf("Whoami().Account = %q, want the host as the user wrote it", identity.Account)
+	}
+	if identity.Location != "" {
+		t.Errorf("Whoami().Location = %q, want nothing: a machine is where the user put it", identity.Location)
+	}
+	if key := detail(identity, "host key"); key != "ssh-ed25519 SHA256:whoami" {
+		t.Errorf("Whoami() host key = %q, want the key's type and the fingerprint that was verified", key)
+	}
+	if addr := detail(identity, "address"); addr != "203.0.113.7 port 22" {
+		t.Errorf("Whoami() address = %q, want the address the name resolved to and the port it answered on", addr)
 	}
 	if held := detail(identity, "elevation"); held != "neither root nor sudo without a password" {
 		t.Errorf("Whoami() names the elevation %q for a login holding neither, want it said plainly: a deploy login reported as holding passwordless sudo is the one grant `ocel permissions deploy` promises it never holds", held)

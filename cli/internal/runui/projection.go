@@ -31,6 +31,7 @@ var overrides = map[protoreflect.FullName]armFunc{
 	"common.progress.v1.ResultEvent":    (*projector).outcome,
 	"cli.stream.v1.RunResultEvent":      (*projector).result,
 	"cli.stream.v1.DiagnosticEvent":     (*projector).diagnostic,
+	"cli.stream.v1.IdentityEvent":       (*projector).identity,
 	"cli.stream.v1.WaitingEvent":        (*projector).waiting,
 	"cli.stream.v1.ResumedEvent":        (*projector).resumed,
 	"common.plan.v1.ChangePlan":         (*projector).plan,
@@ -491,6 +492,10 @@ func (p *projector) diagnostic(m protoreflect.Message) []string {
 		lines[0] = warnMark + " " + lines[0]
 	}
 	return lines
+}
+
+func (p *projector) identity(m protoreflect.Message) []string {
+	return IdentityBlock(p.present, m.Interface().(*streamv1.IdentityEvent))
 }
 
 func (p *projector) waiting(m protoreflect.Message) []string {

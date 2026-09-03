@@ -21,7 +21,7 @@ import (
 )
 
 func preflightPreview(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config) error {
-	return preflight.Tier(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
+	return bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
 }
 
 func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) ([]string, string, error) {

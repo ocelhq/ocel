@@ -185,6 +185,11 @@ func (s *Session) diagnose(message string, level streamv1.DiagnosticLevel) {
 	}})
 }
 
+func (s *Session) Identity(ev *streamv1.IdentityEvent) {
+	s.logf("[identity] %s", identityLogLine(ev))
+	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Identity{Identity: ev}})
+}
+
 func (s *Session) Plan(headline string, plan *planv1.ChangePlan, notes ...string) *planv1.ChangePlan {
 	drawn := proto.Clone(plan).(*planv1.ChangePlan)
 	drawn.Headline, drawn.Notes = headline, notes
@@ -271,6 +276,17 @@ func (s *Session) logOperation(ev *progressv1.OperationEvent) {
 	case ev.GetDnsOwed() != nil:
 		s.logf("[dns] %s: %s", ev.GetDnsOwed().GetHeadline(), dnsLogLine(ev.GetDnsOwed().GetRecords()))
 	}
+}
+
+func identityLogLine(ev *streamv1.IdentityEvent) string {
+	parts := nonEmpty(ev.GetProject(), tierName(ev.GetTier()))
+	for _, party := range []*streamv1.Party{ev.GetOrigin(), ev.GetEdge()} {
+		if party == nil {
+			continue
+		}
+		parts = append(parts, strings.Join(nonEmpty(party.GetVendor(), party.GetAccount(), party.GetPrincipal(), party.GetLocation()), " "))
+	}
+	return strings.Join(parts, " | ")
 }
 
 func dnsLogLine(records []*progressv1.DnsRecord) string {

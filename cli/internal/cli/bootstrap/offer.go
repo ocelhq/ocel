@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -143,4 +145,12 @@ func reportEvent(rep runui.Reporter, ev *progressv1.OperationEvent) {
 	case ev.GetLog() != nil:
 		rep.Diagnostic("  " + ev.GetLog().GetMessage())
 	}
+}
+
+func Ready(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, hint string) error {
+	resp, err := preflight.Run(ctx, rep, runner, cfg, required, "", nil, preflight.Frameworks(cfg), hint)
+	if err != nil {
+		return err
+	}
+	return PlanFor(resp.GetBootstrap()).Refusal(required)
 }

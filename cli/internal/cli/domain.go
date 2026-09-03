@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
@@ -189,7 +190,7 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 	}
 
 	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain use", cfg, false, stdout, nil), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		if err := preflight.Tier(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview"); err != nil {
+		if err := bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview"); err != nil {
 			return err
 		}
 		req := &contractv1.UsePreviewWildcardRequest{
@@ -230,7 +231,7 @@ func runDomainLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts domain
 }
 
 func listProductionHostnames(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer) (*contractv1.GetHostnameStatusResponse, error) {
-	if err := preflight.Tier(ctx, runui.Plain(deps.Presentation(out), out), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
+	if err := bootstrap.Ready(ctx, runui.Plain(deps.Presentation(out), out), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 		return nil, err
 	}
 	client, err := runner.Client()
@@ -281,7 +282,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 	spec.Unattended = "pass --yes"
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		if err := preflight.Tier(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview"); err != nil {
+		if err := bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview"); err != nil {
 			return err
 		}
 		client, err := runner.Client()
@@ -331,7 +332,7 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
 	}
 	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain add", cfg, false, stdout, nil), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		if err := preflight.Tier(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
+		if err := bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
 		}
 		req := &contractv1.HostnameRequest{
@@ -362,7 +363,7 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdou
 	}
 
 	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain rm", cfg, false, stdout, nil), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		if err := preflight.Tier(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
+		if err := bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
 		}
 		req := &contractv1.HostnameRequest{
@@ -384,7 +385,7 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdou
 }
 
 func listGlobalPreviewDomain(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer) (*contractv1.GetPreviewWildcardResponse, error) {
-	if err := preflight.Tier(ctx, runui.Plain(deps.Presentation(out), out), runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview"); err != nil {
+	if err := bootstrap.Ready(ctx, runui.Plain(deps.Presentation(out), out), runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview"); err != nil {
 		return nil, err
 	}
 	client, err := runner.Client()
@@ -488,7 +489,7 @@ func runDomainStatus(ctx context.Context, deps cmddeps.Deps, cwd string, opts do
 		return err
 	}
 	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
-		if err := preflight.Tier(ctx, runui.Plain(deps.Presentation(stdout), stdout), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
+		if err := bootstrap.Ready(ctx, runui.Plain(deps.Presentation(stderr), stderr), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
 		}
 		client, err := runner.Client()
