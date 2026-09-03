@@ -295,11 +295,13 @@ func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.Previe
 		if err := checkGlobalPreviewDomain(wildcard, id, configName); err != nil {
 			return err
 		}
-		rep.Diagnostic(fmt.Sprintf("Serving previews on the global preview domain *.%s — this project declares no domains.preview of its own", base))
+		rep.Diagnostic(fmt.Sprintf("Serving previews on global *.%s", base))
+
+	case declared == edge.PreviewWildcard(base):
+		rep.Diagnostic(fmt.Sprintf("Serving previews on project-level %s, also the global preview domain", declared))
 
 	case base != "":
-		rep.Diagnostic(fmt.Sprintf("Serving previews on %s, this project's own domains.preview — the global preview domain *.%s exists and is ignored (remove domains.preview from %s to serve on it)",
-			declared, base, configName))
+		rep.Diagnostic(fmt.Sprintf("Serving previews on project-level %s; global *.%s ignored", declared, base))
 	}
 
 	site := edge.ProjectPreview(strings.TrimPrefix(declared, "*."))

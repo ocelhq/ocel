@@ -265,7 +265,7 @@ export default {
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"global preview domain *.previews.ocel.dev", "DEPLOY tier=TIER_PREVIEW"} {
+		for _, want := range []string{"Serving previews on global *.previews.ocel.dev", "DEPLOY tier=TIER_PREVIEW"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -801,7 +801,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		if err := requirePreviewDomain(bare, global, nil, "pr-1", runui.Plain(runui.Presentation{}, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
-		for _, want := range []string{"global preview domain *.previews.ocel.dev", "declares no domains.preview"} {
+		for _, want := range []string{"Serving previews on global *.previews.ocel.dev"} {
 			if !strings.Contains(out.String(), want) {
 				t.Errorf("out = %q, want it to contain %q", out.String(), want)
 			}
@@ -895,6 +895,25 @@ func TestRequirePreviewDomain(t *testing.T) {
 			if !strings.Contains(out.String(), want) {
 				t.Errorf("out = %q, want it to contain %q", out.String(), want)
 			}
+		}
+	})
+
+	t.Run("a declared domain equal to the global one serves as the project's own and calls nothing ignored", func(t *testing.T) {
+		t.Parallel()
+
+		same := &projectconfig.Config{Slug: "acme", Domains: map[string][]string{"preview": {"*.previews.ocel.dev"}}}
+		var out bytes.Buffer
+		if err := requirePreviewDomain(same, global, nil, "pr-1", runui.Plain(runui.Presentation{}, &out)); err != nil {
+			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
+		}
+		if got := out.String(); !strings.Contains(got, "Serving previews on project-level *.previews.ocel.dev, also the global preview domain") || strings.Contains(got, "ignored") {
+			t.Errorf("out = %q, want the one wildcard named as both, nothing ignored", got)
+		}
+
+		var over bytes.Buffer
+		err := requirePreviewDomain(same, global, nil, strings.Repeat("b", 60), runui.Plain(runui.Presentation{}, &over))
+		if err != nil {
+			t.Errorf("err = %v, want a 60-character label admitted: the hostnames are the project's own, so no slug segment counts against the cap", err)
 		}
 	})
 
