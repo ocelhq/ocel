@@ -6,7 +6,7 @@ import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
 import { configTree, copyTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { exampleDir, outputRoot, treeDir } from "../../paths";
 import { specForTarget } from "../../spec";
-import { appFolder, migrateCommand } from "../../workspace";
+import { migrateCommand, setAppNames } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
 import { accountFiles, pinnedEnv, PROFILE_VARS } from "./account";
 import { emulatorFetch } from "./dispatch";
@@ -155,13 +155,7 @@ async function up(cell: CellContext): Promise<Deployment> {
 
   await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
   await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
-  for (const app of cell.example.apps) {
-    const folder = appFolder(cell.example, app);
-    if (folder) {
-      const args = ["env", "set", "APP_NAME", app, "--folder", folder];
-      await runOcel(cell, dir, "up", `env-app-${app}`, args, env);
-    }
-  }
+  await setAppNames(cell.example, (name, args) => runOcel(cell, dir, "up", name, args, env));
   await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
   await runOcel(cell, dir, "up", "domain-add", ["domain", "add"], env);
   if (cell.example.suites.includes("product")) {
