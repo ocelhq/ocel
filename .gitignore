@@ -201,9 +201,6 @@ cli/platform/dist/
 # Retired local issue database. Issues are tracked on GitHub; this is read-only history.
 .beads/
 
-examples/next-cache-lab/*
-!examples/next-cache-lab/package.json
-
 /bootstrap
 
 mise.local.toml
