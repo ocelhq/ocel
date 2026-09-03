@@ -1,7 +1,7 @@
 import { custom, postgres } from "./resource.js";
 
 export type { CustomLink } from "./custom.js";
-export type { Grant } from "./grants.js";
+export type { Grant, GrantInput } from "./grants.js";
 export type { PostgresLink, PostgresProperties } from "./postgres.js";
 export type {
   DescribedCustomResource,

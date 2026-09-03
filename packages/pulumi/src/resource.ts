@@ -2,7 +2,7 @@ import { createUrn, dynamic, type Input, type Resource } from "@pulumi/pulumi";
 import { createHash } from "node:crypto";
 import { checkTarget, runLink, type Target } from "./cli.js";
 import { customLink, type DescribedCustom } from "./custom.js";
-import type { Grant } from "./grants.js";
+import type { GrantInput } from "./grants.js";
 import { postgresLink, type DescribedPostgres } from "./postgres.js";
 
 /**
@@ -19,7 +19,7 @@ export interface DescribedPostgresResource {
   database: Input<string>;
   username: Input<string>;
   password: Input<string>;
-  grants?: Grant[];
+  grants?: GrantInput[];
 }
 
 /**
@@ -218,7 +218,7 @@ const linkFields = [
   "password",
 ] as const;
 
-function describe(resource: DescribedPostgresResource): DescribedPostgres {
+function describe(resource: DescribedPostgresResource) {
   return {
     properties: pick(resource as unknown as Record<string, unknown>),
     grants: resource.grants,
