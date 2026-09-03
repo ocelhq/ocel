@@ -1,0 +1,497 @@
+name: Journey
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - "cli/**"
+      - "packages/**"
+      - "frameworks/**"
+      - "pkg/**"
+      - "sdk/**"
+      - "proto/**"
+      - "platform/**"
+      - "console/resources/**"
+      - "console/api/**"
+      - "console/auth/**"
+      - "console/db/**"
+      - "console/web/**"
+      - "examples/**"
+      - "tests/journeys/**"
+      - "tests/shared/**"
+      - "scripts/floci.sh"
+      - "scripts/incus.sh"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/journey.yml"
+      - ".github/actions/**"
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Targets to drive against their real accounts, space separated. dev is never dispatched."
+        default: "aws vps"
+        type: string
+      edges:
+        description: "Edges the aws lane runs, space separated."
+        default: "api-gateway cloudfront cloudflare"
+        type: string
+      examples:
+        description: "Examples each lane runs, space separated."
+        default: "express hono fastify next"
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: journey-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  OCEL_FLOCI_IMAGE: floci/floci:2.0.1
+  NODE_VERSION: "22"
+  PNPM_VERSION: "11.10.0"
+  PR_EDGES: "api-gateway cloudfront cloudflare"
+  BINARIES: packages/native-lib
+
+jobs:
+  changes:
+    name: lanes this run drives
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      dev: ${{ steps.lanes.outputs.dev }}
+      aws: ${{ steps.lanes.outputs.aws }}
+      vps: ${{ steps.lanes.outputs.vps }}
+      edges: ${{ steps.lanes.outputs.edges }}
+      examples: ${{ steps.lanes.outputs.examples }}
+      real: ${{ steps.lanes.outputs.real }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pick the lanes
+        id: lanes
+        env:
+          EVENT: ${{ github.event_name }}
+          TARGETS: ${{ inputs.targets }}
+          EDGES: ${{ inputs.edges }}
+          EXAMPLES: ${{ inputs.examples }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          named() {
+            for want in $2; do
+              [ "$want" = "$1" ] && { echo true; return; }
+            done
+            echo false
+          }
+
+          forced=${OCEL_JOURNEY_LANES:-}
+          real=false
+          if [ -n "$forced" ]; then
+            lanes=${forced/all/dev aws vps}
+            dev=$(named dev "$lanes")
+            aws=$(named aws "$lanes")
+            vps=$(named vps "$lanes")
+          elif [ "$EVENT" = workflow_dispatch ]; then
+            real=true
+            dev=false
+            aws=$(named aws "$TARGETS")
+            vps=$(named vps "$TARGETS")
+          else
+            files=$(git diff --name-only "$BASE" "$HEAD")
+            echo "$files"
+            hit() { printf '%s\n' "$files" | grep -Eq "$1" && echo true || echo false; }
+            shared='^(cli|packages|frameworks|pkg|sdk|proto|examples|tests/journeys|tests/shared)/'
+            shared="$shared"'|^\.github/(actions/|workflows/journey\.yml$)'
+            shared="$shared"'|^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$'
+            dev=$(hit "$shared"'|^console/(resources|api|auth|db|web)/')
+            aws=$(hit "$shared"'|^platform/(aws|edge)/|^scripts/floci\.sh$')
+            vps=$(hit "$shared"'|^platform/vps/|^scripts/incus\.sh$')
+          fi
+
+          if [ "$EVENT" = workflow_dispatch ]; then
+            edges=$(jq -nc --arg edges "${EDGES:-$PR_EDGES}" '[{name: "real", edges: $edges}]')
+          else
+            edges=$(printf '%s\n' $PR_EDGES | jq -Rc '{name: ., edges: .}' | jq -sc .)
+          fi
+
+          {
+            echo "dev=$dev"
+            echo "aws=$aws"
+            echo "vps=$vps"
+            echo "edges=$edges"
+            echo "examples=$(echo "$EXAMPLES" | tr ' ' ',')"
+            echo "real=$real"
+          } >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+  binary:
+    name: the binaries every lane drives
+    needs: changes
+    if: ${{ needs.changes.outputs.dev == 'true' || needs.changes.outputs.aws == 'true' || needs.changes.outputs.vps == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: |
+            cli/go.sum
+            platform/aws/provider/go.sum
+            platform/vps/provider/go.sum
+            pkg/proto/go.sum
+            sdk/go.sum
+
+      - name: Setup gobuildcache
+        uses: ./.github/actions/gobuildcache
+        with:
+          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: The node bundle the CLI binary is built around
+        run: pnpm --filter ocel build
+
+      - name: Build the binaries a journey drives
+        run: |
+          set -euo pipefail
+          node scripts/build-native.mjs --host --target cli
+          node scripts/build-native.mjs --host --target provider-aws
+          node scripts/build-native.mjs --host --target provider-vps
+
+      - name: Upload them for the lanes
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-binaries
+          if-no-files-found: error
+          path: |
+            ${{ env.BINARIES }}/cli-linux-x64/bin/ocel
+            ${{ env.BINARIES }}/provider-aws-linux-x64/bin/deploy
+            ${{ env.BINARIES }}/provider-vps-linux-x64/bin/deploy
+
+  dev:
+    name: dev
+    needs: [changes, binary]
+    if: ${{ needs.changes.outputs.dev == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OCEL_TARGET: dev
+      OCEL_EXAMPLES: ${{ needs.changes.outputs.examples }}
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      OCEL_RESOURCE_POSTGRES_main: '{"name":"main","postgres":{"host":"localhost","port":5432,"database":"postgres","username":"postgres","password":"postgres"}}'
+      OCEL_CLOUD_ADMIN_URL: postgres://postgres:postgres@localhost:5433/postgres
+      BETTER_AUTH_SECRET: journey-secret-not-for-production
+      BETTER_AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_BETTER_AUTH_URL: http://localhost:3000
+      OCEL_API_URL: http://localhost:3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: The node bundle the examples import
+        run: pnpm --filter ocel build
+
+      - name: Take the binaries this lane drives
+        uses: ./.github/actions/journey-binaries
+
+      - name: Start the services the console stands on
+        run: docker compose up -d
+
+      - name: Wait for Postgres to be ready
+        run: |
+          for svc in postgres ocel-cloud; do
+            echo "Waiting for $svc ..."
+            for i in $(seq 1 60); do
+              if docker compose exec -T "$svc" pg_isready -U postgres >/dev/null 2>&1; then
+                echo "$svc is ready"
+                break
+              fi
+              sleep 1
+              if [ "$i" -eq 60 ]; then
+                echo "$svc did not become ready" >&2
+                exit 1
+              fi
+            done
+          done
+
+      - name: Push control-plane schema
+        run: pnpm --filter @console/db db:push
+
+      - name: Start console/web (Next dev)
+        run: |
+          pnpm --filter @console/web dev > /tmp/web.log 2>&1 &
+          echo "Waiting for console/web on :3000 ..."
+          for i in $(seq 1 90); do
+            if curl -s -o /dev/null http://localhost:3000; then
+              echo "console/web is up"
+              break
+            fi
+            sleep 1
+            if [ "$i" -eq 90 ]; then
+              echo "console/web did not start; last log:" >&2
+              cat /tmp/web.log >&2
+              exit 1
+            fi
+          done
+
+      - name: Run the journey
+        run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: Dump console/web log on failure
+        if: failure()
+        run: cat /tmp/web.log || true
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-evidence-dev
+          path: tests/journeys/output
+          if-no-files-found: warn
+
+  aws:
+    name: aws (${{ matrix.edge.name }})
+    needs: [changes, binary]
+    if: ${{ needs.changes.outputs.aws == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 45 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        edge: ${{ fromJSON(needs.changes.outputs.edges) }}
+    concurrency:
+      group: ${{ github.event_name == 'workflow_dispatch' && 'real-aws' || format('journey-aws-{0}-{1}', github.event.pull_request.number, matrix.edge.name) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    env:
+      OCEL_TARGET: aws
+      OCEL_EXAMPLES: ${{ needs.changes.outputs.examples }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
+      CLOUDFLARE_API_TOKEN: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
+      REAL: ${{ needs.changes.outputs.real }}
+      EDGES: ${{ matrix.edge.edges }}
+      EMULATOR: ocel-journey-${{ matrix.edge.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: The node bundle the examples import
+        run: pnpm --filter ocel build
+
+      - name: Take the binaries this lane drives
+        uses: ./.github/actions/journey-binaries
+
+      - name: Pull the emulator this lane deploys into
+        if: ${{ needs.changes.outputs.real != 'true' }}
+        run: docker pull "$OCEL_FLOCI_IMAGE"
+
+      - name: Assume the session that may spend the real account
+        if: ${{ needs.changes.outputs.real == 'true' }}
+        uses: ./.github/actions/real-aws-session
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          role-session-name: ocel-journey-aws-${{ github.run_id }}
+          role-duration-seconds: "14400"
+          guard-script: tests/next-compat/guard-accounts.sh
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Name the account and the zone this run may touch
+        if: ${{ needs.changes.outputs.real == 'true' }}
+        env:
+          EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          ZONE: ${{ vars.E2E_PREVIEW_DOMAIN }}
+          REGION: ${{ vars.E2E_AWS_REGION }}
+        run: |
+          set -euo pipefail
+          {
+            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
+            echo "OCEL_JOURNEY_ZONE=$ZONE"
+            echo "AWS_REGION=$REGION"
+          } >> "$GITHUB_ENV"
+
+      - name: Reclaim what a run that died left in the account
+        if: ${{ needs.changes.outputs.real == 'true' }}
+        run: pnpm --filter @ocel-tests/journeys sweep --target aws
+
+      - name: Run the journey on every edge this cell holds
+        run: |
+          set -uo pipefail
+          status=0
+          for edge in $EDGES; do
+            echo "::group::aws journey on $edge"
+            if [ "$REAL" != true ]; then
+              OCEL_AWS_EDGE=$edge scripts/floci.sh run "$EMULATOR-$edge" -- \
+                bash -c 'AWS_ENDPOINT_URL=${OCEL_FLOCI_ENDPOINT/127.0.0.1/localhost.localstack.cloud} pnpm --filter @ocel-tests/journeys journey' ||
+                status=1
+            else
+              OCEL_AWS_EDGE=$edge pnpm --filter @ocel-tests/journeys journey || status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - name: No emulator left behind
+        if: always()
+        run: |
+          for edge in $EDGES; do
+            scripts/floci.sh destroy "$EMULATOR-$edge" || echo "could not destroy $EMULATOR-$edge"
+          done
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-evidence-aws-${{ matrix.edge.name }}
+          path: tests/journeys/output
+          if-no-files-found: warn
+
+  vps:
+    name: vps
+    needs: [changes, binary]
+    if: ${{ needs.changes.outputs.vps == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 90 || 45 }}
+    concurrency:
+      group: ${{ github.event_name == 'workflow_dispatch' && 'real-vps' || format('journey-vps-{0}', github.event.pull_request.number) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    env:
+      OCEL_TARGET: vps
+      OCEL_EXAMPLES: ${{ needs.changes.outputs.examples }}
+      VM: ocel-journey-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup the incus host
+        if: ${{ needs.changes.outputs.real != 'true' }}
+        uses: ./.github/actions/incus-vm
+        with:
+          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - name: Setup pnpm
+        if: ${{ needs.changes.outputs.real == 'true' }}
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        if: ${{ needs.changes.outputs.real == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        if: ${{ needs.changes.outputs.real == 'true' }}
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --filter ocel build
+
+      - name: Take the binaries this lane drives
+        uses: ./.github/actions/journey-binaries
+
+      - name: Bring up the box this lane deploys to
+        if: ${{ needs.changes.outputs.real != 'true' }}
+        run: |
+          set -euo pipefail
+          sg incus-admin -c "scripts/incus.sh create $VM"
+          eval "$(sg incus-admin -c "scripts/incus.sh info $VM")"
+          {
+            echo "OCEL_VPS_HOST=$OCEL_INCUS_ADDR"
+            echo "OCEL_VPS_USER=$OCEL_INCUS_USER"
+            echo "OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Name the box this run may deploy to
+        if: ${{ needs.changes.outputs.real == 'true' }}
+        env:
+          HOST: ${{ secrets.JOURNEY_VPS_HOST }}
+          USER_NAME: ${{ secrets.JOURNEY_VPS_USER }}
+          KEY: ${{ secrets.JOURNEY_VPS_KEY }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/journey-vps-key"
+          install -m 0600 /dev/null "$key"
+          printf '%s\n' "$KEY" > "$key"
+          {
+            echo "OCEL_VPS_HOST=$HOST"
+            echo "OCEL_VPS_USER=$USER_NAME"
+            echo "OCEL_VPS_IDENTITY_FILE=$key"
+          } >> "$GITHUB_ENV"
+
+      - name: Run the journey
+        run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: No VM left behind
+        if: ${{ always() && needs.changes.outputs.real != 'true' }}
+        run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-evidence-vps
+          path: tests/journeys/output
+          if-no-files-found: warn
