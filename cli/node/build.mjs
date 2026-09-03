@@ -32,12 +32,14 @@ await build({
 });
 
 await build({
-  entryPoints: [join(platformDir, "src/vars-ui/main.ts")],
+  entryPoints: [join(platformDir, "src/vars-ui/main.tsx")],
   outfile: join(dist, "vars-ui/app.js"),
   bundle: true,
   platform: "browser",
   format: "esm",
   target: "es2022",
+  jsx: "automatic",
+  jsxImportSource: "preact",
   minify: true,
 });
 await copyFile(
