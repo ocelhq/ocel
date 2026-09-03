@@ -3,7 +3,6 @@ export type Stamp = { cached: string; live: string };
 export type PostedForm = {
   action: string;
   method: string;
-  enctype: string;
   fields: Record<string, string>;
 };
 
@@ -22,7 +21,7 @@ function attributes(tag: string): Record<string, string> {
   return found;
 }
 
-export function decodeEntities(text: string): string {
+function decodeEntities(text: string): string {
   return text
     .replace(/&quot;/g, '"')
     .replace(/&#x27;/g, "'")
@@ -60,7 +59,6 @@ export function form(html: string): PostedForm {
   return {
     action: attrs.action ?? "",
     method: (attrs.method ?? "get").toLowerCase(),
-    enctype: attrs.enctype ?? "application/x-www-form-urlencoded",
     fields,
   };
 }

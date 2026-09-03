@@ -30,9 +30,9 @@ describe("stamp", () => {
 });
 
 describe("form", () => {
-  it("reads the action, method, encoding and hidden fields", () => {
+  it("reads the action, method and hidden fields", () => {
     const html = `
-      <form action="/actions" method="POST" enctype="multipart/form-data">
+      <form action="/actions" method="POST" encType="multipart/form-data">
         <input type="hidden" name="$ACTION_ID_abc" value=""/>
         <input name="note" value="ignored"/>
         <button type="submit">go</button>
@@ -41,7 +41,6 @@ describe("form", () => {
     expect(form(html)).toEqual({
       action: "/actions",
       method: "post",
-      enctype: "multipart/form-data",
       fields: { $ACTION_ID_abc: "" },
     });
   });

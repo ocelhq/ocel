@@ -11,10 +11,9 @@ type StateRow = {
   count: number;
   firstSeen: string;
   lastSeen: string;
-  value: string | null;
 };
 
-async function html(ctx: ContractContext, path: string): Promise<string> {
+async function pageHtml(ctx: ContractContext, path: string): Promise<string> {
   const res = await ctx.fetch(`${ctx.baseUrl}${path}`);
   assert.equal(res.status, 200, `${path} answered ${res.status}`);
   return res.text();
@@ -25,8 +24,9 @@ async function text(ctx: ContractContext, path: string, init?: RequestInit) {
   return { res, body: await res.text() };
 }
 
-async function state(ctx: ContractContext): Promise<Map<string, StateRow>> {
-  const res = await ctx.fetch(`${ctx.baseUrl}/api/next/state`);
+async function state(ctx: ContractContext, keys: string[]): Promise<Map<string, StateRow>> {
+  const asked = keys.map((key) => `key=${encodeURIComponent(key)}`).join("&");
+  const res = await ctx.fetch(`${ctx.baseUrl}/api/next/state?${asked}`);
   assert.equal(res.status, 200, "the state readback answered " + res.status);
   const read = (await res.json()) as { rows: StateRow[] };
   return new Map(read.rows.map((row) => [row.key, row]));
@@ -35,7 +35,7 @@ async function state(ctx: ContractContext): Promise<Map<string, StateRow>> {
 async function stateRow(ctx: ContractContext, key: string, timeoutMs: number): Promise<StateRow> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const row = (await state(ctx)).get(key);
+    const row = (await state(ctx, [key])).get(key);
     if (row) {
       return row;
     }
@@ -56,7 +56,7 @@ async function submit(
   path: string,
   values: Record<string, string>,
 ): Promise<Response> {
-  const posted = form(await html(ctx, path));
+  const posted = form(await pageHtml(ctx, path));
   assert.equal(posted.method, "post");
   const body = new FormData();
   for (const [name, value] of Object.entries({ ...posted.fields, ...values })) {
@@ -121,7 +121,7 @@ export const nextRoutingRows: ContractRow[] = [
     suite: "next-routing",
     run: async (ctx) => {
       assert.equal(
-        marker(await html(ctx, "/routing/dynamic/one%2520two"), "param:slug"),
+        marker(await pageHtml(ctx, "/routing/dynamic/one%2520two"), "param:slug"),
         "one%20two",
       );
     },
@@ -131,17 +131,20 @@ export const nextRoutingRows: ContractRow[] = [
     suite: "next-routing",
     run: async (ctx) => {
       assert.equal(
-        marker(await html(ctx, "/routing/catch-all/alpha/one%2520two"), "param:parts"),
+        marker(await pageHtml(ctx, "/routing/catch-all/alpha/one%2520two"), "param:parts"),
         "alpha|one%20two",
       );
     },
   },
   {
-    title: "an optional catch-all route serves with and without segments",
+    title: "an optional catch-all route serves without segments and once-decodes the ones it has",
     suite: "next-routing",
     run: async (ctx) => {
-      assert.equal(marker(await html(ctx, "/routing/optional"), "param:parts"), "none");
-      assert.equal(marker(await html(ctx, "/routing/optional/x/y"), "param:parts"), "x|y");
+      assert.equal(marker(await pageHtml(ctx, "/routing/optional"), "param:parts"), "none");
+      assert.equal(
+        marker(await pageHtml(ctx, "/routing/optional/caf%C3%A9/a%252Fb"), "param:parts"),
+        "café|a%2Fb",
+      );
     },
   },
   {
@@ -158,11 +161,12 @@ export const nextRoutingRows: ContractRow[] = [
     },
   },
   {
-    title: "a throwing page renders the error page with a 500",
+    title: "a throwing page answers 500 with the error shell",
     suite: "next-routing",
     run: async (ctx) => {
       const res = await ctx.fetch(`${ctx.baseUrl}/routing/boom`);
       assert.equal(res.status, 500);
+      assert.match(res.headers.get("content-type") ?? "", /^text\/html/);
     },
   },
   {
@@ -218,22 +222,26 @@ export const nextRoutingRows: ContractRow[] = [
     title: "a redirect beats a beforeFiles rewrite, which beats the filesystem",
     suite: "next-routing",
     run: async (ctx) => {
-      const res = await ctx.fetch(`${ctx.baseUrl}/routing/precedence-redirect`, {
+      assert.equal(
+        marker(await pageHtml(ctx, "/routing/precedence/other"), "page"),
+        "target:precedence",
+      );
+      const res = await ctx.fetch(`${ctx.baseUrl}/routing/precedence/redirected`, {
         redirect: "manual",
       });
       assert.equal(res.status, 307);
       assert.equal(locationPath(res), "/routing/landing");
 
-      assert.equal(marker(await html(ctx, "/routing/rewrite/before"), "page"), "target:before");
+      assert.equal(marker(await pageHtml(ctx, "/routing/rewrite/before"), "page"), "target:before");
     },
   },
   {
     title: "an afterFiles rewrite loses to the filesystem and beats a dynamic route",
     suite: "next-routing",
     run: async (ctx) => {
-      assert.equal(marker(await html(ctx, "/routing/rewrite/after"), "page"), "filesystem");
+      assert.equal(marker(await pageHtml(ctx, "/routing/rewrite/after"), "page"), "filesystem");
       assert.equal(
-        marker(await html(ctx, "/routing/dynamic/rewritten"), "page"),
+        marker(await pageHtml(ctx, "/routing/dynamic/rewritten"), "page"),
         "target:after",
       );
     },
@@ -243,7 +251,7 @@ export const nextRoutingRows: ContractRow[] = [
     suite: "next-routing",
     run: async (ctx) => {
       assert.equal(
-        marker(await html(ctx, "/routing/fallback/anything/at/all"), "page"),
+        marker(await pageHtml(ctx, "/routing/fallback/anything/at/all"), "page"),
         "target:fallback",
       );
     },
@@ -261,7 +269,7 @@ export const nextRoutingRows: ContractRow[] = [
     title: "the proxy rewrites, redirects and blocks",
     suite: "next-routing",
     run: async (ctx) => {
-      assert.equal(marker(await html(ctx, "/mw/rewrite"), "page"), "mw:target");
+      assert.equal(marker(await pageHtml(ctx, "/mw/rewrite"), "page"), "mw:target");
 
       const redirected = await ctx.fetch(`${ctx.baseUrl}/mw/redirect`, { redirect: "manual" });
       assert.equal(redirected.status, 307);
@@ -276,7 +284,7 @@ export const nextRoutingRows: ContractRow[] = [
     title: "the proxy injects a request header the page renders",
     suite: "next-routing",
     run: async (ctx) => {
-      assert.equal(marker(await html(ctx, "/mw/inject"), "header:injected"), "from-the-proxy");
+      assert.equal(marker(await pageHtml(ctx, "/mw/inject"), "header:injected"), "from-the-proxy");
     },
   },
   {
@@ -342,19 +350,18 @@ export const nextRoutingRows: ContractRow[] = [
     },
   },
   {
-    title: "register() is counted with a first-seen before the first request",
+    title: "register() ran once in the boot that is answering, before that boot's first request",
     suite: "next-routing",
     run: async (ctx) => {
-      const probe = await text(ctx, "/api/next/upstream/register-probe");
-      assert.equal(probe.res.status, 200);
-      const rows = await state(ctx);
-      const registered = rows.get("register");
-      const requested = rows.get("upstream:register-probe");
-      assert.ok(registered, "register() never reached the state readback");
-      assert.ok(requested, "the probe request never reached the state readback");
-      assert.ok(registered.count >= 1, `register() was counted ${registered.count} times`);
+      const boot = marker(await pageHtml(ctx, "/runtime/node"), "boot");
+      const rows = await state(ctx, [`register:${boot}`, `request:${boot}`]);
+      const registered = rows.get(`register:${boot}`);
+      const requested = rows.get(`request:${boot}`);
+      assert.ok(registered, `register() never ran in boot ${boot}`);
+      assert.ok(requested, `boot ${boot} recorded no request`);
+      assert.equal(registered.count, 1, `register() ran ${registered.count} times in one boot`);
       assert.ok(
-        Date.parse(registered.firstSeen) <= Date.parse(requested.firstSeen),
+        Date.parse(registered.firstSeen) < Date.parse(requested.firstSeen),
         `register() was first seen at ${registered.firstSeen}, after ${requested.firstSeen}`,
       );
     },
@@ -363,8 +370,8 @@ export const nextRoutingRows: ContractRow[] = [
     title: "the edge and the node runtime stamp themselves apart",
     suite: "next-routing",
     run: async (ctx) => {
-      const node = stamp(await html(ctx, "/runtime/node"), "runtime");
-      const edge = stamp(await html(ctx, "/runtime/edge"), "runtime");
+      const node = stamp(await pageHtml(ctx, "/runtime/node"), "runtime");
+      const edge = stamp(await pageHtml(ctx, "/runtime/edge"), "runtime");
       assert.equal(node.cached, "nodejs");
       assert.equal(edge.cached, "edge");
       assert.notEqual(node.cached, edge.cached);
