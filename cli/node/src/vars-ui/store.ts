@@ -1,8 +1,10 @@
 import { computed, signal } from "@preact/signals";
 
 import { api, ApiError, query } from "./api";
+import { parseDotenv } from "./dotenv";
 import {
   addressKey,
+  applyDotenv,
   baselineOf,
   dirtyEntries,
   reduceSave,
@@ -12,6 +14,7 @@ import {
   variantsOf,
   type Address,
   type AppResolution,
+  type DropOutcome,
   type Problem,
   type SaveResult,
   type State,
@@ -32,6 +35,9 @@ export const baselines = signal<ReadonlyMap<string, string>>(new Map());
 export const revealErrors = signal<ReadonlyMap<string, string>>(new Map());
 export const problems = signal<ReadonlyMap<string, Problem>>(new Map());
 export const outcome = signal<{ text: string; tone?: "owed" } | null>(null);
+
+export const dropTarget = signal<string | null>(null);
+export const dropped = signal<(DropOutcome & { name: string }) | null>(null);
 
 export const drawer = signal<Address | null>(null);
 export const history = signal<Version[] | null>(null);
@@ -243,6 +249,35 @@ export async function erase(at: Address, version: number): Promise<void> {
   } finally {
     saving.value = false;
   }
+}
+
+export function applyDrop(name: string, text: string, folder: string): void {
+  const out = applyDotenv(tree.value, parseDotenv(text), folder);
+  const added = [...extras.value];
+  const known = new Set(added.map(addressKey));
+  const open = new Set(expanded.value);
+  const next = new Map(drafts.value);
+  for (const fill of out.fills) {
+    if (fill.materialise && !known.has(addressKey(fill.at))) {
+      added.push(fill.at);
+      known.add(addressKey(fill.at));
+    }
+    if (fill.at.folder !== "") open.add(fill.at.key);
+    if (fill.value === baselineOf(fill.at, baselines.value)) {
+      next.delete(addressKey(fill.at));
+    } else {
+      next.set(addressKey(fill.at), fill.value);
+    }
+  }
+  extras.value = added;
+  expanded.value = open;
+  drafts.value = next;
+  dropped.value = { ...out, name };
+  dropTarget.value = null;
+}
+
+export function dismissDrop(): void {
+  dropped.value = null;
 }
 
 export function openDrawer(at: Address): void {

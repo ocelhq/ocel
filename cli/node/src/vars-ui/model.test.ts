@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addressKey,
+  applyDotenv,
   dirtyEntries,
   doneLabel,
   held,
@@ -242,6 +243,51 @@ describe("sizeLine", () => {
   it("keeps bytes under a kibibyte and rounds above", () => {
     expect(sizeLine(48)).toBe("48 B");
     expect(sizeLine(2048)).toBe("2.0 KiB");
+  });
+});
+
+describe("applyDotenv", () => {
+  const rows = treeOf(
+    stateOf(
+      [
+        row("A", [cell({ set: true, version: 1 }), cell({ folder: "/web" })]),
+        row("S", [cell({}), cell({ folder: "/web" })], { class: "secret" }),
+        row("R", [cell({ reference: { slug: "billing", folder: "", key: "R" } }), cell({ folder: "/web" })]),
+        row("W", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], { scope: ["/web"] }),
+      ],
+      [],
+    ),
+    [],
+  );
+  const entries = [
+    { key: "A", value: "a" },
+    { key: "S", value: "s" },
+    { key: "R", value: "r" },
+    { key: "W", value: "w" },
+    { key: "NOPE", value: "x" },
+  ];
+
+  it("fills root rows, overwrites secrets, skips references and reports the rest", () => {
+    const out = applyDotenv(rows, entries, "");
+    expect(out.fills).toEqual([
+      { at: at("A"), value: "a", materialise: false },
+      { at: at("S"), value: "s", materialise: false },
+    ]);
+    expect(out.undeclared).toEqual(["NOPE"]);
+    expect(out.skipped.map((s) => s.key)).toEqual(["R", "W"]);
+    expect(out.skipped[0]?.reason).toMatch(/reads billing.*ocel env ref/);
+    expect(out.skipped[1]?.reason).toBe("nothing reads W in root");
+  });
+
+  it("scopes to a folder and asks to materialise cells the tree does not show", () => {
+    const out = applyDotenv(rows, entries, "/web");
+    expect(out.fills).toEqual([
+      { at: at("A", "/web"), value: "a", materialise: true },
+      { at: at("S", "/web"), value: "s", materialise: true },
+      { at: at("R", "/web"), value: "r", materialise: true },
+      { at: at("W", "/web"), value: "w", materialise: false },
+    ]);
+    expect(out.skipped).toEqual([]);
   });
 });
 
