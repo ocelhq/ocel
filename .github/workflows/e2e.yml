@@ -2,6 +2,7 @@ name: E2E
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "cli/**"
       - "pkg/proto/**"
@@ -20,8 +21,13 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres

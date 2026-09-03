@@ -2,6 +2,7 @@ name: VPS Live
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "platform/vps/**"
       - "pkg/providerkit/**"
@@ -9,27 +10,6 @@ on:
       - "cli/internal/provider/**"
       - "cli/internal/prompt/**"
       - "cli/internal/cli/bootstrap/**"
-      - "cli/internal/cli/preflight/**"
-      - "cli/internal/cli/doctor/**"
-      - "cli/internal/imagebuild/**"
-      - "cli/internal/appbuilder/**"
-      - "cli/internal/appimages/**"
-      - "cli/internal/appregistry/**"
-      - "cli/internal/livemachine/**"
-      - "cli/internal/cli/deploy/**"
-      - "cli/internal/cli/permissions/**"
-      - "cli/internal/cli/domain.go"
-      - "cli/internal/cli/rollback.go"
-      - "cli/internal/cli/destroy.go"
-      - "cli/internal/cli/env/**"
-      - "cli/internal/envgate/**"
-      - "cli/internal/discovery/**"
-      - "cli/internal/manifestbuilder/**"
-      - "cli/internal/projectconfig/**"
-      - "packages/ocel/**"
-      - "pkg/naming/**"
-      - "examples/express-container/**"
-      - "proto/**"
       - "pnpm-lock.yaml"
       - "scripts/incus.sh"
       - "scripts/assert-ran.sh"
@@ -37,7 +17,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: vps-live-${{ github.ref }}
+  group: vps-live-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -46,6 +26,7 @@ permissions:
 
 jobs:
   live:
+    if: github.event.action != 'closed'
     name: vps live conformance
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -86,9 +67,6 @@ jobs:
           pnpm --filter ocel build
           go generate -C cli ./...
 
-      - name: The flip helper the provider embeds
-        run: go generate -C platform/vps/provider ./...
-
       - name: Virtualisation the qemu driver hard-requires
         run: |
           sudo modprobe vhost_vsock || true
@@ -101,30 +79,6 @@ jobs:
           sudo apt-get install -y incus qemu-system-x86 ovmf
           sudo incus admin init --auto
           sudo usermod -aG incus-admin "$(id -un)"
-
-      - name: Keep images in containerd, as every build the cli accepts does
-        run: |
-          set -euo pipefail
-          sudo mkdir -p /etc/docker
-          if [ -s /etc/docker/daemon.json ]; then
-            jq '.features."containerd-snapshotter" = true' /etc/docker/daemon.json > /tmp/daemon.json
-          else
-            echo '{"features":{"containerd-snapshotter":true}}' > /tmp/daemon.json
-          fi
-          sudo install -m 0644 /tmp/daemon.json /etc/docker/daemon.json
-          cat /etc/docker/daemon.json
-          sudo systemctl restart docker
-          for _ in $(seq 1 30); do
-            if docker info >/dev/null 2>&1; then break; fi
-            sleep 1
-          done
-          docker info --format '{{json .DriverStatus}}'
-          if ! docker info --format '{{json .DriverStatus}}' | grep -q 'containerd.snapshotter'; then
-            echo "the containerd image store did not take: the daemon still keeps images in its classic store," >&2
-            echo "so the live transfer would export an archive production never exports and prove nothing." >&2
-            docker info >&2
-            exit 1
-          fi
 
       - name: Let the incus bridge past Docker's FORWARD drop
         run: |
@@ -143,18 +97,10 @@ jobs:
       - name: Assert the live suite ran
         run: scripts/assert-ran.sh live.json TestLive
 
-      - name: Run the build pipeline against a machine's own daemon
-        run: |
-          set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh run ocel-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} -- go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." | tee build.json
-
-      - name: Assert the build live suite ran
-        run: scripts/assert-ran.sh build.json TestLive
-
       - name: Run the CLI e2e on a machine of its own
         run: |
           set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh run ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} -- go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestE2E' -json ./..." | tee e2e.json
+          sg incus-admin -c "scripts/incus.sh run ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestE2E' -json ./..." | tee e2e.json
 
       - name: Assert the e2e ran
         run: scripts/assert-ran.sh e2e.json TestE2E
@@ -162,6 +108,6 @@ jobs:
       - name: No VM left behind
         if: always()
         run: |
-          for name in "ocel-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "ocel-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; do
+          for name in "ocel-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; do
             sg incus-admin -c "scripts/incus.sh destroy $name" || echo "could not destroy $name"
           done

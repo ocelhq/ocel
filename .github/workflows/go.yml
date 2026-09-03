@@ -2,6 +2,7 @@ name: Go
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "cli/**"
       - "sdk/**"
@@ -14,7 +15,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: go-${{ github.ref }}
+  group: go-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -23,6 +24,7 @@ permissions:
 
 jobs:
   go:
+    if: github.event.action != 'closed'
     name: ${{ matrix.module }}
     runs-on: ubuntu-latest
     strategy:
@@ -84,7 +86,7 @@ jobs:
         run: pnpm --filter ocel build
 
       - name: go generate (embedded dist)
-        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider' || matrix.module == 'platform/vps/provider'
+        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
         run: go generate ./...
 
       - name: go generate (provider payloads the cli tests build)
