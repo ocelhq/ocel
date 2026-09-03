@@ -2,7 +2,7 @@ name: Journey
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened, closed, labeled]
     paths:
       - "cli/**"
       - "packages/**"
@@ -21,6 +21,7 @@ on:
       - "tests/shared/**"
       - "scripts/floci.sh"
       - "scripts/incus.sh"
+      - "scripts/ec2.sh"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -45,10 +46,11 @@ on:
 permissions:
   contents: read
   id-token: write
+  pull-requests: write
 
 concurrency:
-  group: journey-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.event.action == 'labeled' && format('journey-real-{0}', github.event.pull_request.number) || format('journey-{0}', github.event.pull_request.number || github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
 
 env:
   OCEL_FLOCI_IMAGE: floci/floci:2.0.1
@@ -61,7 +63,7 @@ env:
 jobs:
   changes:
     name: lanes this run drives
-    if: github.event.action != 'closed'
+    if: ${{ github.event.action != 'closed' && (github.event.action != 'labeled' || github.event.label.name == 'journey:real') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -72,6 +74,14 @@ jobs:
       examples: ${{ steps.lanes.outputs.examples }}
       real: ${{ steps.lanes.outputs.real }}
     steps:
+      - name: Spend the label that asked for this run
+        if: ${{ github.event.action == 'labeled' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr edit "$PR" --remove-label journey:real
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -81,6 +91,8 @@ jobs:
         id: lanes
         env:
           EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
           TARGETS: ${{ inputs.targets }}
           EDGES: ${{ inputs.edges }}
           EXAMPLES: ${{ inputs.examples }}
@@ -98,13 +110,20 @@ jobs:
 
           forced=${OCEL_JOURNEY_LANES:-}
           real=false
+          if [ "$EVENT" = workflow_dispatch ]; then
+            real=true
+          elif [ "$ACTION" = labeled ] && [ "$LABEL" = journey:real ]; then
+            real=true
+            TARGETS="aws vps"
+            EXAMPLES="express hono fastify next"
+          fi
+
           if [ -n "$forced" ]; then
             lanes=${forced/all/dev aws vps}
             dev=$(named dev "$lanes")
             aws=$(named aws "$lanes")
             vps=$(named vps "$lanes")
-          elif [ "$EVENT" = workflow_dispatch ]; then
-            real=true
+          elif [ "$real" = true ]; then
             dev=false
             aws=$(named aws "$TARGETS")
             vps=$(named vps "$TARGETS")
@@ -117,10 +136,10 @@ jobs:
             shared="$shared"'|^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$'
             dev=$(hit "$shared"'|^console/(resources|api|auth|db|web)/')
             aws=$(hit "$shared"'|^platform/(aws|edge)/|^scripts/floci\.sh$')
-            vps=$(hit "$shared"'|^platform/vps/|^scripts/incus\.sh$')
+            vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
           fi
 
-          if [ "$EVENT" = workflow_dispatch ]; then
+          if [ "$real" = true ]; then
             edges=$(jq -nc --arg edges "${EDGES:-$PR_EDGES}" '[{name: "real", edges: $edges}]')
           else
             edges=$(printf '%s\n' $PR_EDGES | jq -Rc '{name: ., edges: .}' | jq -sc .)
@@ -281,14 +300,14 @@ jobs:
     needs: [changes, binary]
     if: ${{ needs.changes.outputs.aws == 'true' && needs.binary.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 45 }}
+    timeout-minutes: ${{ needs.changes.outputs.real == 'true' && 120 || 45 }}
     strategy:
       fail-fast: false
       matrix:
         edge: ${{ fromJSON(needs.changes.outputs.edges) }}
     concurrency:
-      group: ${{ github.event_name == 'workflow_dispatch' && 'real-aws' || format('journey-aws-{0}-{1}', github.event.pull_request.number, matrix.edge.name) }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+      group: ${{ needs.changes.outputs.real == 'true' && 'real-aws' || format('journey-aws-{0}-{1}', github.event.pull_request.number, matrix.edge.name) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
       OCEL_TARGET: aws
       OCEL_EXAMPLES: ${{ needs.changes.outputs.examples }}
@@ -339,6 +358,7 @@ jobs:
           REGION: ${{ vars.E2E_AWS_REGION }}
         run: |
           set -euo pipefail
+          ZONE=${ZONE#\*.}
           {
             echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
             echo "OCEL_JOURNEY_ZONE=$ZONE"
@@ -388,14 +408,17 @@ jobs:
     needs: [changes, binary]
     if: ${{ needs.changes.outputs.vps == 'true' && needs.binary.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 90 || 45 }}
+    timeout-minutes: ${{ needs.changes.outputs.real == 'true' && 90 || 45 }}
     concurrency:
-      group: ${{ github.event_name == 'workflow_dispatch' && 'real-vps' || format('journey-vps-{0}', github.event.pull_request.number) }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+      group: ${{ needs.changes.outputs.real == 'true' && 'real-vps' || format('journey-vps-{0}', github.event.pull_request.number) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
       OCEL_TARGET: vps
       OCEL_EXAMPLES: ${{ needs.changes.outputs.examples }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
+      CLOUDFLARE_API_TOKEN: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       VM: ocel-journey-${{ github.run_id }}-${{ github.run_attempt }}
+      BOX: journey-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -433,21 +456,45 @@ jobs:
             echo "OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY"
           } >> "$GITHUB_ENV"
 
-      - name: Name the box this run may deploy to
+      - name: Assume the session that may spend the real account
+        if: ${{ needs.changes.outputs.real == 'true' }}
+        uses: ./.github/actions/real-aws-session
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          role-session-name: ocel-journey-vps-${{ github.run_id }}
+          role-duration-seconds: "7200"
+          guard-script: tests/next-compat/guard-accounts.sh
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Name the account this run may touch
         if: ${{ needs.changes.outputs.real == 'true' }}
         env:
-          HOST: ${{ secrets.JOURNEY_VPS_HOST }}
-          USER_NAME: ${{ secrets.JOURNEY_VPS_USER }}
-          KEY: ${{ secrets.JOURNEY_VPS_KEY }}
+          EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          REGION: ${{ vars.E2E_AWS_REGION }}
         run: |
           set -euo pipefail
-          key="$RUNNER_TEMP/journey-vps-key"
-          install -m 0600 /dev/null "$key"
-          printf '%s\n' "$KEY" > "$key"
           {
-            echo "OCEL_VPS_HOST=$HOST"
-            echo "OCEL_VPS_USER=$USER_NAME"
-            echo "OCEL_VPS_IDENTITY_FILE=$key"
+            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
+            echo "AWS_REGION=$REGION"
+          } >> "$GITHUB_ENV"
+
+      - name: Reclaim boxes a run that died left behind
+        if: ${{ needs.changes.outputs.real == 'true' }}
+        run: scripts/ec2.sh sweep
+
+      - name: Bring up the box this lane deploys to
+        if: ${{ needs.changes.outputs.real == 'true' }}
+        run: |
+          set -euo pipefail
+          eval "$(scripts/ec2.sh create "$BOX")"
+          {
+            echo "OCEL_VPS_HOST=$OCEL_EC2_ADDR"
+            echo "OCEL_VPS_USER=$OCEL_EC2_USER"
+            echo "OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY"
           } >> "$GITHUB_ENV"
 
       - name: Run the journey
@@ -456,6 +503,10 @@ jobs:
       - name: No VM left behind
         if: ${{ always() && needs.changes.outputs.real != 'true' }}
         run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
+
+      - name: No box left behind
+        if: ${{ always() && needs.changes.outputs.real == 'true' }}
+        run: scripts/ec2.sh destroy "$BOX" || echo "could not destroy $BOX"
 
       - name: Upload the evidence
         if: always()
