@@ -202,6 +202,28 @@ describe("publishing a postgres link", () => {
     expect(JSON.stringify(created.outs)).not.toContain(properties.password);
   });
 
+  it("resolves a grant's resource from a pulumi output before it publishes", async () => {
+    const resourceArn =
+      "arn:aws:rds-db:us-east-1:111122223333:dbuser:cluster-abc/operator";
+    postgres(
+      "orders",
+      {
+        ...properties,
+        grants: [
+          { actions: ["rds-db:connect"], resources: [output(resourceArn)] },
+        ],
+      },
+      { project: root },
+    );
+
+    const created = await postgresProvider.create(await inputs(latest()));
+
+    expect(JSON.parse(String(argv().options?.input))).toMatchObject({
+      grants: [{ actions: ["rds-db:connect"], resources: [resourceArn] }],
+    });
+    expect(created.id).toBe("production/orders");
+  });
+
   it("surfaces the CLI's refusal verbatim", async () => {
     run.mockReturnValue({
       status: 1,
