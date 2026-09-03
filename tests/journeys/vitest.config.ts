@@ -8,6 +8,7 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.journey.test.ts"],
     reporters: ["default", new URL("./src/reporter.ts", import.meta.url).pathname],
+    globalSetup: [new URL("./src/globalSetup.ts", import.meta.url).pathname],
     testTimeout: target.legTimeoutMs,
     hookTimeout: target.legTimeoutMs,
     fileParallelism: true,
