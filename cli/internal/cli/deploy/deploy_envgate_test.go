@@ -78,6 +78,29 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		}
 	})
 
+	t.Run("a client value that fails its schema refuses before anything is built, naming the key and the complaint", func(t *testing.T) {
+		root := clitest.SetUpEnvGateFixture(t, `[{"key":"NEXT_PUBLIC_PORT","class":"VARIABLE_CLASS_PLAIN","required":true,"clientAccessible":true,"hasSchema":true,"schemaSource":"/app/env.schema.ts","source":"/app/env.ts"}]`)
+		t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"NEXT_PUBLIC_PORT","folder":"","kind":"KIND_INVALID","detail":"expected a number"}]`)
+		deps := clitest.NewDeps()
+		built := false
+		stubAppBuildRecorder(&deps, &built)
+
+		var stdout, stderr bytes.Buffer
+		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil {
+			t.Fatal("runDeploy err = nil, want the gate to refuse")
+		}
+		out := stdout.String()
+		for _, want := range []string{"NEXT_PUBLIC_PORT", "set, but expected a number", "ocel env set NEXT_PUBLIC_PORT <VALUE>"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+		if built {
+			t.Error("the app was built with a client value its schema rejects")
+		}
+	})
+
 	t.Run("a missing value refuses though discovery reported nothing", func(t *testing.T) {
 		root := clitest.SetUpEnvGateFixtureWith(t,
 			`[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`,
