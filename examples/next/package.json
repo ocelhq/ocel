@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ocel/provider-aws": "workspace:^",
+    "@ocel/provider-vps": "workspace:^",
+    "better-sqlite3": "^13.0.3",
     "next": "16.2.10",
     "ocel": "workspace:^",
     "pg": "^8.22.0",
@@ -18,6 +21,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
