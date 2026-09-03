@@ -1,6 +1,8 @@
 package deploy
 
 import (
+	"fmt"
+
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	rds "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/rds"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -150,7 +152,12 @@ func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, arg
 		return err
 	}
 
-	secretARN := cluster.MasterUserSecrets.Index(pulumi.Int(0)).SecretArn()
+	secretARN := cluster.MasterUserSecrets.ApplyT(func(secrets []rds.ClusterMasterUserSecret) (string, error) {
+		if len(secrets) == 0 || secrets[0].SecretArn == nil {
+			return "", fmt.Errorf("the %s cluster reports no managed master user secret, so nothing can read the password %s needs", at.Name, args.DatabaseName)
+		}
+		return *secrets[0].SecretArn, nil
+	}).(pulumi.StringOutput)
 	ctx.Export(logicalName, pulumi.Map{
 		outputKeyHost:      cluster.Endpoint,
 		outputKeyPort:      cluster.Port,
