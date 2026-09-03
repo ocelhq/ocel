@@ -81,7 +81,7 @@ export const spec: ExampleSpec[] = [
     dir: "next",
     framework: "next",
     kind: "composite",
-    suites: ["health", "static", "product", "probes", "next-routing"],
+    suites: ["health", "static", "product", "probes", "next-routing", "next-cache"],
     apps: ["web"],
   },
   {

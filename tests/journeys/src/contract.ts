@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import type { AnyUploader, Bucket } from "ocel/blob";
 import { createUploadClient } from "ocel/blob/client";
+import { nextCacheRows } from "./nextCache";
 import { nextRoutingRows } from "./nextRouting";
-import type { Suite } from "./spec";
+import type { Leg, Suite } from "./spec";
 
 export const INITIAL_GREETING = "journey-hello";
 export const REDEPLOY_GREETING = "redeployed";
@@ -18,6 +19,7 @@ export type ContractContext = {
   app: string;
   baseUrl: string;
   greeting: string;
+  leg: Leg;
   fetch: typeof fetch;
 };
 
@@ -361,6 +363,7 @@ export const contract: ContractRow[] = [
     },
   },
   ...nextRoutingRows,
+  ...nextCacheRows,
 ];
 
 export function contractRows(suites: Suite[]): ContractRow[] {

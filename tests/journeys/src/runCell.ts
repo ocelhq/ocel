@@ -83,12 +83,13 @@ export function describeCell(example: ExampleSpec) {
     }
   });
 
-  function contractContext(app: string) {
+  function contractContext(app: string, leg: Leg) {
     assert.ok(deployment, "the contract ran before the cell came up");
     return {
       app,
       baseUrl: deployment.baseUrl(app),
       greeting,
+      leg,
       fetch: secretGuarded(deployment.fetch),
     };
   }
@@ -99,7 +100,7 @@ export function describeCell(example: ExampleSpec) {
         contractTitle(leg, row.title),
         async () => {
           await bringUp();
-          await row.run(contractContext(app));
+          await row.run(contractContext(app, leg));
         },
         timeout,
       );

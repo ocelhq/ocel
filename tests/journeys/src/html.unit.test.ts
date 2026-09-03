@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstChunkWith, form, marker, stamp } from "./html";
+import { assetPath, firstChunkWith, form, marker, stamp } from "./html";
 
 describe("marker", () => {
   it("reads the text an ocel marker wraps", () => {
@@ -47,6 +47,20 @@ describe("form", () => {
 
   it("refuses a page that rendered no form", () => {
     expect(() => form("<main></main>")).toThrow(/no form/);
+  });
+});
+
+describe("assetPath", () => {
+  it("reads the first hashed asset the page links, whichever quote it wears", () => {
+    const html = `
+      <link rel="preload" href="/_next/static/css/8fd1.css"/>
+      <script src='/_next/static/chunks/0eir.js'></script>
+    `;
+    expect(assetPath(html)).toBe("/_next/static/css/8fd1.css");
+  });
+
+  it("refuses a page that links none", () => {
+    expect(() => assetPath("<main></main>")).toThrow(/hashed static asset/);
   });
 });
 
