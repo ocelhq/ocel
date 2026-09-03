@@ -14,6 +14,7 @@ import {
   state,
 } from "../store";
 import { Apps } from "./Apps";
+import { Drawer } from "./Drawer";
 import { Icon, Sprite } from "./Icons";
 import { Masthead } from "./Masthead";
 import { Table } from "./Table";
@@ -63,6 +64,7 @@ export function App() {
         </div>
         <Table />
       </div>
+      <Drawer />
       <footer class="bar">
         <div class="bar-actions">
           <button

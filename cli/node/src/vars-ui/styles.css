@@ -608,6 +608,118 @@ select {
   color: var(--owed);
 }
 
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--step) * 2);
+  width: min(26rem, 100vw);
+  padding: calc(var(--step) * 3) calc(var(--step) * 4);
+  overflow-y: auto;
+  border-left: 1px solid var(--rule-strong);
+  background: var(--sheet);
+  box-shadow: -12px 0 32px -16px rgba(0, 0, 0, 0.35);
+}
+
+.drawer-head {
+  display: flex;
+  gap: var(--step);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.drawer h2 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.drawer .badge {
+  margin: 0;
+}
+
+.coordinate {
+  margin: 2px 0 0;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.drawer .badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--step) * 0.75);
+}
+
+.drawer .eyebrow {
+  margin: calc(var(--step) * 2) 0 calc(var(--step) * 0.75);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: calc(var(--step) * 0.75) calc(var(--step) * 2);
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+}
+
+.facts dt {
+  color: var(--ink-soft);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.facts .readers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--step) * 0.75);
+}
+
+.problem {
+  margin: 0;
+  padding: var(--step) calc(var(--step) * 1.5);
+  border-left: 2px solid var(--owed);
+  color: var(--owed);
+  font-size: 0.8125rem;
+}
+
+.history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.history li {
+  display: grid;
+  grid-template-columns: 3rem 1fr auto;
+  gap: var(--step);
+  padding: calc(var(--step) * 0.75) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.history .version {
+  color: var(--ink);
+}
+
+.empty {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+}
+
 .farewell {
   padding: calc(var(--step) * 6);
   font-family: var(--mono);

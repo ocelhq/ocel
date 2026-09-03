@@ -9,9 +9,11 @@ import {
   names,
   owedChildren,
   owedCount,
+  readersOf,
   reduceSave,
   revealable,
   saveSummary,
+  sizeLine,
   tallyLine,
   treeOf,
   variantsOf,
@@ -208,6 +210,38 @@ describe("treeOf", () => {
       [],
     );
     expect(owedChildren(tree[0]!)).toBe(1);
+  });
+});
+
+describe("readersOf", () => {
+  const apps = [
+    { name: "web", folder: "/web" },
+    { name: "api", folder: "/api" },
+    { name: "root-app", folder: "" },
+  ];
+
+  it("names every app for an unscoped key, since each reads the root", () => {
+    const tree = treeOf(stateOf([row("A", [cell({}), cell({ folder: "/web" })])]), []);
+    expect(readersOf(tree[0]!, apps).map((a) => a.name)).toEqual(["web", "api", "root-app"]);
+  });
+
+  it("names only the apps bound to a scoped key's folders", () => {
+    const tree = treeOf(
+      stateOf(
+        [row("B", [cell({ state: "forbidden" }), cell({ folder: "/web" }), cell({ folder: "/api", state: "forbidden" })], { scope: ["/web"] })],
+        [],
+        ["", "/web", "/api"],
+      ),
+      [],
+    );
+    expect(readersOf(tree[0]!, apps).map((a) => a.name)).toEqual(["web"]);
+  });
+});
+
+describe("sizeLine", () => {
+  it("keeps bytes under a kibibyte and rounds above", () => {
+    expect(sizeLine(48)).toBe("48 B");
+    expect(sizeLine(2048)).toBe("2.0 KiB");
   });
 });
 
