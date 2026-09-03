@@ -1,5 +1,7 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { EnvDefinitionError } from "./errors.js";
 import { scopeProblem } from "./scope.js";
+import { parse } from "./standard.js";
 
 export type VariableClass = "plain" | "sensitive" | "secret";
 
@@ -25,10 +27,6 @@ export type VariableDefinition<
     });
 
 export type Definitions = Record<string, VariableDefinition>;
-
-export class EnvDefinitionError extends Error {
-  override name = "EnvDefinitionError";
-}
 
 const LIVE_CLASSES: ReadonlySet<VariableClass> = new Set(["secret"]);
 
@@ -111,45 +109,10 @@ export function isRequired(definition: VariableDefinition): boolean {
   return parse(definition.schema, undefined).ok === false;
 }
 
-export type ParseResult =
-  | { ok: true; value: unknown }
-  | { ok: false; message: string };
-
-export function parse(
-  schema: StandardSchemaV1,
-  value: unknown,
-): ParseResult {
-  const result = schema["~standard"].validate(value);
-  if (result instanceof Promise) {
-    throw new EnvDefinitionError(
-      "A variable's schema must validate synchronously: variables are read as plain properties.",
-    );
-  }
-  if (result.issues) {
-    return { ok: false, message: describeIssues(result.issues) };
-  }
-  return { ok: true, value: result.value };
-}
-
 export function complaint(
   definition: VariableDefinition,
   message: string,
 ): string {
   if (definition.class === "plain") return message;
   return `withheld, because a '${definition.class}' value's schema message can quote the value itself`;
-}
-
-function describeIssues(
-  issues: ReadonlyArray<StandardSchemaV1.Issue>,
-): string {
-  return issues
-    .map((issue) => {
-      const path = (issue.path ?? [])
-        .map((segment) =>
-          typeof segment === "object" ? String(segment.key) : String(segment),
-        )
-        .join(".");
-      return path ? `${path}: ${issue.message}` : issue.message;
-    })
-    .join("; ");
 }

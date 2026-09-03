@@ -789,7 +789,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if readErr != nil {
 			t.Fatalf("dev generated no client accessor: %v", readErr)
 		}
-		if !strings.Contains(string(accessor), `PUBLIC_SITE_URL: inlined("PUBLIC_SITE_URL", process.env.PUBLIC_SITE_URL)`) {
+		if !strings.Contains(string(accessor), `PUBLIC_SITE_URL: inlined(schema, "PUBLIC_SITE_URL", process.env.PUBLIC_SITE_URL)`) {
 			t.Errorf("accessor = %s, want it to read the key under its declared name", accessor)
 		}
 		if strings.Contains(string(accessor), "STRIPE_API_KEY") {

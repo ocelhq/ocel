@@ -1,4 +1,5 @@
-import { complaint, parse, type VariableDefinition } from "./definition.js";
+import { complaint, type VariableDefinition } from "./definition.js";
+import { parse } from "./standard.js";
 import { EnvValueError } from "./errors.js";
 
 const BAKED_PREFIX = "OCEL_VAR_";

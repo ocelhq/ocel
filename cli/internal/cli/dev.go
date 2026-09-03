@@ -182,7 +182,10 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 		return nil, err
 	}
 
-	clientKeys := srv.ClientKeys()
+	clientKeys, err := srv.ClientKeys()
+	if err != nil {
+		return nil, err
+	}
 	if err := generateClientAccessors(cfg, clientKeys); err != nil {
 		return nil, err
 	}

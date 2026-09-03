@@ -50,8 +50,12 @@ func TestDevserverDiscover(t *testing.T) {
 		})
 
 		t.Run("a client-accessible declaration arrives as one", func(t *testing.T) {
-			if got := strings.Join(srv.ClientKeys(), ","); got != "PUBLIC_SITE_URL" {
-				t.Errorf("client keys = %q, want PUBLIC_SITE_URL", got)
+			keys, err := srv.ClientKeys()
+			if err != nil {
+				t.Fatalf("ClientKeys: %v", err)
+			}
+			if len(keys) != 1 || keys[0].Name != "PUBLIC_SITE_URL" {
+				t.Errorf("client keys = %+v, want PUBLIC_SITE_URL", keys)
 			}
 		})
 

@@ -229,7 +229,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 
-		if !strings.Contains(generated, `PUBLIC_SITE_URL: inlined("PUBLIC_SITE_URL", process.env.PUBLIC_SITE_URL)`) {
+		if !strings.Contains(generated, `PUBLIC_SITE_URL: inlined(schema, "PUBLIC_SITE_URL", process.env.PUBLIC_SITE_URL)`) {
 			t.Errorf("accessor the build saw = %q, want it to read the key under its declared name", generated)
 		}
 		if _, err := os.Stat(filepath.Join(root, ".ocel", "output", "client-digests.json")); err != nil {

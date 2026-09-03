@@ -177,6 +177,9 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 			Folder:           cell.Folder,
 			Version:          cell.Version,
 			ClientAccessible: definition.GetClientAccessible(),
+			Source:           definition.GetSource(),
+			SchemaSource:     definition.GetSchemaSource(),
+			Schema:           definition.GetHasSchema(),
 		})
 	}
 	return variables

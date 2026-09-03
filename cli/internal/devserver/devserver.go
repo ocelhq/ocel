@@ -305,10 +305,10 @@ func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout
 	return discovery.Run(ctx, entry, s.devServerAddr, stdout, stderr)
 }
 
-func (s *Server) ClientKeys() []string {
+func (s *Server) ClientKeys() ([]clientenv.Key, error) {
 	_, gate := s.env.current()
 	if gate == nil {
-		return nil
+		return nil, nil
 	}
-	return clientenv.DeclaredKeys(gate.Definitions())
+	return clientenv.Declared(gate.Definitions())
 }

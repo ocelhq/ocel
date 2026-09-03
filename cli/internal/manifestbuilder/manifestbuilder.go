@@ -60,6 +60,9 @@ type Variable struct {
 	Folder           string
 	ClientAccessible bool
 	Version          int64
+	Source           string
+	SchemaSource     string
+	Schema           bool
 }
 
 type Function struct {
