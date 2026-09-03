@@ -488,6 +488,11 @@ select {
   padding-right: 8px;
 }
 
+.badge[data-kind="reference"] {
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+
 .badge[data-tone="owed"] {
   border-color: var(--owed);
   color: var(--owed);
@@ -580,6 +585,27 @@ select {
 
 .tag[data-tone="owed"] {
   background: var(--owed);
+}
+
+.reference .value-line {
+  min-height: 26px;
+}
+
+.resolved {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.terminal {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.terminal code {
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .add-variant {

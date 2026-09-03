@@ -8,8 +8,10 @@ import {
   owedChildren,
   plural,
   readBy,
+  referenceLine,
   revealable,
   type KeyRow,
+  type Reference,
   type Variant,
   type VariantOption,
 } from "../model";
@@ -248,6 +250,9 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
   }
   const key = addressKey(variant.at);
   const revealed = baselines.value.has(key);
+  if (variant.reference) {
+    return <Linked variant={variant} reference={variant.reference} />;
+  }
   const draft = drafts.value.get(key) ?? baselineOf(variant.at, baselines.value);
   const dirty = isDirty(variant.at, drafts.value, baselines.value);
   const problem = problems.value.get(key);
@@ -320,6 +325,35 @@ function Value({ variant, scope }: { variant: Variant; scope: string[] }) {
   );
 }
 
+function Linked({ variant, reference }: { variant: Variant; reference: Reference }) {
+  const key = addressKey(variant.at);
+  const value = baselines.value.get(key);
+  const unreadable = revealErrors.value.get(key);
+  return (
+    <div class="value reference">
+      <div class="value-line">
+        <span class="status">
+          <span class="stored">set · v{variant.version}</span>
+        </span>
+        <span class="badge" data-kind="reference">
+          <Icon name="link" />
+          reads {referenceLine(reference)}
+        </span>
+        {value !== undefined && <span class="resolved">{value}</span>}
+      </div>
+      {unreadable && (
+        <span class="fault">
+          <Icon name="warning" />
+          source unreadable: {unreadable}
+        </span>
+      )}
+      <span class="terminal">
+        Change it with <code>ocel env ref {variant.at.key} …</code> in the terminal.
+      </span>
+    </div>
+  );
+}
+
 function stored(variant: Variant, value: string | undefined): string {
   if (variant.class === "secret") return `set · v${variant.version} (a secret stays out of the browser)`;
   if (value === undefined) return `v${variant.version}`;
@@ -368,7 +402,7 @@ function Tools({ variant }: { variant: Variant }) {
           <Icon name={revealed ? "eyeOff" : "eye"} />
         </button>
       )}
-      {variant.set && (
+      {variant.set && !variant.reference && (
         <button
           type="button"
           class="iconbtn"

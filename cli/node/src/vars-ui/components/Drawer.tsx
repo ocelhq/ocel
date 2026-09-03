@@ -5,6 +5,7 @@ import {
   folderName,
   names,
   readersOf,
+  referenceLine,
   sizeLine,
   whenLine,
   type KeyRow,
@@ -142,6 +143,22 @@ function Facts({ row, variant }: { row: KeyRow; variant: Variant }) {
             ? "required, not set"
             : "not set"}
       </dd>
+      {variant.reference && (
+        <>
+          <dt>source</dt>
+          <dd>
+            <span class="badge" data-kind="reference">
+              <Icon name="link" />
+              {referenceLine(variant.reference)}
+            </span>
+            <span class="terminal">
+              {" "}
+              live — edits there change what this project reads; change the link with{" "}
+              <code>ocel env ref</code>
+            </span>
+          </dd>
+        </>
+      )}
       <dt>read by</dt>
       <dd>
         {readers.length === 0 ? (

@@ -13,6 +13,7 @@ import {
   planCopy,
   readersOf,
   reduceSave,
+  referenceLine,
   revealable,
   saveSummary,
   sizeLine,
@@ -241,6 +242,13 @@ describe("readersOf", () => {
   });
 });
 
+describe("referenceLine", () => {
+  it("omits an empty folder", () => {
+    expect(referenceLine({ slug: "billing", folder: "", key: "K" })).toBe("billing/K");
+    expect(referenceLine({ slug: "billing", folder: "/api", key: "K" })).toBe("billing/api/K");
+  });
+});
+
 describe("sizeLine", () => {
   it("keeps bytes under a kibibyte and rounds above", () => {
     expect(sizeLine(48)).toBe("48 B");
@@ -400,6 +408,14 @@ describe("dirtyEntries", () => {
       { at: at("A", "/web"), value: "web", version: 1 },
       { at: at("B"), value: "new", version: 0 },
     ]);
+  });
+
+  it("never includes a referenced cell, whatever its draft says", () => {
+    const linked = treeOf(
+      stateOf([row("R", [cell({ reference: { slug: "billing", folder: "/api", key: "R" } })])]),
+      [],
+    );
+    expect(dirtyEntries(linked, new Map([[key(at("R")), "typed"]]), new Map())).toEqual([]);
   });
 
   it("treats clearing a revealed value as a change to empty", () => {
