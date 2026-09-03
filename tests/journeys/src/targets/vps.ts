@@ -10,6 +10,7 @@ import { appHostname, HARNESS_PREFIX } from "../identity";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
 import type { Leg } from "../spec";
+import { appFolder, migrateCommand } from "../workspace";
 import { type Gateway, openGateway } from "./gateway";
 import type { CellContext, Deployment, Target } from "./types";
 
@@ -310,10 +311,16 @@ async function up(cell: CellContext): Promise<Deployment> {
 
   await drive("env-greeting", ["env", "set", "GREETING", INITIAL_GREETING]);
   await drive("env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN]);
+  for (const app of cell.example.apps) {
+    const folder = appFolder(cell.example, app);
+    if (folder) {
+      await drive(`env-app-${app}`, ["env", "set", "APP_NAME", app, "--folder", folder]);
+    }
+  }
   await drive("deploy", ["deploy", "--yes"]);
   await bindDomains(cell, started);
   if (cell.example.suites.includes("product")) {
-    await drive("migrate", ["run", "--", "pnpm", "migrate"]);
+    await drive("migrate", ["run", "--", ...migrateCommand(cell.example)]);
   }
   return deployment(cell, started);
 }

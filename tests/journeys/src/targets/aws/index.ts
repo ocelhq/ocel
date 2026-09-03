@@ -3,9 +3,10 @@ import path from "node:path";
 import { INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
-import { copyTree, ocel, runOcel, workTree } from "../../ocel";
+import { configTree, copyTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { exampleDir, outputRoot, treeDir } from "../../paths";
 import { specForTarget } from "../../spec";
+import { appFolder, migrateCommand } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
 import { accountFiles, pinnedEnv, PROFILE_VARS } from "./account";
 import { emulatorFetch } from "./dispatch";
@@ -139,7 +140,7 @@ async function setup(): Promise<void> {
 }
 
 async function cellTree(cell: CellContext): Promise<string> {
-  const dir = treeDir(cell.runId, "aws", cell.example.name);
+  const dir = configTree(cell, "aws");
   try {
     await access(dir);
     return dir;
@@ -154,10 +155,17 @@ async function up(cell: CellContext): Promise<Deployment> {
 
   await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
   await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
+  for (const app of cell.example.apps) {
+    const folder = appFolder(cell.example, app);
+    if (folder) {
+      const args = ["env", "set", "APP_NAME", app, "--folder", folder];
+      await runOcel(cell, dir, "up", `env-app-${app}`, args, env);
+    }
+  }
   await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
   await runOcel(cell, dir, "up", "domain-add", ["domain", "add"], env);
   if (cell.example.suites.includes("product")) {
-    await runOcel(cell, dir, "up", "migrate", ["run", "--", "pnpm", "migrate"], env);
+    await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand(cell.example)], env);
   }
 
   const deployed = deployment(cell, await dispatcher());
@@ -201,7 +209,7 @@ async function destroy(cell: CellContext): Promise<void> {
     await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
   }
   await runOcel(cell, dir, "destroy", "destroy", ["destroy", "production", "--yes"], env);
-  await rm(dir, { recursive: true, force: true });
+  await rm(treeRoot(cell, "aws"), { recursive: true, force: true });
 }
 
 async function list(): Promise<string[]> {
