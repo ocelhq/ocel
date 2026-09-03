@@ -1,6 +1,6 @@
+import { link } from "@ocel/pulumi";
 import * as aws from "@pulumi/aws";
 import { Config, interpolate } from "@pulumi/pulumi";
-import { link } from "@ocel/pulumi";
 
 const region = aws.config.requireRegion();
 const password = new Config().requireSecret("dbPassword");
@@ -63,12 +63,23 @@ const orders = new aws.rds.Instance("orders", {
   skipFinalSnapshot: true,
 });
 
+const account = aws.getCallerIdentityOutput().accountId;
+
 link.postgres("orders", {
   host: orders.address,
   port: orders.port,
   database: orders.dbName,
   username: orders.username,
   password,
+  grants: [
+    {
+      label: "connect",
+      actions: ["rds-db:connect"],
+      resources: [
+        interpolate`arn:aws:rds-db:${region}:${account}:dbuser:${orders.resourceId}/${orders.username}`,
+      ],
+    },
+  ],
 });
 
 link.custom("network", {
@@ -79,3 +90,8 @@ link.custom("network", {
 });
 
 export const endpoint = interpolate`${orders.address}:${orders.port}`;
+export const host = orders.address;
+export const port = orders.port;
+export const database = orders.dbName;
+export const networkSubnetIds = subnetIds;
+export const networkSecurityGroupIds = [security.id];
