@@ -5,15 +5,15 @@
 | `journeys`    | one example on one target, through the real `ocel` binary, over HTTP |
 | `next-compat` | Next.js's own deployment-adapter harness, by workflow dispatch only  |
 
-Unit tests live beside the code they cover, in vitest for TypeScript and `go test`
-for Go. The Go provider suites (`TestLive*`) and lifecycle suites (`TestE2E*`) stay
-in their provider packages and run from the provider workflows.
+Unit tests live beside the code they cover, in vitest for TypeScript and `go test` for Go;
+the Go provider suites (`TestLive*`) and lifecycle suites (`TestLifecycle*`) stay in the
+provider packages and the CLI, and run from the provider workflows.
 
-## Journeys
+## Running one journey locally
 
-A cell is one example on one target, named in `journeys/src/spec.ts`. The harness
-starts nothing but the `ocel` binary; bring up what the target needs first. For `dev`
-that is postgres, the control-plane schema and the console:
+A cell is one example on one target, named in `journeys/src/spec.ts`. The harness starts
+nothing but the `ocel` binary; bring up what the target needs first. For `dev` that is
+postgres, the control-plane schema and the console:
 
 ```
 go -C cli build -o bin/ocel ./ocel
@@ -40,11 +40,8 @@ scripts/floci.sh destroy ocel-journeys
 
 The host is `localhost.localstack.cloud`, not the `127.0.0.1` the script prints: S3-Control
 addresses its endpoint as `<account>.<host>`, and `<account>.127.0.0.1` resolves nowhere,
-so a bootstrap against the printed form fails where the named form works (#888).
-
-The target pins the AWS config and credentials files to empty files of its own, so a
-profile in `~/.aws` cannot redirect one service at the endpoint. A bootstrap cannot be
-updated on floci (#853), so a second run wants a fresh emulator.
+so a bootstrap against the printed form fails where the named form works (#888). A
+bootstrap cannot be updated on floci (#853), so a second run wants a fresh emulator.
 
 For `vps` that is a box the run can reach over SSH, and on a laptop that is an incus VM:
 
@@ -57,38 +54,70 @@ export OCEL_VPS_HOST=$OCEL_INCUS_ADDR OCEL_VPS_USER=$OCEL_INCUS_USER OCEL_VPS_ID
 pnpm --filter @ocel-tests/journeys cell --example express --target vps
 ```
 
-The vps sweep refuses a box that is not the disposable incus one.
+`pnpm --filter @ocel-tests/journeys sweep --target <target>` reclaims what a run that died
+left behind, and only projects the harness named.
 
-Projects stranded by a run that died are reclaimed per target, and only ones the harness
-named:
-
-```
-pnpm --filter @ocel-tests/journeys sweep --target aws
-```
-
-`--shard <index>/<total>` is accepted and validated; it selects nothing yet.
-
-Real clouds are reached by workflow dispatch only. Nothing here spends a real account.
+Real clouds are reached by workflow dispatch only; nothing run from here spends a real
+account.
 
 A cell that is expected to fail is listed in `journeys/src/expectations/<environment>.ts`
-with the issue that owns the gap, and un-listed in the PR that fixes it.
+under the issue that owns the gap, and un-listed in the pull request that fixes it. The
+account is exact in both directions: a listed cell that passes fails the run, an unlisted
+cell that fails fails the run, and a skipped, `todo` or `only` test fails the run whatever
+the file says.
 
 Evidence and the run's account land under `journeys/output/`, which is untracked and
 uploaded as a workflow artifact.
 
+## Running next-compat locally
+
+The pure half — the manifest and result comparisons, not the Lambda — runs anywhere:
+
+```
+pnpm --filter @ocel-tests/next-compat test
+```
+
+Driving the harness itself needs a Next.js checkout at the ref the adapter pins, an `ocel`
+sidecar to install into each temp app, and credentials for a real AWS and Cloudflare
+account, because every case deploys. One suite at a time:
+
+```
+RUN_ID=local-$USER OUT_DIR=/tmp/next-compat NEXT_DIR=<next.js checkout> \
+  OCEL_E2E_SIDECAR_DIR=<sidecar dir> \
+  tests/next-compat/run-one.sh test/e2e/app-dir/app-basepath/index.test.ts
+```
+
+`next-compat/README.md` is the source of truth for building the sidecar, recording a
+baseline and reclaiming a stranded project.
+
 ## One-time human setup
 
-The `vps` lane of the `journey` workflow points at an incus VM on a pull request and at
-a vendor box on dispatch. The box is named by three repository secrets, which a human
-sets once:
+Both real lanes are dispatch-only, and both need a human to prepare an account once.
 
-| secret              | what it holds                                                  |
-| ------------------- | -------------------------------------------------------------- |
-| `JOURNEY_VPS_HOST`  | the box's address                                              |
-| `JOURNEY_VPS_USER`  | the login that may bootstrap it                                |
-| `JOURNEY_VPS_KEY`   | that login's private key, whole, newlines and all              |
+The `aws` lane assumes a role over GitHub OIDC — no access key is stored — and hard-fails
+if the session or the Cloudflare token resolves to an account other than the one named. The
+role's `MaxSessionDuration` must be at least 14400 seconds, the duration the journey job
+mints, or the assume fails outright.
 
-The workflow writes the key to the runner's temporary directory at mode 0600 and hands
-its path to the harness as `OCEL_VPS_IDENTITY_FILE`. Nothing else on the box is
-configured from here: the journey bootstraps production on it and destroys what it
-deployed.
+| name                                 | kind   | what it holds                                               |
+| ------------------------------------ | ------ | ----------------------------------------------------------- |
+| `E2E_AWS_ROLE_ARN`                   | secret | the role every AWS-touching job assumes                      |
+| `E2E_AWS_REGION`                     | var    | the region the session is minted in and the apps deploy into |
+| `E2E_CLOUDFLARE_API_TOKEN`           | secret | the Cloudflare API token the edge deploys with               |
+| `E2E_CLOUDFLARE_ACCOUNT_ID`          | secret | the Cloudflare account passed to the provider                |
+| `E2E_EXPECTED_AWS_ACCOUNT_ID`        | secret | the only AWS account the guard lets a run touch              |
+| `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID` | secret | the only Cloudflare account the guard lets a run touch       |
+| `E2E_PREVIEW_DOMAIN`                 | var    | the zone a dispatched run may take hostnames under           |
+
+The `vps` lane points at an incus VM on a pull request and at a vendor box on dispatch. The
+box is three secrets:
+
+| name               | what it holds                                     |
+| ------------------ | ------------------------------------------------- |
+| `JOURNEY_VPS_HOST` | the box's address                                 |
+| `JOURNEY_VPS_USER` | the login that may bootstrap it                   |
+| `JOURNEY_VPS_KEY`  | that login's private key, whole, newlines and all |
+
+The workflow writes the key to the runner's temporary directory at mode 0600 and hands its
+path to the harness as `OCEL_VPS_IDENTITY_FILE`. Nothing else on the box is configured from
+here: the journey bootstraps production on it and destroys what it deployed.
