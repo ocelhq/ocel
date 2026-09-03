@@ -1,0 +1,37 @@
+config:
+  aws:region: us-east-1
+  aws:accessKey: test
+  aws:secretKey: test
+  aws:skipCredentialsValidation: "true"
+  aws:skipRequestingAccountId: "true"
+  aws:skipMetadataApiCheck: "true"
+  aws:s3UsePathStyle: "true"
+  aws:endpoints:
+    - acm: http://127.0.0.1:4566
+      apigateway: http://127.0.0.1:4566
+      apigatewayv2: http://127.0.0.1:4566
+      cloudformation: http://127.0.0.1:4566
+      cloudfront: http://127.0.0.1:4566
+      cloudwatch: http://127.0.0.1:4566
+      cloudwatchlogs: http://127.0.0.1:4566
+      dynamodb: http://127.0.0.1:4566
+      ec2: http://127.0.0.1:4566
+      ecr: http://127.0.0.1:4566
+      ecs: http://127.0.0.1:4566
+      elbv2: http://127.0.0.1:4566
+      events: http://127.0.0.1:4566
+      iam: http://127.0.0.1:4566
+      kms: http://127.0.0.1:4566
+      lambda: http://127.0.0.1:4566
+      logs: http://127.0.0.1:4566
+      rds: http://127.0.0.1:4566
+      route53: http://127.0.0.1:4566
+      s3: http://127.0.0.1:4566
+      secretsmanager: http://127.0.0.1:4566
+      sns: http://127.0.0.1:4566
+      sqs: http://127.0.0.1:4566
+      ssm: http://127.0.0.1:4566
+      sts: http://127.0.0.1:4566
+  with-pulumi:dbPassword:
+    secure: v1:rHWx/Se3+Z7mIEim:V+jyBZOi3TG18M5g5d0EGmIBTdogTYwJZg==
+encryptionsalt: v1:9Pn3IRUUZqM=:v1:nmR4Mk8z4zsNpXqA:Su/BdmPd3KVPWgbdapK0IksfImRZbw==

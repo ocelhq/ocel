@@ -2,12 +2,56 @@
 
 const region = "us-east-1";
 
+const emulator = process.env.AWS_ENDPOINT_URL;
+
+const emulated = emulator
+  ? {
+      accessKey: process.env.AWS_ACCESS_KEY_ID ?? "test",
+      secretKey: process.env.AWS_SECRET_ACCESS_KEY ?? "test",
+      skipCredentialsValidation: true,
+      skipRequestingAccountId: true,
+      skipMetadataApiCheck: true,
+      s3UsePathStyle: true,
+      endpoints: [
+        Object.fromEntries(
+          [
+            "acm",
+            "apigateway",
+            "apigatewayv2",
+            "cloudformation",
+            "cloudfront",
+            "cloudwatch",
+            "cloudwatchlogs",
+            "dynamodb",
+            "ec2",
+            "ecr",
+            "ecs",
+            "elbv2",
+            "events",
+            "iam",
+            "kms",
+            "lambda",
+            "logs",
+            "rds",
+            "route53",
+            "s3",
+            "secretsmanager",
+            "sns",
+            "sqs",
+            "ssm",
+            "sts",
+          ].map((service) => [service, emulator]),
+        ),
+      ],
+    }
+  : {};
+
 export default $config({
   app() {
     return {
       name: "with-sst",
       home: "aws",
-      providers: { aws: { region } },
+      providers: { aws: { region, ...emulated } },
     };
   },
   async run() {
