@@ -17,7 +17,15 @@ describe("expectationsFor", () => {
   it("does not read the edge for an environment that has no edges", () => {
     process.env[EDGE_ENV] = "not-an-edge";
     assert.doesNotThrow(() => expectationsFor("dev"));
-    assert.deepEqual(expectationsFor("aws"), {});
+    assert.doesNotThrow(() => expectationsFor("aws"));
+  });
+
+  it("lists nothing on real aws but the pre-declared edge-runtime ISR red", () => {
+    const listed = expectationsFor("aws");
+    assert.deepEqual(Object.keys(listed), ["next/web"]);
+    const titles = Object.values(listed["next/web"] ?? {});
+    assert.equal(titles.length, 3);
+    assert.deepEqual(new Set(titles), new Set(["https://github.com/ocelhq/ocel/issues/899"]));
   });
 
   it("names the variable when the aws floci file is asked for an edge it does not list", () => {

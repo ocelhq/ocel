@@ -43,6 +43,14 @@ export function stamp(html: string, scope: string): Stamp {
   return { cached: marker(html, `${scope}:cached`), live: marker(html, `${scope}:live`) };
 }
 
+export function assetPath(html: string): string {
+  const found = /["'](\/_next\/static\/[^"']+)["']/.exec(html);
+  if (!found) {
+    throw new Error("the page linked no hashed static asset");
+  }
+  return decodeEntities(found[1]!);
+}
+
 export function form(html: string): PostedForm {
   const found = /<form\b([^>]*)>([\s\S]*?)<\/form>/.exec(html);
   if (!found) {

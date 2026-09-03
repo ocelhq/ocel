@@ -16,6 +16,7 @@ function context(asked: string, answered: string): ContractContext {
     app: asked,
     baseUrl: `https://${asked}.j-1-workspace.journey.test`,
     greeting: "journey-hello",
+    leg: "contract",
     fetch: answering(answered),
   };
 }
