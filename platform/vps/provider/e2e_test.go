@@ -654,7 +654,7 @@ func plain(rendered string) string {
 const (
 	e2eDecoyContainer = "not-ocels-workload"
 	e2eDecoyLabel     = "not.ocels.workload"
-	e2eDecoyImage     = "alpine:3.20"
+	e2eDecoyImage     = "public.ecr.aws/docker/library/alpine:3.20"
 	e2eDecoyProxy     = "not-ocels-caddy"
 	e2eDecoyProxyData = "/var/lib/not-ocels-caddy"
 )
@@ -721,8 +721,8 @@ func (j journey) gaveBack(t *testing.T, repository string) {
 	if standing := j.appContainers(t); len(standing) > 0 {
 		t.Errorf("containers %v still carry %s", standing, host.LabelApp)
 	}
-	if kept := j.appImages(t, decoyImage); len(kept) == 0 {
-		t.Fatalf("this box lists no image at all under %s, so the empty listing under %s is the emptiness of the command rather than of the repository", decoyImage, repository)
+	if kept := j.appImages(t, decoyRepository); len(kept) == 0 {
+		t.Fatalf("this box lists no image at all under %s, so the empty listing under %s is the emptiness of the command rather than of the repository", decoyRepository, repository)
 	}
 	if swept := j.appImages(t, repository); len(swept) > 0 {
 		t.Errorf("%v still stand under %s, and a destroy empties the difference its own reference filter names", swept, repository)

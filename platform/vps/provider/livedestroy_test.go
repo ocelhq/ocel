@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	workload   = "ocel-live-workload"
-	decoyImage = "busybox"
+	workload        = "ocel-live-workload"
+	decoyRepository = "public.ecr.aws/docker/library/busybox"
+	decoyImage      = decoyRepository + ":stable"
 )
 
 type said struct{ lines []string }
