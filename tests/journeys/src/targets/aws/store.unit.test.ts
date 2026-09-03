@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
-import { awsStore, type Cli } from "./store";
+import { awsLinkStore, awsStore, type Cli } from "./store";
 
 const TABLE = "ocel-vars";
 
@@ -99,5 +99,99 @@ describe("stands", () => {
       return TABLE;
     });
     await assert.rejects(awsStore(undefined, cli).stands("j-1-express"), /ThrottlingException/);
+  });
+});
+
+const SLUG = "j-1-with-sst";
+
+function b64(value: string): string {
+  return Buffer.from(value, "utf8").toString("base64");
+}
+
+function linksPage(items: Array<{ sk: string; body: Record<string, unknown> }>): string {
+  return JSON.stringify({
+    Items: items.map(({ sk, body }) => ({
+      sk: { S: sk },
+      body: { B: b64(JSON.stringify(body)) },
+    })),
+  });
+}
+
+function recordItem(sk: string, record: Record<string, unknown>, owner: string): { sk: string; body: Record<string, unknown> } {
+  return {
+    sk,
+    body: { version: 1, updatedAt: 0, record: b64(JSON.stringify(record)), owner },
+  };
+}
+
+describe("awsLinkStore", () => {
+  const owner = "urn:pulumi:j-1::with-sst::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-orders";
+
+  it("parses a postgres record and a custom record, redacted and stamped with the owner", async () => {
+    const { cli } = cliOver((args) => {
+      if (describeStacks(args)) {
+        return TABLE;
+      }
+      return linksPage([
+        recordItem(
+          "links#orders#records#*#",
+          {
+            name: "orders",
+            postgres: {},
+            source: "sst",
+            grants: [{ actions: ["rds-db:connect"], resources: ["arn:aws:rds-db:x"], label: "connect" }],
+          },
+          owner,
+        ),
+        recordItem("links#network#records#*#", { name: "network", custom: {}, source: "sst" }, owner),
+      ]);
+    });
+
+    const records = await awsLinkStore(undefined, cli).records(SLUG);
+    assert.equal(records.length, 2);
+    const orders = records.find((row) => row.name === "orders");
+    assert.deepEqual(orders, {
+      name: "orders",
+      type: "postgres",
+      source: "sst",
+      owner,
+      grants: [{ actions: ["rds-db:connect"], resources: ["arn:aws:rds-db:x"], label: "connect" }],
+      redactedProperties: {},
+    });
+    const network = records.find((row) => row.name === "network");
+    assert.deepEqual(network, {
+      name: "network",
+      type: "custom",
+      source: "sst",
+      owner,
+      grants: [],
+      redactedProperties: {},
+    });
+  });
+
+  it("parses a value item as the sealed ciphertext beside nothing else", async () => {
+    const sealed = b64("kms-ciphertext-not-plaintext");
+    const { cli } = cliOver((args) =>
+      describeStacks(args)
+        ? TABLE
+        : linksPage([{ sk: "links#orders#values#*#", body: { version: 1, sealed } }]),
+    );
+    const values = await awsLinkStore(undefined, cli).values(SLUG);
+    assert.deepEqual(values, [{ name: "orders", sealed }]);
+  });
+
+  it("reads the publisher's owner index by its own prefix", async () => {
+    const { cli, calls } = cliOver((args) =>
+      describeStacks(args) ? TABLE : linksPage([{ sk: `linkowners#${owner}#*#`, body: { names: ["orders"] } }]),
+    );
+    const names = await awsLinkStore(undefined, cli).ownerIndex(SLUG, owner);
+    assert.deepEqual(names, ["orders"]);
+    const queried = calls.find((args) => args[0] === "dynamodb");
+    assert.ok(queried?.includes(JSON.stringify({ ":pk": { S: `values#${SLUG}#production` }, ":sk": { S: `linkowners#${owner}#` } })));
+  });
+
+  it("reports no index for an owner that never published there", async () => {
+    const { cli } = cliOver((args) => (describeStacks(args) ? TABLE : linksPage([])));
+    assert.equal(await awsLinkStore(undefined, cli).ownerIndex(SLUG, owner), undefined);
   });
 });
