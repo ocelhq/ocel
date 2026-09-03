@@ -63,42 +63,46 @@ function key(cell: string, title: string): string {
   return JSON.stringify([cell, title]);
 }
 
+type Blocking = "none" | "up-failed" | "up-listed";
+
 function verdictFor(
   result: TestResult | undefined,
   issue: string | undefined,
-  blocked: boolean,
+  blocking: Blocking,
 ): Verdict {
+  const listed = blocking === "up-listed";
   if (!result) {
-    return blocked ? "blocked" : "never-ran";
+    return listed ? "blocked" : "never-ran";
   }
   if (DISABLED.has(result.outcome)) {
-    return "disabled";
+    return result.outcome === "skipped" && blocking !== "none" ? "blocked" : "disabled";
   }
   if (result.outcome === "failed") {
     if (issue) {
       return "expected-failure";
     }
-    return blocked ? "blocked" : "unexpected-failure";
+    return listed ? "blocked" : "unexpected-failure";
   }
   if (issue) {
-    return blocked ? "ok" : "listed-and-passed";
+    return listed ? "ok" : "listed-and-passed";
   }
   return "ok";
 }
 
-function blockedCells(
+function blockingByCell(
   planned: PlannedTest[],
   byKey: Map<string, TestResult>,
   expectations: Expectations,
-): Set<string> {
-  const blocked = new Set<string>();
+): Map<string, Blocking> {
+  const blocking = new Map<string, Blocking>();
   for (const cell of new Set(planned.map((entry) => entry.cell))) {
     const up = byKey.get(key(cell, UP_TITLE));
-    if (up?.outcome === "failed" && expectations[cell]?.[UP_TITLE]) {
-      blocked.add(cell);
+    if (up?.outcome !== "failed") {
+      continue;
     }
+    blocking.set(cell, expectations[cell]?.[UP_TITLE] ? "up-listed" : "up-failed");
   }
-  return blocked;
+  return blocking;
 }
 
 export function reconcile(input: {
@@ -107,7 +111,7 @@ export function reconcile(input: {
   expectations: Expectations;
 }): Report {
   const byKey = new Map(input.results.map((result) => [key(result.cell, result.title), result]));
-  const blocked = blockedCells(input.planned, byKey, input.expectations);
+  const blocking = blockingByCell(input.planned, byKey, input.expectations);
   const seen = new Set<string>();
 
   const rows: ReportRow[] = input.planned.map((entry) => {
@@ -115,12 +119,13 @@ export function reconcile(input: {
     seen.add(id);
     const result = byKey.get(id);
     const issue = input.expectations[entry.cell]?.[entry.title];
-    const isBlocked = blocked.has(entry.cell) && entry.title !== UP_TITLE;
+    const downstream: Blocking =
+      entry.title === UP_TITLE ? "none" : (blocking.get(entry.cell) ?? "none");
     return {
       cell: entry.cell,
       title: entry.title,
       leg: entry.leg,
-      verdict: verdictFor(result, issue, isBlocked),
+      verdict: verdictFor(result, issue, downstream),
       issue,
       error: result?.error,
     };
