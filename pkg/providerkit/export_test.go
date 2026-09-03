@@ -9,3 +9,5 @@ var CredentialsTravelTo = credentialsTravelTo
 var Addressable = addressable
 
 var RegistryTimeout = &registryTimeout
+
+var LoaderID = loaderID

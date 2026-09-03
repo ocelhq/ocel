@@ -37,6 +37,7 @@ type ServingQuery struct {
 }
 
 type ServingFacts struct {
+	Entry       string
 	Routing     *RoutingPlan
 	EdgeRouting *RoutingPlan
 	Guard       *OriginGuard
@@ -46,9 +47,16 @@ type ServingFacts struct {
 }
 
 func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
+	desc, present, err := ReadServeDescriptor(q.Root, q.App)
+	if err != nil {
+		return ServingFacts{}, err
+	}
 	facts := ServingFacts{
 		AssetPrefix: q.Coordinate.AssetKey(""),
 		Bytecode:    &BytecodePlan{Prefix: withoutSlash(q.Coordinate.BytecodePrefix())},
+	}
+	if present {
+		facts.Entry = desc.Entry
 	}
 	if q.Framework == FrameworkNext {
 		facts.ISR = &ISRPlan{
@@ -56,7 +64,7 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),
 		}
 	}
-	routing, err := routingFor(q)
+	routing, err := routingFor(q, desc, present)
 	if err != nil {
 		return ServingFacts{}, err
 	}
@@ -65,23 +73,15 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 	} else {
 		facts.Routing = routing
 	}
-	guard, err := guardFor(q)
-	if err != nil {
-		return ServingFacts{}, err
-	}
-	facts.Guard = guard
+	facts.Guard = guardFor(q, desc, present)
 	return facts, nil
 }
 
-func guardFor(q ServingQuery) (*OriginGuard, error) {
-	if q.EdgeRunsCode || q.EdgeSignsForwards {
-		return nil, nil
+func guardFor(q ServingQuery, desc edge.ServeDescriptor, present bool) *OriginGuard {
+	if q.EdgeRunsCode || q.EdgeSignsForwards || !present || desc.Entry == "" {
+		return nil
 	}
-	desc, present, err := ReadServeDescriptor(q.Root, q.App)
-	if err != nil || !present || desc.Entry == "" {
-		return nil, err
-	}
-	return &OriginGuard{Entry: desc.Entry}, nil
+	return &OriginGuard{Entry: desc.Entry}
 }
 
 func CrossesMembrane(kind LinkType) bool {
@@ -97,11 +97,7 @@ func crossesMembrane(crosses func(LinkType) bool, grants []Link) bool {
 	return slices.ContainsFunc(grants, func(link Link) bool { return crosses(link.Type) })
 }
 
-func routingFor(q ServingQuery) (*RoutingPlan, error) {
-	desc, present, err := ReadServeDescriptor(q.Root, q.App)
-	if err != nil {
-		return nil, err
-	}
+func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*RoutingPlan, error) {
 	if !present || !desc.EdgeRouting {
 		return nil, nil
 	}

@@ -168,6 +168,12 @@ type StackResult struct {
 	Functions []Function
 
 	Containers []AppContainer
+
+	EdgeBundleKey string
+
+	Envelope string
+
+	ISRWriteSecret string
 }
 
 type Link struct {

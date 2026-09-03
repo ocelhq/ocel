@@ -175,7 +175,7 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, builds appBuilds) er
 func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
 	for _, app := range manifestApps(deployedManifest(manifest)) {
 		name := app.GetName()
-		set, err := edgeBundleSet(deployedConfig(cfg), name, builds.coords[name], builds.baked[name])
+		set, _, err := edgeBundleSet(deployedConfig(cfg), name, builds.coords[name], builds.baked[name])
 		if err := pushSet(ctx, set, err); err != nil {
 			return err
 		}

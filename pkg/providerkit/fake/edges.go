@@ -174,6 +174,15 @@ func (e *Edge) Facts() edge.Facts {
 	}
 }
 
+const (
+	CompatDate = "2025-01-01"
+	CompatFlag = "nodejs_compat"
+)
+
+func (e *Edge) CodeRuntime() (string, []string) {
+	return CompatDate, []string{CompatFlag}
+}
+
 func (e *Edge) Serves(needs []edge.Need) {
 	e.mu.Lock()
 	defer e.mu.Unlock()

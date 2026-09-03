@@ -25,6 +25,7 @@ type appWork struct {
 	bundle      appBundle
 	cache       *isrConfig
 	sets        []assetSet
+	delivery    edgeDelivery
 	stack       string
 }
 
@@ -130,7 +131,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 
 	r.served.plan(r, app.App, logical, bytecode)
 
-	sets, err := r.assetSets(plan, app.App, app.Framework, bundle, cache)
+	sets, delivery, err := r.assetSets(plan, app.App, app.Framework, bundle, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +142,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 		bundle:      bundle,
 		cache:       cache,
 		sets:        sets,
+		delivery:    delivery,
 		stack:       stack.String(),
 		roleCoord:   roleCoordinate(project, stack),
 		role:        role,
@@ -387,7 +389,13 @@ func (r *release) decodeApp(plan providerkit.StackPlan, outputs auto.OutputMap) 
 	if !held {
 		return providerkit.StackResult{}, fmt.Errorf("this stack was not planned as an app stack")
 	}
-	result := providerkit.StackResult{}
+	result := providerkit.StackResult{
+		EdgeBundleKey: work.delivery.BundleKey,
+		Envelope:      work.delivery.Envelope,
+	}
+	if work.cache != nil {
+		result.ISRWriteSecret = work.cache.WriterSecret
+	}
 	for _, logical := range work.logical {
 		raw, produced := outputs[logical]
 		if !produced {
