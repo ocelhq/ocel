@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -24,6 +25,8 @@ var ErrAbandoned = errors.New("variables UI abandoned")
 var ErrStaleValue = errors.New("stale value")
 
 const AbandonedMessage = "the variables UI closed before the matrix was complete"
+
+const DefaultAbsence = 5 * time.Second
 
 type Reader interface {
 	List(ctx context.Context) ([]envgate.Stored, error)
@@ -71,6 +74,8 @@ type Options struct {
 	Environments []string
 
 	Recovery *Recovery
+
+	Absence time.Duration
 }
 
 type Session struct {
@@ -84,6 +89,10 @@ type Session struct {
 	done     chan struct{}
 	outcome  error
 	closeOne sync.Once
+
+	present  sync.Mutex
+	pages    int
+	departed *time.Timer
 }
 
 func Serve(ctx context.Context, opts Options) (*Session, error) {
@@ -98,6 +107,9 @@ func Serve(ctx context.Context, opts Options) (*Session, error) {
 		return nil, fmt.Errorf("generate the variables UI session token: %w", err)
 	}
 
+	if opts.Absence <= 0 {
+		opts.Absence = DefaultAbsence
+	}
 	s := &Session{
 		Token:    base64.RawURLEncoding.EncodeToString(token),
 		opts:     opts,
@@ -155,6 +167,7 @@ func (s *Session) handler() http.Handler {
 	api.HandleFunc("POST /api/copy", s.handleCopy)
 	api.HandleFunc("POST /api/done", s.handleDone)
 	api.HandleFunc("POST /api/abandon", s.handleAbandon)
+	api.HandleFunc("GET /api/presence", s.handlePresence)
 
 	page := http.FileServerFS(s.opts.Assets)
 
@@ -523,6 +536,47 @@ func (s *Session) handleDone(w http.ResponseWriter, r *http.Request) {
 
 func (s *Session) handleAbandon(w http.ResponseWriter, _ *http.Request) {
 	s.leave(w, ErrAbandoned)
+}
+
+func (s *Session) handlePresence(w http.ResponseWriter, r *http.Request) {
+	s.arrive()
+	defer s.depart()
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	select {
+	case <-r.Context().Done():
+	case <-s.done:
+	}
+}
+
+func (s *Session) arrive() {
+	s.present.Lock()
+	defer s.present.Unlock()
+	s.pages++
+	if s.departed != nil {
+		s.departed.Stop()
+		s.departed = nil
+	}
+}
+
+func (s *Session) depart() {
+	s.present.Lock()
+	defer s.present.Unlock()
+	s.pages--
+	if s.pages > 0 {
+		return
+	}
+	s.departed = time.AfterFunc(s.opts.Absence, func() {
+		s.present.Lock()
+		gone := s.pages == 0
+		s.present.Unlock()
+		if gone {
+			_ = s.finish(ErrAbandoned)
+		}
+	})
 }
 
 func (s *Session) leave(w http.ResponseWriter, outcome error) {
