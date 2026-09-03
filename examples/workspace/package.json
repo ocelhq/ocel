@@ -1,0 +1,12 @@
+{
+  "name": "@ocel-examples/workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ocel/provider-aws": "workspace:^",
+    "@ocel/provider-vps": "workspace:^",
+    "ocel": "workspace:^",
+    "zod": "^4.4.3"
+  }
+}
