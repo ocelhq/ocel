@@ -120,6 +120,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 					Tier:   environmentv1.Tier_TIER_PRODUCTION,
 				}, envwire.Scope(cfg, false, ""))
 			},
+			command: "ocel deploy",
 			compute: compute,
 			ui:      ui,
 			enabled: !opts.dry && canOpenVarsUI(deps, stdin),

@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 var ErrAbandoned = errors.New("variables UI abandoned")
@@ -24,7 +25,13 @@ var ErrStaleValue = errors.New("stale value")
 
 const AbandonedMessage = "the variables UI closed before the matrix was complete"
 
+type Reader interface {
+	List(ctx context.Context) ([]envgate.Stored, error)
+	Read(ctx context.Context, rows []envgate.Address) (map[envgate.Address]string, error)
+}
+
 type Store interface {
+	Reader
 	Set(ctx context.Context, at envgate.Address, value string, expected *int64) error
 	Delete(ctx context.Context, at envgate.Address, expected *int64) error
 	History(ctx context.Context, at envgate.Address) ([]Version, error)
@@ -36,11 +43,18 @@ type Version struct {
 	Size      int64 `json:"size"`
 }
 
+type Recovery struct {
+	Deploy string         `json:"deploy"`
+	Owed   []envgate.Cell `json:"owed"`
+}
+
 type State struct {
 	Slug         string         `json:"slug"`
 	Tier         string         `json:"tier"`
+	Other        string         `json:"other"`
 	Environments []string       `json:"environments"`
 	Matrix       envgate.Matrix `json:"matrix"`
+	Recovery     *Recovery      `json:"recovery,omitempty"`
 }
 
 type Options struct {
@@ -48,11 +62,15 @@ type Options struct {
 
 	Gate *envgate.Gate
 
-	Store   Store
+	Store Store
+	Other Reader
+
 	Slug    string
 	Preview bool
 
 	Environments []string
+
+	Recovery *Recovery
 }
 
 type Session struct {
@@ -131,8 +149,12 @@ func (s *Session) handler() http.Handler {
 	api.HandleFunc("GET /api/state", s.handleState)
 	api.HandleFunc("PUT /api/value", s.handleSet)
 	api.HandleFunc("DELETE /api/value", s.handleDelete)
+	api.HandleFunc("POST /api/reveal", s.handleReveal)
 	api.HandleFunc("GET /api/history", s.handleHistory)
+	api.HandleFunc("GET /api/other", s.handleOther)
+	api.HandleFunc("POST /api/copy", s.handleCopy)
 	api.HandleFunc("POST /api/done", s.handleDone)
+	api.HandleFunc("POST /api/abandon", s.handleAbandon)
 
 	page := http.FileServerFS(s.opts.Assets)
 
@@ -177,12 +199,24 @@ func (s *Session) handleState(w http.ResponseWriter, r *http.Request) {
 	s.writeState(r.Context(), w)
 }
 
-type valueRequest struct {
+type addressRequest struct {
 	Key         string `json:"key"`
 	Folder      string `json:"folder"`
 	Environment string `json:"environment"`
-	Value       string `json:"value"`
-	Version     *int64 `json:"version"`
+}
+
+func (a addressRequest) address() envgate.Address {
+	return envgate.Address{Cell: envgate.Cell{Key: a.Key, Folder: a.Folder}, Environment: a.Environment}
+}
+
+func addressOf(at envgate.Address) addressRequest {
+	return addressRequest{Key: at.Cell.Key, Folder: at.Cell.Folder, Environment: at.Environment}
+}
+
+type valueRequest struct {
+	addressRequest
+	Value   string `json:"value"`
+	Version *int64 `json:"version"`
 }
 
 func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
@@ -191,17 +225,8 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, fmt.Errorf("read this request: %w", err))
 		return
 	}
-	at := envgate.Address{Cell: envgate.Cell{Key: req.Key, Folder: req.Folder}, Environment: req.Environment}
-
-	if err := addressable(at.Cell.Folder); err != nil {
-		fail(w, http.StatusBadRequest, err)
-		return
-	}
-	if err := envgate.CheckWritable(s.opts.Gate.Definitions(), at.Cell.Key, at.Cell.Folder); err != nil {
-		fail(w, http.StatusBadRequest, err)
-		return
-	}
-	if err := s.writable(at.Environment); err != nil {
+	at := req.address()
+	if err := s.writable(at); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
@@ -215,7 +240,7 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.forget(at)
-	s.writeState(r.Context(), w)
+	writeJSON(w, struct{}{})
 }
 
 func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
@@ -238,20 +263,92 @@ func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.forget(at)
-	s.writeState(r.Context(), w)
+	writeJSON(w, struct{}{})
 }
 
-func (s *Session) writable(environment string) error {
-	if environment == "" || slices.Contains(s.opts.Environments, environment) {
+func (s *Session) writable(at envgate.Address) error {
+	if err := addressable(at.Cell.Folder); err != nil {
+		return err
+	}
+	if err := envgate.CheckWritable(s.opts.Gate.Definitions(), at.Cell.Key, at.Cell.Folder); err != nil {
+		return err
+	}
+	if at.Environment == "" || slices.Contains(s.opts.Environments, at.Environment) {
 		return nil
 	}
-	return fmt.Errorf("no environment named %q exists, so nothing would ever read that value", environment)
+	return fmt.Errorf("no environment named %q exists, so nothing would ever read that value", at.Environment)
 }
 
 func (s *Session) forget(at envgate.Address) {
 	if at.Environment == "" {
 		s.opts.Gate.Forget(at.Cell)
 	}
+}
+
+type revealRequest struct {
+	Cells []addressRequest `json:"cells"`
+}
+
+type revealedValue struct {
+	addressRequest
+	Value string `json:"value"`
+}
+
+type cellError struct {
+	addressRequest
+	Error string `json:"error"`
+}
+
+type revealResponse struct {
+	Values []revealedValue `json:"values"`
+	Errors []cellError     `json:"errors"`
+}
+
+func (s *Session) handleReveal(w http.ResponseWriter, r *http.Request) {
+	var req revealRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("read this request: %w", err))
+		return
+	}
+	secrets := s.secrets()
+	rows := make([]envgate.Address, 0, len(req.Cells))
+	for _, cell := range req.Cells {
+		if secrets[cell.Key] {
+			fail(w, http.StatusBadRequest, fmt.Errorf("%s is a secret, and a secret's value never reaches a browser; overwrite it here or read it with ocel env get --reveal", cell.Key))
+			return
+		}
+		rows = append(rows, cell.address())
+	}
+	writeJSON(w, s.read(r.Context(), s.opts.Store, rows))
+}
+
+func (s *Session) read(ctx context.Context, from Reader, rows []envgate.Address) revealResponse {
+	out := revealResponse{Values: []revealedValue{}, Errors: []cellError{}}
+	if len(rows) == 0 {
+		return out
+	}
+	found, err := from.Read(ctx, rows)
+	for _, at := range rows {
+		switch value, ok := found[at]; {
+		case err != nil:
+			out.Errors = append(out.Errors, cellError{addressOf(at), err.Error()})
+		case !ok:
+			out.Errors = append(out.Errors, cellError{addressOf(at), "no value could be read here"})
+		default:
+			out.Values = append(out.Values, revealedValue{addressOf(at), value})
+		}
+	}
+	return out
+}
+
+func (s *Session) secrets() map[string]bool {
+	out := map[string]bool{}
+	for _, definition := range s.opts.Gate.Definitions() {
+		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
+			out[definition.GetKey()] = true
+		}
+	}
+	return out
 }
 
 func (s *Session) handleHistory(w http.ResponseWriter, r *http.Request) {
@@ -266,12 +363,174 @@ func (s *Session) handleHistory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"versions": versions})
 }
 
-func (s *Session) handleDone(w http.ResponseWriter, _ *http.Request) {
+type otherValue struct {
+	addressRequest
+	Version   int64              `json:"version"`
+	Class     string             `json:"class"`
+	Reference *envgate.Reference `json:"reference,omitempty"`
+	Value     *string            `json:"value,omitempty"`
+	Error     string             `json:"error,omitempty"`
+}
+
+type otherResponse struct {
+	Tier   string       `json:"tier"`
+	Values []otherValue `json:"values"`
+}
+
+func (s *Session) handleOther(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Other == nil {
+		fail(w, http.StatusNotFound, fmt.Errorf("this session has no %s substrate to read", s.otherTier()))
+		return
+	}
+	stored, err := s.opts.Other.List(r.Context())
+	if err != nil {
+		fail(w, http.StatusBadGateway, fmt.Errorf("read the %s values: %w", s.otherTier(), err))
+		return
+	}
+
+	classes := s.classes()
+	out := otherResponse{Tier: s.otherTier(), Values: []otherValue{}}
+	var readable []envgate.Address
+	for _, row := range stored {
+		class, declared := classes[row.Cell.Key]
+		if !declared || row.Reference != nil {
+			continue
+		}
+		out.Values = append(out.Values, otherValue{
+			addressRequest: addressOf(row.Address),
+			Version:        row.Version,
+			Class:          class,
+		})
+		if class != "secret" {
+			readable = append(readable, row.Address)
+		}
+	}
+
+	read := s.read(r.Context(), s.opts.Other, readable)
+	values := make(map[envgate.Address]string, len(read.Values))
+	for _, v := range read.Values {
+		values[v.address()] = v.Value
+	}
+	problems := make(map[envgate.Address]string, len(read.Errors))
+	for _, e := range read.Errors {
+		problems[e.address()] = e.Error
+	}
+	for i := range out.Values {
+		at := out.Values[i].address()
+		if value, ok := values[at]; ok {
+			out.Values[i].Value = &value
+		}
+		out.Values[i].Error = problems[at]
+	}
+	writeJSON(w, out)
+}
+
+var className = map[resourcesv1.VariableClass]string{
+	resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:     "plain",
+	resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE: "sensitive",
+	resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:    "secret",
+}
+
+func (s *Session) classes() map[string]string {
+	out := map[string]string{}
+	for _, definition := range s.opts.Gate.Definitions() {
+		out[definition.GetKey()] = className[definition.GetClass()]
+	}
+	return out
+}
+
+type copyRequest struct {
+	Cells []struct {
+		addressRequest
+		Version *int64 `json:"version"`
+	} `json:"cells"`
+}
+
+type copyOutcome struct {
+	addressRequest
+	Saved    bool   `json:"saved"`
+	Conflict bool   `json:"conflict,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Other == nil {
+		fail(w, http.StatusNotFound, fmt.Errorf("this session has no %s substrate to copy from", s.otherTier()))
+		return
+	}
+	var req copyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("read this request: %w", err))
+		return
+	}
+	rows := make([]envgate.Address, 0, len(req.Cells))
+	for _, cell := range req.Cells {
+		rows = append(rows, cell.address())
+	}
+	read := s.read(r.Context(), s.opts.Other, rows)
+	values := make(map[envgate.Address]string, len(read.Values))
+	for _, v := range read.Values {
+		values[v.address()] = v.Value
+	}
+	problems := make(map[envgate.Address]string, len(read.Errors))
+	for _, e := range read.Errors {
+		problems[e.address()] = e.Error
+	}
+
+	outcomes := make([]copyOutcome, 0, len(req.Cells))
+	for _, cell := range req.Cells {
+		at := cell.address()
+		outcome := copyOutcome{addressRequest: cell.addressRequest}
+		value, ok := values[at]
+		switch {
+		case !ok:
+			outcome.Error = fmt.Sprintf("could not read the %s value: %s", s.otherTier(), problems[at])
+		default:
+			if err := s.writable(at); err != nil {
+				outcome.Error = err.Error()
+				break
+			}
+			err := s.opts.Store.Set(r.Context(), at, value, cell.Version)
+			switch {
+			case errors.Is(err, ErrStaleValue):
+				outcome.Conflict = true
+				outcome.Error = err.Error()
+			case err != nil:
+				outcome.Error = err.Error()
+			default:
+				outcome.Saved = true
+				s.forget(at)
+			}
+		}
+		outcomes = append(outcomes, outcome)
+	}
+	writeJSON(w, map[string]any{"results": outcomes})
+}
+
+func (s *Session) handleDone(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Recovery != nil {
+		if err := s.opts.Gate.Prefetch(r.Context()); err != nil {
+			fail(w, http.StatusBadGateway, err)
+			return
+		}
+		if err := s.opts.Gate.Check(); err != nil {
+			fail(w, http.StatusConflict, fmt.Errorf("the deploy cannot resume yet: %w", err))
+			return
+		}
+	}
+	s.leave(w, nil)
+}
+
+func (s *Session) handleAbandon(w http.ResponseWriter, _ *http.Request) {
+	s.leave(w, ErrAbandoned)
+}
+
+func (s *Session) leave(w http.ResponseWriter, outcome error) {
 	w.WriteHeader(http.StatusOK)
 	if flusher, ok := w.(http.Flusher); ok {
 		flusher.Flush()
 	}
-	go func() { _ = s.finish(nil) }()
+	go func() { _ = s.finish(outcome) }()
 }
 
 func addressable(folder string) error {
@@ -308,8 +567,10 @@ func (s *Session) writeState(ctx context.Context, w http.ResponseWriter) {
 	writeJSON(w, State{
 		Slug:         s.opts.Slug,
 		Tier:         s.tier(),
+		Other:        s.otherTier(),
 		Environments: s.opts.Environments,
 		Matrix:       s.opts.Gate.Matrix(s.opts.Environments),
+		Recovery:     s.opts.Recovery,
 	})
 }
 
@@ -318,6 +579,13 @@ func (s *Session) tier() string {
 		return "preview"
 	}
 	return "production"
+}
+
+func (s *Session) otherTier() string {
+	if s.opts.Preview {
+		return "production"
+	}
+	return "preview"
 }
 
 func writeJSON(w http.ResponseWriter, payload any) {

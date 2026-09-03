@@ -31,6 +31,10 @@ type fakeStore struct {
 	environments []string
 	expected     []*int64
 	deletes      int
+
+	read       []envgate.Address
+	unreadable string
+	references map[envgate.Cell]*envgate.Reference
 }
 
 func newFakeStore() *fakeStore {
@@ -45,7 +49,7 @@ func (s *fakeStore) override(cell envgate.Cell, environment string) {
 func (s *fakeStore) List(context.Context) ([]envgate.Stored, error) {
 	out := make([]envgate.Stored, 0, len(s.cells)+len(s.overrides))
 	for cell := range s.cells {
-		out = append(out, envgate.Stored{Address: envgate.Address{Cell: cell}, Version: s.versions[cell]})
+		out = append(out, envgate.Stored{Address: envgate.Address{Cell: cell}, Version: s.versions[cell], Reference: s.references[cell]})
 	}
 	return append(out, s.overrides...), nil
 }
@@ -55,6 +59,26 @@ func (s *fakeStore) Reveal(_ context.Context, rows []envgate.Address) (map[envga
 	for _, row := range rows {
 		if value, ok := s.cells[row.Cell]; ok {
 			found[row.Cell] = value
+		}
+	}
+	return found, nil
+}
+
+func (s *fakeStore) Read(_ context.Context, rows []envgate.Address) (map[envgate.Address]string, error) {
+	if s.unreadable != "" {
+		return nil, errors.New(s.unreadable)
+	}
+	found := map[envgate.Address]string{}
+	for _, at := range rows {
+		s.read = append(s.read, at)
+		if at.Environment == "" {
+			if value, ok := s.cells[at.Cell]; ok {
+				found[at] = value
+			}
+			continue
+		}
+		if value, ok := s.held[at]; ok {
+			found[at] = value
 		}
 	}
 	return found, nil
@@ -116,6 +140,12 @@ func (s *fakeStore) History(_ context.Context, at envgate.Address) ([]varsui.Ver
 	return []varsui.Version{{Version: 2, CreatedAt: 200}, {Version: 1, CreatedAt: 100}}, nil
 }
 
+func secretDef(key string) *resourcesv1.VariableDefinition {
+	d := def(key)
+	d.Class = resourcesv1.VariableClass_VARIABLE_CLASS_SECRET
+	return d
+}
+
 func def(key string, folders ...string) *resourcesv1.VariableDefinition {
 	return &resourcesv1.VariableDefinition{
 		Key:      key,
@@ -149,13 +179,14 @@ func serve(t *testing.T, store *fakeStore, gate *envgate.Gate) *varsui.Session {
 
 func serveUnder(t *testing.T, ctx context.Context, store *fakeStore, gate *envgate.Gate) *varsui.Session {
 	t.Helper()
-	s, err := varsui.Serve(ctx, varsui.Options{
-		Assets:       fstest.MapFS{"index.html": {Data: []byte("<title>vars</title>")}},
-		Gate:         gate,
-		Store:        store,
-		Slug:         "shop",
-		Environments: store.environments,
-	})
+	return serveWith(t, ctx, varsui.Options{Gate: gate, Store: store, Environments: store.environments})
+}
+
+func serveWith(t *testing.T, ctx context.Context, opts varsui.Options) *varsui.Session {
+	t.Helper()
+	opts.Assets = fstest.MapFS{"index.html": {Data: []byte("<title>vars</title>")}}
+	opts.Slug = "shop"
+	s, err := varsui.Serve(ctx, opts)
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
@@ -898,4 +929,301 @@ func TestSessionClose(t *testing.T) {
 			t.Errorf("%d goroutines after closing %d sessions, up from %d — a closed session still watches a context it can no longer act on", got, sessions, before)
 		}
 	})
+}
+
+func decode[T any](t *testing.T, resp *http.Response) T {
+	t.Helper()
+	defer resp.Body.Close()
+	var out T
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode %s: %v", resp.Request.URL.Path, err)
+	}
+	return out
+}
+
+type revealed struct {
+	Values []struct {
+		Key, Folder, Environment, Value string
+	}
+	Errors []struct {
+		Key, Folder, Environment, Error string
+	}
+}
+
+func TestReveal(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a plain or sensitive value is read on demand", func(t *testing.T) {
+		t.Parallel()
+		store := newFakeStore()
+		store.environments = []string{"staging"}
+		store.cells[envgate.Cell{Key: "API_URL"}] = "https://root.example"
+		store.override(envgate.Cell{Key: "API_URL"}, "staging")
+		s := session(t, store, def("API_URL"))
+
+		resp := request(t, s, http.MethodPost, "/api/reveal", map[string]any{"cells": []map[string]string{
+			{"key": "API_URL", "folder": "", "environment": ""},
+			{"key": "API_URL", "folder": "", "environment": "staging"},
+			{"key": "API_URL", "folder": "/web", "environment": ""},
+		}})
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("POST /api/reveal = %d: %s", resp.StatusCode, bodyOf(t, resp))
+		}
+		got := decode[revealed](t, resp)
+		if len(got.Values) != 2 || got.Values[0].Value != "https://root.example" || got.Values[1].Environment != "staging" || got.Values[1].Value != "override" {
+			t.Errorf("values = %+v, want the root value and the staging override, each under its own address", got.Values)
+		}
+		if len(got.Errors) != 1 || got.Errors[0].Folder != "/web" {
+			t.Errorf("errors = %+v, want the empty /web cell reported as unreadable rather than shown blank", got.Errors)
+		}
+	})
+
+	t.Run("a secret is never sent to the browser", func(t *testing.T) {
+		t.Parallel()
+		store := newFakeStore()
+		store.cells[envgate.Cell{Key: "STRIPE_KEY"}] = "sk_live"
+		store.cells[envgate.Cell{Key: "API_URL"}] = "https://root.example"
+		s := session(t, store, secretDef("STRIPE_KEY"), def("API_URL"))
+
+		resp := request(t, s, http.MethodPost, "/api/reveal", map[string]any{"cells": []map[string]string{
+			{"key": "API_URL", "folder": "", "environment": ""},
+			{"key": "STRIPE_KEY", "folder": "", "environment": ""},
+		}})
+		body := bodyOf(t, resp)
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("POST /api/reveal = %d, want %d: %s", resp.StatusCode, http.StatusBadRequest, body)
+		}
+		if strings.Contains(body, "sk_live") {
+			t.Fatalf("body = %q leaks the secret", body)
+		}
+		if !strings.Contains(body, "STRIPE_KEY") {
+			t.Errorf("body = %q, want the refusal to name the secret it refused", body)
+		}
+		if len(store.read) != 0 {
+			t.Errorf("the store was read for %v, want a batch naming a secret refused before any read", store.read)
+		}
+	})
+
+	t.Run("a store that cannot read reports every cell asked for", func(t *testing.T) {
+		t.Parallel()
+		store := newFakeStore()
+		store.cells[envgate.Cell{Key: "API_URL"}] = "https://root.example"
+		store.unreadable = "the target project no longer exists"
+		s := session(t, store, def("API_URL"))
+
+		resp := request(t, s, http.MethodPost, "/api/reveal", map[string]any{"cells": []map[string]string{{"key": "API_URL"}}})
+		got := decode[revealed](t, resp)
+		if len(got.Values) != 0 || len(got.Errors) != 1 || got.Errors[0].Error != store.unreadable {
+			t.Errorf("reveal = %+v, want the failure carried on the cell rather than an empty value", got)
+		}
+	})
+}
+
+func TestReferences(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the matrix names the source a referenced cell reads", func(t *testing.T) {
+		t.Parallel()
+		store := newFakeStore()
+		store.cells[envgate.Cell{Key: "LOG_LEVEL"}] = "debug"
+		store.references = map[envgate.Cell]*envgate.Reference{{Key: "LOG_LEVEL"}: {Slug: "shared", Key: "LOG_LEVEL"}}
+		s := session(t, store, def("LOG_LEVEL"), def("API_URL"))
+
+		got := cellState(t, state(t, s), "LOG_LEVEL", "")
+		if got.Reference == nil || got.Reference.Slug != "shared" || got.Reference.Key != "LOG_LEVEL" {
+			t.Errorf("LOG_LEVEL reference = %+v, want the project and key it reads", got.Reference)
+		}
+		if other := cellState(t, state(t, s), "API_URL", ""); other.Reference != nil {
+			t.Errorf("API_URL reference = %+v, want none on a cell holding its own value", other.Reference)
+		}
+	})
+}
+
+type otherValues struct {
+	Tier   string
+	Values []struct {
+		Key, Folder, Environment string
+		Version                  int64
+		Class                    string
+		Value                    *string
+		Error                    string
+	}
+}
+
+type copyOutcomes struct {
+	Results []struct {
+		Key, Folder, Environment string
+		Saved, Conflict          bool
+		Error                    string
+	}
+}
+
+func TestOtherSubstrate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reading the other substrate lists declared cells with values for all but secrets", func(t *testing.T) {
+		t.Parallel()
+		here := newFakeStore()
+		other := newFakeStore()
+		other.cells[envgate.Cell{Key: "API_URL"}] = "https://preview.example"
+		other.cells[envgate.Cell{Key: "STRIPE_KEY"}] = "sk_test"
+		other.cells[envgate.Cell{Key: "UNDECLARED"}] = "nobody reads this"
+		other.versions[envgate.Cell{Key: "API_URL"}] = 4
+		s := serveWith(t, context.Background(), varsui.Options{
+			Gate:  discovered(t, here, def("API_URL"), secretDef("STRIPE_KEY")),
+			Store: here,
+			Other: other,
+		})
+
+		resp := request(t, s, http.MethodGet, "/api/other", nil)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET /api/other = %d: %s", resp.StatusCode, bodyOf(t, resp))
+		}
+		got := decode[otherValues](t, resp)
+		if got.Tier != "preview" {
+			t.Errorf("tier = %q, want the production session to read preview", got.Tier)
+		}
+		byKey := map[string]int{}
+		for i, v := range got.Values {
+			byKey[v.Key] = i
+		}
+		if len(got.Values) != 2 {
+			t.Fatalf("values = %+v, want the two declared cells and not the undeclared one", got.Values)
+		}
+		api := got.Values[byKey["API_URL"]]
+		if api.Value == nil || *api.Value != "https://preview.example" || api.Version != 4 || api.Class != "plain" {
+			t.Errorf("API_URL = %+v, want its preview value, version and class", api)
+		}
+		secret := got.Values[byKey["STRIPE_KEY"]]
+		if secret.Value != nil || secret.Class != "secret" {
+			t.Errorf("STRIPE_KEY = %+v, want it listed without a value", secret)
+		}
+		for _, at := range other.read {
+			if at.Cell.Key == "STRIPE_KEY" {
+				t.Error("the secret was read from the other substrate for a browser listing")
+			}
+		}
+		if len(here.read) != 0 {
+			t.Errorf("the session's own store was read %v, want the other substrate read without disturbing this one", here.read)
+		}
+	})
+
+	t.Run("a copy writes each value through the store with the version the page expected", func(t *testing.T) {
+		t.Parallel()
+		here := newFakeStore()
+		here.cells[envgate.Cell{Key: "API_URL"}] = "https://old.example"
+		here.versions[envgate.Cell{Key: "API_URL"}] = 2
+		other := newFakeStore()
+		other.cells[envgate.Cell{Key: "API_URL"}] = "https://preview.example"
+		other.cells[envgate.Cell{Key: "STRIPE_KEY"}] = "sk_test"
+		s := serveWith(t, context.Background(), varsui.Options{
+			Gate:  discovered(t, here, def("API_URL"), secretDef("STRIPE_KEY"), def("MISSING")),
+			Store: here,
+			Other: other,
+		})
+
+		resp := request(t, s, http.MethodPost, "/api/copy", map[string]any{"cells": []map[string]any{
+			{"key": "API_URL", "folder": "", "environment": "", "version": 1},
+			{"key": "STRIPE_KEY", "folder": "", "environment": "", "version": 0},
+			{"key": "MISSING", "folder": "", "environment": "", "version": 0},
+		}})
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("POST /api/copy = %d: %s", resp.StatusCode, bodyOf(t, resp))
+		}
+		got := decode[copyOutcomes](t, resp)
+		if len(got.Results) != 3 {
+			t.Fatalf("results = %+v, want one per requested cell", got.Results)
+		}
+		if r := got.Results[0]; !r.Conflict || r.Saved {
+			t.Errorf("API_URL = %+v, want a conflict against version 1 when version 2 is stored", r)
+		}
+		if here.cells[envgate.Cell{Key: "API_URL"}] != "https://old.example" {
+			t.Error("the conflicting copy overwrote the stored value")
+		}
+		if r := got.Results[1]; !r.Saved || here.cells[envgate.Cell{Key: "STRIPE_KEY"}] != "sk_test" {
+			t.Errorf("STRIPE_KEY = %+v, want the secret copied server-side without entering the browser", r)
+		}
+		if r := got.Results[2]; r.Saved || r.Error == "" {
+			t.Errorf("MISSING = %+v, want a cell the other substrate lacks reported rather than skipped", r)
+		}
+		if body := bodyOf(t, request(t, s, http.MethodGet, "/api/state", nil)); strings.Contains(body, "sk_test") {
+			t.Error("the state leaks the copied secret")
+		}
+	})
+
+	t.Run("a session without another substrate says so", func(t *testing.T) {
+		t.Parallel()
+		s := session(t, newFakeStore(), def("API_URL"))
+		if resp := request(t, s, http.MethodGet, "/api/other", nil); resp.StatusCode != http.StatusNotFound {
+			t.Errorf("GET /api/other = %d, want %d", resp.StatusCode, http.StatusNotFound)
+		}
+	})
+}
+
+func TestRecovery(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the state carries the deploy that is waiting and the cells it is owed", func(t *testing.T) {
+		t.Parallel()
+		store := newFakeStore()
+		owed := []envgate.Cell{{Key: "API_URL"}}
+		s := serveWith(t, context.Background(), varsui.Options{
+			Gate:     discovered(t, store, def("API_URL")),
+			Store:    store,
+			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Owed: owed},
+		})
+		got := state(t, s)
+		if got.Recovery == nil || got.Recovery.Deploy != "ocel deploy" || !reflect.DeepEqual(got.Recovery.Owed, owed) {
+			t.Errorf("recovery = %+v, want the deploy named and API_URL owed", got.Recovery)
+		}
+		if standalone := state(t, session(t, newFakeStore(), def("API_URL"))); standalone.Recovery != nil {
+			t.Errorf("a standalone visit carries recovery %+v, want none", standalone.Recovery)
+		}
+	})
+
+	t.Run("done is refused while a cell is still owed, and accepted once it is filled", func(t *testing.T) {
+		t.Parallel()
+		store := newFakeStore()
+		s := serveWith(t, context.Background(), varsui.Options{
+			Gate:     discovered(t, store, def("API_URL")),
+			Store:    store,
+			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Owed: []envgate.Cell{{Key: "API_URL"}}},
+		})
+
+		resp := request(t, s, http.MethodPost, "/api/done", nil)
+		if body := bodyOf(t, resp); resp.StatusCode != http.StatusConflict || !strings.Contains(body, "API_URL") {
+			t.Fatalf("POST /api/done = %d %q, want %d naming the owed cell", resp.StatusCode, body, http.StatusConflict)
+		}
+		if err := s.Wait(shortContext(t)); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Wait = %v after a refused done, want the session still open", err)
+		}
+
+		if resp := request(t, s, http.MethodPut, "/api/value", map[string]string{"key": "API_URL", "value": "https://ok.example"}); resp.StatusCode != http.StatusOK {
+			t.Fatalf("PUT = %d: %s", resp.StatusCode, bodyOf(t, resp))
+		}
+		if resp := request(t, s, http.MethodPost, "/api/done", nil); resp.StatusCode != http.StatusOK {
+			t.Fatalf("POST /api/done = %d: %s", resp.StatusCode, bodyOf(t, resp))
+		}
+		if err := s.Wait(context.Background()); err != nil {
+			t.Errorf("Wait = %v, want nil once every owed cell is filled", err)
+		}
+	})
+
+	t.Run("abandoning ends the session as abandoned", func(t *testing.T) {
+		t.Parallel()
+		s := session(t, newFakeStore(), def("API_URL"))
+		if resp := request(t, s, http.MethodPost, "/api/abandon", nil); resp.StatusCode != http.StatusOK {
+			t.Fatalf("POST /api/abandon = %d", resp.StatusCode)
+		}
+		if err := s.Wait(context.Background()); !errors.Is(err, varsui.ErrAbandoned) {
+			t.Errorf("Wait = %v, want %v", err, varsui.ErrAbandoned)
+		}
+	})
+}
+
+func shortContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	t.Cleanup(cancel)
+	return ctx
 }

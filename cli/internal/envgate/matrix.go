@@ -1,6 +1,7 @@
 package envgate
 
 import (
+	"maps"
 	"slices"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -22,6 +23,8 @@ type MatrixCell struct {
 	Version int64 `json:"version"`
 
 	Overrides []Override `json:"overrides,omitempty"`
+
+	Reference *Reference `json:"reference,omitempty"`
 
 	Problem string `json:"problem,omitempty"`
 }
@@ -57,6 +60,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	apps := slices.Clone(g.scope.Apps)
 	base := g.baseCells()
 	resolved := g.resolvedCells()
+	references := maps.Clone(g.references)
 	overrides := make(map[Cell][]Override, len(g.overrides))
 	for cell, forCell := range g.overrides {
 		for _, override := range forCell {
@@ -88,6 +92,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 				Set:       base.has(cell),
 				Version:   base[cell],
 				Overrides: overrides[cell],
+				Reference: references[cell],
 				Problem:   complaints[cell],
 			})
 		}

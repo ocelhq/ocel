@@ -227,6 +227,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 					Tier:   environmentv1.Tier_TIER_PREVIEW,
 				}, envwire.Scope(cfg, true, env.GetIdentity()))
 			},
+			command: "ocel preview up",
 			compute: compute,
 			ui:      ui,
 			enabled: !opts.dry && canOpenVarsUI(deps, stdin),
