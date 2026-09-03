@@ -19,7 +19,10 @@ Change plan, fronted by the cloudfront edge:
   Bundling web (1/2)
   Bundling api (2/2)
 
-1 variable is not ready — nothing has been built.
+✗ 1 variable is not ready — nothing has been built.
+
+  ✗ STRIPE_API_KEY  root  no value
+
   Fill them in at:
 
     http://127.0.0.1:5555/#t=abc

@@ -22,15 +22,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-const noBrowserEnvVar = "OCEL_NO_BROWSER"
-
-func canOpenVarsUI(deps cmddeps.Deps, stdin io.Reader) bool {
-	if os.Getenv(noBrowserEnvVar) != "" {
-		return false
-	}
-	return deps.StdinIsTerminal(stdin)
-}
-
 const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building first (produce it with ocel build)"
 
 type deployOptions struct {
@@ -109,6 +100,9 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		}
 
 		ui.Building()
+		browser := deps.BrowserReachable(stdin)
+		scope := envwire.Scope(cfg, false, "")
+		scope.Browser = browser
 		recovery := gateRecovery{
 			deps:   deps,
 			cfg:    cfg,
@@ -118,12 +112,12 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 					Runner: runner,
 					Slug:   cfg.Slug,
 					Tier:   environmentv1.Tier_TIER_PRODUCTION,
-				}, envwire.Scope(cfg, false, ""))
+				}, scope)
 			},
 			command: "ocel deploy",
 			compute: compute,
 			ui:      ui,
-			enabled: !opts.dry && canOpenVarsUI(deps, stdin),
+			enabled: !opts.dry && browser,
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {

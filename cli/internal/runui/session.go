@@ -2,6 +2,7 @@ package runui
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/naming"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -233,13 +235,13 @@ func (s *Session) BuildOK() {
 	s.buildStart = time.Time{}
 }
 
-func (s *Session) Waiting(reason, url string) {
+func (s *Session) Waiting(owed *streamv1.VariablesOwed, url string) {
 	s.logf("[waiting] %s", withoutFragment(url))
 	s.waiting = true
 	s.build.flush()
 	s.buildStart = time.Time{}
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{
-		Waiting: &streamv1.WaitingEvent{Reason: reason, Url: url},
+		Waiting: &streamv1.WaitingEvent{Owed: owed, Url: url},
 	}})
 }
 
@@ -334,7 +336,13 @@ func (s *Session) Finish(headline string) {
 
 func (s *Session) Fail(err error) {
 	s.logf("[error] %v", err)
-	s.result(&streamv1.RunResultEvent{Success: false, Detail: err.Error()})
+	ev := &streamv1.RunResultEvent{Success: false, Detail: err.Error()}
+	var refusal *envgate.Refusal
+	if errors.As(err, &refusal) {
+		ev.Owed = refusal.Owed()
+		ev.Detail = strings.TrimLeft(strings.TrimPrefix(err.Error(), refusal.Error()), "\n")
+	}
+	s.result(ev)
 }
 
 func (s *Session) Cancel() {

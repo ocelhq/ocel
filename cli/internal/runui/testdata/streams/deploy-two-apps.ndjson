@@ -5,7 +5,7 @@
 {"operation":{"progress":{"stageId":"AgAAAAAAAAA=","message":"Bundling web","current":1,"total":2}}}
 {"operation":{"progress":{"stageId":"AgAAAAAAAAA=","message":"Bundling api","current":2,"total":2}}}
 {"operation":{"span":{"spanId":"AgAAAAAAAAA=","parentSpanId":"AQAAAAAAAAA=","name":"building","startTimeUnixNano":"1000000000","endTimeUnixNano":"7000000000","status":"SPAN_STATUS_OK"}}}
-{"waiting":{"reason":"1 variable is not ready — nothing has been built.","url":"http://127.0.0.1:5555/#t=abc"}}
+{"waiting":{"url":"http://127.0.0.1:5555/#t=abc","owed":{"cells":[{"key":"STRIPE_API_KEY","reason":"no value"}],"remedy":"ocel env ui"}}}
 {"resumed":{"reason":"the page was answered"}}
 {"operation":{"stagePlan":{"stages":[{"id":"AwAAAAAAAAA=","title":"web"},{"id":"BAAAAAAAAAA=","parentId":"AwAAAAAAAAA=","title":"Provisioning","phase":"PHASE_PROVISIONING"},{"id":"BQAAAAAAAAA=","title":"api"},{"id":"BgAAAAAAAAA=","parentId":"BQAAAAAAAAA=","title":"Provisioning","phase":"PHASE_PROVISIONING"}]}}}
 {"operation":{"progress":{"stageId":"BAAAAAAAAAA=","message":"creating bucket assets"}}}

@@ -6,6 +6,13 @@ import (
 	"strings"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+)
+
+const (
+	Mark       = "✗"
+	rootFolder = "root"
+	indent     = "  "
 )
 
 type Refusal struct {
@@ -14,32 +21,99 @@ type Refusal struct {
 }
 
 func (r *Refusal) Error() string {
-	return r.Owed() + "\nSet the values above, then run this command again."
+	owed := r.Owed()
+	lines := append(Lines(owed.GetCells(), Plain), "", RemedyLine(owed.GetRemedy()))
+	return strings.Join(lines, "\n")
 }
 
-func (r *Refusal) Owed() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s not ready — nothing has been built.\n", plural(len(r.Problems)))
+func (r *Refusal) Owed() *streamv1.VariablesOwed {
+	cells := make([]*streamv1.OwedVariable, 0, len(r.Problems))
 	for _, problem := range r.Problems {
-		cell := Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}
-		fmt.Fprintf(&b, "\n  %s\n    %s\n    fix: %s\n",
-			describe(cell)+readBy(r.Scope.Apps, cell.Folder), why(problem), fixCommand(cell, r.Scope))
+		cells = append(cells, &streamv1.OwedVariable{
+			Key:    problem.GetKey(),
+			Folder: problem.GetFolder(),
+			Reason: reason(problem),
+		})
 	}
-	return b.String()
+	return &streamv1.VariablesOwed{Cells: cells, Remedy: r.remedy()}
 }
 
-func plural(n int) string {
+func (r *Refusal) remedy() string {
+	if r.Scope.Browser {
+		return withPreview("ocel env ui", r.Scope)
+	}
+	key, folder := "<KEY>", "<FOLDER>"
+	inFolder := false
+	for _, problem := range r.Problems {
+		inFolder = inFolder || problem.GetFolder() != ""
+	}
+	if len(r.Problems) == 1 {
+		key, folder = r.Problems[0].GetKey(), r.Problems[0].GetFolder()
+	}
+	cmd := fmt.Sprintf("ocel env set %s <VALUE>", key)
+	if inFolder {
+		cmd += " --folder " + folder
+	}
+	return withPreview(cmd, r.Scope)
+}
+
+func withPreview(cmd string, scope Scope) string {
+	if scope.Preview {
+		return cmd + " --preview"
+	}
+	return cmd
+}
+
+func reason(problem *resourcesv1.VariableProblem) string {
+	if problem.GetKind() != resourcesv1.VariableProblem_KIND_INVALID {
+		return "no value"
+	}
+	if detail := problem.GetDetail(); detail != "" {
+		return "set, but " + detail
+	}
+	return "set, but it does not satisfy its schema"
+}
+
+type Paint struct {
+	Fail  func(string) string
+	Faint func(string) string
+}
+
+var Plain = Paint{Fail: plain, Faint: plain}
+
+func plain(s string) string { return s }
+
+func Headline(n int) string {
 	if n == 1 {
-		return "1 variable is"
+		return "1 variable is not ready — nothing has been built."
 	}
-	return fmt.Sprintf("%d variables are", n)
+	return fmt.Sprintf("%d variables are not ready — nothing has been built.", n)
 }
 
-func why(problem *resourcesv1.VariableProblem) string {
-	if problem.GetKind() == resourcesv1.VariableProblem_KIND_INVALID {
-		return "set, but it does not satisfy its schema: " + problem.GetDetail()
+func Lines(cells []*streamv1.OwedVariable, paint Paint) []string {
+	out := []string{paint.Fail(Mark) + " " + Headline(len(cells)), ""}
+	keyWidth, folderWidth := 0, 0
+	for _, cell := range cells {
+		keyWidth = max(keyWidth, len(cell.GetKey()))
+		folderWidth = max(folderWidth, len(folderName(cell.GetFolder())))
 	}
-	return "no value is set"
+	for _, cell := range cells {
+		key := fmt.Sprintf("%-*s", keyWidth, cell.GetKey())
+		folder := fmt.Sprintf("%-*s", folderWidth, folderName(cell.GetFolder()))
+		out = append(out, indent+paint.Fail(Mark)+" "+key+indent+paint.Faint(folder)+indent+cell.GetReason())
+	}
+	return out
+}
+
+func RemedyLine(remedy string) string {
+	return indent + "Fill them in: " + remedy
+}
+
+func folderName(folder string) string {
+	if folder == "" {
+		return rootFolder
+	}
+	return folder
 }
 
 func describeAll(rows []Address) string {
@@ -56,28 +130,4 @@ func describe(cell Cell) string {
 		return cell.Key + " (project root)"
 	}
 	return cell.Key + " (" + cell.Folder + ")"
-}
-
-func readBy(apps []App, folder string) string {
-	var names []string
-	for _, app := range apps {
-		if folder == "" || app.Folder == folder {
-			names = append(names, app.Name)
-		}
-	}
-	if len(names) == 0 {
-		return ""
-	}
-	return ", read by " + strings.Join(names, ", ")
-}
-
-func fixCommand(cell Cell, scope Scope) string {
-	cmd := fmt.Sprintf("ocel env set %s <VALUE>", cell.Key)
-	if cell.Folder != "" {
-		cmd += " --folder " + cell.Folder
-	}
-	if scope.Preview {
-		cmd += " --preview"
-	}
-	return cmd
 }

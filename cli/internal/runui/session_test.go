@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/naming"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -326,7 +327,7 @@ func TestSession(t *testing.T) {
 	t.Run("waiting prints where to go and how to abort", func(t *testing.T) {
 		t.Parallel()
 		s, out, logPath := newTestSession(t, "ocel deploy")
-		s.Waiting("1 variable is not ready — nothing has been built.\n\n  STRIPE_API_KEY (project root)\n", "http://127.0.0.1:5555/#t=abc")
+		s.Waiting(owedStripeKey(), "http://127.0.0.1:5555/#t=abc")
 
 		got := out.String()
 		for _, want := range []string{"STRIPE_API_KEY", "http://127.0.0.1:5555/#t=abc", "Ctrl-C"} {
@@ -342,7 +343,7 @@ func TestSession(t *testing.T) {
 	t.Run("cancel while waiting does not warn about resources that cannot exist", func(t *testing.T) {
 		t.Parallel()
 		s, out, _ := newTestSession(t, "ocel deploy")
-		s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+		s.Waiting(owedStripeKey(), "http://127.0.0.1:5555/#t=abc")
 		s.Cancel()
 
 		got := out.String()
@@ -358,7 +359,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 		const token = "s3cr3t-session-token"
 		s, out, logPath := newTestSession(t, "ocel deploy")
-		s.Waiting("1 variable is not ready.", "http://127.0.0.1:41234/#t="+token)
+		s.Waiting(owedStripeKey(), "http://127.0.0.1:41234/#t="+token)
 		if err := s.Close(); err != nil {
 			t.Fatalf("Close() = %v", err)
 		}
@@ -378,7 +379,7 @@ func TestSession(t *testing.T) {
 	t.Run("cancel after resume warns about resources again", func(t *testing.T) {
 		t.Parallel()
 		s, out, _ := newTestSession(t, "ocel deploy")
-		s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+		s.Waiting(owedStripeKey(), "http://127.0.0.1:5555/#t=abc")
 		s.Resume()
 		s.Cancel()
 
@@ -1288,7 +1289,7 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 		t.Cleanup(func() { _ = s.Close() })
 
 		s.Building()
-		s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+		s.Waiting(owedStripeKey(), "http://127.0.0.1:5555/#t=abc")
 		s.Resume()
 		s.BuildOK()
 
@@ -1327,7 +1328,7 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 		t.Cleanup(func() { _ = s.Close() })
 
 		s.Building()
-		s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+		s.Waiting(owedStripeKey(), "http://127.0.0.1:5555/#t=abc")
 		s.Resume()
 		s.BuildOK()
 
@@ -1352,7 +1353,7 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 
 		s.Building()
 		fmt.Fprintln(s.BuildWriter(), "Reading ocel.aws.config.ts")
-		s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+		s.Waiting(owedStripeKey(), "http://127.0.0.1:5555/#t=abc")
 		s.Resume()
 		fmt.Fprintln(s.BuildWriter(), "Compiled successfully")
 		s.BuildOK()
@@ -1374,4 +1375,11 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 			at += i + len(want)
 		}
 	})
+}
+
+func owedStripeKey() *streamv1.VariablesOwed {
+	return &streamv1.VariablesOwed{
+		Cells:  []*streamv1.OwedVariable{{Key: "STRIPE_API_KEY", Reason: "no value"}},
+		Remedy: "ocel env ui",
+	}
 }

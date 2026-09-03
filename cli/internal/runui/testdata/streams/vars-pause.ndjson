@@ -1,7 +1,7 @@
 {"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"BgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILDING"}]}}}
 {"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"Building project"}}}
 {"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"Reading ocel.aws.config.ts"}}}
-{"waiting":{"reason":"1 variable is not ready — nothing has been built.\n\n  STRIPE_API_KEY (project root), read by web\n    no value is set\n    fix: ocel env set STRIPE_API_KEY <VALUE>\n","url":"http://127.0.0.1:5555/#t=abc"}}
+{"waiting":{"url":"http://127.0.0.1:5555/#t=abc","owed":{"cells":[{"key":"STRIPE_API_KEY","reason":"no value"}],"remedy":"ocel env ui"}}}
 {"resumed":{"reason":"the page was answered"}}
 {"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"BgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILDING"}]}}}
 {"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"Building project"}}}

@@ -3,11 +3,10 @@
 ⚠ Environment paused
   Building project
 
-1 variable is not ready — nothing has been built.
+✗ 1 variable is not ready — nothing has been built.
 
-  STRIPE_API_KEY (project root), read by web
-    no value is set
-    fix: ocel env set STRIPE_API_KEY <VALUE>
+  ✗ STRIPE_API_KEY  root  no value
+
   Fill them in at:
 
     http://127.0.0.1:5555/#t=abc
