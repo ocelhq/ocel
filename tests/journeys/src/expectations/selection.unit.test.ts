@@ -44,4 +44,37 @@ describe("expectationsFor", () => {
       "https://github.com/ocelhq/ocel/issues/854",
     );
   });
+
+  it("never lists a ladder's refuse title, on any edge", () => {
+    for (const edge of ["api-gateway", "cloudfront", "cloudflare"]) {
+      process.env[EDGE_ENV] = edge;
+      const listed = expectationsFor("aws.floci");
+      assert.equal(listed["with-sst/web"]?.refuse, undefined, edge);
+      assert.equal(listed["with-pulumi/web"]?.refuse, undefined, edge);
+    }
+  });
+
+  it("lists with-sst red at up under its own issue, not the edge's, and passing at publish", () => {
+    for (const edge of ["api-gateway", "cloudfront", "cloudflare"]) {
+      process.env[EDGE_ENV] = edge;
+      const cell = expectationsFor("aws.floci")["with-sst/web"];
+      assert.ok(cell, edge);
+      assert.equal(cell!.up, "https://github.com/ocelhq/ocel/issues/857", edge);
+      assert.equal(cell!["publish · lists both records"], undefined, edge);
+    }
+  });
+
+  it("lists with-pulumi red at up and at publish, under its own issue", () => {
+    process.env[EDGE_ENV] = "api-gateway";
+    const cell = expectationsFor("aws.floci")["with-pulumi/web"];
+    assert.ok(cell);
+    assert.equal(cell!.up, "https://github.com/ocelhq/ocel/issues/856");
+  });
+
+  it("leaves with-transforms to the edge's own reason, not a ladder issue", () => {
+    process.env[EDGE_ENV] = "api-gateway";
+    const cell = expectationsFor("aws.floci")["with-transforms/web"];
+    assert.ok(cell);
+    assert.equal(cell!.up, "https://github.com/ocelhq/ocel/issues/884");
+  });
 });
