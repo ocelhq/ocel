@@ -94,6 +94,28 @@ describe("node framework serve path", () => {
     expect(sent.headers.get("x-amz-date")).toBeTruthy();
   });
 
+  it("percent-encodes the second question mark Next writes into an icon URL", async () => {
+    const wire = capturing();
+    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+
+    await serve(new Request("https://api.example.com/favicon.ico?favicon.abc.ico?dpl=123"));
+
+    expect(wire.calls[0].url).toBe(
+      "https://abc123.lambda-url.eu-west-2.on.aws/favicon.ico?favicon.abc.ico%3Fdpl=123",
+    );
+  });
+
+  it("leaves an ordinary query untouched on its way to the Function URL", async () => {
+    const wire = capturing();
+    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+
+    await serve(new Request("https://api.example.com/search?a=1&b=2"));
+
+    expect(wire.calls[0].url).toBe(
+      "https://abc123.lambda-url.eu-west-2.on.aws/search?a=1&b=2",
+    );
+  });
+
   it("sets the forwarded host and proto so the origin can build absolute URLs", async () => {
     const wire = capturing();
     const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;

@@ -34,6 +34,7 @@ import {
   type ImageOrigin,
 } from "./image.mjs";
 import { retryTransientOrigin } from "./retry.mjs";
+import { encodeForwardedSearch, encodeRequestTarget } from "./request-target.mjs";
 
 type HeadersInit = NonNullable<ConstructorParameters<typeof Headers>[0]>;
 
@@ -1029,15 +1030,6 @@ function searchFromQuery(query: Record<string, string | string[]>): string {
   return search ? `?${search}` : "";
 }
 
-const REQUEST_TARGET_ILLEGAL = /[[\]^|]/g;
-
-function encodeRequestTarget(pathname: string): string {
-  return pathname.replace(
-    REQUEST_TARGET_ILLEGAL,
-    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
-  );
-}
-
 function originUrl(
   fnUrl: string,
   url: URL,
@@ -1048,7 +1040,7 @@ function originUrl(
   const query = result.invocationTarget?.query;
   const search = query ? searchFromQuery(query) : url.search;
   const target = canonicalPathname(dataPathname(pathname, url, manifest), manifest);
-  return new URL(encodeRequestTarget(target) + search, fnUrl);
+  return new URL(encodeRequestTarget(target) + encodeForwardedSearch(search), fnUrl);
 }
 
 async function bufferBody(request: Request): Promise<ArrayBuffer | null> {
@@ -1182,7 +1174,10 @@ function invokeMiddleware(
     return retryTransientOrigin(() => {
       const request = makeRequest();
       const url = new URL(request.url);
-      const forwardUrl = new URL(url.pathname + url.search, fnUrl);
+      const forwardUrl = new URL(
+        url.pathname + encodeForwardedSearch(url.search),
+        fnUrl,
+      );
       return doOrigin(
         withEntry(
           forward(forwardUrl, request, withoutControlHeaders(request.headers)),

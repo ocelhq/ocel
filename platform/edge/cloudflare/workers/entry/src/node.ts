@@ -2,6 +2,7 @@ import {
   originBodyBytes,
   type OriginBodyBudget,
 } from "@framework/next-router/origin-body";
+import { encodeForwardedSearch } from "@framework/next-router/request-target";
 import {
   needsSlashNormalization,
   normalizeRepeatedSlashes,
@@ -59,7 +60,7 @@ export function nodeOrigin(
     }
 
     return originFetch(
-      new Request(new URL(url.pathname + url.search, urls[0]), {
+      new Request(new URL(url.pathname + encodeForwardedSearch(url.search), urls[0]), {
         method: request.method,
         headers,
         body,
