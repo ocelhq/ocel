@@ -269,8 +269,7 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 	}
 	if len(hosts) == 0 {
 		return Refuse(CodeNotReady,
-			"this project declares no domains.production, so a production deploy has no hostname to serve: "+
-				"declare one in your ocel config and run `ocel domain add` to provision the certificate, the edge surface and the DNS for it")
+			"no domains.production declared on the project or any app — declare one, then run `ocel domain add`")
 	}
 	if r.state.Edge.Empty() {
 		r.withheld = fmt.Sprintf(
@@ -414,12 +413,26 @@ func (r *deployRun) appNames() []string {
 
 func (r *deployRun) hostnames() []string {
 	tier := environmentTier(r.plan.Class)
-	for _, domains := range r.manifest.GetDomains() {
-		if domains.GetTier() == tier {
-			return domains.GetHostnames()
+	var hosts []string
+	seen := map[string]bool{}
+	add := func(declared []*contractv1.TierDomains) {
+		for _, domains := range declared {
+			if domains.GetTier() != tier {
+				continue
+			}
+			for _, host := range domains.GetHostnames() {
+				if !seen[host] {
+					seen[host] = true
+					hosts = append(hosts, host)
+				}
+			}
 		}
 	}
-	return nil
+	add(r.manifest.GetDomains())
+	for _, app := range r.manifest.GetApps() {
+		add(app.GetDomains())
+	}
+	return hosts
 }
 
 func (r *deployRun) previewSite() edge.PreviewSite {

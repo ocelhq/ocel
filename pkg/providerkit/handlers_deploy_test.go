@@ -929,3 +929,33 @@ func TestDeployRefusesAProductionProjectThatDeclaresNoHostname(t *testing.T) {
 		t.Fatalf("Deploy() of a project declaring no hostname = %q, want it refused for the domain it does not declare", said)
 	}
 }
+
+func TestDeployServesAHostnameDeclaredOnAnAppRatherThanTheProject(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	req := deployRequest()
+	req.Manifest.Domains = nil
+	req.Manifest.Apps[0].Domains = []*contractv1.TierDomains{{
+		Tier:      environmentv1.Tier_TIER_PRODUCTION,
+		Hostnames: []string{"shop.example"},
+	}}
+
+	result, _ := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() of a project whose only hostname sits on an app = %q, want it admitted", result.GetError())
+	}
+	if !strings.Contains(result.GetUrlNote(), "shop.example") {
+		t.Errorf("the first deploy returned the note %q, want it naming the app's hostname nothing is bound to yet", result.GetUrlNote())
+	}
+
+	hostnameAdded(t, client)
+
+	result, _ = deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("a second Deploy() = %q", result.GetError())
+	}
+	if !slices.Equal(result.GetAppUrls(), []string{"https://shop.example"}) {
+		t.Errorf("the deploy after the hostname settled returned urls %v, want the app-declared hostname printed", result.GetAppUrls())
+	}
+}
