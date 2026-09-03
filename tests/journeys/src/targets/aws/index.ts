@@ -7,16 +7,15 @@ import { copyTree, ocel, runOcel, workTree } from "../../ocel";
 import { exampleDir, outputRoot, treeDir } from "../../paths";
 import { specForTarget } from "../../spec";
 import type { CellContext, Deployment, Target } from "../types";
+import { accountFiles, pinnedEnv, PROFILE_VARS } from "./account";
 import { emulatorFetch } from "./dispatch";
 import { sweepable } from "./slugs";
-import { answersAsFloci, callerAccount, deployedSlugs } from "./store";
+import { answersAsFloci, awsStore, type Store } from "./store";
 import { detectWorld, expectationEnvironmentFor, type Where } from "./world";
 
 const CONFIG = "ocel.aws.config.ts";
 
 const FLOCI_ZONE = "journey.test";
-
-const DEFAULT_REGION = "us-east-1";
 
 const LEG_TIMEOUT_MS = 600_000;
 
@@ -28,16 +27,14 @@ let dispatching: Promise<typeof fetch> | undefined;
 
 async function pinAccountFiles(): Promise<void> {
   await mkdir(pinnedDir, { recursive: true });
-  const config = path.join(pinnedDir, "config");
-  const credentials = path.join(pinnedDir, "credentials");
+  const { config, credentials } = accountFiles(pinnedDir);
   await writeFile(config, "", "utf8");
   await writeFile(credentials, "", "utf8");
-  process.env.AWS_CONFIG_FILE = config;
-  process.env.AWS_SHARED_CREDENTIALS_FILE = credentials;
-  delete process.env.AWS_PROFILE;
-  delete process.env.AWS_DEFAULT_PROFILE;
-  process.env.AWS_REGION ??= DEFAULT_REGION;
-  process.env.AWS_DEFAULT_REGION ??= process.env.AWS_REGION;
+  const pinned = pinnedEnv(process.env, pinnedDir);
+  for (const name of PROFILE_VARS) {
+    delete process.env[name];
+  }
+  Object.assign(process.env, pinned);
 }
 
 async function place(): Promise<Where> {
@@ -45,7 +42,7 @@ async function place(): Promise<Where> {
     await pinAccountFiles();
     const where = await detectWorld(process.env, {
       answersAsFloci,
-      callerAccount: () => callerAccount(process.env.AWS_ENDPOINT_URL),
+      callerAccount: () => awsStore(process.env.AWS_ENDPOINT_URL).callerAccount(),
     });
     if (where.world === "floci") {
       process.env.AWS_ACCESS_KEY_ID ??= "test";
@@ -65,12 +62,16 @@ async function guard(): Promise<ExpectationEnvironment> {
   return expectationEnvironmentFor((await place()).world);
 }
 
-function childEnv(cell: CellContext, dir: string): NodeJS.ProcessEnv {
+function childEnv(dir: string, runId: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
     OCEL_CONFIG: path.join(dir, CONFIG),
-    OCEL_JOURNEY_RUN: cell.runId,
+    OCEL_JOURNEY_RUN: runId,
   };
+}
+
+async function store(): Promise<Store> {
+  return awsStore((await place()).endpoint);
 }
 
 function zone(): string {
@@ -124,11 +125,7 @@ async function bootstrap(): Promise<void> {
     const runId = currentRunIdentity();
     const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", "bootstrap"));
     try {
-      await ocel(dir, ["bootstrap", "production", "--yes"], {
-        ...process.env,
-        OCEL_CONFIG: path.join(dir, CONFIG),
-        OCEL_JOURNEY_RUN: runId,
-      });
+      await ocel(dir, ["bootstrap", "production", "--yes"], childEnv(dir, runId));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -153,7 +150,7 @@ async function cellTree(cell: CellContext): Promise<string> {
 
 async function up(cell: CellContext): Promise<Deployment> {
   const dir = await workTree(cell, "aws");
-  const env = childEnv(cell, dir);
+  const env = childEnv(dir, cell.runId);
 
   await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
   await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
@@ -184,7 +181,7 @@ async function up(cell: CellContext): Promise<Deployment> {
 
 async function redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
   const dir = await cellTree(cell);
-  const env = childEnv(cell, dir);
+  const env = childEnv(dir, cell.runId);
   await runOcel(cell, dir, "redeploy", "env-greeting", ["env", "set", "GREETING", greeting], env);
   await runOcel(cell, dir, "redeploy", "deploy", ["deploy", "--yes"], env);
   return deployment(cell, await dispatcher());
@@ -192,13 +189,13 @@ async function redeploy(cell: CellContext, greeting: string): Promise<Deployment
 
 async function rollback(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
-  await runOcel(cell, dir, "rollback", "rollback", ["rollback"], childEnv(cell, dir));
+  await runOcel(cell, dir, "rollback", "rollback", ["rollback"], childEnv(dir, cell.runId));
   return deployment(cell, await dispatcher());
 }
 
 async function destroy(cell: CellContext): Promise<void> {
   const dir = await cellTree(cell);
-  const env = childEnv(cell, dir);
+  const env = childEnv(dir, cell.runId);
   const hosts = hostnames(cell);
   for (const [app, host] of hosts) {
     await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
@@ -208,7 +205,11 @@ async function destroy(cell: CellContext): Promise<void> {
 }
 
 async function list(): Promise<string[]> {
-  return deployedSlugs((await place()).endpoint);
+  return (await store()).deployedSlugs();
+}
+
+async function stands(slug: string): Promise<boolean> {
+  return (await store()).stands(slug);
 }
 
 async function sweep(runId: string): Promise<void> {
@@ -233,13 +234,8 @@ async function sweep(runId: string): Promise<void> {
       exampleDir(example.dir),
       treeDir(runId, "aws", `sweep-${stranded.slug}`),
     );
-    const env = {
-      ...process.env,
-      OCEL_CONFIG: path.join(dir, CONFIG),
-      OCEL_JOURNEY_RUN: stranded.run,
-    };
     try {
-      await ocel(dir, ["destroy", "production", "--yes"], env);
+      await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir, stranded.run));
       process.stdout.write(`swept ${stranded.slug}\n`);
     } catch (error) {
       complaints.push(`${stranded.slug}: ${String(error)}`);
@@ -277,5 +273,6 @@ export const awsTarget: Target = {
   rollback,
   destroy,
   list,
+  stands,
   sweep,
 };
