@@ -3,6 +3,7 @@ import { connect, type Socket } from "node:net";
 
 const PROXY_PORT = 443;
 const EDGE_PORT = 80;
+const CONNECT_TIMEOUT_MS = 10_000;
 
 export type Gateway = {
   tunnelUrl: string;
@@ -35,8 +36,13 @@ function tunnel(box: string): Server {
   const server = createHttpServer((_, res) => {
     res.writeHead(405).end();
   });
-  server.on("connect", (req, client: Socket, head: Buffer) => {
+  server.on("connect", (_req, client: Socket, head: Buffer) => {
+    const both = () => {
+      upstream.destroy();
+      client.destroy();
+    };
     const upstream = connect(PROXY_PORT, box, () => {
+      upstream.setTimeout(0);
       client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
       if (head.length > 0) {
         upstream.write(head);
@@ -44,8 +50,9 @@ function tunnel(box: string): Server {
       upstream.pipe(client);
       client.pipe(upstream);
     });
-    upstream.on("error", () => client.destroy());
-    client.on("error", () => upstream.destroy());
+    upstream.setTimeout(CONNECT_TIMEOUT_MS, both);
+    upstream.on("error", both);
+    client.on("error", both);
   });
   return server;
 }

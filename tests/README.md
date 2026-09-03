@@ -47,15 +47,6 @@ The target pins the AWS config and credentials files to empty files of its own, 
 profile in `~/.aws` cannot redirect one service at the endpoint. A bootstrap cannot be
 updated on floci (#853), so a second run wants a fresh emulator.
 
-Projects stranded by a run that died are reclaimed per target, and only ones the harness
-named:
-
-```
-pnpm --filter @ocel-tests/journeys sweep --target aws
-```
-
-`--shard <index>/<total>` is accepted and validated; it selects nothing yet.
-
 For `vps` that is a box the run can reach over SSH, and on a laptop that is an incus VM:
 
 ```
@@ -67,20 +58,16 @@ export OCEL_VPS_HOST=$OCEL_INCUS_ADDR OCEL_VPS_USER=$OCEL_INCUS_USER OCEL_VPS_ID
 pnpm --filter @ocel-tests/journeys cell --example express --target vps
 ```
 
-Those three variables are the only place a host is ever named: the example's
-`ocel.vps.config.ts` reads them, and nothing about a box is committed. The target
-bootstraps the box as the login you name and deploys as `ocel-deploy`, the login the
-bootstrap creates; it serves each app at `<app>.<slug>.localhost`, which the box's own
-proxy issues a certificate for and the harness reaches through the box's address.
+The vps sweep refuses a box that is not the disposable incus one.
 
-A dead run leaves its project on the box. Reclaim every stranded harness project — every
-`j-` slug that is not this run's — with:
+Projects stranded by a run that died are reclaimed per target, and only ones the harness
+named:
 
 ```
-pnpm --filter @ocel-tests/journeys sweep --target vps
+pnpm --filter @ocel-tests/journeys sweep --target aws
 ```
 
-The sweep refuses a box that is not the disposable incus one.
+`--shard <index>/<total>` is accepted and validated; it selects nothing yet.
 
 Real clouds are reached by workflow dispatch only. Nothing here spends a real account.
 
