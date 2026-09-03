@@ -2,12 +2,37 @@
 
 const region = "us-east-1";
 
+const emulatedServices = [
+  "cloudformation",
+  "dynamodb",
+  "ec2",
+  "iam",
+  "kms",
+  "rds",
+  "s3",
+  "secretsmanager",
+  "sts",
+];
+
+function providerForAws() {
+  const endpoint = process.env.AWS_ENDPOINT_URL;
+  if (!endpoint) {
+    return { region };
+  }
+  return {
+    region,
+    endpoints: [Object.fromEntries(emulatedServices.map((service) => [service, endpoint]))],
+    skipCredentialsValidation: true,
+    s3UsePathStyle: true,
+  };
+}
+
 export default $config({
   app() {
     return {
       name: "with-sst",
       home: "aws",
-      providers: { aws: { region } },
+      providers: { aws: providerForAws() },
     };
   },
   async run() {
@@ -44,6 +69,12 @@ export default $config({
       },
     });
 
-    return { host: orders.host, database: orders.database, port: orders.port };
+    return {
+      host: orders.host,
+      database: orders.database,
+      port: orders.port,
+      subnetIds: vpc.privateSubnets.apply((ids) => ids.join(",")),
+      securityGroupIds: vpc.securityGroups.apply((ids) => ids.join(",")),
+    };
   },
 });

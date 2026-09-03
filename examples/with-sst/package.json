@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "migrate": "tsx scripts/migrate.ts",
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -14,7 +13,8 @@
     "express": "~5.0.0",
     "ocel": "workspace:^",
     "pg": "^8.22.0",
-    "sst": "^3.17.10"
+    "sst": "^3.17.10",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "~5.0.0",

@@ -11,7 +11,6 @@ export default defineTransform([
         ...args,
         minCapacity: 2,
         maxCapacity: 16,
-        deletionProtection: true,
       }),
     },
   },
