@@ -5,14 +5,16 @@ import {
   discard,
   expandAll,
   farewell,
+  hideAll,
   leave,
   outcome,
+  revealAll,
   save,
   saving,
   state,
 } from "../store";
 import { Apps } from "./Apps";
-import { Sprite } from "./Icons";
+import { Icon, Sprite } from "./Icons";
 import { Masthead } from "./Masthead";
 import { Table } from "./Table";
 
@@ -49,6 +51,13 @@ export function App() {
             </button>
             <button type="button" class="linkish" onClick={collapseAll}>
               collapse all
+            </button>
+            <span class="tools-gap" />
+            <button type="button" class="linkish" onClick={() => void revealAll()}>
+              <Icon name="eye" /> reveal all
+            </button>
+            <button type="button" class="linkish" onClick={hideAll}>
+              hide all
             </button>
           </div>
         </div>
