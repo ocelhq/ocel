@@ -3,6 +3,7 @@ import type { Expectations } from "./types";
 
 const CONTAINER_IN_A_WORKSPACE = "https://github.com/ocelhq/ocel/issues/885";
 const NO_ROUTER_ON_A_BOX = "https://github.com/ocelhq/ocel/issues/900";
+const GREETING_DECLARED_TWICE = "https://github.com/ocelhq/ocel/issues/907";
 
 export const vpsIncus: Expectations = {
   "express/web": {
@@ -25,12 +26,12 @@ export const vpsIncus: Expectations = {
     up: CONTAINER_IN_A_WORKSPACE,
   },
   "workspace/next": {
-    up: CONTAINER_IN_A_WORKSPACE,
+    up: GREETING_DECLARED_TWICE,
   },
   "workspace/express": {
-    up: CONTAINER_IN_A_WORKSPACE,
+    up: GREETING_DECLARED_TWICE,
   },
   "workspace/hono": {
-    up: CONTAINER_IN_A_WORKSPACE,
+    up: GREETING_DECLARED_TWICE,
   },
 };
