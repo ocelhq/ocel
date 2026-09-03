@@ -19,8 +19,17 @@ async function main() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  await pg.query(`
+    CREATE TABLE IF NOT EXISTS next_state (
+      key        TEXT        PRIMARY KEY,
+      count      INTEGER     NOT NULL DEFAULT 0,
+      value      TEXT,
+      first_seen TIMESTAMPTZ NOT NULL DEFAULT now(),
+      last_seen  TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
   await pg.end();
-  console.log("migrated: todos + documents tables ready");
+  console.log("migrated: todos + documents + next_state tables ready");
 }
 
 main().catch((err) => {

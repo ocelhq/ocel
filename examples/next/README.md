@@ -22,3 +22,8 @@ OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --con
 
 `src/probes.ts` is the test surface — mounted at `/api/probes` by one catch-all route,
 driven by the suites under [`tests/`](../../tests), and of no use to the product.
+
+The framework surface is grouped by behaviour: `/routing`, `/mw`, `/stream`, `/actions`
+and `/runtime` as pages, with their handlers under `/api/next`. Side effects land in
+postgres rather than in a module-level counter, because a serverless deployment throws
+the module away between requests; `/api/next/state` reads them back.
