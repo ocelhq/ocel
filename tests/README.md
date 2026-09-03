@@ -55,13 +55,26 @@ export OCEL_VPS_HOST=$OCEL_INCUS_ADDR OCEL_VPS_USER=$OCEL_INCUS_USER OCEL_VPS_ID
 pnpm --filter @ocel-tests/journeys cell --example express --target vps
 ```
 
+`scripts/ec2.sh` is the same box on a real EC2 instance, for when the deploy has to face a
+public IP and a real network. It spends the AWS account you are authenticated against, so
+destroy it when the run ends:
+
+```
+scripts/ec2.sh create journey
+eval "$(scripts/ec2.sh info journey)"
+export OCEL_VPS_HOST=$OCEL_EC2_ADDR OCEL_VPS_USER=$OCEL_EC2_USER OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY
+pnpm --filter @ocel-tests/journeys cell --example express --target vps
+scripts/ec2.sh destroy journey
+```
+
 `pnpm --filter @ocel-tests/journeys sweep --target <target>` reclaims what a run that died
 left behind, and only projects the harness named.
 
 `--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
-Real clouds are reached by workflow dispatch only; nothing run from here spends a real
-account.
+Real clouds are reached by workflow dispatch, or by putting the `journey:real` label on a
+pull request — one shot, the label comes off again as the run starts. From here only
+`scripts/ec2.sh` spends a real account.
 
 A cell that is expected to fail is listed in `journeys/src/expectations/<environment>.ts`
 under the issue that owns the gap, and un-listed in the pull request that fixes it. The
@@ -95,7 +108,7 @@ baseline and reclaiming a stranded project.
 
 ## One-time human setup
 
-Both real lanes are dispatch-only, and both need a human to prepare an account once.
+Both real lanes need a human to prepare an account once.
 
 The `aws` lane assumes a role over GitHub OIDC — no access key is stored — and hard-fails
 if the session or the Cloudflare token resolves to an account other than the one named. The
@@ -112,15 +125,8 @@ mints, or the assume fails outright.
 | `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID` | secret | the only Cloudflare account the guard lets a run touch       |
 | `E2E_PREVIEW_DOMAIN`                 | var    | the zone a dispatched run may take hostnames under           |
 
-The `vps` lane points at an incus VM on a pull request and at a vendor box on dispatch. The
-box is three secrets:
-
-| name               | what it holds                                     |
-| ------------------ | ------------------------------------------------- |
-| `JOURNEY_VPS_HOST` | the box's address                                 |
-| `JOURNEY_VPS_USER` | the login that may bootstrap it                   |
-| `JOURNEY_VPS_KEY`  | that login's private key, whole, newlines and all |
-
-The workflow writes the key to the runner's temporary directory at mode 0600 and hands its
-path to the harness as `OCEL_VPS_IDENTITY_FILE`. Nothing else on the box is configured from
-here: the journey bootstraps production on it and destroys what it deployed.
+The `vps` lane points at an incus VM on a pull request, and on a real run brings up a
+throwaway EC2 box with `scripts/ec2.sh` under the same role and account guard as the `aws`
+lane, so it needs no secrets of its own. The job destroys the box when it ends, whether the
+journey passed or not, and the nightly `Sweep` workflow reclaims any box older than three
+hours that a run which died left behind.

@@ -1,0 +1,38 @@
+name: Sweep
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  ec2:
+    name: boxes a run that died left behind
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assume the E2E deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-session-name: ocel-sweep-${{ github.run_id }}
+
+      - name: Guard the account this sweep may touch
+        env:
+          EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          account=$(aws sts get-caller-identity --query Account --output text)
+          [ -n "$EXPECTED" ] || { echo "no expected account is named" >&2; exit 1; }
+          [ "$account" = "$EXPECTED" ] || { echo "session is account $account, not $EXPECTED" >&2; exit 1; }
+
+      - name: Reclaim the boxes nothing is using
+        run: scripts/ec2.sh sweep
