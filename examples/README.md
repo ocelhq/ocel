@@ -1,7 +1,8 @@
 # Examples
 
-Every one of these deploys with `ocel deploy`. Four of them are rungs of one ladder, and
-the story of that ladder opens [with-transforms](./with-transforms).
+Every one of these deploys with `ocel deploy`. Three of them are rungs of a ladder that
+starts at [express](./express), and the story of that ladder opens
+[with-transforms](./with-transforms).
 
 ## hello
 
@@ -15,10 +16,16 @@ the story of that ladder opens [with-transforms](./with-transforms).
 - [fastify](./fastify) — the same app on Fastify 5.
 - [next](./next) — the same app on the Next.js App Router, and the fixture the Next routing and cache suites drive.
 
-## the ladder
+## with-transforms
 
 - [with-transforms](./with-transforms) — the defaults stop fitting, so a transform module reshapes what ocel provisions.
+
+## with-sst
+
 - [with-sst](./with-sst) — SST owns the database and the network, and ocel deploys the app into it.
+
+## with-pulumi
+
 - [with-pulumi](./with-pulumi) — the same arrangement in Pulumi.
 
 ## workspace

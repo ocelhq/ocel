@@ -2,7 +2,7 @@
 
 Four of the [examples](../README.md) are three rungs of one ladder, and a team climbs it as
 it scales. Every rung deploys with `ocel deploy`; what changes is how much of the
-provisioning you have taken back. The other directories are framework fixtures, not rungs.
+provisioning you have taken back.
 
 **No config — [express](../express).** The reference composite: a provider-less base config
 names the slug and the app, and `ocel.aws.config.ts` and `ocel.vps.config.ts` import it and
