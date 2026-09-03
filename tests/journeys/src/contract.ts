@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import type { AnyUploader, Bucket } from "ocel/blob";
 import { createUploadClient } from "ocel/blob/client";
+import { nextRoutingRows } from "./nextRouting";
 import type { Suite } from "./spec";
 
 export const INITIAL_GREETING = "journey-hello";
@@ -330,6 +331,7 @@ export const contract: ContractRow[] = [
       assert.deepEqual(body, { slept: SLEEP_MS });
     },
   },
+  ...nextRoutingRows,
 ];
 
 export function contractRows(suites: Suite[]): ContractRow[] {
