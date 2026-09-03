@@ -47,11 +47,19 @@ export const sstHooks: LadderHooks = {
   },
 };
 
+function isStageNotFound(error: unknown): boolean {
+  return error instanceof Error && /Stage not found/.test(error.message);
+}
+
 export async function sstSweep(runId: string): Promise<void> {
   const dir = await copyTree(exampleDir("with-sst"), treeDir(runId, "aws", "ladder-sweep-with-sst"));
   try {
     const bin = path.join(dir, "node_modules", ".bin", "sst");
     await spawnBin(bin, ["remove", "--stage", `j-${runId}`], dir, await deployEnv());
+  } catch (error) {
+    if (!isStageNotFound(error)) {
+      throw error;
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
