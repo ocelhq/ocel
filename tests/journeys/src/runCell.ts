@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterAll, beforeAll, describe, it } from "vitest";
+import { afterAll, beforeAll, describe, inject, it } from "vitest";
 import {
   type ContractRow,
   contractRows,
@@ -8,6 +8,7 @@ import {
   secretGuarded,
 } from "./contract";
 import { evidence } from "./evidence";
+import { PREPARE_FAILURE } from "./globalSetup";
 import { currentRunIdentity, projectSlug } from "./identity";
 import { evidenceDir, exampleDir } from "./paths";
 import {
@@ -59,7 +60,10 @@ export function describeCell(example: ExampleSpec) {
   let greeting = INITIAL_GREETING;
   const notes = new Map<string, string>();
 
-  let setupFailure: { error: unknown } | undefined;
+  const laneFailure = inject(PREPARE_FAILURE);
+  let setupFailure: { error: unknown } | undefined = laneFailure
+    ? { error: new Error(laneFailure) }
+    : undefined;
 
   const bringUp = once(async () => {
     if (setupFailure) {

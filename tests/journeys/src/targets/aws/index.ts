@@ -20,7 +20,6 @@ const CONFIG = "ocel.aws.config.ts";
 
 const LEG_TIMEOUT_MS = 600_000;
 
-let bootstrapped: Promise<void> | undefined;
 let dispatching: Promise<typeof fetch> | undefined;
 
 async function guard(): Promise<ExpectationEnvironment> {
@@ -81,26 +80,23 @@ function deployment(cell: CellContext, dispatch: typeof fetch): Deployment {
   };
 }
 
-async function bootstrap(): Promise<void> {
-  bootstrapped ??= (async () => {
-    const [first] = specForTarget("aws");
-    if (!first) {
-      throw new Error("no example in the spec table runs on aws, so there is nothing to bootstrap");
-    }
-    const runId = currentRunIdentity();
-    const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", "bootstrap"));
-    try {
-      await ocel(dir, ["bootstrap", "production", "--yes"], childEnv(dir, runId));
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  })();
-  return bootstrapped;
+async function prepare(): Promise<void> {
+  await place();
+  const [first] = specForTarget("aws");
+  if (!first) {
+    throw new Error("no example in the spec table runs on aws, so there is nothing to bootstrap");
+  }
+  const runId = currentRunIdentity();
+  const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", "bootstrap"));
+  try {
+    await ocel(dir, ["bootstrap", "production", "--yes"], childEnv(dir, runId));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 async function setup(): Promise<void> {
   await place();
-  await bootstrap();
 }
 
 async function cellTree(cell: CellContext): Promise<string> {
@@ -248,6 +244,7 @@ export const awsTarget: Target = {
   legTimeoutMs: LEG_TIMEOUT_MS,
   legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,
+  prepare,
   setup,
   up,
   redeploy,

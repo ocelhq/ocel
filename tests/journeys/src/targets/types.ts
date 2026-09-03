@@ -21,6 +21,7 @@ export type Target = {
   legTimeoutMs: number;
   legs: Leg[];
   guard: () => Promise<ExpectationEnvironment>;
+  prepare?: () => Promise<void>;
   setup: () => Promise<void>;
   up: (cell: CellContext) => Promise<Deployment>;
   redeploy?: (cell: CellContext, greeting: string) => Promise<Deployment>;

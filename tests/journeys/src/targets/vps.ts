@@ -37,8 +37,6 @@ type Standing = { dir: string; gateway: Gateway; env: NodeJS.ProcessEnv };
 
 const standing = new Map<string, Standing>();
 
-let bootstrapped: Promise<void> | undefined;
-
 let resolvedBox: Box | undefined;
 
 let resolvedZone: string | undefined;
@@ -207,24 +205,21 @@ export default defineConfig({
   return dir;
 }
 
-async function setup(): Promise<void> {
+async function prepare(): Promise<void> {
   await guard();
   const target = box();
-  bootstrapped ??= (async () => {
-    const dir = await boxConfig(
-      path.join(outputRoot, "vps", "box"),
-      `${HARNESS_PREFIX}journey-bootstrap`,
-      target.user,
-    );
-    const args = ["bootstrap", "production", "--yes"];
-    const result = await spawnOcel(dir, args, boxEnv(target.user));
-    const log = redact(`${result.stdout}${result.stderr}`);
-    await writeFile(path.join(dir, "bootstrap.log"), log, "utf8");
-    if (result.code !== 0) {
-      throw exitedBadly(args, result);
-    }
-  })();
-  await bootstrapped;
+  const dir = await boxConfig(
+    path.join(outputRoot, "vps", "box"),
+    `${HARNESS_PREFIX}journey-bootstrap`,
+    target.user,
+  );
+  const args = ["bootstrap", "production", "--yes"];
+  const result = await spawnOcel(dir, args, boxEnv(target.user));
+  const log = redact(`${result.stdout}${result.stderr}`);
+  await writeFile(path.join(dir, "bootstrap.log"), log, "utf8");
+  if (result.code !== 0) {
+    throw exitedBadly(args, result);
+  }
 }
 
 async function trusted(cell: CellContext): Promise<string | undefined> {
@@ -395,7 +390,10 @@ export const vpsTarget: Target = {
   legTimeoutMs: 600_000,
   legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,
-  setup,
+  prepare,
+  setup: async () => {
+    await guard();
+  },
   up,
   redeploy,
   rollback,
