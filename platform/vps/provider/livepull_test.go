@@ -49,18 +49,21 @@ func shellQuoted(arg string) string {
 	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
 }
 
-func (vm machine) hashed(t *testing.T, password string) string {
+func (vm machine) pull(t *testing.T, image string) {
 	t.Helper()
 	var pulled error
 	for attempt := range 3 {
-		if _, pulled = vm.attempt(vm.user, "sudo docker pull -q "+liveHtpasswdImage); pulled == nil {
-			break
+		if _, pulled = vm.attempt(vm.user, "sudo docker pull -q "+image); pulled == nil {
+			return
 		}
 		time.Sleep(time.Duration(attempt+1) * 2 * time.Second)
 	}
-	if pulled != nil {
-		t.Fatalf("pull %s onto the machine, three tries: %v", liveHtpasswdImage, pulled)
-	}
+	t.Fatalf("pull %s onto the machine, three tries: %v", image, pulled)
+}
+
+func (vm machine) hashed(t *testing.T, password string) string {
+	t.Helper()
+	vm.pull(t, liveHtpasswdImage)
 	rendered, err := vm.feeding(vm.user, password+"\n",
 		"sudo docker run --rm -i --entrypoint htpasswd "+liveHtpasswdImage+" -niB "+liveRegistryLogin)
 	if err != nil {
@@ -80,6 +83,7 @@ func (vm machine) registry(t *testing.T) providerkit.RegistryTarget {
 	run := secretOf(t)
 	name, dir := "ocel-live-registry-"+run, "/tmp/ocel-live-registry-"+run
 	hashed := vm.hashed(t, password)
+	vm.pull(t, liveRegistryImage)
 
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker rm -f "+name+" >/dev/null 2>&1 || true; sudo rm -rf "+dir)
