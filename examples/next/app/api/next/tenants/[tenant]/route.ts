@@ -1,25 +1,16 @@
+import { echo } from "../../../../../lib/echo";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const BODYLESS = new Set(["GET", "HEAD", "OPTIONS"]);
+const handler = echo(async ({ params }: { params: Promise<{ tenant: string }> }) => [
+  (await params).tenant,
+]);
 
-type Context = { params: Promise<{ tenant: string }> };
-
-async function echo(request: Request, { params }: Context) {
-  const { tenant } = await params;
-  const body = BODYLESS.has(request.method) ? "" : await request.text();
-  return new Response(`${request.method}:${tenant}:${body}`, {
-    headers: {
-      "content-type": "text/plain; charset=utf-8",
-      "x-ocel-method": request.method,
-    },
-  });
-}
-
-export const GET = echo;
-export const HEAD = echo;
-export const OPTIONS = echo;
-export const POST = echo;
-export const PUT = echo;
-export const PATCH = echo;
-export const DELETE = echo;
+export const GET = handler;
+export const HEAD = handler;
+export const OPTIONS = handler;
+export const POST = handler;
+export const PUT = handler;
+export const PATCH = handler;
+export const DELETE = handler;
