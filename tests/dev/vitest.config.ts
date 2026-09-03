@@ -1,5 +1,7 @@
+import { DEFAULT_DATABASE_URL, postgresLink } from "@ocel-tests/shared/env";
 import { defineConfig } from "vitest/config";
-import { postgresLink } from "./src/env";
+
+const databaseUrl = process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
 
 export default defineConfig({
   test: {
@@ -10,20 +12,13 @@ export default defineConfig({
     hookTimeout: 180_000,
     fileParallelism: true,
     env: {
-      DATABASE_URL:
-        process.env.DATABASE_URL ??
-        "postgres://postgres:postgres@localhost:5432/postgres",
+      DATABASE_URL: databaseUrl,
       OCEL_RESOURCE_POSTGRES_main:
-        process.env.OCEL_RESOURCE_POSTGRES_main ??
-        postgresLink(
-          "main",
-          process.env.DATABASE_URL ??
-            "postgres://postgres:postgres@localhost:5432/postgres",
-        ),
+        process.env.OCEL_RESOURCE_POSTGRES_main ?? postgresLink("main", databaseUrl),
     },
     server: {
       deps: {
-        inline: ["@console/auth", "@console/db"],
+        inline: ["@ocel-tests/shared", "@console/auth", "@console/db"],
       },
     },
   },

@@ -1,7 +1,7 @@
-import { seed } from "./seed";
+import { seed } from "@ocel-tests/shared/seed";
 
 async function main() {
-  const { token, userId, organizationId } = await seed();
+  const { token, userId, organizationId } = await seed("E2E");
   process.stderr.write(
     `seeded user=${userId} org=${organizationId}\n`,
   );
