@@ -26,7 +26,7 @@ export type LadderHooks = {
 export type ExampleSpec = {
   name: string;
   dir: string;
-  framework: Framework;
+  framework?: Framework;
   kind: Kind;
   suites: Suite[];
   apps: string[];
@@ -66,6 +66,29 @@ export const spec: ExampleSpec[] = [
     kind: "composite",
     suites: ["health", "static", "product", "probes"],
     apps: ["web"],
+  },
+  {
+    name: "hello-express",
+    dir: "hello-express",
+    framework: "express",
+    kind: "hello",
+    suites: ["health", "static"],
+    apps: ["web"],
+  },
+  {
+    name: "hello-next",
+    dir: "hello-next",
+    framework: "next",
+    kind: "hello",
+    suites: ["health", "static"],
+    apps: ["web"],
+  },
+  {
+    name: "workspace",
+    dir: "workspace",
+    kind: "workspace",
+    suites: ["health", "static", "product", "probes"],
+    apps: ["next", "express", "hono"],
   },
 ];
 

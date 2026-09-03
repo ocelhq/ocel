@@ -15,4 +15,19 @@ export const vpsIncus: Expectations = {
   "next/web": {
     up: CONTAINER_IN_A_WORKSPACE,
   },
+  "hello-express/web": {
+    up: CONTAINER_IN_A_WORKSPACE,
+  },
+  "hello-next/web": {
+    up: CONTAINER_IN_A_WORKSPACE,
+  },
+  "workspace/next": {
+    up: CONTAINER_IN_A_WORKSPACE,
+  },
+  "workspace/express": {
+    up: CONTAINER_IN_A_WORKSPACE,
+  },
+  "workspace/hono": {
+    up: CONTAINER_IN_A_WORKSPACE,
+  },
 };
