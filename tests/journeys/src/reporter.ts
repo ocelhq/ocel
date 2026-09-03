@@ -5,9 +5,9 @@ import { expectationsFor } from "./expectations";
 import { currentRunIdentity } from "./identity";
 import { outputRoot, verdictFile } from "./paths";
 import { planTests } from "./plan";
-import { exitCodeFor, reconcile, type TestOutcome, type TestResult } from "./reconcile";
+import { reconcile, type TestOutcome, type TestResult } from "./reconcile";
 import { specForTarget } from "./spec";
-import { failureReport, summaryTable } from "./summary";
+import { journeyVerdict, summaryTable } from "./summary";
 import { selectedTarget } from "./targets";
 
 function outcomeOf(testCase: TestCase): TestOutcome {
@@ -40,7 +40,8 @@ function cellOf(testCase: TestCase): string {
 async function writeVerdict(runId: string, target: string, exitCode: number, report: string) {
   const file = verdictFile(runId, target);
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify({ exitCode, report }, null, 2)}\n`, "utf8");
+  const nonce = process.env.OCEL_JOURNEY_VERDICT_NONCE ?? "";
+  await writeFile(file, `${JSON.stringify({ nonce, exitCode, report }, null, 2)}\n`, "utf8");
 }
 
 export default class JourneyReporter implements Reporter {
@@ -55,7 +56,10 @@ export default class JourneyReporter implements Reporter {
     });
   }
 
-  async onTestRunEnd() {
+  async onTestRunEnd(
+    _modules: ReadonlyArray<unknown>,
+    unhandledErrors: ReadonlyArray<{ message?: string; stack?: string }>,
+  ) {
     const target = selectedTarget();
     const runId = currentRunIdentity();
     const chosen = process.env.OCEL_EXAMPLES?.split(",").map((name) => name.trim());
@@ -89,10 +93,13 @@ export default class JourneyReporter implements Reporter {
       await writeFile(stepSummary, table, { encoding: "utf8", flag: "a" });
     }
 
-    const exitCode = exitCodeFor(report.rows.map((row) => row.verdict));
-    await writeVerdict(runId, target.name, exitCode, failureReport(report));
-    if (exitCode !== 0) {
-      process.stderr.write(`\nthe journey account does not reconcile:\n${failureReport(report)}\n`);
+    const verdict = journeyVerdict(
+      report,
+      unhandledErrors.map((error) => error.message ?? error.stack ?? String(error)),
+    );
+    await writeVerdict(runId, target.name, verdict.exitCode, verdict.report);
+    if (verdict.exitCode !== 0) {
+      process.stderr.write(`\nthe journey account does not reconcile:\n${verdict.report}\n`);
       process.exitCode = 1;
     }
   }

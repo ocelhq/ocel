@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { reconcile } from "./reconcile";
-import { summaryTable } from "./summary";
+import { journeyVerdict, summaryTable } from "./summary";
 
 const ISSUE = "https://github.com/ocelhq/ocel/issues/851";
 
@@ -37,5 +37,34 @@ describe("summary table", () => {
 
   it("links the issue that owns a red cell", () => {
     expect(table).toContain(`[#851](${ISSUE})`);
+  });
+});
+
+describe("journey verdict", () => {
+  const green = reconcile({
+    planned: [{ cell: "express/web", title: "up", leg: "up" }],
+    results: [{ cell: "express/web", title: "up", outcome: "passed" }],
+    expectations: {},
+  });
+
+  it("is zero when the account reconciles and nothing was thrown outside a test", () => {
+    expect(journeyVerdict(green, [])).toEqual({ exitCode: 0, report: "" });
+  });
+
+  it("is one when a test threw outside the run, and names what threw", () => {
+    const verdict = journeyVerdict(green, ["Error: the pool was closed\n  at pg.end"]);
+    expect(verdict.exitCode).toBe(1);
+    expect(verdict.report).toBe("UNHANDLED — Error: the pool was closed");
+  });
+
+  it("names the unreconciled rows alongside what threw", () => {
+    const red = reconcile({
+      planned: [{ cell: "express/web", title: "up", leg: "up" }],
+      results: [{ cell: "express/web", title: "up", outcome: "failed" }],
+      expectations: {},
+    });
+    const verdict = journeyVerdict(red, ["Error: unhandled"]);
+    expect(verdict.exitCode).toBe(1);
+    expect(verdict.report.split("\n")).toHaveLength(2);
   });
 });
