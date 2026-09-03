@@ -74,8 +74,8 @@ export default {
 			t.Fatalf("runGenerate wrote no accessor: %v", err)
 		}
 		for _, want := range []string{
-			"NEXT_PUBLIC_APP_ID: inlined(\"NEXT_PUBLIC_APP_ID\", process.env.NEXT_PUBLIC_APP_ID)",
-			"NEXT_PUBLIC_SITE_URL: inlined(\"NEXT_PUBLIC_SITE_URL\", process.env.NEXT_PUBLIC_SITE_URL)",
+			"NEXT_PUBLIC_APP_ID: inlined(schema, \"NEXT_PUBLIC_APP_ID\", process.env.NEXT_PUBLIC_APP_ID)",
+			"NEXT_PUBLIC_SITE_URL: inlined(schema, \"NEXT_PUBLIC_SITE_URL\", process.env.NEXT_PUBLIC_SITE_URL)",
 		} {
 			if !strings.Contains(string(accessor), want) {
 				t.Errorf("accessor = %s, want it to name %q", accessor, want)

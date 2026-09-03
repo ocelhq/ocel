@@ -7,11 +7,12 @@ import { rpc } from "../utils/rpc.js";
 import {
   complaint,
   isRequired,
-  parse,
   type Definitions,
   type VariableClass,
   type VariableDefinition,
 } from "./definition.js";
+import { sourceOf } from "./schema.js";
+import { parse } from "./standard.js";
 
 const WIRE_CLASS: Record<VariableClass, WireClass> = {
   plain: WireClass.PLAIN,
@@ -31,6 +32,8 @@ export async function declareEnv(
       required: isRequired(definition),
       folders: [...(definition.folders ?? [])],
       source,
+      schemaSource: sourceOf(definitions),
+      hasSchema: definition.schema !== undefined,
     })),
   });
 

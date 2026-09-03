@@ -9,17 +9,17 @@ import {
 } from "./definition.js";
 import { EnvValueError } from "./errors.js";
 import { liveGeneration, NO_GENERATION, readLive } from "./live.js";
-import { assertInScope, callSite, inScope } from "./scope.js";
+import { callSite } from "./callsite.js";
+import { assertInScope, inScope } from "./scope.js";
 import { coerce, readDelivered, undeclared } from "./value.js";
 
 export {
-  EnvDefinitionError,
   type Definitions,
   type VariableClass,
   type VariableDefinition,
 } from "./definition.js";
 export { EnvClientError } from "./client.js";
-export { EnvEdgeError, EnvValueError } from "./errors.js";
+export { EnvDefinitionError, EnvEdgeError, EnvValueError } from "./errors.js";
 export { EnvScopeError } from "./scope.js";
 
 export type Env<TDefinitions extends Definitions> = {

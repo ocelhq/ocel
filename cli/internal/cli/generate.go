@@ -53,7 +53,10 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 		return err
 	}
 
-	keys := clientenv.DeclaredKeys(gate.Definitions())
+	keys, err := clientenv.Declared(gate.Definitions())
+	if err != nil {
+		return err
+	}
 	if err := generateClientAccessors(cfg, keys); err != nil {
 		return err
 	}
@@ -70,7 +73,7 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 	return nil
 }
 
-func generateClientAccessors(cfg *projectconfig.Config, keys []string) error {
+func generateClientAccessors(cfg *projectconfig.Config, keys []clientenv.Key) error {
 	if len(cfg.Apps) == 0 {
 		return clientenv.GenerateKeys(cfg.Dir, keys)
 	}

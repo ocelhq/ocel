@@ -35,6 +35,10 @@
       "types": "./dist/env/client.d.ts",
       "import": "./dist/env/client.js"
     },
+    "./env/schema": {
+      "types": "./dist/env/schema.d.ts",
+      "import": "./dist/env/schema.js"
+    },
     "./postgres": {
       "types": "./dist/postgres/index.d.ts",
       "import": "./dist/postgres/index.js"

@@ -1,5 +1,6 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { isUsableKey, parse } from "./env/definition.js";
+import { isUsableKey } from "./env/definition.js";
+import { parse } from "./env/standard.js";
 
 export class BuildEnvError extends Error {
   override name = "BuildEnvError";

@@ -49,18 +49,3 @@ export function assertInScope(key: string, folders: readonly string[]): void {
     }. Bind this app to one of those folders in ocel.config.ts, or widen the variable's scope.`,
   );
 }
-
-export function callSite(): string {
-  for (const line of (new Error().stack ?? "").split("\n").slice(1)) {
-    const file = /\(?((?:\/|file:|[A-Za-z]:\\)[^()]+?):\d+:\d+\)?$/.exec(
-      line.trim(),
-    )?.[1];
-    if (
-      file &&
-      !/[/\\]env[/\\](index|edge|scope|declare|definition|errors)\./.test(file)
-    ) {
-      return file.replace(/^file:\/\//, "");
-    }
-  }
-  return "";
-}

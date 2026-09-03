@@ -8,8 +8,8 @@ const reportEnvProblemsMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})))
 
 const source = vi.hoisted(() => ({ override: undefined as string | undefined }));
 
-vi.mock("./scope.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./scope.js")>();
+vi.mock("./callsite.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./callsite.js")>();
   return { ...actual, callSite: () => source.override ?? actual.callSite() };
 });
 
@@ -25,6 +25,7 @@ vi.mock("../utils/rpc", () => ({
 
 const { defineEnv, EnvDefinitionError, EnvScopeError, EnvValueError } =
   await import("./index.js");
+const { envSchema } = await import("./schema.js");
 
 async function flushDeclarations() {
   const pending = globalThis.__ocelRegister ?? [];
@@ -192,6 +193,8 @@ describe("the declaration payload", () => {
           required: true,
           folders: [],
           source,
+          schemaSource: "",
+          hasSchema: false,
         },
         {
           key: "PAYLOAD_SECRET",
@@ -200,6 +203,8 @@ describe("the declaration payload", () => {
           required: true,
           folders: [],
           source,
+          schemaSource: "",
+          hasSchema: false,
         },
         {
           key: "PAYLOAD_DEFAULTED",
@@ -208,9 +213,44 @@ describe("the declaration payload", () => {
           required: false,
           folders: [],
           source,
+          schemaSource: "",
+          hasSchema: true,
         },
       ],
     });
+  });
+
+  it("names the module holding an envSchema() declaration apart from the one calling defineEnv", async () => {
+    source.override = "/app/src/env.ts";
+    const schema = envSchema({
+      PAYLOAD_SCHEMA_MODULE: { class: "plain", client: true, schema: z.coerce.number() },
+    });
+    source.override = undefined;
+    defineEnv(schema);
+    await flushDeclarations();
+
+    expect(declareEnvMock).toHaveBeenCalledWith({
+      definitions: [
+        expect.objectContaining({
+          key: "PAYLOAD_SCHEMA_MODULE",
+          source: expect.stringContaining("env.test.ts"),
+          schemaSource: "/app/src/env.ts",
+          hasSchema: true,
+        }),
+      ],
+    });
+  });
+
+  it("reports a client-accessible value its schema rejects before anything is built", async () => {
+    declareEnvMock.mockResolvedValue({ cells: [cell("NEXT_PUBLIC_PORT", "eighty")] });
+    defineEnv({
+      NEXT_PUBLIC_PORT: { class: "plain", client: true, schema: z.coerce.number() },
+    });
+    await flushDeclarations();
+
+    const [problem] = reportedProblems();
+    expect(problem).toMatchObject({ key: "NEXT_PUBLIC_PORT", kind: 2 });
+    expect(problem!.detail).not.toBe("");
   });
 });
 
