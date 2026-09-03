@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { currentRunIdentity } from "./identity";
 import { verdictFile } from "./paths";
-import { type ExampleSpec, specForTarget } from "./spec";
+import { type ExampleSpec, examplesNamed, specForTarget } from "./spec";
 import { selectedTarget } from "./targets";
 import type { Target } from "./targets/types";
 
@@ -56,9 +56,14 @@ export async function runJourney(target: Target, examples: ExampleSpec[]): Promi
   return verdict.exitCode;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+async function main(): Promise<number> {
   const target = selectedTarget();
-  runJourney(target, specForTarget(target.name)).then(
+  const chosen = examplesNamed(specForTarget(target.name), process.env.OCEL_EXAMPLES);
+  return runJourney(target, chosen);
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().then(
     (code) => {
       process.exitCode = code;
     },

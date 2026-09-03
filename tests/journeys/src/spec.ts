@@ -73,6 +73,22 @@ export function specForTarget(target: TargetName): ExampleSpec[] {
   return spec.filter((row) => row.targets === undefined || row.targets.includes(target));
 }
 
+export function examplesNamed(rows: ExampleSpec[], named: string | undefined): ExampleSpec[] {
+  const names = (named ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter((name) => name !== "");
+  if (names.length === 0) {
+    return rows;
+  }
+  const unknown = names.filter((name) => !rows.some((row) => row.name === name));
+  if (unknown.length > 0) {
+    const known = rows.map((row) => row.name).join(", ");
+    throw new Error(`this target runs no example named ${unknown.join(", ")} (${known})`);
+  }
+  return rows.filter((row) => names.includes(row.name));
+}
+
 export function specByName(name: string): ExampleSpec {
   const row = spec.find((candidate) => candidate.name === name);
   if (!row) {
