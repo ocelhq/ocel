@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "vitest";
-import { nextCacheRows } from "../nextCache";
+import { EDGE_ISR_TITLE, nextCacheRows } from "../nextCache";
 import { contractTitle } from "../plan";
 import { EDGE_ENV } from "./aws.floci";
 import { CONTRACT_LEGS } from "./keys";
@@ -36,7 +36,7 @@ describe("expectationsFor", () => {
     assert.throws(() => expectationsFor("aws.floci"), new RegExp(EDGE_ENV));
   });
 
-  it("lists every planned title for an edge it knows", () => {
+  it("lists every contract title on api-gateway, and up under the master-secret issue", () => {
     process.env[EDGE_ENV] = "api-gateway";
     const listed = expectationsFor("aws.floci");
     const cell = listed["express/web"];
@@ -56,49 +56,73 @@ describe("expectationsFor", () => {
     );
   });
 
-  it("never lists a ladder's refuse title, on any edge", () => {
+  it("lists no leg marker on api-gateway: a failed up blocks the legs behind it", () => {
+    process.env[EDGE_ENV] = "api-gateway";
+    const cell = expectationsFor("aws.floci")["express/web"];
+    assert.ok(cell);
+    assert.equal(cell.redeploy, undefined);
+    assert.equal(cell.rollback, undefined);
+    assert.equal(cell.destroy, undefined);
+  });
+
+  it("lists up alone under the edge's own issue on cloudfront and cloudflare", () => {
+    const issues: Record<string, string> = {
+      cloudfront: "https://github.com/ocelhq/ocel/issues/852",
+      cloudflare: "https://github.com/ocelhq/ocel/issues/904",
+    };
+    for (const [edge, issue] of Object.entries(issues)) {
+      process.env[EDGE_ENV] = edge;
+      const listed = expectationsFor("aws.floci");
+      const cell = listed["express/web"];
+      assert.ok(cell, edge);
+      assert.deepEqual(Object.keys(cell), ["up"], edge);
+      assert.equal(cell.up, issue, edge);
+      assert.deepEqual(Object.keys(listed["next/web"] ?? {}), ["up"], edge);
+    }
+  });
+
+  it("never lists a ladder's refuse or publish title, on any edge", () => {
+    const publishTitle =
+      "publish · ocel link ls lists both records with their name, type, source and owner";
     for (const edge of ["api-gateway", "cloudfront", "cloudflare"]) {
       process.env[EDGE_ENV] = edge;
       const listed = expectationsFor("aws.floci");
       assert.equal(listed["with-sst/web"]?.refuse, undefined, edge);
       assert.equal(listed["with-pulumi/web"]?.refuse, undefined, edge);
+      assert.equal(listed["with-sst/web"]?.[publishTitle], undefined, edge);
+      assert.equal(listed["with-pulumi/web"]?.[publishTitle], undefined, edge);
     }
   });
 
-  it("lists with-sst red from publish onward under its own issue, not the edge's", () => {
-    const publishTitle = "publish · ocel link ls lists both records with their name, type, source and owner";
+  it("lists each ladder at up under its own issue, not the edge's", () => {
     for (const edge of ["api-gateway", "cloudfront", "cloudflare"]) {
       process.env[EDGE_ENV] = edge;
-      const cell = expectationsFor("aws.floci")["with-sst/web"];
-      assert.ok(cell, edge);
-      assert.equal(cell![publishTitle], "https://github.com/ocelhq/ocel/issues/857", edge);
-      assert.equal(cell!.up, "https://github.com/ocelhq/ocel/issues/857", edge);
+      const listed = expectationsFor("aws.floci");
+      assert.equal(listed["with-sst/web"]?.up, "https://github.com/ocelhq/ocel/issues/857", edge);
+      assert.equal(listed["with-pulumi/web"]?.up, "https://github.com/ocelhq/ocel/issues/856", edge);
     }
-  });
-
-  it("lists with-pulumi red from publish onward, under its own issue", () => {
-    process.env[EDGE_ENV] = "api-gateway";
-    const cell = expectationsFor("aws.floci")["with-pulumi/web"];
-    assert.ok(cell);
-    assert.equal(cell!.up, "https://github.com/ocelhq/ocel/issues/856");
   });
 
   it("leaves with-transforms to the edge's own reason, not a ladder issue", () => {
     process.env[EDGE_ENV] = "api-gateway";
     const cell = expectationsFor("aws.floci")["with-transforms/web"];
     assert.ok(cell);
-    assert.equal(cell!.up, "https://github.com/ocelhq/ocel/issues/884");
+    assert.equal(cell.up, "https://github.com/ocelhq/ocel/issues/884");
   });
 
-  it("lists each next-cache title on floci by the exact title the plan gives it", () => {
-    process.env[EDGE_ENV] = "cloudfront";
+  it("lists each next-cache title on api-gateway by the exact title the plan gives it", () => {
+    process.env[EDGE_ENV] = "api-gateway";
     const cell = expectationsFor("aws.floci")["next/web"];
     assert.ok(cell);
     for (const row of nextCacheRows) {
+      const issue =
+        row.title === EDGE_ISR_TITLE
+          ? "https://github.com/ocelhq/ocel/issues/899"
+          : "https://github.com/ocelhq/ocel/issues/854";
       for (const leg of CONTRACT_LEGS) {
         assert.equal(
           cell[contractTitle(leg, row.title)],
-          "https://github.com/ocelhq/ocel/issues/852",
+          issue,
           `floci lists no issue for ${contractTitle(leg, row.title)}`,
         );
       }
