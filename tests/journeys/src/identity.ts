@@ -15,8 +15,8 @@ export function currentRunIdentity(): string {
   return runIdentity(process.env, userInfo().username);
 }
 
-export function projectSlug(example: string, run: string | undefined): string {
-  return run ? `j-${run}-${example}` : example;
+export function projectSlug(example: string, run: string): string {
+  return `j-${run}-${example}`;
 }
 
 export function appHostname(

@@ -19,10 +19,6 @@ describe("project slug", () => {
   it("carries the run id behind the sweep prefix", () => {
     expect(projectSlug("express", "local-ada")).toBe("j-local-ada-express");
   });
-
-  it("is the plain example name without a run id", () => {
-    expect(projectSlug("express", undefined)).toBe("express");
-  });
 });
 
 describe("app hostname", () => {

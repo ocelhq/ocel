@@ -1,3 +1,5 @@
+import type { CellContext } from "./targets/types";
+
 export type Framework = "express" | "hono" | "fastify" | "next";
 
 export type Kind = "composite" | "hello" | "ladder" | "workspace";
@@ -16,17 +18,9 @@ export type TargetName = "dev" | "aws" | "vps";
 export type Leg = "up" | "contract" | "redeploy" | "rollback" | "destroy";
 
 export type LadderHooks = {
-  refuse?: (cell: LadderCell) => Promise<void>;
-  beforeUp?: (cell: LadderCell) => Promise<void>;
-  afterDestroy?: (cell: LadderCell) => Promise<void>;
-};
-
-export type LadderCell = {
-  example: ExampleSpec;
-  dir: string;
-  slug: string;
-  runId: string;
-  evidenceDir: string;
+  refuse?: (cell: CellContext) => Promise<void>;
+  beforeUp?: (cell: CellContext) => Promise<void>;
+  afterDestroy?: (cell: CellContext) => Promise<void>;
 };
 
 export type ExampleSpec = {
