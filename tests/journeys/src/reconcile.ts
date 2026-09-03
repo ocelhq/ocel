@@ -50,6 +50,15 @@ const DISABLED: ReadonlySet<TestOutcome> = new Set<TestOutcome>([
   "only",
 ]);
 
+export function exitCodeFor(verdicts: Iterable<Verdict>): number {
+  for (const verdict of verdicts) {
+    if (FAILING_VERDICTS.has(verdict)) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 function key(cell: string, title: string): string {
   return JSON.stringify([cell, title]);
 }

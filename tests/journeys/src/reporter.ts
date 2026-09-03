@@ -3,9 +3,9 @@ import path from "node:path";
 import type { Reporter, TestCase } from "vitest/node";
 import { expectationsFor } from "./expectations";
 import { currentRunIdentity } from "./identity";
-import { outputRoot } from "./paths";
+import { outputRoot, verdictFile } from "./paths";
 import { planTests } from "./plan";
-import { reconcile, type TestOutcome, type TestResult } from "./reconcile";
+import { exitCodeFor, reconcile, type TestOutcome, type TestResult } from "./reconcile";
 import { specForTarget } from "./spec";
 import { failureReport, summaryTable } from "./summary";
 import { selectedTarget } from "./targets";
@@ -29,16 +29,26 @@ function errorOf(testCase: TestCase): string | undefined {
   return testCase.result().errors?.[0]?.message;
 }
 
+function cellOf(testCase: TestCase): string {
+  const parent = testCase.parent;
+  if (parent.type === "suite") {
+    return parent.name;
+  }
+  return `top level · ${path.basename(parent.moduleId)}`;
+}
+
+async function writeVerdict(runId: string, target: string, exitCode: number, report: string) {
+  const file = verdictFile(runId, target);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify({ exitCode, report }, null, 2)}\n`, "utf8");
+}
+
 export default class JourneyReporter implements Reporter {
   private readonly results: TestResult[] = [];
 
   onTestCaseResult(testCase: TestCase) {
-    const parent = testCase.parent;
-    if (parent.type !== "suite") {
-      return;
-    }
     this.results.push({
-      cell: parent.name,
+      cell: cellOf(testCase),
       title: testCase.name,
       outcome: outcomeOf(testCase),
       error: errorOf(testCase),
@@ -56,7 +66,9 @@ export default class JourneyReporter implements Reporter {
     try {
       environment = await target.guard();
     } catch (error) {
-      process.stderr.write(`\nthe journey account cannot be read: ${String(error)}\n`);
+      const said = `the journey account cannot be read: ${String(error)}`;
+      process.stderr.write(`\n${said}\n`);
+      await writeVerdict(runId, target.name, 1, said);
       process.exitCode = 1;
       return;
     }
@@ -77,7 +89,9 @@ export default class JourneyReporter implements Reporter {
       await writeFile(stepSummary, table, { encoding: "utf8", flag: "a" });
     }
 
-    if (report.failed) {
+    const exitCode = exitCodeFor(report.rows.map((row) => row.verdict));
+    await writeVerdict(runId, target.name, exitCode, failureReport(report));
+    if (exitCode !== 0) {
       process.stderr.write(`\nthe journey account does not reconcile:\n${failureReport(report)}\n`);
       process.exitCode = 1;
     }
