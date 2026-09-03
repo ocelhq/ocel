@@ -5,6 +5,8 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "isolatedModules": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
     "strict": true,
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
