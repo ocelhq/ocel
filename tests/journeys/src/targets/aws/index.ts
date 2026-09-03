@@ -1,5 +1,6 @@
 import { access, rm } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as pause } from "node:timers/promises";
 import { INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
@@ -13,12 +14,14 @@ import { pulumiSweep } from "./ladder-pulumi";
 import { sstSweep } from "./ladder-sst";
 import { place } from "./place";
 import { sweepable } from "./slugs";
-import { awsStore, type Store } from "./store";
+import { awsStore, cliAt, said, type Store } from "./store";
 import { expectationEnvironmentFor } from "./world";
 
 const CONFIG = "ocel.aws.config.ts";
 
 const LEG_TIMEOUT_MS = 600_000;
+
+const DEFAULT_VPC_TRIES = 30;
 
 let dispatching: Promise<typeof fetch> | undefined;
 
@@ -93,8 +96,36 @@ function bootstrapFeatures(): string[] {
   return edge ? [...NEXT_FEATURES, edge] : NEXT_FEATURES;
 }
 
+async function awaitDefaultVpc(endpoint: string): Promise<void> {
+  const cli = cliAt(endpoint);
+  let last = "";
+  for (let attempt = 0; attempt < DEFAULT_VPC_TRIES; attempt++) {
+    try {
+      const raw = await cli([
+        "ec2",
+        "describe-vpcs",
+        "--filters",
+        "Name=isDefault,Values=true",
+        "--output",
+        "json",
+      ]);
+      if ((JSON.parse(raw) as { Vpcs?: unknown[] }).Vpcs?.length) {
+        return;
+      }
+      last = "the emulator lists no default VPC";
+    } catch (error) {
+      last = said(error);
+    }
+    await pause(1000);
+  }
+  throw new Error(`the emulator never showed a default VPC, and every deploy looks one up first: ${last}`);
+}
+
 async function prepare(): Promise<void> {
-  await place();
+  const where = await place();
+  if (where.world === "floci" && where.endpoint) {
+    await awaitDefaultVpc(where.endpoint);
+  }
   const [first] = specForTarget("aws");
   if (!first) {
     throw new Error("no example in the spec table runs on aws, so there is nothing to bootstrap");
