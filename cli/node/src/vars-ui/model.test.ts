@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  addressable,
   coordinateLine,
   doneLabel,
   held,
   names,
+  owedChildren,
   owedCount,
-  socketState,
   tallyLine,
+  treeOf,
   verdictLine,
+  type Address,
   type MatrixCell,
   type MatrixRow,
   type State,
@@ -23,17 +24,29 @@ const cell = (over: Partial<MatrixCell>): MatrixCell => ({
   ...over,
 });
 
-const row = (key: string, cells: MatrixCell[]): MatrixRow => ({
+const row = (key: string, cells: MatrixCell[], over: Partial<MatrixRow> = {}): MatrixRow => ({
   key,
   class: "plain",
   cells,
+  ...over,
 });
 
-const stateOf = (rows: MatrixRow[], environments: string[] = []): State => ({
+const stateOf = (
+  rows: MatrixRow[],
+  environments: string[] = [],
+  columns = ["", "/web"],
+): State => ({
   slug: "acme",
   tier: "production",
+  other: "preview",
   environments,
-  matrix: { columns: ["", "/web"], rows, apps: [] },
+  matrix: { columns, rows, apps: [] },
+});
+
+const at = (key: string, folder = "", environment = ""): Address => ({
+  key,
+  folder,
+  environment,
 });
 
 describe("owedCount", () => {
@@ -44,16 +57,6 @@ describe("owedCount", () => {
       row("C", [cell({ state: "required", set: true, version: 1 })]),
     ]);
     expect(owedCount(current)).toBe(2);
-  });
-});
-
-describe("socketState", () => {
-  it("ranks forbidden over faulty over held over owed", () => {
-    expect(socketState(cell({ state: "forbidden", problem: "x" }))).toBe("forbidden");
-    expect(socketState(cell({ set: true, problem: "x" }))).toBe("faulty");
-    expect(socketState(cell({ set: true }))).toBe("held");
-    expect(socketState(cell({ state: "required" }))).toBe("owed");
-    expect(socketState(cell({}))).toBe("free");
   });
 });
 
@@ -74,13 +77,116 @@ describe("held", () => {
   });
 });
 
-describe("addressable", () => {
-  it("lists the root, the named environments, then orphaned ones", () => {
-    const current = stateOf([], ["staging"]);
-    const withOrphan = cell({
-      overrides: [{ environment: "gone", version: 1, orphaned: true }],
+describe("treeOf", () => {
+  it("makes one row per declared key with the root cell as its value", () => {
+    const tree = treeOf(
+      stateOf([row("A", [cell({ set: true, version: 3 }), cell({ folder: "/web" })])]),
+      [],
+    );
+    expect(tree).toHaveLength(1);
+    expect(tree[0]?.root).toMatchObject({
+      at: at("A"),
+      kind: "root",
+      set: true,
+      version: 3,
+      owed: false,
     });
-    expect(addressable(current, withOrphan)).toEqual(["", "staging", "gone"]);
+    expect(tree[0]?.children).toEqual([]);
+  });
+
+  it("nests a folder cell only when it is set, required, faulty or overridden", () => {
+    const tree = treeOf(
+      stateOf(
+        [
+          row("A", [cell({}), cell({ folder: "/web" }), cell({ folder: "/api", set: true, version: 1 })]),
+          row("B", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], { scope: ["/web"] }),
+          row("C", [cell({}), cell({ folder: "/web", problem: "too short", set: true, version: 2 })]),
+          row("D", [cell({}), cell({ folder: "/web", overrides: [{ environment: "qa", version: 1 }] })]),
+        ],
+        ["qa"],
+        ["", "/api", "/web"],
+      ),
+      [],
+    );
+    expect(tree.map((r) => r.children.map((c) => c.at))).toEqual([
+      [at("A", "/api")],
+      [at("B", "/web")],
+      [at("C", "/web")],
+      [at("D", "/web"), at("D", "/web", "qa")],
+    ]);
+    expect(tree[1]?.root.state).toBe("forbidden");
+    expect(tree[1]?.children[0]).toMatchObject({ kind: "folder", owed: true });
+    expect(tree[2]?.children[0]?.problem).toBe("too short");
+    expect(tree[3]?.children[1]).toMatchObject({ kind: "environment", set: true, version: 1 });
+  });
+
+  it("lists root overrides before folder variants and flags orphans", () => {
+    const tree = treeOf(
+      stateOf(
+        [
+          row("A", [
+            cell({ set: true, version: 5, overrides: [{ environment: "gone", version: 2, orphaned: true }] }),
+            cell({ folder: "/web", set: true, version: 1 }),
+          ]),
+        ],
+        ["staging"],
+      ),
+      [],
+    );
+    expect(tree[0]?.children.map((c) => [c.at.folder, c.at.environment, c.orphaned])).toEqual([
+      ["", "gone", true],
+      ["/web", "", false],
+    ]);
+  });
+
+  it("materialises asked-for variants as empty extras and dedupes real ones", () => {
+    const tree = treeOf(
+      stateOf([row("A", [cell({}), cell({ folder: "/web", set: true, version: 1 })])], ["staging"]),
+      [at("A", "/web"), at("A", "", "staging"), at("A", "/web", "staging")],
+    );
+    expect(tree[0]?.children.map((c) => [c.at.folder, c.at.environment, c.extra, c.set])).toEqual([
+      ["", "staging", true, false],
+      ["/web", "", false, true],
+      ["/web", "staging", true, false],
+    ]);
+  });
+
+  it("offers the folders and environments a key can still gain", () => {
+    const tree = treeOf(
+      stateOf(
+        [
+          row("A", [cell({}), cell({ folder: "/web", set: true, version: 1 }), cell({ folder: "/api" })]),
+          row("B", [cell({ state: "forbidden" }), cell({ folder: "/web" }), cell({ folder: "/api", state: "forbidden" })], { scope: ["/web"] }),
+        ],
+        ["staging"],
+        ["", "/web", "/api"],
+      ),
+      [at("A", "", "staging")],
+    );
+    expect(tree[0]?.options.map((o) => o.label)).toEqual([
+      "/api",
+      "staging in /web",
+      "staging in /api",
+    ]);
+    expect(tree[1]?.options.map((o) => o.label)).toEqual(["/web", "staging in /web"]);
+  });
+
+  it("treats a reference as set", () => {
+    const tree = treeOf(
+      stateOf([row("A", [cell({ reference: { slug: "other", folder: "", key: "A" } })])]),
+      [],
+    );
+    expect(tree[0]?.root).toMatchObject({ set: true, reference: { slug: "other" } });
+  });
+
+  it("counts owed children", () => {
+    const tree = treeOf(
+      stateOf(
+        [row("B", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], { scope: ["/web"] })],
+      ),
+      [],
+    );
+    expect(owedChildren(tree[0]!)).toBe(1);
   });
 });
 

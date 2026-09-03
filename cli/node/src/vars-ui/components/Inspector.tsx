@@ -1,29 +1,15 @@
 import { api, query } from "../api";
 import {
-  addressable,
   cellOf,
-  chipTitle,
   coordinateLine,
   doneLabel,
-  environmentName,
   held,
   overrideOf,
   owedCount,
   verdictLine,
-  type MatrixCell,
-  type MatrixRow,
   type State,
 } from "../model";
-import {
-  address,
-  draft,
-  error,
-  leave,
-  mutate,
-  saving,
-  selected,
-  versions,
-} from "../store";
+import { draft, leave, mutate, saving, selected, versions } from "../store";
 
 export function Inspector({ current }: { current: State }) {
   const at = selected.value;
@@ -33,12 +19,11 @@ export function Inspector({ current }: { current: State }) {
   if (!at || !row || !cell) {
     return (
       <aside class="inspector">
-        <h2>Pick a cell</h2>
+        <h2>Pick a row</h2>
         <p class="empty">
-          Each socket is one variable in one folder. Hollow sockets are owed;
-          hatched sockets hold no value because nothing would read one.
+          Each row is one variable in one place. Expand a key to see the
+          folders and environments that hold their own value for it.
         </p>
-        <Legend />
         <Done current={current} />
       </aside>
     );
@@ -66,7 +51,6 @@ export function Inspector({ current }: { current: State }) {
     <aside class="inspector">
       <h2>{row.key}</h2>
       <p class="coordinate">{coordinateLine(row, cell, environment)}</p>
-      <Environments current={current} row={row} cell={cell} />
       <p
         class="verdict-line"
         data-tone={
@@ -117,7 +101,6 @@ export function Inspector({ current }: { current: State }) {
           </button>
         )}
       </div>
-      {error.value && <p class="problem">{error.value}</p>}
       <p class="eyebrow">History</p>
       {versions.value.length === 0 ? (
         <p class="empty">No versions yet.</p>
@@ -136,69 +119,6 @@ export function Inspector({ current }: { current: State }) {
       )}
       <Done current={current} />
     </aside>
-  );
-}
-
-function Environments({
-  current,
-  row,
-  cell,
-}: {
-  current: State;
-  row: MatrixRow;
-  cell: MatrixCell;
-}) {
-  const environments = addressable(current, cell);
-  if (environments.length === 1) return <div class="environments" />;
-  const picked = selected.value;
-  return (
-    <div class="environments">
-      {environments.map((environment) => {
-        const override = overrideOf(cell, environment);
-        return (
-          <button
-            type="button"
-            class="environment"
-            key={environment}
-            data-selected={picked?.environment === environment}
-            data-set={held(cell, environment).set}
-            data-orphaned={override?.orphaned ? "true" : undefined}
-            title={chipTitle(row, environment, override)}
-            onClick={() =>
-              address({ key: row.key, folder: cell.folder, environment })
-            }
-          >
-            {environmentName(environment)}
-            {override?.orphaned && <span class="orphan">orphaned</span>}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-const legend = [
-  ["held", "set"],
-  ["owed", "required, empty"],
-  ["free", "optional override"],
-  ["forbidden", "nothing would read it"],
-] as const;
-
-function Legend() {
-  return (
-    <div class="legend">
-      {legend.map(([state, caption]) => (
-        <span key={state}>
-          <span
-            class={state === "forbidden" ? "socket forbidden" : "socket"}
-            data-state={state}
-          >
-            <span class="pip" />
-          </span>
-          {caption}
-        </span>
-      ))}
-    </div>
   );
 }
 
