@@ -371,7 +371,14 @@ func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, rep
 		r.pending.hold(work.stack, work.sets, report)
 		defer r.pending.drop(work.stack, work.sets)
 	}
-	return r.adapter.Run(ctx, prepared, report)
+	result, err := r.adapter.Run(ctx, prepared, report)
+	if err != nil {
+		return providerkit.StackResult{}, err
+	}
+	if err := writeOriginRecord(ctx, r.cfg, plan.Ref.Name.App, work, result); err != nil {
+		return providerkit.StackResult{}, err
+	}
+	return result, nil
 }
 
 func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
