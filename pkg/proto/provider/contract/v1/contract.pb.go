@@ -3384,6 +3384,7 @@ type Identity struct {
 	Principal     string                 `protobuf:"bytes,3,opt,name=principal,proto3" json:"principal,omitempty"`
 	EdgeScope     string                 `protobuf:"bytes,6,opt,name=edge_scope,json=edgeScope,proto3" json:"edge_scope,omitempty"`
 	Details       []*Detail              `protobuf:"bytes,7,rep,name=details,proto3" json:"details,omitempty"`
+	Location      string                 `protobuf:"bytes,8,opt,name=location,proto3" json:"location,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3451,6 +3452,13 @@ func (x *Identity) GetDetails() []*Detail {
 		return x.Details
 	}
 	return nil
+}
+
+func (x *Identity) GetLocation() string {
+	if x != nil {
+		return x.Location
+	}
+	return ""
 }
 
 type Detail struct {
@@ -4410,14 +4418,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10STATUS_UNCLAIMED\x10\x01\x12\x12\n" +
-	"\x0eSTATUS_CLAIMED\x10\x02\"\xb5\x01\n" +
+	"\x0eSTATUS_CLAIMED\x10\x02\"\xd1\x01\n" +
 	"\bIdentity\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x18\n" +
 	"\aaccount\x18\x02 \x01(\tR\aaccount\x12\x1c\n" +
 	"\tprincipal\x18\x03 \x01(\tR\tprincipal\x12\x1d\n" +
 	"\n" +
 	"edge_scope\x18\x06 \x01(\tR\tedgeScope\x126\n" +
-	"\adetails\x18\a \x03(\v2\x1c.provider.contract.v1.DetailR\adetails\"4\n" +
+	"\adetails\x18\a \x03(\v2\x1c.provider.contract.v1.DetailR\adetails\x12\x1a\n" +
+	"\blocation\x18\b \x01(\tR\blocation\"4\n" +
 	"\x06Detail\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\"]\n" +

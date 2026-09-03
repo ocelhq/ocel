@@ -23,6 +23,7 @@ type Identity struct {
 	Provider  Vendor
 	Account   string
 	Principal string
+	Location  string
 	EdgeScope string
 	Details   []Detail
 }

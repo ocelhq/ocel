@@ -428,9 +428,8 @@ export default {
 		clitest.StubBuild(&deps, nil)
 		pretendStdoutIsTerminal(&deps)
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		t.Setenv(clitest.FakeIDProviderEnvVar, "Origin")
+		t.Setenv(clitest.FakeIDProviderEnvVar, "AWS")
 		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
-		t.Setenv(clitest.FakeIDProfileEnvVar, "default")
 		t.Setenv(clitest.FakeIDRegionEnvVar, "us-east-1")
 		t.Setenv(clitest.FakeIDEdgeScopeEnvVar, "abcd1234")
 
@@ -440,12 +439,12 @@ export default {
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"Running with:", "Origin      account=123456789012", "region=us-east-1", "profile=default", "Edge        account=abcd1234"} {
+		for _, want := range []string{"ocel", "test-app › production", "aws", "123456789012", "us-east-1", "edge", "abcd1234"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q:\n%s", want, out)
 			}
 		}
-		banner := strings.Index(out, "Running with:")
+		banner := strings.Index(out, "▎")
 		build := strings.Index(out, "Building project")
 		deploy := strings.Index(out, "DEPLOY ")
 		if banner < 0 || build < 0 || deploy < 0 {
@@ -458,13 +457,13 @@ export default {
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("without a terminal the identity banner is omitted", func(t *testing.T) {
+	t.Run("the identity banner prints with no terminal to print it to", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		root, sockPath := clitest.SetUpDeployFixture(t)
+		t.Setenv(clitest.FakeIDProviderEnvVar, "AWS")
 		t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
-		t.Setenv(clitest.FakeIDProfileEnvVar, "default")
 		t.Setenv(clitest.FakeIDRegionEnvVar, "us-east-1")
 		t.Setenv(clitest.FakeIDEdgeScopeEnvVar, "abcd1234")
 
@@ -477,10 +476,13 @@ export default {
 		if !strings.Contains(out, "Deployed") {
 			t.Fatalf("stdout = %q, want the deploy to have proceeded", out)
 		}
-		for _, leaked := range []string{"Running with:", "123456789012", "abcd1234", "profile=default"} {
-			if strings.Contains(out+stderr.String(), leaked) {
-				t.Errorf("output leaked %q with no terminal to print it to:\n%s", leaked, out)
+		for _, want := range []string{"▎ ocel  test-app › production", "▎ aws   123456789012  us-east-1", "▎ edge  abcd1234"} {
+			if !strings.Contains(out, want+"\n") {
+				t.Errorf("stdout missing %q with no terminal attached:\n%s", want, out)
 			}
+		}
+		if strings.Contains(out, "\x1b[") {
+			t.Errorf("the banner painted colour with no terminal attached:\n%q", out)
 		}
 
 		clitest.WaitForNoStaleSocket(t, sockPath)
@@ -503,7 +505,7 @@ export default {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "account=123456789012") {
+		if !strings.Contains(out, "123456789012") {
 			t.Errorf("stdout = %q, want the resolved identity still shown", out)
 		}
 		if !strings.Contains(out, "Cloudflare") {

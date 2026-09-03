@@ -119,11 +119,14 @@ func TestLiveWhoamiAnswersFromTheMachineItself(t *testing.T) {
 	if identity.Provider != vps.Vendor {
 		t.Errorf("Whoami().Provider = %q, want %q", identity.Provider, vps.Vendor)
 	}
-	if want := vm.user + "@" + vm.addr; identity.Principal != want {
-		t.Errorf("Whoami().Principal = %q, want %q", identity.Principal, want)
+	if identity.Principal != vm.user {
+		t.Errorf("Whoami().Principal = %q, want %q", identity.Principal, vm.user)
 	}
-	if !strings.HasPrefix(identity.Account, "SHA256:") {
-		t.Errorf("Whoami().Account = %q, want the verified host key's SHA256 fingerprint", identity.Account)
+	if identity.Account != vm.addr {
+		t.Errorf("Whoami().Account = %q, want the host as it was written", identity.Account)
+	}
+	if key := detail(identity, "host key"); !strings.Contains(key, "SHA256:") {
+		t.Errorf("Whoami() host key = %q, want the verified host key's type and SHA256 fingerprint", key)
 	}
 	labels := named(identity.Details)
 	if !labels["os"] || !labels["arch"] {

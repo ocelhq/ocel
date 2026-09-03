@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -166,6 +167,9 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	spec.Unattended = "pass --yes"
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+		if err := preflight.Announce(ctx, ui, runner, cfg, tier); err != nil {
+			return err
+		}
 		client, err := runner.Client()
 		if err != nil {
 			return err

@@ -47,7 +47,8 @@ func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 		Provider:  Vendor,
 		Account:   aws.ToString(out.Account),
 		Principal: principalOf(arn),
-		Details:   details(c.Region, c.Profile),
+		Location:  c.Region,
+		Details:   details(c.Profile),
 	}, nil
 }
 
@@ -81,14 +82,11 @@ func principalOf(arn string) string {
 	return arn
 }
 
-func details(region, profile string) []providerkit.Detail {
-	var out []providerkit.Detail
-	for _, detail := range []providerkit.Detail{{Label: "region", Value: region}, {Label: "profile", Value: profile}} {
-		if detail.Value != "" {
-			out = append(out, detail)
-		}
+func details(profile string) []providerkit.Detail {
+	if profile == "" {
+		return nil
 	}
-	return out
+	return []providerkit.Detail{{Label: "profile", Value: profile}}
 }
 
 var _ providerkit.Credentials = Credentials{}

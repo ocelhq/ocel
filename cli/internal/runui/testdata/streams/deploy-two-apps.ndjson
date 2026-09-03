@@ -1,3 +1,4 @@
+{"identity":{"project":"acme","tier":"TIER_PRODUCTION","origin":{"vendor":"aws","account":"123456789012","principal":"deploy","location":"us-east-1"},"edge":{"vendor":"cloudfront","account":"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"}}}
 {"plan":{"subject":"production","edgeKind":"cloudfront","groups":[{"kind":"infrastructure","name":"shared","changes":[{"kind":"function","name":"api","action":"ACTION_UPDATE"},{"kind":"bucket","name":"logs","action":"ACTION_DELETE","reason":"no longer declared"},{"kind":"bucket","name":"assets","action":"ACTION_CREATE"}]}]}}
 {"diagnostic":{"message":"web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts","level":"DIAGNOSTIC_LEVEL_WARNING"}}
 {"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"AgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILDING"}]}}}

@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
 type Reporter interface {
 	Presentation() Presentation
 	Diagnostic(message string)
+	Identity(ev *streamv1.IdentityEvent)
 	Warning(message string)
 	Spin(message string) *Spinner
 	Suspend() func()
@@ -26,6 +29,12 @@ type plainReporter struct {
 func (p plainReporter) Presentation() Presentation { return p.present }
 
 func (p plainReporter) Diagnostic(message string) { p.say(message) }
+
+func (p plainReporter) Identity(ev *streamv1.IdentityEvent) {
+	for _, line := range IdentityBlock(p.present, ev) {
+		fmt.Fprintln(p.w, line)
+	}
+}
 
 func (p plainReporter) Warning(message string) { p.say(warnMark + " " + message) }
 

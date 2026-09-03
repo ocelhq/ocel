@@ -36,6 +36,9 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		if !strings.Contains(out, "TEARDOWN tier=TIER_PRODUCTION") {
 			t.Errorf("stdout = %q, want the production teardown", out)
 		}
+		if !strings.Contains(out, "▎ ocel  test-app › production") {
+			t.Errorf("stdout = %q, want the teardown to say which account it runs in", out)
+		}
 	})
 
 	t.Run("the bypass env skips the phrase and says so", func(t *testing.T) {
@@ -459,6 +462,9 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 		}
 		if !strings.Contains(stdout.String(), "± OcelOriginSecret") {
 			t.Fatalf("stdout = %q, want the replacement shown before the confirm that covers it", stdout.String())
+		}
+		if !strings.Contains(stdout.String(), "▎ ocel  test-app › production") {
+			t.Errorf("stdout = %q, want the bootstrap to say which account it runs in", stdout.String())
 		}
 		got := clitest.ReadJournal(t, journal)
 		if len(got) != 1 || !strings.Contains(got[0], "acceptReplacements=true") {

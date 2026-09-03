@@ -4,54 +4,58 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func TestFormatIdentityBanner(t *testing.T) {
+func TestIdentityEvent(t *testing.T) {
 	t.Parallel()
 
-	t.Run("names the provider, account and principal alongside the edge", func(t *testing.T) {
+	cfg := &projectconfig.Config{Slug: "acme", Edge: &projectconfig.EdgeDescriptor{Kind: "cloudflare"}}
+
+	t.Run("names the project, the tier and both parties", func(t *testing.T) {
 		t.Parallel()
 
-		got := identityBanner(&contractv1.Identity{
+		got := IdentityEvent(cfg, environmentv1.Tier_TIER_PRODUCTION, &contractv1.Identity{
 			Provider:  "AWS",
 			Account:   "123456789012",
 			Principal: "deploy",
-			EdgeScope: "abcd1234",
+			Location:  "us-east-1",
+			EdgeScope: "a1b2c3d4",
+			Details:   []*contractv1.Detail{{Label: "profile", Value: "default"}},
 		})
-		for _, want := range []string{"Running with:", "AWS", "account=123456789012", "identity=deploy", "Edge", "abcd1234"} {
-			if !strings.Contains(got, want) {
-				t.Errorf("banner missing %q:\n%s", want, got)
-			}
+		want := &streamv1.IdentityEvent{
+			Project: "acme",
+			Tier:    environmentv1.Tier_TIER_PRODUCTION,
+			Origin:  &streamv1.Party{Vendor: "aws", Account: "123456789012", Principal: "deploy", Location: "us-east-1"},
+			Edge:    &streamv1.Party{Vendor: "cloudflare", Account: "a1b2c3d4"},
+		}
+		if !proto.Equal(got, want) {
+			t.Errorf("IdentityEvent() = %v, want %v", got, want)
 		}
 	})
 
-	t.Run("prints every detail the provider reports, in the order it reports them", func(t *testing.T) {
+	t.Run("no edge scope means no edge party", func(t *testing.T) {
 		t.Parallel()
 
-		got := identityBanner(&contractv1.Identity{
-			Provider:  "AWS",
-			Account:   "123456789012",
-			Principal: "session",
-			Details: []*contractv1.Detail{
-				{Label: "region", Value: "eu-west-1"},
-				{Label: "profile", Value: "default"},
-			},
+		got := IdentityEvent(cfg, environmentv1.Tier_TIER_PREVIEW, &contractv1.Identity{
+			Provider: "vps",
+			Account:  "srv1.example.com",
 		})
-		want := "account=123456789012  identity=session  region=eu-west-1  profile=default"
-		if !strings.Contains(got, want) {
-			t.Errorf("banner = %q, want it to contain %q", got, want)
+		if got.GetEdge() != nil {
+			t.Errorf("edge = %v, want nothing: the provider reported no edge scope", got.GetEdge())
 		}
 	})
 
-	t.Run("an empty identity is blank", func(t *testing.T) {
+	t.Run("an empty identity carries no origin", func(t *testing.T) {
 		t.Parallel()
 
-		if got := identityBanner(&contractv1.Identity{}); got != "" {
-			t.Errorf("expected blank banner for empty identity, got %q", got)
-		}
-		if got := identityBanner(nil); got != "" {
-			t.Errorf("expected blank banner for nil identity, got %q", got)
+		if got := IdentityEvent(cfg, environmentv1.Tier_TIER_PREVIEW, &contractv1.Identity{}); got.GetOrigin() != nil {
+			t.Errorf("origin = %v, want nothing to stand for an identity the provider left blank", got.GetOrigin())
 		}
 	})
 }

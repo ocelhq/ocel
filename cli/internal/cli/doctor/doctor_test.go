@@ -198,7 +198,7 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 		"  ✓ provider @ocel/provider-aws 1.4.0",
 		"  ✓ provider default edge",
 		"",
-		"AWS  123456789012 · region eu-west-1 · profile shop",
+		"AWS  123456789012 · eu-west-1 · profile shop",
 		"  ✓ credentials valid",
 		"",
 		"Production  shop.example.com",
@@ -232,7 +232,7 @@ func TestRunDoctorReportsACredentialProblem(t *testing.T) {
 
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
-		"AWS  123456789012 · region eu-west-1 · profile shop\n  ✓ credentials valid",
+		"AWS  123456789012 · eu-west-1 · profile shop\n  ✓ credentials valid",
 		"Cloudflare\n  ✗ could not authenticate\n    → configure the credential and re-run",
 		"1 problem.",
 	} {

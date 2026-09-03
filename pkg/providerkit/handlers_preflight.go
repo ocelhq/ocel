@@ -32,6 +32,9 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return resp, nil
 	}
 	resp.Identity = IdentityProto(provider.Vendor(), identity)
+	if err := h.edgeIdentity(ctx, provider, gate.Edge, req.GetEdge(), resp); err != nil {
+		return nil, err
+	}
 
 	required, err := RequiredFeatures(gate.Bootstrapper.Catalogue(), req.GetFrameworks(), string(gate.Edge))
 	if err != nil {
@@ -77,6 +80,33 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		resp.InfraTier, resp.InfrastructurePresent = tierOf(sibling.Class), true
 	}
 	return resp, nil
+}
+
+func (h *handlers) edgeIdentity(
+	ctx context.Context,
+	provider Provider,
+	kind edge.Kind,
+	sel *contractv1.EdgeSelection,
+	resp *contractv1.PreflightResponse,
+) error {
+	if kind == "" {
+		return nil
+	}
+	front, err := h.edgeFor(provider, sel)
+	if err != nil {
+		return RefusalError(err)
+	}
+	verifier, verifies := front.(edge.CredentialVerifier)
+	if !verifies {
+		return nil
+	}
+	scope, err := verifier.VerifyCredentials(ctx)
+	if err != nil {
+		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(Vendor(kind), err))
+		return nil
+	}
+	resp.Identity.EdgeScope = scope.Account
+	return nil
 }
 
 func (h *handlers) domainClaims(ctx context.Context, provider Provider, class Class, req *contractv1.PreflightRequest) ([]*contractv1.DomainClaim, error) {
@@ -166,6 +196,7 @@ func IdentityProto(vendor Vendor, id Identity) *contractv1.Identity {
 		Provider:  string(named),
 		Account:   id.Account,
 		Principal: id.Principal,
+		Location:  id.Location,
 		EdgeScope: id.EdgeScope,
 	}
 	for _, detail := range id.Details {

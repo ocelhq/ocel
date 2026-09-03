@@ -29,13 +29,14 @@ type Ledger interface {
 }
 
 type Edges struct {
-	mu    sync.Mutex
-	order []edge.Kind
-	edges map[edge.Kind]*Edge
+	mu        sync.Mutex
+	order     []edge.Kind
+	edges     map[edge.Kind]*Edge
+	verifiers map[edge.Kind]verifying
 }
 
 func NewEdges(records providerkit.RecordStore) *Edges {
-	registry := &Edges{edges: map[edge.Kind]*Edge{}}
+	registry := &Edges{edges: map[edge.Kind]*Edge{}, verifiers: map[edge.Kind]verifying{}}
 	for _, kind := range []edge.Kind{KindRelay, KindDirect} {
 		registry.order = append(registry.order, kind)
 		registry.edges[kind] = newEdge(kind, records)
@@ -59,7 +60,27 @@ func (e *Edges) Open(kind edge.Kind) (edge.Edge, error) {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"the reference provider serves no edge %q; it serves %s", kind, kindList(e.order))
 	}
+	if verifier, verifies := e.verifiers[kind]; verifies {
+		verifier.Edge = front
+		return verifier, nil
+	}
 	return front, nil
+}
+
+func (e *Edges) Verifies(kind edge.Kind, identity edge.CredentialIdentity, err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.verifiers[kind] = verifying{identity: identity, err: err}
+}
+
+type verifying struct {
+	*Edge
+	identity edge.CredentialIdentity
+	err      error
+}
+
+func (v verifying) VerifyCredentials(context.Context) (edge.CredentialIdentity, error) {
+	return v.identity, v.err
 }
 
 func (e *Edges) serving(certificate string) bool {

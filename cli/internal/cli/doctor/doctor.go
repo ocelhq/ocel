@@ -537,6 +537,9 @@ func identityText(identity *contractv1.Identity) string {
 	if principal := identity.GetPrincipal(); principal != "" {
 		parts = append(parts, principal)
 	}
+	if location := identity.GetLocation(); location != "" {
+		parts = append(parts, location)
+	}
 	for _, detail := range identity.GetDetails() {
 		value := detail.GetValue()
 		if value == "" {

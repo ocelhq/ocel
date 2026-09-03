@@ -545,6 +545,8 @@ message Identity {
   string edge_scope = 6;
 
   repeated Detail details = 7;
+
+  string location = 8;
 }
 
 message Detail {
