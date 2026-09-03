@@ -37,6 +37,19 @@ export async function api<T>(
   return text ? (JSON.parse(text) as T) : (undefined as T);
 }
 
+export async function hold(path: string): Promise<void> {
+  const response = await fetch(path, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok || response.body === null) {
+    throw new ApiError(response.status, await response.text());
+  }
+  const reader = response.body.getReader();
+  while (!(await reader.read()).done) {
+  }
+}
+
 export function query(at: Address): string {
   return `key=${encodeURIComponent(at.key)}&folder=${encodeURIComponent(at.folder)}&environment=${encodeURIComponent(at.environment)}`;
 }

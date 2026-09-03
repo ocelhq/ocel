@@ -1,6 +1,6 @@
 import { computed, signal } from "@preact/signals";
 
-import { api, ApiError, query } from "./api";
+import { api, ApiError, hold, query } from "./api";
 import { parseDotenv } from "./dotenv";
 import {
   addressKey,
@@ -92,11 +92,23 @@ export async function load(): Promise<void> {
     farewell.value = `Could not read this project's variables: ${message(thrown)}`;
     return;
   }
+  void attend();
   const open = new Set(expanded.value);
   for (const cell of state.value.recovery?.owed ?? []) {
     if (cell.folder !== "") open.add(cell.key);
   }
   expanded.value = open;
+}
+
+async function attend(): Promise<void> {
+  while (farewell.value === null) {
+    try {
+      await hold("/api/presence");
+    } catch {
+    }
+    if (farewell.value !== null) return;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
 }
 
 function message(thrown: unknown): string {

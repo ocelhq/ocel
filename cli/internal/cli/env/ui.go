@@ -2,6 +2,7 @@ package env
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -46,7 +47,12 @@ func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 			return err
 		}
 		defer varsSession.Close()
-		return varsSession.Wait(ctx)
+		err = varsSession.Wait(ctx)
+		if errors.Is(err, varsui.ErrAbandoned) {
+			fmt.Fprintln(stdout, "The editor closed.")
+			return nil
+		}
+		return err
 	})
 }
 
