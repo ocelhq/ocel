@@ -5,31 +5,34 @@ export type StateRow = {
   count: number;
   firstSeen: string;
   lastSeen: string;
-  value: string | null;
 };
 
-export async function bump(key: string, value?: string): Promise<number> {
+export async function bump(key: string): Promise<number> {
   const { rows } = await pg.query<{ count: number }>(
-    `INSERT INTO next_state (key, count, value) VALUES ($1, 1, $2)
+    `INSERT INTO next_state (key, count) VALUES ($1, 1)
      ON CONFLICT (key) DO UPDATE
        SET count = next_state.count + 1,
-           last_seen = now(),
-           value = COALESCE(EXCLUDED.value, next_state.value)
+           last_seen = now()
      RETURNING count`,
-    [key, value ?? null],
+    [key],
   );
-  return rows[0].count;
+  const [row] = rows;
+  if (!row) {
+    throw new Error(`next_state returned no row for ${key}`);
+  }
+  return row.count;
 }
 
-export async function readState(): Promise<StateRow[]> {
+export async function readState(keys: string[]): Promise<StateRow[]> {
   const { rows } = await pg.query<StateRow>(
     `SELECT key,
             count,
             first_seen AS "firstSeen",
-            last_seen  AS "lastSeen",
-            value
+            last_seen  AS "lastSeen"
        FROM next_state
+      WHERE key = ANY($1)
       ORDER BY key`,
+    [keys],
   );
   return rows;
 }
