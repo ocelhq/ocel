@@ -194,17 +194,6 @@ export async function refuse(cell: CellContext): Promise<void> {
   );
 }
 
-function grantsMatch(recordGrants: { actions: string[]; resources: string[] }[], want: { action: string; resource: string } | undefined): void {
-  if (!want) {
-    assert.deepEqual(recordGrants, [], "a custom link carries a grant, and no consumer attaches a custom link's grants");
-    return;
-  }
-  assert.ok(
-    recordGrants.some((grant) => grant.actions.includes(want.action) && grant.resources.includes(want.resource)),
-    `no grant on the record carries ${want.action} over ${want.resource}: ${JSON.stringify(recordGrants)}`,
-  );
-}
-
 export const ladderRows: LadderRow[] = [
   {
     title: "ocel link ls lists both records with their name, type, source and owner",
