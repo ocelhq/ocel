@@ -1,17 +1,16 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { cp, rm, symlink } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { createServer } from "node:net";
-import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   applyConsoleEnvDefaults,
   consoleUrl,
   HARNESS_ONLY_ENV,
 } from "@ocel-tests/shared/env";
-import { INITIAL_GREETING, redact, REDACTED, SECRET_TOKEN } from "../contract";
+import { INITIAL_GREETING, redact, SECRET_TOKEN } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
-import { ocelBin, treeDir } from "../paths";
-import type { Leg } from "../spec";
+import { runOcel, workTree } from "../ocel";
+import { ocelBin } from "../paths";
 import type { CellContext, Deployment, Target } from "./types";
 
 const HEALTH_TIMEOUT_MS = 120_000;
@@ -21,8 +20,6 @@ const START_CONSOLE = [
   "pnpm --filter @console/db db:push",
   "pnpm --filter @console/web dev",
 ].join(" && ");
-
-const NEVER_COPIED = new Set([".git", ".next", ".ocel", "dist", "node_modules", "output"]);
 
 type Running = { port: number; dir: string; child: ChildProcess; output: () => string };
 
@@ -88,56 +85,6 @@ function childEnv(token: string, cell: CellContext, port: number): NodeJS.Proces
     delete env[name];
   }
   return env;
-}
-
-function maskArgs(args: string[]): string {
-  const shown = args.map((arg, index) =>
-    args[0] === "env" && args[1] === "set" && index === 3 ? REDACTED : arg,
-  );
-  return redact(shown.join(" "));
-}
-
-async function workTree(cell: CellContext, target: string): Promise<string> {
-  const dest = treeDir(cell.runId, target, cell.example.name);
-  await rm(dest, { recursive: true, force: true });
-  await cp(cell.dir, dest, {
-    recursive: true,
-    filter: (source) => !NEVER_COPIED.has(path.basename(source)),
-  });
-  await symlink(path.join(cell.dir, "node_modules"), path.join(dest, "node_modules"), "dir");
-  return dest;
-}
-
-async function runOcel(
-  cell: CellContext,
-  dir: string,
-  leg: Leg,
-  name: string,
-  args: string[],
-  env: NodeJS.ProcessEnv,
-): Promise<void> {
-  const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(
-    (resolve, reject) => {
-      const child = spawn(ocelBin, args, { cwd: dir, env });
-      let stdout = "";
-      let stderr = "";
-      child.stdout.on("data", (chunk) => {
-        stdout += String(chunk);
-      });
-      child.stderr.on("data", (chunk) => {
-        stderr += String(chunk);
-      });
-      child.on("error", reject);
-      child.on("close", (code) => resolve({ code, stdout, stderr }));
-    },
-  );
-  await cell.evidence.write(leg, `${name}.stdout`, result.stdout);
-  await cell.evidence.write(leg, `${name}.stderr`, result.stderr);
-  if (result.code !== 0) {
-    throw new Error(
-      `ocel ${maskArgs(args)} exited ${result.code}\nstdout: ${redact(result.stdout)}\nstderr: ${redact(result.stderr)}`,
-    );
-  }
 }
 
 async function waitForHealth(url: string, cell: Running): Promise<void> {
