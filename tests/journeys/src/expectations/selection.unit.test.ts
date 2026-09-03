@@ -54,17 +54,18 @@ describe("expectationsFor", () => {
     }
   });
 
-  it("lists with-sst red at up under its own issue, not the edge's, and passing at publish", () => {
+  it("lists with-sst red from publish onward under its own issue, not the edge's", () => {
+    const publishTitle = "publish · ocel link ls lists both records with their name, type, source and owner";
     for (const edge of ["api-gateway", "cloudfront", "cloudflare"]) {
       process.env[EDGE_ENV] = edge;
       const cell = expectationsFor("aws.floci")["with-sst/web"];
       assert.ok(cell, edge);
+      assert.equal(cell![publishTitle], "https://github.com/ocelhq/ocel/issues/857", edge);
       assert.equal(cell!.up, "https://github.com/ocelhq/ocel/issues/857", edge);
-      assert.equal(cell!["publish · lists both records"], undefined, edge);
     }
   });
 
-  it("lists with-pulumi red at up and at publish, under its own issue", () => {
+  it("lists with-pulumi red from publish onward, under its own issue", () => {
     process.env[EDGE_ENV] = "api-gateway";
     const cell = expectationsFor("aws.floci")["with-pulumi/web"];
     assert.ok(cell);

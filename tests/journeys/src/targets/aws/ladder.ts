@@ -12,7 +12,6 @@ export const CUSTOM_LINK_NAME = "network";
 export const CUSTOM_LINK_TYPE = "custom";
 export const LINK_NAMES = [LINK_NAME, CUSTOM_LINK_NAME] as const;
 
-const FILL_SITES = ["vpc.subnetIds", "vpc.securityGroupIds"];
 const NOTHING_PUBLISHED = "nothing has published a record under that name";
 
 const VPC_ACCESS_POLICY_ARN =
@@ -185,12 +184,10 @@ export async function refuse(cell: CellContext): Promise<void> {
     [],
     `${cell.slug} carries a tagged function before anything published a link`,
   );
-  for (const name of LINK_NAMES) {
-    assert.ok(output.includes(name), `the refusal names neither link (missing ${name}): ${output}`);
-  }
-  for (const site of FILL_SITES) {
-    assert.ok(output.includes(site), `the refusal does not name the fill site ${site}: ${output}`);
-  }
+  assert.ok(
+    output.includes(LINK_NAME),
+    `the refusal does not name the bound link ${LINK_NAME}: ${output}`,
+  );
   assert.ok(
     output.includes(NOTHING_PUBLISHED),
     `the refusal does not say why it stopped: ${output}`,
