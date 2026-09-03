@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "vitest";
+import { nextCacheRows } from "../nextCache";
+import { contractTitle } from "../plan";
 import { EDGE_ENV } from "./aws.floci";
+import { CONTRACT_LEGS } from "./keys";
 import { expectationsFor } from "./index";
 
 const before = process.env[EDGE_ENV];
@@ -85,5 +88,20 @@ describe("expectationsFor", () => {
     const cell = expectationsFor("aws.floci")["with-transforms/web"];
     assert.ok(cell);
     assert.equal(cell!.up, "https://github.com/ocelhq/ocel/issues/884");
+  });
+
+  it("lists each next-cache title on floci by the exact title the plan gives it", () => {
+    process.env[EDGE_ENV] = "cloudfront";
+    const cell = expectationsFor("aws.floci")["next/web"];
+    assert.ok(cell);
+    for (const row of nextCacheRows) {
+      for (const leg of CONTRACT_LEGS) {
+        assert.equal(
+          cell[contractTitle(leg, row.title)],
+          "https://github.com/ocelhq/ocel/issues/852",
+          `floci lists no issue for ${contractTitle(leg, row.title)}`,
+        );
+      }
+    }
   });
 });

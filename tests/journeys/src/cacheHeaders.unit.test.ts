@@ -3,6 +3,8 @@ import {
   CACHE_HEADER,
   cacheControlFor,
   DYNAMIC_CACHE_CONTROL,
+  imageCacheControl,
+  IMMUTABLE_CACHE_CONTROL,
   ROUTER_VARY,
   tierOf,
   variesOn,
@@ -24,6 +26,18 @@ describe("cacheControlFor", () => {
 
   it("reads a zero revalidate as the dynamic literal", () => {
     expect(cacheControlFor(0)).toBe(DYNAMIC_CACHE_CONTROL);
+  });
+});
+
+describe("imageCacheControl", () => {
+  it("spells the optimizer's ttl as a public max-age that must be revalidated", () => {
+    expect(imageCacheControl(60)).toBe("public, max-age=60, must-revalidate");
+  });
+});
+
+describe("IMMUTABLE_CACHE_CONTROL", () => {
+  it("is a year of max-age", () => {
+    expect(IMMUTABLE_CACHE_CONTROL).toBe("public, max-age=31536000, immutable");
   });
 });
 

@@ -4,7 +4,7 @@ export const ONE_YEAR_SECONDS = 31536000;
 
 export const DYNAMIC_CACHE_CONTROL = "private, no-cache, no-store, max-age=0, must-revalidate";
 
-export const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+export const IMMUTABLE_CACHE_CONTROL = `public, max-age=${ONE_YEAR_SECONDS}, immutable`;
 
 export const ROUTER_VARY = [
   "RSC",
@@ -21,13 +21,20 @@ export const CACHED: Tier[] = ["HIT", "STALE", "PRERENDER"];
 
 export const UNCACHED: Tier[] = ["MISS", "BYPASS"];
 
-export function cacheControlFor(revalidate: number | false, expire = ONE_YEAR_SECONDS): string {
+export function cacheControlFor(revalidate: number | false): string {
   if (revalidate === 0) {
     return DYNAMIC_CACHE_CONTROL;
   }
   const seconds = revalidate === false ? ONE_YEAR_SECONDS : revalidate;
-  const swr = seconds < expire ? `, stale-while-revalidate=${expire - seconds}` : "";
+  const swr =
+    seconds < ONE_YEAR_SECONDS
+      ? `, stale-while-revalidate=${ONE_YEAR_SECONDS - seconds}`
+      : "";
   return `s-maxage=${seconds}${swr}`;
+}
+
+export function imageCacheControl(seconds: number): string {
+  return `public, max-age=${seconds}, must-revalidate`;
 }
 
 export function variesOn(vary: string | null, names: string[]): boolean {

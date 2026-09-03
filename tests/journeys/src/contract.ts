@@ -20,6 +20,7 @@ export type ContractContext = {
   baseUrl: string;
   greeting: string;
   leg: Leg;
+  notes: Map<string, string>;
   fetch: typeof fetch;
 };
 

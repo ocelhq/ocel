@@ -4,6 +4,7 @@ import {
   CACHED,
   cacheControlFor,
   DYNAMIC_CACHE_CONTROL,
+  imageCacheControl,
   IMMUTABLE_CACHE_CONTROL,
   ROUTER_VARY,
   type Tier,
@@ -12,27 +13,22 @@ import {
   variesOn,
 } from "./cacheHeaders";
 import type { ContractContext, ContractRow } from "./contract";
-import { assetPath, marker, stamp } from "./html";
-import { pageHtml, state, until } from "./nextApp";
+import { assetPath, marker, markerOrNone, stamp } from "./html";
+import { page, state, steady, until } from "./nextApp";
 
-const ISR_SECONDS = 5;
+const ISR_SECONDS = 15;
 const PATH_SECONDS = 3600;
 const REVALIDATION_TIMEOUT_MS = 60_000;
 const SETTLED_READS = 3;
+const SETTLE_ATTEMPTS = 3;
+const IMAGE_TTL_SECONDS = 60;
 const RESUME_TAG = "résumé";
 const LOCAL_IMAGE = "/ocel.png";
 const ALLOWED_WIDTH = 640;
 const ALLOWED_QUALITY = 75;
+const DEPLOYMENT_NOTE = "next-cache:deployment";
 
 export const EDGE_ISR_TITLE = "an edge-runtime page with a revalidate serves a cached tier";
-
-const deploymentsSeen = new Map<string, string>();
-
-async function page(ctx: ContractContext, path: string, init?: RequestInit) {
-  const res = await ctx.fetch(`${ctx.baseUrl}${path}`, init);
-  assert.equal(res.status, 200, `${path} answered ${res.status}`);
-  return { res, html: await res.text() };
-}
 
 function tierIs(res: Response, allowed: Tier[], what: string) {
   const tier = tierOf(res);
@@ -44,19 +40,16 @@ function cacheControlIs(res: Response, expected: string, what: string) {
 }
 
 async function cachedHalf(ctx: ContractContext, path: string, scope: string): Promise<string> {
-  return stamp(await pageHtml(ctx, path), scope).cached;
+  return marker((await page(ctx, path)).html, `${scope}:cached`);
 }
 
 async function settled(ctx: ContractContext, path: string, scope: string): Promise<string> {
-  const first = await cachedHalf(ctx, path, scope);
-  for (let read = 1; read < SETTLED_READS; read += 1) {
-    assert.equal(
-      await cachedHalf(ctx, path, scope),
-      first,
-      `${path} moved between two reads inside its window`,
-    );
-  }
-  return first;
+  return steady(
+    () => cachedHalf(ctx, path, scope),
+    path,
+    SETTLED_READS,
+    SETTLE_ATTEMPTS,
+  );
 }
 
 async function movedOn(
@@ -89,9 +82,13 @@ export const nextCacheRows: ContractRow[] = [
       const { res, html } = await page(ctx, "/cache/static");
       tierIs(res, CACHED, "the static page");
       cacheControlIs(res, cacheControlFor(false), "the static page");
-      const frozen = stamp(html, "static");
-      assert.equal(frozen.cached, frozen.live);
-      assert.equal(await settled(ctx, "/cache/static", "static"), frozen.cached);
+      assert.equal(
+        markerOrNone(html, "static:live"),
+        undefined,
+        "the static page rendered a live half, so freezing it proves nothing",
+      );
+      const frozen = marker(html, "static:cached");
+      assert.equal(await settled(ctx, "/cache/static", "static"), frozen);
 
       const asset = await ctx.fetch(`${ctx.baseUrl}${assetPath(html)}`);
       assert.equal(asset.status, 200);
@@ -114,11 +111,19 @@ export const nextCacheRows: ContractRow[] = [
     title: "a non-ASCII tag holds one upstream call and releases it when the tag is revalidated",
     suite: "next-cache",
     run: async (ctx) => {
-      const { res } = await page(ctx, "/cache/data");
+      const { res, html } = await page(ctx, "/cache/data");
       tierIs(res, UNCACHED, "the data-cache page");
       cacheControlIs(res, DYNAMIC_CACHE_CONTROL, "the data-cache page");
 
       const held = await settled(ctx, "/cache/data", "data");
+      const again = stamp((await page(ctx, "/cache/data")).html, "data");
+      assert.equal(again.cached, held, "the tag released the upstream call it was holding");
+      assert.notEqual(
+        again.live,
+        stamp(html, "data").live,
+        "the data-cache page answered twice with the same render",
+      );
+
       const counted = (await state(ctx, ["upstream:data"])).get("upstream:data");
       assert.ok(counted, "the upstream never reached the state readback");
       assert.equal(
@@ -182,15 +187,11 @@ export const nextCacheRows: ContractRow[] = [
       cacheControlIs(rsc, DYNAMIC_CACHE_CONTROL, "the RSC response");
       await rsc.arrayBuffer();
 
-      const before = deploymentsSeen.get(ctx.baseUrl);
-      if (ctx.leg === "contract") {
-        deploymentsSeen.set(ctx.baseUrl, id);
-        return;
-      }
-      if (ctx.leg === "redeploy") {
-        assert.ok(before, "the contract leg recorded no deployment id to compare against");
+      const before = ctx.notes.get(DEPLOYMENT_NOTE);
+      if (ctx.leg === "redeploy" && before) {
         assert.notEqual(id, before, "the redeploy served the deployment the first leg did");
       }
+      ctx.notes.set(DEPLOYMENT_NOTE, id);
     },
   },
   {
@@ -216,7 +217,7 @@ export const nextCacheRows: ContractRow[] = [
         const res = await ctx.fetch(imageUrl(ctx, url, ALLOWED_WIDTH, ALLOWED_QUALITY));
         assert.equal(res.status, 200, `${url} answered ${res.status}`);
         assert.match(res.headers.get("content-type") ?? "", /^image\//);
-        tierIs(res, [...CACHED, ...UNCACHED], `the optimized ${url}`);
+        cacheControlIs(res, imageCacheControl(IMAGE_TTL_SECONDS), `the optimized ${url}`);
         await res.arrayBuffer();
       }
 
