@@ -103,6 +103,59 @@ describe("reconciliation", () => {
     ]);
   });
 
+  it("blocks the rows vitest skipped behind a listed up, whatever order they arrive in", () => {
+    const results: TestResult[] = [
+      result("GET /health answers", "skipped"),
+      result("destroy", "skipped"),
+      result(UP_TITLE, "failed"),
+    ];
+    const expectations = { "express/web": { [UP_TITLE]: ISSUE } };
+    for (const ordered of [results, [...results].reverse()]) {
+      const report = reconcile({ planned, results: ordered, expectations });
+      expect(report.rows.map((row) => row.verdict)).toEqual([
+        "expected-failure",
+        "blocked",
+        "blocked",
+      ]);
+      expect(exitCodeFor(report.rows.map((row) => row.verdict))).toBe(0);
+    }
+  });
+
+  it("blocks the skipped rows behind an unlisted up, and fails on the up alone", () => {
+    const report = reconcile({
+      planned,
+      results: [
+        result(UP_TITLE, "failed"),
+        result("GET /health answers", "skipped"),
+        result("destroy", "skipped"),
+      ],
+      expectations: {},
+    });
+    expect(report.rows.map((row) => row.verdict)).toEqual([
+      "unexpected-failure",
+      "blocked",
+      "blocked",
+    ]);
+    expect(exitCodeFor(report.rows.map((row) => row.verdict))).toBe(1);
+  });
+
+  it("fails a skipped row in a cell that came up", () => {
+    const results = allRan();
+    results[1] = result("GET /health answers", "skipped");
+    const report = reconcile({ planned, results, expectations: {} });
+    expect(report.rows.map((row) => row.verdict)).toEqual(["ok", "disabled", "ok"]);
+    expect(exitCodeFor(report.rows.map((row) => row.verdict))).toBe(1);
+  });
+
+  it.each(["todo", "only"] as const)("fails on a %s row behind a listed up", (outcome) => {
+    const report = reconcile({
+      planned,
+      results: [result(UP_TITLE, "failed"), result("GET /health answers", outcome)],
+      expectations: { "express/web": { [UP_TITLE]: ISSUE } },
+    });
+    expect(report.failures.map((row) => row.verdict)).toEqual(["disabled"]);
+  });
+
   it("fails a cell whose up failed unlisted", () => {
     const report = reconcile({
       planned,
