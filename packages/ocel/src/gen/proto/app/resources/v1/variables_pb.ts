@@ -48,9 +48,6 @@ export type VariableDefinition = Message<"app.resources.v1.VariableDefinition"> 
   source: string;
 
   /**
-   * The module that holds the declaration's schemas without calling defineEnv,
-   * when one does; empty when the schemas live beside the call.
-   *
    * @generated from field: string schema_source = 7;
    */
   schemaSource: string;

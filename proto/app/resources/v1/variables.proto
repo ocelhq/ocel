@@ -32,8 +32,6 @@ message VariableDefinition {
 
   string source = 6;
 
-  // The module that holds the declaration's schemas without calling defineEnv,
-  // when one does; empty when the schemas live beside the call.
   string schema_source = 7;
 
   bool has_schema = 8;

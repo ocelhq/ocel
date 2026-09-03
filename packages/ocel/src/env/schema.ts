@@ -6,10 +6,16 @@ import { parse } from "./standard.js";
 
 const SOURCE: unique symbol = Symbol.for("ocel.env.schema");
 
+/** Definitions handed back by {@link envSchema}, marked with the module they were declared in. */
 export type EnvSchema<TDefinitions extends Definitions> = TDefinitions & {
   readonly [SOURCE]: string;
 };
 
+/**
+ * Declares variables without reading, declaring or resolving anything, so a
+ * browser bundle can import the module for its schemas. Hand the result to
+ * `defineEnv` on the server.
+ */
 export function envSchema<const TDefinitions extends Definitions>(
   definitions: TDefinitions,
 ): EnvSchema<TDefinitions> {
@@ -19,11 +25,13 @@ export function envSchema<const TDefinitions extends Definitions>(
   }) as EnvSchema<TDefinitions>;
 }
 
+/** The module a set of definitions was declared in through {@link envSchema}, or `""`. */
 export function sourceOf(definitions: Definitions): string {
   const source = (definitions as { [SOURCE]?: unknown })[SOURCE];
   return typeof source === "string" ? source : "";
 }
 
+/** The {@link envSchema} export of a module, whatever it is named. */
 export type Declared<TModule> = Extract<
   TModule[keyof TModule],
   { readonly [SOURCE]: string }
@@ -33,6 +41,7 @@ type Holding<TModule> = [Declared<TModule>] extends [never]
   ? "this module exports nothing made by envSchema()"
   : unknown;
 
+/** Picks the {@link envSchema} export out of a module; a module without one fails at typecheck and at runtime. */
 export function declared<TModule extends object>(
   module: TModule & Holding<TModule>,
 ): Declared<TModule> {
@@ -46,6 +55,7 @@ export function declared<TModule extends object>(
   );
 }
 
+/** What the client accessor hands back for a key: the schema's output where one was declared, otherwise `string`. */
 export type ClientValue<
   TSchema extends Definitions,
   TKey extends string,
@@ -55,6 +65,7 @@ export type ClientValue<
     : string
   : string;
 
+/** Parses a value the bundler inlined through the key's schema; a missing or failing value throws {@link EnvClientError}. */
 export function inlined<TSchema extends Definitions, TKey extends string>(
   schema: TSchema,
   key: TKey,
