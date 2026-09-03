@@ -39,7 +39,6 @@ func TestDoctorRendersEveryVerdict(t *testing.T) {
 	var found report
 	project := section{name: "Project", identity: "my-shop · ocel.config.ts"}
 	project.pass("config loads — 2 apps (web, api)")
-	project.warn("no preview domain declared", "add `domains: { preview: \"*.preview.example.com\" }` to your config")
 	found.add(project)
 
 	edge := section{name: "Cloudflare"}
@@ -47,6 +46,7 @@ func TestDoctorRendersEveryVerdict(t *testing.T) {
 	found.add(edge)
 
 	preview := section{name: "Preview"}
+	preview.warn("no preview domain", "run `ocel domain use '*.preview.example.com' --preview`")
 	preview.neutral("not set up — run `ocel bootstrap preview` to add previews")
 	found.add(preview)
 
@@ -56,14 +56,14 @@ func TestDoctorRendersEveryVerdict(t *testing.T) {
 	want := strings.Join([]string{
 		"Project  my-shop · ocel.config.ts",
 		"  ✓ config loads — 2 apps (web, api)",
-		"  ⚠ no preview domain declared",
-		"    → add `domains: { preview: \"*.preview.example.com\" }` to your config",
 		"",
 		"Cloudflare",
 		"  ✗ CLOUDFLARE_API_TOKEN rejected",
 		"    → create a token with the scopes from `ocel permissions deploy`",
 		"",
 		"Preview",
+		"  ⚠ no preview domain",
+		"    → run `ocel domain use '*.preview.example.com' --preview`",
 		"  – not set up — run `ocel bootstrap preview` to add previews",
 		"",
 		"1 problem, 1 warning.",
@@ -345,6 +345,64 @@ func TestDoctorReadsTheBootstrapAndNothingThatGrowsWithTheAccount(t *testing.T) 
 	}
 }
 
+func TestRunDoctorServesPreviewsOnTheGlobalWildcardWithoutAWarning(t *testing.T) {
+	root := healthyProject(t)
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "my-shop",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { production: "shop.example.com" },
+  apps: [
+    { name: "web", path: "apps/web", framework: "express" },
+    { name: "api", path: "apps/api", framework: "express" },
+  ],
+};
+`)
+	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+	t.Setenv(clitest.FakeGlobalDomainEnvVar, "previews.ocel.dev")
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), deps, root, &stdout, &stderr); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := rendered(t, stdout.String())
+	if strings.Contains(out, "no preview domain") {
+		t.Errorf("doctor warned about a preview domain the global wildcard already supplies:\n%s", out)
+	}
+	for _, want := range []string{"Preview  *.previews.ocel.dev (global)", "Good to go."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout missing %q; got:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunDoctorNotesAProjectPreviewDomainShadowingTheGlobalOne(t *testing.T) {
+	root := healthyProject(t)
+	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
+	t.Setenv(clitest.FakeGlobalDomainEnvVar, "previews.ocel.dev")
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), deps, root, &stdout, &stderr); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := rendered(t, stdout.String())
+	for _, want := range []string{"Preview  *.preview.example.com", "  – project-level preview domain; global *.previews.ocel.dev ignored", "Good to go."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout missing %q; got:\n%s", want, out)
+		}
+	}
+}
+
 func TestRunDoctorLeavesAnUnwantedTierAlone(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -367,8 +425,7 @@ export default {
 
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
-		"  ⚠ no preview domain declared",
-		"Preview\n  – not set up — run `ocel bootstrap preview` to add previews\n",
+		"Preview\n  ⚠ no preview domain\n    → run `ocel domain use '*.preview.example.com' --preview`\n  – not set up — run `ocel bootstrap preview` to add previews\n",
 		"1 warning.",
 	} {
 		if !strings.Contains(out, want) {
