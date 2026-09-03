@@ -1,0 +1,24 @@
+{
+  "name": "@ocel-tests/journeys",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cell": "tsx src/cell.ts",
+    "test": "vitest run --config vitest.unit.config.ts",
+    "journey": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@console/auth": "workspace:*",
+    "@console/db": "workspace:*",
+    "ocel": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.19.2",
+    "typescript": "^5",
+    "vite": "^8.1.3",
+    "vitest": "^4.1.9"
+  }
+}
