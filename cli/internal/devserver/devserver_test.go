@@ -55,6 +55,8 @@ func newFakeResolveServer(t *testing.T) *httptest.Server {
 	return ts
 }
 
+var testClient = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+
 func serve(t *testing.T, s *Server) string {
 	t.Helper()
 	ts := httptest.NewServer(s.Mux())
@@ -64,7 +66,7 @@ func serve(t *testing.T, s *Server) string {
 
 func declareResource(t *testing.T, url, name string, typ linksv1.LinkType) {
 	t.Helper()
-	client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, url)
+	client := resourcesv1connect.NewResourceServiceClient(testClient, url)
 	req := &resourcesv1.DeclareRequest{Resource: &resourcesv1.ResourceIdentifier{Name: name, Type: typ}}
 	switch typ {
 	case linksv1.LinkType_LINK_TYPE_POSTGRES:
@@ -430,7 +432,7 @@ func openEnvStream(t *testing.T, url string) *bufio.Reader {
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET /env: %v", err)
 	}
