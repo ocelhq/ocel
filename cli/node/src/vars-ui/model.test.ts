@@ -10,6 +10,7 @@ import {
   names,
   owedChildren,
   owedCount,
+  owedSet,
   planCopy,
   readersOf,
   reduceSave,
@@ -17,8 +18,10 @@ import {
   revealable,
   saveSummary,
   sizeLine,
+  sortOwedFirst,
   tallyLine,
   treeOf,
+  unfilledOwed,
   variantsOf,
   type Address,
   type SaveResult,
@@ -359,6 +362,48 @@ describe("planCopy", () => {
       "no environment named gone exists here",
       "R in root reads billing here; a copy would break the link",
     ]);
+  });
+});
+
+describe("recovery", () => {
+  const rows = treeOf(
+    stateOf(
+      [
+        row("A", [cell({ set: true, version: 1 }), cell({ folder: "/web" })]),
+        row("B", [cell({ state: "required" }), cell({ folder: "/web" })]),
+        row("C", [cell({ set: true, version: 2, problem: "bad" }), cell({ folder: "/web" })]),
+        row("D", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], { scope: ["/web"] }),
+      ],
+      [],
+    ),
+    [],
+  );
+  const owed = owedSet({
+    deploy: "dpl_1",
+    owed: [
+      { key: "B", folder: "" },
+      { key: "C", folder: "" },
+      { key: "D", folder: "/web" },
+    ],
+  });
+
+  it("sorts rows the deploy needs to the top without dropping the rest", () => {
+    expect(sortOwedFirst(rows, owed).map((r) => r.key)).toEqual(["B", "C", "D", "A"]);
+    expect(sortOwedFirst(rows, owedSet(undefined)).map((r) => r.key)).toEqual(["A", "B", "C", "D"]);
+  });
+
+  it("counts an owed cell as filled once it is set and valid, or holds a draft", () => {
+    expect(unfilledOwed(rows, owed, new Map(), new Map()).map((v) => v.at)).toEqual([
+      at("B"),
+      at("C"),
+      at("D", "/web"),
+    ]);
+    const drafts = new Map([
+      [addressKey(at("B")), "b"],
+      [addressKey(at("C")), "fixed"],
+      [addressKey(at("D", "/web")), "d"],
+    ]);
+    expect(unfilledOwed(rows, owed, drafts, new Map())).toEqual([]);
   });
 });
 

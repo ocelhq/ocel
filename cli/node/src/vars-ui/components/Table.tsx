@@ -27,13 +27,14 @@ import {
   hoveredApp,
   hide,
   openDrawer,
+  ordered,
+  owed,
   problems,
   reveal,
   revealErrors,
   saving,
   setDraft,
   toggle,
-  tree,
 } from "../store";
 import { Icon } from "./Icons";
 
@@ -111,7 +112,7 @@ export function Table() {
             </th>
           </tr>
         </thead>
-        {tree.value.map((row) => (
+        {ordered.value.map((row) => (
           <KeyGroup row={row} key={row.key} />
         ))}
       </table>
@@ -123,10 +124,24 @@ function editable(variant: Variant): boolean {
   return variant.state !== "forbidden" || variant.set;
 }
 
+function needed(variant: Variant): boolean {
+  return owed.value.has(addressKey(variant.at));
+}
+
+function Needed() {
+  return (
+    <span class="badge" data-tone="owed">
+      <Icon name="warning" />
+      the deploy needs this
+    </span>
+  );
+}
+
 function KeyGroup({ row }: { row: KeyRow }) {
   const open = expanded.value.has(row.key);
-  const owed = owedChildren(row);
+  const owedBelow = owedChildren(row);
   const app = hoveredApp.value;
+  const rootNeeded = needed(row.root);
   return (
     <tbody
       class="group"
@@ -135,7 +150,7 @@ function KeyGroup({ row }: { row: KeyRow }) {
     >
       <tr
         class="row parent"
-        data-owed={row.root.owed}
+        data-owed={row.root.owed || rootNeeded}
         data-dirty={isDirty(row.root.at, drafts.value, baselines.value)}
         aria-expanded={open}
       >
@@ -151,11 +166,12 @@ function KeyGroup({ row }: { row: KeyRow }) {
           </button>
           <span class="key">{row.key}</span>
           {row.children.length > 0 && (
-            <span class="count" data-owed={owed > 0}>
+            <span class="count" data-owed={owedBelow > 0}>
               {plural(row.children.length, "variant")}
-              {owed > 0 && ` · ${owed} owed`}
+              {owedBelow > 0 && ` · ${owedBelow} owed`}
             </span>
           )}
+          {rootNeeded && <Needed />}
         </th>
         <td class="cell-class">
           {row.class}
@@ -187,7 +203,7 @@ function ChildRow({ variant }: { variant: Variant }) {
     <tr
       class="row child"
       data-kind={variant.kind}
-      data-owed={variant.owed}
+      data-owed={variant.owed || needed(variant)}
       data-orphaned={variant.orphaned}
       data-dirty={isDirty(variant.at, drafts.value, baselines.value)}
       data-drop={scoped && dropTarget.value === folder}
@@ -218,6 +234,7 @@ function ChildRow({ variant }: { variant: Variant }) {
             orphaned
           </span>
         )}
+        {needed(variant) && <Needed />}
       </th>
       <td class="cell-class" />
       <td class="cell-value">
