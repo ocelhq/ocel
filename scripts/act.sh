@@ -4,25 +4,26 @@ set -euo pipefail
 IMAGE="${OCEL_ACT_IMAGE:-ghcr.io/catthehacker/ubuntu:act-latest}"
 DOCKER_SOCK="${OCEL_ACT_DOCKER_SOCK:-/var/run/docker.sock}"
 COMPOSE_PROJECT=ocel-act
-E2E_PORTS=(5432 5433 3000 9000 9001 8000)
-ALL_WORKFLOWS=(build go e2e provider-aws provider-vps)
+DEV_LANE_PORTS=(5432 5433 3000 9000 9001 8000)
+ALL_WORKFLOWS=(build go journey provider-aws provider-vps)
 
 usage() {
     cat <<'EOF'
 usage: scripts/act.sh [workflow ...]
 
-Runs the PR gates locally before anything is pushed. build, go, e2e and
+Runs the PR gates locally before anything is pushed. build, go, journey and
 provider-aws replay through nektos/act as workflow_dispatch, so every step runs
 regardless of what changed — a superset of the PR run. provider-vps runs its
 workflow's commands natively (incus wants systemd and KVM an act container
-cannot host; the CI runner executes it un-containered too). The remote Go
-build cache is wired in from your local credentials, so a green run both
-proves the change and leaves the cache warm for CI.
+cannot host; the CI runner executes it un-containered too), and so does the
+journey workflow's own vps lane, which is why journey replays its dev and aws
+lanes only. The remote Go build cache is wired in from your local credentials,
+so a green run both proves the change and leaves the cache warm for CI.
 
-  workflows: build go e2e provider-aws provider-vps    (default: all five)
+  workflows: build go journey provider-aws provider-vps    (default: all five)
 
-e2e and provider-aws drive the host docker daemon. e2e needs the dev compose
-stack's ports free — stop it first (docker compose stop); e2e's own stack
+journey and provider-aws drive the host docker daemon. journey needs the dev
+compose stack's ports free — stop it first (docker compose stop); its own stack
 runs under the ocel-act compose project and is torn down afterwards.
 EOF
     exit 2
@@ -96,15 +97,15 @@ run_provider_vps() {
     return $status
 }
 
-e2e_ports_free() {
+dev_lane_ports_free() {
     local port busy=()
-    for port in "${E2E_PORTS[@]}"; do
+    for port in "${DEV_LANE_PORTS[@]}"; do
         if ss -ltn "sport = :$port" 2>/dev/null | grep -q LISTEN; then
             busy+=("$port")
         fi
     done
     [ ${#busy[@]} -eq 0 ] ||
-        die "e2e needs ports ${busy[*]} — stop whatever holds them (the dev stack: docker compose stop)"
+        die "the journey dev lane needs ports ${busy[*]} — stop whatever holds them (the dev stack: docker compose stop)"
 }
 
 case "${1:-}" in -h | --help) usage ;; esac
@@ -150,16 +151,16 @@ for wf in "${selected[@]}"; do
     container_opts="--init"
     wf_args=()
     case "$wf" in
-    go | e2e)
+    go | journey)
         if [ -n "$CACHE_BIN" ]; then
             container_opts="--init -v $CACHE_BIN:/opt/gobuildcache:ro"
             wf_args+=("${CACHE_ENV[@]}")
         fi
         ;;
     esac
-    if [ "$wf" = e2e ]; then
-        e2e_ports_free
-        wf_args+=(--env "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT")
+    if [ "$wf" = journey ]; then
+        dev_lane_ports_free
+        wf_args+=(--env "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT" --env "OCEL_JOURNEY_LANES=dev aws")
     fi
     if ! "$ACT" workflow_dispatch \
         -W ".github/workflows/$wf.yml" \
@@ -170,7 +171,7 @@ for wf in "${selected[@]}"; do
         "${wf_args[@]}"; then
         failed+=("$wf")
     fi
-    if [ "$wf" = e2e ]; then
+    if [ "$wf" = journey ]; then
         docker compose -p "$COMPOSE_PROJECT" down -v --remove-orphans >/dev/null 2>&1 || true
     fi
 done

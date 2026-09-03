@@ -75,3 +75,20 @@ with the issue that owns the gap, and un-listed in the PR that fixes it.
 
 Evidence and the run's account land under `journeys/output/`, which is untracked and
 uploaded as a workflow artifact.
+
+## One-time human setup
+
+The `vps` lane of the `journey` workflow points at an incus VM on a pull request and at
+a vendor box on dispatch. The box is named by three repository secrets, which a human
+sets once:
+
+| secret              | what it holds                                                  |
+| ------------------- | -------------------------------------------------------------- |
+| `JOURNEY_VPS_HOST`  | the box's address                                              |
+| `JOURNEY_VPS_USER`  | the login that may bootstrap it                                |
+| `JOURNEY_VPS_KEY`   | that login's private key, whole, newlines and all              |
+
+The workflow writes the key to the runner's temporary directory at mode 0600 and hands
+its path to the harness as `OCEL_VPS_IDENTITY_FILE`. Nothing else on the box is
+configured from here: the journey bootstraps production on it and destroys what it
+deployed.
