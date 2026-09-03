@@ -12,6 +12,9 @@ const CLOUDFRONT_STUB = "https://github.com/ocelhq/ocel/issues/852";
 const NO_CLOUDFLARE_API = "https://github.com/ocelhq/ocel/issues/904";
 const SST_UTIL = "https://github.com/ocelhq/ocel/issues/857";
 const PULUMI_SERIALIZATION = "https://github.com/ocelhq/ocel/issues/856";
+const BUILD_NEEDS_POSTGRES = "https://github.com/ocelhq/ocel/issues/849";
+const NO_EDGE_CACHE = "https://github.com/ocelhq/ocel/issues/906";
+const DUPLICATE_ENV_KEY = "https://github.com/ocelhq/ocel/issues/907";
 
 const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
 
@@ -26,9 +29,23 @@ const LADDER_ISSUES: Record<string, string> = {
   "with-pulumi": PULUMI_SERIALIZATION,
 };
 
-function ladderIssueFor(cell: string): string | undefined {
+const API_GATEWAY_UP: Record<string, string> = {
+  express: NO_MASTER_SECRET,
+  hono: NO_MASTER_SECRET,
+  fastify: NO_MASTER_SECRET,
+  "with-transforms": NO_MASTER_SECRET,
+  next: BUILD_NEEDS_POSTGRES,
+  "hello-next": NO_EDGE_CACHE,
+  workspace: DUPLICATE_ENV_KEY,
+};
+
+function exampleOf(cell: string): string {
   const [example] = cell.split("/");
-  return example ? LADDER_ISSUES[example] : undefined;
+  return example ?? "";
+}
+
+function ladderIssueFor(cell: string): string | undefined {
+  return LADDER_ISSUES[exampleOf(cell)];
 }
 
 function upOnly(issue: string): Expectations {
@@ -53,7 +70,14 @@ function contractIssueFor(title: string): string {
 }
 
 function apiGateway(): Expectations {
-  const listed = upOnly(NO_MASTER_SECRET);
+  const listed: Expectations = {};
+  for (const test of planTests(specForTarget("aws"), ["up"])) {
+    if (test.title !== UP_TITLE) {
+      continue;
+    }
+    const issue = ladderIssueFor(test.cell) ?? API_GATEWAY_UP[exampleOf(test.cell)];
+    listed[test.cell] = issue ? { [UP_TITLE]: issue } : {};
+  }
   for (const test of planTests(specForTarget("aws"), CONTRACT_LEGS)) {
     if (ladderIssueFor(test.cell) || LEG_MARKERS.has(test.title)) {
       continue;

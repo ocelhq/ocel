@@ -103,11 +103,39 @@ describe("expectationsFor", () => {
     }
   });
 
-  it("leaves with-transforms to the edge's own reason, not a ladder issue", () => {
+  it("leaves with-transforms to the master-secret issue, not a ladder issue", () => {
     process.env[EDGE_ENV] = "api-gateway";
     const cell = expectationsFor("aws.floci")["with-transforms/web"];
     assert.ok(cell);
     assert.equal(cell.up, "https://github.com/ocelhq/ocel/issues/884");
+  });
+
+  it("names each api-gateway up after the reason that cell actually fails for", () => {
+    process.env[EDGE_ENV] = "api-gateway";
+    const listed = expectationsFor("aws.floci");
+    const upIssues: Record<string, string | undefined> = {
+      "hono/web": "https://github.com/ocelhq/ocel/issues/884",
+      "fastify/web": "https://github.com/ocelhq/ocel/issues/884",
+      "next/web": "https://github.com/ocelhq/ocel/issues/849",
+      "hello-next/web": "https://github.com/ocelhq/ocel/issues/906",
+      "workspace/next": "https://github.com/ocelhq/ocel/issues/907",
+      "workspace/express": "https://github.com/ocelhq/ocel/issues/907",
+      "workspace/hono": "https://github.com/ocelhq/ocel/issues/907",
+    };
+    for (const [cell, issue] of Object.entries(upIssues)) {
+      assert.equal(listed[cell]?.up, issue, cell);
+    }
+  });
+
+  it("lists no up for hello-express on api-gateway, and keeps its contract titles", () => {
+    process.env[EDGE_ENV] = "api-gateway";
+    const cell = expectationsFor("aws.floci")["hello-express/web"];
+    assert.ok(cell);
+    assert.equal(cell.up, undefined);
+    assert.equal(
+      cell["GET /health answers with the app name"],
+      "https://github.com/ocelhq/ocel/issues/854",
+    );
   });
 
   it("lists each next-cache title on api-gateway by the exact title the plan gives it", () => {
