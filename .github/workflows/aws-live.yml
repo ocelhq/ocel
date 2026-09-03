@@ -2,6 +2,7 @@ name: AWS Live
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, closed]
     paths:
       - "platform/aws/**"
       - "pkg/providerkit/**"
@@ -15,7 +16,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: aws-live-${{ github.ref }}
+  group: aws-live-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -24,6 +25,7 @@ permissions:
 
 jobs:
   live:
+    if: github.event.action != 'closed'
     name: aws live conformance
     runs-on: ubuntu-latest
     timeout-minutes: 90
