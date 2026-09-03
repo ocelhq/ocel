@@ -146,7 +146,6 @@ type DeploymentRecord struct {
 	Framework        string            `json:"framework"`
 	Identity         string            `json:"identity"`
 	DeploymentID     string            `json:"deploymentId"`
-	BuildID          string            `json:"buildId"`
 	Entry            string            `json:"entry"`
 	EntryFunction    string            `json:"entryFunction,omitempty"`
 	Image            string            `json:"image,omitempty"`

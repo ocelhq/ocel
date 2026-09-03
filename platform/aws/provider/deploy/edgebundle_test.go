@@ -319,28 +319,3 @@ func TestCheckAppEdgeVariables(t *testing.T) {
 		}
 	})
 }
-
-func TestLoaderID(t *testing.T) {
-	t.Run("covers the runtime not just the bundle", func(t *testing.T) {
-		t.Parallel()
-		bundle := []byte(`{"version":1}`)
-		base := loaderID(bundle, "2026-07-13", []string{"nodejs_compat"})
-
-		if again := loaderID(bundle, "2026-07-13", []string{"nodejs_compat"}); again != base {
-			t.Error("id changed with nothing changed; a redeploy must reuse the loaded code")
-		}
-		for _, tc := range []struct {
-			name string
-			got  string
-		}{
-			{"changed bundle", loaderID([]byte(`{"version":2}`), "2026-07-13", []string{"nodejs_compat"})},
-			{"changed compat date", loaderID(bundle, "2026-09-01", []string{"nodejs_compat"})},
-			{"changed compat flag", loaderID(bundle, "2026-07-13", []string{"nodejs_compat", "no_nodejs_compat_v2"})},
-			{"dropped compat flag", loaderID(bundle, "2026-07-13", nil)},
-		} {
-			if tc.got == base {
-				t.Errorf("%s: id unchanged, want a new id for code the loader evaluates differently", tc.name)
-			}
-		}
-	})
-}

@@ -7,7 +7,6 @@ export interface DeploymentRecord {
   framework: string;
   identity: string;
   deploymentId: string;
-  buildId: string;
   entry?: string;
   routingManifest?: RoutingManifest | null;
   functionUrls: Record<string, string>;

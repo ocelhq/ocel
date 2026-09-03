@@ -8,7 +8,6 @@ export interface DeploymentRecord {
   framework: string;
   identity: string;
   deploymentId: string;
-  buildId: string;
   routingManifest: unknown;
   functionUrls: Record<string, string>;
   assetPrefix: string;

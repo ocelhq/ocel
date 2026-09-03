@@ -2,6 +2,8 @@ package fake
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 
@@ -315,6 +317,12 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 	}
 	result.Functions = StoodUpFunctions(plan)
 	result.Containers = StoodUpContainers(plan)
+	if plan.App != nil {
+		result.EdgeBundleKey = deliveredEdgeBundle(plan)
+		if plan.App.ISR != nil {
+			result.ISRWriteSecret = "isr-" + plan.Ref.Name.String()
+		}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.plans = append(r.plans, plan)
@@ -352,6 +360,14 @@ func (r *Releaser) State(ref providerkit.StackRef) providerkit.StackState {
 	defer r.mu.Unlock()
 	result, present := r.stacks[stackKey(ref)]
 	return providerkit.StackState{Present: present, Result: result}
+}
+
+func deliveredEdgeBundle(plan providerkit.StackPlan) string {
+	root := providerkit.AppArtifactRoot(providerkit.ArtifactRoot(), plan.App.App)
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(edge.AppBundleFile))); err != nil {
+		return ""
+	}
+	return plan.Ref.Name.String() + "/edge/bundle.json"
 }
 
 func StoodUpFunctions(plan providerkit.StackPlan) []providerkit.Function {

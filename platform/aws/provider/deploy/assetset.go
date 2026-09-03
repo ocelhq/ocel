@@ -130,23 +130,29 @@ func (r *assetSetResource) Create(ctx context.Context, req infer.CreateRequest[a
 	}, nil
 }
 
-func (r *release) assetSets(plan providerkit.StackPlan, app, framework string, bundle appBundle, cache *isrConfig) ([]assetSet, error) {
+func (r *release) assetSets(plan providerkit.StackPlan, app, framework string, bundle appBundle, cache *isrConfig) ([]assetSet, edgeDelivery, error) {
 	coord := appCoordinate(plan)
 	var sets []assetSet
 	for _, planned := range []func() (*assetSet, error){
 		func() (*assetSet, error) { return staticAssetSet(r.cfg, app, framework, coord) },
 		func() (*assetSet, error) { return prerenderAssetSet(r.cfg, app, cache) },
-		func() (*assetSet, error) { return edgeBundleSet(r.cfg, app, coord, bundle) },
 	} {
 		set, err := planned()
 		if err != nil {
-			return nil, err
+			return nil, edgeDelivery{}, err
 		}
 		if set != nil {
 			sets = append(sets, *set)
 		}
 	}
-	return sets, nil
+	edgeSet, delivery, err := edgeBundleSet(r.cfg, app, coord, bundle)
+	if err != nil {
+		return nil, edgeDelivery{}, err
+	}
+	if edgeSet != nil {
+		sets = append(sets, *edgeSet)
+	}
+	return sets, delivery, nil
 }
 
 func assetSetPlugin(pending *pendingSets) (kitpulumi.Plugin, error) {

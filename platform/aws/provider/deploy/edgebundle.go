@@ -2,15 +2,12 @@ package deploy
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -49,21 +46,28 @@ func edgeSealedDelivered(cfg Config, bundle appBundle) bool {
 	return cfg.CacheStoreBucket != "" && cfg.CacheStoreUploader != nil && len(bundle.Ciphertext) > 0
 }
 
-func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBundle) (*assetSet, error) {
+type edgeDelivery struct {
+	BundleKey string
+	Envelope  string
+}
+
+func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBundle) (*assetSet, edgeDelivery, error) {
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
-		return nil, nil
+		return nil, edgeDelivery{}, nil
 	}
 	bundle, held, err := readEdgeBundle(cfg, app)
 	if err != nil {
-		return nil, err
+		return nil, edgeDelivery{}, err
 	}
 	if !held {
-		return nil, nil
+		return nil, edgeDelivery{}, nil
 	}
+	delivery := edgeDelivery{BundleKey: appEdgeBundleKey(coord)}
 	manifest := newSetManifest()
 	manifest.add(cfg.CacheStoreBucket, appEdgeBundleKey(coord), int64(len(bundle)))
 	if edgeSealedDelivered(cfg, sealed) {
 		manifest.add(cfg.CacheStoreBucket, appEdgeSealedKey(coord), int64(len(sealed.Ciphertext)))
+		delivery.Envelope = sealed.Envelope
 	}
 
 	return &assetSet{
@@ -78,7 +82,7 @@ func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBu
 			emitUploadBatch(report, uploadKindEdgeBundle, stats, err, phaseStart)
 			return err
 		},
-	}, nil
+	}, delivery, nil
 }
 
 func putEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coordinate, bundle []byte, sealed appBundle, stats *uploadBatchStats, report providerkit.Reporter) error {
@@ -98,12 +102,4 @@ func checkAppEdgeVariables(cfg Config, app string, values providerkit.AppValues,
 		return err
 	}
 	return checkEdgeVariables(app, values, bundle.Ciphertext)
-}
-
-func loaderID(bundle []byte, compatDate string, compatFlags []string) string {
-	h := sha256.New()
-	h.Write(bundle)
-	h.Write([]byte(compatDate))
-	h.Write([]byte(strings.Join(compatFlags, ",")))
-	return hex.EncodeToString(h.Sum(nil))
 }

@@ -2,9 +2,15 @@ package providerkit
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -660,7 +666,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 				App: &AppPlan{
 					App:             entry.App,
 					Framework:       entry.Manifest.GetFramework(),
-					Entry:           entryFunction(r.manifest, entry.App),
+					Entry:           entryLogicalName(r.manifest, entry.App, facts.Entry),
 					Deployment:      entry.Build.DeploymentID(),
 					Compute:         entry.Compute(),
 					Functions:       r.functionSpecs(entry),
@@ -697,7 +703,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 			if err := r.embed(ctx, entry, result.Functions, report); err != nil {
 				return err
 			}
-			if err := r.stage(ctx, entry, facts, images, values, result.Functions, result.Containers, grants); err != nil {
+			if err := r.stage(ctx, entry, facts, images, values, result); err != nil {
 				return err
 			}
 			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, Stack{
@@ -890,9 +896,12 @@ func frameworksOf(manifest *contractv1.Manifest) []string {
 	return frameworks
 }
 
-func entryFunction(manifest *contractv1.Manifest, app string) string {
+func entryLogicalName(manifest *contractv1.Manifest, app, entry string) string {
+	if entry == "" {
+		return ""
+	}
 	for _, fn := range manifest.GetFunctions() {
-		if fn.GetApp() == app && fn.GetRouteId() == "" {
+		if fn.GetApp() == app && routeOf(fn) == entry {
 			return fn.GetLogicalName()
 		}
 	}
@@ -947,10 +956,21 @@ func declaredVariables(held AppValues) []edge.VariableRecord {
 	return declared
 }
 
-func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFacts, images ImagePlan, values AppValues, functions []Function, containers []AppContainer, grants []Link) error {
-	urls := make(map[string]string, len(functions))
-	for _, fn := range functions {
-		urls[fn.Name] = fn.URL
+func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFacts, images ImagePlan, values AppValues, result StackResult) error {
+	urlByLogical := make(map[string]string, len(result.Functions))
+	physicalByLogical := make(map[string]string, len(result.Functions))
+	for _, fn := range result.Functions {
+		urlByLogical[fn.Name] = fn.URL
+		physicalByLogical[fn.Name] = fn.Physical
+	}
+	urls := make(map[string]string, len(result.Functions))
+	for _, fn := range r.manifest.GetFunctions() {
+		if fn.GetApp() != entry.App {
+			continue
+		}
+		if url := urlByLogical[fn.GetLogicalName()]; url != "" {
+			urls[routeOf(fn)] = url
+		}
 	}
 	coordinate := r.plan.coordinate(entry.App, entry.Build.Release())
 	var routing any
@@ -963,13 +983,15 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 		Framework:        entry.Manifest.GetFramework(),
 		Identity:         r.plan.Builds[entry.App],
 		DeploymentID:     entry.Build.DeploymentID(),
-		Entry:            entryFunction(r.manifest, entry.App),
+		Entry:            facts.Entry,
+		EntryFunction:    physicalByLogical[entryLogicalName(r.manifest, entry.App, facts.Entry)],
 		Image:            images.Coordinate(entry.App),
-		Physical:         physicalOf(containers, entry.App),
+		Physical:         physicalOf(result.Containers, entry.App),
 		HealthPath:       entry.HealthCheckPath,
 		FunctionURLs:     urls,
 		AssetPrefix:      coordinate.AssetKey(""),
-		IsrPrefix:        coordinate.ISRPrefix(),
+		IsrPrefix:        withoutSlash(coordinate.ISRPrefix()),
+		IsrWriteSecret:   result.ISRWriteSecret,
 		CreatedAt:        time.Now().Unix(),
 		ValueFingerprint: entry.Build.Fingerprint(),
 		Variables:        declaredVariables(values),
@@ -977,13 +999,63 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 		SupportInEffect:  r.needs[entry.App].InEffect,
 		Waived:           r.needs[entry.App].Waived,
 	}
-	if len(grants) > 0 {
-		record.Env = map[string]string{}
-		for _, link := range grants {
-			record.Env[link.Name] = string(link.Type)
+	code, err := r.edgeCode(entry, result)
+	if err != nil {
+		return err
+	}
+	if code != nil {
+		record.EdgeWorkers = code
+		record.Envelope = result.Envelope
+		if env := variableEnv(values); len(env) > 0 {
+			record.Env = env
 		}
 	}
 	return r.stack.Ledger().PutStaged(ctx, record)
+}
+
+func (r *deployRun) edgeCode(entry AppEntry, result StackResult) (*edge.Code, error) {
+	if result.EdgeBundleKey == "" {
+		return nil, nil
+	}
+	host, runs := r.front.(edge.CodeHost)
+	if !runs {
+		return nil, nil
+	}
+	bundle, err := os.ReadFile(filepath.Join(AppArtifactRoot(ArtifactRoot(), entry.App), filepath.FromSlash(edge.AppBundleFile)))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, Refuse(CodeInvalid,
+			"%s was released with an edge bundle at %s but its build left no %s for the edge to load; rebuild the app",
+			entry.App, result.EdgeBundleKey, edge.AppBundleFile)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read the edge bundle %s runs: %w", entry.App, err)
+	}
+	compatDate, compatFlags := host.CodeRuntime()
+	return &edge.Code{
+		BundleKey:   result.EdgeBundleKey,
+		ID:          loaderID(bundle, compatDate, compatFlags),
+		CompatDate:  compatDate,
+		CompatFlags: compatFlags,
+	}, nil
+}
+
+const appFolderEnv = "OCEL_APP_FOLDER"
+
+func variableEnv(values AppValues) map[string]string {
+	env := make(map[string]string, len(values.Plain)+1)
+	maps.Copy(env, values.Plain)
+	if values.Folder != "" {
+		env[appFolderEnv] = values.Folder
+	}
+	return env
+}
+
+func loaderID(bundle []byte, compatDate string, compatFlags []string) string {
+	sum := sha256.New()
+	sum.Write(bundle)
+	sum.Write([]byte(compatDate))
+	sum.Write([]byte(strings.Join(compatFlags, ",")))
+	return hex.EncodeToString(sum.Sum(nil))
 }
 
 func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, error) {
