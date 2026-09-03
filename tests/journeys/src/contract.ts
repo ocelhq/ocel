@@ -162,6 +162,7 @@ export const contract: ContractRow[] = [
     run: async (ctx) => {
       const client = createUploadClient<Bucket<Record<string, AnyUploader>>>({
         url: `${ctx.baseUrl}/api/upload`,
+        fetch: (url, init) => ctx.fetch(url, init as RequestInit),
         pollIntervalMs: 250,
         maxPollMs: 30_000,
       });
