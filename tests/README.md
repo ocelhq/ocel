@@ -33,11 +33,15 @@ For `aws` that is a floci emulator, one per edge, and the endpoint it prints:
 
 ```
 scripts/floci.sh create ocel-journeys
-export AWS_ENDPOINT_URL=<the OCEL_FLOCI_ENDPOINT it printed>
+export AWS_ENDPOINT_URL=http://localhost.localstack.cloud:<the port it printed>
 export OCEL_AWS_EDGE=api-gateway
 pnpm --filter @ocel-tests/journeys cell --example express --target aws
 scripts/floci.sh destroy ocel-journeys
 ```
+
+The host is `localhost.localstack.cloud`, not the `127.0.0.1` the script prints: S3-Control
+addresses its endpoint as `<account>.<host>`, and `<account>.127.0.0.1` resolves nowhere,
+so a bootstrap against the printed form fails where the named form works (#888).
 
 The target pins the AWS config and credentials files to empty files of its own, so a
 profile in `~/.aws` cannot redirect one service at the endpoint. A bootstrap cannot be
