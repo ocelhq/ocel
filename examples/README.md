@@ -1,23 +1,26 @@
 # Examples
 
-Four of these examples are three rungs of one ladder, and a team climbs it as it scales.
-Every rung deploys with `ocel deploy`; what changes is how much of the provisioning you
-have taken back. The other directories here are framework fixtures, not rungs.
+Every one of these deploys with `ocel deploy`. Four of them are rungs of one ladder, and
+the story of that ladder opens [with-transforms](./with-transforms).
 
-**No config — [express](./express).** The reference composite: a provider-less base config
-names the slug and the app, and `ocel.aws.config.ts` and `ocel.vps.config.ts` import it and
-add a provider each. Everything else Ocel provisions from what the app declares. A resource
-in app code is the provisioning step, so there is nothing to keep in sync and nothing to
-configure. Most projects never need to leave this rung.
+## hello
 
-**Transforms — [with-transforms](./with-transforms).** The defaults stop fitting: a route
-needs more memory, production needs a bigger database than a preview, every resource needs
-the org's tag. Ocel still provisions all of it; you change how, as reviewable rules in your
-repo. This is a smaller step than owning the infrastructure, and it is usually enough.
+- [hello-express](./hello-express) — an Express 5 app that declares nothing at all.
+- [hello-next](./hello-next) — a Next.js App Router app that declares nothing at all.
 
-**Links — [with-sst](./with-sst), [with-pulumi](./with-pulumi).** You need full control of
-some infrastructure, so your own IaC tool provisions it and Ocel turns consumer. Which tool
-that is decides nothing: the app consuming the infrastructure is the same app either way,
-and so is what Ocel asks of you. Ocel never gives away deploying the app itself — that is
-the one thing it always provisions, and transforms are how you shape it even here, which is
-why a shared-VPC setup needs both rungs at once.
+## composite
+
+- [express](./express) — todos and documents on Express 5: a postgres database, a blob uploader, a plain variable and a secret.
+- [hono](./hono) — the same app on Hono, served on Node.
+- [fastify](./fastify) — the same app on Fastify 5.
+- [next](./next) — the same app on the Next.js App Router, and the fixture the Next routing and cache suites drive.
+
+## the ladder
+
+- [with-transforms](./with-transforms) — the defaults stop fitting, so a transform module reshapes what ocel provisions.
+- [with-sst](./with-sst) — SST owns the database and the network, and ocel deploys the app into it.
+- [with-pulumi](./with-pulumi) — the same arrangement in Pulumi.
+
+## workspace
+
+- [workspace](./workspace) — one project serving the `next`, `express` and `hono` apps behind one edge.

@@ -1,6 +1,6 @@
 # with-pulumi
 
-Rung three of the [examples ladder](../README.md), in Pulumi rather than
+Rung three of the [examples ladder](../with-transforms), in Pulumi rather than
 [SST](../with-sst), and standing on the same two rungs: Pulumi owns the database and the
 network it sits in, and ocel still deploys the app — into that network. Links are how the
 app reaches what Pulumi provisioned; transforms are how ocel renders what it provisions
