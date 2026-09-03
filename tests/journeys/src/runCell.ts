@@ -87,20 +87,22 @@ export function describeCell(example: ExampleSpec) {
     }
   }
 
-  function perApp(title: string, work: () => Promise<void>) {
+  function perAppDescribe(body: (app: string) => void) {
     for (const app of example.apps) {
-      describe(cellKey(example.name, app), () => {
-        it(title, work, timeout);
-      });
+      describe(cellKey(example.name, app), () => body(app));
     }
   }
 
+  function perApp(title: string, work: () => Promise<void>) {
+    perAppDescribe(() => {
+      it(title, work, timeout);
+    });
+  }
+
   function contractPerApp(leg: Leg) {
-    for (const app of example.apps) {
-      describe(cellKey(example.name, app), () => {
-        contractLeg(leg, app, rows);
-      });
-    }
+    perAppDescribe((app) => {
+      contractLeg(leg, app, rows);
+    });
   }
 
   describe(example.name, () => {
