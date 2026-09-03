@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { redact } from "./contract";
 import type { Leg } from "./spec";
 
 export type Evidence = {
@@ -13,7 +14,7 @@ export function evidence(dir: string): Evidence {
     async write(leg, name, content) {
       const target = path.join(dir, leg);
       await mkdir(target, { recursive: true });
-      await writeFile(path.join(target, name), content, "utf8");
+      await writeFile(path.join(target, name), redact(content), "utf8");
     },
   };
 }
