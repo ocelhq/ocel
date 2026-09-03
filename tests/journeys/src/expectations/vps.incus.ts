@@ -1,11 +1,8 @@
-import type { Leg } from "../spec";
-import { suiteTitles } from "./rows";
+import { CONTRACT_LEGS, suiteTitles } from "./keys";
 import type { Expectations } from "./types";
 
 const CONTAINER_IN_A_WORKSPACE = "https://github.com/ocelhq/ocel/issues/885";
 const NO_ROUTER_ON_A_BOX = "https://github.com/ocelhq/ocel/issues/900";
-
-const CONTRACT_LEGS: Leg[] = ["contract", "redeploy", "rollback"];
 
 export const vpsIncus: Expectations = {
   "express/web": {

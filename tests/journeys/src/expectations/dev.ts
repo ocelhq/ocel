@@ -1,5 +1,5 @@
 import type { Leg } from "../spec";
-import { suiteTitles } from "./rows";
+import { suiteTitles } from "./keys";
 import type { Expectations } from "./types";
 
 const UPLOAD_KEY = "https://github.com/ocelhq/ocel/issues/882";

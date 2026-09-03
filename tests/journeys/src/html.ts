@@ -31,12 +31,20 @@ function decodeEntities(text: string): string {
     .replace(/&amp;/g, "&");
 }
 
-export function marker(html: string, name: string): string {
+export function markerOrNone(html: string, name: string): string | undefined {
   const found = new RegExp(`data-ocel="${escaped(name)}"[^>]*>([\\s\\S]*?)</`).exec(html);
   if (!found) {
-    throw new Error(`no element carried data-ocel="${name}"`);
+    return undefined;
   }
   return decodeEntities(found[1]!.replace(COMMENT, "")).trim();
+}
+
+export function marker(html: string, name: string): string {
+  const found = markerOrNone(html, name);
+  if (found === undefined) {
+    throw new Error(`no element carried data-ocel="${name}"`);
+  }
+  return found;
 }
 
 export function stamp(html: string, scope: string): Stamp {

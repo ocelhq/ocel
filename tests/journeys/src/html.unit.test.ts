@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assetPath, firstChunkWith, form, marker, stamp } from "./html";
+import { assetPath, firstChunkWith, form, marker, markerOrNone, stamp } from "./html";
 
 describe("marker", () => {
   it("reads the text an ocel marker wraps", () => {
@@ -16,6 +16,14 @@ describe("marker", () => {
 
   it("names the marker it could not find", () => {
     expect(() => marker("<p>nothing</p>", "gone")).toThrow(/data-ocel="gone"/);
+  });
+});
+
+describe("markerOrNone", () => {
+  it("reads a marker that is there and answers with nothing for one that is not", () => {
+    const html = '<span data-ocel="static:cached">at</span>';
+    expect(markerOrNone(html, "static:cached")).toBe("at");
+    expect(markerOrNone(html, "static:live")).toBeUndefined();
   });
 });
 

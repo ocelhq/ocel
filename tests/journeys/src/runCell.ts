@@ -57,6 +57,7 @@ export function describeCell(example: ExampleSpec) {
 
   let deployment: Deployment | undefined;
   let greeting = INITIAL_GREETING;
+  const notes = new Map<string, string>();
 
   let setupFailure: { error: unknown } | undefined;
 
@@ -90,6 +91,7 @@ export function describeCell(example: ExampleSpec) {
       baseUrl: deployment.baseUrl(app),
       greeting,
       leg,
+      notes,
       fetch: secretGuarded(deployment.fetch),
     };
   }
