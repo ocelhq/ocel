@@ -20,12 +20,12 @@ export const EDGE_ENV = "OCEL_AWS_EDGE";
 
 const DEFAULT_EDGE = "cloudfront";
 
-const LADDER_ISSUES: Record<string, { issue: string; publishPasses: boolean }> = {
-  "with-sst": { issue: SST_UTIL, publishPasses: true },
-  "with-pulumi": { issue: PULUMI_SERIALIZATION, publishPasses: false },
+const LADDER_ISSUES: Record<string, string> = {
+  "with-sst": SST_UTIL,
+  "with-pulumi": PULUMI_SERIALIZATION,
 };
 
-function ladderIssueFor(cell: string): { issue: string; publishPasses: boolean } | undefined {
+function ladderIssueFor(cell: string): string | undefined {
   const [example] = cell.split("/");
   return example ? LADDER_ISSUES[example] : undefined;
 }
@@ -33,11 +33,10 @@ function ladderIssueFor(cell: string): { issue: string; publishPasses: boolean }
 function listing(issueFor: (title: string) => string): Expectations {
   const listed: Expectations = {};
   for (const test of planTests(specForTarget("aws"), LEGS)) {
-    const ladder = ladderIssueFor(test.cell);
-    if (ladder) {
-      const passes = test.title === REFUSE_TITLE || (ladder.publishPasses && test.title.startsWith("publish · "));
-      if (!passes) {
-        (listed[test.cell] ??= {})[test.title] = ladder.issue;
+    const issue = ladderIssueFor(test.cell);
+    if (issue) {
+      if (test.title !== REFUSE_TITLE) {
+        (listed[test.cell] ??= {})[test.title] = issue;
       }
       continue;
     }
