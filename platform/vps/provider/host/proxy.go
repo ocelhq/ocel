@@ -16,7 +16,7 @@ const (
 	KindProxyConfig = "ocel:proxy-config"
 )
 
-const ProxyImage = "docker.io/library/caddy@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d"
+const ProxyImage = "public.ecr.aws/docker/library/caddy@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d"
 
 const (
 	ProxyNetwork   = "ocel"
@@ -57,7 +57,10 @@ const (
 	ArchARM64 = "arm64"
 )
 
-const proxyRising = 30
+const (
+	proxyRising = 30
+	proxyPulls  = 5
+)
 
 const (
 	networkFact = "network=present"
@@ -256,9 +259,23 @@ func containerWriting(attempts int, files []string) string {
 	argv := proxyRun()
 	return "set -e\n" +
 		bindsStanding(files) +
+		imageHeld(proxyPulls) +
 		"docker rm --force " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
 		words(argv) + " >/dev/null\n" +
 		containerRising(attempts)
+}
+
+func imageHeld(attempts int) string {
+	image := quoted(ProxyImage)
+	return "at=0\n" +
+		"until docker image inspect " + image + " >/dev/null 2>&1 || docker pull " + image + " >/dev/null; do\n" +
+		"at=$((at + 1))\n" +
+		"if [ \"$at\" -ge " + fmt.Sprint(attempts) + " ]; then\n" +
+		"printf '%s\\n' " + quoted(fmt.Sprintf("%s was not pulled in %d attempts", ProxyImage, attempts)) + " >&2\n" +
+		"exit 1\n" +
+		"fi\n" +
+		"sleep $((at * 2))\n" +
+		"done\n"
 }
 
 func containerRising(attempts int) string {

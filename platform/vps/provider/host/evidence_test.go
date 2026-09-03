@@ -70,6 +70,7 @@ func inspectRosters() map[string][]string {
 	return map[string][]string{
 		"docker inspect":         {"containerProbe", "containerRising", "servingCommand", "stateCommand"},
 		"docker network inspect": {"command", "networkCommand", "networkProbe"},
+		"docker image inspect":   {"imageHeld"},
 	}
 }
 

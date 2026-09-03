@@ -197,6 +197,29 @@ func TestTheProxyIsPinnedByDigestAndNamedByNoTagAnywhere(t *testing.T) {
 	}
 }
 
+func TestTheProxyImageIsPulledOffTheAnonymousHubCeilingAndRetriedBeforeTheRun(t *testing.T) {
+	t.Parallel()
+
+	if strings.HasPrefix(ProxyImage, "docker.io/") || !strings.Contains(ProxyImage, "/") {
+		t.Errorf("the proxy is pulled as %q, from Docker Hub, whose anonymous per-IP ceiling is shared by every tenant behind a NAT and is what took a fresh box down mid-bootstrap", ProxyImage)
+	}
+	command := containerCommand()
+	pull := strings.Index(command, "docker pull "+quoted(ProxyImage))
+	run := strings.Index(command, quoted("--name")+" "+quoted(ProxyContainer))
+	if pull < 0 || run < 0 || pull > run {
+		t.Fatalf("the proxy is run without an explicit pull ahead of it, so a registry hiccup is `docker run`'s one unretried attempt:\n%s", command)
+	}
+	for _, want := range []string{
+		"docker image inspect " + quoted(ProxyImage),
+		fmt.Sprintf("-ge %d", proxyPulls),
+		"sleep $((at * 2))",
+	} {
+		if !strings.Contains(command, want) {
+			t.Errorf("the pull carries no %q, so it is either unbounded or repeated on a box that already holds the image:\n%s", want, command)
+		}
+	}
+}
+
 func TestTheProxyIsRestartedUnlessSomebodyStopsItAndSitsOnTheOneSharedNetwork(t *testing.T) {
 	t.Parallel()
 
@@ -805,7 +828,7 @@ func engineStub(t *testing.T, upAt int) string {
 	asks := quoted(filepath.Join(dir, "asked"))
 	stub := "#!/bin/sh\n" +
 		"case \"$1\" in\n" +
-		"rm|run) exit 0 ;;\n" +
+		"rm|run|image|pull) exit 0 ;;\n" +
 		"logs) echo 'run: loading initial config' ; echo 'caddy said why it stopped' ; exit 0 ;;\n" +
 		"inspect)\n" +
 		"  echo call >> " + asks + "\n" +
