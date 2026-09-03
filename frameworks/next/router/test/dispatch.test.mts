@@ -438,6 +438,63 @@ describe("dispatchResult", () => {
     expect(captured?.url).toBe("https://fn.example.com/dynamic/%5Bfirst%5D");
   });
 
+  it("percent-encodes the second question mark Next writes into an icon URL", async () => {
+    let captured: Request | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/favicon.ico": { kind: "lambda", id: "fn" } },
+      },
+      functionUrls: { fn: "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req;
+        return new Response("from-lambda", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/favicon.ico",
+        invocationTarget: { pathname: "/favicon.ico" },
+      },
+      new Request("https://app.example/favicon.ico?favicon.abc.ico?dpl=123"),
+      deps,
+    );
+
+    const forwarded = new URL(captured!.url);
+    expect(forwarded.pathname).toBe("/favicon.ico");
+    expect(forwarded.search).toBe("?favicon.abc.ico%3Fdpl=123");
+  });
+
+  it("leaves an ordinary query untouched on its way to the Function URL", async () => {
+    let captured: Request | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/search": { kind: "lambda", id: "fn" } },
+      },
+      functionUrls: { fn: "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req;
+        return new Response("from-lambda", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await dispatchResult(
+      { resolvedPathname: "/search", invocationTarget: { pathname: "/search" } },
+      new Request("https://app.example/search?a=1&b=2"),
+      deps,
+    );
+
+    expect(new URL(captured!.url).search).toBe("?a=1&b=2");
+  });
+
   it("leaves an already-encoded request target encoded exactly once", async () => {
     let captured: Request | undefined;
     const deps = baseDeps({
