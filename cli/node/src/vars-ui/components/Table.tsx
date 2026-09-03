@@ -1,4 +1,40 @@
-import { useRef } from "preact/hooks";
+import {
+  CaretRightIcon,
+  ClockCounterClockwiseIcon,
+  CopyIcon,
+  DotsThreeIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  FileTextIcon,
+  FolderIcon,
+  HouseIcon,
+  KeyIcon,
+  LinkIcon,
+  LockIcon,
+  MagnifyingGlassIcon,
+  ShieldCheckIcon,
+  StackIcon,
+  TrashIcon,
+  UploadSimpleIcon,
+  WarningIcon,
+  XIcon,
+} from "@phosphor-icons/react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 import {
   addressKey,
@@ -12,13 +48,16 @@ import {
   readBy,
   referenceLine,
   revealable,
-  type FolderLine,
+  setForOptions,
+  type Group,
   type KeyLine,
   type Reference,
   type Variant,
 } from "../model";
+import { useValue } from "../signals";
 import {
   addOverride,
+  applyDrop,
   askRemoval,
   baselines,
   catalogue,
@@ -26,11 +65,12 @@ import {
   copyValue,
   dismiss,
   drafts,
-  dragging,
+  dragTarget,
   environment,
   environments,
-  folder,
-  go,
+  expanded,
+  focused,
+  focusing,
   hide,
   hoveredApp,
   importFile,
@@ -42,41 +82,70 @@ import {
   problems,
   reveal,
   revealErrors,
+  revealGroup,
   saving,
   search,
   selectVisible,
   selected,
   setDraft,
+  setFor,
   setSearch,
   shown,
+  spotlight,
+  spotlighted,
   state,
+  toggleGroup,
   toggleRevealVisible,
   toggleSelected,
   visible,
-  applyDrop,
 } from "../store";
-import { Icon } from "./Icons";
-import { Menu, type MenuSection } from "./Menu";
+import { Chip, ChipButton } from "./Chip";
 
 function carriesFile(event: DragEvent): boolean {
   const types = event.dataTransfer?.types ?? [];
   return [...types].some((type) => type === "Files" || type === "text/plain");
 }
 
+function dropInto(event: DragEvent, into: string): void {
+  if (!carriesFile(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const file = event.dataTransfer?.files[0];
+  if (file) {
+    importFile(file, into);
+    return;
+  }
+  applyDrop("the dropped text", event.dataTransfer?.getData("text/plain") ?? "", into);
+}
+
+function aimAt(event: DragEvent, into: string): void {
+  if (!carriesFile(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.dataTransfer!.dropEffect = "copy";
+  dragTarget.value = into;
+}
+
+const cellPick = "w-10 pr-0 pl-4 align-middle";
+const cellKey = "min-w-0 py-2.5 pr-3 pl-2 text-left align-middle font-normal";
+const cellValue = "w-[46%] min-w-72 py-2 pr-3 align-middle";
+const cellTools = "w-28 py-2 pr-3 pl-0 text-right align-middle";
+
 export function Table() {
-  const current = state.value!;
-  const list = listing.value;
-  const into = folder.value;
+  const current = useValue(state)!;
+  const list = useValue(listing);
+  const target = useValue(dragTarget);
+  const open = useValue(expanded);
+  const shownRows = useValue(visible);
+  const picked = useValue(selected);
+  const revealed = useValue(shown);
+  const owedLens = useValue(owedOnly);
+  const total = list.keys.length + list.groups.reduce((sum, group) => sum + group.keys, 0);
   return (
     <section
-      class="card"
-      data-dragging={dragging.value}
-      onDragOver={(event) => {
-        if (!carriesFile(event)) return;
-        event.preventDefault();
-        event.dataTransfer!.dropEffect = "copy";
-        if (!dragging.value) dragging.value = true;
-      }}
+      data-slot="card"
+      className="relative border border-border bg-card"
+      onDragOver={(event) => aimAt(event, "")}
       onDragLeave={(event) => {
         if (
           event.currentTarget instanceof Element &&
@@ -85,236 +154,308 @@ export function Table() {
         ) {
           return;
         }
-        dragging.value = false;
+        dragTarget.value = null;
       }}
-      onDrop={(event) => {
-        if (!carriesFile(event)) return;
-        event.preventDefault();
-        const file = event.dataTransfer?.files[0];
-        if (file) {
-          importFile(file);
-          return;
-        }
-        applyDrop("the dropped text", event.dataTransfer?.getData("text/plain") ?? "", into);
-      }}
+      onDrop={(event) => dropInto(event, "")}
     >
       <Toolbar />
-      <table class="vars">
-        <thead>
-          <tr>
-            <th scope="col" class="cell-pick">
-              <input
-                type="checkbox"
-                aria-label="select every row"
-                checked={visible.value.length > 0 && selected.value.size === visible.value.length}
-                disabled={visible.value.length === 0}
-                onChange={(event) => selectVisible(event.currentTarget.checked)}
-              />
-            </th>
-            <th scope="col" class="cell-key">
-              Name
-            </th>
-            <th scope="col" class="cell-value">
-              Value
-            </th>
-            <th scope="col" class="cell-tools">
-              <button
-                type="button"
-                class="btn btn-ghost btn-small"
-                aria-pressed={shown.value}
-                disabled={visible.value.filter(revealable).length === 0}
-                onClick={toggleRevealVisible}
+      <div className="overflow-x-auto">
+        <table className="w-full table-fixed border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <th scope="col" className={cellPick}>
+                <Checkbox
+                  aria-label="select every row"
+                  checked={shownRows.length > 0 && picked.size === shownRows.length}
+                  disabled={shownRows.length === 0}
+                  onCheckedChange={(on) => selectVisible(on)}
+                />
+              </th>
+              <th
+                scope="col"
+                className={cn(cellKey, "font-mono text-[11px] tracking-[0.1em] text-dim uppercase")}
               >
-                <Icon name={shown.value ? "eyeOff" : "eye"} />
-                {shown.value ? "Hide values" : "Reveal values"}
-              </button>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {list.folders.map((line) => (
-            <FolderRow line={line} key={line.folder} />
+                Name
+              </th>
+              <th
+                scope="col"
+                className={cn(cellValue, "font-mono text-[11px] tracking-[0.1em] text-dim uppercase")}
+              >
+                Value
+              </th>
+              <th scope="col" className={cellTools}>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  data-action="reveal-all"
+                  aria-pressed={revealed}
+                  disabled={shownRows.filter(revealable).length === 0}
+                  onClick={toggleRevealVisible}
+                >
+                  {revealed ? <EyeSlashIcon /> : <EyeIcon />}
+                  {revealed ? "Hide" : "Reveal"}
+                </Button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.keys.map((line) => (
+              <KeyRow line={line} flat={list.flat} key={addressKey(line.variant.at)} />
+            ))}
+          </tbody>
+          {list.groups.map((group) => (
+            <FolderGroup group={group} open={open.has(group.folder)} key={group.folder} />
           ))}
-          {list.keys.map((line) => (
-            <KeyRow line={line} flat={list.flat} key={addressKey(line.variant.at)} />
-          ))}
-        </tbody>
-      </table>
-      {list.folders.length === 0 && list.keys.length === 0 && <Empty />}
-      <footer class="card-foot">
-        <span class="counts">
+        </table>
+      </div>
+      {total === 0 && <Empty />}
+      <footer className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border px-4 py-2.5 font-mono text-[11px] text-dim">
+        <span className="inline-flex items-center gap-3">
           {!list.flat && (
-            <>
-              <Icon name="folder" /> {list.folders.length}
-              <span class="counts-gap" />
-            </>
+            <span className="inline-flex items-center gap-1.5">
+              <FolderIcon className="size-3.5" /> {list.groups.length}
+            </span>
           )}
-          <Icon name="key" /> {list.keys.length}
+          <span className="inline-flex items-center gap-1.5">
+            <KeyIcon className="size-3.5" /> {total}
+          </span>
         </span>
-        <span class="hint">
-          <Icon name="file" />
-          Drop a .env file on this table to fill {folderName(into)} values
+        <span className="inline-flex items-center gap-1.5">
+          <FileTextIcon className="size-3.5" />
+          Drop a .env file here to fill root values, or on a folder to fill that folder
         </span>
       </footer>
-      {dragging.value && (
-        <div class="dropzone" aria-hidden="true">
-          <Icon name="upload" />
-          <p>Drop to fill {folderName(into)} values</p>
-          <p class="dropzone-sub">
+      {target !== null && (
+        <div
+          data-slot="dropzone"
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 border-2 border-primary bg-background/90 text-center"
+        >
+          <UploadSimpleIcon className="size-6 text-primary" />
+          <p className="font-mono text-sm">Drop to fill {folderName(target)} values</p>
+          <p className="max-w-md text-xs text-muted-foreground">
             Keys the project declares fill in as unsaved drafts; nothing is written until you save
           </p>
         </div>
       )}
-      {current.recovery && list.keys.length === 0 && owedOnly.value && (
-        <p class="empty-note">Every cell the deploy needs has a value. Save and resume below.</p>
+      {current.recovery && total === 0 && owedLens && (
+        <p className="px-4 py-6 text-sm text-muted-foreground">
+          Every cell the deploy needs has a value. Save and resume below.
+        </p>
       )}
     </section>
   );
 }
 
 function Toolbar() {
-  const current = state.value!;
+  const current = useValue(state)!;
   const picker = useRef<HTMLInputElement>(null);
-  const list = listing.value;
+  const [into, setInto] = useState("");
+  const list = useValue(listing);
+  const env = useValue(environment);
+  const envs = useValue(environments);
+  const query = useValue(search);
+  const owedLens = useValue(owedOnly);
+  const loading = useValue(copyLoading);
+  const folders = current.matrix.columns.filter((folder) => folder !== "");
+  const items = [
+    { value: "", label: "Base" },
+    ...envs.map((known) => ({
+      value: known.name,
+      label: known.orphaned ? `${known.name} · no longer exists` : known.name,
+    })),
+  ];
   return (
-    <div class="toolbar">
-      <label class="select">
-        <Icon name="environment" />
-        <select
-          value={environment.value}
+    <div
+      data-slot="toolbar"
+      className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5"
+    >
+      <Select value={env} items={items} onValueChange={(name) => pickEnvironment(name ?? "")}>
+        <SelectTrigger
+          size="sm"
           aria-label="environment"
-          onChange={(event) => pickEnvironment(event.currentTarget.value)}
+          data-action="environment"
+          className="h-8 border-border px-2.5 font-mono text-xs"
         >
-          <option value="">Base</option>
-          {environments.value.map((env) => (
-            <option value={env.name} key={env.name}>
-              {env.orphaned ? `${env.name} · no longer exists` : env.name}
-            </option>
+          <StackIcon className="text-muted-foreground" />
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent align="start" alignItemWithTrigger={false} className="font-mono text-xs">
+          {items.map((item) => (
+            <SelectItem value={item.value} key={item.value} className="text-xs">
+              {item.label}
+            </SelectItem>
           ))}
-        </select>
-      </label>
-      <nav class="crumbs" aria-label="folder">
-        <button
-          type="button"
-          class="crumb"
-          aria-current={!list.flat && folder.value === "" ? "page" : undefined}
-          onClick={() => go("")}
-        >
-          <Icon name="home" />
-          <span>/</span>
-        </button>
-        {!list.flat && folder.value !== "" && (
-          <>
-            <span class="crumb-sep">›</span>
-            <span class="crumb" aria-current="page">
-              <Icon name="folder" />
-              {folder.value.slice(1)}
-            </span>
-          </>
-        )}
-        {owedOnly.value && (
-          <>
-            <span class="crumb-sep">›</span>
-            <span class="crumb" aria-current="page" data-tone="owed">
-              <Icon name="warning" />
-              {plural(list.keys.length, "cell")} the deploy needs
-            </span>
-          </>
-        )}
-        {!owedOnly.value && list.flat && (
-          <>
-            <span class="crumb-sep">›</span>
-            <span class="crumb" aria-current="page">
-              <Icon name="search" />
-              results across every folder
-            </span>
-          </>
-        )}
-      </nav>
-      <span class="toolbar-gap" />
-      <label class="search">
-        <Icon name="search" />
-        <input
+        </SelectContent>
+      </Select>
+      {owedLens && (
+        <Chip tone="owed">
+          <WarningIcon />
+          {plural(list.keys.length, "cell")} the deploy needs
+        </Chip>
+      )}
+      {!owedLens && list.flat && (
+        <Chip tone="muted">
+          <MagnifyingGlassIcon />
+          results across every folder
+        </Chip>
+      )}
+      <span className="flex-1" />
+      <label className="relative">
+        <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
           type="search"
+          data-action="search"
           placeholder="Search by name"
-          value={search.value}
-          onInput={(event) => setSearch(event.currentTarget.value)}
+          className="h-8 w-56 border-border pr-2 pl-8 font-mono text-xs"
+          value={query}
+          onChange={(event) => setSearch(event.currentTarget.value)}
         />
       </label>
       <input
         type="file"
         accept=".env,text/plain"
-        class="visually-hidden"
+        className="sr-only"
         ref={picker}
         tabIndex={-1}
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = "";
-          if (file) importFile(file);
+          if (file) importFile(file, into);
         }}
       />
-      <button type="button" class="btn" onClick={() => picker.current?.click()}>
-        <Icon name="upload" />
-        Import .env
-      </button>
-      <button
-        type="button"
-        class="btn"
-        disabled={copyLoading.value}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<Button variant="outline" size="xs" data-action="import" />}
+        >
+          <UploadSimpleIcon />
+          Import .env
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Fill values in</DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => {
+                setInto("");
+                picker.current?.click();
+              }}
+            >
+              <HouseIcon />
+              root
+            </DropdownMenuItem>
+            {folders.map((folder) => (
+              <DropdownMenuItem
+                key={folder}
+                onClick={() => {
+                  setInto(folder);
+                  picker.current?.click();
+                }}
+              >
+                <FolderIcon />
+                {folder.slice(1)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Button
+        variant="outline"
+        size="xs"
+        data-action="copy-other"
+        disabled={loading}
         onClick={() => void openCopy()}
       >
-        <Icon name="copy" />
-        {copyLoading.value ? "Reading…" : `Copy from ${current.other}`}
-      </button>
+        <CopyIcon />
+        {loading ? "Reading…" : `Copy from ${current.other}`}
+      </Button>
     </div>
   );
 }
 
 function Empty() {
-  const current = state.value!;
-  if (search.value.trim() !== "") {
-    return <p class="empty-note">No variable is named like “{search.value.trim()}”.</p>;
-  }
-  if (current.matrix.rows.length === 0) {
-    return (
-      <p class="empty-note">
+  const current = useValue(state)!;
+  const query = useValue(search);
+  const text =
+    query.trim() !== "" ? (
+      <>No variable is named like “{query.trim()}”.</>
+    ) : current.matrix.rows.length === 0 ? (
+      <>
         This project declares no variables yet. Keys come from <code>defineEnv</code> in app
         code; this page cannot create one.
-      </p>
+      </>
+    ) : (
+      <>Nothing reads a variable here.</>
     );
-  }
-  return <p class="empty-note">Nothing reads a variable in {folderName(folder.value)}.</p>;
+  return <p className="px-4 py-6 text-sm text-muted-foreground">{text}</p>;
 }
 
-function FolderRow({ line }: { line: FolderLine }) {
+function FolderGroup({ group, open }: { group: Group; open: boolean }) {
+  const lit = useValue(spotlight);
+  const header = useRef<HTMLTableRowElement>(null);
+  useEffect(() => {
+    if (lit !== group.folder) return;
+    header.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    spotlighted();
+  }, [lit, group.folder]);
   return (
-    <tr class="row folder-row" onClick={() => go(line.folder)}>
-      <td class="cell-pick" />
-      <th scope="row" class="cell-key">
-        <button
-          type="button"
-          class="folder-link"
-          onClick={(event) => {
-            event.stopPropagation();
-            go(line.folder);
-          }}
-        >
-          <Icon name="folder" />
-          <span class="key">{line.folder.slice(1)}</span>
-        </button>
-        {line.owed > 0 && (
-          <span class="chip" data-tone="owed">
-            {plural(line.owed, "cell")} to fill
+    <tbody
+      data-group={group.folder}
+      data-open={open}
+      onDragOver={(event) => aimAt(event, group.folder)}
+      onDrop={(event) => dropInto(event, group.folder)}
+    >
+      <tr
+        ref={header}
+        data-slot="group-row"
+        className="cursor-pointer border-t border-b border-border bg-muted/40 hover:bg-muted/70"
+        onClick={() => toggleGroup(group.folder)}
+      >
+        <td className={cn(cellPick, "text-center")}>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={`${open ? "collapse" : "expand"} ${group.folder.slice(1)}`}
+            className="inline-flex size-6 items-center justify-center text-muted-foreground"
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleGroup(group.folder);
+            }}
+          >
+            <CaretRightIcon
+              className={cn("size-3.5 transition-transform", open && "rotate-90")}
+              weight="bold"
+            />
+          </button>
+        </td>
+        <th scope="rowgroup" className={cn(cellKey, "font-normal")} colSpan={3}>
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 font-mono text-[13px] font-medium">
+              <FolderIcon className="size-4 text-muted-foreground" />
+              {group.folder.slice(1)}
+            </span>
+            <span className="font-mono text-[11px] text-dim">{plural(group.keys, "key")}</span>
+            {group.owed > 0 && (
+              <Chip tone="owed" data-slot="owed-count">
+                {group.owed} to fill
+              </Chip>
+            )}
           </span>
-        )}
-      </th>
-      <td class="cell-value">
-        <span class="muted">{plural(line.keys, "key")}</span>
-      </td>
-      <td class="cell-tools">
-        <Icon name="chevron" />
-      </td>
-    </tr>
+        </th>
+      </tr>
+      {open &&
+        group.lines.map((line) => (
+          <KeyRow line={line} flat={false} key={addressKey(line.variant.at)} />
+        ))}
+      {open && group.lines.length === 0 && (
+        <tr className="border-b border-border">
+          <td />
+          <td colSpan={3} className="py-3 pl-2 text-xs text-muted-foreground">
+            Nothing is set for {group.folder.slice(1)}; every key it reads inherits the root.
+            Use a root row’s menu, or drop a .env file here, to set one.
+          </td>
+        </tr>
+      )}
+    </tbody>
   );
 }
 
@@ -324,97 +465,133 @@ function describe(variant: Variant): string {
   return env === "" ? `${key} in ${place}` : `${key} in ${place} for ${env}`;
 }
 
+function ClassIcon({ kind }: { kind: KeyLine["row"]["class"] }) {
+  const className = "size-4 shrink-0 text-muted-foreground";
+  if (kind === "secret") return <LockIcon className={className} />;
+  if (kind === "sensitive") return <ShieldCheckIcon className={className} />;
+  return <KeyIcon className={className} />;
+}
+
 function KeyRow({ line, flat }: { line: KeyLine; flat: boolean }) {
   const { row, variant } = line;
   const key = addressKey(variant.at);
-  const app = hoveredApp.value;
+  const app = useValue(hoveredApp);
+  const picked = useValue(selected).has(key);
   const open = editable(variant);
-  const picked = selected.value.has(key);
+  const dimmed = app !== null && !readBy(row, app);
+  const owed = variant.owed || line.needed;
   return (
     <tr
-      class="row key-row"
-      data-owed={variant.owed || line.needed}
-      data-dirty={isDirty(variant.at, drafts.value, baselines.value)}
+      data-slot="key-row"
       data-selected={picked}
-      data-dim={app !== null && !readBy(row, app)}
+      className={cn(
+        "border-b border-border transition-opacity last:border-b-0",
+        picked && "bg-muted/60",
+        dimmed && "opacity-40",
+      )}
     >
-      <td class="cell-pick">
+      <td className={cellPick}>
         {open && (
-          <input
-            type="checkbox"
+          <Checkbox
             aria-label={`select ${describe(variant)}`}
             checked={picked}
-            onChange={() => toggleSelected(variant.at)}
+            onCheckedChange={() => toggleSelected(variant.at)}
           />
         )}
       </td>
-      <th scope="row" class="cell-key">
-        <span class="name">
-          <Icon
-            name={row.class === "secret" ? "lock" : row.class === "sensitive" ? "shield" : "key"}
-          />
-          <span class="key">{row.key}</span>
+      <th scope="row" className={cellKey}>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="inline-flex items-center gap-2 font-mono text-[13px]">
+            <ClassIcon kind={row.class} />
+            <span className="truncate">{row.key}</span>
+          </span>
+          {flat && (
+            <ChipButton onClick={() => revealGroup(variant.at.folder)}>
+              {variant.at.folder === "" ? <HouseIcon /> : <FolderIcon />}
+              {folderName(variant.at.folder)}
+            </ChipButton>
+          )}
+          {row.class !== "plain" && <Chip tone="muted">{row.class}</Chip>}
+          {owed && (
+            <Chip tone="owed" data-slot="owed">
+              {line.needed ? "deploy needs this" : "required"}
+            </Chip>
+          )}
+          {row.scope && row.scope.length > 0 && (
+            <Chip tone="muted" title={`only ${names(row.scope)} read it`}>
+              scoped
+            </Chip>
+          )}
         </span>
-        {flat && (
-          <button type="button" class="chip chip-link" onClick={() => go(variant.at.folder)}>
-            <Icon name={variant.at.folder === "" ? "home" : "folder"} />
-            {folderName(variant.at.folder)}
-          </button>
-        )}
-        {row.class !== "plain" && <span class="chip">{row.class}</span>}
-        {(variant.owed || line.needed) && (
-          <span class="chip" data-tone="owed">
-            {line.needed ? "deploy needs this" : "required"}
-          </span>
-        )}
-        {row.scope && row.scope.length > 0 && (
-          <span class="chip" title={`only ${names(row.scope)} read it`}>
-            scoped
-          </span>
-        )}
       </th>
-      <td class="cell-value">
+      <td className={cellValue}>
         {open ? (
           <Value line={line} />
         ) : (
-          <span class="muted">
-            only in{" "}
+          <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            only in
             {(row.scope ?? []).map((where) => (
-              <button type="button" class="chip chip-link" key={where} onClick={() => go(where)}>
-                <Icon name="folder" />
+              <ChipButton key={where} data-slot="pointer" onClick={() => revealGroup(where)}>
+                <FolderIcon />
                 {where.slice(1)}
-              </button>
+              </ChipButton>
             ))}
           </span>
         )}
       </td>
-      <td class="cell-tools">{open && <Actions line={line} />}</td>
+      <td className={cellTools}>{open && <Actions line={line} />}</td>
     </tr>
+  );
+}
+
+function Fault({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-start gap-1 text-xs text-destructive">
+      <WarningIcon className="mt-0.5 size-3.5 shrink-0" />
+      <span>{children}</span>
+    </span>
   );
 }
 
 function Value({ line }: { line: KeyLine }) {
   const { variant } = line;
   const key = addressKey(variant.at);
-  const revealed = baselines.value.has(key);
+  const known = useValue(baselines);
+  const typed = useValue(drafts);
+  const trouble = useValue(problems);
+  const unreadableAll = useValue(revealErrors);
+  const wanted = useValue(focusing);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (wanted !== key) return;
+    input.current?.focus();
+    focused();
+  }, [wanted, key]);
   if (variant.reference) {
     return <Linked variant={variant} reference={variant.reference} />;
   }
-  const draft = drafts.value.get(key) ?? baselineOf(variant.at, baselines.value);
-  const dirty = isDirty(variant.at, drafts.value, baselines.value);
-  const problem = problems.value.get(key);
-  const unreadable = revealErrors.value.get(key);
+  const revealed = known.has(key);
+  const draft = typed.get(key) ?? baselineOf(variant.at, known);
+  const dirty = isDirty(variant.at, typed, known);
+  const problem = trouble.get(key);
+  const unreadable = unreadableAll.get(key);
   const secret = variant.class === "secret";
   const stamp = variant.set ? `set · v${variant.version}` : "not set";
   return (
-    <div class="value" data-dirty={dirty}>
-      <div class="value-line">
-        <input
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Input
+          ref={input}
           type="text"
-          class="value-input"
+          data-slot="value-input"
+          data-dirty={dirty}
+          className={cn(
+            "h-8 min-w-40 flex-1 border-input px-2 font-mono text-xs",
+            dirty && "border-primary focus-visible:border-primary",
+          )}
           value={draft}
-          autocomplete="off"
-          spellcheck={false}
+          autoComplete="off"
+          spellCheck={false}
           disabled={variant.orphaned}
           title={stamp}
           placeholder={
@@ -423,9 +600,7 @@ function Value({ line }: { line: KeyLine }) {
                 ? "inherits the root value"
                 : line.inherits === "base"
                   ? "inherits the base value"
-                  : variant.owed || line.needed
-                    ? "required"
-                    : "not set"
+                  : "not set"
               : secret
                 ? "overwrite the secret"
                 : revealed
@@ -433,91 +608,74 @@ function Value({ line }: { line: KeyLine }) {
                   : "••••••••"
           }
           aria-label={`value of ${describe(variant)}`}
-          onInput={(event) => setDraft(variant.at, event.currentTarget.value)}
+          onChange={(event) => setDraft(variant.at, event.currentTarget.value)}
         />
-        {dirty && <span class="chip chip-ink">unsaved</span>}
-        {problem && (
-          <span class="chip" data-tone="owed">
-            {problem.kind === "conflict" ? "conflict" : "failed"}
-          </span>
+        {dirty && (
+          <Chip tone="accent" data-slot="unsaved">
+            unsaved
+          </Chip>
         )}
-        {!dirty && line.inherits === "root" && <span class="chip">inherits root</span>}
-        {!dirty && line.inherits === "base" && <span class="chip">inherits base</span>}
+        {problem && <Chip tone="owed">{problem.kind === "conflict" ? "conflict" : "failed"}</Chip>}
+        {!dirty && line.inherits === "root" && <Chip tone="muted">inherits root</Chip>}
+        {!dirty && line.inherits === "base" && <Chip tone="muted">inherits base</Chip>}
         {variant.kind === "environment" && variant.set && !variant.orphaned && (
-          <span class="chip chip-env">
-            <Icon name="environment" />
+          <Chip>
+            <StackIcon />
             override
-          </span>
+          </Chip>
         )}
         {variant.orphaned && (
-          <span class="chip" data-tone="owed">
-            <Icon name="warning" />
+          <Chip tone="owed">
+            <WarningIcon />
             orphaned
-          </span>
+          </Chip>
         )}
         {variant.at.environment === "" && line.overrides.length > 0 && (
-          <span
-            class="chip chip-env"
-            data-tone={line.orphaned ? "owed" : undefined}
+          <Chip
+            tone={line.orphaned ? "owed" : "default"}
             title={`overridden in ${names(line.overrides)}${line.orphaned ? "; an override names an environment that no longer exists" : ""}`}
           >
-            <Icon name="environment" />
+            <StackIcon />
             {line.overrides.length === 1 ? line.overrides[0] : plural(line.overrides.length, "override")}
-          </span>
+          </Chip>
         )}
       </div>
       {problem && (
-        <span class="fault">
-          <Icon name="warning" />
+        <Fault>
           {problem.kind === "conflict"
-            ? `Changed underneath you — now ${stored(variant, revealed ? baselines.value.get(key) : undefined)}. Nothing was written; decide again.`
+            ? `Changed underneath you — now ${stored(variant, revealed ? known.get(key) : undefined)}. Nothing was written; decide again.`
             : problem.message}
-        </span>
+        </Fault>
       )}
-      {unreadable && (
-        <span class="fault">
-          <Icon name="warning" />
-          could not reveal: {unreadable}
-        </span>
-      )}
+      {unreadable && <Fault>could not reveal: {unreadable}</Fault>}
       {variant.orphaned && (
-        <span class="fault">
+        <span className="text-xs text-muted-foreground">
           nothing reads it — {variant.at.environment} no longer exists
         </span>
       )}
-      {variant.problem && (
-        <span class="fault">
-          <Icon name="warning" />
-          fails its schema: {variant.problem}
-        </span>
-      )}
+      {variant.problem && <Fault>fails its schema: {variant.problem}</Fault>}
     </div>
   );
 }
 
 function Linked({ variant, reference }: { variant: Variant; reference: Reference }) {
   const key = addressKey(variant.at);
-  const value = baselines.value.get(key);
-  const unreadable = revealErrors.value.get(key);
+  const value = useValue(baselines).get(key);
+  const unreadable = useValue(revealErrors).get(key);
   return (
-    <div class="value reference">
-      <div class="value-line">
-        <span class="chip chip-ink" title={`set · v${variant.version}`}>
-          <Icon name="link" />
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Chip tone="ink" title={`set · v${variant.version}`}>
+          <LinkIcon />
           reads {referenceLine(reference)}
-        </span>
+        </Chip>
         {value !== undefined ? (
-          <span class="resolved">{value}</span>
+          <span className="font-mono text-xs text-held">{value}</span>
         ) : (
-          <span class="muted">••••••••</span>
+          <span className="font-mono text-xs text-muted-foreground">••••••••</span>
         )}
       </div>
-      {unreadable && (
-        <span class="fault">
-          <Icon name="warning" />
-          source unreadable: {unreadable}
-        </span>
-      )}
+      {unreadable && <Fault>source unreadable: {unreadable}</Fault>}
     </div>
   );
 }
@@ -529,81 +687,122 @@ function stored(variant: Variant, value: string | undefined): string {
 }
 
 function Actions({ line }: { line: KeyLine }) {
-  const { variant } = line;
-  const current = state.value!;
-  const busy = saving.value;
-  const revealed = baselines.value.has(addressKey(variant.at));
+  const { row, variant } = line;
+  const current = useValue(state)!;
+  const busy = useValue(saving);
+  const revealed = useValue(baselines).has(addressKey(variant.at));
+  const known = useValue(catalogue);
   const env = variant.at.environment;
-  const removal =
-    variant.orphaned
-      ? `Remove the ${env} override — ${env} no longer exists`
-      : env === ""
-        ? "Remove value"
-        : `Remove the ${env} override`;
-  const sections: MenuSection[] = [
-    {
-      label: "Insights",
-      items: [
-        { label: "Details and history", icon: "history", onSelect: () => openDrawer(variant.at) },
-      ],
-    },
-    {
-      label: "Manage",
-      items: [
-        ...overrideOptions(current, catalogue.value, variant.at).map((name) => ({
-          label: `Override for ${name}`,
-          icon: "environment" as const,
-          onSelect: () => addOverride({ ...variant.at, environment: name }),
-        })),
-        ...(revealable(variant)
-          ? [{ label: "Copy value", icon: "copy" as const, onSelect: () => void copyValue(variant.at) }]
-          : []),
-        ...(variant.extra
-          ? [{ label: "Dismiss this empty row", icon: "x" as const, onSelect: () => dismiss(variant.at) }]
-          : []),
-      ],
-    },
-    {
-      items:
-        variant.set && !variant.reference
-          ? [
-              {
-                label: removal,
-                icon: "trash" as const,
-                danger: true,
-                disabled: busy,
-                onSelect: () => askRemoval([variant.at]),
-              },
-            ]
-          : [],
-    },
-  ];
+  const removal = variant.orphaned
+    ? `Remove the ${env} override — ${env} no longer exists`
+    : env === ""
+      ? "Remove value"
+      : `Remove the ${env} override`;
+  const overrides = overrideOptions(current, known, variant.at);
+  const folders = variant.at.folder === "" ? setForOptions(known, row) : [];
+  const removable = variant.set && !variant.reference;
   return (
-    <span class="cluster">
+    <span className="inline-flex items-center justify-end gap-0.5">
       {revealable(variant) && (
-        <button
-          type="button"
-          class="iconbtn"
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          data-action="reveal"
           aria-pressed={revealed}
           title={revealed ? "Hide the value" : "Reveal the value"}
           aria-label={`${revealed ? "hide" : "reveal"} the value of ${describe(variant)}`}
           onClick={() => (revealed ? hide([variant.at]) : void reveal([variant.at]))}
         >
-          <Icon name={revealed ? "eyeOff" : "eye"} />
-        </button>
+          {revealed ? <EyeSlashIcon /> : <EyeIcon />}
+        </Button>
       )}
-      <button
-        type="button"
-        class="iconbtn"
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        data-action="details"
         aria-haspopup="dialog"
         title="Details and history"
         aria-label={`details and history of ${describe(variant)}`}
         onClick={() => openDrawer(variant.at)}
       >
-        <Icon name="info" />
-      </button>
-      <Menu label={`actions for ${describe(variant)}`} sections={sections} />
+        <ClockCounterClockwiseIcon />
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              data-action="menu"
+              title="More"
+              aria-label={`actions for ${describe(variant)}`}
+            />
+          }
+        >
+          <DotsThreeIcon weight="bold" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Insights</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => openDrawer(variant.at)}>
+              <ClockCounterClockwiseIcon />
+              Details and history
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          {(overrides.length > 0 || folders.length > 0 || revealable(variant) || variant.extra) && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Manage</DropdownMenuLabel>
+                {folders.map((folder) => (
+                  <DropdownMenuItem
+                    key={folder}
+                    data-action="set-for"
+                    onClick={() => setFor({ key: row.key, folder, environment: "" })}
+                  >
+                    <FolderIcon />
+                    Set for {folder.slice(1)}
+                  </DropdownMenuItem>
+                ))}
+                {overrides.map((name) => (
+                  <DropdownMenuItem
+                    key={name}
+                    onClick={() => addOverride({ ...variant.at, environment: name })}
+                  >
+                    <StackIcon />
+                    Override for {name}
+                  </DropdownMenuItem>
+                ))}
+                {revealable(variant) && (
+                  <DropdownMenuItem onClick={() => void copyValue(variant.at)}>
+                    <CopyIcon />
+                    Copy value
+                  </DropdownMenuItem>
+                )}
+                {variant.extra && (
+                  <DropdownMenuItem onClick={() => dismiss(variant.at)}>
+                    <XIcon />
+                    Dismiss this empty row
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuGroup>
+            </>
+          )}
+          {removable && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={busy}
+                onClick={() => askRemoval([variant.at])}
+              >
+                <TrashIcon />
+                {removal}
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </span>
   );
 }
-

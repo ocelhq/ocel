@@ -6,12 +6,12 @@
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "jsx": "react-jsx",
-    "jsxImportSource": "preact",
     "strict": true,
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
     "types": [],
-    "noEmit": true
+    "noEmit": true,
+    "paths": { "@/*": ["./src/vars-ui/*"] }
   },
   "include": ["src/vars-ui/**/*"]
 }

@@ -22,6 +22,7 @@ import {
   removeSummary,
   revealable,
   saveSummary,
+  setForOptions,
   sizeLine,
   tallyLine,
   unfilledOwed,
@@ -70,7 +71,6 @@ const at = (key: string, folder = "", environment = ""): Address => ({
 });
 
 const lens = (over: Partial<Lens> = {}): Lens => ({
-  folder: "",
   environment: "",
   query: "",
   owedOnly: false,
@@ -220,29 +220,37 @@ describe("listingOf", () => {
   );
   const catalogue = catalogueOf(current, []);
 
-  it("lists folders and root keys at the root, keeping a scoped key as a pointer", () => {
+  it("lists root keys first, keeping a scoped key as a pointer, then one group per folder", () => {
     const listing = listingOf(current, catalogue, none, lens());
     expect(listing.flat).toBe(false);
-    expect(listing.folders).toEqual([
-      { folder: "/web", keys: 3, owed: 1 },
-      { folder: "/api", keys: 1, owed: 0 },
-    ]);
     expect(listing.keys.map((line) => [line.row.key, line.variant.state, line.inherits, line.overrides])).toEqual([
       ["A", "optional", null, ["qa"]],
       ["B", "forbidden", null, []],
       ["C", "required", null, []],
       ["S", "optional", null, []],
     ]);
+    expect(listing.groups.map((group) => [group.folder, group.keys, group.owed])).toEqual([
+      ["/web", 1, 1],
+      ["/api", 1, 0],
+    ]);
   });
 
-  it("lists a folder's keys with what they inherit from the root", () => {
-    const listing = listingOf(current, catalogue, none, lens({ folder: "/web" }));
-    expect(listing.folders).toEqual([]);
-    expect(listing.keys.map((line) => [line.row.key, line.variant.at.folder, line.inherits, line.variant.extra])).toEqual([
-      ["A", "/web", "root", true],
-      ["B", "/web", null, false],
-      ["C", "/web", "root", true],
+  it("lists in a group only the keys with a cell of their own there, never the ones that merely inherit", () => {
+    const listing = listingOf(current, catalogue, none, lens());
+    expect(listing.groups.map((group) => group.lines.map((line) => addressKey(line.variant.at)))).toEqual([
+      ["B /web "],
+      ["A /api "],
     ]);
+  });
+
+  it("lists an asked-for cell in its group as an extra that inherits the root", () => {
+    const asked = catalogueOf(current, [at("A", "/web")]);
+    const listing = listingOf(current, asked, none, lens());
+    expect(listing.groups[0]?.lines.map((line) => [line.row.key, line.inherits, line.variant.extra])).toEqual([
+      ["A", "root", true],
+      ["B", null, false],
+    ]);
+    expect(listing.groups[0]?.keys).toBe(2);
   });
 
   it("shows an environment's overrides, or what falls through to the base", () => {
@@ -253,19 +261,23 @@ describe("listingOf", () => {
       ["C", "qa", "base", false],
       ["S", "qa", "base", false],
     ]);
+    expect(listing.groups[1]?.lines.map((line) => [addressKey(line.variant.at), line.inherits])).toEqual([
+      ["A /api qa", "base"],
+    ]);
   });
 
   it("flattens across folders when searching", () => {
-    const listing = listingOf(current, catalogue, none, lens({ folder: "/api", query: " b " }));
+    const listing = listingOf(current, catalogue, none, lens({ query: " b " }));
     expect(listing.flat).toBe(true);
-    expect(listing.folders).toEqual([]);
+    expect(listing.groups).toEqual([]);
     expect(listing.keys.map((line) => addressKey(line.variant.at))).toEqual(["B /web "]);
   });
 
   it("flattens to the cells a deploy is owed, wherever they live", () => {
     const owed = owedSet({ deploy: "dpl_1", owed: [{ key: "C", folder: "" }, { key: "B", folder: "/web" }] });
-    const listing = listingOf(current, catalogue, owed, lens({ folder: "/api", owedOnly: true }));
+    const listing = listingOf(current, catalogue, owed, lens({ owedOnly: true }));
     expect(listing.flat).toBe(true);
+    expect(listing.groups).toEqual([]);
     expect(listing.keys.map((line) => [addressKey(line.variant.at), line.needed])).toEqual([
       ["B /web ", true],
       ["C  ", true],
@@ -276,6 +288,14 @@ describe("listingOf", () => {
     expect(overrideOptions(current, catalogue, at("A"))).toEqual(["staging"]);
     expect(overrideOptions(current, catalogueOf(current, [at("A", "", "staging")]), at("A"))).toEqual([]);
     expect(overrideOptions(current, catalogue, at("C", "/web"))).toEqual(["qa", "staging"]);
+  });
+
+  it("offers to set a root key in a folder that reads it and holds no cell yet", () => {
+    const rowOf = (key: string) => current.matrix.rows.find((row) => row.key === key)!;
+    expect(setForOptions(catalogue, rowOf("A"))).toEqual(["/web"]);
+    expect(setForOptions(catalogueOf(current, [at("A", "/web")]), rowOf("A"))).toEqual([]);
+    expect(setForOptions(catalogue, rowOf("B"))).toEqual([]);
+    expect(setForOptions(catalogue, rowOf("C"))).toEqual(["/web"]);
   });
 
   it("lists orphaned environments after the live ones", () => {

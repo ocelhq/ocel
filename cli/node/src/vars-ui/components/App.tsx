@@ -1,4 +1,28 @@
+import {
+  EyeIcon,
+  EyeSlashIcon,
+  FileTextIcon,
+  TrashIcon,
+  WarningIcon,
+  XIcon,
+} from "@phosphor-icons/react";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
+
 import { folderName, names, plural } from "../model";
+import { useValue } from "../signals";
 import {
   abandon,
   askRemoval,
@@ -29,69 +53,76 @@ import {
 import { Apps } from "./Apps";
 import { CopyPanel } from "./CopyPanel";
 import { Drawer } from "./Drawer";
-import { Icon, Sprite } from "./Icons";
 import { Masthead } from "./Masthead";
 import { Table } from "./Table";
 
 function DropNotice() {
-  const drop = dropped.value;
+  const drop = useValue(dropped);
   if (!drop) return null;
   const where = folderName(drop.folder);
   return (
-    <div class="notice" role="status">
-      <Icon name="file" />
-      <div class="notice-body">
+    <div
+      role="status"
+      data-slot="notice"
+      className="mb-4 flex items-start gap-3 border border-border bg-card px-4 py-3 text-sm"
+    >
+      <FileTextIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <div className="flex-1 space-y-1">
         <p>
-          <strong>{drop.name}</strong>:{" "}
+          <strong className="font-mono font-medium">{drop.name}</strong>:{" "}
           {drop.fills.length === 0
             ? `nothing to fill in ${where}.`
             : `${plural(drop.fills.length, "row")} filled in ${where}, unsaved until you save.`}
         </p>
         {drop.undeclared.length > 0 && (
-          <p>
-            Ignored {plural(drop.undeclared.length, "key")} this project does not
-            declare: <code>{names(drop.undeclared)}</code>. Keys come from{" "}
-            <code>defineEnv</code> in app code; this page cannot create one.
+          <p className="text-muted-foreground">
+            Ignored {plural(drop.undeclared.length, "key")} this project does not declare:{" "}
+            <code className="bg-chip px-1 text-xs">{names(drop.undeclared)}</code>. Keys come from{" "}
+            <code className="bg-chip px-1 text-xs">defineEnv</code> in app code; this page cannot
+            create one.
           </p>
         )}
         {drop.skipped.map((skip) => (
-          <p key={skip.key}>Skipped {skip.key}: {skip.reason}.</p>
+          <p className="text-muted-foreground" key={skip.key}>
+            Skipped {skip.key}: {skip.reason}.
+          </p>
         ))}
       </div>
-      <button
-        type="button"
-        class="iconbtn"
+      <Button
+        variant="ghost"
+        size="icon-xs"
         title="Dismiss"
         aria-label="dismiss this notice"
         onClick={dismissDrop}
       >
-        <Icon name="x" />
-      </button>
+        <XIcon />
+      </Button>
     </div>
   );
 }
 
 function Banner() {
-  const current = state.value;
+  const current = useValue(state);
+  const left = useValue(unfilled).length;
+  const only = useValue(owedOnly);
   const recovery = current?.recovery;
   if (!current || !recovery) return null;
-  const left = unfilled.value.length;
   return (
-    <div class="banner" role="status">
-      <Icon name="warning" />
-      <p>
-        Deploy <code>{recovery.deploy}</code> is waiting on{" "}
+    <div
+      role="status"
+      data-slot="banner"
+      className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm"
+    >
+      <WarningIcon className="size-4 shrink-0 text-destructive" />
+      <p className="flex-1 basis-96">
+        Deploy <code className="bg-chip px-1 text-xs">{recovery.deploy}</code> is waiting on{" "}
         {plural(recovery.owed.length, "cell")} it was refused.{" "}
         {left === 0
           ? "Every one now holds a value; save and resume below."
           : `${plural(left, "cell")} still ${left === 1 ? "needs" : "need"} a value.`}
       </p>
-      <label class="switch">
-        <input
-          type="checkbox"
-          checked={owedOnly.value}
-          onChange={(event) => showOwed(event.currentTarget.checked)}
-        />
+      <label className="inline-flex cursor-pointer items-center gap-2 text-xs">
+        <Checkbox checked={only} onCheckedChange={(on) => showOwed(on)} />
         Show only what the deploy needs
       </label>
     </div>
@@ -99,108 +130,132 @@ function Banner() {
 }
 
 function BulkBar() {
-  const picked = selected.value;
+  const picked = useValue(selected);
+  const known = useValue(variants);
+  const busy = useValue(saving);
   if (picked.size === 0) return null;
   const cells = [...picked]
-    .map((key) => variants.value.get(key))
+    .map((key) => known.get(key))
     .filter((v) => v !== undefined)
     .map((v) => v!.at);
   const removable = cells.filter((at) => {
-    const v = variants.value.get(`${at.key} ${at.folder} ${at.environment}`);
+    const v = known.get(`${at.key} ${at.folder} ${at.environment}`);
     return v !== undefined && v.set && !v.reference;
   });
   return (
-    <div class="bulk" role="toolbar" aria-label="selected rows">
-      <span class="bulk-count">{picked.size} selected</span>
-      <button type="button" class="btn btn-ghost btn-small" onClick={clearSelection}>
+    <div
+      role="toolbar"
+      aria-label="selected rows"
+      data-slot="bulk"
+      className="sticky bottom-0 z-20 flex flex-wrap items-center gap-2 border-t border-border bg-background px-6 py-2.5"
+    >
+      <span className="font-mono text-xs">{picked.size} selected</span>
+      <Button variant="ghost" size="xs" data-action="unselect" onClick={clearSelection}>
         Unselect all
-      </button>
-      <span class="bulk-gap" />
-      <button type="button" class="btn btn-small" onClick={() => void revealSelected()}>
-        <Icon name="eye" />
+      </Button>
+      <span className="flex-1" />
+      <Button variant="outline" size="xs" onClick={() => void revealSelected()}>
+        <EyeIcon />
         Reveal
-      </button>
-      <button type="button" class="btn btn-small" onClick={hideSelected}>
-        <Icon name="eyeOff" />
+      </Button>
+      <Button variant="outline" size="xs" onClick={hideSelected}>
+        <EyeSlashIcon />
         Hide
-      </button>
-      <button
-        type="button"
-        class="btn btn-small btn-danger"
-        disabled={removable.length === 0 || saving.value}
+      </Button>
+      <Button
+        variant="destructive"
+        size="xs"
+        data-action="remove"
+        disabled={removable.length === 0 || busy}
         onClick={() => askRemoval(removable)}
       >
-        <Icon name="trash" />
+        <TrashIcon />
         Remove {removable.length > 0 ? plural(removable.length, "value") : "values"}
-      </button>
+      </Button>
     </div>
   );
 }
 
 function Confirm() {
-  const asked = removing.value;
-  if (!asked) return null;
-  const busy = saving.value;
+  const asked = useValue(removing);
+  const busy = useValue(saving);
   return (
-    <div class="scrim" onPointerDown={(event) => event.target === event.currentTarget && cancelRemoval()}>
-      <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="remove-title">
-        <h2 id="remove-title">Remove {plural(asked.cells.length, "value")}?</h2>
-        <p class="muted">
-          The stored value goes away for {names(asked.cells.map((cell) => cell.at.key))}. History
-          keeps the versions; nothing else on this page is touched.
-        </p>
-        <div class="dialog-actions">
-          <button type="button" class="btn btn-danger" disabled={busy} onClick={() => void confirmRemoval()}>
-            <Icon name="trash" />
-            {busy ? "Removing…" : "Remove"}
-          </button>
-          <button type="button" class="btn" disabled={busy} onClick={cancelRemoval}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
+    <AlertDialog open={asked !== null} onOpenChange={(open) => !open && cancelRemoval()}>
+      {asked && (
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {plural(asked.cells.length, "value")}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The stored value goes away for {names(asked.cells.map((cell) => cell.at.key))}.
+              History keeps the versions; nothing else on this page is touched.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy} data-action="cancel-remove">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={busy}
+              data-action="confirm-remove"
+              onClick={() => void confirmRemoval()}
+            >
+              <TrashIcon />
+              {busy ? "Removing…" : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      )}
+    </AlertDialog>
   );
 }
 
 function Bar({ recovery }: { recovery: boolean }) {
-  const pending = dirty.value.length;
-  const busy = saving.value || finishing.value;
-  const said = [outcome.value?.text, finishError.value].filter(Boolean).join(" ");
-  if (!recovery && pending === 0 && said === "") return null;
-  const left = unfilled.value.length;
+  const pending = useValue(dirty).length;
+  const busySaving = useValue(saving);
+  const busyFinishing = useValue(finishing);
+  const said = useValue(outcome);
+  const failed = useValue(finishError);
+  const left = useValue(unfilled).length;
+  const busy = busySaving || busyFinishing;
+  const text = [said?.text, failed].filter(Boolean).join(" ");
+  if (!recovery && pending === 0 && text === "") return null;
+  const tone = said?.tone ?? (failed ? "owed" : undefined);
   return (
-    <footer class="bar" data-recovery={recovery}>
-      <div class="bar-actions">
+    <footer
+      data-slot="bar"
+      className="sticky bottom-0 z-20 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border bg-background px-6 py-3"
+    >
+      <div className="flex flex-1 flex-wrap items-center gap-3">
         {pending > 0 && (
           <>
-            <span class="bar-count">{plural(pending, "unsaved change")}</span>
-            <button
-              type="button"
-              class={recovery ? "btn" : "btn btn-primary"}
+            <span className="font-mono text-xs">{plural(pending, "unsaved change")}</span>
+            <Button
+              variant={recovery ? "outline" : "default"}
+              size="sm"
+              data-action="save"
               disabled={busy}
               onClick={() => void save()}
             >
-              {saving.value ? "Saving…" : "Save"}
-            </button>
-            <button type="button" class="btn btn-ghost" disabled={busy} onClick={discard}>
+              {busySaving ? "Saving…" : "Save"}
+            </Button>
+            <Button variant="ghost" size="sm" disabled={busy} onClick={discard}>
               Discard
-            </button>
+            </Button>
           </>
         )}
         <p
-          class="outcome"
           aria-live="polite"
-          data-tone={outcome.value?.tone ?? (finishError.value ? "owed" : undefined)}
+          className={cn("text-sm", tone === "owed" ? "text-destructive" : "text-muted-foreground")}
         >
-          {said}
+          {text}
         </p>
       </div>
       {recovery && (
-        <div class="finish">
-          <button
-            type="button"
-            class="btn btn-primary"
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            data-action="resume"
             disabled={busy || left > 0}
             title={
               left > 0
@@ -209,11 +264,17 @@ function Bar({ recovery }: { recovery: boolean }) {
             }
             onClick={() => void resume()}
           >
-            {finishing.value ? "Resuming…" : "Save and resume the deploy"}
-          </button>
-          <button type="button" class="btn btn-ghost btn-danger-text" disabled={busy} onClick={() => void abandon()}>
+            {busyFinishing ? "Resuming…" : "Save and resume the deploy"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            disabled={busy}
+            onClick={() => void abandon()}
+          >
             Abandon the deploy
-          </button>
+          </Button>
         </div>
       )}
     </footer>
@@ -221,18 +282,22 @@ function Bar({ recovery }: { recovery: boolean }) {
 }
 
 export function App() {
-  if (farewell.value !== null) {
-    return <p class="farewell">{farewell.value}</p>;
+  const goodbye = useValue(farewell);
+  const current = useValue(state);
+  if (goodbye !== null) {
+    return <p className="p-12 font-mono text-sm text-muted-foreground">{goodbye}</p>;
   }
-  const current = state.value;
   if (!current) {
-    return <p class="loading">Reading this project’s variables…</p>;
+    return (
+      <p className="p-12 font-mono text-sm text-muted-foreground">
+        Reading this project’s variables…
+      </p>
+    );
   }
   const recovery = current.recovery !== undefined;
   return (
-    <div class="frame">
-      <Sprite />
-      <div class="sheet">
+    <div className="flex min-h-screen flex-col">
+      <div className="mx-auto w-full max-w-[92rem] flex-1 px-6 pt-6 pb-24">
         <Masthead current={current} />
         <Banner />
         <Apps current={current} />

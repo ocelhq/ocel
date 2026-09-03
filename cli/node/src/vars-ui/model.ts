@@ -257,16 +257,9 @@ export function environmentsOf(current: State): Environment[] {
 }
 
 export interface Lens {
-  folder: string;
   environment: string;
   query: string;
   owedOnly: boolean;
-}
-
-export interface FolderLine {
-  folder: string;
-  keys: number;
-  owed: number;
 }
 
 export type Inherits = "root" | "base" | null;
@@ -280,10 +273,17 @@ export interface KeyLine {
   needed: boolean;
 }
 
+export interface Group {
+  folder: string;
+  keys: number;
+  owed: number;
+  lines: KeyLine[];
+}
+
 export interface Listing {
   flat: boolean;
-  folders: FolderLine[];
   keys: KeyLine[];
+  groups: Group[];
 }
 
 function lineOf(
@@ -351,29 +351,34 @@ export function listingOf(
       }
       continue;
     }
-    const cell = cellOf(row, lens.folder);
-    if (!cell) continue;
-    if (listed(cell)) {
-      keys.push(lineOf(catalogue, owed, row, cell, lens.environment));
-    } else if (lens.folder === "") {
-      keys.push(lineOf(catalogue, owed, row, cell, ""));
-    }
+    const root = cellOf(row, "") ?? forbiddenRoot;
+    keys.push(lineOf(catalogue, owed, row, root, listed(root) ? lens.environment : ""));
   }
-  const folders: FolderLine[] = [];
-  if (!flat && lens.folder === "") {
+  const groups: Group[] = [];
+  if (!flat) {
     for (const folder of current.matrix.columns) {
       if (folder === "") continue;
-      const cells = current.matrix.rows
-        .map((row) => cellOf(row, folder))
-        .filter((cell): cell is MatrixCell => cell !== undefined && listed(cell));
-      folders.push({
-        folder,
-        keys: cells.length,
-        owed: cells.filter(owedCell).length,
-      });
+      const lines: KeyLine[] = [];
+      let owing = 0;
+      for (const row of current.matrix.rows) {
+        const cell = cellOf(row, folder);
+        if (!cell || !listed(cell)) continue;
+        if (!catalogue.variants.has(addressKey({ key: row.key, folder, environment: "" }))) continue;
+        lines.push(lineOf(catalogue, owed, row, cell, lens.environment));
+        if (owedCell(cell)) owing += 1;
+      }
+      groups.push({ folder, keys: lines.length, owed: owing, lines });
     }
   }
-  return { flat, folders, keys };
+  return { flat, keys, groups };
+}
+
+export function setForOptions(catalogue: Catalogue, row: MatrixRow): string[] {
+  return readable(row).filter(
+    (folder) =>
+      folder !== "" &&
+      !catalogue.variants.has(addressKey({ key: row.key, folder, environment: "" })),
+  );
 }
 
 export function overrideOptions(

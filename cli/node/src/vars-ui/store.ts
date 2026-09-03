@@ -1,4 +1,4 @@
-import { computed, signal } from "@preact/signals";
+import { computed, signal } from "./signals";
 
 import { api, ApiError, hold, query } from "./api";
 import { parseDotenv } from "./dotenv";
@@ -37,12 +37,14 @@ export const hoveredApp = signal<AppResolution | null>(null);
 export const saving = signal(false);
 export const farewell = signal<string | null>(null);
 
-export const folder = signal("");
 export const environment = signal("");
 export const search = signal("");
 export const owedOnly = signal(false);
 export const selected = signal<ReadonlySet<string>>(new Set());
 export const extras = signal<readonly Address[]>([]);
+export const expanded = signal<ReadonlySet<string>>(new Set());
+export const spotlight = signal<string | null>(null);
+export const focusing = signal<string | null>(null);
 
 export const drafts = signal<ReadonlyMap<string, string>>(new Map());
 export const baselines = signal<ReadonlyMap<string, string>>(new Map());
@@ -50,7 +52,7 @@ export const revealErrors = signal<ReadonlyMap<string, string>>(new Map());
 export const problems = signal<ReadonlyMap<string, Problem>>(new Map());
 export const outcome = signal<{ text: string; tone?: "owed" } | null>(null);
 
-export const dragging = signal(false);
+export const dragTarget = signal<string | null>(null);
 export const dropped = signal<(DropOutcome & { name: string }) | null>(null);
 
 export interface Removal {
@@ -102,16 +104,22 @@ export const owed = computed(() => owedSet(state.value?.recovery));
 
 export const listing = computed(() =>
   listingOf(state.value ?? emptyState, catalogue.value, owed.value, {
-    folder: folder.value,
     environment: environment.value,
     query: search.value,
     owedOnly: owedOnly.value,
   }),
 );
 
-export const visible = computed(() =>
-  listing.value.keys.filter((line) => editable(line.variant)).map((line) => line.variant),
-);
+export const visible = computed(() => {
+  const shown = listing.value;
+  const lines = [
+    ...shown.keys,
+    ...shown.groups
+      .filter((group) => expanded.value.has(group.folder))
+      .flatMap((group) => group.lines),
+  ];
+  return lines.filter((line) => editable(line.variant)).map((line) => line.variant);
+});
 
 export const unfilled = computed(() =>
   unfilledOwed(catalogue.value, owed.value, drafts.value, baselines.value),
@@ -129,6 +137,9 @@ export async function load(): Promise<void> {
   }
   void attend();
   owedOnly.value = unfilled.value.length > 0;
+  expanded.value = new Set(
+    listing.value.groups.filter((group) => group.owed > 0).map((group) => group.folder),
+  );
 }
 
 async function attend(): Promise<void> {
@@ -157,11 +168,30 @@ async function refresh(): Promise<void> {
   }
 }
 
-export function go(target: string): void {
-  folder.value = target;
+export function toggleGroup(folder: string): void {
+  const next = new Set(expanded.value);
+  if (!next.delete(folder)) next.add(folder);
+  expanded.value = next;
+}
+
+function expand(folder: string): void {
+  if (folder === "" || expanded.value.has(folder)) return;
+  expanded.value = new Set([...expanded.value, folder]);
+}
+
+export function revealGroup(folder: string): void {
   search.value = "";
   owedOnly.value = false;
-  selected.value = new Set();
+  expand(folder);
+  spotlight.value = folder;
+}
+
+export function spotlighted(): void {
+  spotlight.value = null;
+}
+
+export function focused(): void {
+  focusing.value = null;
 }
 
 export function pickEnvironment(name: string): void {
@@ -201,11 +231,18 @@ function remember(at: Address): void {
 
 export function addOverride(at: Address): void {
   remember(at);
-  folder.value = at.folder;
   environment.value = at.environment;
   search.value = "";
   owedOnly.value = false;
   selected.value = new Set();
+  expand(at.folder);
+  focusing.value = addressKey(at);
+}
+
+export function setFor(at: Address): void {
+  remember(at);
+  expand(at.folder);
+  focusing.value = addressKey(at);
 }
 
 export function dismiss(at: Address): void {
@@ -429,11 +466,12 @@ export function applyDrop(name: string, text: string, into: string): void {
   extras.value = added;
   drafts.value = next;
   dropped.value = { ...out, name };
-  dragging.value = false;
+  dragTarget.value = null;
+  if (out.fills.length > 0) expand(into);
 }
 
-export function importFile(file: File): void {
-  void file.text().then((text) => applyDrop(file.name, text, folder.value));
+export function importFile(file: File, into: string): void {
+  void file.text().then((text) => applyDrop(file.name, text, into));
 }
 
 export function dismissDrop(): void {

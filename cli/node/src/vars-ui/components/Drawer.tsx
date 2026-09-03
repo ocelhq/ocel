@@ -1,4 +1,19 @@
-import { useEffect, useRef } from "preact/hooks";
+import {
+  AppWindowIcon,
+  FolderIcon,
+  HouseIcon,
+  LinkIcon,
+  StackIcon,
+  WarningIcon,
+} from "@phosphor-icons/react";
+
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 import {
   addressKey,
@@ -12,123 +27,81 @@ import {
   type MatrixRow,
   type Variant,
 } from "../model";
-import {
-  catalogue,
-  closeDrawer,
-  drawer,
-  history,
-  historyError,
-  problems,
-  state,
-} from "../store";
-import { Icon } from "./Icons";
+import { useValue } from "../signals";
+import { catalogue, closeDrawer, drawer, history, historyError, problems, state } from "../store";
+import { Chip, SectionLabel } from "./Chip";
 
 export function Drawer() {
-  const at = drawer.value;
-  const panel = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (!at) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeDrawer();
-    };
-    const onPointer = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (panel.current?.contains(target)) return;
-      if (target.closest("[aria-haspopup='dialog'],[role='menu']")) return;
-      closeDrawer();
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("pointerdown", onPointer);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("pointerdown", onPointer);
-    };
-  }, [at]);
-
-  useEffect(() => {
-    panel.current?.focus();
-  }, [at]);
-
-  if (!at) return null;
-  const row = catalogue.value.rows.find((candidate) => candidate.key === at.key);
-  const variant = variantAt(catalogue.value, at);
-  if (!row || !variant) return null;
-  const problem = problems.value.get(addressKey(at));
-
+  const at = useValue(drawer);
+  const known = useValue(catalogue);
+  const trouble = useValue(problems);
+  const row = at && known.rows.find((candidate) => candidate.key === at.key);
+  const variant = at && variantAt(known, at);
+  const problem = at && trouble.get(addressKey(at));
   return (
-    <aside
-      class="panel"
-      role="dialog"
-      aria-labelledby="drawer-title"
-      tabIndex={-1}
-      ref={panel}
-    >
-      <div class="panel-head">
-        <div>
-          <h2 id="drawer-title">{row.key}</h2>
-          <Where variant={variant} />
-        </div>
-        <button
-          type="button"
-          class="iconbtn"
-          title="Close"
-          aria-label="close the details"
-          onClick={closeDrawer}
-        >
-          <Icon name="x" />
-        </button>
-      </div>
-      <div class="panel-body">
-        <Facts row={row} variant={variant} />
-        {variant.problem && (
-          <p class="problem">The value here fails its schema: {variant.problem}</p>
-        )}
-        {problem && (
-          <p class="problem">
-            {problem.kind === "conflict"
-              ? `This value changed since the page read it. Nothing was written here; decide again against what is there now: ${problem.message}`
-              : problem.message}
-          </p>
-        )}
-        <p class="eyebrow">History</p>
-        <History />
-      </div>
-    </aside>
+    <Sheet open={at !== null} onOpenChange={(open) => !open && closeDrawer()}>
+      {row && variant && (
+        <SheetContent data-slot="drawer" className="gap-0 sm:max-w-md">
+          <SheetHeader className="border-b border-border p-6">
+            <SheetTitle className="font-mono text-base normal-case tracking-tight">
+              {row.key}
+            </SheetTitle>
+            <SheetDescription className="sr-only">Details and history of {row.key}</SheetDescription>
+            <Where variant={variant} />
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto p-6 text-sm">
+            <Facts row={row} variant={variant} />
+            {variant.problem && (
+              <p className="mt-4 text-destructive">
+                The value here fails its schema: {variant.problem}
+              </p>
+            )}
+            {problem && (
+              <p className="mt-4 text-destructive">
+                {problem.kind === "conflict"
+                  ? `This value changed since the page read it. Nothing was written here; decide again against what is there now: ${problem.message}`
+                  : problem.message}
+              </p>
+            )}
+            <SectionLabel className="mt-6">History</SectionLabel>
+            <History />
+          </div>
+        </SheetContent>
+      )}
+    </Sheet>
   );
 }
 
 function Where({ variant }: { variant: Variant }) {
   const { folder, environment } = variant.at;
   return (
-    <div class="chips">
-      <span class="chip">
-        <Icon name={folder === "" ? "home" : "folder"} />
+    <div className="flex flex-wrap gap-1.5">
+      <Chip>
+        {folder === "" ? <HouseIcon /> : <FolderIcon />}
         {folderName(folder)}
-      </span>
-      <span class="chip chip-env">
-        <Icon name="environment" />
+      </Chip>
+      <Chip>
+        <StackIcon />
         {environment === "" ? "base" : environment}
-      </span>
+      </Chip>
       {variant.orphaned && (
-        <span class="chip" data-tone="owed">
-          <Icon name="warning" />
+        <Chip tone="owed">
+          <WarningIcon />
           orphaned
-        </span>
+        </Chip>
       )}
     </div>
   );
 }
 
 function Facts({ row, variant }: { row: MatrixRow; variant: Variant }) {
-  const apps = state.value?.matrix.apps ?? [];
+  const apps = useValue(state)?.matrix.apps ?? [];
   const readers = readersOf(row, apps);
   const scope = row.scope ?? [];
   return (
-    <dl class="facts">
+    <dl className="grid grid-cols-[6rem_1fr] gap-x-4 gap-y-3 [&_dt]:font-mono [&_dt]:text-[11px] [&_dt]:tracking-[0.1em] [&_dt]:text-dim [&_dt]:uppercase">
       <dt>Class</dt>
-      <dd>{row.class}</dd>
+      <dd className="font-mono text-xs">{row.class}</dd>
       <dt>Scope</dt>
       <dd>
         {scope.length === 0
@@ -136,24 +109,20 @@ function Facts({ row, variant }: { row: MatrixRow; variant: Variant }) {
           : `only ${names(scope)}`}
       </dd>
       <dt>Here</dt>
-      <dd>
-        {variant.set
-          ? `set · v${variant.version}`
-          : variant.owed
-            ? "required, not set"
-            : "not set"}
+      <dd className="font-mono text-xs">
+        {variant.set ? `set · v${variant.version}` : variant.owed ? "required, not set" : "not set"}
       </dd>
       {variant.reference && (
         <>
           <dt>Source</dt>
-          <dd>
-            <span class="chip chip-ink">
-              <Icon name="link" />
+          <dd className="space-y-2">
+            <Chip tone="ink">
+              <LinkIcon />
               {referenceLine(variant.reference)}
-            </span>
-            <p class="terminal">
+            </Chip>
+            <p className="text-xs text-muted-foreground">
               Live: edits there change what this project reads. Change the link with{" "}
-              <code>ocel env ref {variant.at.key} …</code> in the terminal.
+              <code className="bg-chip px-1">ocel env ref {variant.at.key} …</code> in the terminal.
             </p>
           </dd>
         </>
@@ -161,18 +130,14 @@ function Facts({ row, variant }: { row: MatrixRow; variant: Variant }) {
       <dt>Read by</dt>
       <dd>
         {readers.length === 0 ? (
-          <span class="muted">no app binds a folder that reads it</span>
+          <span className="text-muted-foreground">no app binds a folder that reads it</span>
         ) : (
-          <span class="chips">
+          <span className="flex flex-wrap gap-1.5">
             {readers.map((app) => (
-              <span
-                class="chip"
-                key={app.name}
-                title={`${app.name} reads ${folderName(app.folder)}, then root`}
-              >
-                <Icon name="app" />
+              <Chip key={app.name} title={`${app.name} reads ${folderName(app.folder)}, then root`}>
+                <AppWindowIcon />
                 {app.name}
-              </span>
+              </Chip>
             ))}
           </span>
         )}
@@ -182,21 +147,20 @@ function Facts({ row, variant }: { row: MatrixRow; variant: Variant }) {
 }
 
 function History() {
-  if (historyError.value) {
-    return <p class="problem">Could not read the history: {historyError.value}</p>;
-  }
-  const versions = history.value;
-  if (versions === null) return <p class="muted">Reading…</p>;
+  const failed = useValue(historyError);
+  const versions = useValue(history);
+  if (failed) return <p className="text-destructive">Could not read the history: {failed}</p>;
+  if (versions === null) return <p className="text-muted-foreground">Reading…</p>;
   if (versions.length === 0) {
-    return <p class="muted">No versions stored yet; nothing has been saved here.</p>;
+    return <p className="text-muted-foreground">No versions stored yet; nothing has been saved here.</p>;
   }
   return (
-    <ul class="history">
+    <ul className="divide-y divide-border border-y border-border font-mono text-xs">
       {versions.map((version) => (
-        <li key={version.version}>
-          <span class="version">v{version.version}</span>
-          <span>{whenLine(version.createdAt)}</span>
-          <span>{sizeLine(version.size)}</span>
+        <li key={version.version} className="grid grid-cols-[3rem_1fr_auto] gap-3 py-2">
+          <span className="font-medium">v{version.version}</span>
+          <span className="text-muted-foreground">{whenLine(version.createdAt)}</span>
+          <span className="text-dim">{sizeLine(version.size)}</span>
         </li>
       ))}
     </ul>
