@@ -21,6 +21,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -413,24 +414,26 @@ func (r *deployRun) appNames() []string {
 
 func (r *deployRun) hostnames() []string {
 	tier := environmentTier(r.plan.Class)
-	var hosts []string
 	seen := map[string]bool{}
-	add := func(declared []*contractv1.TierDomains) {
-		for _, domains := range declared {
-			if domains.GetTier() != tier {
-				continue
-			}
-			for _, host := range domains.GetHostnames() {
-				if !seen[host] {
-					seen[host] = true
-					hosts = append(hosts, host)
-				}
+	hosts := tierHostnames(r.manifest.GetDomains(), tier, seen)
+	for _, app := range r.manifest.GetApps() {
+		hosts = append(hosts, tierHostnames(app.GetDomains(), tier, seen)...)
+	}
+	return hosts
+}
+
+func tierHostnames(declared []*contractv1.TierDomains, tier environmentv1.Tier, seen map[string]bool) []string {
+	var hosts []string
+	for _, domains := range declared {
+		if domains.GetTier() != tier {
+			continue
+		}
+		for _, host := range domains.GetHostnames() {
+			if !seen[host] {
+				seen[host] = true
+				hosts = append(hosts, host)
 			}
 		}
-	}
-	add(r.manifest.GetDomains())
-	for _, app := range r.manifest.GetApps() {
-		add(app.GetDomains())
 	}
 	return hosts
 }
@@ -442,11 +445,31 @@ func (r *deployRun) previewSite() edge.PreviewSite {
 	return edge.ProjectPreview(r.previewOn)
 }
 
-func (r *deployRun) servedHostnames() []string {
-	if r.plan.Class != ClassPreview {
-		return r.hostnames()
+func (r *deployRun) servedHostnames() [][]string {
+	served := make([][]string, len(r.plan.Apps))
+	if r.plan.Class == ClassPreview {
+		site, names := r.previewSite(), r.appNames()
+		for slot := range served {
+			app := ""
+			if len(names) > 1 {
+				app = names[slot]
+			}
+			if host := site.Host(r.plan.Pointer, app); host != "" {
+				served[slot] = []string{host}
+			}
+		}
+		return served
 	}
-	return r.previewSite().Hosts(r.plan.Pointer, r.appNames())
+	tier := environmentTier(r.plan.Class)
+	seen := map[string]bool{}
+	project := tierHostnames(r.manifest.GetDomains(), tier, seen)
+	for slot, entry := range r.plan.Apps {
+		if slot == 0 {
+			served[slot] = project
+		}
+		served[slot] = append(served[slot], tierHostnames(entry.Manifest.GetDomains(), tier, seen)...)
+	}
+	return served
 }
 
 func (r *deployRun) checkpoint(ctx context.Context) error {
@@ -1128,11 +1151,16 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 			})
 		}
 	}
-	for _, host := range r.servedHostnames() {
-		result.AppUrls = append(result.AppUrls, "https://"+host)
+	for slot, hosts := range r.servedHostnames() {
+		for _, host := range hosts {
+			r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, "https://"+host)
+		}
 	}
 	if r.withheld != "" {
-		result.AppUrls, result.UrlNote = nil, r.withheld
+		for _, outcome := range r.outcomes {
+			outcome.Urls = nil
+		}
+		result.UrlNote = r.withheld
 	}
 	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: result}}, nil
 }

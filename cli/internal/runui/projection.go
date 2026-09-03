@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/fatih/color"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -16,6 +17,7 @@ import (
 
 const (
 	blockIndent    = "  "
+	appURLGutter   = "  "
 	maxOrphanLines = 4096
 )
 
@@ -531,12 +533,9 @@ func (p *projector) result(m protoreflect.Message) []string {
 	if ev.GetSuccess() {
 		out := p.strand(warnMark, "unfinished")
 		out = append(out, "", p.style(color.FgGreen, color.Bold).Sprintf("%s %s in %s", okMark, headlineOr(ev, "Done"), formatDuration(d)))
-		switch {
-		case len(ev.GetAppUrls()) > 0:
-			out = append(out, "")
-			for _, u := range ev.GetAppUrls() {
-				out = append(out, blockIndent+p.style(color.FgCyan).Sprint(u))
-			}
+		switch urls := p.appURLBlock(ev.GetApps()); {
+		case len(urls) > 0:
+			out = append(out, append([]string{""}, urls...)...)
 		case ev.GetUrlNote() != "":
 			out = append(out, "", blockIndent+ev.GetUrlNote())
 		}
@@ -550,6 +549,54 @@ func (p *projector) result(m protoreflect.Message) []string {
 	out = append(out, "", failMark+" "+headlineOr(ev, "Failed"))
 	out = append(out, detailLines(ev.GetDetail())...)
 	return append(out, p.logPointer("Full log", ev.GetLogPath())...)
+}
+
+func (p *projector) appURLBlock(apps []*progressv1.AppResult) []string {
+	var served int
+	for _, app := range apps {
+		if len(app.GetUrls()) > 0 {
+			served++
+		}
+	}
+	if served == 0 {
+		return nil
+	}
+	if len(apps) < 2 {
+		var out []string
+		for _, u := range apps[0].GetUrls() {
+			out = append(out, blockIndent+p.style(color.FgCyan).Sprint(u))
+		}
+		return out
+	}
+	var width int
+	for _, app := range apps {
+		width = max(width, utf8.RuneCountInString(app.GetApp()))
+	}
+	var out []string
+	for _, app := range apps {
+		label := blockIndent + app.GetApp() + strings.Repeat(" ", width-utf8.RuneCountInString(app.GetApp())) + appURLGutter
+		gutter := blockIndent + strings.Repeat(" ", width) + appURLGutter
+		urls := app.GetUrls()
+		if len(urls) == 0 {
+			out = append(out, label+p.faint(unservedApp(app)))
+			continue
+		}
+		for at, u := range urls {
+			lead := label
+			if at > 0 {
+				lead = gutter
+			}
+			out = append(out, lead+p.style(color.FgCyan).Sprint(u))
+		}
+	}
+	return out
+}
+
+func unservedApp(app *progressv1.AppResult) string {
+	if app.GetOutcome() == progressv1.AppOutcome_APP_OUTCOME_FAILED {
+		return "failed"
+	}
+	return "no public url"
 }
 
 func headlineOr(ev *streamv1.RunResultEvent, fallback string) string {

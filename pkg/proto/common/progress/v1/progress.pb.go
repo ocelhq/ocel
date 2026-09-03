@@ -1020,7 +1020,8 @@ type AppResult struct {
 	App     string                 `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
 	Outcome AppOutcome             `protobuf:"varint,2,opt,name=outcome,proto3,enum=common.progress.v1.AppOutcome" json:"outcome,omitempty"`
 	// Set only on APP_OUTCOME_FAILED.
-	Error         string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	Error         string   `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	Urls          []string `protobuf:"bytes,4,rep,name=urls,proto3" json:"urls,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1076,13 +1077,19 @@ func (x *AppResult) GetError() string {
 	return ""
 }
 
+func (x *AppResult) GetUrls() []string {
+	if x != nil {
+		return x.Urls
+	}
+	return nil
+}
+
 type ResultEvent struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Success     bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Error       string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	Links       []*v11.Link            `protobuf:"bytes,3,rep,name=links,proto3" json:"links,omitempty"`
 	Functions   []*FunctionOutput      `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
-	AppUrls     []string               `protobuf:"bytes,5,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
 	PromotionId string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	FlipBound   *FlipBound             `protobuf:"bytes,7,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
 	UrlNote     string                 `protobuf:"bytes,8,opt,name=url_note,json=urlNote,proto3" json:"url_note,omitempty"`
@@ -1149,13 +1156,6 @@ func (x *ResultEvent) GetLinks() []*v11.Link {
 func (x *ResultEvent) GetFunctions() []*FunctionOutput {
 	if x != nil {
 		return x.Functions
-	}
-	return nil
-}
-
-func (x *ResultEvent) GetAppUrls() []string {
-	if x != nil {
-		return x.AppUrls
 	}
 	return nil
 }
@@ -1359,17 +1359,17 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x05notes\x18\x03 \x03(\tR\x05notes\";\n" +
 	"\rDegradedEvent\x12\x12\n" +
 	"\x04need\x18\x01 \x01(\tR\x04need\x12\x16\n" +
-	"\x06detail\x18\x02 \x01(\tR\x06detail\"m\n" +
+	"\x06detail\x18\x02 \x01(\tR\x06detail\"\x81\x01\n" +
 	"\tAppResult\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\x90\x03\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\x12\x12\n" +
+	"\x04urls\x18\x04 \x03(\tR\x04urls\"\xf5\x02\n" +
 	"\vResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12+\n" +
 	"\x05links\x18\x03 \x03(\v2\x15.common.links.v1.LinkR\x05links\x12@\n" +
-	"\tfunctions\x18\x04 \x03(\v2\".common.progress.v1.FunctionOutputR\tfunctions\x12\x19\n" +
-	"\bapp_urls\x18\x05 \x03(\tR\aappUrls\x12!\n" +
+	"\tfunctions\x18\x04 \x03(\v2\".common.progress.v1.FunctionOutputR\tfunctions\x12!\n" +
 	"\fpromotion_id\x18\x06 \x01(\tR\vpromotionId\x12<\n" +
 	"\n" +
 	"flip_bound\x18\a \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x12\x19\n" +

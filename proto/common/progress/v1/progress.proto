@@ -157,6 +157,8 @@ message AppResult {
 
   // Set only on APP_OUTCOME_FAILED.
   string error = 3;
+
+  repeated string urls = 4;
 }
 
 message ResultEvent {
@@ -166,8 +168,6 @@ message ResultEvent {
   repeated common.links.v1.Link links = 3;
 
   repeated FunctionOutput functions = 4;
-
-  repeated string app_urls = 5;
 
   string promotion_id = 6;
 

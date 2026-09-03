@@ -51,8 +51,8 @@ func TestDeployResult(t *testing.T) {
 		if got.Tag != "v9" {
 			t.Errorf("tag = %q, want %q", got.Tag, "v9")
 		}
-		if len(got.AppURLs) != 1 || got.AppURLs[0] != clitest.FakeAppURL {
-			t.Errorf("appUrls = %v, want [%s]", got.AppURLs, clitest.FakeAppURL)
+		if len(got.Apps) == 0 || len(got.Apps[0].URLs) != 1 || got.Apps[0].URLs[0] != clitest.FakeAppURL {
+			t.Errorf("apps = %+v, want the first app to carry [%s]", got.Apps, clitest.FakeAppURL)
 		}
 		if len(got.Apps) != 1 || got.Apps[0].Name != "api" || got.Apps[0].BuildID != "bld_api_1" {
 			t.Errorf("apps = %+v, want one api app with build id bld_api_1", got.Apps)
@@ -86,8 +86,13 @@ func TestDeployResult(t *testing.T) {
 	t.Run("a successful preview up records the named preview", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
-		clitest.StubBuild(&deps, nil)
+		clitest.StubBuild(&deps, []manifestbuilder.Function{{
+			Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js",
+			ArtifactPath: "output/api", Framework: "express", App: "api",
+		}})
 		root, _ := clitest.SetUpDeployFixture(t)
+		addAppToFixtureConfig(t, root)
+		writeServeDescriptor(t, root, "api", "bld_api_1")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
@@ -102,8 +107,8 @@ func TestDeployResult(t *testing.T) {
 		if got.PromotionID != clitest.FakePromotionID {
 			t.Errorf("promotionId = %q, want the provider's %q", got.PromotionID, clitest.FakePromotionID)
 		}
-		if len(got.AppURLs) != 1 || got.AppURLs[0] != clitest.FakeAppURL {
-			t.Errorf("appUrls = %v, want [%s]", got.AppURLs, clitest.FakeAppURL)
+		if len(got.Apps) == 0 || len(got.Apps[0].URLs) != 1 || got.Apps[0].URLs[0] != clitest.FakeAppURL {
+			t.Errorf("apps = %+v, want the first app to carry [%s]", got.Apps, clitest.FakeAppURL)
 		}
 	})
 }

@@ -23,7 +23,7 @@ func TestTheProviderResultIsNotProjectedAtTheHuman(t *testing.T) {
 	got := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 		Success:     true,
 		PromotionId: "prm_1",
-		AppUrls:     []string{"https://app.example.com"},
+		Apps:        []*progressv1.AppResult{{App: "web", Urls: []string{"https://app.example.com"}}},
 		Functions:   []*progressv1.FunctionOutput{{LogicalName: "server", Url: "https://fn.example.com"}},
 	}}}))
 
@@ -40,7 +40,7 @@ func TestTheSuccessResultIsTheURLsColoured(t *testing.T) {
 		Success:    true,
 		Headline:   "Deployed shop to production",
 		DurationMs: 1000,
-		AppUrls:    []string{"https://shop.example"},
+		Apps:       []*progressv1.AppResult{{App: "web", Urls: []string{"https://shop.example"}}},
 		LogPath:    "run.log",
 	}}}), "\n")
 
@@ -52,6 +52,61 @@ func TestTheSuccessResultIsTheURLsColoured(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("projection =\n%q\nwant it to carry %q", got, want)
 		}
+	}
+}
+
+func projectedResult(t *testing.T, apps ...*progressv1.AppResult) []string {
+	t.Helper()
+	p := newProjector(Presentation{Format: FormatHuman, TTY: true, Color: true, Width: defaultWidth})
+	return p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
+		Success:  true,
+		Headline: "Deployed",
+		Apps:     apps,
+	}}})
+}
+
+func TestTheSuccessResultLabelsEveryAppOnceTheProjectCarriesMoreThanOne(t *testing.T) {
+	t.Parallel()
+
+	got := projectedResult(t,
+		&progressv1.AppResult{App: "web", Urls: []string{"https://shop.example"}},
+		&progressv1.AppResult{App: "admin", Urls: []string{"https://admin.shop.example"}},
+	)
+
+	want := []string{
+		blockIndent + "web  " + "  " + "\x1b[36mhttps://shop.example\x1b[0m",
+		blockIndent + "admin" + "  " + "\x1b[36mhttps://admin.shop.example\x1b[0m",
+	}
+	if !slices.Contains(got, want[0]) || !slices.Contains(got, want[1]) {
+		t.Errorf("projection =\n%q\nwant it to carry %q", got, want)
+	}
+}
+
+func TestTheSuccessResultIndentsAnAppsSecondURLUnderTheFirst(t *testing.T) {
+	t.Parallel()
+
+	got := projectedResult(t,
+		&progressv1.AppResult{App: "web", Urls: []string{"https://shop.example", "https://www.shop.example"}},
+		&progressv1.AppResult{App: "admin", Urls: []string{"https://admin.shop.example"}},
+	)
+
+	want := blockIndent + "     " + "  " + "\x1b[36mhttps://www.shop.example\x1b[0m"
+	if !slices.Contains(got, want) {
+		t.Errorf("projection =\n%q\nwant it to carry %q", got, want)
+	}
+}
+
+func TestTheSuccessResultSaysSoWhenAnAppAnswersNowhere(t *testing.T) {
+	t.Parallel()
+
+	got := projectedResult(t,
+		&progressv1.AppResult{App: "web", Urls: []string{"https://shop.example"}},
+		&progressv1.AppResult{App: "admin"},
+	)
+
+	want := blockIndent + "admin" + "  " + "\x1b[2mno public url\x1b[22m"
+	if !slices.Contains(got, want) {
+		t.Errorf("projection =\n%q\nwant it to carry %q", got, want)
 	}
 }
 

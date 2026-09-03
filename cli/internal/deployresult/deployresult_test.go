@@ -22,8 +22,7 @@ func TestWrite(t *testing.T) {
 			Environment: Environment{Class: "preview", Identity: "e2e-42"},
 			PromotionID: "dep_abc",
 			Tag:         "v1",
-			AppURLs:     []string{"https://app.example.com"},
-			Apps:        []App{{Name: "web", BuildID: "bld_1", DeploymentID: "3f7c1b9a5e2d4c8f"}},
+			Apps:        []App{{Name: "web", BuildID: "bld_1", DeploymentID: "3f7c1b9a5e2d4c8f", URLs: []string{"https://app.example.com"}}},
 			DeployedAt:  time.Date(2026, 7, 25, 10, 30, 0, 0, time.UTC),
 		})
 		if err != nil {
@@ -45,8 +44,7 @@ func TestWrite(t *testing.T) {
 			"environment":   map[string]any{"class": "preview", "identity": "e2e-42"},
 			"promotionId":   "dep_abc",
 			"tag":           "v1",
-			"appUrls":       []any{"https://app.example.com"},
-			"apps":          []any{map[string]any{"name": "web", "buildId": "bld_1", "deploymentId": "3f7c1b9a5e2d4c8f"}},
+			"apps":          []any{map[string]any{"name": "web", "buildId": "bld_1", "deploymentId": "3f7c1b9a5e2d4c8f", "urls": []any{"https://app.example.com"}}},
 			"deployedAt":    "2026-07-25T10:30:00Z",
 		}
 		for key, wantVal := range want {

@@ -9,7 +9,7 @@ import (
 type deployOutcome struct {
 	links       []*linksv1.Link
 	functions   []*progressv1.FunctionOutput
-	appURLs     []string
+	apps        []*progressv1.AppResult
 	urlNote     string
 	promotionID string
 	flip        runui.Flip
@@ -24,7 +24,7 @@ func (o *deployOutcome) collect(ui *runui.Session) func(*progressv1.OperationEve
 		}
 		o.links = res.GetLinks()
 		o.functions = res.GetFunctions()
-		o.appURLs = res.GetAppUrls()
+		o.apps = res.GetApps()
 		o.urlNote = res.GetUrlNote()
 		o.promotionID = res.GetPromotionId()
 		o.flip = runui.FlipFor(res.GetFlipBound())

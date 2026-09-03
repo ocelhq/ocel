@@ -78,8 +78,6 @@ message RunResultEvent {
 
   string headline = 5;
 
-  repeated string app_urls = 6;
-
   string url_note = 7;
 
   common.progress.v1.FlipBound flip_bound = 8;

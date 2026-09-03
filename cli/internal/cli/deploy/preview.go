@@ -264,13 +264,13 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			return err
 		}
 
-		if err := recordDeployResult(cfg, manifest, env, "", out.promotionID, out.appURLs); err != nil {
+		if err := recordDeployResult(cfg, manifest, env, "", out.promotionID, out.apps); err != nil {
 			return err
 		}
 		if err := publishServiceMap(cfg, manifest, env, "", out.promotionID, out.links); err != nil {
 			return err
 		}
-		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), out.appURLs, out.urlNote, out.flip, out.links, out.functions)
+		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), out.urlNote, out.flip, out.links, out.functions)
 		return nil
 	})
 }

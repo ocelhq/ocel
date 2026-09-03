@@ -305,7 +305,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 	return stream.Send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 			Success:     true,
-			AppUrls:     []string{FakeAppURL},
+			Apps:        fakeAppResults(req.GetManifest()),
 			PromotionId: FakePromotionID,
 			FlipBound:   fakeFlipBound(),
 			Links:       fakeLinks(req.GetManifest()),
@@ -418,6 +418,18 @@ func refuseUnpublishedFakeLinks(m *contractv1.Manifest) string {
 		return ""
 	}
 	return "nothing has published a link named " + strings.Join(missing, ", ") + " to production"
+}
+
+func fakeAppResults(m *contractv1.Manifest) []*progressv1.AppResult {
+	out := make([]*progressv1.AppResult, 0, len(m.GetApps()))
+	for _, app := range m.GetApps() {
+		out = append(out, &progressv1.AppResult{
+			App:     app.GetName(),
+			Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED,
+			Urls:    []string{FakeAppURL},
+		})
+	}
+	return out
 }
 
 func fakeLinks(m *contractv1.Manifest) []*linksv1.Link {

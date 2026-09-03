@@ -170,7 +170,7 @@ check(
   varsReachProblem(documents, linkPartitionKey(state.slug, CLASS, LINK_NAME)),
 );
 
-const url = (deployed.appUrls ?? [])[0];
+const url = (deployed.apps ?? []).flatMap((app) => app?.urls ?? [])[0];
 if (!url) {
   die("the deploy result names no app URL, so the running app cannot be asked what it resolved");
 }

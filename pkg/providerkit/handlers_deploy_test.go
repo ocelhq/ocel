@@ -346,7 +346,7 @@ func TestDeployPublishesEveryInfraLinkForItsAppsToRead(t *testing.T) {
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	hostnameAdded(t, client)
+	hostnameAdded(t, client, "shop.example")
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
 	}
@@ -527,7 +527,7 @@ func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysLink(t *
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	hostnameAdded(t, client)
+	hostnameAdded(t, client, "shop.example")
 	releaser.publishes("db-two.invalid")
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
@@ -703,7 +703,7 @@ func TestDeployPrunesTheLinkItStoppedProvisioning(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	hostnameAdded(t, deploys)
+	hostnameAdded(t, deploys, "shop.example")
 	dropped := deployRequest()
 	dropped.Manifest.Resources = nil
 	dropped.Manifest.Usages = nil
@@ -802,11 +802,28 @@ func TestDeployRecordsTheFeaturesItsProjectDependsOn(t *testing.T) {
 	}
 }
 
-func hostnameAdded(t *testing.T, client contractv1connect.ProviderServiceClient) {
+func servedURLs(result *progressv1.ResultEvent) []string {
+	var urls []string
+	for _, app := range result.GetApps() {
+		urls = append(urls, app.GetUrls()...)
+	}
+	return urls
+}
+
+func servedAppURLs(result *progressv1.ResultEvent, app string) []string {
+	for _, held := range result.GetApps() {
+		if held.GetApp() == app {
+			return held.GetUrls()
+		}
+	}
+	return nil
+}
+
+func hostnameAdded(t *testing.T, client contractv1connect.ProviderServiceClient, hosts ...string) {
 	t.Helper()
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
-		Configured: configuredHosts("shop.example"),
+		Configured: configuredHosts(hosts...),
 		Edge:       &contractv1.EdgeSelection{Dns: &contractv1.Dns{Kind: string(fake.KindZone), Zone: "shop.example"}},
 	})
 	if err != nil {
@@ -826,20 +843,20 @@ func TestDeployWithholdsTheURLUntilTheHostnameIsSettled(t *testing.T) {
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	if len(result.GetAppUrls()) != 0 || !strings.Contains(result.GetUrlNote(), "shop.example") {
+	if len(servedURLs(result)) != 0 || !strings.Contains(result.GetUrlNote(), "shop.example") {
 		t.Fatalf("the first deploy returned urls %v and the note %q, want no url and a note naming the hostname nothing is bound to yet",
-			result.GetAppUrls(), result.GetUrlNote())
+			servedURLs(result), result.GetUrlNote())
 	}
 
-	hostnameAdded(t, client)
+	hostnameAdded(t, client, "shop.example")
 
 	result, _ = deploy(t, client, deployRequest())
 	if !result.GetSuccess() {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
 	}
-	if !slices.Equal(result.GetAppUrls(), []string{"https://shop.example"}) || result.GetUrlNote() != "" {
+	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) || result.GetUrlNote() != "" {
 		t.Errorf("the deploy after the hostname settled returned urls %v and the note %q, want the hostname it serves printed",
-			result.GetAppUrls(), result.GetUrlNote())
+			servedURLs(result), result.GetUrlNote())
 	}
 }
 
@@ -853,9 +870,9 @@ func TestDeployAnnouncesThePreviewHostnameOfTheProjectsOwnWildcard(t *testing.T)
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	want := "https://" + edge.ProjectPreview("preview.example").Host("pr-7", "")
-	if !slices.Equal(result.GetAppUrls(), []string{want}) {
+	if !slices.Equal(servedURLs(result), []string{want}) {
 		t.Errorf("the preview deploy announced %v, want %s: the project's own wildcard serves only this project, so no slug segment names it",
-			result.GetAppUrls(), want)
+			servedURLs(result), want)
 	}
 }
 
@@ -872,9 +889,9 @@ func TestDeployAnnouncesThePreviewHostnameOfTheGlobalWildcard(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	want := "https://" + edge.SharedPreview("shop", "preview.acme.com").Host("pr-7", "")
-	if !slices.Equal(result.GetAppUrls(), []string{want}) {
+	if !slices.Equal(servedURLs(result), []string{want}) {
 		t.Errorf("the preview deploy announced %v, want %s: the project declares no domains.preview, so the global wildcard serves it",
-			result.GetAppUrls(), want)
+			servedURLs(result), want)
 	}
 }
 
@@ -899,9 +916,9 @@ func TestDeployAnnouncesAPreviewHostnamePerAppWhenTheProjectCarriesMoreThanOne(t
 		"https://" + edge.SharedPreview("shop", "preview.acme.com").Host("pr-7", "web"),
 		"https://" + edge.SharedPreview("shop", "preview.acme.com").Host("pr-7", "admin"),
 	}
-	if !slices.Equal(result.GetAppUrls(), want) {
+	if !slices.Equal(servedURLs(result), want) {
 		t.Errorf("the preview deploy announced %v, want %v: the appless hostname is ambiguous once a project carries two apps",
-			result.GetAppUrls(), want)
+			servedURLs(result), want)
 	}
 }
 
@@ -949,13 +966,45 @@ func TestDeployServesAHostnameDeclaredOnAnAppRatherThanTheProject(t *testing.T) 
 		t.Errorf("the first deploy returned the note %q, want it naming the app's hostname nothing is bound to yet", result.GetUrlNote())
 	}
 
-	hostnameAdded(t, client)
+	hostnameAdded(t, client, "shop.example")
 
 	result, _ = deploy(t, client, req)
 	if !result.GetSuccess() {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
 	}
-	if !slices.Equal(result.GetAppUrls(), []string{"https://shop.example"}) {
-		t.Errorf("the deploy after the hostname settled returned urls %v, want the app-declared hostname printed", result.GetAppUrls())
+	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) {
+		t.Errorf("the deploy after the hostname settled returned urls %v, want the app-declared hostname printed", servedURLs(result))
+	}
+}
+
+func TestDeployAnnouncesEachAppsOwnHostnameUnderThatApp(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	req := twoAppRequest()
+	req.Manifest.Domains = nil
+	req.Manifest.Apps[0].Domains = []*contractv1.TierDomains{{
+		Tier:      environmentv1.Tier_TIER_PRODUCTION,
+		Hostnames: []string{"shop.example"},
+	}}
+	req.Manifest.Apps[1].Domains = []*contractv1.TierDomains{{
+		Tier:      environmentv1.Tier_TIER_PRODUCTION,
+		Hostnames: []string{"admin.shop.example"},
+	}}
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("the first Deploy() = %q", result.GetError())
+	}
+	hostnameAdded(t, client, "shop.example", "admin.shop.example")
+
+	result, _ := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("a second Deploy() = %q", result.GetError())
+	}
+	if got := servedAppURLs(result, "web"); !slices.Equal(got, []string{"https://shop.example"}) {
+		t.Errorf("web carries %v, want the hostname web itself declares", got)
+	}
+	if got := servedAppURLs(result, "admin"); !slices.Equal(got, []string{"https://admin.shop.example"}) {
+		t.Errorf("admin carries %v, want the hostname admin itself declares", got)
 	}
 }
