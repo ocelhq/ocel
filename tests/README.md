@@ -29,6 +29,27 @@ Then run one cell:
 pnpm --filter @ocel-tests/journeys cell --example express --target dev
 ```
 
+For `aws` that is a floci emulator, one per edge, and the endpoint it prints:
+
+```
+scripts/floci.sh create ocel-journeys
+export AWS_ENDPOINT_URL=<the OCEL_FLOCI_ENDPOINT it printed>
+export OCEL_AWS_EDGE=api-gateway
+pnpm --filter @ocel-tests/journeys cell --example express --target aws
+scripts/floci.sh destroy ocel-journeys
+```
+
+The target pins the AWS config and credentials files to empty files of its own, so a
+profile in `~/.aws` cannot redirect one service at the endpoint. A bootstrap cannot be
+updated on floci (#853), so a second run wants a fresh emulator.
+
+Projects stranded by a run that died are reclaimed per target, and only ones the harness
+named:
+
+```
+pnpm --filter @ocel-tests/journeys sweep --target aws
+```
+
 `--shard <index>/<total>` is accepted and validated; it selects nothing yet.
 
 Real clouds are reached by workflow dispatch only. Nothing here spends a real account.

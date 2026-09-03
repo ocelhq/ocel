@@ -1,10 +1,11 @@
 import type { TargetName } from "../spec";
+import { awsTarget } from "./aws";
 import { devTarget } from "./dev";
 import type { Target } from "./types";
 
 export type { CellContext, Deployment, Target } from "./types";
 
-const targets: Partial<Record<TargetName, Target>> = { dev: devTarget };
+const targets: Partial<Record<TargetName, Target>> = { aws: awsTarget, dev: devTarget };
 
 export function targetNamed(name: string): Target {
   const target = targets[name as TargetName];

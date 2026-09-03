@@ -7,11 +7,13 @@
     "cell": "tsx src/cell.ts",
     "test": "vitest run --config vitest.unit.config.ts",
     "journey": "tsx src/journey.ts",
+    "sweep": "tsx src/sweep.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ocel-tests/shared": "workspace:*",
-    "ocel": "workspace:^"
+    "ocel": "workspace:^",
+    "undici": "^7.18.2"
   },
   "devDependencies": {
     "@types/node": "^20",

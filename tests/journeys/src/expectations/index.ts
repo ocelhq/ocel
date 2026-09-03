@@ -1,9 +1,15 @@
+import { aws } from "./aws";
+import { awsFloci } from "./aws.floci";
 import { dev } from "./dev";
 import type { ExpectationEnvironment, Expectations } from "./types";
 
 export type { ExpectationEnvironment, Expectations } from "./types";
 
-const files: Record<ExpectationEnvironment, Expectations> = { dev };
+const files: Record<ExpectationEnvironment, Expectations> = {
+  aws,
+  "aws.floci": awsFloci,
+  dev,
+};
 
 export function expectationsFor(environment: ExpectationEnvironment): Expectations {
   const file = files[environment];
