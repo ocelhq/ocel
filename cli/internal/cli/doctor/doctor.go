@@ -158,9 +158,6 @@ func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io
 	for _, tier := range tiers {
 		hosts[tier] = preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier)))
 	}
-	if len(hosts[environmentv1.Tier_TIER_PREVIEW]) == 0 {
-		project.warn("no preview domain declared", "add `domains: { preview: \"*.preview.example.com\" }` to your config")
-	}
 	found.add(project)
 
 	if providerErr != nil {
@@ -573,6 +570,10 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 		return s
 	}
 
+	if tier == environmentv1.Tier_TIER_PREVIEW {
+		previewDomain(&s, hosts, got.wildcard.GetBaseDomain())
+	}
+
 	status := answer.status
 	if !status.GetPresent() {
 		if len(hosts) == 0 {
@@ -622,6 +623,17 @@ func staleStacks(status *contractv1.BootstrapStatus) []string {
 		}
 	}
 	return out
+}
+
+func previewDomain(s *section, hosts []string, global string) {
+	switch {
+	case len(hosts) == 0 && global == "":
+		s.warn("no preview domain", "run `ocel domain use '*.preview.example.com' --preview`")
+	case len(hosts) == 0:
+		s.identity = "*." + global + " (global)"
+	case global != "" && !slices.Contains(hosts, "*."+global):
+		s.neutral("project-level preview domain; global *." + global + " ignored")
+	}
 }
 
 func absentText(tier environmentv1.Tier) string {
