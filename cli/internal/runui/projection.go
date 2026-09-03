@@ -3,7 +3,6 @@ package runui
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"strings"
 	"time"
 	"unicode"
@@ -12,6 +11,7 @@ import (
 	"github.com/fatih/color"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )

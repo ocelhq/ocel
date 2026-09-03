@@ -62,8 +62,6 @@ message WaitingEvent {
   VariablesOwed owed = 3;
 }
 
-// The variables a run is owed before it can build, one cell per entry, and
-// the one command that fills them in.
 message VariablesOwed {
   repeated OwedVariable cells = 1;
 

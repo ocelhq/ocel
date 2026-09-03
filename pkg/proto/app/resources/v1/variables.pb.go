@@ -134,12 +134,10 @@ type VariableDefinition struct {
 	Required         bool                   `protobuf:"varint,4,opt,name=required,proto3" json:"required,omitempty"`
 	Folders          []string               `protobuf:"bytes,5,rep,name=folders,proto3" json:"folders,omitempty"`
 	Source           string                 `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
-	// The module that holds the declaration's schemas without calling defineEnv,
-	// when one does; empty when the schemas live beside the call.
-	SchemaSource  string `protobuf:"bytes,7,opt,name=schema_source,json=schemaSource,proto3" json:"schema_source,omitempty"`
-	HasSchema     bool   `protobuf:"varint,8,opt,name=has_schema,json=hasSchema,proto3" json:"has_schema,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SchemaSource     string                 `protobuf:"bytes,7,opt,name=schema_source,json=schemaSource,proto3" json:"schema_source,omitempty"`
+	HasSchema        bool                   `protobuf:"varint,8,opt,name=has_schema,json=hasSchema,proto3" json:"has_schema,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *VariableDefinition) Reset() {

@@ -432,8 +432,6 @@ func (x *WaitingEvent) GetOwed() *VariablesOwed {
 	return nil
 }
 
-// The variables a run is owed before it can build, one cell per entry, and
-// the one command that fills them in.
 type VariablesOwed struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Cells         []*OwedVariable        `protobuf:"bytes,1,rep,name=cells,proto3" json:"cells,omitempty"`
