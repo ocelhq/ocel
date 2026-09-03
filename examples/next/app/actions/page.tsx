@@ -1,11 +1,6 @@
-import { bump } from "../../lib/state";
+import { record } from "./record";
 
 export const dynamic = "force-dynamic";
-
-async function record(formData: FormData) {
-  "use server";
-  await bump(`action:${String(formData.get("note") ?? "")}`);
-}
 
 export default function ActionsPage() {
   return (

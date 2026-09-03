@@ -8,7 +8,7 @@ export function Stamp({
   live: string | number;
 }) {
   return (
-    <div data-ocel-stamp={scope}>
+    <div>
       <span data-ocel={`${scope}:cached`}>{cached}</span>
       <span data-ocel={`${scope}:live`}>{live}</span>
     </div>
