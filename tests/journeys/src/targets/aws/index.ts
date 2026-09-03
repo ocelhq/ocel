@@ -22,6 +22,14 @@ const LEG_TIMEOUT_MS = 600_000;
 
 let dispatching: Promise<typeof fetch> | undefined;
 
+const EDGE_FEATURES: Record<string, string> = {
+  "api-gateway": "apigateway-edge",
+  cloudfront: "cloudfront-edge",
+  cloudflare: "cloudflare-edge",
+};
+
+const NEXT_FEATURES = ["isr", "image-optimization"];
+
 async function guard(): Promise<ExpectationEnvironment> {
   return expectationEnvironmentFor((await place()).world);
 }
@@ -80,6 +88,11 @@ function deployment(cell: CellContext, dispatch: typeof fetch): Deployment {
   };
 }
 
+function bootstrapFeatures(): string[] {
+  const edge = EDGE_FEATURES[process.env.OCEL_AWS_EDGE ?? ""];
+  return edge ? [...NEXT_FEATURES, edge] : NEXT_FEATURES;
+}
+
 async function prepare(): Promise<void> {
   await place();
   const [first] = specForTarget("aws");
@@ -88,8 +101,9 @@ async function prepare(): Promise<void> {
   }
   const runId = currentRunIdentity();
   const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", "bootstrap"));
+  const args = ["bootstrap", "production", "--yes", "--features", bootstrapFeatures().join(",")];
   try {
-    await ocel(dir, ["bootstrap", "production", "--yes"], childEnv(dir, runId));
+    await ocel(dir, args, childEnv(dir, runId));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
