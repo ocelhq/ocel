@@ -1,4 +1,5 @@
-const { join } = require("path");
+const { existsSync, realpathSync } = require("fs");
+const { dirname, join } = require("path");
 
 const packageName = process.argv[2];
 if (!packageName) {
@@ -36,12 +37,26 @@ switch (platform) {
 const platformPackage = `${packageName}-${platformSuffix}`;
 const binary = platform === "win32" ? `${binaryName}.exe` : binaryName;
 
+const installHint = `Run \`npm install ${packageName}\` (or add it as a dependency via your package manager).`;
+
+const providerDir = (require.resolve.paths(packageName) || [])
+  .map((dir) => join(dir, packageName, "package.json"))
+  .filter(existsSync)
+  .map((manifest) => realpathSync(dirname(manifest)))[0];
+
+if (!providerDir) {
+  console.error(`Failed to locate ${packageName} from ${process.cwd()}. ${installHint}`);
+  process.exit(1);
+}
+
 try {
-  const binaryPath = require.resolve(join(platformPackage, "bin", binary));
+  const binaryPath = require.resolve(join(platformPackage, "bin", binary), {
+    paths: [providerDir],
+  });
   process.stdout.write(binaryPath);
 } catch (e) {
   console.error(
-    `Failed to locate binary for ${platformPackage}. Is ${packageName} installed? Run \`npm install ${packageName}\` (or add it as a dependency via your package manager).`,
+    `Failed to locate binary for ${platformPackage} from ${providerDir}. Is ${packageName} installed with its platform package? ${installHint}`,
   );
   process.exit(1);
 }
