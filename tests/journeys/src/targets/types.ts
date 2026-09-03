@@ -27,5 +27,6 @@ export type Target = {
   rollback?: (cell: CellContext, greeting: string) => Promise<Deployment>;
   destroy: (cell: CellContext) => Promise<void>;
   list: () => Promise<string[]>;
+  stands: (slug: string) => Promise<boolean>;
   sweep: (runId: string) => Promise<void>;
 };

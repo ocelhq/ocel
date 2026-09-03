@@ -134,10 +134,9 @@ export function describeCell(example: ExampleSpec) {
       describe(cellKey(example.name, app), () => {
         it(DESTROY_TITLE, async () => {
           await tearDown();
-          const remaining = await target.list();
           assert.ok(
-            !remaining.includes(slug),
-            `${slug} still exists on ${target.name} after destroy: ${remaining.join(", ")}`,
+            !(await target.stands(slug)),
+            `${slug} still exists on ${target.name} after destroy`,
           );
         }, timeout);
       });

@@ -230,5 +230,6 @@ export const devTarget: Target = {
   up,
   destroy,
   list,
+  stands: async (slug) => (await list()).includes(slug),
   sweep: async () => {},
 };
