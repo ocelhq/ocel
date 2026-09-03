@@ -1,5 +1,4 @@
 @import "tailwindcss" source(none);
-@import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @source "./";
@@ -36,6 +35,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-held: var(--held);
+  --color-body: var(--body);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -57,34 +57,35 @@
     "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     monospace;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.1448 0 0);
+  --background: #ffffff;
+  --foreground: #0a0a0a;
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.1448 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.1448 0 0);
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
 
-  --primary: oklch(0.4924 0.2858 266.52);
-  --primary-foreground: oklch(1 0 0);
+  --primary: #1f35ff;
+  --primary-foreground: #ffffff;
 
-  --secondary: oklch(0.9581 0 0);
-  --secondary-foreground: oklch(0.1448 0 0);
+  --secondary: #f1f1f1;
+  --secondary-foreground: #0a0a0a;
 
-  --muted: oklch(0.9581 0 0);
-  --muted-foreground: oklch(0.4495 0 0);
+  --muted: #f1f1f1;
+  --muted-foreground: #8a8a8a;
 
-  --accent: oklch(0.9581 0 0);
-  --accent-foreground: oklch(0.1448 0 0);
+  --accent: #f1f1f1;
+  --accent-foreground: #0a0a0a;
 
   --destructive: oklch(0.577 0.245 27.33);
-  --destructive-foreground: oklch(1 0 0);
+  --destructive-foreground: #ffffff;
 
-  --border: oklch(0.9128 0 0);
-  --input: oklch(0.9128 0 0);
-  --ring: oklch(0.4924 0.2858 266.52);
+  --border: #e2e2e2;
+  --input: #e2e2e2;
+  --ring: #1f35ff;
 
-  --held: oklch(0.616 0.151 153.07);
+  --held: #1a9e57;
+  --body: #555555;
 
   --dim: #8a8a8a;
   --faint: #c9c9c9;
@@ -95,34 +96,35 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: oklch(0.1809 0.0052 248.12);
-    --foreground: oklch(0.9575 0.0067 97.35);
+    --background: #101214;
+    --foreground: #f2f1ec;
 
-    --card: oklch(0.2077 0.005 248.07);
-    --card-foreground: oklch(0.9575 0.0067 97.35);
-    --popover: oklch(0.2077 0.005 248.07);
-    --popover-foreground: oklch(0.9575 0.0067 97.35);
+    --card: #16181a;
+    --card-foreground: #f2f1ec;
+    --popover: #16181a;
+    --popover-foreground: #f2f1ec;
 
-    --primary: oklch(0.587 0.225 270.16);
-    --primary-foreground: oklch(1 0 0);
+    --primary: #4d68ff;
+    --primary-foreground: #ffffff;
 
-    --secondary: oklch(0.2077 0.005 248.07);
-    --secondary-foreground: oklch(0.9575 0.0067 97.35);
+    --secondary: #16181a;
+    --secondary-foreground: #f2f1ec;
 
-    --muted: oklch(0.2077 0.005 248.07);
-    --muted-foreground: oklch(0.7034 0.0135 255.53);
+    --muted: #16181a;
+    --muted-foreground: #5f646b;
 
-    --accent: oklch(0.2077 0.005 248.07);
-    --accent-foreground: oklch(0.9575 0.0067 97.35);
+    --accent: #16181a;
+    --accent-foreground: #f2f1ec;
 
     --destructive: oklch(0.627 0.22 25);
-    --destructive-foreground: oklch(1 0 0);
+    --destructive-foreground: #ffffff;
 
-    --border: oklch(0.2958 0.0084 255.57);
-    --input: oklch(0.2958 0.0084 255.57);
-    --ring: oklch(0.587 0.225 270.16);
+    --border: #2a2d31;
+    --input: #2a2d31;
+    --ring: #4d68ff;
 
-    --held: oklch(0.7584 0.1722 153.08);
+    --held: #3ecf7a;
+    --body: #9aa0a8;
 
     --dim: #5f646b;
     --faint: #3a3e44;
@@ -142,6 +144,9 @@
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+  a:hover {
+    color: var(--primary);
   }
   html {
     @apply font-sans;

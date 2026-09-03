@@ -1,44 +1,47 @@
-import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge, badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-const chipVariants = cva(
-  "gap-1 px-1.5 py-px font-mono text-[11px] font-normal tracking-normal normal-case [&>svg]:size-3!",
-  {
-    variants: {
-      tone: {
-        default: "bg-chip text-foreground",
-        muted: "bg-chip text-muted-foreground",
-        owed: "bg-destructive/10 text-destructive",
-        ink: "bg-foreground text-background",
-        accent: "bg-primary/10 text-primary",
-      },
-    },
-    defaultVariants: { tone: "default" },
-  },
-);
+const tones = {
+  default: "default",
+  muted: "secondary",
+  owed: "destructive",
+  accent: "outline",
+  soon: "ghost",
+  ink: "default",
+} as const;
+
+export type Tone = keyof typeof tones;
+
+const inked = "border-foreground bg-foreground text-background";
 
 export function Chip({
   className,
-  tone,
+  tone = "default",
   ...props
-}: ComponentProps<typeof Badge> & VariantProps<typeof chipVariants>) {
-  return <Badge className={cn(chipVariants({ tone }), className)} {...props} />;
+}: ComponentProps<typeof Badge> & { tone?: Tone }) {
+  return (
+    <Badge
+      variant={tones[tone]}
+      className={cn(tone === "ink" && inked, className)}
+      {...props}
+    />
+  );
 }
 
 export function ChipButton({
   className,
-  tone,
+  tone = "default",
   ...props
-}: ComponentProps<"button"> & VariantProps<typeof chipVariants>) {
+}: ComponentProps<"button"> & { tone?: Tone }) {
   return (
     <button
       type="button"
       className={cn(
-        "inline-flex w-fit shrink-0 items-center justify-center whitespace-nowrap outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/30",
-        chipVariants({ tone }),
+        badgeVariants({ variant: tones[tone] }),
+        "cursor-pointer outline-none hover:border-primary hover:text-primary focus-visible:ring-2 focus-visible:ring-ring",
+        tone === "ink" && inked,
         className,
       )}
       {...props}
@@ -49,8 +52,35 @@ export function ChipButton({
 export function SectionLabel({ className, ...props }: ComponentProps<"p">) {
   return (
     <p
-      className={cn("mb-2 font-mono text-[11px] tracking-[0.1em] text-dim uppercase", className)}
+      className={cn(
+        "mb-2 font-mono text-xs tracking-[0.14em] text-muted-foreground uppercase",
+        className,
+      )}
       {...props}
     />
+  );
+}
+
+export function Glyph({ className, ...props }: ComponentProps<"span">) {
+  return <span aria-hidden="true" className={cn("font-mono", className)} {...props} />;
+}
+
+export function Note({
+  label,
+  className,
+  children,
+  ...props
+}: ComponentProps<"div"> & { label: string }) {
+  return (
+    <div
+      className={cn(
+        "border border-border border-t-2 border-t-primary bg-card px-4.5 py-3.5 font-sans text-[13.5px] leading-relaxed text-body",
+        className,
+      )}
+      {...props}
+    >
+      <p className="mb-1 font-mono text-[11px] tracking-[0.1em] text-primary uppercase">{label}</p>
+      {children}
+    </div>
   );
 }

@@ -1,25 +1,4 @@
-import {
-  CaretRightIcon,
-  ClockCounterClockwiseIcon,
-  CopyIcon,
-  DotsThreeIcon,
-  EyeIcon,
-  EyeSlashIcon,
-  FileTextIcon,
-  FolderIcon,
-  HouseIcon,
-  KeyIcon,
-  LinkIcon,
-  LockIcon,
-  MagnifyingGlassIcon,
-  ShieldCheckIcon,
-  StackIcon,
-  TrashIcon,
-  UploadSimpleIcon,
-  WarningIcon,
-  XIcon,
-} from "@phosphor-icons/react";
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -99,7 +78,7 @@ import {
   toggleSelected,
   visible,
 } from "../store";
-import { Chip, ChipButton } from "./Chip";
+import { Chip, ChipButton, Glyph } from "./Chip";
 
 function carriesFile(event: DragEvent): boolean {
   const types = event.dataTransfer?.types ?? [];
@@ -126,10 +105,11 @@ function aimAt(event: DragEvent, into: string): void {
   dragTarget.value = into;
 }
 
+const label = "font-mono text-xs tracking-[0.14em] text-muted-foreground uppercase";
 const cellPick = "w-10 pr-0 pl-4 align-middle";
 const cellKey = "min-w-0 py-2.5 pr-3 pl-2 text-left align-middle font-normal";
 const cellValue = "w-[46%] min-w-72 py-2 pr-3 align-middle";
-const cellTools = "w-28 py-2 pr-3 pl-0 text-right align-middle";
+const cellTools = "w-36 py-2 pr-3 pl-0 text-right align-middle";
 
 export function Table() {
   const current = useValue(state)!;
@@ -144,7 +124,7 @@ export function Table() {
   return (
     <section
       data-slot="card"
-      className="relative border border-border bg-card"
+      className="relative border-[1.5px] border-foreground bg-card"
       onDragOver={(event) => aimAt(event, "")}
       onDragLeave={(event) => {
         if (
@@ -171,16 +151,10 @@ export function Table() {
                   onCheckedChange={(on) => selectVisible(on)}
                 />
               </th>
-              <th
-                scope="col"
-                className={cn(cellKey, "font-mono text-[11px] tracking-[0.1em] text-dim uppercase")}
-              >
+              <th scope="col" className={cn(cellKey, label)}>
                 Name
               </th>
-              <th
-                scope="col"
-                className={cn(cellValue, "font-mono text-[11px] tracking-[0.1em] text-dim uppercase")}
-              >
+              <th scope="col" className={cn(cellValue, label)}>
                 Value
               </th>
               <th scope="col" className={cellTools}>
@@ -192,8 +166,7 @@ export function Table() {
                   disabled={shownRows.filter(revealable).length === 0}
                   onClick={toggleRevealVisible}
                 >
-                  {revealed ? <EyeSlashIcon /> : <EyeIcon />}
-                  {revealed ? "Hide" : "Reveal"}
+                  {revealed ? "Hide all" : "Reveal all"}
                 </Button>
               </th>
             </tr>
@@ -209,19 +182,12 @@ export function Table() {
         </table>
       </div>
       {total === 0 && <Empty />}
-      <footer className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border px-4 py-2.5 font-mono text-[11px] text-dim">
+      <footer className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border px-4 py-2.5 font-mono text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-3">
-          {!list.flat && (
-            <span className="inline-flex items-center gap-1.5">
-              <FolderIcon className="size-3.5" /> {list.groups.length}
-            </span>
-          )}
-          <span className="inline-flex items-center gap-1.5">
-            <KeyIcon className="size-3.5" /> {total}
-          </span>
+          {!list.flat && <span>{plural(list.groups.length, "folder")}</span>}
+          <span>{plural(total, "key")}</span>
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <FileTextIcon className="size-3.5" />
+        <span>
           Drop a .env file here to fill root values, or on a folder to fill that folder
         </span>
       </footer>
@@ -229,17 +195,17 @@ export function Table() {
         <div
           data-slot="dropzone"
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 border-2 border-primary bg-background/90 text-center"
+          className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 border-[1.5px] border-primary bg-background text-center"
         >
-          <UploadSimpleIcon className="size-6 text-primary" />
-          <p className="font-mono text-sm">Drop to fill {folderName(target)} values</p>
-          <p className="max-w-md text-xs text-muted-foreground">
+          <Glyph className="text-2xl text-primary">↓</Glyph>
+          <p className="font-mono text-sm text-foreground">Drop to fill {folderName(target)} values</p>
+          <p className="max-w-md font-sans text-[13.5px] text-body">
             Keys the project declares fill in as unsaved drafts; nothing is written until you save
           </p>
         </div>
       )}
       {current.recovery && total === 0 && owedLens && (
-        <p className="px-4 py-6 text-sm text-muted-foreground">
+        <p className="px-4 py-6 font-sans text-[13.5px] text-body">
           Every cell the deploy needs has a value. Save and resume below.
         </p>
       )}
@@ -275,14 +241,14 @@ function Toolbar() {
           size="sm"
           aria-label="environment"
           data-action="environment"
-          className="h-8 border-border px-2.5 font-mono text-xs"
+          className="h-8"
         >
-          <StackIcon className="text-muted-foreground" />
+          <span className="text-muted-foreground">env</span>
           <SelectValue />
         </SelectTrigger>
-        <SelectContent align="start" alignItemWithTrigger={false} className="font-mono text-xs">
+        <SelectContent align="start" alignItemWithTrigger={false}>
           {items.map((item) => (
-            <SelectItem value={item.value} key={item.value} className="text-xs">
+            <SelectItem value={item.value} key={item.value}>
               {item.label}
             </SelectItem>
           ))}
@@ -290,28 +256,20 @@ function Toolbar() {
       </Select>
       {owedLens && (
         <Chip tone="owed">
-          <WarningIcon />
           {plural(list.keys.length, "cell")} the deploy needs
         </Chip>
       )}
-      {!owedLens && list.flat && (
-        <Chip tone="muted">
-          <MagnifyingGlassIcon />
-          results across every folder
-        </Chip>
-      )}
+      {!owedLens && list.flat && <Chip tone="muted">results across every folder</Chip>}
       <span className="flex-1" />
-      <label className="relative">
-        <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          data-action="search"
-          placeholder="Search by name"
-          className="h-8 w-56 border-border pr-2 pl-8 font-mono text-xs"
-          value={query}
-          onChange={(event) => setSearch(event.currentTarget.value)}
-        />
-      </label>
+      <Input
+        type="search"
+        data-action="search"
+        aria-label="search by name"
+        placeholder="Search by name"
+        className="h-8 w-56"
+        value={query}
+        onChange={(event) => setSearch(event.currentTarget.value)}
+      />
       <input
         type="file"
         accept=".env,text/plain"
@@ -326,9 +284,9 @@ function Toolbar() {
       />
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={<Button variant="outline" size="xs" data-action="import" />}
+          render={<Button variant="command" size="xs" data-action="import" />}
         >
-          <UploadSimpleIcon />
+          <Glyph>↑</Glyph>
           Import .env
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -340,7 +298,6 @@ function Toolbar() {
                 picker.current?.click();
               }}
             >
-              <HouseIcon />
               root
             </DropdownMenuItem>
             {folders.map((folder) => (
@@ -351,21 +308,20 @@ function Toolbar() {
                   picker.current?.click();
                 }}
               >
-                <FolderIcon />
-                {folder.slice(1)}
+                {folder}
               </DropdownMenuItem>
             ))}
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
       <Button
-        variant="outline"
+        variant="command"
         size="xs"
         data-action="copy-other"
         disabled={loading}
         onClick={() => void openCopy()}
       >
-        <CopyIcon />
+        <Glyph>←</Glyph>
         {loading ? "Reading…" : `Copy from ${current.other}`}
       </Button>
     </div>
@@ -386,7 +342,7 @@ function Empty() {
     ) : (
       <>Nothing reads a variable here.</>
     );
-  return <p className="px-4 py-6 text-sm text-muted-foreground">{text}</p>;
+  return <p className="px-4 py-6 font-sans text-[13.5px] text-body">{text}</p>;
 }
 
 function FolderGroup({ group, open }: { group: Group; open: boolean }) {
@@ -407,33 +363,27 @@ function FolderGroup({ group, open }: { group: Group; open: boolean }) {
       <tr
         ref={header}
         data-slot="group-row"
-        className="cursor-pointer border-t border-b border-border bg-muted/40 hover:bg-muted/70"
+        className="cursor-pointer border-t border-b border-border bg-muted hover:text-primary"
         onClick={() => toggleGroup(group.folder)}
       >
         <td className={cn(cellPick, "text-center")}>
           <button
             type="button"
             aria-expanded={open}
-            aria-label={`${open ? "collapse" : "expand"} ${group.folder.slice(1)}`}
-            className="inline-flex size-6 items-center justify-center text-muted-foreground"
+            aria-label={`${open ? "collapse" : "expand"} ${group.folder}`}
+            className="inline-flex size-6 items-center justify-center font-mono text-muted-foreground"
             onClick={(event) => {
               event.stopPropagation();
               toggleGroup(group.folder);
             }}
           >
-            <CaretRightIcon
-              className={cn("size-3.5 transition-transform", open && "rotate-90")}
-              weight="bold"
-            />
+            {open ? "▾" : "▸"}
           </button>
         </td>
         <th scope="rowgroup" className={cn(cellKey, "font-normal")} colSpan={3}>
-          <span className="inline-flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 font-mono text-[13px] font-medium">
-              <FolderIcon className="size-4 text-muted-foreground" />
-              {group.folder.slice(1)}
-            </span>
-            <span className="font-mono text-[11px] text-dim">{plural(group.keys, "key")}</span>
+          <span className="inline-flex flex-wrap items-center gap-3">
+            <span className="font-mono text-[13px] font-medium">{group.folder}</span>
+            <span className="font-mono text-xs text-muted-foreground">{plural(group.keys, "key")}</span>
             {group.owed > 0 && (
               <Chip tone="owed" data-slot="owed-count">
                 {group.owed} to fill
@@ -449,9 +399,9 @@ function FolderGroup({ group, open }: { group: Group; open: boolean }) {
       {open && group.lines.length === 0 && (
         <tr className="border-b border-border">
           <td />
-          <td colSpan={3} className="py-3 pl-2 text-xs text-muted-foreground">
-            Nothing is set for {group.folder.slice(1)}; every key it reads inherits the root.
-            Use a root row’s menu, or drop a .env file here, to set one.
+          <td colSpan={3} className="py-3 pl-2 font-sans text-[13.5px] text-body">
+            Nothing is set for {group.folder}; every key it reads inherits the root. Use a
+            root row’s menu, or drop a .env file here, to set one.
           </td>
         </tr>
       )}
@@ -463,13 +413,6 @@ function describe(variant: Variant): string {
   const { key, folder: where, environment: env } = variant.at;
   const place = where === "" ? "the root" : where;
   return env === "" ? `${key} in ${place}` : `${key} in ${place} for ${env}`;
-}
-
-function ClassIcon({ kind }: { kind: KeyLine["row"]["class"] }) {
-  const className = "size-4 shrink-0 text-muted-foreground";
-  if (kind === "secret") return <LockIcon className={className} />;
-  if (kind === "sensitive") return <ShieldCheckIcon className={className} />;
-  return <KeyIcon className={className} />;
 }
 
 function KeyRow({ line, flat }: { line: KeyLine; flat: boolean }) {
@@ -485,8 +428,8 @@ function KeyRow({ line, flat }: { line: KeyLine; flat: boolean }) {
       data-slot="key-row"
       data-selected={picked}
       className={cn(
-        "border-b border-border transition-opacity last:border-b-0",
-        picked && "bg-muted/60",
+        "border-b border-border last:border-b-0",
+        picked && "bg-muted",
         dimmed && "opacity-40",
       )}
     >
@@ -501,13 +444,9 @@ function KeyRow({ line, flat }: { line: KeyLine; flat: boolean }) {
       </td>
       <th scope="row" className={cellKey}>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="inline-flex items-center gap-2 font-mono text-[13px]">
-            <ClassIcon kind={row.class} />
-            <span className="truncate">{row.key}</span>
-          </span>
+          <span className="truncate font-mono text-[13px]">{row.key}</span>
           {flat && (
             <ChipButton onClick={() => revealGroup(variant.at.folder)}>
-              {variant.at.folder === "" ? <HouseIcon /> : <FolderIcon />}
               {folderName(variant.at.folder)}
             </ChipButton>
           )}
@@ -528,12 +467,11 @@ function KeyRow({ line, flat }: { line: KeyLine; flat: boolean }) {
         {open ? (
           <Value line={line} />
         ) : (
-          <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="inline-flex flex-wrap items-center gap-1.5 font-sans text-[13.5px] text-body">
             only in
             {(row.scope ?? []).map((where) => (
               <ChipButton key={where} data-slot="pointer" onClick={() => revealGroup(where)}>
-                <FolderIcon />
-                {where.slice(1)}
+                {where}
               </ChipButton>
             ))}
           </span>
@@ -544,10 +482,10 @@ function KeyRow({ line, flat }: { line: KeyLine; flat: boolean }) {
   );
 }
 
-function Fault({ children }: { children: React.ReactNode }) {
+function Fault({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex items-start gap-1 text-xs text-destructive">
-      <WarningIcon className="mt-0.5 size-3.5 shrink-0" />
+    <span className="inline-flex items-start gap-1.5 font-mono text-xs text-destructive">
+      <Glyph>△</Glyph>
       <span>{children}</span>
     </span>
   );
@@ -586,7 +524,7 @@ function Value({ line }: { line: KeyLine }) {
           data-slot="value-input"
           data-dirty={dirty}
           className={cn(
-            "h-8 min-w-40 flex-1 border-input px-2 font-mono text-xs",
+            "h-8 min-w-40 flex-1",
             dirty && "border-primary focus-visible:border-primary",
           )}
           value={draft}
@@ -619,23 +557,14 @@ function Value({ line }: { line: KeyLine }) {
         {!dirty && line.inherits === "root" && <Chip tone="muted">inherits root</Chip>}
         {!dirty && line.inherits === "base" && <Chip tone="muted">inherits base</Chip>}
         {variant.kind === "environment" && variant.set && !variant.orphaned && (
-          <Chip>
-            <StackIcon />
-            override
-          </Chip>
+          <Chip>override</Chip>
         )}
-        {variant.orphaned && (
-          <Chip tone="owed">
-            <WarningIcon />
-            orphaned
-          </Chip>
-        )}
+        {variant.orphaned && <Chip tone="owed">orphaned</Chip>}
         {variant.at.environment === "" && line.overrides.length > 0 && (
           <Chip
             tone={line.orphaned ? "owed" : "default"}
             title={`overridden in ${names(line.overrides)}${line.orphaned ? "; an override names an environment that no longer exists" : ""}`}
           >
-            <StackIcon />
             {line.overrides.length === 1 ? line.overrides[0] : plural(line.overrides.length, "override")}
           </Chip>
         )}
@@ -649,7 +578,7 @@ function Value({ line }: { line: KeyLine }) {
       )}
       {unreadable && <Fault>could not reveal: {unreadable}</Fault>}
       {variant.orphaned && (
-        <span className="text-xs text-muted-foreground">
+        <span className="font-sans text-xs text-body">
           nothing reads it — {variant.at.environment} no longer exists
         </span>
       )}
@@ -666,13 +595,12 @@ function Linked({ variant, reference }: { variant: Variant; reference: Reference
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-1.5">
         <Chip tone="ink" title={`set · v${variant.version}`}>
-          <LinkIcon />
-          reads {referenceLine(reference)}
+          → reads {referenceLine(reference)}
         </Chip>
         {value !== undefined ? (
-          <span className="font-mono text-xs text-held">{value}</span>
+          <span className="font-mono text-[13px] text-held">{value}</span>
         ) : (
-          <span className="font-mono text-xs text-muted-foreground">••••••••</span>
+          <span className="font-mono text-[13px] text-muted-foreground">••••••••</span>
         )}
       </div>
       {unreadable && <Fault>source unreadable: {unreadable}</Fault>}
@@ -702,18 +630,18 @@ function Actions({ line }: { line: KeyLine }) {
   const folders = variant.at.folder === "" ? setForOptions(known, row) : [];
   const removable = variant.set && !variant.reference;
   return (
-    <span className="inline-flex items-center justify-end gap-0.5">
+    <span className="inline-flex items-center justify-end gap-1">
       {revealable(variant) && (
         <Button
           variant="ghost"
-          size="icon-xs"
+          size="xs"
           data-action="reveal"
           aria-pressed={revealed}
           title={revealed ? "Hide the value" : "Reveal the value"}
           aria-label={`${revealed ? "hide" : "reveal"} the value of ${describe(variant)}`}
           onClick={() => (revealed ? hide([variant.at]) : void reveal([variant.at]))}
         >
-          {revealed ? <EyeSlashIcon /> : <EyeIcon />}
+          {revealed ? "hide" : "reveal"}
         </Button>
       )}
       <Button
@@ -725,7 +653,7 @@ function Actions({ line }: { line: KeyLine }) {
         aria-label={`details and history of ${describe(variant)}`}
         onClick={() => openDrawer(variant.at)}
       >
-        <ClockCounterClockwiseIcon />
+        <Glyph>↺</Glyph>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -739,13 +667,13 @@ function Actions({ line }: { line: KeyLine }) {
             />
           }
         >
-          <DotsThreeIcon weight="bold" />
+          <Glyph>⋯</Glyph>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
             <DropdownMenuLabel>Insights</DropdownMenuLabel>
             <DropdownMenuItem onClick={() => openDrawer(variant.at)}>
-              <ClockCounterClockwiseIcon />
+              <Glyph>↺</Glyph>
               Details and history
             </DropdownMenuItem>
           </DropdownMenuGroup>
@@ -760,8 +688,7 @@ function Actions({ line }: { line: KeyLine }) {
                     data-action="set-for"
                     onClick={() => setFor({ key: row.key, folder, environment: "" })}
                   >
-                    <FolderIcon />
-                    Set for {folder.slice(1)}
+                    Set for {folder}
                   </DropdownMenuItem>
                 ))}
                 {overrides.map((name) => (
@@ -769,19 +696,17 @@ function Actions({ line }: { line: KeyLine }) {
                     key={name}
                     onClick={() => addOverride({ ...variant.at, environment: name })}
                   >
-                    <StackIcon />
                     Override for {name}
                   </DropdownMenuItem>
                 ))}
                 {revealable(variant) && (
                   <DropdownMenuItem onClick={() => void copyValue(variant.at)}>
-                    <CopyIcon />
                     Copy value
                   </DropdownMenuItem>
                 )}
                 {variant.extra && (
                   <DropdownMenuItem onClick={() => dismiss(variant.at)}>
-                    <XIcon />
+                    <Glyph>✕</Glyph>
                     Dismiss this empty row
                   </DropdownMenuItem>
                 )}
@@ -796,7 +721,7 @@ function Actions({ line }: { line: KeyLine }) {
                 disabled={busy}
                 onClick={() => askRemoval([variant.at])}
               >
-                <TrashIcon />
+                <Glyph>✕</Glyph>
                 {removal}
               </DropdownMenuItem>
             </>

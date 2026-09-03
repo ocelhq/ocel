@@ -1,11 +1,10 @@
-import { CheckIcon } from "@phosphor-icons/react";
-
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { doneLabel, owedCount, tallyLine, type State } from "../model";
 import { useValue } from "../signals";
 import { dirty, finishing, leave, leaveDiscarding, saving } from "../store";
+import { Glyph, SectionLabel } from "./Chip";
 
 export function Masthead({ current }: { current: State }) {
   const owed = owedCount(current);
@@ -13,20 +12,23 @@ export function Masthead({ current }: { current: State }) {
   const pending = useValue(dirty).length;
   const busy = useValue(saving) || useValue(finishing);
   return (
-    <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <header className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b-[1.5px] border-foreground pb-6">
       <div>
-        <p className="mb-1 font-mono text-[11px] tracking-[0.1em] text-dim uppercase">Variables</p>
-        <h1 className="font-mono text-2xl font-semibold tracking-tight">
-          {current.slug} <span className="font-normal text-muted-foreground">· {current.tier}</span>
+        <SectionLabel className="mb-1">Variables</SectionLabel>
+        <h1 className="font-sans text-[34px] leading-[1.15] font-semibold tracking-[-0.02em]">
+          {current.slug}{" "}
+          <span className="font-mono text-lg font-normal tracking-normal text-muted-foreground">
+            · {current.tier}
+          </span>
         </h1>
         <p
           data-slot="tally"
           className={cn(
-            "mt-1 inline-flex items-center gap-1.5 font-mono text-xs",
+            "mt-2 inline-flex items-center gap-1.5 font-mono text-[13px]",
             owed === 0 ? "text-held" : "text-destructive",
           )}
         >
-          {owed === 0 && <CheckIcon className="size-3.5" weight="bold" />}
+          {owed === 0 ? <Glyph>✓</Glyph> : <Glyph>●</Glyph>}
           {tallyLine(owed)}
         </p>
       </div>

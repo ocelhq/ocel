@@ -1,13 +1,4 @@
 import {
-  EyeIcon,
-  EyeSlashIcon,
-  FileTextIcon,
-  TrashIcon,
-  WarningIcon,
-  XIcon,
-} from "@phosphor-icons/react";
-
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -51,53 +42,51 @@ import {
   variants,
 } from "../store";
 import { Apps } from "./Apps";
+import { Glyph, Note } from "./Chip";
 import { CopyPanel } from "./CopyPanel";
 import { Drawer } from "./Drawer";
 import { Masthead } from "./Masthead";
 import { Table } from "./Table";
+
+function Code({ children }: { children: React.ReactNode }) {
+  return <code className="bg-chip px-1 font-mono text-xs text-foreground">{children}</code>;
+}
 
 function DropNotice() {
   const drop = useValue(dropped);
   if (!drop) return null;
   const where = folderName(drop.folder);
   return (
-    <div
-      role="status"
-      data-slot="notice"
-      className="mb-4 flex items-start gap-3 border border-border bg-card px-4 py-3 text-sm"
-    >
-      <FileTextIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-      <div className="flex-1 space-y-1">
+    <Note role="status" data-slot="notice" label="Imported" className="relative mb-6 pr-12">
+      <p>
+        <Code>{drop.name}</Code>:{" "}
+        {drop.fills.length === 0
+          ? `nothing to fill in ${where}.`
+          : `${plural(drop.fills.length, "row")} filled in ${where}, unsaved until you save.`}
+      </p>
+      {drop.undeclared.length > 0 && (
         <p>
-          <strong className="font-mono font-medium">{drop.name}</strong>:{" "}
-          {drop.fills.length === 0
-            ? `nothing to fill in ${where}.`
-            : `${plural(drop.fills.length, "row")} filled in ${where}, unsaved until you save.`}
+          Ignored {plural(drop.undeclared.length, "key")} this project does not declare:{" "}
+          <Code>{names(drop.undeclared)}</Code>. Keys come from <Code>defineEnv</Code> in app
+          code; this page cannot create one.
         </p>
-        {drop.undeclared.length > 0 && (
-          <p className="text-muted-foreground">
-            Ignored {plural(drop.undeclared.length, "key")} this project does not declare:{" "}
-            <code className="bg-chip px-1 text-xs">{names(drop.undeclared)}</code>. Keys come from{" "}
-            <code className="bg-chip px-1 text-xs">defineEnv</code> in app code; this page cannot
-            create one.
-          </p>
-        )}
-        {drop.skipped.map((skip) => (
-          <p className="text-muted-foreground" key={skip.key}>
-            Skipped {skip.key}: {skip.reason}.
-          </p>
-        ))}
-      </div>
+      )}
+      {drop.skipped.map((skip) => (
+        <p key={skip.key}>
+          Skipped {skip.key}: {skip.reason}.
+        </p>
+      ))}
       <Button
         variant="ghost"
         size="icon-xs"
+        className="absolute top-3 right-3"
         title="Dismiss"
         aria-label="dismiss this notice"
         onClick={dismissDrop}
       >
-        <XIcon />
+        <Glyph>✕</Glyph>
       </Button>
-    </div>
+    </Note>
   );
 }
 
@@ -108,24 +97,21 @@ function Banner() {
   const recovery = current?.recovery;
   if (!current || !recovery) return null;
   return (
-    <div
-      role="status"
-      data-slot="banner"
-      className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm"
-    >
-      <WarningIcon className="size-4 shrink-0 text-destructive" />
-      <p className="flex-1 basis-96">
-        Deploy <code className="bg-chip px-1 text-xs">{recovery.deploy}</code> is waiting on{" "}
-        {plural(recovery.owed.length, "cell")} it was refused.{" "}
-        {left === 0
-          ? "Every one now holds a value; save and resume below."
-          : `${plural(left, "cell")} still ${left === 1 ? "needs" : "need"} a value.`}
-      </p>
-      <label className="inline-flex cursor-pointer items-center gap-2 text-xs">
-        <Checkbox checked={only} onCheckedChange={(on) => showOwed(on)} />
-        Show only what the deploy needs
-      </label>
-    </div>
+    <Note role="status" data-slot="banner" label="Deploy waiting" className="mb-6">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <p className="flex-1 basis-96">
+          Deploy <Code>{recovery.deploy}</Code> is waiting on{" "}
+          {plural(recovery.owed.length, "cell")} it was refused.{" "}
+          {left === 0
+            ? "Every one now holds a value; save and resume below."
+            : `${plural(left, "cell")} still ${left === 1 ? "needs" : "need"} a value.`}
+        </p>
+        <label className="inline-flex cursor-pointer items-center gap-2 font-mono text-xs text-foreground">
+          <Checkbox checked={only} onCheckedChange={(on) => showOwed(on)} />
+          Show only what the deploy needs
+        </label>
+      </div>
+    </Note>
   );
 }
 
@@ -147,19 +133,17 @@ function BulkBar() {
       role="toolbar"
       aria-label="selected rows"
       data-slot="bulk"
-      className="sticky bottom-0 z-20 flex flex-wrap items-center gap-2 border-t border-border bg-background px-6 py-2.5"
+      className="sticky bottom-0 z-20 flex flex-wrap items-center gap-2 border-t-[1.5px] border-foreground bg-background px-6 py-2.5"
     >
-      <span className="font-mono text-xs">{picked.size} selected</span>
+      <span className="font-mono text-[13px]">{picked.size} selected</span>
       <Button variant="ghost" size="xs" data-action="unselect" onClick={clearSelection}>
         Unselect all
       </Button>
       <span className="flex-1" />
-      <Button variant="outline" size="xs" onClick={() => void revealSelected()}>
-        <EyeIcon />
+      <Button variant="command" size="xs" onClick={() => void revealSelected()}>
         Reveal
       </Button>
-      <Button variant="outline" size="xs" onClick={hideSelected}>
-        <EyeSlashIcon />
+      <Button variant="command" size="xs" onClick={hideSelected}>
         Hide
       </Button>
       <Button
@@ -169,7 +153,7 @@ function BulkBar() {
         disabled={removable.length === 0 || busy}
         onClick={() => askRemoval(removable)}
       >
-        <TrashIcon />
+        <Glyph>✕</Glyph>
         Remove {removable.length > 0 ? plural(removable.length, "value") : "values"}
       </Button>
     </div>
@@ -191,16 +175,16 @@ function Confirm() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy} data-action="cancel-remove">
+            <AlertDialogCancel size="sm" disabled={busy} data-action="cancel-remove">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
+              size="sm"
               disabled={busy}
               data-action="confirm-remove"
               onClick={() => void confirmRemoval()}
             >
-              <TrashIcon />
               {busy ? "Removing…" : "Remove"}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -224,12 +208,12 @@ function Bar({ recovery }: { recovery: boolean }) {
   return (
     <footer
       data-slot="bar"
-      className="sticky bottom-0 z-20 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border bg-background px-6 py-3"
+      className="sticky bottom-0 z-20 flex flex-wrap items-center gap-x-6 gap-y-2 border-t-[1.5px] border-foreground bg-background px-6 py-3"
     >
       <div className="flex flex-1 flex-wrap items-center gap-3">
         {pending > 0 && (
           <>
-            <span className="font-mono text-xs">{plural(pending, "unsaved change")}</span>
+            <span className="font-mono text-[13px]">{plural(pending, "unsaved change")}</span>
             <Button
               variant={recovery ? "outline" : "default"}
               size="sm"
@@ -246,7 +230,10 @@ function Bar({ recovery }: { recovery: boolean }) {
         )}
         <p
           aria-live="polite"
-          className={cn("text-sm", tone === "owed" ? "text-destructive" : "text-muted-foreground")}
+          className={cn(
+            "font-sans text-[13.5px]",
+            tone === "owed" ? "text-destructive" : "text-body",
+          )}
         >
           {text}
         </p>
@@ -264,15 +251,10 @@ function Bar({ recovery }: { recovery: boolean }) {
             }
             onClick={() => void resume()}
           >
+            <Glyph>↵</Glyph>
             {busyFinishing ? "Resuming…" : "Save and resume the deploy"}
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            disabled={busy}
-            onClick={() => void abandon()}
-          >
+          <Button variant="destructive" size="sm" disabled={busy} onClick={() => void abandon()}>
             Abandon the deploy
           </Button>
         </div>
@@ -285,19 +267,17 @@ export function App() {
   const goodbye = useValue(farewell);
   const current = useValue(state);
   if (goodbye !== null) {
-    return <p className="p-12 font-mono text-sm text-muted-foreground">{goodbye}</p>;
+    return <p className="p-12 font-mono text-sm text-body">{goodbye}</p>;
   }
   if (!current) {
     return (
-      <p className="p-12 font-mono text-sm text-muted-foreground">
-        Reading this project’s variables…
-      </p>
+      <p className="p-12 font-mono text-sm text-body">Reading this project’s variables…</p>
     );
   }
   const recovery = current.recovery !== undefined;
   return (
     <div className="flex min-h-screen flex-col">
-      <div className="mx-auto w-full max-w-[92rem] flex-1 px-6 pt-6 pb-24">
+      <div className="mx-auto w-full max-w-[92rem] flex-1 px-10 pt-8 pb-24">
         <Masthead current={current} />
         <Banner />
         <Apps current={current} />

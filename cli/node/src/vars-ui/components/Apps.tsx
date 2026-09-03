@@ -1,10 +1,8 @@
-import { AppWindowIcon } from "@phosphor-icons/react";
-
 import { cn } from "@/lib/utils";
 
 import { folderName, type State } from "../model";
 import { hoveredApp } from "../store";
-import { SectionLabel } from "./Chip";
+import { Glyph, SectionLabel } from "./Chip";
 
 export function Apps({ current }: { current: State }) {
   if (current.matrix.apps.length === 0) return null;
@@ -17,19 +15,19 @@ export function Apps({ current }: { current: State }) {
           return (
             <li
               key={app.name}
-              className="flex cursor-default items-center gap-2 border border-border bg-card px-3 py-1.5 text-xs hover:border-foreground"
+              className="flex cursor-default items-center gap-2.5 border border-border bg-card px-3 py-1.5 font-mono text-[12.5px] hover:border-foreground"
               onMouseEnter={() => (hoveredApp.value = app)}
               onMouseLeave={() => (hoveredApp.value = null)}
             >
-              <AppWindowIcon className="size-4 text-muted-foreground" />
-              <span className="font-mono font-medium">{app.name}</span>
+              <span className="text-foreground">{app.name}</span>
               <span className="text-muted-foreground">reads {folderName(app.folder)}, then root</span>
               <span
                 className={cn(
-                  "font-mono text-[11px]",
+                  "inline-flex items-center gap-1.5",
                   missing.length === 0 ? "text-held" : "text-destructive",
                 )}
               >
+                <Glyph className="text-[9px]">●</Glyph>
                 {missing.length === 0 ? "resolves" : `${missing.length} unresolved`}
               </span>
             </li>

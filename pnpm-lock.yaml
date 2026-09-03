@@ -269,9 +269,6 @@ importers:
       '@base-ui/react':
         specifier: ^1.6.0
         version: 1.6.0(@types/react@19.2.17)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@phosphor-icons/react':
-        specifier: ^2.1.10
-        version: 2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@platform/edge-contract':
         specifier: workspace:^
         version: link:../../platform/edge/contract
@@ -317,9 +314,6 @@ importers:
       tailwindcss:
         specifier: ^4
         version: 4.3.2
-      tw-animate-css:
-        specifier: ^1.4.0
-        version: 1.4.0
       vite:
         specifier: ^8.1.3
         version: 8.1.3(@types/node@20.19.43)(esbuild@0.24.2)(jiti@2.7.0)(tsx@4.23.0)
