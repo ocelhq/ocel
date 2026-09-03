@@ -211,7 +211,6 @@ jobs:
       BETTER_AUTH_SECRET: journey-secret-not-for-production
       BETTER_AUTH_URL: http://localhost:3000
       NEXT_PUBLIC_BETTER_AUTH_URL: http://localhost:3000
-      OCEL_API_URL: http://localhost:3000
     steps:
       - name: Checkout
         uses: actions/checkout@v4
