@@ -6,16 +6,19 @@ import {
   addressKey,
   applyDotenv,
   baselineOf,
+  catalogueOf,
   dirtyEntries,
+  editable,
+  environmentsOf,
+  listingOf,
   names,
   owedSet,
   planCopy,
   plural,
   reduceSave,
+  removeSummary,
   revealable,
   saveSummary,
-  sortOwedFirst,
-  treeOf,
   unfilledOwed,
   variantsOf,
   type Address,
@@ -26,7 +29,6 @@ import {
   type Problem,
   type SaveResult,
   type State,
-  type Variant,
   type Version,
 } from "./model";
 
@@ -35,7 +37,11 @@ export const hoveredApp = signal<AppResolution | null>(null);
 export const saving = signal(false);
 export const farewell = signal<string | null>(null);
 
-export const expanded = signal<ReadonlySet<string>>(new Set());
+export const folder = signal("");
+export const environment = signal("");
+export const search = signal("");
+export const owedOnly = signal(false);
+export const selected = signal<ReadonlySet<string>>(new Set());
 export const extras = signal<readonly Address[]>([]);
 
 export const drafts = signal<ReadonlyMap<string, string>>(new Map());
@@ -44,13 +50,21 @@ export const revealErrors = signal<ReadonlyMap<string, string>>(new Map());
 export const problems = signal<ReadonlyMap<string, Problem>>(new Map());
 export const outcome = signal<{ text: string; tone?: "owed" } | null>(null);
 
-export const dropTarget = signal<string | null>(null);
+export const dragging = signal(false);
 export const dropped = signal<(DropOutcome & { name: string }) | null>(null);
+
+export interface Removal {
+  cells: { at: Address; version: number }[];
+}
+
+export const removing = signal<Removal | null>(null);
 
 export interface CopyDialog {
   tier: string;
   plan: CopyPlan;
   chosen: ReadonlySet<string>;
+  overwriting: boolean;
+  open: ReadonlySet<string>;
   busy: boolean;
   error: string | null;
 }
@@ -62,24 +76,45 @@ export const drawer = signal<Address | null>(null);
 export const history = signal<Version[] | null>(null);
 export const historyError = signal<string | null>(null);
 
-export const tree = computed(() =>
-  state.value ? treeOf(state.value, extras.value) : [],
+const emptyState: State = {
+  slug: "",
+  tier: "",
+  other: "",
+  environments: [],
+  matrix: { columns: [], rows: [], apps: [] },
+};
+
+export const catalogue = computed(() =>
+  catalogueOf(state.value ?? emptyState, extras.value),
 );
 
-export const variants = computed(
-  () => new Map(variantsOf(tree.value).map((v) => [addressKey(v.at), v])),
+export const variants = computed(() => catalogue.value.variants);
+
+export const environments = computed(() =>
+  state.value ? environmentsOf(state.value) : [],
 );
 
 export const dirty = computed(() =>
-  dirtyEntries(tree.value, drafts.value, baselines.value),
+  dirtyEntries(catalogue.value, drafts.value, baselines.value),
 );
 
 export const owed = computed(() => owedSet(state.value?.recovery));
 
-export const ordered = computed(() => sortOwedFirst(tree.value, owed.value));
+export const listing = computed(() =>
+  listingOf(state.value ?? emptyState, catalogue.value, owed.value, {
+    folder: folder.value,
+    environment: environment.value,
+    query: search.value,
+    owedOnly: owedOnly.value,
+  }),
+);
+
+export const visible = computed(() =>
+  listing.value.keys.filter((line) => editable(line.variant)).map((line) => line.variant),
+);
 
 export const unfilled = computed(() =>
-  unfilledOwed(tree.value, owed.value, drafts.value, baselines.value),
+  unfilledOwed(catalogue.value, owed.value, drafts.value, baselines.value),
 );
 
 export const finishing = signal(false);
@@ -93,11 +128,7 @@ export async function load(): Promise<void> {
     return;
   }
   void attend();
-  const open = new Set(expanded.value);
-  for (const cell of state.value.recovery?.owed ?? []) {
-    if (cell.folder !== "") open.add(cell.key);
-  }
-  expanded.value = open;
+  owedOnly.value = unfilled.value.length > 0;
 }
 
 async function attend(): Promise<void> {
@@ -126,33 +157,67 @@ async function refresh(): Promise<void> {
   }
 }
 
-export function toggle(key: string): void {
-  const next = new Set(expanded.value);
+export function go(target: string): void {
+  folder.value = target;
+  search.value = "";
+  owedOnly.value = false;
+  selected.value = new Set();
+}
+
+export function pickEnvironment(name: string): void {
+  environment.value = name;
+  selected.value = new Set();
+}
+
+export function setSearch(text: string): void {
+  search.value = text;
+  selected.value = new Set();
+}
+
+export function showOwed(on: boolean): void {
+  owedOnly.value = on;
+  selected.value = new Set();
+}
+
+export function toggleSelected(at: Address): void {
+  const next = new Set(selected.value);
+  const key = addressKey(at);
   if (!next.delete(key)) next.add(key);
-  expanded.value = next;
+  selected.value = next;
 }
 
-export function expandAll(): void {
-  expanded.value = new Set(tree.value.map((row) => row.key));
+export function selectVisible(on: boolean): void {
+  selected.value = on ? new Set(visible.value.map((v) => addressKey(v.at))) : new Set();
 }
 
-export function collapseAll(): void {
-  expanded.value = new Set();
+export function clearSelection(): void {
+  selected.value = new Set();
 }
 
-export function addVariant(at: Address): void {
-  const known = new Set(extras.value.map(addressKey));
-  if (!known.has(addressKey(at))) extras.value = [...extras.value, at];
-  if (!expanded.value.has(at.key)) toggle(at.key);
+function remember(at: Address): void {
+  if (variants.value.has(addressKey(at))) return;
+  extras.value = [...extras.value, at];
 }
 
-export function dropVariant(at: Address): void {
+export function addOverride(at: Address): void {
+  remember(at);
+  folder.value = at.folder;
+  environment.value = at.environment;
+  search.value = "";
+  owedOnly.value = false;
+  selected.value = new Set();
+}
+
+export function dismiss(at: Address): void {
   const key = addressKey(at);
   extras.value = extras.value.filter((extra) => addressKey(extra) !== key);
-  setDraft(at, baselineOf(at, baselines.value));
+  const next = new Map(drafts.value);
+  next.delete(key);
+  drafts.value = next;
 }
 
 export function setDraft(at: Address, value: string): void {
+  remember(at);
   const key = addressKey(at);
   const next = new Map(drafts.value);
   if (value === baselineOf(at, baselines.value)) next.delete(key);
@@ -211,18 +276,44 @@ export function hide(cells: readonly Address[]): void {
   revealErrors.value = errors;
 }
 
-function everyRevealable(): Address[] {
-  return variantsOf(tree.value)
-    .filter(revealable)
-    .map((variant: Variant) => variant.at);
+export const shown = computed(() => {
+  const open = visible.value.filter(revealable);
+  return open.length > 0 && open.every((v) => baselines.value.has(addressKey(v.at)));
+});
+
+export function toggleRevealVisible(): void {
+  const cells = visible.value.filter(revealable).map((v) => v.at);
+  if (shown.value) hide(cells);
+  else void reveal(cells);
 }
 
-export function revealAll(): Promise<void> {
-  return reveal(everyRevealable());
+function chosen(): Address[] {
+  return variantsOf(catalogue.value)
+    .filter((v) => selected.value.has(addressKey(v.at)))
+    .map((v) => v.at);
 }
 
-export function hideAll(): void {
-  hide(everyRevealable());
+export function revealSelected(): Promise<void> {
+  return reveal(chosen());
+}
+
+export function hideSelected(): void {
+  hide(chosen());
+}
+
+export async function copyValue(at: Address): Promise<void> {
+  if (!baselines.value.has(addressKey(at))) await reveal([at]);
+  const value = baselines.value.get(addressKey(at));
+  if (value === undefined) {
+    outcome.value = { text: `Could not read the value of ${at.key} to copy it.`, tone: "owed" };
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(value);
+    outcome.value = { text: `Copied the value of ${at.key}.` };
+  } catch (thrown) {
+    outcome.value = { text: `Could not copy: ${message(thrown)}`, tone: "owed" };
+  }
 }
 
 async function attempt(at: Address, run: () => Promise<unknown>): Promise<SaveResult> {
@@ -280,37 +371,55 @@ export async function save(): Promise<void> {
   }
 }
 
-export async function erase(at: Address, version: number): Promise<void> {
+export function askRemoval(cells: readonly Address[]): void {
+  const held = cells
+    .map((at) => variants.value.get(addressKey(at)))
+    .filter((v) => v !== undefined && v.set && !v.reference)
+    .map((v) => ({ at: v!.at, version: v!.version }));
+  if (held.length === 0) return;
+  removing.value = { cells: held };
+}
+
+export function cancelRemoval(): void {
   if (saving.value) return;
+  removing.value = null;
+}
+
+export async function confirmRemoval(): Promise<void> {
+  const asked = removing.value;
+  if (!asked || saving.value) return;
   saving.value = true;
   outcome.value = null;
   try {
-    const result = await attempt(at, () =>
-      api("DELETE", `/api/value?${query(at)}&version=${version}`),
+    const results = await Promise.all(
+      asked.cells.map(({ at, version }) =>
+        attempt(at, () => api("DELETE", `/api/value?${query(at)}&version=${version}`)),
+      ),
     );
     await refresh();
-    settle([result]);
-    if (result.ok) hide([at]);
-    outcome.value = result.ok
-      ? { text: `Removed the value of ${at.key}.` }
-      : { text: `Could not remove the value of ${at.key}: ${result.message}`, tone: "owed" };
+    const reduced = settle(results);
+    hide(results.filter((r) => r.ok).map((r) => r.at));
+    outcome.value = {
+      text: removeSummary(reduced),
+      ...(reduced.saved < results.length && { tone: "owed" as const }),
+    };
+    removing.value = null;
+    selected.value = new Set();
   } finally {
     saving.value = false;
   }
 }
 
-export function applyDrop(name: string, text: string, folder: string): void {
-  const out = applyDotenv(tree.value, parseDotenv(text), folder);
+export function applyDrop(name: string, text: string, into: string): void {
+  const out = applyDotenv(catalogue.value, parseDotenv(text), into);
   const added = [...extras.value];
   const known = new Set(added.map(addressKey));
-  const open = new Set(expanded.value);
   const next = new Map(drafts.value);
   for (const fill of out.fills) {
     if (fill.materialise && !known.has(addressKey(fill.at))) {
       added.push(fill.at);
       known.add(addressKey(fill.at));
     }
-    if (fill.at.folder !== "") open.add(fill.at.key);
     if (fill.value === baselineOf(fill.at, baselines.value)) {
       next.delete(addressKey(fill.at));
     } else {
@@ -318,10 +427,13 @@ export function applyDrop(name: string, text: string, folder: string): void {
     }
   }
   extras.value = added;
-  expanded.value = open;
   drafts.value = next;
   dropped.value = { ...out, name };
-  dropTarget.value = null;
+  dragging.value = false;
+}
+
+export function importFile(file: File): void {
+  void file.text().then((text) => applyDrop(file.name, text, folder.value));
 }
 
 export function dismissDrop(): void {
@@ -335,11 +447,13 @@ export async function openCopy(): Promise<void> {
   outcome.value = null;
   try {
     const other = await api<{ tier: string; values: OtherValue[] }>("GET", "/api/other");
-    const plan = planCopy(tree.value, current.environments, other.values);
+    const plan = planCopy(catalogue.value, current.environments, other.values);
     copying.value = {
       tier: other.tier,
       plan,
       chosen: new Set(plan.fills.map((cell) => addressKey(cell.at))),
+      overwriting: false,
+      open: new Set([""]),
       busy: false,
       error: null,
     };
@@ -353,13 +467,36 @@ export async function openCopy(): Promise<void> {
   }
 }
 
-export function toggleCopy(at: Address): void {
+export function toggleCopy(cells: readonly Address[], on?: boolean): void {
   const dialog = copying.value;
   if (!dialog || dialog.busy) return;
+  const next = new Set(dialog.chosen);
+  for (const at of cells) {
+    const key = addressKey(at);
+    const want = on ?? !next.has(key);
+    if (want) next.add(key);
+    else next.delete(key);
+  }
+  copying.value = { ...dialog, chosen: next };
+}
+
+export function toggleOverwriting(): void {
+  const dialog = copying.value;
+  if (!dialog || dialog.busy) return;
+  const overwriting = !dialog.overwriting;
   const chosen = new Set(dialog.chosen);
-  const key = addressKey(at);
-  if (!chosen.delete(key)) chosen.add(key);
-  copying.value = { ...dialog, chosen };
+  if (!overwriting) {
+    for (const cell of dialog.plan.overwrites) chosen.delete(addressKey(cell.at));
+  }
+  copying.value = { ...dialog, overwriting, chosen };
+}
+
+export function toggleBranch(target: string): void {
+  const dialog = copying.value;
+  if (!dialog) return;
+  const open = new Set(dialog.open);
+  if (!open.delete(target)) open.add(target);
+  copying.value = { ...dialog, open };
 }
 
 export function closeCopy(): void {
@@ -388,16 +525,13 @@ export async function confirmCopy(): Promise<void> {
     });
     const added = [...extras.value];
     const known = new Set(added.map(addressKey));
-    const open = new Set(expanded.value);
     for (const cell of cells) {
       if (cell.materialise && !known.has(addressKey(cell.at))) {
         added.push(cell.at);
         known.add(addressKey(cell.at));
       }
-      if (cell.at.folder !== "" || cell.at.environment !== "") open.add(cell.at.key);
     }
     extras.value = added;
-    expanded.value = open;
     await refresh();
     const results: SaveResult[] = answer.results.map((result) => {
       const at = { key: result.key, folder: result.folder, environment: result.environment };
