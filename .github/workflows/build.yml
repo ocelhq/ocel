@@ -70,3 +70,4 @@ jobs:
           pnpm --filter @platform/cf-entry test
           pnpm --filter @platform/cloudfront-resolver test
           pnpm --filter @platform/aws-tag-invalidator test
+          pnpm --filter @platform/aws-membrane test

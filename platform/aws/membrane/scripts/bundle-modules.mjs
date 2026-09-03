@@ -1,14 +1,22 @@
 import { build } from "esbuild";
-import { rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readdir, rm } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const distNext = join(pkgDir, "dist/next");
+const dist = process.argv[2] ? join(process.cwd(), process.argv[2]) : join(pkgDir, "dist");
+const distNext = join(dist, "next");
 
 const handlers = ["cache-handler", "use-cache-default", "use-cache-remote"];
 
-const internalModules = ["cache-store", "tag-clock", "use-cache-entry", "use-cache-store"];
+const internalModules = [
+  "cache-store",
+  "isr-writer",
+  "object-store",
+  "tag-clock",
+  "use-cache-entry",
+  "use-cache-store",
+];
 
 const bundledModules = ["router-host"];
 
@@ -62,3 +70,36 @@ await Promise.all(
 await Promise.all(
   bundledInternals.map((name) => rm(join(distNext, `${name}.mjs`), { force: true })),
 );
+
+const keepRelativeImports = {
+  name: "keep-relative-imports",
+  setup(api) {
+    api.onResolve({ filter: /^\.\.?\// }, (args) =>
+      args.importer.startsWith(dist) ? { path: args.path, external: true } : undefined,
+    );
+  },
+};
+
+const bundledOutputs = new Set(bundledModules.map((name) => join(distNext, `${name}.mjs`)));
+const loose = (await readdir(dist, { recursive: true, withFileTypes: true }))
+  .filter((entry) => entry.isFile() && entry.name.endsWith(".mjs"))
+  .map((entry) => join(entry.parentPath, entry.name))
+  .filter((file) => !bundledOutputs.has(file));
+
+await Promise.all(
+  loose.map((file) =>
+    build({
+      entryPoints: [file],
+      outfile: file,
+      bundle: true,
+      platform: "node",
+      format: "esm",
+      target: "node24",
+      allowOverwrite: true,
+      nodePaths: [join(pkgDir, "node_modules")],
+      plugins: [keepRelativeImports],
+    }),
+  ),
+);
+
+process.stdout.write(`${loose.map((file) => relative(dist, file)).sort().join("\n")}\n`);
