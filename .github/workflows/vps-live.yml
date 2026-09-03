@@ -10,10 +10,32 @@ on:
       - "cli/internal/provider/**"
       - "cli/internal/prompt/**"
       - "cli/internal/cli/bootstrap/**"
+      - "cli/internal/cli/preflight/**"
+      - "cli/internal/cli/doctor/**"
+      - "cli/internal/imagebuild/**"
+      - "cli/internal/appbuilder/**"
+      - "cli/internal/appimages/**"
+      - "cli/internal/appregistry/**"
+      - "cli/internal/livemachine/**"
+      - "cli/internal/cli/deploy/**"
+      - "cli/internal/cli/permissions/**"
+      - "cli/internal/cli/domain.go"
+      - "cli/internal/cli/rollback.go"
+      - "cli/internal/cli/destroy.go"
+      - "cli/internal/cli/env/**"
+      - "cli/internal/envgate/**"
+      - "cli/internal/discovery/**"
+      - "cli/internal/manifestbuilder/**"
+      - "cli/internal/projectconfig/**"
+      - "packages/ocel/**"
+      - "pkg/naming/**"
+      - "examples/express-container/**"
+      - "proto/**"
       - "pnpm-lock.yaml"
       - "scripts/incus.sh"
       - "scripts/assert-ran.sh"
       - ".github/workflows/vps-live.yml"
+      - ".github/actions/incus-vm/**"
   workflow_dispatch:
 
 concurrency:
@@ -27,87 +49,108 @@ permissions:
 jobs:
   live:
     if: github.event.action != 'closed'
-    name: vps live conformance
+    name: vps live conformance ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      VM: ocel-live-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup the incus host
+        uses: ./.github/actions/incus-vm
         with:
-          go-version-file: platform/vps/provider/go.mod
-          cache-dependency-path: |
-            platform/vps/provider/go.sum
-            cli/go.sum
+          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
-      - name: Setup gobuildcache
-        uses: ./.github/actions/gobuildcache
-        with:
-          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.10.0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: The node bundle the CLI binary is built around
+      - name: Pick this shard's tests
         run: |
           set -euo pipefail
-          pnpm install --frozen-lockfile
-          pnpm --filter ocel build
-          go generate -C cli ./...
-
-      - name: Virtualisation the qemu driver hard-requires
-        run: |
-          sudo modprobe vhost_vsock || true
-          ls -l /dev/kvm /dev/vsock
-
-      - name: Install incus
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y incus qemu-system-x86 ovmf
-          sudo incus admin init --auto
-          sudo usermod -aG incus-admin "$(id -un)"
-
-      - name: Let the incus bridge past Docker's FORWARD drop
-        run: |
-          set -euo pipefail
-          for cmd in iptables ip6tables; do
-            sudo "$cmd" -nL DOCKER-USER >/dev/null 2>&1 || continue
-            sudo "$cmd" -I DOCKER-USER -i incusbr0 -j ACCEPT
-            sudo "$cmd" -I DOCKER-USER -o incusbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-          done
+          go test -C platform/vps/provider -list '^TestLive' ./... \
+            | grep '^TestLive' | sort \
+            | awk -v n=4 -v s='${{ matrix.shard }}' 'NR % n == s' > shard.tests
+          if [ ! -s shard.tests ]; then
+            echo "::error::shard ${{ matrix.shard }} holds no test"
+            exit 1
+          fi
+          echo "shard ${{ matrix.shard }} runs:"
+          cat shard.tests
+          echo "SHARD_RUN=^($(paste -sd'|' shard.tests))\$" >> "$GITHUB_ENV"
 
       - name: Run the live conformance suite
         run: |
           set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh run ocel-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./..." | tee live.json
+          sg incus-admin -c "scripts/incus.sh run $VM -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '$SHARD_RUN' -json ./..." | tee live.json
 
       - name: Assert the live suite ran
         run: scripts/assert-ran.sh live.json TestLive
 
+      - name: No VM left behind
+        if: always()
+        run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
+
+  build:
+    if: github.event.action != 'closed'
+    name: vps build pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VM: ocel-build-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup the incus host
+        uses: ./.github/actions/incus-vm
+        with:
+          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - name: Run the build pipeline against a machine's own daemon
+        run: |
+          set -euo pipefail
+          sg incus-admin -c "scripts/incus.sh run $VM -- go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." | tee build.json
+
+      - name: Assert the build live suite ran
+        run: scripts/assert-ran.sh build.json TestLive
+
+      - name: No VM left behind
+        if: always()
+        run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
+
+  e2e:
+    if: github.event.action != 'closed'
+    name: vps cli e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      VM: ocel-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup the incus host
+        uses: ./.github/actions/incus-vm
+        with:
+          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
       - name: Run the CLI e2e on a machine of its own
         run: |
           set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh run ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestE2E' -json ./..." | tee e2e.json
+          sg incus-admin -c "scripts/incus.sh run $VM -- go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestE2E' -json ./..." | tee e2e.json
 
       - name: Assert the e2e ran
         run: scripts/assert-ran.sh e2e.json TestE2E
 
       - name: No VM left behind
         if: always()
-        run: |
-          for name in "ocel-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "ocel-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; do
-            sg incus-admin -c "scripts/incus.sh destroy $name" || echo "could not destroy $name"
-          done
+        run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"

@@ -1,0 +1,104 @@
+name: incus-vm
+description: >-
+  The toolchain and host every incus-backed live suite needs: Go with the
+  embedded node bundle and flip helper generated, incus with the qemu driver,
+  and a Docker daemon keeping images in containerd.
+
+inputs:
+  gobuildcache-bucket:
+    default: ""
+  gobuildcache-region:
+    default: ""
+  gobuildcache-role-to-assume:
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: platform/vps/provider/go.mod
+        cache-dependency-path: |
+          platform/vps/provider/go.sum
+          cli/go.sum
+
+    - name: Setup gobuildcache
+      uses: ./.github/actions/gobuildcache
+      with:
+        bucket: ${{ inputs.gobuildcache-bucket }}
+        region: ${{ inputs.gobuildcache-region }}
+        role-to-assume: ${{ inputs.gobuildcache-role-to-assume }}
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 11.10.0
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: pnpm
+
+    - name: The node bundle the CLI binary is built around
+      shell: bash
+      run: |
+        set -euo pipefail
+        pnpm install --frozen-lockfile
+        pnpm --filter ocel build
+        go generate -C cli ./...
+
+    - name: The flip helper the provider embeds
+      shell: bash
+      run: go generate -C platform/vps/provider ./...
+
+    - name: Virtualisation the qemu driver hard-requires
+      shell: bash
+      run: |
+        sudo modprobe vhost_vsock || true
+        ls -l /dev/kvm /dev/vsock
+
+    - name: Install incus
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y incus qemu-system-x86 ovmf
+        sudo incus admin init --auto
+        sudo usermod -aG incus-admin "$(id -un)"
+
+    - name: Keep images in containerd, as every build the cli accepts does
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo mkdir -p /etc/docker
+        if [ -s /etc/docker/daemon.json ]; then
+          jq '.features."containerd-snapshotter" = true' /etc/docker/daemon.json > /tmp/daemon.json
+        else
+          echo '{"features":{"containerd-snapshotter":true}}' > /tmp/daemon.json
+        fi
+        sudo install -m 0644 /tmp/daemon.json /etc/docker/daemon.json
+        cat /etc/docker/daemon.json
+        sudo systemctl restart docker
+        for _ in $(seq 1 30); do
+          if docker info >/dev/null 2>&1; then break; fi
+          sleep 1
+        done
+        docker info --format '{{json .DriverStatus}}'
+        if ! docker info --format '{{json .DriverStatus}}' | grep -q 'containerd.snapshotter'; then
+          echo "the containerd image store did not take: the daemon still keeps images in its classic store," >&2
+          echo "so the live transfer would export an archive production never exports and prove nothing." >&2
+          docker info >&2
+          exit 1
+        fi
+
+    - name: Let the incus bridge past Docker's FORWARD drop
+      shell: bash
+      run: |
+        set -euo pipefail
+        for cmd in iptables ip6tables; do
+          sudo "$cmd" -nL DOCKER-USER >/dev/null 2>&1 || continue
+          sudo "$cmd" -I DOCKER-USER -i incusbr0 -j ACCEPT
+          sudo "$cmd" -I DOCKER-USER -o incusbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+        done
