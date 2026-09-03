@@ -80,6 +80,40 @@ func TestTheAppPlanCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
 	}
 }
 
+func TestTheStagedRecordCarriesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.T) {
+	builtProject(t)
+	routing := []byte(`{"routes":[{"id":"index"}]}`)
+	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", BuildID: "b1"}, routing)
+	client, provider := deployServed(t)
+	held := staging(t, provider)
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+
+	result, _ := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	staged := held.records()
+	if len(staged) != 1 {
+		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+	}
+	encoded, err := json.Marshal(staged[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record struct {
+		RoutingManifest json.RawMessage `json:"routingManifest"`
+	}
+	if err := json.Unmarshal(encoded, &record); err != nil {
+		t.Fatal(err)
+	}
+	if string(record.RoutingManifest) != string(routing) {
+		t.Errorf("the staged record routes by %s, want %s: an edge that runs the code reads its routing from the record, and without it proxies every static asset to the origin", record.RoutingManifest, routing)
+	}
+}
+
 func TestAProviderCarryingNoMembraneStandsAnAppUpWithout(t *testing.T) {
 	builtProject(t)
 	provider := fake.NewProvider(fake.Options{})
