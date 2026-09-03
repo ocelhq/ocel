@@ -21,6 +21,7 @@ env:
   ADAPTER_BASELINE: tests/next-compat/baseline-manifest.json
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
+  BUN_VERSION: "1.4.0"
   # FIXME: must match pinnedPulumiVersion in platform/aws/provider/pulumiruntime/runtime.go —
   # nothing checks that it does, and a mismatch silently warms the wrong directory.
   PULUMI_VERSION: "3.146.0"
@@ -58,6 +59,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-build-${{ github.run_id }}
@@ -90,14 +92,19 @@ jobs:
         working-directory: nextjs
         run: pnpm playwright install --with-deps chromium
 
+      - uses: actions/cache@v4
+        with:
+          path: adapter/.turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ github.job }}-
+            turbo-${{ runner.os }}-
+
       - name: Install & build the adapter workspace
         working-directory: adapter
         run: |
           pnpm install --frozen-lockfile
-          pnpm --filter ocel build
-          pnpm --filter @framework/next-adapter build
-          pnpm --filter @platform/cf-entry build
-          pnpm --filter @platform/cf-deployments-store build
+          pnpm turbo run build --filter=ocel --filter=@cli/node
 
       - name: Build the Go binaries for this host
         working-directory: adapter
@@ -158,6 +165,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-sweep-${{ github.run_id }}
@@ -204,6 +212,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-smoke-${{ github.run_id }}
@@ -350,6 +359,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-${{ github.run_id }}-${{ strategy.job-index }}
@@ -505,6 +515,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-tier-${{ matrix.tier }}-${{ github.run_id }}
@@ -584,6 +595,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-e2e-destroy-${{ github.run_id }}

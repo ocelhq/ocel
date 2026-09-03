@@ -8,10 +8,13 @@ on:
       - "cli/node/**"
       - "frameworks/**"
       - "platform/**"
+      - "scripts/**"
       - "pnpm-lock.yaml"
       - "package.json"
       - "pnpm-workspace.yaml"
+      - "turbo.json"
       - ".github/workflows/build.yml"
+      - ".github/actions/node-workspace/**"
       - "!**/*.go"
       - "!**/go.mod"
       - "!**/go.sum"
@@ -29,51 +32,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.10.0
+      - uses: ./.github/actions/node-workspace
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: pnpm --filter @cli/node typecheck
-        run: pnpm --filter @cli/node typecheck
-
-      - name: pnpm --filter ocel build (tsc)
-        run: pnpm --filter ocel build
-
-      - name: pnpm --filter @ocel/provider-aws typecheck
-        run: pnpm --filter @ocel/provider-aws typecheck
-
-      - name: pnpm --filter @ocel/provider-vps typecheck
-        run: pnpm --filter @ocel/provider-vps typecheck
-
-      - name: pnpm --filter @ocel/sst build (tsc)
-        run: pnpm --filter @ocel/sst build
-
-      - name: pnpm --filter @ocel/pulumi build (tsc)
-        run: pnpm --filter @ocel/pulumi build
-
-      - name: pnpm --filter @framework/next-router typecheck
-        run: pnpm --filter @framework/next-router typecheck
-
-      - name: JS unit tests
-        run: |
-          pnpm --filter ocel test
-          pnpm --filter @cli/node test
-          pnpm --filter @ocel/sst test
-          pnpm --filter @ocel/pulumi test
-          pnpm --filter @ocel/provider-aws test
-          pnpm --filter @ocel/provider-vps test
-          pnpm --filter @framework/next-router test
-          pnpm --filter @platform/cf-entry test
-          pnpm --filter @platform/cloudfront-resolver test
-          pnpm --filter @platform/aws-tag-invalidator test
-          pnpm --filter @platform/aws-membrane test
+      - name: Build, typecheck and test the workspace
+        run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./examples/*' --filter='!./tests/*'

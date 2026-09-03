@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-//go:generate sh ./generate.sh
+//go:generate pnpm --dir ../.. exec turbo run build --filter=@cli/node
 
 //go:embed dist
 var embedded embed.FS

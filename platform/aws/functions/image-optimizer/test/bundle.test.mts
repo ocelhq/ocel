@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { esbuildArgs } from "../scripts/bundle.mjs";
+import { bunArgs } from "../scripts/bundle.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -17,8 +17,8 @@ describe("the deployable bundle", () => {
     mkdirSync(out, { recursive: true });
 
     execFileSync(
-      "pnpm",
-      ["exec", "esbuild", ...esbuildArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))],
+      "bun",
+      ["build", ...bunArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))],
       { cwd: root, stdio: "pipe" },
     );
 

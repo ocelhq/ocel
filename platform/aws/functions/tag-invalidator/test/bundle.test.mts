@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { tagNamespace } from "@framework/next-cache";
 import { afterAll, expect, it } from "vitest";
 
-import { esbuildArgs } from "../scripts/bundle.mjs";
+import { bunArgs } from "../scripts/bundle.mjs";
 
 const namespace = tagNamespace("prod/acme/web/r0a1b2c3d/isr")!;
 
@@ -29,7 +29,7 @@ afterAll(() => rmSync(out, { recursive: true, force: true }));
 
 it("builds a bundle that loads and exports the handler", async () => {
   const outfile = join(out, "index.mjs");
-  execFileSync("pnpm", ["exec", "esbuild", ...esbuildArgs(join(root, "src", "index.mts"), outfile)], {
+  execFileSync("bun", ["build", ...bunArgs(join(root, "src", "index.mts"), outfile)], {
     cwd: root,
     stdio: "inherit",
   });

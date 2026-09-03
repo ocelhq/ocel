@@ -1,6 +1,7 @@
-import { build } from "esbuild";
+import { execFileSync } from "node:child_process";
+import { isBuiltin } from "node:module";
 import { readdir, rm } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -31,17 +32,29 @@ const cjsInterop = [
   "const __dirname = ocelDirname(__filename);",
 ].join("\n");
 
+async function bundle(entry, outfile, options) {
+  const result = await Bun.build({
+    entrypoints: [entry],
+    outdir: dirname(outfile),
+    naming: basename(outfile),
+    target: "node",
+    ...options,
+  });
+  if (!result.success) {
+    for (const log of result.logs) console.error(log);
+    process.exit(1);
+  }
+}
+
+await rm(dist, { recursive: true, force: true });
+execFileSync("tsc", ["--outDir", dist], { cwd: pkgDir, stdio: "inherit" });
+
 await Promise.all(
   handlers.map((name) =>
-    build({
-      entryPoints: [join(pkgDir, `src/next/${name}.mts`)],
-      outfile: join(distNext, `${name}.cjs`),
-      bundle: true,
-      platform: "node",
+    bundle(join(pkgDir, `src/next/${name}.mts`), join(distNext, `${name}.cjs`), {
       format: "cjs",
-      target: "node24",
       minify: true,
-      footer: { js: "module.exports = module.exports.default;" },
+      footer: "module.exports = module.exports.default;",
     }),
   ),
 );
@@ -54,15 +67,9 @@ await Promise.all(
 
 await Promise.all(
   bundledModules.map((name) =>
-    build({
-      entryPoints: [join(pkgDir, `src/next/${name}.mts`)],
-      outfile: join(distNext, `${name}.mjs`),
-      bundle: true,
-      platform: "node",
+    bundle(join(pkgDir, `src/next/${name}.mts`), join(distNext, `${name}.mjs`), {
       format: "esm",
-      target: "node24",
-      allowOverwrite: true,
-      banner: { js: cjsInterop },
+      banner: cjsInterop,
     }),
   ),
 );
@@ -71,11 +78,16 @@ await Promise.all(
   bundledInternals.map((name) => rm(join(distNext, `${name}.mjs`), { force: true })),
 );
 
-const keepRelativeImports = {
-  name: "keep-relative-imports",
+const looseImports = {
+  name: "loose-imports",
   setup(api) {
     api.onResolve({ filter: /^\.\.?\// }, (args) =>
       args.importer.startsWith(dist) ? { path: args.path, external: true } : undefined,
+    );
+    api.onResolve({ filter: /^[^./]/ }, (args) =>
+      args.importer.startsWith(dist) && !isBuiltin(args.path)
+        ? { path: Bun.resolveSync(args.path, pkgDir) }
+        : undefined,
     );
   },
 };
@@ -88,16 +100,9 @@ const loose = (await readdir(dist, { recursive: true, withFileTypes: true }))
 
 await Promise.all(
   loose.map((file) =>
-    build({
-      entryPoints: [file],
-      outfile: file,
-      bundle: true,
-      platform: "node",
+    bundle(file, file, {
       format: "esm",
-      target: "node24",
-      allowOverwrite: true,
-      nodePaths: [join(pkgDir, "node_modules")],
-      plugins: [keepRelativeImports],
+      plugins: [looseImports],
     }),
   ),
 );

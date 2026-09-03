@@ -11,6 +11,9 @@ inputs:
   pnpm-version:
     description: pnpm version to install.
     required: true
+  bun-version:
+    description: Bun version to install.
+    required: true
   aws-region:
     description: Region the role session is minted in.
     required: true
@@ -53,6 +56,10 @@ runs:
     - uses: pnpm/action-setup@v4
       with:
         version: ${{ inputs.pnpm-version }}
+
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: ${{ inputs.bun-version }}
 
     - name: Assume the E2E deploy role
       uses: aws-actions/configure-aws-credentials@v4

@@ -30,23 +30,13 @@ runs:
         region: ${{ inputs.gobuildcache-region }}
         role-to-assume: ${{ inputs.gobuildcache-role-to-assume }}
 
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v4
-      with:
-        version: 11.10.0
-
-    - name: Setup Node
-      uses: actions/setup-node@v4
-      with:
-        node-version: 22
-        cache: pnpm
+    - uses: ./.github/actions/node-workspace
 
     - name: The node bundle the CLI binary is built around
       shell: bash
       run: |
         set -euo pipefail
-        pnpm install --frozen-lockfile
-        pnpm --filter ocel build
+        pnpm turbo run build --filter=ocel
         go generate -C cli ./...
 
     - name: The flip helper the provider embeds
