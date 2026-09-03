@@ -1353,6 +1353,9 @@ importers:
       '@ocel-tests/shared':
         specifier: workspace:*
         version: link:../shared
+      '@ocel/provider-vps':
+        specifier: workspace:^
+        version: link:../../packages/provider-vps
       ocel:
         specifier: workspace:^
         version: link:../../packages/ocel

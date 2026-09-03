@@ -1,0 +1,99 @@
+import { createServer as createHttpServer, request as httpRequest, type Server } from "node:http";
+import { connect, type Socket } from "node:net";
+
+const PROXY_PORT = 443;
+const EDGE_PORT = 80;
+
+export type Gateway = {
+  tunnelUrl: string;
+  serving: (hostname: string) => Promise<string>;
+  close: () => Promise<void>;
+};
+
+function listening(server: Server): Promise<string> {
+  return new Promise((resolve, reject) => {
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (typeof address !== "object" || address === null) {
+        reject(new Error("the gateway could not read the port the kernel handed out"));
+        return;
+      }
+      resolve(`http://127.0.0.1:${address.port}`);
+    });
+  });
+}
+
+function closing(server: Server): Promise<void> {
+  return new Promise((resolve) => {
+    server.closeAllConnections();
+    server.close(() => resolve());
+  });
+}
+
+function tunnel(box: string): Server {
+  const server = createHttpServer((_, res) => {
+    res.writeHead(405).end();
+  });
+  server.on("connect", (req, client: Socket, head: Buffer) => {
+    const upstream = connect(PROXY_PORT, box, () => {
+      client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+      if (head.length > 0) {
+        upstream.write(head);
+      }
+      upstream.pipe(client);
+      client.pipe(upstream);
+    });
+    upstream.on("error", () => client.destroy());
+    client.on("error", () => upstream.destroy());
+  });
+  return server;
+}
+
+function forwarder(box: string, hostname: string): Server {
+  return createHttpServer((from, to) => {
+    const upstream = httpRequest(
+      {
+        host: box,
+        port: EDGE_PORT,
+        method: from.method,
+        path: from.url,
+        headers: { ...from.headers, host: hostname },
+      },
+      (answered) => {
+        to.writeHead(answered.statusCode ?? 502, answered.headers);
+        answered.pipe(to);
+      },
+    );
+    upstream.on("error", (error) => {
+      to.writeHead(502, { "content-type": "text/plain" }).end(String(error));
+    });
+    from.pipe(upstream);
+  });
+}
+
+export async function openGateway(box: string): Promise<Gateway> {
+  const servers: Server[] = [];
+  const forwarders = new Map<string, Promise<string>>();
+
+  const tunnelling = tunnel(box);
+  servers.push(tunnelling);
+  const tunnelUrl = await listening(tunnelling);
+
+  return {
+    tunnelUrl,
+    serving(hostname) {
+      let url = forwarders.get(hostname);
+      if (!url) {
+        const server = forwarder(box, hostname);
+        servers.push(server);
+        url = listening(server);
+        forwarders.set(hostname, url);
+      }
+      return url;
+    },
+    close: async () => {
+      await Promise.all(servers.map(closing));
+    },
+  };
+}
