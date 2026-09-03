@@ -18,6 +18,7 @@ export async function buildNext(input: AppInput, options: BuildOptions): Promise
 
   await nextRunner.run(cmd.command, cmd.args, input.cwd, {
     ...input.env,
+    NODE_ENV: "production",
     OCEL_APP_NAME: input.name,
     OCEL_OUTPUT_DIR: appOutDir(options.outDir, input.name),
     OCEL_APP_FOLDER: input.folder ?? "",
