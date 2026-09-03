@@ -1,63 +1,25 @@
-import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
 import { configTree, copyTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
-import { exampleDir, outputRoot, treeDir } from "../../paths";
+import { exampleDir, treeDir } from "../../paths";
 import { specForTarget } from "../../spec";
 import { migrateCommand, setAppNames } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
-import { accountFiles, pinnedEnv, PROFILE_VARS } from "./account";
 import { emulatorFetch } from "./dispatch";
+import { place } from "./place";
 import { sweepable } from "./slugs";
-import { answersAsFloci, awsStore, type Store } from "./store";
-import { detectWorld, expectationEnvironmentFor, type Where } from "./world";
+import { awsStore, type Store } from "./store";
+import { expectationEnvironmentFor } from "./world";
 
 const CONFIG = "ocel.aws.config.ts";
 
-const FLOCI_ZONE = "journey.test";
-
 const LEG_TIMEOUT_MS = 600_000;
 
-const pinnedDir = path.join(outputRoot, "aws-account");
-
-let placed: Promise<Where> | undefined;
 let bootstrapped: Promise<void> | undefined;
 let dispatching: Promise<typeof fetch> | undefined;
-
-async function pinAccountFiles(): Promise<void> {
-  await mkdir(pinnedDir, { recursive: true });
-  const { config, credentials } = accountFiles(pinnedDir);
-  await writeFile(config, "", "utf8");
-  await writeFile(credentials, "", "utf8");
-  const pinned = pinnedEnv(process.env, pinnedDir);
-  for (const name of PROFILE_VARS) {
-    delete process.env[name];
-  }
-  Object.assign(process.env, pinned);
-}
-
-async function place(): Promise<Where> {
-  placed ??= (async () => {
-    await pinAccountFiles();
-    const where = await detectWorld(process.env, {
-      answersAsFloci,
-      callerAccount: () => awsStore(process.env.AWS_ENDPOINT_URL).callerAccount(),
-    });
-    if (where.world === "floci") {
-      process.env.AWS_ACCESS_KEY_ID ??= "test";
-      process.env.AWS_SECRET_ACCESS_KEY ??= "test";
-      process.env.OCEL_JOURNEY_ZONE ??= FLOCI_ZONE;
-    } else if (!process.env.OCEL_JOURNEY_ZONE) {
-      throw new Error(
-        "OCEL_JOURNEY_ZONE names the zone this run's production hostnames hang under, and an aws project with no production hostname has nowhere to serve",
-      );
-    }
-    return where;
-  })();
-  return placed;
-}
 
 async function guard(): Promise<ExpectationEnvironment> {
   return expectationEnvironmentFor((await place()).world);
