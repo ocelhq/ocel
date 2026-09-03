@@ -199,7 +199,7 @@ jobs:
   dev:
     name: dev
     needs: [changes, binary]
-    if: ${{ needs.changes.outputs.dev == 'true' }}
+    if: ${{ needs.changes.outputs.dev == 'true' && needs.binary.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -294,7 +294,7 @@ jobs:
   aws:
     name: aws (${{ matrix.edge.name }})
     needs: [changes, binary]
-    if: ${{ needs.changes.outputs.aws == 'true' }}
+    if: ${{ needs.changes.outputs.aws == 'true' && needs.binary.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 45 }}
     strategy:
@@ -407,7 +407,7 @@ jobs:
   vps:
     name: vps
     needs: [changes, binary]
-    if: ${{ needs.changes.outputs.vps == 'true' }}
+    if: ${{ needs.changes.outputs.vps == 'true' && needs.binary.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 90 || 45 }}
     concurrency:
