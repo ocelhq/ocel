@@ -193,7 +193,7 @@ const imagesLock = stateRoot + "/images.lock"
 
 func loadEvidenceCommand() string {
 	return strings.Join([]string{
-		"journalctl -u docker.service -u containerd.service --no-pager -o short-iso -n 60 2>&1 | tail -n 60",
+		"docker events --since 10m --until 1s 2>&1 | tail -n 40",
 		"echo '--- disk'; df -h /var/lib/docker /var/lib/containerd 2>&1",
 		"echo '--- memory'; free -m 2>&1",
 		"echo '--- images'; docker system df 2>&1",
