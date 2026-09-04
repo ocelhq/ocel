@@ -53,10 +53,10 @@ var behaviours = map[Manager]behaviour{
 		runner:     "pnpm",
 		runtime:    "node",
 		install: func(l Location) string {
-			return fmt.Sprintf("pnpm install --frozen-lockfile --filter ./%s...", l.Path)
+			return fmt.Sprintf("pnpm install --frozen-lockfile --filter \"{./%s}...\"", l.Path)
 		},
-		build:    func(l Location) string { return fmt.Sprintf("pnpm --filter ./%s... run build", l.Path) },
-		start:    func(l Location) string { return fmt.Sprintf("pnpm --filter ./%s run start", l.Path) },
+		build:    func(l Location) string { return fmt.Sprintf("pnpm --filter \"{./%s}...\" run build", l.Path) },
+		start:    func(l Location) string { return fmt.Sprintf("pnpm --filter \"{./%s}\" run start", l.Path) },
 		replaces: []string{"pnpm install --frozen-lockfile --prefer-offline", "pnpm install"},
 	},
 	Npm: {
