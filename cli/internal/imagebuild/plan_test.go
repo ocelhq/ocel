@@ -24,6 +24,11 @@ type builtPlan struct {
 	} `json:"steps"`
 	Deploy struct {
 		StartCommand string `json:"startCommand"`
+		Inputs       []struct {
+			Step    string   `json:"step"`
+			Include []string `json:"include"`
+			Exclude []string `json:"exclude"`
+		} `json:"inputs"`
 	} `json:"deploy"`
 }
 
@@ -272,6 +277,47 @@ func TestThePlanNeverCopiesWhatTheContextNoLongerCarries(t *testing.T) {
 		if strings.HasPrefix(filepath.ToSlash(src), "node_modules/") {
 			t.Errorf("the install step copies %q, which the build context excludes, so the daemon cannot checksum it and the build fails before it starts", src)
 		}
+	}
+}
+
+func TestANextAppInAWorkspaceIsBuiltAndStartedAsTheAppRatherThanTheRoot(t *testing.T) {
+	loc := located(t, "testdata/nextworkspace/apps/web")
+	if !loc.InWorkspace() {
+		t.Fatalf("Locate() = %+v, want the next app read as a member of the workspace above it", loc)
+	}
+
+	plan := plannedFrom(t, loc)
+
+	if want := "pnpm --filter ./apps/web run start"; plan.Deploy.StartCommand != want {
+		t.Errorf("the plan starts the app with %q, want %q — the root's start script serves nothing", plan.Deploy.StartCommand, want)
+	}
+	build := strings.Join(plan.step(t, "build"), "\n")
+	if want := "pnpm --filter ./apps/web... run build"; !strings.Contains(build, want) {
+		t.Errorf("the build step runs:\n%s\nwant %q", build, want)
+	}
+	install := strings.Join(plan.step(t, "install"), "\n")
+	if want := "pnpm install --frozen-lockfile --filter ./apps/web..."; !strings.Contains(install, want) {
+		t.Errorf("the install step runs:\n%s\nwant %q", install, want)
+	}
+
+	var cached []string
+	for _, step := range plan.Steps {
+		if step.Name == "build" {
+			cached = step.Caches
+		}
+	}
+	if !contains(cached, "next-apps-web") {
+		t.Errorf("the build step caches %v, and none of them is the app's own .next: railpack plans the root, and it has to reach into the member to cache what next writes there", cached)
+	}
+
+	var carried []string
+	for _, input := range plan.Deploy.Inputs {
+		if input.Step == "build" {
+			carried = append(carried, input.Include...)
+		}
+	}
+	if !contains(carried, ".") {
+		t.Errorf("the deploy takes %v from the build, and none of it is the directory the app was built in: next writes apps/web/.next, and an image that carries only root-level paths starts without it", carried)
 	}
 }
 
