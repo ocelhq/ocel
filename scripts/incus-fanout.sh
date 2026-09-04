@@ -39,7 +39,7 @@ lane() {
 host() {
     echo "host $1:"
     free -m
-    df -h / /var/lib/incus 2>/dev/null || df -h /
+    df -h / /var/lib/incus/storage-pools/default 2>/dev/null || df -h /
     echo
 }
 
