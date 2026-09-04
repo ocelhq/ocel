@@ -62,7 +62,7 @@ func golden(t *testing.T, name, ext, got string) {
 
 func projectPlain(t *testing.T, events []*streamv1.RunEvent) string {
 	t.Helper()
-	var out bytes.Buffer
+	var out safeBuffer
 	s := NewStream(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
 	for _, ev := range events {
 		s.Emit(ev)
@@ -75,7 +75,7 @@ func projectPlain(t *testing.T, events []*streamv1.RunEvent) string {
 
 func projectLive(t *testing.T, events []*streamv1.RunEvent) string {
 	t.Helper()
-	var out bytes.Buffer
+	var out safeBuffer
 	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 	for _, ev := range events {
 		s.Emit(ev)
@@ -172,7 +172,7 @@ func TestTheNDJSONProjectionIsOneProtojsonLinePerEnvelopeWrittenAsItLands(t *tes
 			t.Parallel()
 			_, events := fixtureStream(t, name)
 
-			var out bytes.Buffer
+			var out safeBuffer
 			s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
 			for i, ev := range events {
 				s.Emit(ev)

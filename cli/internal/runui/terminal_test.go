@@ -1,7 +1,6 @@
 package runui
 
 import (
-	"bytes"
 	"regexp"
 	"strings"
 	"testing"
@@ -170,7 +169,7 @@ func TestTruncateToWidthHandlesRowsWithNothingToShow(t *testing.T) {
 
 func TestColoredLiveRowFitsTheTerminal(t *testing.T) {
 	drawnRow := func(colorEnabled bool) string {
-		var out bytes.Buffer
+		var out safeBuffer
 		s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Color: colorEnabled, Width: 40, Height: defaultHeight})
 		s.r.useClock(func() time.Time { return time.Unix(0, 0) })
 

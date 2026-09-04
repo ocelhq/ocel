@@ -1,7 +1,6 @@
 package runui
 
 import (
-	"bytes"
 	"fmt"
 	"regexp"
 	"strings"
@@ -36,7 +35,7 @@ func TestOnlyTheProjectionWithoutAWindowCommitsPhaseStartLines(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var out bytes.Buffer
+			var out safeBuffer
 			s := NewStream(&out, tc.present)
 			t.Cleanup(func() { _ = s.Close() })
 
@@ -84,7 +83,7 @@ var elapsedTail = regexp.MustCompile(`  (<1s|\d+s|\d+m\d\ds)$`)
 
 func TestADetailIsCutSoTheElapsedTimeAlwaysFits(t *testing.T) {
 	t.Parallel()
-	var out bytes.Buffer
+	var out safeBuffer
 	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: 60, Height: 40})
 	t.Cleanup(func() { _ = s.Close() })
 

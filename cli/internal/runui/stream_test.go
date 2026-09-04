@@ -1,7 +1,6 @@
 package runui
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 
@@ -14,7 +13,7 @@ import (
 
 func recorded(t *testing.T, events ...*streamv1.RunEvent) []*streamv1.RunEvent {
 	t.Helper()
-	var out bytes.Buffer
+	var out safeBuffer
 	s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
 	for _, ev := range events {
 		s.Emit(ev)
@@ -145,7 +144,7 @@ func planNames(ev *streamv1.RunEvent) string {
 func TestNDJSONIsOneEnvelopePerLineAndNeverBuffers(t *testing.T) {
 	t.Parallel()
 
-	var out bytes.Buffer
+	var out safeBuffer
 	s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 

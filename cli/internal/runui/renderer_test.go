@@ -12,29 +12,64 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *safeBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *safeBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func (b *safeBuffer) Bytes() []byte {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]byte(nil), b.buf.Bytes()...)
+}
+
+func (b *safeBuffer) Len() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Len()
+}
+
+func (b *safeBuffer) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf.Reset()
+}
+
 func u32(n uint32) *uint32 { return &n }
 
 func appStage(n byte) []byte {
 	return []byte{n, 0, 0, 0, 0, 0, 0, 0}
 }
 
-func liveStream(t *testing.T) (*Stream, *bytes.Buffer) {
+func liveStream(t *testing.T) (*Stream, *safeBuffer) {
 	t.Helper()
-	var out bytes.Buffer
+	var out safeBuffer
 	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 	t.Cleanup(func() { _ = s.Close() })
 	return s, &out
 }
 
-func liveStreamOfHeight(t *testing.T, height int) (*Stream, *bytes.Buffer) {
+func liveStreamOfHeight(t *testing.T, height int) (*Stream, *safeBuffer) {
 	t.Helper()
-	var out bytes.Buffer
+	var out safeBuffer
 	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: height})
 	t.Cleanup(func() { _ = s.Close() })
 	return s, &out
 }
 
-func liveRegion(t *testing.T, s *Stream, out *bytes.Buffer) []string {
+func liveRegion(t *testing.T, s *Stream, out *safeBuffer) []string {
 	t.Helper()
 	s.r.Pause()
 	out.Reset()
@@ -152,7 +187,7 @@ func TestNoRawSpinnerCanTouchATerminalALiveFrameOwns(t *testing.T) {
 	))
 	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
 
-	var elsewhere bytes.Buffer
+	var elsewhere safeBuffer
 	spinner := StartSpinner(Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: 40}, &elsewhere, "Checking credentials")
 	time.Sleep(3 * frameRate)
 	spinner.Stop()
@@ -270,7 +305,7 @@ func TestOrphanStageAttachesRecursively(t *testing.T) {
 func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 	t.Parallel()
 
-	var out bytes.Buffer
+	var out safeBuffer
 	s := NewStream(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -291,7 +326,7 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 }
 
 func TestRendererSingleOwnerRaceFree(t *testing.T) {
-	var out bytes.Buffer
+	var out safeBuffer
 	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 
 	appA, appB := appStage(1), appStage(2)
@@ -457,7 +492,7 @@ func TestRawEngineOutputIsShownOnlyWhenVerboseOrWhenThePhaseFailed(t *testing.T)
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var out bytes.Buffer
+			var out safeBuffer
 			s := NewStream(&out, tc.present)
 			t.Cleanup(func() { _ = s.Close() })
 
