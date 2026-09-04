@@ -2,6 +2,7 @@ import awsProvider from "@ocel/provider-aws";
 import { apiGateway, cloudfront } from "@ocel/provider-aws/edge";
 import type { EdgeDescriptor } from "ocel/config";
 import { defineConfig } from "ocel/config";
+import { cloudflareDns } from "ocel/dns";
 import { cloudflare } from "ocel/edge";
 import base, { zonedApps } from "./ocel.config.ts";
 
@@ -17,5 +18,6 @@ export default defineConfig({
   ...base,
   provider: awsProvider({ transforms: ["./infra/network.transform.ts"] }),
   ...(edge ? { edge: edge() } : {}),
+  ...(process.env.OCEL_JOURNEY_DNS === "cloudflare" ? { dns: cloudflareDns() } : {}),
   apps: zonedApps(),
 });
