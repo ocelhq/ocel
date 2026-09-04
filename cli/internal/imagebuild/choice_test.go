@@ -7,7 +7,17 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
+	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
+
+func standalone(t *testing.T, dir string) workspace.Location {
+	t.Helper()
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return workspace.Location{Root: abs, Path: "."}
+}
 
 func chosen(t *testing.T, app imagebuild.App) imagebuild.Choice {
 	t.Helper()
@@ -31,9 +41,9 @@ func write(t *testing.T, path string) {
 func TestADockerfileBesideAnAppSwitchesTheBuildToIt(t *testing.T) {
 	t.Parallel()
 
-	choice := chosen(t, imagebuild.App{Name: "web", Dir: "testdata/dockerfileapp"})
+	choice := chosen(t, imagebuild.App{Name: "web", Workspace: standalone(t, "testdata/dockerfileapp")})
 
-	if want := filepath.Join("testdata/dockerfileapp", imagebuild.DockerfileName); choice.Dockerfile != want {
+	if want := filepath.Join(choice.App.Dir(), imagebuild.DockerfileName); choice.Dockerfile != want {
 		t.Errorf("Choose() built %q, want the app's own %s", choice.Dockerfile, want)
 	}
 	notice := choice.Notice()
@@ -53,7 +63,7 @@ func TestADockerfileBesideAnAppSwitchesTheBuildToIt(t *testing.T) {
 func TestAnAppWithNoDockerfileIsBuiltByRailpackAndAnnouncesNothing(t *testing.T) {
 	t.Parallel()
 
-	choice := chosen(t, imagebuild.App{Name: "web", Dir: "testdata/plainserver"})
+	choice := chosen(t, imagebuild.App{Name: "web", Workspace: standalone(t, "testdata/plainserver")})
 
 	if choice.Dockerfile != "" {
 		t.Errorf("Choose() built from %q, want railpack where the app has no Dockerfile", choice.Dockerfile)
@@ -68,7 +78,7 @@ func TestRemovingTheDockerfileIsTheWayBackToRailpack(t *testing.T) {
 
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, imagebuild.DockerfileName))
-	if chosen(t, imagebuild.App{Name: "web", Dir: dir}).Dockerfile == "" {
+	if chosen(t, imagebuild.App{Name: "web", Workspace: standalone(t, dir)}).Dockerfile == "" {
 		t.Fatal("Choose() ignored a Dockerfile beside the app")
 	}
 
@@ -76,7 +86,7 @@ func TestRemovingTheDockerfileIsTheWayBackToRailpack(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := chosen(t, imagebuild.App{Name: "web", Dir: dir}).Dockerfile; got != "" {
+	if got := chosen(t, imagebuild.App{Name: "web", Workspace: standalone(t, dir)}).Dockerfile; got != "" {
 		t.Errorf("Choose() still builds from %q after the Dockerfile was renamed, so there is no way back to railpack", got)
 	}
 }
@@ -98,7 +108,7 @@ func TestOnlyTheExactNameDockerfileSwitchesAnything(t *testing.T) {
 			dir := t.TempDir()
 			write(t, filepath.Join(dir, filepath.FromSlash(held)))
 
-			choice := chosen(t, imagebuild.App{Name: "web", Dir: dir})
+			choice := chosen(t, imagebuild.App{Name: "web", Workspace: standalone(t, dir)})
 
 			if choice.Dockerfile != "" {
 				t.Errorf("%s switched the build to %q, and only a file named exactly %s in the app's own directory does that", held, choice.Dockerfile, imagebuild.DockerfileName)
@@ -118,7 +128,7 @@ func TestADirectoryNamedDockerfileSwitchesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := chosen(t, imagebuild.App{Name: "web", Dir: dir}).Dockerfile; got != "" {
+	if got := chosen(t, imagebuild.App{Name: "web", Workspace: standalone(t, dir)}).Dockerfile; got != "" {
 		t.Errorf("Choose() built from %q, and a directory is not a Dockerfile", got)
 	}
 }
@@ -139,7 +149,7 @@ func TestASymlinkNamedDockerfileIsFollowedToWhatItPointsAt(t *testing.T) {
 			t.Skipf("this machine makes no symlinks: %v", err)
 		}
 
-		if got := chosen(t, imagebuild.App{Name: "web", Dir: filepath.Join(appDir, "holder")}).Dockerfile; got != "" {
+		if got := chosen(t, imagebuild.App{Name: "web", Workspace: standalone(t, filepath.Join(appDir, "holder"))}).Dockerfile; got != "" {
 			t.Errorf("Choose() built from %q, and a link to a directory is no more a Dockerfile than the directory is — buildkit finds that out with an error nobody can read", got)
 		}
 	})
@@ -150,7 +160,7 @@ func TestASymlinkNamedDockerfileIsFollowedToWhatItPointsAt(t *testing.T) {
 			t.Skipf("this machine makes no symlinks: %v", err)
 		}
 
-		if got := chosen(t, imagebuild.App{Name: "web", Dir: appDir}).Dockerfile; got != linked {
+		if got := chosen(t, imagebuild.App{Name: "web", Workspace: standalone(t, appDir)}).Dockerfile; got != linked {
 			t.Errorf("Choose() built from %q, want %q — a link to a Dockerfile builds what it points at", got, linked)
 		}
 	})
@@ -165,13 +175,13 @@ func TestAConfiguredDockerfileMayLiveOutsideTheAppItBuilds(t *testing.T) {
 	write(t, filepath.Join(appDir, "package.json"))
 	write(t, shared)
 
-	choice := chosen(t, imagebuild.App{Name: "api", Dir: appDir, Configured: "../../shared/Dockerfile"})
+	choice := chosen(t, imagebuild.App{Name: "api", Workspace: standalone(t, appDir), Configured: "../../shared/Dockerfile"})
 
 	if choice.Dockerfile != shared {
 		t.Errorf("Choose() built from %q, want the %q the app's build names, resolved against the app's directory", choice.Dockerfile, shared)
 	}
-	if choice.App.Dir != appDir {
-		t.Errorf("the build context is %q, want the app's own directory %q wherever its Dockerfile lives", choice.App.Dir, appDir)
+	if choice.App.Dir() != appDir {
+		t.Errorf("the build context is %q, want the app's own directory %q wherever its Dockerfile lives", choice.App.Dir(), appDir)
 	}
 	if notice := choice.Notice(); !strings.Contains(notice, "api") || !strings.Contains(notice, shared) {
 		t.Errorf("the notice is %q, want it to name the app and the Dockerfile it was pointed at", notice)
@@ -186,7 +196,7 @@ func TestAConfiguredDockerfileBeatsTheOneBesideTheApp(t *testing.T) {
 	write(t, filepath.Join(appDir, imagebuild.DockerfileName))
 	write(t, filepath.Join(root, "shared", imagebuild.DockerfileName))
 
-	choice := chosen(t, imagebuild.App{Name: "api", Dir: appDir, Configured: "../shared/Dockerfile"})
+	choice := chosen(t, imagebuild.App{Name: "api", Workspace: standalone(t, appDir), Configured: "../shared/Dockerfile"})
 
 	if want := filepath.Join(root, "shared", imagebuild.DockerfileName); choice.Dockerfile != want {
 		t.Errorf("Choose() built from %q, want the %q the app asked for", choice.Dockerfile, want)
@@ -198,7 +208,7 @@ func TestAConfiguredDockerfileThatIsNotThereRefusesTheBuildByName(t *testing.T) 
 
 	dir := t.TempDir()
 
-	_, err := imagebuild.Choose(imagebuild.App{Name: "api", Dir: dir, Configured: "build/Dockerfile"})
+	_, err := imagebuild.Choose(imagebuild.App{Name: "api", Workspace: standalone(t, dir), Configured: "build/Dockerfile"})
 	if err == nil {
 		t.Fatal("Choose() accepted a build.dockerfile naming nothing, so the deploy would reach the solve before finding out")
 	}
@@ -212,7 +222,7 @@ func TestAConfiguredDockerfileThatIsNotThereRefusesTheBuildByName(t *testing.T) 
 func TestAnAppDirectoryThatIsNotThereRefusesTheBuildByName(t *testing.T) {
 	t.Parallel()
 
-	_, err := imagebuild.Choose(imagebuild.App{Name: "api", Dir: filepath.Join(t.TempDir(), "absent")})
+	_, err := imagebuild.Choose(imagebuild.App{Name: "api", Workspace: standalone(t, filepath.Join(t.TempDir(), "absent"))})
 	if err == nil {
 		t.Fatal("Choose() read a directory that does not exist as an app with no Dockerfile")
 	}

@@ -1,0 +1,6 @@
+{
+  "name": "@fixture/lib",
+  "private": true,
+  "type": "module",
+  "main": "index.js"
+}

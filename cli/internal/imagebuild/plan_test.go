@@ -6,23 +6,77 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
+	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
 
 type builtPlan struct {
 	Steps []struct {
-		Name   string            `json:"name"`
-		Assets map[string]string `json:"assets"`
+		Name     string            `json:"name"`
+		Assets   map[string]string `json:"assets"`
+		Commands []struct {
+			Cmd  string `json:"cmd"`
+			Src  string `json:"src"`
+			Dest string `json:"dest"`
+		} `json:"commands"`
+		Caches []string `json:"caches"`
 	} `json:"steps"`
 	Deploy struct {
 		StartCommand string `json:"startCommand"`
 	} `json:"deploy"`
 }
 
+func (p builtPlan) step(t *testing.T, name string) []string {
+	t.Helper()
+	for _, step := range p.Steps {
+		if step.Name != name {
+			continue
+		}
+		var said []string
+		for _, command := range step.Commands {
+			if command.Cmd != "" {
+				said = append(said, command.Cmd)
+			}
+		}
+		return said
+	}
+	t.Fatalf("the plan has no %q step; it has %d steps", name, len(p.Steps))
+	return nil
+}
+
+func (p builtPlan) copied(name string) []string {
+	var srcs []string
+	for _, step := range p.Steps {
+		if step.Name != name {
+			continue
+		}
+		for _, command := range step.Commands {
+			if command.Cmd == "" && command.Src != "" {
+				srcs = append(srcs, command.Src)
+			}
+		}
+	}
+	return srcs
+}
+
+func located(t *testing.T, dir string) workspace.Location {
+	t.Helper()
+	loc, err := workspace.Locate(dir)
+	if err != nil {
+		t.Fatalf("Locate(%s) = %v", dir, err)
+	}
+	return loc
+}
+
 func planned(t *testing.T, dir string) builtPlan {
 	t.Helper()
-	raw, err := imagebuild.Plan(dir)
+	return plannedFrom(t, located(t, dir))
+}
+
+func plannedFrom(t *testing.T, loc workspace.Location) builtPlan {
+	t.Helper()
+	raw, err := imagebuild.Plan(loc)
 	if err != nil {
-		t.Fatalf("Plan(%s) = %v", dir, err)
+		t.Fatalf("Plan(%s) = %v", loc.Root, err)
 	}
 	var plan builtPlan
 	if err := json.Unmarshal(raw, &plan); err != nil {
@@ -79,7 +133,7 @@ func TestNoVariableOcelRunsUnderAppearsAnywhereInThePlanItHandsTheFrontend(t *te
 	const leak = "a value the plan must never carry"
 	t.Setenv("OCEL_PLAN_LEAK", leak)
 
-	raw, err := imagebuild.Plan("testdata/plainserver")
+	raw, err := imagebuild.Plan(located(t, "testdata/plainserver"))
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
@@ -92,11 +146,98 @@ func TestNoVariableOcelRunsUnderAppearsAnywhereInThePlanItHandsTheFrontend(t *te
 }
 
 func TestADirectoryRailpackCannotReadSaysWhyInsteadOfPlanningNothing(t *testing.T) {
-	_, err := imagebuild.Plan(t.TempDir())
+	_, err := imagebuild.Plan(located(t, t.TempDir()))
 	if err == nil {
 		t.Fatal("Plan() over an empty directory succeeded, so a build with nothing in it would be attempted")
 	}
 	if !strings.Contains(err.Error(), "railpack") {
 		t.Errorf("Plan() over an empty directory = %v, and the reason never names the builder that refused", err)
 	}
+}
+
+const workspaceApp = "testdata/pnpmworkspace/apps/web"
+
+func TestAnAppInAWorkspaceInstallsFromTheRootLockfileAndOnlyWhatItReaches(t *testing.T) {
+	loc := located(t, workspaceApp)
+	if loc.Path != "apps/web" || loc.Manager != workspace.Pnpm {
+		t.Fatalf("Locate(%s) = %+v, want the app located inside the pnpm workspace above it", workspaceApp, loc)
+	}
+	plan := plannedFrom(t, loc)
+
+	install := strings.Join(plan.step(t, "install"), "\n")
+	if want := "pnpm install --frozen-lockfile --prefer-offline --filter ./apps/web..."; !strings.Contains(install, want) {
+		t.Errorf("the install step runs:\n%s\nwant %q — the whole monorepo is installed to serve one app otherwise", install, want)
+	}
+	if strings.Contains(install, "pnpm install --frozen-lockfile --prefer-offline\n") {
+		t.Errorf("the install step still runs railpack's unscoped install as well:\n%s", install)
+	}
+
+	copied := plan.copied("install")
+	for _, want := range []string{"pnpm-lock.yaml", "pnpm-workspace.yaml", "package.json", "apps/web/package.json", "packages/lib/package.json"} {
+		if !contains(copied, want) {
+			t.Errorf("the install step copies %v, and %q is not among them — pnpm resolves a workspace: range from the root's lockfile and every member's manifest", copied, want)
+		}
+	}
+}
+
+func TestAnAppInAWorkspaceRunsItsOwnScriptsAndNeverTheRoots(t *testing.T) {
+	plan := plannedFrom(t, located(t, workspaceApp))
+
+	if want := "pnpm --filter ./apps/web run start"; plan.Deploy.StartCommand != want {
+		t.Errorf("the plan starts the app with %q, want %q", plan.Deploy.StartCommand, want)
+	}
+	build := strings.Join(plan.step(t, "build"), "\n")
+	if strings.Contains(build, "run build") {
+		t.Errorf("the build step runs:\n%s\nand the app declares no build script, so that is the workspace root's — which is not this app's build", build)
+	}
+}
+
+func TestAWorkspaceAppWithABuildScriptBuildsWhatItDependsOnFirst(t *testing.T) {
+	loc := located(t, workspaceApp)
+	loc.App.Build = true
+
+	plan := plannedFrom(t, loc)
+
+	build := strings.Join(plan.step(t, "build"), "\n")
+	if want := "pnpm --filter ./apps/web... run build"; !strings.Contains(build, want) {
+		t.Errorf("the build step runs:\n%s\nwant %q — a workspace dependency has to be built before the app that imports it", build, want)
+	}
+}
+
+func TestAConfiguredBuildCommandIsWhatTheImageRuns(t *testing.T) {
+	loc := located(t, workspaceApp)
+	loc.BuildCommand = "turbo run build --filter=@fixture/web"
+
+	plan := plannedFrom(t, loc)
+
+	if build := strings.Join(plan.step(t, "build"), "\n"); !strings.Contains(build, loc.BuildCommand) {
+		t.Errorf("the build step runs:\n%s\nwant the build.command the app names", build)
+	}
+}
+
+func TestScopingAnInstallKeepsTheCachesAndTheSetupRailpackPutAroundIt(t *testing.T) {
+	scoped := plannedFrom(t, located(t, workspaceApp))
+	unscoped := planned(t, "testdata/plainserver")
+
+	var install []string
+	for _, step := range scoped.Steps {
+		if step.Name == "install" {
+			install = step.Caches
+		}
+	}
+	if len(install) == 0 {
+		t.Error("the scoped install step carries no cache, so the package store is re-downloaded on every build")
+	}
+	if len(scoped.Steps) < len(unscoped.Steps) {
+		t.Errorf("the scoped plan has %d steps against %d for an app with no workspace, so scoping dropped a step railpack generated", len(scoped.Steps), len(unscoped.Steps))
+	}
+}
+
+func contains(haystack []string, needle string) bool {
+	for _, straw := range haystack {
+		if straw == needle {
+			return true
+		}
+	}
+	return false
 }

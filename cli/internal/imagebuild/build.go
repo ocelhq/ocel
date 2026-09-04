@@ -77,10 +77,10 @@ func (c Choice) railpack() bool { return c.Dockerfile == "" }
 
 func (c Choice) solve() (client.SolveOpt, func(), error) {
 	if !c.railpack() {
-		opt, err := dockerfileOptions(c.App.Dir, c.Dockerfile)
+		opt, err := dockerfileOptions(c.App.Workspace.Root, c.Dockerfile)
 		return opt, func() {}, err
 	}
-	plan, err := Plan(c.App.Dir)
+	plan, err := Plan(c.App.Workspace)
 	if err != nil {
 		return client.SolveOpt{}, nil, err
 	}
@@ -88,7 +88,7 @@ func (c Choice) solve() (client.SolveOpt, func(), error) {
 	if err != nil {
 		return client.SolveOpt{}, nil, err
 	}
-	opt, err := solveOptions(c.App.Dir, planDir)
+	opt, err := solveOptions(c.App.Workspace.Root, planDir)
 	if err != nil {
 		_ = os.RemoveAll(planDir)
 		return client.SolveOpt{}, nil, err
@@ -115,10 +115,10 @@ func stagePlan(plan []byte) (string, error) {
 	return dir, nil
 }
 
-func solveOptions(appDir, planDir string) (client.SolveOpt, error) {
-	source, err := fsutil.NewFS(appDir)
+func solveOptions(root, planDir string) (client.SolveOpt, error) {
+	source, err := contextFS(root)
 	if err != nil {
-		return client.SolveOpt{}, fmt.Errorf("read %s as a build context: %w", appDir, err)
+		return client.SolveOpt{}, err
 	}
 	plan, err := fsutil.NewFS(planDir)
 	if err != nil {
@@ -130,10 +130,10 @@ func solveOptions(appDir, planDir string) (client.SolveOpt, error) {
 	}, nil
 }
 
-func dockerfileOptions(appDir, dockerfile string) (client.SolveOpt, error) {
-	source, err := fsutil.NewFS(appDir)
+func dockerfileOptions(root, dockerfile string) (client.SolveOpt, error) {
+	source, err := contextFS(root)
 	if err != nil {
-		return client.SolveOpt{}, fmt.Errorf("read %s as a build context: %w", appDir, err)
+		return client.SolveOpt{}, err
 	}
 	holding, err := fsutil.NewFS(filepath.Dir(dockerfile))
 	if err != nil {

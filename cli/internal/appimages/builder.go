@@ -3,7 +3,6 @@ package appimages
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -13,11 +12,11 @@ import (
 func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.Config) error {
 	var chosen []imagebuild.Choice
 	for _, app := range Apps(cfg) {
-		choice, err := imagebuild.Choose(imagebuild.App{
-			Name:       app.Name,
-			Dir:        filepath.Join(cfg.Dir, app.Path),
-			Configured: DockerfileOf(app),
-		})
+		built, err := Describe(cfg, app)
+		if err != nil {
+			return err
+		}
+		choice, err := imagebuild.Choose(built)
 		if err != nil {
 			return err
 		}

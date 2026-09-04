@@ -22,7 +22,7 @@ func TestLiveARailpackBuildLandsAWorkingImageInTheDaemon(t *testing.T) {
 	vm.Forward(t)
 	t.Setenv("OCEL_LIVE_LEAK", leaked)
 
-	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(), imagebuild.App{Name: "Web API", Dir: "testdata/plainserver"})
+	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(), imagebuild.App{Name: "Web API", Workspace: located(t, "testdata/plainserver")})
 	if err != nil {
 		t.Fatalf("Build() against a real daemon = %v", err)
 	}
@@ -93,7 +93,7 @@ func TestLiveADockerfileBuildLandsTheSameCoordinateAsARailpackOne(t *testing.T) 
 	vm.Engine(t)
 	vm.Forward(t)
 
-	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(), imagebuild.App{Name: "Docs Site", Dir: "testdata/dockerfileapp"})
+	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(), imagebuild.App{Name: "Docs Site", Workspace: located(t, "testdata/dockerfileapp")})
 	if err != nil {
 		t.Fatalf("Build() of an app with a Dockerfile against a real daemon = %v", err)
 	}
@@ -113,7 +113,7 @@ func TestLiveTheExpressFixtureBuildsAndServesItsVersion(t *testing.T) {
 	vm.Forward(t)
 
 	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(),
-		imagebuild.App{Name: "web", Dir: journeyFixture})
+		imagebuild.App{Name: "web", Workspace: located(t, journeyFixture)})
 	if err != nil {
 		t.Fatalf("Build() of the express fixture = %v", err)
 	}

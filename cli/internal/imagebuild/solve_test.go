@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/client"
+
+	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
 
 func TestTheSolveMountsTheAppBesideThePlanAndNothingElse(t *testing.T) {
@@ -89,9 +91,18 @@ func TestTheSolveExportsIntoTheDaemonsOwnImageStore(t *testing.T) {
 	}
 }
 
+func at(t *testing.T, dir string) workspace.Location {
+	t.Helper()
+	loc, err := workspace.Locate(dir)
+	if err != nil {
+		t.Fatalf("Locate(%s) = %v", dir, err)
+	}
+	return loc
+}
+
 func dockerfileSolve(t *testing.T) client.SolveOpt {
 	t.Helper()
-	choice, err := Choose(App{Name: "web", Dir: "testdata/dockerfileapp"})
+	choice, err := Choose(App{Name: "web", Workspace: at(t, "testdata/dockerfileapp")})
 	if err != nil {
 		t.Fatalf("Choose() = %v", err)
 	}

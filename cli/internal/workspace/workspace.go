@@ -26,13 +26,24 @@ type App struct {
 }
 
 type Location struct {
-	Root    string
-	Path    string
-	Manager Manager
-	App     App
+	Root         string
+	Path         string
+	Manager      Manager
+	App          App
+	BuildCommand string
 }
 
 func (l Location) InWorkspace() bool { return l.Path != "." }
+
+func (l Location) Rebase(root string) (Location, error) {
+	appDir := filepath.Join(l.Root, filepath.FromSlash(l.Path))
+	rel, err := filepath.Rel(root, appDir)
+	if err != nil || rel == ".." || strings.HasPrefix(filepath.ToSlash(rel), "../") {
+		return Location{}, fmt.Errorf("%s is not inside %s, and an image is built from a directory holding the app it serves: point the build context at a directory %s sits under", appDir, root, appDir)
+	}
+	l.Root, l.Path, l.Manager = root, filepath.ToSlash(rel), detect(root)
+	return l, nil
+}
 
 type manifest struct {
 	Name           string            `json:"name"`
