@@ -35,24 +35,86 @@ type Commands struct {
 	Start   string
 }
 
+type behaviour struct {
+	declaredAs string
+	lockfiles  []string
+	runner     string
+	runtime    string
+	install    func(Location) string
+	build      func(Location) string
+	start      func(Location) string
+	replaces   []string
+}
+
+var behaviours = map[Manager]behaviour{
+	Pnpm: {
+		declaredAs: "pnpm",
+		lockfiles:  []string{pnpmLock},
+		runner:     "pnpm",
+		runtime:    "node",
+		install: func(l Location) string {
+			return fmt.Sprintf("pnpm install --frozen-lockfile --prefer-offline --filter ./%s...", l.Path)
+		},
+		build:    func(l Location) string { return fmt.Sprintf("pnpm --filter ./%s... run build", l.Path) },
+		start:    func(l Location) string { return fmt.Sprintf("pnpm --filter ./%s run start", l.Path) },
+		replaces: []string{"pnpm install --frozen-lockfile --prefer-offline", "pnpm install"},
+	},
+	Npm: {
+		declaredAs: "npm",
+		lockfiles:  []string{npmLock, "npm-shrinkwrap.json"},
+		runner:     "npm",
+		runtime:    "node",
+		build:      func(l Location) string { return fmt.Sprintf("npm run build -w %s", l.Path) },
+		start:      func(l Location) string { return fmt.Sprintf("npm run start -w %s", l.Path) },
+	},
+	YarnBerry: {
+		runner:   "yarn",
+		runtime:  "node",
+		install:  byName(func(l Location) string { return fmt.Sprintf("yarn workspaces focus %s", l.App.Name) }),
+		build:    byName(func(l Location) string { return fmt.Sprintf("yarn workspaces foreach -R -t --from %s run build", l.App.Name) }),
+		start:    byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run start", l.App.Name) }),
+		replaces: []string{"yarn install --check-cache"},
+	},
+	YarnClassic: {
+		declaredAs: "yarn",
+		lockfiles:  []string{yarnLock},
+		runner:     "yarn",
+		runtime:    "node",
+		build:      byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run build", l.App.Name) }),
+		start:      byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run start", l.App.Name) }),
+	},
+	Bun: {
+		declaredAs: "bun",
+		lockfiles:  []string{bunLock, "bun.lockb"},
+		runner:     "bun",
+		runtime:    "bun",
+		build:      byName(func(l Location) string { return fmt.Sprintf("bun run --filter %s build", l.App.Name) }),
+		start:      func(l Location) string { return l.inAppDir("bun run start") },
+	},
+}
+
+func byName(command func(Location) string) func(Location) string {
+	return func(l Location) string {
+		if l.App.Name == "" {
+			return ""
+		}
+		return command(l)
+	}
+}
+
 func detect(root string) Manager {
 	declared := declaredManager(root)
 	present := map[Manager]bool{}
-	for name, manager := range map[string]Manager{
-		pnpmLock:              Pnpm,
-		npmLock:               Npm,
-		"npm-shrinkwrap.json": Npm,
-		yarnLock:              YarnClassic,
-		bunLock:               Bun,
-		"bun.lockb":           Bun,
-	} {
-		if _, err := os.Stat(filepath.Join(root, name)); err != nil {
-			continue
+	for manager, m := range behaviours {
+		for _, lock := range m.lockfiles {
+			if _, err := os.Stat(filepath.Join(root, lock)); err != nil {
+				continue
+			}
+			if manager == YarnClassic {
+				manager = yarnAt(root, declared)
+			}
+			present[manager] = true
 		}
-		if manager == YarnClassic {
-			manager = yarnAt(root, declared)
-		}
-		present[manager] = true
 	}
 	if len(present) == 0 {
 		return Unknown
@@ -92,15 +154,14 @@ func declaredManager(root string) Manager {
 		return Unknown
 	}
 	name, version, _ := strings.Cut(m.PackageManager, "@")
-	switch strings.TrimSpace(name) {
-	case "pnpm":
-		return Pnpm
-	case "npm":
-		return Npm
-	case "bun":
-		return Bun
-	case "yarn":
+	name = strings.TrimSpace(name)
+	if name == behaviours[YarnClassic].declaredAs {
 		return yarnGeneration(version)
+	}
+	for manager, m := range behaviours {
+		if m.declaredAs != "" && m.declaredAs == name {
+			return manager
+		}
 	}
 	return Unknown
 }
@@ -125,43 +186,20 @@ func (l Location) Commands() Commands {
 }
 
 func (l Location) install() string {
-	switch l.Manager {
-	case Pnpm:
-		return fmt.Sprintf("pnpm install --frozen-lockfile --prefer-offline --filter ./%s...", l.Path)
-	case YarnBerry:
-		if l.App.Name == "" {
-			return ""
-		}
-		return fmt.Sprintf("yarn workspaces focus %s", l.App.Name)
-	default:
-		return ""
+	if install := behaviours[l.Manager].install; install != nil {
+		return install(l)
 	}
+	return ""
 }
 
 func (l Location) build() string {
 	if !l.App.Build {
 		return ""
 	}
-	switch l.Manager {
-	case Pnpm:
-		return fmt.Sprintf("pnpm --filter ./%s... run build", l.Path)
-	case YarnBerry:
-		if l.App.Name == "" {
-			break
+	if build := behaviours[l.Manager].build; build != nil {
+		if scoped := build(l); scoped != "" {
+			return scoped
 		}
-		return fmt.Sprintf("yarn workspaces foreach -R -t --from %s run build", l.App.Name)
-	case YarnClassic:
-		if l.App.Name == "" {
-			break
-		}
-		return fmt.Sprintf("yarn workspace %s run build", l.App.Name)
-	case Npm:
-		return fmt.Sprintf("npm run build -w %s", l.Path)
-	case Bun:
-		if l.App.Name == "" {
-			break
-		}
-		return fmt.Sprintf("bun run --filter %s build", l.App.Name)
 	}
 	return l.inAppDir(l.runner() + " run build")
 }
@@ -170,18 +208,10 @@ func (l Location) start() string {
 	if !l.App.Start {
 		return l.startsItself()
 	}
-	switch l.Manager {
-	case Pnpm:
-		return fmt.Sprintf("pnpm --filter ./%s run start", l.Path)
-	case YarnBerry, YarnClassic:
-		if l.App.Name == "" {
-			break
+	if start := behaviours[l.Manager].start; start != nil {
+		if scoped := start(l); scoped != "" {
+			return scoped
 		}
-		return fmt.Sprintf("yarn workspace %s run start", l.App.Name)
-	case Npm:
-		return fmt.Sprintf("npm run start -w %s", l.Path)
-	case Bun:
-		return l.inAppDir("bun run start")
 	}
 	return l.inAppDir(l.runner() + " run start")
 }
@@ -194,11 +224,7 @@ func (l Location) startsItself() string {
 	if entry == "" {
 		return ""
 	}
-	runtime := "node"
-	if l.Manager == Bun {
-		runtime = "bun"
-	}
-	return l.inAppDir(runtime + " " + entry)
+	return l.inAppDir(l.runtime() + " " + entry)
 }
 
 func (l Location) inAppDir(command string) string {
@@ -206,14 +232,19 @@ func (l Location) inAppDir(command string) string {
 }
 
 func (l Location) runner() string {
-	switch l.Manager {
-	case Pnpm:
-		return "pnpm"
-	case Bun:
-		return "bun"
-	case YarnBerry, YarnClassic:
-		return "yarn"
-	default:
-		return "npm"
+	if runner := behaviours[l.Manager].runner; runner != "" {
+		return runner
 	}
+	return "npm"
+}
+
+func (l Location) runtime() string {
+	if runtime := behaviours[l.Manager].runtime; runtime != "" {
+		return runtime
+	}
+	return "node"
+}
+
+func ReplaceableInstalls(manager Manager) []string {
+	return behaviours[manager].replaces
 }

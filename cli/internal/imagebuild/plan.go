@@ -20,11 +20,6 @@ const (
 	buildStep   = "build"
 )
 
-var replaceableInstalls = map[workspace.Manager][]string{
-	workspace.Pnpm:      {"pnpm install --frozen-lockfile --prefer-offline", "pnpm install"},
-	workspace.YarnBerry: {"yarn install --check-cache"},
-}
-
 func Plan(loc workspace.Location) ([]byte, error) {
 	source, err := app.NewApp(loc.Root)
 	if err != nil {
@@ -78,7 +73,7 @@ func replaceInstall(step *railpackplan.Step, manager workspace.Manager, scoped s
 	if scoped == "" {
 		return
 	}
-	replaceable := replaceableInstalls[manager]
+	replaceable := workspace.ReplaceableInstalls(manager)
 	for i, command := range step.Commands {
 		exec, ok := command.(railpackplan.ExecCommand)
 		if !ok || !slices.Contains(replaceable, exec.Cmd) {
