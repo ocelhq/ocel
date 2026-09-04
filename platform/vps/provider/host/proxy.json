@@ -17,6 +17,7 @@
     }
   },
   "apps": {
+    "pki": { "certificate_authorities": { "local": { "install_trust": false } } },
     "http": {
       "grace_period": "30s",
       "servers": {
