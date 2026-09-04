@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { workTree } from "../../ocel";
-import { exampleDir, outputRoot, treeDir } from "../../paths";
+import { exampleDir, laneDir, treeDir } from "../../paths";
 import { copyTree } from "../../tree";
 import type { LadderHooks } from "../../spec";
 import { recordPlacement, refuse } from "./ladder";
@@ -28,7 +28,7 @@ async function pulumiEnv(runId: string): Promise<NodeJS.ProcessEnv> {
     PULUMI_CONFIG_PASSPHRASE: "journey",
   };
   if (where.world === "floci") {
-    const state = path.join(outputRoot, runId, "aws", "pulumi-state");
+    const state = path.join(laneDir(runId, "aws"), "pulumi-state");
     await mkdir(state, { recursive: true });
     env.PULUMI_BACKEND_URL = `file://${state}`;
   }
