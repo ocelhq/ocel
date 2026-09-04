@@ -486,6 +486,33 @@ func TestReconcileKeepsTheReleaseTheStageIsServing(t *testing.T) {
 	}
 }
 
+func TestReconcileLeavesTheMethodsItAlreadyOpened(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	e := bootstrapped(t, w)
+	if _, err := e.Reconcile(ctx, testSpec(), edge.StackState{}); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	opened := w.gateway.count("PutMethod")
+	if opened == 0 {
+		t.Fatal("the first reconcile opened no method; the repeat this test covers cannot happen")
+	}
+	integrated := w.gateway.count("PutIntegration")
+	w.gateway.calls = nil
+
+	if _, err := e.Reconcile(ctx, testSpec(), edge.StackState{}); err != nil {
+		t.Fatalf("second Reconcile: %v", err)
+	}
+	if got := w.gateway.count("PutMethod"); got != 0 {
+		t.Errorf("PutMethod calls on the second reconcile = %d, want none; API Gateway rejects a method the resource already carries", got)
+	}
+	if got := w.gateway.count("PutIntegration"); got != integrated {
+		t.Errorf("PutIntegration calls on the second reconcile = %d, want the %d the first made; skipping the method must not skip what it points at", got, integrated)
+	}
+}
+
 func TestAPINamesCannotCollideAcrossSlugsAndPointers(t *testing.T) {
 	t.Parallel()
 

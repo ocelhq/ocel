@@ -109,6 +109,7 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 }
 
 type fakeMethod struct {
+	open                bool
 	integration         agtypes.IntegrationType
 	transfer            agtypes.ResponseTransferMode
 	uri                 string
@@ -336,8 +337,28 @@ func (f *fakeGateway) PutMethod(_ context.Context, in *apigateway.PutMethodInput
 		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
 	}
 	f.record("PutMethod " + api.resources[aws.ToString(in.ResourceId)] + " " + aws.ToString(in.HttpMethod))
-	f.method(api, aws.ToString(in.ResourceId), aws.ToString(in.HttpMethod))
+	m := f.method(api, aws.ToString(in.ResourceId), aws.ToString(in.HttpMethod))
+	if m.open {
+		return nil, &agtypes.ConflictException{Message: aws.String("Method already exists for this resource")}
+	}
+	m.open = true
 	return &apigateway.PutMethodOutput{}, nil
+}
+
+func (f *fakeGateway) GetMethod(_ context.Context, in *apigateway.GetMethodInput, _ ...func(*apigateway.Options)) (*apigateway.GetMethodOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	api, ok := f.apis[aws.ToString(in.RestApiId)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
+	}
+	httpMethod := aws.ToString(in.HttpMethod)
+	f.record("GetMethod " + api.resources[aws.ToString(in.ResourceId)] + " " + httpMethod)
+	m, ok := api.methods[aws.ToString(in.ResourceId)+" "+httpMethod]
+	if !ok || !m.open {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no method " + httpMethod)}
+	}
+	return &apigateway.GetMethodOutput{HttpMethod: in.HttpMethod}, nil
 }
 
 func (f *fakeGateway) PutIntegration(_ context.Context, in *apigateway.PutIntegrationInput, _ ...func(*apigateway.Options)) (*apigateway.PutIntegrationOutput, error) {
