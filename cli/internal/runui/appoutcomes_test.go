@@ -1,7 +1,6 @@
 package runui
 
 import (
-	"bytes"
 	"errors"
 	"slices"
 	"testing"
@@ -65,7 +64,7 @@ func TestRunResultCarriesTheProviderAppOutcomes(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
 			run := startTestRun(t, dir, "ocel deploy")
-			var out bytes.Buffer
+			var out safeBuffer
 			s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 			t.Cleanup(func() { _ = s.Close() })
 

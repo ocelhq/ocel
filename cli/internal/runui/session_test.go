@@ -30,21 +30,21 @@ func startTestRun(t *testing.T, dir, command string) *runtrace.Run {
 	return run
 }
 
-func newTestSession(t *testing.T, command string) (*Session, *bytes.Buffer, string) {
+func newTestSession(t *testing.T, command string) (*Session, *safeBuffer, string) {
 	t.Helper()
 	dir := t.TempDir()
 	run := startTestRun(t, dir, command)
-	var out bytes.Buffer
+	var out safeBuffer
 	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 	return s, &out, s.LogPath()
 }
 
-func newVerboseTestSession(t *testing.T, command string) (*Session, *bytes.Buffer, string) {
+func newVerboseTestSession(t *testing.T, command string) (*Session, *safeBuffer, string) {
 	t.Helper()
 	dir := t.TempDir()
 	run := startTestRun(t, dir, command)
-	var out bytes.Buffer
+	var out safeBuffer
 	s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 	return s, &out, s.LogPath()
@@ -90,10 +90,10 @@ func progressN(msg string, current, total uint32) *progressv1.OperationEvent {
 	}}
 }
 
-func liveSession(t *testing.T) (*Session, *bytes.Buffer) {
+func liveSession(t *testing.T) (*Session, *safeBuffer) {
 	t.Helper()
 	run := startTestRun(t, t.TempDir(), "ocel deploy")
-	var out bytes.Buffer
+	var out safeBuffer
 	s := New(&out, run, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 	t.Cleanup(func() { _ = s.Close() })
 	return s, &out
@@ -211,7 +211,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
-		var out bytes.Buffer
+		var out safeBuffer
 		s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
 		logPath := s.LogPath()
 
@@ -460,7 +460,7 @@ func TestSession(t *testing.T) {
 			if err != nil {
 				t.Fatalf("runtrace.Start() = %v", err)
 			}
-			var out bytes.Buffer
+			var out safeBuffer
 			s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 			s.Building()
 			if err := s.Close(); err != nil {
@@ -511,7 +511,7 @@ func TestIngestedSpanResourceIdentityReachesTheTraceFile(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	run := startTestRun(t, dir, "ocel deploy")
-	var out bytes.Buffer
+	var out safeBuffer
 	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -548,7 +548,7 @@ func TestNumericSpanAttributesLandAsIntValueInTheTraceFile(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	run := startTestRun(t, dir, "ocel deploy")
-	var out bytes.Buffer
+	var out safeBuffer
 	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -603,7 +603,7 @@ func TestNonNumericValueForANumericKeyDegradesToStringValue(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	run := startTestRun(t, dir, "ocel deploy")
-	var out bytes.Buffer
+	var out safeBuffer
 	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -688,7 +688,7 @@ func TestProviderProcessOutputRidesTheDiagnosticArmAndNeverEntersABlock(t *testi
 			t.Parallel()
 			dir := t.TempDir()
 			run := startTestRun(t, dir, "ocel deploy")
-			var out bytes.Buffer
+			var out safeBuffer
 			s := New(&out, run, Resolve(tc.origin))
 			t.Cleanup(func() { _ = s.Close() })
 
@@ -795,7 +795,7 @@ func TestDiagnosticAlwaysReachesTheTerminalRegardlessOfVerbosity(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
 			run := startTestRun(t, dir, "ocel deploy")
-			var out bytes.Buffer
+			var out safeBuffer
 			s := New(&out, run, Presentation{Format: FormatHuman, Verbose: tc.verbose})
 			t.Cleanup(func() { _ = s.Close() })
 
@@ -812,7 +812,7 @@ func TestDiagnosticEmitsAStructuredRecordUnderJSONFormat(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	run := startTestRun(t, dir, "ocel deploy")
-	var out bytes.Buffer
+	var out safeBuffer
 	s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -832,7 +832,7 @@ func TestFormatAxis(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
-		var out bytes.Buffer
+		var out safeBuffer
 		s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
@@ -862,7 +862,7 @@ func TestFormatAxis(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
-		var out bytes.Buffer
+		var out safeBuffer
 		s := New(&out, run, Presentation{Format: FormatJSON, Verbose: true, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
@@ -878,7 +878,7 @@ func TestFormatAxis(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
-		s := New(&bytes.Buffer{}, run, Presentation{Format: FormatJSON, Width: defaultWidth})
+		s := New(&safeBuffer{}, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 		if s.stream.r != nil {
 			t.Error("json format entered the live-region view, which only makes sense for human output on a terminal")
@@ -889,7 +889,7 @@ func TestFormatAxis(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
-		var out bytes.Buffer
+		var out safeBuffer
 		s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
@@ -917,7 +917,7 @@ func TestFormatAxis(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
-		var out bytes.Buffer
+		var out safeBuffer
 		s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
@@ -953,7 +953,7 @@ func TestSpanWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
 			run := startTestRun(t, dir, "ocel deploy")
-			var out bytes.Buffer
+			var out safeBuffer
 			s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 			t.Cleanup(func() { _ = s.Close() })
 			s.stream.r.useClock(func() time.Time { return now })
@@ -1152,7 +1152,7 @@ func TestABuildLineThatCollapsesToNothingIsNeverEmitted(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	run := startTestRun(t, dir, "ocel deploy")
-	var out bytes.Buffer
+	var out safeBuffer
 	s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -1284,7 +1284,7 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
-		var out bytes.Buffer
+		var out safeBuffer
 		s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
@@ -1323,7 +1323,7 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
-		var out bytes.Buffer
+		var out safeBuffer
 		s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 

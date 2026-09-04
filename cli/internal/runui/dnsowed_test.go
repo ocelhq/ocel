@@ -1,7 +1,6 @@
 package runui
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 
@@ -89,7 +88,7 @@ func TestDNSStack(t *testing.T) {
 
 func dnsOutput(t *testing.T, present Presentation, headline string, records []*progressv1.DnsRecord, notes []string) string {
 	t.Helper()
-	var out bytes.Buffer
+	var out safeBuffer
 	s := NewStream(&out, present)
 	t.Cleanup(func() { _ = s.Close() })
 	s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_DnsOwed{
