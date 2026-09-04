@@ -174,13 +174,22 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := forgetting.PlanRemoval(ctx, class); err != nil {
-		t.Fatalf("PlanRemoval() with the deploy key gone = %v, want a destroy that needs no key to say what it will take", err)
-	}
-	if err := forgetting.Remove(ctx, class, nil); err != nil {
-		t.Fatalf("Remove() with the deploy key gone = %v, want a host nobody can bootstrap to still be one ocel can leave", err)
+	for _, taken := range []providerkit.Class{providerkit.ClassPreview, class} {
+		standing, err := forgetting.Describe(ctx, taken)
+		if err != nil {
+			t.Fatalf("Describe(%s) = %v", taken, err)
+		}
+		if !standing.Present {
+			continue
+		}
+		if _, err := forgetting.PlanRemoval(ctx, taken); err != nil {
+			t.Fatalf("PlanRemoval(%s) with the deploy key gone = %v, want a destroy that needs no key to say what it will take", taken, err)
+		}
+		if err := forgetting.Remove(ctx, taken, nil); err != nil {
+			t.Fatalf("Remove(%s) with the deploy key gone = %v, want a host nobody can bootstrap to still be one ocel can leave", taken, err)
+		}
 	}
 	if left := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); left != "" {
-		t.Errorf("%s still stands as %q after a keyless Remove()", deployLogin, left)
+		t.Errorf("%s still stands as %q after a keyless Remove() of every class", deployLogin, left)
 	}
 }
