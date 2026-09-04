@@ -2,6 +2,7 @@ package cloudfront
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -387,5 +388,88 @@ func TestCompleteFromFillsOnlyWhatThePlanLeftOut(t *testing.T) {
 				t.Errorf("WebACLId = %q, want %q", got, tc.acl)
 			}
 		})
+	}
+}
+
+func TestEveryCertificateAConfigCarriesIsOneAnUpdateAccepts(t *testing.T) {
+	t.Parallel()
+
+	const (
+		alias       = "shop.example.com"
+		certificate = "arn:aws:acm:us-east-1:111122223333:certificate/1111-2222"
+	)
+
+	w := newWorld()
+	plan := distributionPlan{
+		name:          "storefront",
+		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
+		function:      "arn:aws:cloudfront::111122223333:function/resolver",
+		cachePolicy:   "cache-policy",
+		headersPolicy: "headers-policy",
+		oac:           "origin-access-control",
+	}
+
+	raised, err := createDistribution(context.Background(), w.clients(), plan, nil, "")
+	if err != nil {
+		t.Fatalf("createDistribution: %v", err)
+	}
+	assertViewerCertificate(t, "the config sent to CreateDistribution", w.front.distributions[raised.id].config)
+
+	if err := serveAlias(context.Background(), w.clients(), plan, raised.id, alias, certificate); err != nil {
+		t.Fatalf("serveAlias: %v", err)
+	}
+	if got := certificateOf(w.front.distributions[raised.id].config); got != certificate {
+		t.Errorf("the distribution serves the alias under certificate %q, want %q", got, certificate)
+	}
+
+	if err := dropAlias(context.Background(), w.clients(), plan, raised.id, alias); err != nil {
+		t.Fatalf("dropAlias: %v", err)
+	}
+	dropped := w.front.distributions[raised.id].config
+	if len(aliasesOf(dropped)) != 0 {
+		t.Errorf("the distribution still answers for %v, want the alias gone", aliasesOf(dropped))
+	}
+	if !aws.ToBool(dropped.ViewerCertificate.CloudFrontDefaultCertificate) {
+		t.Errorf("dropping the last alias left the ACM certificate in place, want the CloudFront default certificate back")
+	}
+
+	if err := w.edge().deleteDistribution(context.Background(), w.clients(), kindDistribution, raised.id); err != nil {
+		t.Fatalf("deleteDistribution: %v", err)
+	}
+
+	if len(w.front.updates) < 3 {
+		t.Fatalf("%d configs reached UpdateDistribution, want one each for serving the alias, dropping it and disabling the distribution", len(w.front.updates))
+	}
+	for i, config := range w.front.updates {
+		assertViewerCertificate(t, fmt.Sprintf("the config sent to UpdateDistribution #%d", i+1), config)
+	}
+}
+
+func assertViewerCertificate(t *testing.T, what string, config *cftypes.DistributionConfig) {
+	t.Helper()
+	held := config.ViewerCertificate
+	if held == nil {
+		t.Fatalf("%s carries no ViewerCertificate, and CloudFront rejects an update without one", what)
+	}
+	if aws.ToBool(held.CloudFrontDefaultCertificate) {
+		if held.MinimumProtocolVersion != cftypes.MinimumProtocolVersionTLSv1 {
+			t.Errorf("%s takes the default certificate with MinimumProtocolVersion %q, want %q: it is the only one CloudFront accepts there", what, held.MinimumProtocolVersion, cftypes.MinimumProtocolVersionTLSv1)
+		}
+		if held.SSLSupportMethod != "" {
+			t.Errorf("%s takes the default certificate and still names SSLSupportMethod %q, want none", what, held.SSLSupportMethod)
+		}
+		if aws.ToString(held.ACMCertificateArn) != "" {
+			t.Errorf("%s takes the default certificate and still names ACMCertificateArn %q, want none", what, aws.ToString(held.ACMCertificateArn))
+		}
+		return
+	}
+	if aws.ToString(held.ACMCertificateArn) == "" {
+		t.Errorf("%s takes neither the default certificate nor an ACM one", what)
+	}
+	if held.SSLSupportMethod != cftypes.SSLSupportMethodSniOnly {
+		t.Errorf("%s names SSLSupportMethod %q, want %q", what, held.SSLSupportMethod, cftypes.SSLSupportMethodSniOnly)
+	}
+	if held.MinimumProtocolVersion == "" {
+		t.Errorf("%s names an ACM certificate and no MinimumProtocolVersion, and CloudFront insists on one", what)
 	}
 }

@@ -232,12 +232,16 @@ func completeFrom(want, held *cftypes.DistributionConfig) *cftypes.DistributionC
 
 func viewerCertificate(certificate string) *cftypes.ViewerCertificate {
 	if certificate == "" {
-		return &cftypes.ViewerCertificate{CloudFrontDefaultCertificate: ptr(true)}
+		return &cftypes.ViewerCertificate{
+			CloudFrontDefaultCertificate: ptr(true),
+			MinimumProtocolVersion:       cftypes.MinimumProtocolVersionTLSv1,
+		}
 	}
 	return &cftypes.ViewerCertificate{
-		ACMCertificateArn:      aws.String(certificate),
-		SSLSupportMethod:       cftypes.SSLSupportMethodSniOnly,
-		MinimumProtocolVersion: cftypes.MinimumProtocolVersionTLSv122021,
+		CloudFrontDefaultCertificate: ptr(false),
+		ACMCertificateArn:            aws.String(certificate),
+		SSLSupportMethod:             cftypes.SSLSupportMethodSniOnly,
+		MinimumProtocolVersion:       cftypes.MinimumProtocolVersionTLSv122021,
 	}
 }
 

@@ -196,6 +196,7 @@ type fakeCloudFront struct {
 
 	stores        map[string]*fakeStore
 	distributions map[string]*fakeDistribution
+	updates       []*cftypes.DistributionConfig
 
 	createDistributionErr error
 	aliasErr              error
@@ -410,6 +411,7 @@ func (f *fakeCloudFront) UpdateDistribution(_ context.Context, in *cloudfront.Up
 	if f.aliasErr != nil {
 		return nil, f.aliasErr
 	}
+	f.updates = append(f.updates, in.DistributionConfig)
 	held.config = in.DistributionConfig
 	held.etag = f.id("dist-")
 	held.polls = 0
