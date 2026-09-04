@@ -254,3 +254,55 @@ func TestTheAppsOwnScriptsAreWhatTheImageRuns(t *testing.T) {
 		t.Error("Locate() missed the app's own start script")
 	}
 }
+
+func TestAGlobTheWorkspaceNegatesLeavesTheAppOutOfIt(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		packages string
+		member   bool
+	}{
+		{
+			name:     "a negation after the glob that matched excludes the app",
+			packages: "  - apps/*\n  - '!apps/legacy'\n",
+			member:   false,
+		},
+		{
+			name:     "a negation the next glob matches again is overruled by it",
+			packages: "  - '!apps/legacy'\n  - apps/*\n",
+			member:   true,
+		},
+		{
+			name:     "a negation naming another member leaves this one in",
+			packages: "  - apps/*\n  - '!apps/docs'\n",
+			member:   true,
+		},
+		{
+			name:     "a deep negation excludes what the recursive glob swept in",
+			packages: "  - apps/**\n  - '!apps/legacy/**'\n",
+			member:   false,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, map[string]string{
+				"pnpm-workspace.yaml":      "packages:\n" + tt.packages,
+				"pnpm-lock.yaml":           "lockfileVersion: '9.0'\n",
+				"package.json":             `{"name":"root"}`,
+				"apps/legacy/package.json": `{"name":"legacy"}`,
+			})
+
+			appDir := filepath.Join(dir, "apps", "legacy")
+			got, err := workspace.Locate(appDir)
+			if err != nil {
+				t.Fatalf("Locate() = %v", err)
+			}
+
+			if tt.member && got.Root != dir {
+				t.Errorf("Locate().Root = %q, want the workspace root %q — the last glob to match the app decides whether it is a member", got.Root, dir)
+			}
+			if !tt.member && got.Root != appDir {
+				t.Errorf("Locate().Root = %q, and the workspace excludes the app, so it is built from its own directory %q", got.Root, appDir)
+			}
+		})
+	}
+}

@@ -165,22 +165,20 @@ func memberOf(root, appDir string, globs []string) (string, bool) {
 	if slashed == "." || strings.HasPrefix(slashed, "../") {
 		return "", false
 	}
+	member := false
 	for _, glob := range globs {
 		pattern := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(glob), "./"), "/")
-		if strings.HasPrefix(pattern, "!") {
-			if ok, _ := doublestar.Match(strings.TrimPrefix(pattern, "!"), slashed); ok {
-				return "", false
-			}
+		excluding := strings.HasPrefix(pattern, "!")
+		pattern = strings.TrimPrefix(pattern, "!")
+		if pattern == slashed {
+			member = !excluding
 			continue
 		}
-		if pattern == slashed {
-			return slashed, true
-		}
 		if ok, _ := doublestar.Match(pattern, slashed); ok {
-			return slashed, true
+			member = !excluding
 		}
 	}
-	return "", false
+	return slashed, member
 }
 
 func readManifest(path string) (manifest, error) {
