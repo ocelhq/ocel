@@ -60,7 +60,7 @@ env:
 
 jobs:
   binary:
-    name: the lanes this run drives, and the binaries they drive
+    name: binaries
     if: ${{ github.event.action != 'closed' && (github.event.action != 'labeled' || github.event.label.name == 'journey:real') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
