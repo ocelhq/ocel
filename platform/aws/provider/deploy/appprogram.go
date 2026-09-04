@@ -341,6 +341,9 @@ func (r *release) appEnv(plan providerkit.StackPlan, bundle appBundle, sessions 
 	for key, value := range app.Values.Plain {
 		env[key] = value
 	}
+	if app.Values.Phase != "" {
+		env[providerkit.PhaseEnvName] = app.Values.Phase
+	}
 	if app.Values.Folder != "" {
 		env[appFolderEnv] = app.Values.Folder
 	}

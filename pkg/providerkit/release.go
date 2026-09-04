@@ -118,6 +118,7 @@ type AppValues struct {
 	Owners    map[string]string
 	Folder    string
 	Delivered map[string]string
+	Phase     string
 }
 
 func (v AppValues) String() string {
