@@ -5,10 +5,9 @@ import { reclaimable, sweepable } from "./slugs";
 const CELLS = ["express", "express-hello"];
 
 describe("reclaimable", () => {
-  it("reads the run and the example out of a harness slug", () => {
+  it("reads the example out of a harness slug", () => {
     assert.deepEqual(reclaimable("j-local-vndaba-express", CELLS), {
       slug: "j-local-vndaba-express",
-      run: "local-vndaba",
       example: "express",
     });
   });
@@ -16,7 +15,6 @@ describe("reclaimable", () => {
   it("reads the longest cell name a slug ends in, not the shortest", () => {
     assert.deepEqual(reclaimable("j-1874-express-hello", CELLS), {
       slug: "j-1874-express-hello",
-      run: "1874",
       example: "express-hello",
     });
   });
