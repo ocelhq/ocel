@@ -16,6 +16,18 @@ const avatar = uploader(
   {},
 );
 
+describe("Bucket record", () => {
+  it("refuses its record when this deploy provisioned nothing", () => {
+    vi.stubEnv("OCEL_PHASE", "resources-suppressed");
+
+    expect(() => bucket("storage", { uploaders: { avatar } }).__config()).toThrow(
+      "'bucket(\"storage\")' cannot be used while resources are suppressed",
+    );
+
+    vi.unstubAllEnvs();
+  });
+});
+
 describe("Bucket discovery declare", () => {
   beforeEach(() => {
     declareMock.mockClear();

@@ -55,6 +55,26 @@ describe("postgres()", () => {
     );
   });
 
+  it("refuses every read during discovery, naming what was reached for", () => {
+    vi.stubEnv("OCEL_PHASE", "discovery");
+
+    const pool = postgres("orders");
+
+    expect(() => pool.query).toThrow(
+      "'postgres(\"orders\")' cannot be used during discovery: tried to access 'query' before the resource was provisioned",
+    );
+  });
+
+  it("refuses every read when this deploy provisioned nothing", () => {
+    vi.stubEnv("OCEL_PHASE", "resources-suppressed");
+
+    const pool = postgres("orders");
+
+    expect(() => pool.query).toThrow(
+      "'postgres(\"orders\")' cannot be used while resources are suppressed: tried to access 'query', and this deploy provisioned none",
+    );
+  });
+
   it("percent-encodes credentials in the connection string it exposes", () => {
     const url = new URL(connectionStringFor("h", 5432, "d", "u:s", "p/w"));
 
