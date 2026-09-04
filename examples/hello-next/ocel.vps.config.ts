@@ -18,5 +18,5 @@ export default defineConfig({
       identityFile: ssh.OCEL_VPS_IDENTITY_FILE,
     },
   }),
-  apps: zonedApps(),
+  apps: zonedApps()?.map((app) => ({ ...app, health: { path: "/health" } })),
 });
