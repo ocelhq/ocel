@@ -20,6 +20,7 @@ describe("summary table", () => {
     target: "dev",
     environment: "dev",
     runId: "local-ada",
+    leftOut: [],
   });
 
   it("heads the table with the target, environment and run", () => {
@@ -37,6 +38,24 @@ describe("summary table", () => {
 
   it("links the issue that owns a red cell", () => {
     expect(table).toContain(`[#851](${ISSUE})`);
+  });
+
+  it("says nothing about a pick when the pass ran everything", () => {
+    expect(table).not.toContain("left out this pass");
+  });
+
+  it("names what the pass left out, above the tally", () => {
+    const said = summaryTable(report, {
+      target: "dev",
+      environment: "dev",
+      runId: "local-ada",
+      leftOut: ["hono", "fastify"],
+    });
+    const lines = said.split("\n");
+    expect(lines[2]).toBe("left out this pass: hono, fastify");
+    expect(lines.indexOf("left out this pass: hono, fastify")).toBeLessThan(
+      lines.findIndex((line) => line.includes("green")),
+    );
   });
 });
 
