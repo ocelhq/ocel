@@ -1,7 +1,8 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
-import { copyTree, workTree } from "../../ocel";
+import { workTree } from "../../ocel";
 import { exampleDir, treeDir } from "../../paths";
+import { copyTree } from "../../tree";
 import type { LadderHooks } from "../../spec";
 import { recordPlacement, refuse } from "./ladder";
 import { place } from "./place";
