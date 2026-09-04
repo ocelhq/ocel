@@ -24,6 +24,7 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+      - "turbo.json"
       - ".github/workflows/journey.yml"
       - ".github/actions/**"
   workflow_dispatch:
@@ -53,6 +54,7 @@ env:
   OCEL_FLOCI_IMAGE: floci/floci:2.0.1
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
+  BUN_VERSION: "1.4.0"
   PR_EDGES: "api-gateway cloudfront cloudflare"
   BINARIES: packages/native-lib
 
@@ -144,16 +146,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: ./.github/actions/node-workspace
         with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -173,11 +169,8 @@ jobs:
           region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: The node bundle the CLI binary is built around
-        run: pnpm --filter ocel build
+        run: pnpm turbo run build --filter=ocel
 
       - name: Build the binaries a journey drives
         run: |
@@ -215,22 +208,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: ./.github/actions/node-workspace
         with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: The node bundle the examples import
-        run: pnpm --filter ocel build
+        run: pnpm turbo run build --filter=ocel
 
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries
@@ -317,22 +301,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: ./.github/actions/node-workspace
         with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: The node bundle the examples import
-        run: pnpm --filter ocel build
+        run: pnpm turbo run build --filter=ocel
 
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries
@@ -347,6 +322,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-journey-aws-${{ github.run_id }}
@@ -432,25 +408,15 @@ jobs:
           gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
-      - name: Setup pnpm
+      - uses: ./.github/actions/node-workspace
         if: ${{ needs.changes.outputs.real == 'true' }}
-        uses: pnpm/action-setup@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: Setup Node
+      - name: The node bundle the examples import
         if: ${{ needs.changes.outputs.real == 'true' }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        if: ${{ needs.changes.outputs.real == 'true' }}
-        run: |
-          set -euo pipefail
-          pnpm install --frozen-lockfile
-          pnpm --filter ocel build
+        run: pnpm turbo run build --filter=ocel
 
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries

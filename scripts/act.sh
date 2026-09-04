@@ -88,7 +88,7 @@ run_provider_vps() {
     local out status=0
     out=$(mktemp -d)
     pnpm install --frozen-lockfile &&
-        pnpm --filter ocel build &&
+        pnpm turbo run build --filter=ocel &&
         go generate -C cli ./... &&
         incus_run "scripts/incus.sh run ocel-act-live-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./..." | tee "$out/live.json" &&
         scripts/assert-ran.sh "$out/live.json" TestLive &&
@@ -103,7 +103,7 @@ run_journey_vps() {
     [ -e /dev/kvm ] || die "the journey vps lane needs /dev/kvm"
     incus_run "incus list" >/dev/null || die "the journey vps lane needs a working incus (incus admin init --auto)"
     pnpm install --frozen-lockfile &&
-        pnpm --filter ocel build &&
+        pnpm turbo run build --filter=ocel &&
         node scripts/build-native.mjs --host --target cli &&
         node scripts/build-native.mjs --host --target provider-vps || return $?
     local vm=ocel-act-journey-vps-$$ status=0
