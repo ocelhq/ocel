@@ -56,8 +56,9 @@ export type Compute = "serverless" | "container";
 export type Framework = "next" | "express" | "fastify" | "hono";
 
 /**
- * How a container app's image is built. Left off, the app is built from its
- * own directory: with a `Dockerfile` sitting in it if there is one, and
+ * How a container app's image is built. Left off, the image is built from the
+ * workspace root the app is a member of — its own directory when it belongs to
+ * no workspace — with a `Dockerfile` sitting in the app if there is one, and
  * otherwise with no configuration at all.
  */
 export interface BuildConfig {
@@ -65,10 +66,22 @@ export interface BuildConfig {
    * The Dockerfile to build from. A relative path resolves against the app's
    * directory and is free to point outside it; an absolute path is taken as
    * written, which ties the config to the machine it is read on. Naming one
-   * builds from it whether or not the app has a `Dockerfile` of its own. The
-   * build context is the app's directory either way.
+   * builds from it whether or not the app has a `Dockerfile` of its own.
    */
   dockerfile?: string;
+  /**
+   * The directory the image is built from, relative to the project. It must
+   * hold the app. Left off, it is the workspace root the app is a member of,
+   * which is what an installer needs to resolve a `workspace:` dependency.
+   */
+  context?: string;
+  /**
+   * The command that builds the app inside the image, run from the build
+   * context. Left off, the app's own `build` script runs, addressed through
+   * the workspace's package manager. Name one to build with turbo, nx or
+   * anything else that drives the build from the root.
+   */
+  command?: string;
 }
 
 /**

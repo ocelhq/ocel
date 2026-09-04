@@ -95,14 +95,14 @@ func declaredManager(root string) Manager {
 }
 
 func (l Location) Commands() Commands {
-	if !l.InWorkspace() {
-		return Commands{}
+	var commands Commands
+	if l.InWorkspace() {
+		commands = Commands{Install: l.install(), Build: l.build(), Start: l.start()}
 	}
-	return Commands{
-		Install: l.install(),
-		Build:   l.build(),
-		Start:   l.start(),
+	if l.BuildCommand != "" {
+		commands.Build = l.BuildCommand
 	}
+	return commands
 }
 
 func (l Location) install() string {

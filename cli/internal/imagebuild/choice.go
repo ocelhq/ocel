@@ -4,14 +4,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
 
 const DockerfileName = "Dockerfile"
 
 type App struct {
 	Name       string
-	Dir        string
+	Workspace  workspace.Location
 	Configured string
+}
+
+func (a App) Dir() string {
+	return filepath.Join(a.Workspace.Root, filepath.FromSlash(a.Workspace.Path))
 }
 
 type Choice struct {
@@ -20,10 +26,11 @@ type Choice struct {
 }
 
 func Choose(app App) (Choice, error) {
+	dir := app.Dir()
 	if app.Configured != "" {
 		path := app.Configured
 		if !filepath.IsAbs(path) {
-			path = filepath.Join(app.Dir, path)
+			path = filepath.Join(dir, path)
 		}
 		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() {
@@ -31,7 +38,7 @@ func Choose(app App) (Choice, error) {
 		}
 		return Choice{App: app, Dockerfile: path}, nil
 	}
-	entries, err := os.ReadDir(app.Dir)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return Choice{}, fmt.Errorf("read the directory app %q is built from: %w", app.Name, err)
 	}
@@ -39,7 +46,7 @@ func Choose(app App) (Choice, error) {
 		if entry.Name() != DockerfileName {
 			continue
 		}
-		beside := filepath.Join(app.Dir, DockerfileName)
+		beside := filepath.Join(dir, DockerfileName)
 		if info, err := os.Stat(beside); err == nil && info.Mode().IsRegular() {
 			return Choice{App: app, Dockerfile: beside}, nil
 		}
@@ -52,7 +59,7 @@ func (c Choice) Notice() string {
 	case c.Dockerfile == "":
 		return ""
 	case c.App.Configured != "":
-		return fmt.Sprintf("%s builds from %s, the build.dockerfile it names — its build context is still %s", c.App.Name, c.Dockerfile, c.App.Dir)
+		return fmt.Sprintf("%s builds from %s, the build.dockerfile it names — its build context is still %s", c.App.Name, c.Dockerfile, c.App.Workspace.Root)
 	default:
 		return fmt.Sprintf("%s builds from the %s beside it rather than with railpack — rename or remove %s to go back", c.App.Name, DockerfileName, c.Dockerfile)
 	}

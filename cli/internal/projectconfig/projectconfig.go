@@ -65,6 +65,8 @@ type DNSDescriptor struct {
 
 type Build struct {
 	Dockerfile string
+	Context    string
+	Command    string
 }
 
 type Registry struct {
@@ -138,6 +140,8 @@ type rawConfig struct {
 		Domains    rawDomains `json:"domains"`
 		Build      *struct {
 			Dockerfile string `json:"dockerfile"`
+			Context    string `json:"context"`
+			Command    string `json:"command"`
 		} `json:"build"`
 		Health *struct {
 			Path string `json:"path"`
@@ -595,7 +599,15 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			if dockerfile == "" && a.Build.Dockerfile != "" {
 				return nil, fmt.Errorf("app %q sets build.dockerfile to %q, which names no file: give it the path to a Dockerfile, or drop build.dockerfile to build %q from the Dockerfile beside it or from no configuration at all", a.Name, a.Build.Dockerfile, a.Name)
 			}
-			build = &Build{Dockerfile: dockerfile}
+			context := strings.TrimSpace(a.Build.Context)
+			if context == "" && a.Build.Context != "" {
+				return nil, fmt.Errorf("app %q sets build.context to %q, which names no directory: give it the directory the image is built from, or drop build.context to build %q from the workspace root its own directory sits in", a.Name, a.Build.Context, a.Name)
+			}
+			command := strings.TrimSpace(a.Build.Command)
+			if command == "" && a.Build.Command != "" {
+				return nil, fmt.Errorf("app %q sets build.command to %q, which names no command: give it the command that builds %q inside the image, or drop build.command to run the app's own build script", a.Name, a.Build.Command, a.Name)
+			}
+			build = &Build{Dockerfile: dockerfile, Context: context, Command: command}
 		}
 		var health *Health
 		if a.Health != nil {
