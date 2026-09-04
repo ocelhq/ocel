@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	appImage   = "ocel/web:sha256-abc"
+	appImage   = "ocel/shop/web:sha256-abc"
 	physical   = "shop-web-abc123def456"
 	fixtureRef = "registry.example.com/web@sha256:0000"
 )
@@ -98,7 +98,7 @@ func TestAContainerAlreadyServingTheReleasesImageIsKeptRatherThanRecreated(t *te
 func TestAContainerStandingUnderAnotherImageIsReplacedRatherThanLeftServing(t *testing.T) {
 	t.Parallel()
 
-	stand := stood(t, "running ocel/web:sha256-older")
+	stand := stood(t, "running ocel/shop/web:sha256-older")
 	command := ranContainer(t, stand)
 	if !strings.Contains(command, "docker rm --force "+quoted(physical)) && !strings.Contains(strings.Join(stand.commands(), "\n"), "docker rm --force "+quoted(physical)) {
 		t.Errorf("the name was reused without taking the container holding it: %v", stand.commands())
