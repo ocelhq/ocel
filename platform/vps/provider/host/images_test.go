@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	coordinate = "ocel/web:sha256-abc"
+	coordinate = "ocel/shop/web:sha256-abc"
 	imageID    = "sha256:abcdef"
 )
 
