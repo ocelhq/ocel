@@ -43,7 +43,11 @@ func Plan(loc workspace.Location) ([]byte, error) {
 	if !result.Success {
 		return nil, fmt.Errorf("railpack could not plan %s:\n%s", loc.Root, refusal(result))
 	}
-	if err := scope(result.Plan, loc, commands); err != nil {
+	outside, err := outsideTheContext(loc.Root)
+	if err != nil {
+		return nil, err
+	}
+	if err := scope(result.Plan, loc, commands, outside); err != nil {
 		return nil, err
 	}
 	plan, err := json.Marshal(result.Plan)
@@ -53,12 +57,12 @@ func Plan(loc workspace.Location) ([]byte, error) {
 	return plan, nil
 }
 
-func scope(built *railpackplan.BuildPlan, loc workspace.Location, commands workspace.Commands) error {
+func scope(built *railpackplan.BuildPlan, loc workspace.Location, commands workspace.Commands, outside func(string) bool) error {
 	for i := range built.Steps {
 		step := &built.Steps[i]
 		step.Commands = slices.DeleteFunc(step.Commands, func(command railpackplan.Command) bool {
 			copied, ok := command.(railpackplan.CopyCommand)
-			return ok && copied.Image == "" && outsideTheContext(copied.Src)
+			return ok && copied.Image == "" && outside(copied.Src)
 		})
 		switch step.Name {
 		case installStep:
