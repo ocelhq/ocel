@@ -206,6 +206,19 @@ func TestAWorkspaceAppWithABuildScriptBuildsWhatItDependsOnFirst(t *testing.T) {
 	}
 }
 
+func TestAnInstallOcelCannotScopeStopsTheBuildRatherThanInstallingTheWholeWorkspace(t *testing.T) {
+	loc := located(t, workspaceApp)
+	loc.Manager = workspace.YarnBerry
+
+	_, err := imagebuild.Plan(loc)
+	if err == nil {
+		t.Fatal("Plan() dropped a scoped install it could not place, so the image installs every package in the workspace to serve one app")
+	}
+	if !strings.Contains(err.Error(), "pnpm install --frozen-lockfile --prefer-offline") {
+		t.Errorf("Plan() = %v, and the reader is never told which install command ocel could not replace", err)
+	}
+}
+
 func TestAConfiguredBuildCommandIsWhatTheImageRuns(t *testing.T) {
 	loc := located(t, workspaceApp)
 	loc.BuildCommand = "turbo run build --filter=@fixture/web"
