@@ -77,6 +77,12 @@ func (p distributionPlan) config(aliases []string, certificate string) *cftypes.
 		IsIPV6Enabled:   ptr(true),
 		PriceClass:      cftypes.PriceClassPriceClassAll,
 		CacheTagConfig:  &cftypes.CacheTagConfig{HeaderName: aws.String(bootstrap.EdgeCacheTagHeader)},
+		Logging: &cftypes.LoggingConfig{
+			Enabled:        ptr(false),
+			IncludeCookies: ptr(false),
+			Bucket:         aws.String(""),
+			Prefix:         aws.String(""),
+		},
 		Aliases:         &cftypes.Aliases{Quantity: quantity(aliases), Items: aliases},
 		Origins: &cftypes.Origins{
 			Quantity: ptr(int32(1)),
