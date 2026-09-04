@@ -231,7 +231,11 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 		return err
 	}
 
-	if err := stream.Send(fakeProgress("DEPLOY " + describeEnv(req.GetEnvironment()) + describeSuppression(req.GetSuppressResources()))); err != nil {
+	deploying := "DEPLOY " + describeEnv(req.GetEnvironment())
+	if req.GetSuppressResources() {
+		deploying += " suppress_resources=true"
+	}
+	if err := stream.Send(fakeProgress(deploying)); err != nil {
 		return err
 	}
 
@@ -1431,13 +1435,6 @@ func describeConsent(consented *planv1.ChangePlan) string {
 func describeEnv(env *environmentv1.Environment) string {
 	return fmt.Sprintf("tier=%s lifecycle=%s identity=%s",
 		env.GetTier(), env.GetLifecycle(), env.GetIdentity())
-}
-
-func describeSuppression(suppressed bool) string {
-	if !suppressed {
-		return ""
-	}
-	return " suppress_resources=true"
 }
 
 func describeFunction(f *contractv1.ManifestFunction) string {
