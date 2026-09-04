@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { currentRunIdentity } from "./identity";
+import { longestFirst } from "./order";
 import { verdictFile } from "./paths";
 import { type Pick, pickExamples } from "./pick";
 import { type ExampleSpec, examplesNamed, specForTarget } from "./spec";
@@ -12,9 +13,10 @@ export type Verdict = { nonce: string; exitCode: number; report: string };
 
 export async function runJourney(
   target: Target,
-  examples: ExampleSpec[],
+  chosen: ExampleSpec[],
   leftOut: ExampleSpec[] = [],
 ): Promise<number> {
+  const examples = longestFirst(chosen);
   const runId = currentRunIdentity();
   const file = verdictFile(runId, target.name);
   const nonce = randomUUID();

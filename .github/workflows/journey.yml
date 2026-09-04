@@ -292,15 +292,30 @@ jobs:
         run: |
           set -uo pipefail
           status=0
-          for edge in $EDGES; do
-            echo "::group::aws journey on $edge"
-            if [ "$REAL" != true ]; then
-              OCEL_AWS_EDGE=$edge scripts/floci.sh run "$EMULATOR-$edge" -- \
-                bash -c 'AWS_ENDPOINT_URL=${OCEL_FLOCI_ENDPOINT/127.0.0.1/localhost.localstack.cloud} pnpm --filter @ocel-tests/journeys journey' ||
-                status=1
-            else
+          if [ "$REAL" = true ]; then
+            for edge in $EDGES; do
+              echo "::group::aws journey on $edge"
               OCEL_AWS_EDGE=$edge pnpm --filter @ocel-tests/journeys journey || status=1
-            fi
+              echo "::endgroup::"
+            done
+            exit $status
+          fi
+
+          pids=()
+          names=()
+          for edge in $EDGES; do
+            OCEL_AWS_EDGE=$edge scripts/floci.sh run "$EMULATOR-$edge" -- \
+              bash -c 'AWS_ENDPOINT_URL=${OCEL_FLOCI_ENDPOINT/127.0.0.1/localhost.localstack.cloud} pnpm --filter @ocel-tests/journeys journey' \
+              > "$RUNNER_TEMP/journey-$edge.log" 2>&1 &
+            pids+=("$!")
+            names+=("$edge")
+          done
+          for i in "${!pids[@]}"; do
+            wait "${pids[$i]}" || status=1
+          done
+          for edge in "${names[@]}"; do
+            echo "::group::aws journey on $edge"
+            cat "$RUNNER_TEMP/journey-$edge.log" || true
             echo "::endgroup::"
           done
           exit $status
@@ -366,15 +381,23 @@ jobs:
         if: ${{ failure() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
         run: cat /tmp/web.log || true
 
+      - name: Pack the evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p tests/journeys/output
+          tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
+            --exclude='*/node_modules' \
+            --exclude='*/node_modules/*' \
+            --exclude='*/trees/*/packages' \
+            -C tests/journeys output
+
       - name: Upload the evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: journey-evidence-aws-${{ matrix.edge.name }}
-          path: |
-            tests/journeys/output
-            !tests/journeys/output/**/trees/**/node_modules/**
-            !tests/journeys/output/**/trees/**/packages/**
+          path: ${{ runner.temp }}/journey-evidence.tgz
           if-no-files-found: warn
 
   vps:
@@ -492,13 +515,21 @@ jobs:
         if: ${{ always() && needs.binary.outputs.real == 'true' }}
         run: scripts/ec2.sh destroy "$BOX" || echo "could not destroy $BOX"
 
+      - name: Pack the evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p tests/journeys/output
+          tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
+            --exclude='*/node_modules' \
+            --exclude='*/node_modules/*' \
+            --exclude='*/trees/*/packages' \
+            -C tests/journeys output
+
       - name: Upload the evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: journey-evidence-vps
-          path: |
-            tests/journeys/output
-            !tests/journeys/output/**/trees/**/node_modules/**
-            !tests/journeys/output/**/trees/**/packages/**
+          path: ${{ runner.temp }}/journey-evidence.tgz
           if-no-files-found: warn
