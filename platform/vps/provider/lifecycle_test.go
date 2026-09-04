@@ -791,7 +791,7 @@ func lines(rendered string) []string {
 
 func (j journey) window(t *testing.T, class providerkit.Class) []string {
 	t.Helper()
-	return lines(j.vm.sshAs(t, host.DeployUser(), "cat "+quote(host.ReleasesDir()+"/"+lifecycleApp+"/"+string(class))))
+	return lines(j.vm.sshAs(t, host.DeployUser(), "cat "+quote(host.ReleasesDir()+"/"+lifecycleSlug+"/"+lifecycleApp+"/"+string(class))))
 }
 
 func (j journey) container(t *testing.T) string {
@@ -995,8 +995,10 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 		t.Errorf("the deploy never reported %q, and the transfer of an image onto this box is the one mutation nothing else would name:\n%s", want, deployed)
 	}
 	container := run.container(t)
-	if held := run.vm.inspects(t, "container", container, host.LabelSelector(host.LabelApp)); held != lifecycleApp {
-		t.Errorf("%s carries %s=%q, want %q: the label is the join key retention reconciles over", container, host.LabelApp, held, lifecycleApp)
+	for label, want := range map[string]string{host.LabelApp: lifecycleApp, host.LabelProject: lifecycleSlug} {
+		if held := run.vm.inspects(t, "container", container, host.LabelSelector(label)); held != want {
+			t.Errorf("%s carries %s=%q, want %q: the pair is the join key retention reconciles over, and app alone joins two projects that both name an app %s", container, label, held, want, lifecycleApp)
+		}
 	}
 	ref := run.vm.inspects(t, "container", container, host.LabelSelector(host.LabelRef))
 	repository, named := host.Repository(ref)
@@ -1117,7 +1119,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	}
 	window := run.window(t, class)
 	if len(window) != 2 || len(window) > host.KeepWindow {
-		t.Fatalf("%s names %v, want the two refs two deploys left, most-recent-first, inside a window of %d", host.ReleasesDir()+"/"+lifecycleApp+"/"+string(class), window, host.KeepWindow)
+		t.Fatalf("%s names %v, want the two refs two deploys left, most-recent-first, inside a window of %d", host.ReleasesDir()+"/"+lifecycleSlug+"/"+lifecycleApp+"/"+string(class), window, host.KeepWindow)
 	}
 	if serving := run.vm.inspects(t, "container", run.container(t), host.LabelSelector(host.LabelRef)); window[0] != serving {
 		t.Errorf("the keep window reads %v and %s serves %s, want the most recent ref first", window, lifecycleApp, serving)

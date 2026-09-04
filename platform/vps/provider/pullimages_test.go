@@ -150,7 +150,7 @@ func aTarget(server string) providerkit.RegistryTarget {
 func aPull(target providerkit.RegistryTarget) providerkit.ImagePush {
 	return providerkit.ImagePush{
 		App:    "web",
-		Source: "ocel/web@" + pullDigest,
+		Source: "ocel/shop/web@" + pullDigest,
 		Target: target.Coordinate("web", pullTag),
 		Digest: pullDigest,
 	}

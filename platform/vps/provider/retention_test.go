@@ -33,7 +33,7 @@ func TestAStoodUpReleaseIsRecordedAtTheHeadOfItsWindow(t *testing.T) {
 	if len(called) != 1 {
 		t.Fatalf("standing the release up ran %d promotes, want the one that names what the box most recently served", len(called))
 	}
-	for _, want := range []string{"'web'", "'production'", "'" + loadedCoordinate + "'"} {
+	for _, want := range []string{"'shop/web'", "'production'", "'" + loadedCoordinate + "'"} {
 		if !strings.Contains(called[0], want) {
 			t.Errorf("the promote ran as %q and never names %s", called[0], want)
 		}
@@ -131,7 +131,7 @@ func TestATeardownDropsTheWindowBeforeAnythingSweepsAgainstIt(t *testing.T) {
 	if len(called) != 1 {
 		t.Fatalf("the teardown ran %d forgets, want the one that drops the window the torn-down stack wrote", len(called))
 	}
-	for _, want := range []string{"'web'", "'production'"} {
+	for _, want := range []string{"'shop/web'", "'production'"} {
 		if !strings.Contains(called[0], want) {
 			t.Errorf("the forget ran as %q and never names %s", called[0], want)
 		}
@@ -174,7 +174,7 @@ func TestAnAppNameOfMetacharactersReachesTheHelperAsOneWord(t *testing.T) {
 			if !strings.Contains(command, app) {
 				continue
 			}
-			if !strings.Contains(command, quoted(app)) {
+			if !strings.Contains(command, quoted("shop/"+app)) {
 				t.Errorf("the name %q reached the wire as %q outside a quoted word", app, command)
 				continue
 			}
@@ -190,10 +190,10 @@ func TestACoordinateNamingNoRepositoryIsRefusedRatherThanSwept(t *testing.T) {
 	t.Parallel()
 
 	for _, coordinate := range []string{
-		"ocel/web",
-		"ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		"ocel/web:",
-		"registry.invalid:5000/ocel/web",
+		"ocel/shop/web",
+		"ocel/shop/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		"ocel/shop/web:",
+		"registry.invalid:5000/ocel/shop/web",
 	} {
 		machine := &box{}
 		ref := aStack(t, anApp()).Ref
@@ -210,7 +210,7 @@ func TestACoordinateNamingNoRepositoryIsRefusedRatherThanSwept(t *testing.T) {
 func TestADigestCoordinateNamesNoRepositoryToSweep(t *testing.T) {
 	t.Parallel()
 
-	pinned := "ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	pinned := "ocel/shop/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	if repository, named := host.Repository(pinned); named {
 		t.Errorf("Repository(%s) = %q, and a digest is not a tag: everything left of the last colon is the repository plus half a digest algorithm, which lists nothing and names nothing the desired set holds", pinned, repository)
 	}

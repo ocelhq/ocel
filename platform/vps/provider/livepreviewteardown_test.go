@@ -37,7 +37,7 @@ func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+"="+teardownApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 		vm.ssh(t, "sudo docker images -q --filter reference="+teardownRepo+":* | xargs -r sudo docker rmi -f >/dev/null 2>&1 || true")
-		vm.ssh(t, "sudo rm -rf "+host.ReleasesDir()+"/"+teardownApp)
+		vm.ssh(t, "sudo rm -rf "+host.ReleasesDir()+"/"+teardownSlug)
 	})
 
 	p := vm.deploying(t)
