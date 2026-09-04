@@ -1,6 +1,6 @@
 import { HARNESS_PREFIX } from "../../identity";
 
-export type Stranded = { slug: string; run: string; example: string };
+export type Stranded = { slug: string; example: string };
 
 export type Sweepable = { reclaim: Stranded[]; unreadable: string[] };
 
@@ -13,9 +13,8 @@ export function reclaimable(slug: string, examples: string[]): Stranded | undefi
     if (!slug.endsWith(suffix)) {
       continue;
     }
-    const run = slug.slice(HARNESS_PREFIX.length, slug.length - suffix.length);
-    if (run.length > 0) {
-      return { slug, run, example };
+    if (slug.length - suffix.length > HARNESS_PREFIX.length) {
+      return { slug, example };
     }
   }
   return undefined;
