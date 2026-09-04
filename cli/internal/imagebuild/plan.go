@@ -43,7 +43,9 @@ func Plan(loc workspace.Location) ([]byte, error) {
 	if !result.Success {
 		return nil, fmt.Errorf("railpack could not plan %s:\n%s", loc.Root, refusal(result))
 	}
-	scope(result.Plan, loc, commands)
+	if err := scope(result.Plan, loc, commands); err != nil {
+		return nil, err
+	}
 	plan, err := json.Marshal(result.Plan)
 	if err != nil {
 		return nil, fmt.Errorf("serialize the railpack plan for %s: %w", loc.Root, err)
@@ -51,7 +53,7 @@ func Plan(loc workspace.Location) ([]byte, error) {
 	return plan, nil
 }
 
-func scope(built *railpackplan.BuildPlan, loc workspace.Location, commands workspace.Commands) {
+func scope(built *railpackplan.BuildPlan, loc workspace.Location, commands workspace.Commands) error {
 	for i := range built.Steps {
 		step := &built.Steps[i]
 		step.Commands = slices.DeleteFunc(step.Commands, func(command railpackplan.Command) bool {
@@ -60,7 +62,9 @@ func scope(built *railpackplan.BuildPlan, loc workspace.Location, commands works
 		})
 		switch step.Name {
 		case installStep:
-			replaceInstall(step, loc.Manager, commands.Install)
+			if err := replaceInstall(step, loc, commands.Install); err != nil {
+				return err
+			}
 		case buildStep:
 			if loc.InWorkspace() && commands.Build == "" {
 				step.Commands = slices.DeleteFunc(step.Commands, func(command railpackplan.Command) bool {
@@ -70,16 +74,22 @@ func scope(built *railpackplan.BuildPlan, loc workspace.Location, commands works
 			}
 		}
 	}
+	return nil
 }
 
-func replaceInstall(step *railpackplan.Step, manager workspace.Manager, scoped string) {
+func replaceInstall(step *railpackplan.Step, loc workspace.Location, scoped string) error {
 	if scoped == "" {
-		return
+		return nil
 	}
-	replaceable := workspace.ReplaceableInstalls(manager)
+	replaceable := workspace.ReplaceableInstalls(loc.Manager)
+	var ran []string
 	for i, command := range step.Commands {
 		exec, ok := command.(railpackplan.ExecCommand)
-		if !ok || !slices.Contains(replaceable, exec.Cmd) {
+		if !ok {
+			continue
+		}
+		if !slices.Contains(replaceable, exec.Cmd) {
+			ran = append(ran, exec.Cmd)
 			continue
 		}
 		exec.Cmd = scoped
@@ -87,8 +97,23 @@ func replaceInstall(step *railpackplan.Step, manager workspace.Manager, scoped s
 			exec.CustomName = scoped
 		}
 		step.Commands[i] = exec
-		return
+		return nil
 	}
+	return fmt.Errorf(
+		"railpack installs %s with %s, and ocel replaces that with %q to install only what app %q reaches: nothing in the install step is a command ocel knows how to scope, so the whole workspace at %s would be installed to serve one app",
+		loc.Root, quoted(ran), scoped, loc.Path, loc.Root,
+	)
+}
+
+func quoted(commands []string) string {
+	if len(commands) == 0 {
+		return "nothing ocel can read as a command"
+	}
+	said := make([]string, 0, len(commands))
+	for _, command := range commands {
+		said = append(said, fmt.Sprintf("%q", command))
+	}
+	return strings.Join(said, ", ")
 }
 
 func refusal(result *core.BuildResult) string {
