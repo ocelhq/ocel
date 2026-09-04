@@ -124,16 +124,20 @@ func TestLiveTheExpressFixtureBuildsAndServesItsVersion(t *testing.T) {
 	}
 }
 
-const workspaceFixture = "../../../examples/express"
+const (
+	workspaceExample    = "../../../examples/workspace"
+	workspaceExampleApp = "../express"
+)
 
 func TestLiveAnAppInsideAWorkspaceBuildsFromTheWorkspaceRoot(t *testing.T) {
 	vm := livemachine.Require(t)
 	vm.Engine(t)
 	vm.Forward(t)
 
-	loc := located(t, workspaceFixture)
+	fixture := filepath.Join(workspaceExample, workspaceExampleApp)
+	loc := located(t, fixture)
 	if !loc.InWorkspace() {
-		t.Fatalf("%s is not inside a workspace, so this test proves nothing about one", workspaceFixture)
+		t.Fatalf("%s is not inside a workspace, so this test proves nothing about one", fixture)
 	}
 
 	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(),
