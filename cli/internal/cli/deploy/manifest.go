@@ -45,8 +45,10 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	if err != nil {
 		return nil, captured.annotate(err)
 	}
+	phase := ""
 	if suppressed {
 		resources = nil
+		phase = providerkit.PhaseResourcesSuppressed
 	}
 
 	warnings, err := envgate.Lint(gate.Definitions(), envwire.Apps(cfg), cfg.Path)
@@ -76,7 +78,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		if err := clientenv.Generate(clients); err != nil {
 			return nil, err
 		}
-		if err := deps.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
+		if err := deps.BuildApp(ctx, cfg, buildEnv(plans), phase, buildOut); err != nil {
 			return nil, err
 		}
 		if err := clientenv.Record(cfg.Dir, clients); err != nil {
@@ -84,7 +86,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		}
 	}
 
-	images, err := deps.BuildAppImages(ctx, cfg, buildOut)
+	images, err := deps.BuildAppImages(ctx, cfg, phase, buildOut)
 	if err != nil {
 		return nil, err
 	}
