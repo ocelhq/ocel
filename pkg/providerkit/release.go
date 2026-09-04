@@ -121,6 +121,18 @@ type AppValues struct {
 	Phase     string
 }
 
+const (
+	PhaseEnvName             = "OCEL_PHASE"
+	PhaseResourcesSuppressed = "resources-suppressed"
+)
+
+func (v AppValues) Injected() map[string]string {
+	if v.Phase == "" {
+		return nil
+	}
+	return map[string]string{PhaseEnvName: v.Phase}
+}
+
 func (v AppValues) String() string {
 	return fmt.Sprintf("values folder %q plain %v sensitive %v secrets %v links %v delivered %d entries [redacted]",
 		v.Folder, slices.Sorted(maps.Keys(v.Plain)), slices.Sorted(maps.Keys(v.Sensitive)),

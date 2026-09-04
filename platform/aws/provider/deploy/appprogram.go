@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -341,9 +342,7 @@ func (r *release) appEnv(plan providerkit.StackPlan, bundle appBundle, sessions 
 	for key, value := range app.Values.Plain {
 		env[key] = value
 	}
-	if app.Values.Phase != "" {
-		env[providerkit.PhaseEnvName] = app.Values.Phase
-	}
+	maps.Copy(env, app.Values.Injected())
 	if app.Values.Folder != "" {
 		env[appFolderEnv] = app.Values.Folder
 	}
