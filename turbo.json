@@ -11,6 +11,10 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "generate": {
+      "dependsOn": ["^build", "^zip"],
+      "outputs": ["dist/**"]
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     },

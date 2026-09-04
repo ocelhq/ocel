@@ -1,0 +1,15 @@
+{
+  "name": "@platform/aws-payloads",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "generate": "sh ./generate.sh"
+  },
+  "devDependencies": {
+    "@platform/aws-image-optimizer": "workspace:*",
+    "@platform/aws-membrane": "workspace:*",
+    "@platform/aws-revalidator": "workspace:*",
+    "@platform/aws-tag-invalidator": "workspace:*",
+    "@platform/aws-tag-publisher": "workspace:*"
+  }
+}
