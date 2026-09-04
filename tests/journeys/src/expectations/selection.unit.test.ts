@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "vitest";
 import { EDGE_ISR_TITLE, nextCacheRows } from "../nextCache";
 import { contractTitle } from "../plan";
-import { EDGE_ENV } from "./aws.floci";
+import { EDGE_ENV } from "./edge";
 import { CONTRACT_LEGS } from "./keys";
 import { expectationsFor } from "./index";
 
@@ -20,20 +20,65 @@ describe("expectationsFor", () => {
   it("does not read the edge for an environment that has no edges", () => {
     process.env[EDGE_ENV] = "not-an-edge";
     assert.doesNotThrow(() => expectationsFor("dev"));
-    assert.doesNotThrow(() => expectationsFor("aws"));
   });
 
-  it("lists nothing on real aws but the pre-declared edge-runtime ISR red", () => {
-    const listed = expectationsFor("aws");
-    assert.deepEqual(Object.keys(listed), ["next/web"]);
-    const titles = Object.values(listed["next/web"] ?? {});
-    assert.equal(titles.length, 3);
-    assert.deepEqual(new Set(titles), new Set(["https://github.com/ocelhq/ocel/issues/899"]));
-  });
-
-  it("names the variable when the aws floci file is asked for an edge it does not list", () => {
+  it("names the variable when an aws file is asked for an edge it does not list", () => {
     process.env[EDGE_ENV] = "not-an-edge";
+    assert.throws(() => expectationsFor("aws"), new RegExp(EDGE_ENV));
     assert.throws(() => expectationsFor("aws.floci"), new RegExp(EDGE_ENV));
+  });
+
+  it("lists the same real-world up on every edge for the cells that fail everywhere", () => {
+    const everywhere: Record<string, string> = {
+      "express/web": "https://github.com/ocelhq/ocel/issues/911",
+      "hono/web": "https://github.com/ocelhq/ocel/issues/911",
+      "fastify/web": "https://github.com/ocelhq/ocel/issues/911",
+      "next/web": "https://github.com/ocelhq/ocel/issues/849",
+      "workspace/next": "https://github.com/ocelhq/ocel/issues/907",
+      "workspace/express": "https://github.com/ocelhq/ocel/issues/907",
+      "workspace/hono": "https://github.com/ocelhq/ocel/issues/907",
+      "with-sst/web": "https://github.com/ocelhq/ocel/issues/857",
+      "with-pulumi/web": "https://github.com/ocelhq/ocel/issues/856",
+    };
+    for (const edge of ["api-gateway", "cloudfront", "cloudflare"]) {
+      process.env[EDGE_ENV] = edge;
+      const listed = expectationsFor("aws");
+      for (const [cell, issue] of Object.entries(everywhere)) {
+        assert.deepEqual(listed[cell], { up: issue }, `${cell} on ${edge}`);
+      }
+    }
+  });
+
+  it("lists real-world hello-next and not hello-express on api-gateway", () => {
+    process.env[EDGE_ENV] = "api-gateway";
+    const listed = expectationsFor("aws");
+    assert.deepEqual(listed["hello-next/web"], { up: "https://github.com/ocelhq/ocel/issues/906" });
+    assert.deepEqual(listed["hello-express/web"], {});
+    assert.deepEqual(listed["with-transforms/web"], {});
+  });
+
+  it("lists every remaining real-world cell at up under the edge's own issue", () => {
+    const issues: Record<string, string> = {
+      cloudfront: "https://github.com/ocelhq/ocel/issues/923",
+      cloudflare: "https://github.com/ocelhq/ocel/issues/922",
+    };
+    for (const [edge, issue] of Object.entries(issues)) {
+      process.env[EDGE_ENV] = edge;
+      const listed = expectationsFor("aws");
+      for (const cell of ["hello-express/web", "hello-next/web", "with-transforms/web"]) {
+        assert.deepEqual(listed[cell], { up: issue }, `${cell} on ${edge}`);
+      }
+    }
+  });
+
+  it("lists no contract title on real aws: a listed up covers the cell behind it", () => {
+    for (const edge of ["api-gateway", "cloudfront", "cloudflare"]) {
+      process.env[EDGE_ENV] = edge;
+      for (const cell of Object.values(expectationsFor("aws"))) {
+        const contract = Object.keys(cell).filter((title) => title !== "up");
+        assert.deepEqual(contract, [], edge);
+      }
+    }
   });
 
   it("lists every contract title on api-gateway, and up under the master-secret issue", () => {
