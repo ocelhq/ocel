@@ -30,6 +30,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
+const suppressResourcesEnvVar = "OCEL_DEPLOY_SUPPRESS_RESOURCES"
+
+func suppressResources() bool {
+	return os.Getenv(suppressResourcesEnvVar) == "1"
+}
+
 func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string) (*contractv1.Manifest, error) {
 	buildOut := ui.BuildWriter()
 
@@ -38,6 +44,9 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	resources, err := deps.CollectDeclarations(ctx, cfg, gate, tee, tee)
 	if err != nil {
 		return nil, captured.annotate(err)
+	}
+	if suppressResources() {
+		resources = nil
 	}
 
 	warnings, err := envgate.Lint(gate.Definitions(), envwire.Apps(cfg), cfg.Path)

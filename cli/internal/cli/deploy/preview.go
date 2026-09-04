@@ -256,7 +256,8 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			Edge:        edgewire.Selection(cfg),
 			Dry:         opts.dry,
 
-			ImageRegistry: registry,
+			ImageRegistry:     registry,
+			SuppressResources: suppressResources(),
 		}
 
 		if opts.dry {
