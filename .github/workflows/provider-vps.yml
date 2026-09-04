@@ -52,9 +52,9 @@ env:
 jobs:
   live:
     if: github.event.action != 'closed'
-    name: vps live conformance
+    name: vps live suites
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       VM: ocel-live-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -70,11 +70,16 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
+      - name: Compile the race-instrumented test binaries once, ahead of every lane
+        run: |
+          set -euo pipefail
+          go test -C cli -race -list '^TestLive' ./... > /dev/null
+          go test -C platform/vps/provider -race -list '^TestLive' ./... \
+            | grep '^TestLive' | sort > live.tests
+
       - name: Deal the tests across the lanes
         run: |
           set -euo pipefail
-          go test -C platform/vps/provider -list '^TestLive' ./... \
-            | grep '^TestLive' | sort > live.tests
           : > lanes.tsv
           for s in $(seq 0 $((SHARDS - 1))); do
             awk -v n="$SHARDS" -v s="$s" 'NR % n == s' live.tests > "shard-$s.tests"
@@ -88,8 +93,12 @@ jobs:
             printf '%s\t%s\t%s\n' "$VM-$s" "live-$s.json" \
               "go test -C platform/vps/provider -race -count=1 -timeout 30m -run '$run' -json ./..." >> lanes.tsv
           done
+          printf '%s\t%s\t%s\n' \
+            "$VM-build" build.json "go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." \
+            "$VM-lifecycle" lifecycle.json "go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestLifecycle' -json ./..." \
+            >> lanes.tsv
 
-      - name: Run the live conformance suite, one VM per lane
+      - name: Run every live suite, one VM per lane
         run: scripts/incus-fanout.sh lanes.tsv
 
       - name: Assert every lane ran
@@ -100,49 +109,6 @@ jobs:
           for s in $(seq 0 $((SHARDS - 1))); do
             scripts/assert-ran.sh "live-$s.json" TestLive || status=1
           done
-          exit "$status"
-
-      - name: No VM left behind
-        if: always()
-        run: |
-          for s in $(seq 0 $((SHARDS - 1))); do
-            sg incus-admin -c "scripts/incus.sh destroy $VM-$s" || echo "could not destroy $VM-$s"
-          done
-
-  pipeline:
-    if: github.event.action != 'closed'
-    name: vps build pipeline and lifecycle
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      VM: ocel-pipeline-${{ github.run_id }}-${{ github.run_attempt }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup the incus host
-        uses: ./.github/actions/incus-vm
-        with:
-          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
-          turbo-token: ${{ secrets.TURBO_TOKEN }}
-          turbo-team: ${{ vars.TURBO_TEAM }}
-
-      - name: Run the build pipeline and the lifecycle suite, a VM each
-        run: |
-          set -euo pipefail
-          printf '%s\t%s\t%s\n' \
-            "$VM-build" build.json "go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." \
-            "$VM-lifecycle" lifecycle.json "go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestLifecycle' -json ./..." \
-            > lanes.tsv
-          scripts/incus-fanout.sh lanes.tsv
-
-      - name: Assert both lanes ran
-        if: always()
-        run: |
-          set -euo pipefail
-          status=0
           scripts/assert-ran.sh build.json TestLive || status=1
           scripts/assert-ran.sh lifecycle.json TestLifecycle || status=1
           exit "$status"
@@ -150,6 +116,6 @@ jobs:
       - name: No VM left behind
         if: always()
         run: |
-          for lane in build lifecycle; do
-            sg incus-admin -c "scripts/incus.sh destroy $VM-$lane" || echo "could not destroy $VM-$lane"
+          for name in $(cut -f1 lanes.tsv); do
+            sg incus-admin -c "scripts/incus.sh destroy $name" || echo "could not destroy $name"
           done
