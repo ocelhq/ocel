@@ -4,9 +4,6 @@ Every one of these deploys with `ocel deploy`. Three of them are rungs of a ladd
 starts at [express](./express), and the story of that ladder opens
 [with-transforms](./with-transforms).
 
-An app that declares nothing is not an example of its own: the journey harness runs one of
-these with its resources suppressed, and the app must still boot and serve.
-
 ## composite
 
 - [express](./express) — todos and documents on Express 5: a postgres database, a blob uploader, a plain variable and a secret.
