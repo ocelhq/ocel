@@ -425,6 +425,59 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 	}
 }
 
+func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing(t *testing.T) {
+	t.Parallel()
+
+	neighbour, err := RenderProxyConfig(ProxyState{
+		Grace:  30 * time.Second,
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
+	proxied := servesProxy(stood.bench, &stood.held)
+	writes := 0
+	stood.answer = func(command string) (session.Result, bool) {
+		switch {
+		case writesProxy(command):
+			stood.mu.Lock()
+			writes++
+			collided := writes == 1 || writes == 3
+			if collided {
+				stood.held = string(neighbour)
+			}
+			stood.mu.Unlock()
+			if collided {
+				return session.Result{Code: proxyMoved, Stderr: digested(string(neighbour))}, true
+			}
+			return proxied(command)
+		case strings.Contains(command, quoted("deploy")):
+			return session.Result{}, true
+		default:
+			return proxied(command)
+		}
+	}
+
+	if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
+		t.Fatalf("Release() beside a deploy that rewrote %s twice = %v: the compare-and-set exists to refuse a lost update, not a neighbour", ProxyConfig, err)
+	}
+	state, err := ReadProxyState([]byte(stood.held))
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstreams := map[string]string{}
+	for _, route := range state.Routes {
+		upstreams[route.App] = route.Upstream
+	}
+	if upstreams["web"] != flipTo || upstreams["api"] != "prod-api-1:8080" {
+		t.Errorf("the box serves %v after the release, want web onto %s beside the neighbour's api: the retry must compose onto what it re-read, not onto what it first read", upstreams, flipTo)
+	}
+	if state.Retiring != "" {
+		t.Errorf("the steady-state configuration still declares %s retiring", state.Retiring)
+	}
+}
+
 func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *testing.T) {
 	t.Parallel()
 
@@ -437,7 +490,7 @@ func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *
 		case writesProxy(command):
 			stood.mu.Lock()
 			writes++
-			steady := writes == 2
+			steady := writes >= 2
 			stood.mu.Unlock()
 			if steady {
 				return session.Result{Code: proxyMoved, Stderr: "the digest an ocel domain left"}, true

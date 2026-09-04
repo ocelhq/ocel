@@ -49,29 +49,23 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	if err != nil {
 		return err
 	}
-	held, err := h.proxyDocument(ctx)
-	if err != nil {
-		return err
-	}
-	standing, err := ReadProxyState([]byte(held.text))
-	if err != nil {
-		return err
-	}
-	standing.Grace = rel.DrainTimeout
-	standing.Routes = Routing(standing.Routes, AppRoute{RouteKey: rel.RouteKey, Upstream: rel.Target})
-
-	flipping := standing
-	flipping.Retiring = rel.Retire
+	retiring := rel.Retire
 	if rel.Retire == rel.Target {
-		flipping.Retiring = ""
+		retiring = ""
 	}
-	flipped, err := h.writeProxyConfig(ctx, held.digest, flipping)
+	compose := func(standing ProxyState, draining string) ProxyState {
+		standing.Grace = rel.DrainTimeout
+		standing.Routes = Routing(standing.Routes, AppRoute{RouteKey: rel.RouteKey, Upstream: rel.Target})
+		standing.Retiring = draining
+		return standing
+	}
+	held, flipped, err := h.composeProxy(ctx, func(standing ProxyState) ProxyState { return compose(standing, retiring) })
 	if err != nil {
 		return h.stranded(ctx, rel, held, err)
 	}
 
 	say(report, "Gating "+rel.Target+rel.HealthPath+", then flipping the proxy onto it")
-	if flipping.Retiring != "" && report != nil {
+	if retiring != "" && report != nil {
 		report.Detail(fmt.Sprintf("%s has up to %s to finish what it is still serving, and the deploy returns as soon as it reports nothing in flight. %s. %s",
 			rel.retiredName(), rel.DrainTimeout, drainCeiling, hijackedFate))
 	}
@@ -82,21 +76,19 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	if result.Code != 0 {
 		return h.evidence(ctx, rel, fmt.Sprintf("exited %d", result.Code), strings.TrimSpace(result.Stderr), held.text, flipped, elevation)
 	}
-	if flipping.Retiring != "" {
+	if retiring != "" {
 		say(report, "Stopping "+rel.retiredName())
 		if err := h.StopContainer(ctx, rel.retiredName()); err != nil {
 			return err
 		}
 	}
 	warnExpiry(report, result.Stdout)
-	retired := flipping.Retiring
-	standing.Retiring = ""
-	if _, err := h.writeProxyConfig(ctx, flipped, standing); err != nil {
-		return h.serving(rel, retired, err)
+	if _, _, err := h.composeProxy(ctx, func(standing ProxyState) ProxyState { return compose(standing, "") }); err != nil {
+		return h.serving(rel, retiring, err)
 	}
 	if _, err := h.ran(ctx, "reload the proxy's steady-state configuration",
 		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
-		return h.serving(rel, retired, err)
+		return h.serving(rel, retiring, err)
 	}
 	return nil
 }
@@ -145,6 +137,25 @@ func (h *Host) proxyDocument(ctx context.Context) (proxyDocument, error) {
 			ProxyConfig, h.named())
 	}
 	return proxyDocument{text: text, digest: strings.TrimSpace(digest)}, nil
+}
+
+const proxyRewrites = 5
+
+func (h *Host) composeProxy(ctx context.Context, compose func(ProxyState) ProxyState) (proxyDocument, string, error) {
+	for attempt := 1; ; attempt++ {
+		held, err := h.proxyDocument(ctx)
+		if err != nil {
+			return proxyDocument{}, "", err
+		}
+		standing, err := ReadProxyState([]byte(held.text))
+		if err != nil {
+			return held, "", err
+		}
+		written, err := h.writeProxyConfig(ctx, held.digest, compose(standing))
+		if err == nil || !moved(err) || attempt == proxyRewrites {
+			return held, written, err
+		}
+	}
 }
 
 func (h *Host) writeProxyConfig(ctx context.Context, expected string, state ProxyState) (string, error) {
