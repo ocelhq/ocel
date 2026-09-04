@@ -293,6 +293,7 @@ jobs:
           path: |
             tests/journeys/output
             !tests/journeys/output/**/trees/**/node_modules/**
+            !tests/journeys/output/**/trees/**/packages/**
           if-no-files-found: warn
 
   aws:
@@ -401,6 +402,7 @@ jobs:
           path: |
             tests/journeys/output
             !tests/journeys/output/**/trees/**/node_modules/**
+            !tests/journeys/output/**/trees/**/packages/**
           if-no-files-found: warn
 
   vps:
@@ -516,4 +518,5 @@ jobs:
           path: |
             tests/journeys/output
             !tests/journeys/output/**/trees/**/node_modules/**
+            !tests/journeys/output/**/trees/**/packages/**
           if-no-files-found: warn
