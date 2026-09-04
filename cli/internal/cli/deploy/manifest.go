@@ -36,7 +36,7 @@ func suppressResources() bool {
 	return os.Getenv(suppressResourcesEnvVar) == "1"
 }
 
-func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string) (*contractv1.Manifest, error) {
+func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string, suppressed bool) (*contractv1.Manifest, error) {
 	buildOut := ui.BuildWriter()
 
 	captured := &boundedCapture{}
@@ -45,7 +45,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	if err != nil {
 		return nil, captured.annotate(err)
 	}
-	if suppressResources() {
+	if suppressed {
 		resources = nil
 	}
 
