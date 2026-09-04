@@ -59,10 +59,13 @@ func recorded(t *testing.T, p *vps.Provider, slug string, state edge.StackState)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.Records().Write(context.Background(), providerkit.Record{
-		Name:  providerkit.EdgeStackRecord(providerkit.ClassProduction, slug),
-		Bytes: body,
-	}); err != nil {
+	ctx := context.Background()
+	held, err := providerkit.Held(ctx, p.Records(), providerkit.EdgeStackRecord(providerkit.ClassProduction, slug))
+	if err != nil {
+		t.Fatalf("read the edge stack record standing on this box: %v", err)
+	}
+	held.Bytes = body
+	if _, err := p.Records().Write(ctx, held); err != nil {
 		t.Fatalf("record the edge stack the kit opens: %v", err)
 	}
 }
