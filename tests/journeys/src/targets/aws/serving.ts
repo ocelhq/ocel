@@ -24,21 +24,26 @@ export async function awaitServing(
   for (const [app, baseUrl] of urls) {
     const host = new URL(baseUrl).host;
     let attempts = 0;
+    let last = "no attempt completed";
     while (true) {
       attempts += 1;
       try {
         const response = await request(`${baseUrl}/health`);
-        served[app] = { host, waitedMs: now() - began, attempts, status: response.status };
-        break;
-      } catch (refused) {
-        if (now() >= deadline) {
-          throw new Error(
-            `${host} answered no request in the ${Math.round(timeoutMs / 1000)}s after the edge ` +
-              `said it was serving, across ${attempts} attempts: ${(refused as Error).message}`,
-          );
+        if (response.ok) {
+          served[app] = { host, waitedMs: now() - began, attempts, status: response.status };
+          break;
         }
-        await sleep(intervalMs);
+        last = `last status ${response.status}`;
+      } catch (refused) {
+        last = (refused as Error).message;
       }
+      if (now() >= deadline) {
+        throw new Error(
+          `${host} served no 2xx in the ${Math.round(timeoutMs / 1000)}s after the edge ` +
+            `said it was serving, across ${attempts} attempts: ${last}`,
+        );
+      }
+      await sleep(intervalMs);
     }
   }
 
