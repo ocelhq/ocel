@@ -32,6 +32,7 @@ on:
       - "proto/**"
       - "pnpm-lock.yaml"
       - "scripts/incus.sh"
+      - "scripts/incus-fanout.sh"
       - "scripts/assert-ran.sh"
       - ".github/workflows/provider-vps.yml"
       - ".github/actions/incus-vm/**"
@@ -45,18 +46,17 @@ permissions:
   contents: read
   id-token: write
 
+env:
+  SHARDS: 4
+
 jobs:
   live:
     if: github.event.action != 'closed'
-    name: vps live conformance ${{ matrix.shard }}/4
+    name: vps live conformance
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3]
     env:
-      VM: ocel-live-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
+      VM: ocel-live-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,71 +70,52 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: Pick this shard's tests
+      - name: Deal the tests across the lanes
         run: |
           set -euo pipefail
           go test -C platform/vps/provider -list '^TestLive' ./... \
-            | grep '^TestLive' | sort \
-            | awk -v n=4 -v s='${{ matrix.shard }}' 'NR % n == s' > shard.tests
-          if [ ! -s shard.tests ]; then
-            echo "::error::shard ${{ matrix.shard }} holds no test"
-            exit 1
-          fi
-          echo "shard ${{ matrix.shard }} runs:"
-          cat shard.tests
-          echo "SHARD_RUN=^($(paste -sd'|' shard.tests))\$" >> "$GITHUB_ENV"
+            | grep '^TestLive' | sort > live.tests
+          : > lanes.tsv
+          for s in $(seq 0 $((SHARDS - 1))); do
+            awk -v n="$SHARDS" -v s="$s" 'NR % n == s' live.tests > "shard-$s.tests"
+            if [ ! -s "shard-$s.tests" ]; then
+              echo "::error::shard $s holds no test"
+              exit 1
+            fi
+            echo "lane $s runs:"
+            cat "shard-$s.tests"
+            run="^($(paste -sd'|' "shard-$s.tests"))\$"
+            printf '%s\t%s\t%s\n' "$VM-$s" "live-$s.json" \
+              "go test -C platform/vps/provider -race -count=1 -timeout 30m -run '$run' -json ./..." >> lanes.tsv
+          done
 
-      - name: Run the live conformance suite
+      - name: Run the live conformance suite, one VM per lane
+        run: scripts/incus-fanout.sh lanes.tsv
+
+      - name: Assert every lane ran
+        if: always()
         run: |
           set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh run $VM -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '$SHARD_RUN' -json ./..." | tee live.json
-
-      - name: Assert the live suite ran
-        run: scripts/assert-ran.sh live.json TestLive
+          status=0
+          for s in $(seq 0 $((SHARDS - 1))); do
+            scripts/assert-ran.sh "live-$s.json" TestLive || status=1
+          done
+          exit "$status"
 
       - name: No VM left behind
         if: always()
-        run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
-
-  build:
-    if: github.event.action != 'closed'
-    name: vps build pipeline
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      VM: ocel-build-${{ github.run_id }}-${{ github.run_attempt }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup the incus host
-        uses: ./.github/actions/incus-vm
-        with:
-          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
-          turbo-token: ${{ secrets.TURBO_TOKEN }}
-          turbo-team: ${{ vars.TURBO_TEAM }}
-
-      - name: Run the build pipeline against a machine's own daemon
         run: |
-          set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh run $VM -- go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." | tee build.json
+          for s in $(seq 0 $((SHARDS - 1))); do
+            sg incus-admin -c "scripts/incus.sh destroy $VM-$s" || echo "could not destroy $VM-$s"
+          done
 
-      - name: Assert the build live suite ran
-        run: scripts/assert-ran.sh build.json TestLive
-
-      - name: No VM left behind
-        if: always()
-        run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
-
-  lifecycle:
+  pipeline:
     if: github.event.action != 'closed'
-    name: vps lifecycle
+    name: vps build pipeline and lifecycle
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      VM: ocel-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+      VM: ocel-pipeline-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -148,14 +129,27 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: Run the lifecycle suite on a machine of its own
+      - name: Run the build pipeline and the lifecycle suite, a VM each
         run: |
           set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh run $VM -- go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestLifecycle' -json ./..." | tee lifecycle.json
+          printf '%s\t%s\t%s\n' \
+            "$VM-build" build.json "go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." \
+            "$VM-lifecycle" lifecycle.json "go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestLifecycle' -json ./..." \
+            > lanes.tsv
+          scripts/incus-fanout.sh lanes.tsv
 
-      - name: Assert the lifecycle suite ran
-        run: scripts/assert-ran.sh lifecycle.json TestLifecycle
+      - name: Assert both lanes ran
+        if: always()
+        run: |
+          set -euo pipefail
+          status=0
+          scripts/assert-ran.sh build.json TestLive || status=1
+          scripts/assert-ran.sh lifecycle.json TestLifecycle || status=1
+          exit "$status"
 
       - name: No VM left behind
         if: always()
-        run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
+        run: |
+          for lane in build lifecycle; do
+            sg incus-admin -c "scripts/incus.sh destroy $VM-$lane" || echo "could not destroy $VM-$lane"
+          done
