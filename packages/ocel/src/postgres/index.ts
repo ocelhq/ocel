@@ -2,6 +2,8 @@ import { unprovisionedPhase, unprovisionedProxy } from "../utils/phase.js";
 import { Postgres, type PostgresConfig } from "./pg.js";
 import { Pool } from "pg";
 
+export { UnprovisionedResourceError } from "../utils/phase.js";
+
 type PgReturn = Pool & { connectionString: string };
 
 export function postgres(id: string, config?: PostgresConfig): PgReturn {

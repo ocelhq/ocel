@@ -4,7 +4,9 @@ vi.mock("../utils/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 
-const { postgres, connectionStringFor } = await import("./index.js");
+const { postgres, connectionStringFor, UnprovisionedResourceError } = await import(
+  "./index.js"
+);
 
 describe("postgres()", () => {
   beforeEach(() => {
@@ -63,6 +65,7 @@ describe("postgres()", () => {
     expect(() => pool.query).toThrow(
       "'postgres(\"orders\")' cannot be used during discovery: tried to access 'query' before the resource was provisioned",
     );
+    expect(() => pool.query).toThrow(UnprovisionedResourceError);
   });
 
   it("refuses every read when this deploy provisioned nothing", () => {
@@ -73,6 +76,7 @@ describe("postgres()", () => {
     expect(() => pool.query).toThrow(
       "'postgres(\"orders\")' cannot be used while resources are suppressed: tried to access 'query', and this deploy provisioned none",
     );
+    expect(() => pool.query).toThrow(UnprovisionedResourceError);
   });
 
   it("percent-encodes credentials in the connection string it exposes", () => {

@@ -10,6 +10,7 @@ vi.mock("../utils/rpc", () => ({
 
 const { bucket } = await import("./bucket.js");
 const { uploader } = await import("./uploader.js");
+const { UnprovisionedResourceError } = await import("./index.js");
 
 const avatar = uploader(
   { input: z.object({ userId: z.string() }), middleware: ({ input }) => input },
@@ -26,6 +27,17 @@ describe("Bucket record", () => {
 
     expect(() => bucket("storage", { uploaders: { avatar } }).__config()).toThrow(
       "'bucket(\"storage\")' cannot be used while resources are suppressed",
+    );
+    expect(() => bucket("storage", { uploaders: { avatar } }).__config()).toThrow(
+      UnprovisionedResourceError,
+    );
+  });
+
+  it("refuses its record during discovery with the same typed error", () => {
+    vi.stubEnv("OCEL_PHASE", "discovery");
+
+    expect(() => bucket("storage", { uploaders: { avatar } }).__config()).toThrow(
+      UnprovisionedResourceError,
     );
   });
 });
