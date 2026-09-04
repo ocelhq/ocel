@@ -6,13 +6,14 @@ import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
 import { configTree, copyTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { exampleDir, treeDir } from "../../paths";
-import { specForTarget } from "../../spec";
+import { type Leg, specForTarget } from "../../spec";
 import { migrateCommand, setAppNames } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
 import { authoritativeFetch, emulatorFetch } from "./dispatch";
 import { pulumiSweep } from "./ladder-pulumi";
 import { sstSweep } from "./ladder-sst";
 import { place } from "./place";
+import { awaitServing } from "./serving";
 import { sweepable } from "./slugs";
 import { awsStore, cliAt, said, type Store } from "./store";
 import { expectationEnvironmentFor } from "./world";
@@ -22,6 +23,8 @@ const CONFIG = "ocel.aws.config.ts";
 const LEG_TIMEOUT_MS = process.env.AWS_ENDPOINT_URL ? 600_000 : 1_800_000;
 
 const DEFAULT_VPC_TRIES = 30;
+const SERVING_TIMEOUT_MS = 900_000;
+const SERVING_INTERVAL_MS = 5_000;
 
 let dispatching: Promise<typeof fetch> | undefined;
 
@@ -89,6 +92,20 @@ function deployment(cell: CellContext, dispatch: typeof fetch): Deployment {
     },
     fetch: dispatch,
   };
+}
+
+async function awaitEdge(cell: CellContext, leg: Leg, deployed: Deployment): Promise<void> {
+  if ((await place()).world !== "real") {
+    return;
+  }
+  const urls = new Map(cell.example.apps.map((app) => [app, deployed.baseUrl(app)]));
+  const served = await awaitServing(deployed.fetch, urls, {
+    timeoutMs: SERVING_TIMEOUT_MS,
+    intervalMs: SERVING_INTERVAL_MS,
+    now: () => Date.now(),
+    sleep: (ms) => pause(ms),
+  });
+  await cell.evidence.write(leg, "serving.json", `${JSON.stringify(served, null, 2)}\n`);
 }
 
 function bootstrapFeatures(): string[] {
@@ -163,11 +180,14 @@ async function up(cell: CellContext): Promise<Deployment> {
   await setAppNames(cell.example, (name, args) => runOcel(cell, dir, "up", name, args, env));
   await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
   await runOcel(cell, dir, "up", "domain-add", ["domain", "add"], env);
+
+  const deployed = deployment(cell, await dispatcher());
+  await awaitEdge(cell, "up", deployed);
+
   if (cell.example.suites.includes("product")) {
     await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand(cell.example)], env);
   }
 
-  const deployed = deployment(cell, await dispatcher());
   await cell.evidence.write(
     "up",
     "deployment.json",
@@ -191,13 +211,17 @@ async function redeploy(cell: CellContext, greeting: string): Promise<Deployment
   const env = childEnv(dir, cell.runId);
   await runOcel(cell, dir, "redeploy", "env-greeting", ["env", "set", "GREETING", greeting], env);
   await runOcel(cell, dir, "redeploy", "deploy", ["deploy", "--yes"], env);
-  return deployment(cell, await dispatcher());
+  const deployed = deployment(cell, await dispatcher());
+  await awaitEdge(cell, "redeploy", deployed);
+  return deployed;
 }
 
 async function rollback(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
   await runOcel(cell, dir, "rollback", "rollback", ["rollback"], childEnv(dir, cell.runId));
-  return deployment(cell, await dispatcher());
+  const deployed = deployment(cell, await dispatcher());
+  await awaitEdge(cell, "rollback", deployed);
+  return deployed;
 }
 
 async function destroy(cell: CellContext): Promise<void> {
