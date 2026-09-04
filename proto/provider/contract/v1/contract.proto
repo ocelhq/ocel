@@ -248,6 +248,8 @@ message DeployRequest {
   bool dry = 5;
 
   ImageRegistry image_registry = 6;
+
+  bool suppress_resources = 7;
 }
 
 message ImageRegistry {
