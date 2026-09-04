@@ -38,4 +38,4 @@ jobs:
           turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: Build, typecheck and test the workspace
-        run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./examples/*' --filter='!./tests/*'
+        run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./examples/**' --filter='!./tests/*'
