@@ -101,6 +101,19 @@ jobs:
       - name: Run every live suite, one VM per lane
         run: scripts/incus-fanout.sh lanes.tsv
 
+      - name: Keep every lane's report and the host profile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vps-live-${{ github.run_attempt }}
+          path: |
+            lanes.tsv
+            lanes.vmstat
+            *.json
+            *.json.log
+            *.json.status
+          if-no-files-found: ignore
+
       - name: Assert every lane ran
         if: always()
         run: |
