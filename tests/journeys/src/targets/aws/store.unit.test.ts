@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 import { awsLinkStore, awsStore, type Cli } from "./store";
 
-const TABLE = "ocel-vars";
+const TABLES: Record<string, string> = {
+  StateTableName: "ocel-state",
+  VarsTableName: "ocel-vars",
+};
+
+const STATE_TABLE = TABLES.StateTableName as string;
 
 function page(slugs: string[], next?: string): string {
   return JSON.stringify({
@@ -29,6 +34,18 @@ function describeStacks(args: string[]): boolean {
   return args[0] === "cloudformation";
 }
 
+function outputAsked(args: string[]): string {
+  return /OutputKey=='([^']+)'/.exec(args.join(" "))?.[1] ?? "";
+}
+
+function tableAsked(args: string[]): string {
+  return TABLES[outputAsked(args)] ?? "None";
+}
+
+function outputsAsked(calls: string[][]): string[] {
+  return [...new Set(calls.filter(describeStacks).map(outputAsked))];
+}
+
 describe("deployedSlugs", () => {
   it("refuses to report an empty account when the bootstrap stack could not be read", async () => {
     const { cli } = cliOver(() => {
@@ -44,7 +61,7 @@ describe("deployedSlugs", () => {
 
   it("refuses when the stack stands but publishes no table name", async () => {
     const { cli } = cliOver(() => "None");
-    await assert.rejects(awsStore(undefined, cli).deployedSlugs(), /publishes no VarsTableName/);
+    await assert.rejects(awsStore(undefined, cli).deployedSlugs(), /publishes no StateTableName/);
   });
 
   it("reports nothing when no bootstrap stack exists", async () => {
@@ -56,10 +73,19 @@ describe("deployedSlugs", () => {
     assert.deepEqual(await awsStore(undefined, cli).deployedSlugs(), []);
   });
 
+  it("asks for the state table the projects and edge stacks are kept in", async () => {
+    const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : page([])));
+    await awsStore(undefined, cli).deployedSlugs();
+    assert.deepEqual(outputsAsked(calls), ["StateTableName"]);
+    for (const queried of calls.filter((args) => args[0] === "dynamodb")) {
+      assert.ok(queried.includes(STATE_TABLE));
+    }
+  });
+
   it("pages both production partitions", async () => {
     const { cli, calls } = cliOver((args) => {
       if (describeStacks(args)) {
-        return TABLE;
+        return tableAsked(args);
       }
       return args.includes("--starting-token")
         ? page(["j-1-hello"])
@@ -72,7 +98,9 @@ describe("deployedSlugs", () => {
 
 describe("stands", () => {
   it("reaches the slug with a key condition rather than paging the partition", async () => {
-    const { cli, calls } = cliOver((args) => (describeStacks(args) ? TABLE : page(["j-1-express"])));
+    const { cli, calls } = cliOver((args) =>
+      describeStacks(args) ? tableAsked(args) : page(["j-1-express"]),
+    );
     assert.equal(await awsStore(undefined, cli).stands("j-1-express"), true);
     const queried = calls.filter((args) => args[0] === "dynamodb");
     assert.equal(queried.length, 1);
@@ -86,7 +114,7 @@ describe("stands", () => {
 
   it("does not mistake a longer slug sharing the prefix for the one asked about", async () => {
     const { cli } = cliOver((args) =>
-      describeStacks(args) ? TABLE : page(["j-1-express-two"]),
+      describeStacks(args) ? tableAsked(args) : page(["j-1-express-two"]),
     );
     assert.equal(await awsStore(undefined, cli).stands("j-1-express"), false);
   });
@@ -96,7 +124,7 @@ describe("stands", () => {
       if (describeStacks(args)) {
         throw Object.assign(new Error("Command failed"), { stderr: "ThrottlingException" });
       }
-      return TABLE;
+      return tableAsked(args);
     });
     await assert.rejects(awsStore(undefined, cli).stands("j-1-express"), /ThrottlingException/);
   });
@@ -127,10 +155,27 @@ function recordItem(sk: string, record: Record<string, unknown>, owner: string):
 describe("awsLinkStore", () => {
   const owner = "urn:pulumi:j-1::with-sst::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-orders";
 
+  it("asks for the state table the provider writes link values into", async () => {
+    const { cli, calls } = cliOver((args) =>
+      describeStacks(args) ? tableAsked(args) : linksPage([]),
+    );
+    await awsLinkStore(undefined, cli).records(SLUG);
+    assert.deepEqual(outputsAsked(calls), ["StateTableName"]);
+    assert.ok(calls.find((args) => args[0] === "dynamodb")?.includes(STATE_TABLE));
+  });
+
+  it("refuses when the stack publishes no state table name", async () => {
+    const { cli } = cliOver(() => "None");
+    await assert.rejects(
+      awsLinkStore(undefined, cli).records(SLUG),
+      /publishes no StateTableName output, so no link can be read/,
+    );
+  });
+
   it("parses a postgres record and a custom record, redacted and stamped with the owner", async () => {
     const { cli } = cliOver((args) => {
       if (describeStacks(args)) {
-        return TABLE;
+        return tableAsked(args);
       }
       return linksPage([
         recordItem(
@@ -173,7 +218,7 @@ describe("awsLinkStore", () => {
     const sealed = b64("kms-ciphertext-not-plaintext");
     const { cli } = cliOver((args) =>
       describeStacks(args)
-        ? TABLE
+        ? tableAsked(args)
         : linksPage([{ sk: "links#orders#values#*#", body: { version: 1, sealed } }]),
     );
     const values = await awsLinkStore(undefined, cli).values(SLUG);
@@ -182,7 +227,9 @@ describe("awsLinkStore", () => {
 
   it("reads the publisher's owner index by its own prefix", async () => {
     const { cli, calls } = cliOver((args) =>
-      describeStacks(args) ? TABLE : linksPage([{ sk: `linkowners#${owner}#*#`, body: { names: ["orders"] } }]),
+      describeStacks(args)
+        ? tableAsked(args)
+        : linksPage([{ sk: `linkowners#${owner}#*#`, body: { names: ["orders"] } }]),
     );
     const names = await awsLinkStore(undefined, cli).ownerIndex(SLUG, owner);
     assert.deepEqual(names, ["orders"]);
@@ -191,7 +238,7 @@ describe("awsLinkStore", () => {
   });
 
   it("reports no index for an owner that never published there", async () => {
-    const { cli } = cliOver((args) => (describeStacks(args) ? TABLE : linksPage([])));
+    const { cli } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : linksPage([])));
     assert.equal(await awsLinkStore(undefined, cli).ownerIndex(SLUG, owner), undefined);
   });
 });

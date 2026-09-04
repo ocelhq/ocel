@@ -83,7 +83,13 @@ async function queryPartition(
   return found;
 }
 
-export async function varsTable(cli: Cli): Promise<string | undefined> {
+const STATE_TABLE_OUTPUT = "StateTableName";
+
+async function bootstrapTable(
+  cli: Cli,
+  output: string,
+  consequence: string,
+): Promise<string | undefined> {
   let name: string;
   try {
     name = await cli([
@@ -92,7 +98,7 @@ export async function varsTable(cli: Cli): Promise<string | undefined> {
       "--stack-name",
       BOOTSTRAP_STACK,
       "--query",
-      "Stacks[0].Outputs[?OutputKey=='VarsTableName']|[0].OutputValue",
+      `Stacks[0].Outputs[?OutputKey=='${output}']|[0].OutputValue`,
       "--output",
       "text",
     ]);
@@ -101,15 +107,19 @@ export async function varsTable(cli: Cli): Promise<string | undefined> {
       return undefined;
     }
     throw new Error(
-      `the ${BOOTSTRAP_STACK} stack could not be read, so nothing can be said about which projects stand:${said(error)}`,
+      `the ${BOOTSTRAP_STACK} stack could not be read, so ${consequence}:${said(error)}`,
     );
   }
   if (name === "" || name === "None") {
     throw new Error(
-      `the ${BOOTSTRAP_STACK} stack stands but publishes no VarsTableName output, so nothing can be said about which projects stand`,
+      `the ${BOOTSTRAP_STACK} stack stands but publishes no ${output} output, so ${consequence}`,
     );
   }
   return name;
+}
+
+async function stateTable(cli: Cli): Promise<string | undefined> {
+  return bootstrapTable(cli, STATE_TABLE_OUTPUT, "nothing can be said about which projects stand");
 }
 
 export function awsStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Store {
@@ -130,7 +140,7 @@ export function awsStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Store {
     },
 
     async deployedSlugs() {
-      const table = await varsTable(cli);
+      const table = await stateTable(cli);
       if (!table) {
         return [];
       }
@@ -144,7 +154,7 @@ export function awsStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Store {
     },
 
     async stands(slug) {
-      const table = await varsTable(cli);
+      const table = await stateTable(cli);
       if (!table) {
         return false;
       }
@@ -205,18 +215,18 @@ function linkTypeOf(link: Record<string, unknown>): LinkKind {
 }
 
 export function awsLinkStore(endpoint?: string, cli: Cli = cliAt(endpoint)): LinkStore {
-  async function varsTableOrThrow(): Promise<string> {
-    const name = await varsTable(cli);
+  async function linkTableOrThrow(): Promise<string> {
+    const name = await bootstrapTable(cli, STATE_TABLE_OUTPUT, "no link can be read");
     if (!name) {
       throw new Error(
-        `the ${BOOTSTRAP_STACK} stack publishes no VarsTableName output, so no link can be read`,
+        `the ${BOOTSTRAP_STACK} stack publishes no ${STATE_TABLE_OUTPUT} output, so no link can be read`,
       );
     }
     return name;
   }
 
   async function linkItems(slug: string): Promise<RawItem[]> {
-    return queryItems(cli, await varsTableOrThrow(), linksPartition(slug), "links#");
+    return queryItems(cli, await linkTableOrThrow(), linksPartition(slug), "links#");
   }
 
   return {
@@ -261,7 +271,7 @@ export function awsLinkStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Lin
     async ownerIndex(slug, owner) {
       const items = await queryItems(
         cli,
-        await varsTableOrThrow(),
+        await linkTableOrThrow(),
         linksPartition(slug),
         `linkowners#${owner}#`,
       );
