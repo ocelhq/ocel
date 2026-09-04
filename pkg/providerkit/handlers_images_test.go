@@ -295,7 +295,7 @@ func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *test
 	}
 }
 
-const loadedCoordinate = "ocel/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const loadedCoordinate = "ocel/shop/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 type loadingProvider struct {
 	*fake.Provider

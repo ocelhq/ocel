@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 )
 
-const containerTestImage = "ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const containerTestImage = "ocel/shop/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func containerDeployRequest(probe string) *contractv1.DeployRequest {
 	req := deployRequest()
