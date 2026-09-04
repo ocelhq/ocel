@@ -47,7 +47,7 @@ func readGrandchildPid(t *testing.T, pidFile string) int {
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		data, err := os.ReadFile(pidFile)
-		if err == nil {
+		if err == nil && len(data) > 0 {
 			pid, convErr := strconv.Atoi(string(data))
 			if convErr != nil {
 				t.Fatalf("grandchild pidfile %s contains %q, want an integer", pidFile, data)
