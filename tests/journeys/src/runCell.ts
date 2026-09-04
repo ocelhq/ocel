@@ -8,9 +8,9 @@ import {
   secretGuarded,
 } from "./contract";
 import { evidence } from "./evidence";
-import { PREPARE_FAILURE } from "./globalSetup";
 import { currentRunIdentity, projectSlug } from "./identity";
 import { evidenceDir, exampleDir } from "./paths";
+import { failureFor, PREPARE_FAILURE } from "./prepare";
 import {
   cellKey,
   contractTitle,
@@ -83,9 +83,9 @@ function describeVariant(example: ExampleSpec, variant: Variant, offered: Offere
   let greeting = INITIAL_GREETING;
   const notes = new Map<string, string>();
 
-  const laneFailure = inject(PREPARE_FAILURE);
-  let setupFailure: { error: unknown } | undefined = laneFailure
-    ? { error: new Error(laneFailure) }
+  const prepareFailure = failureFor(inject(PREPARE_FAILURE), cell.edge);
+  let setupFailure: { error: unknown } | undefined = prepareFailure
+    ? { error: new Error(prepareFailure) }
     : undefined;
 
   const bringUp = once(async () => {
