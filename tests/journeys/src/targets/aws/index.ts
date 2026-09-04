@@ -180,6 +180,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   await setAppNames(cell.example, (name, args) => runOcel(cell, dir, "up", name, args, env));
   await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
   await runOcel(cell, dir, "up", "domain-add", ["domain", "add"], env);
+  await runOcel(cell, dir, "up", "deploy-bound", ["deploy", "--yes"], env);
 
   const deployed = deployment(cell, await dispatcher());
   await awaitEdge(cell, "up", deployed);
