@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appimages"
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -22,11 +23,11 @@ func repositories(cfg *projectconfig.Config) ([]string, error) {
 	apps := appimages.Apps(cfg)
 	repositories := make([]string, 0, len(apps))
 	for _, app := range apps {
-		repository, err := imagebuild.Repository(app.Name)
+		repository, err := imagebuild.Repository(cfg.Slug, app.Name)
 		if err != nil {
 			return nil, err
 		}
-		repositories = append(repositories, repository)
+		repositories = append(repositories, naming.RepositorySegment(repository))
 	}
 	return repositories, nil
 }

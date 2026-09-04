@@ -25,7 +25,7 @@ func TestLiveADryRunOfAContainerAppCarriesTheDigestTheDaemonBuilt(t *testing.T) 
 	t.Setenv(clitest.FakeComputesEnvVar, "container,serverless")
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
-  slug: "test-app",
+  slug: "`+clitest.FixtureSlug+`",
   provider: { package: "@ocel/provider-aws", options: {} },
   apps: [{ name: "api", path: "apps/api", compute: "container" }],
 };
@@ -37,7 +37,7 @@ export default {
 		t.Fatalf("runDeploy --dry err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	ref := pinnedRefIn(t, stdout.String(), "ocel/api")
+	ref := pinnedRefIn(t, stdout.String(), "ocel/"+clitest.FixtureSlug+"/api")
 	if _, err := vm.Attempt("docker image inspect " + ref); err != nil {
 		t.Errorf("the plan names %s and the daemon holds no image there, so the dry run rendered a coordinate no release could be pinned to: %v", ref, err)
 	}

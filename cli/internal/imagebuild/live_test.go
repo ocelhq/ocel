@@ -22,12 +22,12 @@ func TestLiveARailpackBuildLandsAWorkingImageInTheDaemon(t *testing.T) {
 	vm.Forward(t)
 	t.Setenv("OCEL_LIVE_LEAK", leaked)
 
-	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(), imagebuild.App{Name: "Web API", Workspace: located(t, "testdata/plainserver")})
+	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(), imagebuild.App{Slug: "Shop Live", Name: "Web API", Workspace: located(t, "testdata/plainserver")})
 	if err != nil {
 		t.Fatalf("Build() against a real daemon = %v", err)
 	}
 
-	addresses(t, vm, image, "ocel/web-api")
+	addresses(t, vm, image, "ocel/shop-live/web-api")
 
 	if pulled := vm.SSH(t, "docker image ls --format '{{.Repository}}'"); strings.Contains(pulled, "railpack-frontend") {
 		t.Errorf("the daemon pulled a railpack frontend image, so the build was not in-process:\n%s", pulled)
@@ -93,12 +93,12 @@ func TestLiveADockerfileBuildLandsTheSameCoordinateAsARailpackOne(t *testing.T) 
 	vm.Engine(t)
 	vm.Forward(t)
 
-	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(), imagebuild.App{Name: "Docs Site", Workspace: located(t, "testdata/dockerfileapp")})
+	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(), imagebuild.App{Slug: "Shop Live", Name: "Docs Site", Workspace: located(t, "testdata/dockerfileapp")})
 	if err != nil {
 		t.Fatalf("Build() of an app with a Dockerfile against a real daemon = %v", err)
 	}
 
-	addresses(t, vm, image, "ocel/docs-site")
+	addresses(t, vm, image, "ocel/shop-live/docs-site")
 
 	if said := serves(t, vm, image, 18081); said != "dockerfile" {
 		t.Errorf("the running image answered %q: the app's Dockerfile is what sets that, so %q was built by railpack instead", said, image.Ref)
@@ -113,7 +113,7 @@ func TestLiveTheExpressFixtureBuildsAndServesItsVersion(t *testing.T) {
 	vm.Forward(t)
 
 	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(),
-		imagebuild.App{Name: "web", Workspace: located(t, journeyFixture)})
+		imagebuild.App{Slug: "Shop Live", Name: "web", Workspace: located(t, journeyFixture)})
 	if err != nil {
 		t.Fatalf("Build() of the express fixture = %v", err)
 	}
@@ -141,12 +141,12 @@ func TestLiveAnAppInsideAWorkspaceBuildsFromTheWorkspaceRoot(t *testing.T) {
 	}
 
 	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(),
-		imagebuild.App{Name: "workspace express", Workspace: loc})
+		imagebuild.App{Slug: "Shop Live", Name: "workspace express", Workspace: loc})
 	if err != nil {
 		t.Fatalf("Build() of an app inside a workspace = %v", err)
 	}
 
-	addresses(t, vm, image, "ocel/workspace-express")
+	addresses(t, vm, image, "ocel/shop-live/workspace-express")
 	if held := vm.SSH(t, "docker run --rm --entrypoint sh "+image.Ref+" -c 'ls "+loc.Path+"/node_modules/express/package.json'"); !strings.Contains(held, "package.json") {
 		t.Errorf("the image holds %q where the app's own dependencies belong: the install inside it resolved nothing from the root's lockfile", held)
 	}

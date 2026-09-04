@@ -45,7 +45,7 @@ func Describe(cfg *projectconfig.Config, app projectconfig.App) (imagebuild.App,
 		}
 		located.BuildCommand = app.Build.Command
 	}
-	return imagebuild.App{Name: app.Name, Workspace: located, Configured: DockerfileOf(app)}, nil
+	return imagebuild.App{Slug: cfg.Slug, Name: app.Name, Workspace: located, Configured: DockerfileOf(app)}, nil
 }
 
 func Apps(cfg *projectconfig.Config) []projectconfig.App {

@@ -52,6 +52,7 @@ func hosting() *provider {
 func project(registry *projectconfig.Registry) *projectconfig.Config {
 	return &projectconfig.Config{
 		Path:     "/repo/ocel.config.ts",
+		Slug:     "shop",
 		Apps:     []projectconfig.App{{Name: "web", Path: "services/web", Compute: "container"}},
 		Registry: registry,
 	}

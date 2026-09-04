@@ -21,25 +21,26 @@ type Image struct {
 	Ref        string
 }
 
-func Repository(app string) (string, error) {
+func Repository(slug, app string) (string, error) {
+	project := naming.Sanitize(slug)
 	name := naming.Sanitize(app)
-	if !naming.IsRepositorySegment(name) || len(LocalNamespace)+len("/")+len(name) > maxRepository {
-		return "", fmt.Errorf("%q names an image repository of %q, which docker cannot hold: name the app something a repository can be derived from", app, name)
+	repository := LocalNamespace + "/" + project + "/" + name
+	if !naming.IsRepositorySegment(project) || !naming.IsRepositorySegment(name) || len(repository) > maxRepository {
+		return "", fmt.Errorf("project %q and app %q name an image repository of %q, which docker cannot hold: name them something a repository can be derived from", slug, app, repository)
 	}
-	return name, nil
+	return repository, nil
 }
 
-func imageFor(app, digest string) (Image, error) {
+func imageFor(slug, app, digest string) (Image, error) {
 	if !digestPattern.MatchString(digest) {
 		return Image{}, fmt.Errorf("the build of %q produced %q where its image's digest belongs, so the image has no coordinate to be released under", app, digest)
 	}
-	name, err := Repository(app)
+	repository, err := Repository(slug, app)
 	if err != nil {
 		return Image{}, err
 	}
-	repository := LocalNamespace + "/" + name
 	return Image{
-		Name:       name,
+		Name:       naming.RepositorySegment(repository),
 		Repository: repository,
 		Tag:        naming.DigestTag(digest),
 		Digest:     digest,
