@@ -220,7 +220,6 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
       OCEL_TARGET: aws
-      OCEL_JOURNEY_WORKERS: "4"
       OCEL_EXAMPLES: ${{ needs.binary.outputs.examples }}
       OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
       OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
@@ -412,7 +411,6 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
       OCEL_TARGET: vps
-      OCEL_JOURNEY_WORKERS: "3"
       OCEL_EXAMPLES: ${{ needs.binary.outputs.examples }}
       OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
       OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
