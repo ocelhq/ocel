@@ -41,10 +41,19 @@ describe("awaitServing", () => {
     });
   });
 
-  it("takes any completed request as the readiness signal", async () => {
-    const served = await awaitServing(answering([404]), URLS, clock(900_000));
+  it("keeps waiting through a 403 and takes the later 200 as the readiness signal", async () => {
+    const served = await awaitServing(answering([403, 403, 200]), URLS, clock(900_000));
     assert.deepEqual(served, {
-      web: { host: "app.example.com", waitedMs: 0, attempts: 1, status: 404 },
+      web: { host: "app.example.com", waitedMs: 10_000, attempts: 3, status: 200 },
+    });
+  });
+
+  it("gives up at the deadline naming the last status when only 403s came back", async () => {
+    await assert.rejects(awaitServing(answering([403]), URLS, clock(10_000)), (error: Error) => {
+      assert.match(error.message, /app\.example\.com/);
+      assert.match(error.message, /3 attempts/);
+      assert.match(error.message, /last status 403/);
+      return true;
     });
   });
 
