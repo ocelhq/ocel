@@ -16,10 +16,6 @@
     },
     "test": {
       "dependsOn": ["^build"]
-    },
-    "@ocel-tests/dev#test": {
-      "dependsOn": ["^build"],
-      "cache": false
     }
   }
 }
