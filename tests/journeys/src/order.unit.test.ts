@@ -10,6 +10,7 @@ describe("longestFirst", () => {
       "ladder",
       "hello",
       "hello",
+      "hello",
       "composite",
       "composite",
       "composite",
