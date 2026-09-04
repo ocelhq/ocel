@@ -12,10 +12,7 @@ provider packages alone. Both run from the provider workflows.
 
 ## Running one journey locally
 
-A cell is one example on one target in one mode, named in `journeys/src/spec.ts`. The
-`hello` mode deploys the same example with nothing provisioned and asks only that it boots
-and serves, and it runs under a project slug of its own so it never collides with the full
-cell beside it. The harness starts
+A cell is one example on one target, named in `journeys/src/spec.ts`. The harness starts
 nothing but the `ocel` binary; bring up what the target needs first. For `dev` that is
 postgres, the control-plane schema and the console:
 
@@ -75,12 +72,9 @@ left behind, and only projects the harness named.
 
 `--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
-A pull request runs one member of each example group: the group's preferred member when the
-diff touches none of them, and otherwise every member it touches. A group that names no
-preferred member falls back to a pick by the pull request number, so a rerun of the same
-pull request picks the same member and different pull requests spread the coverage. A full run — workflow
-dispatch, or the `journey:real` label — runs every member. To reproduce a pull request's
-pick on a laptop:
+A pull request runs one member of each example group, plus every member whose directory the
+diff touches. A full run — workflow dispatch, or the `journey:real` label — runs every
+member. To reproduce a pull request's pick on a laptop:
 
 ```
 OCEL_JOURNEY_SEED=<pull request number> OCEL_JOURNEY_TOUCHED=<dir,dir> \
