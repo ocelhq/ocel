@@ -18,7 +18,7 @@ export function appHomes(example: ExampleSpec): string[] {
 }
 
 export function appCommand(example: ExampleSpec, app: string): string[] {
-  return ["pnpm", "--dir", appPath(example, app), "run", "start"];
+  return ["pnpm", "--dir", appPath(example, app), "run", "dev"];
 }
 
 export async function setAppNames(

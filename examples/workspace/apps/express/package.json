@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/server.ts",
+    "dev": "tsx src/server.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
