@@ -173,7 +173,7 @@ func (h *Host) LoadImage(ctx context.Context, coordinate string, tar io.Reader) 
 	if err != nil {
 		return "", err
 	}
-	said, err := h.ran(ctx, "load "+coordinate, "docker load", tar, elevation)
+	said, err := h.ran(ctx, "load "+coordinate, "flock -x "+quoted(imagesLock)+" docker load", tar, elevation)
 	if err != nil {
 		return "", err
 	}
@@ -188,6 +188,8 @@ func (h *Host) LoadImage(ctx context.Context, coordinate string, tar io.Reader) 
 	}
 	return strings.TrimSpace(said), nil
 }
+
+const imagesLock = stateRoot + "/images.lock"
 
 func loadEvidenceCommand() string {
 	return strings.Join([]string{
