@@ -145,7 +145,8 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			Edge:        edgewire.Selection(cfg),
 			Dry:         opts.dry,
 
-			ImageRegistry: registry,
+			ImageRegistry:     registry,
+			SuppressResources: suppressResources(),
 		}
 
 		if opts.dry {

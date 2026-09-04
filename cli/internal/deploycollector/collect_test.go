@@ -14,6 +14,27 @@ import (
 )
 
 func TestCollect(t *testing.T) {
+	t.Run("a project with no discovery directory declares nothing and does not fail", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses a POSIX-style fixture entrypoint")
+		}
+
+		cfg := &projectconfig.Config{
+			Slug:      "test-app",
+			Dir:       t.TempDir(),
+			Discovery: projectconfig.Discovery{Paths: []string{"ocel"}},
+		}
+
+		var stdout, stderr bytes.Buffer
+		resources, err := Collect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
+		if err != nil {
+			t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
+		}
+		if len(resources) != 0 {
+			t.Fatalf("Collect() returned %d resources, want none: %+v", len(resources), resources)
+		}
+	})
+
 	t.Run("a fixture project yields every declare with its typed config", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX-style fixture entrypoint")
