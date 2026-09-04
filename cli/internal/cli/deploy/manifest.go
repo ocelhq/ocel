@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string) (*contractv1.Manifest, error) {
@@ -98,7 +100,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		ui.Diagnostic("no functions to deploy; deploying infrastructure only")
 	}
 
-	attributionApps, err := toAttributionApps(cfg, functions)
+	attributionApps, err := toAttributionApps(cfg, functions, compute)
 	if err != nil {
 		return nil, err
 	}
@@ -301,10 +303,11 @@ func healthPathOf(app projectconfig.App) string {
 	return app.Health.Path
 }
 
-func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function) ([]attribution.App, error) {
+func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function, compute string) ([]attribution.App, error) {
 	detected := detectedApps(functions)
 	apps := cfg.Apps
 	configName := filepath.Base(cfg.Path)
+	container := compute == string(providerkit.ComputeContainer)
 
 	if len(apps) == 0 {
 		if len(detected) > 1 {
@@ -315,7 +318,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 		}
 		out := make([]attribution.App, 0, len(detected))
 		for _, name := range detected {
-			out = append(out, attribution.App{Name: name, Path: "."})
+			out = append(out, attribution.App{Name: name, Path: ".", Container: container})
 		}
 		return out, nil
 	}
@@ -330,7 +333,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 			)
 		}
 		named[a.Name] = true
-		out = append(out, attribution.App{Name: a.Name, Path: a.Path})
+		out = append(out, attribution.App{Name: a.Name, Path: a.Path, Container: cmp.Or(a.Compute, compute) == string(providerkit.ComputeContainer)})
 	}
 
 	var unnamed []string
