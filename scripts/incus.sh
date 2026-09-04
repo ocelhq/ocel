@@ -165,10 +165,18 @@ cmd_clone() {
     trap 'exit 143' TERM
     incus copy "$base" "$name"
     incus start "$name"
+    wait_ssh "$name" > /dev/null
+    cloud_init_finished "$name"
     local addr
     addr=$(wait_ssh "$name")
     trap - EXIT
     print_info "$name" "$addr"
+}
+
+cloud_init_finished() {
+    local name=$1 rc=0
+    incus exec "$name" -- cloud-init status --wait > /dev/null || rc=$?
+    [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || die "$name: cloud-init ended with status $rc"
 }
 
 cmd_restore() {
