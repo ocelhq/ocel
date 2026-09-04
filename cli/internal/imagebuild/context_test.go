@@ -65,6 +65,45 @@ func TestTheContextCarriesNoInstalledDependenciesNoHistoryAndNoEarlierBuild(t *t
 	}
 }
 
+func TestThePlanAndTheContextAgreeOnWhatTheDaemonWillHold(t *testing.T) {
+	root := laidOut(t, map[string]string{
+		".dockerignore":                 "*.log\n!keep.log\nsecrets\n",
+		"package.json":                  `{"name":"root"}`,
+		"server.js":                     "listen()\n",
+		"debug.log":                     "noisy\n",
+		"keep.log":                      "wanted\n",
+		"secrets/token.txt":             "shhh\n",
+		"node_modules/express/index.js": "module.exports = {}\n",
+	})
+
+	carried := mounted(t, root)
+	outside, err := outsideTheContext(root)
+	if err != nil {
+		t.Fatalf("outsideTheContext(%s) = %v", root, err)
+	}
+
+	for _, path := range []string{
+		"package.json",
+		"server.js",
+		"debug.log",
+		"keep.log",
+		"secrets/token.txt",
+		"node_modules/express/index.js",
+	} {
+		if walked := slices.Contains(carried, path); walked == outside(path) {
+			t.Errorf("the context %s %q and the plan filter %s it: a path the plan copies but the context does not carry fails the build at the daemon, and one the plan drops but the context holds is lost from the image",
+				said(walked), path, said(!outside(path)))
+		}
+	}
+}
+
+func said(carries bool) string {
+	if carries {
+		return "carries"
+	}
+	return "excludes"
+}
+
 func TestTheContextHonoursTheDockerignoreBesideIt(t *testing.T) {
 	root := laidOut(t, map[string]string{
 		".dockerignore":     "*.log\nsecrets/\n",

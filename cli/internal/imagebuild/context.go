@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 
+	"github.com/moby/patternmatcher"
 	"github.com/moby/patternmatcher/ignorefile"
 	"github.com/tonistiigi/fsutil"
 )
@@ -48,11 +47,17 @@ func contextExcludes(root string) ([]string, error) {
 	return append(excludes, ignored...), nil
 }
 
-func outsideTheContext(path string) bool {
-	for _, segment := range strings.Split(filepath.ToSlash(path), "/") {
-		if slices.Contains(neverInTheContext, segment) {
-			return true
-		}
+func outsideTheContext(root string) (func(string) bool, error) {
+	excludes, err := contextExcludes(root)
+	if err != nil {
+		return nil, err
 	}
-	return false
+	matcher, err := patternmatcher.New(excludes)
+	if err != nil {
+		return nil, fmt.Errorf("read what the build context in %s excludes: %w", root, err)
+	}
+	return func(path string) bool {
+		excluded, err := matcher.MatchesOrParentMatches(filepath.ToSlash(path))
+		return err == nil && excluded
+	}, nil
 }
