@@ -54,9 +54,9 @@ env:
 jobs:
   live:
     if: github.event.action != 'closed'
-    name: vps live suites
+    name: vps live conformance
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     env:
       VM: ocel-live-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -75,12 +75,11 @@ jobs:
       - name: Bake the box every lane is cloned from
         run: sg incus-admin -c "scripts/incus.sh bake $VM-base -- '$BAKE'"
 
-      - name: Compile the race-instrumented test binaries once and deal the tests across the lanes
+      - name: Compile the race-instrumented test binary once and deal its tests across the lanes
         run: |
           set -euo pipefail
           mkdir reports
-          go test -C cli -race -list '^TestLive' ./... > /dev/null
-          go test -C platform/vps/provider -race -list '^TestLive|^TestLifecycle' ./... \
+          go test -C platform/vps/provider -race -list '^TestLive' ./... \
             | grep '^TestLive' | grep -vx "$ENGINE_TEST" | sort > live.tests
           : > reports/lanes.tsv
           for s in $(seq 0 $((SHARDS - 1))); do
@@ -95,13 +94,8 @@ jobs:
             printf '%s\t%s\t%s\t%s\n' "$VM-$s" "reports/live-$s.json" \
               "go test -C platform/vps/provider -race -count=1 -timeout 30m -run '$run' -json ./..." "$VM-base" >> reports/lanes.tsv
           done
-          printf '%s\t%s\t%s\t%s\n' \
-            "$VM-build" reports/build.json "go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." "$VM-base" \
-            "$VM-lifecycle" reports/lifecycle.json "go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestLifecycle' -json ./..." "$VM-base" \
-            "$VM-engine" reports/engine.json "go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^$ENGINE_TEST\$' -json ./..." "" \
-            >> reports/lanes.tsv
 
-      - name: Run every live suite, one VM per lane
+      - name: Run the live conformance suite, one VM per lane
         run: scripts/incus-fanout.sh reports/lanes.tsv
 
       - name: Keep every lane's report and the host profile
@@ -120,6 +114,68 @@ jobs:
           for s in $(seq 0 $((SHARDS - 1))); do
             scripts/assert-ran.sh "reports/live-$s.json" TestLive || status=1
           done
+          exit "$status"
+
+      - name: No VM left behind
+        if: always()
+        run: |
+          for name in $(cut -f1 reports/lanes.tsv 2>/dev/null) $VM-base; do
+            sg incus-admin -c "scripts/incus.sh destroy $name" || echo "could not destroy $name"
+          done
+
+  pipeline:
+    if: github.event.action != 'closed'
+    name: vps build pipeline, lifecycle and engine install
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      VM: ocel-pipeline-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup the incus host
+        uses: ./.github/actions/incus-vm
+        with:
+          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Bake the box the build and lifecycle lanes are cloned from
+        run: sg incus-admin -c "scripts/incus.sh bake $VM-base -- '$BAKE'"
+
+      - name: Compile the race-instrumented test binaries once
+        run: |
+          set -euo pipefail
+          go test -C cli -race -list '^TestLive' ./... > /dev/null
+          go test -C platform/vps/provider -race -list '^TestLifecycle' ./... > /dev/null
+
+      - name: Run the build pipeline, the lifecycle suite and the engine install, a VM each
+        run: |
+          set -euo pipefail
+          mkdir reports
+          printf '%s\t%s\t%s\t%s\n' \
+            "$VM-build" reports/build.json "go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." "$VM-base" \
+            "$VM-lifecycle" reports/lifecycle.json "go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestLifecycle' -json ./..." "$VM-base" \
+            "$VM-engine" reports/engine.json "go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^$ENGINE_TEST\$' -json ./..." "" \
+            > reports/lanes.tsv
+          scripts/incus-fanout.sh reports/lanes.tsv
+
+      - name: Keep every lane's report and the host profile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vps-pipeline-${{ github.run_attempt }}
+          path: reports
+          if-no-files-found: ignore
+
+      - name: Assert every lane ran
+        if: always()
+        run: |
+          set -euo pipefail
+          status=0
           scripts/assert-ran.sh reports/build.json TestLive || status=1
           scripts/assert-ran.sh reports/lifecycle.json TestLifecycle || status=1
           scripts/assert-ran.sh reports/engine.json TestLive || status=1
