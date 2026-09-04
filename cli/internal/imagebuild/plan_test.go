@@ -321,6 +321,29 @@ func TestANextAppInAWorkspaceIsBuiltAndStartedAsTheAppRatherThanTheRoot(t *testi
 	}
 }
 
+const polyglotApp = "testdata/polyglotworkspace/apps/web"
+
+func TestANodeAppIsPlannedAsOneEvenWhereAnotherLanguageSitsAtTheRoot(t *testing.T) {
+	plan := planned(t, polyglotApp)
+
+	install := strings.Join(plan.step(t, "install"), "\n")
+	if want := "pnpm install --frozen-lockfile --filter ./apps/web..."; !strings.Contains(install, want) {
+		t.Errorf("the install step runs:\n%s\nwant %q — the root carries a go.mod as well, and railpack takes the first language it detects", install, want)
+	}
+	if want := "pnpm --filter ./apps/web run start"; plan.Deploy.StartCommand != want {
+		t.Errorf("the plan starts the app with %q, want %q", plan.Deploy.StartCommand, want)
+	}
+}
+
+func TestTheRootsOwnRailpackFileStillShapesAPlanOcelForcesTheProviderOn(t *testing.T) {
+	plan := planned(t, polyglotApp)
+
+	apt := strings.Join(plan.step(t, "packages:apt:build"), "\n")
+	if !strings.Contains(apt, "libvips-dev") {
+		t.Errorf("the apt step runs:\n%s\nand the root's %s asks for libvips-dev: naming the provider replaced the file the user wrote rather than adding to it", apt, imagebuild.ConfigFileName)
+	}
+}
+
 func contains(haystack []string, needle string) bool {
 	for _, straw := range haystack {
 		if straw == needle {

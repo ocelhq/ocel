@@ -33,6 +33,7 @@ type Location struct {
 	Root         string
 	Path         string
 	Member       bool
+	Node         bool
 	Manager      Manager
 	App          App
 	BuildCommand string
@@ -102,7 +103,13 @@ func locatedAt(dir, root string) (Location, error) {
 	if err != nil {
 		return Location{}, err
 	}
-	located := Location{Root: root, Path: filepath.ToSlash(rel), App: describe(dir, app), Manager: detect(root)}
+	located := Location{
+		Root:    root,
+		Path:    filepath.ToSlash(rel),
+		Node:    regular(filepath.Join(dir, manifestName)),
+		App:     describe(dir, app),
+		Manager: detect(root),
+	}
 	if globs, ok := declaredPackages(root); ok {
 		_, located.Member = memberOf(root, dir, globs)
 	}
@@ -153,12 +160,17 @@ func (l Location) Members() []string {
 	return members
 }
 
+func regular(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
 func describe(dir string, m manifest) App {
 	app := App{Name: m.Name, Main: m.Main}
 	app.Build = strings.TrimSpace(m.Scripts["build"]) != ""
 	app.Start = strings.TrimSpace(m.Scripts["start"]) != ""
 	for _, name := range []string{"index.js", "index.mjs", "index.cjs", "index.ts"} {
-		if info, err := os.Stat(filepath.Join(dir, name)); err == nil && info.Mode().IsRegular() {
+		if regular(filepath.Join(dir, name)) {
 			app.Index = name
 			break
 		}
