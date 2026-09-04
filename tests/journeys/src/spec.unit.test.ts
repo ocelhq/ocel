@@ -6,11 +6,16 @@ import {
   examplesNamed,
   groups,
   modesOf,
+  type Offered,
   preferredOf,
   spec,
   specByName,
   suitesOf,
+  variantsOf,
 } from "./spec";
+
+const AWS: Offered = { modes: ["full", "hello"], computes: ["serverless", "container"] };
+const BOX: Offered = { modes: ["full", "hello"], computes: ["container"] };
 
 const rows: ExampleSpec[] = [
   { name: "express", dir: "express", framework: "express", kind: "composite", suites: [], apps: [] },
@@ -56,14 +61,60 @@ describe("the modes an example runs in", () => {
   });
 
   it("names a cell of its own for the hello mode, so the two never share a slug", () => {
-    expect(cellNameOf(express, "full")).toBe("express");
-    expect(cellNameOf(express, "hello")).toBe("express-hello");
-    expect(cellNamesOf(express)).toEqual(["express", "express-hello"]);
+    expect(cellNameOf(express, { mode: "full", compute: "serverless" }, AWS)).toBe(
+      "express",
+    );
+    expect(cellNameOf(express, { mode: "hello", compute: "serverless" }, AWS)).toBe(
+      "express-hello",
+    );
   });
 
   it("keeps health and static alone in the hello mode", () => {
     expect(suitesOf(express, "full")).toEqual(express.suites);
     expect(suitesOf(express, "hello")).toEqual(["health", "static"]);
+  });
+});
+
+describe("the variants an example runs in", () => {
+  const express = specByName("express");
+  const transforms = specByName("with-transforms");
+
+  it("pairs every mode the row runs with every compute the target offers", () => {
+    expect(variantsOf(express, AWS)).toEqual([
+      { mode: "full", compute: "serverless" },
+      { mode: "full", compute: "container" },
+      { mode: "hello", compute: "serverless" },
+      { mode: "hello", compute: "container" },
+    ]);
+    expect(variantsOf(transforms, AWS)).toEqual([
+      { mode: "full", compute: "serverless" },
+      { mode: "full", compute: "container" },
+    ]);
+  });
+
+  it("names a cell of its own for a compute the target does not name first", () => {
+    expect(cellNameOf(express, { mode: "full", compute: "container" }, AWS)).toBe(
+      "express-container",
+    );
+    expect(cellNameOf(express, { mode: "hello", compute: "container" }, AWS)).toBe(
+      "express-hello-container",
+    );
+  });
+
+  it("names the target's first compute in no cell name", () => {
+    expect(cellNameOf(express, { mode: "full", compute: "container" }, BOX)).toBe(
+      "express",
+    );
+    expect(cellNamesOf(express, BOX)).toEqual(["express", "express-hello"]);
+  });
+
+  it("lists every cell name the target's variants make", () => {
+    expect(cellNamesOf(express, AWS)).toEqual([
+      "express",
+      "express-container",
+      "express-hello",
+      "express-hello-container",
+    ]);
   });
 });
 

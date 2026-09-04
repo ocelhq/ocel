@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "vitest";
 import { EDGE_ISR_TITLE, nextCacheRows } from "../nextCache";
-import { contractTitle, DESTROY_TITLE, UP_TITLE } from "../plan";
+import { contractTitle, DESTROY_TITLE, planTests, UP_TITLE } from "../plan";
+import { specForTarget } from "../spec";
+import { targetNamed } from "../targets";
 import { gaps } from "./gaps";
 import { CONTRACT_LEGS, EDGE_ENV, EDGES, type Expectations, expectationsFor } from "./index";
 
@@ -26,10 +28,19 @@ function issues(listed: Expectations, cell: string, title: string): number[] {
 function upIssues(listed: Expectations): Record<string, number[]> {
   return Object.fromEntries(
     Object.keys(listed)
+      .filter((cell) => !CONTAINER_CELLS.includes(cell))
       .sort()
       .map((cell) => [cell, issues(listed, cell, UP_TITLE)]),
   );
 }
+
+const CONTAINER_CELLS = [
+  ...new Set(
+    planTests(specForTarget("aws"), ["up"], targetNamed("aws"))
+      .filter((row) => row.variant.compute === "container")
+      .map((row) => row.cell),
+  ),
+];
 
 function onEdge(environment: "aws" | "aws.floci", edge: string): Expectations {
   process.env[EDGE_ENV] = edge;
@@ -44,6 +55,35 @@ describe("the gap list", () => {
     for (const environment of ["aws", "aws.floci"] as const) {
       for (const edge of EDGES) {
         assert.doesNotThrow(() => onEdge(environment, edge), `${environment} on ${edge}`);
+      }
+    }
+  });
+
+  it("lists the container gap at up on every aws container cell, and nowhere else", () => {
+    assert.ok(CONTAINER_CELLS.includes("express-container/web"));
+    assert.ok(CONTAINER_CELLS.includes("express-hello-container/web"));
+    assert.ok(CONTAINER_CELLS.includes("with-transforms-container/web"));
+    for (const environment of ["aws", "aws.floci"] as const) {
+      for (const edge of EDGES) {
+        const listed = onEdge(environment, edge);
+        for (const cell of CONTAINER_CELLS) {
+          assert.deepEqual(
+            issues(listed, cell, UP_TITLE),
+            [937],
+            `${cell} on ${environment} ${edge}`,
+          );
+        }
+        for (const [cell, titles] of Object.entries(listed)) {
+          if (CONTAINER_CELLS.includes(cell)) {
+            continue;
+          }
+          for (const [title, rows] of Object.entries(titles)) {
+            assert.ok(
+              !rows.some((row) => row.id === "aws-container-unimplemented"),
+              `${cell} ${title} on ${environment} ${edge}`,
+            );
+          }
+        }
       }
     }
   });

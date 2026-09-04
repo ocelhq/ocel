@@ -7,10 +7,11 @@ const config = defineConfig({
   apps: [{ name: APP, framework: "next", path: "." }],
 });
 
-export function zonedApps(): AppConfig[] | undefined {
+export function zonedApps(compute?: string): AppConfig[] | undefined {
   return config.apps?.map((app) => {
     const production = productionHostname(app.name);
-    return production ? { ...app, domains: { production } } : app;
+    const zoned = production ? { ...app, domains: { production } } : app;
+    return compute === "container" ? { ...zoned, compute } : zoned;
   });
 }
 

@@ -13,6 +13,7 @@ export const SUPPRESS_RESOURCES_ENV = "OCEL_DEPLOY_SUPPRESS_RESOURCES";
 export function cellEnv(cell: CellContext): NodeJS.ProcessEnv {
   return {
     OCEL_JOURNEY_SLUG: cell.slug,
+    OCEL_JOURNEY_COMPUTE: cell.compute,
     ...(cell.mode === "hello" ? { [SUPPRESS_RESOURCES_ENV]: "1" } : {}),
   };
 }

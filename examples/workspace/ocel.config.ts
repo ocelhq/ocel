@@ -11,15 +11,12 @@ const config = defineConfig({
   ],
 });
 
-export function zonedApps(): AppConfig[] | undefined {
+export function zonedApps(compute?: string): AppConfig[] | undefined {
   const zone = process.env.OCEL_JOURNEY_ZONE;
-  if (!zone) {
-    return config.apps;
-  }
-  return config.apps?.map((app) => ({
-    ...app,
-    domains: { production: `${app.name}-${slug}.${zone}` },
-  }));
+  return config.apps?.map((app) => {
+    const zoned = zone ? { ...app, domains: { production: `${app.name}-${slug}.${zone}` } } : app;
+    return compute === "container" ? { ...zoned, compute } : zoned;
+  });
 }
 
 export default config;

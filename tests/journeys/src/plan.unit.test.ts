@@ -13,16 +13,17 @@ import {
   type ExampleSpec,
   type LadderRow,
   type Leg,
-  type Mode,
+  type Offered,
   specByName,
   suitesOf,
 } from "./spec";
+import { targetNamed } from "./targets";
 
 const ALL_LEGS: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"];
 
-const ALL_MODES: Mode[] = ["full", "hello"];
+const ALL_MODES: Offered = { modes: ["full", "hello"], computes: ["serverless"] };
 
-const FULL: Mode[] = ["full"];
+const FULL: Offered = { modes: ["full"], computes: ["serverless"] };
 
 const STAMP = "GET /api/probes/env reports the greeting and never the secret";
 
@@ -156,5 +157,39 @@ describe("planTests", () => {
     const planned = planTests([example], [...ALL_LEGS], FULL);
     expect(planned.some((row) => row.title === REFUSE_TITLE)).toBe(false);
     expect(planned.some((row) => row.title === "publish · lists both records")).toBe(true);
+  });
+});
+
+describe("planning the computes a target offers", () => {
+  const express = specByName("express");
+
+  function cellsOn(target: string): string[] {
+    return [...new Set(planTests([express], ["up"], targetNamed(target)).map((row) => row.cell))];
+  }
+
+  it("plans a container cell beside every aws cell", () => {
+    expect(cellsOn("aws")).toEqual([
+      "express/web",
+      "express-container/web",
+      "express-hello/web",
+      "express-hello-container/web",
+    ]);
+  });
+
+  it("plans no container cell where the target runs one compute", () => {
+    expect(cellsOn("vps")).toEqual(["express/web", "express-hello/web"]);
+    expect(cellsOn("dev")).toEqual(["express/web"]);
+  });
+
+  it("carries the variant of the cell it planned", () => {
+    const planned = planTests([express], ["up"], targetNamed("aws"));
+    expect(planned.find((row) => row.cell === "express-container/web")?.variant).toEqual({
+      mode: "full",
+      compute: "container",
+    });
+    expect(planned.find((row) => row.cell === "express/web")?.variant).toEqual({
+      mode: "full",
+      compute: "serverless",
+    });
   });
 });

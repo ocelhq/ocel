@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 import { reclaimable, sweepable } from "./slugs";
 
-const CELLS = ["express", "express-hello"];
+const CELLS = ["express", "express-hello", "express-container", "express-hello-container"];
 
 describe("reclaimable", () => {
   it("reads the example out of a harness slug", () => {
@@ -16,6 +16,10 @@ describe("reclaimable", () => {
     assert.deepEqual(reclaimable("j-1874-express-hello", CELLS), {
       slug: "j-1874-express-hello",
       example: "express-hello",
+    });
+    assert.deepEqual(reclaimable("j-1874-express-hello-container", CELLS), {
+      slug: "j-1874-express-hello-container",
+      example: "express-hello-container",
     });
   });
 

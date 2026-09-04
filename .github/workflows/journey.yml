@@ -147,7 +147,7 @@ jobs:
           if [ "$real" = true ]; then
             edges=$(jq -nc --arg edges "${EDGES:-$PR_EDGES}" '[{name: "real", edges: $edges}]')
           else
-            edges=$(jq -nc --argjson aws "$aws" '[{name: "api-gateway", edges: "api-gateway"} | select($aws), {name: "cloudfront-cloudflare", edges: "cloudfront cloudflare"}]')
+            edges=$(jq -nc --argjson aws "$aws" '[({name: "api-gateway", edges: "api-gateway"} | select($aws)), {name: "cloudfront-cloudflare", edges: "cloudfront cloudflare"}]')
           fi
 
           {

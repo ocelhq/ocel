@@ -26,9 +26,9 @@ import {
   type ExampleSpec,
   ladderTitle,
   type Leg,
-  type Mode,
-  modesOf,
   suitesOf,
+  type Variant,
+  variantsOf,
 } from "./spec";
 import { selectedTarget } from "./targets";
 import type { CellContext, Deployment } from "./targets/types";
@@ -45,22 +45,23 @@ function once<T>(work: Once<T>): Once<T> {
 
 export function describeCell(example: ExampleSpec) {
   const target = selectedTarget();
-  for (const mode of modesOf(example, target.modes)) {
-    describeMode(example, mode);
+  for (const variant of variantsOf(example, target)) {
+    describeVariant(example, variant);
   }
 }
 
-function describeMode(example: ExampleSpec, mode: Mode) {
+function describeVariant(example: ExampleSpec, variant: Variant) {
   const target = selectedTarget();
   const runId = currentRunIdentity();
-  const name = cellNameOf(example, mode);
+  const name = cellNameOf(example, variant, target);
   const slug = projectSlug(name, runId);
   const dir = exampleDir(example.dir);
-  const suites = suitesOf(example, mode);
+  const suites = suitesOf(example, variant.mode);
   const cell: CellContext = {
     example,
     name,
-    mode,
+    mode: variant.mode,
+    compute: variant.compute,
     suites,
     dir,
     slug,
