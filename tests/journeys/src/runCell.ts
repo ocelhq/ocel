@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterAll, beforeAll, describe, inject, it } from "vitest";
+import { afterAll, beforeAll, describe, it } from "bun:test";
 import {
   type ContractRow,
   contractRows,
@@ -9,8 +9,9 @@ import {
 } from "./contract";
 import { evidence } from "./evidence";
 import { currentRunIdentity, projectSlug } from "./identity";
+import { ledgerFor } from "./ledger";
 import { evidenceDir, exampleDir } from "./paths";
-import { failureFor, PREPARE_FAILURE } from "./prepare";
+import { failureFor, readPrepareFailures } from "./prepare";
 import {
   cellKey,
   contractTitle,
@@ -51,6 +52,10 @@ export function describeCell(example: ExampleSpec) {
   }
 }
 
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function describeVariant(example: ExampleSpec, variant: Variant, offered: Offered) {
   const target = selectedTarget();
   const runId = currentRunIdentity();
@@ -71,8 +76,40 @@ function describeVariant(example: ExampleSpec, variant: Variant, offered: Offere
     evidence: evidence(evidenceDir(runId, target.name, name)),
   };
 
-  const rows = contractRows(suites);
+  const write = ledgerFor(runId, target.name, name);
   const timeout = target.legTimeoutMs;
+
+  function testIn(key: string, title: string, work: () => Promise<void>) {
+    it(
+      title,
+      async () => {
+        const startTime = Date.now();
+        try {
+          await work();
+          write({
+            cell: key,
+            title,
+            outcome: "passed",
+            startTime,
+            duration: Date.now() - startTime,
+          });
+        } catch (error) {
+          write({
+            cell: key,
+            title,
+            outcome: "failed",
+            error: messageOf(error),
+            startTime,
+            duration: Date.now() - startTime,
+          });
+          throw error;
+        }
+      },
+      timeout,
+    );
+  }
+
+  const rows = contractRows(suites);
   const hooks = example.hooks;
   const publishRows = hooks?.rows?.filter((row) => row.phase === "publish") ?? [];
   const consumeRows = hooks?.rows?.filter((row) => row.phase === "consume") ?? [];
@@ -83,7 +120,7 @@ function describeVariant(example: ExampleSpec, variant: Variant, offered: Offere
   let greeting = INITIAL_GREETING;
   const notes = new Map<string, string>();
 
-  const prepareFailure = failureFor(inject(PREPARE_FAILURE), cell.edge);
+  const prepareFailure = failureFor(readPrepareFailures(runId, target.name), cell.edge);
   let setupFailure: { error: unknown } | undefined = prepareFailure
     ? { error: new Error(prepareFailure) }
     : undefined;
@@ -125,27 +162,19 @@ function describeVariant(example: ExampleSpec, variant: Variant, offered: Offere
 
   function contractLeg(leg: Leg, app: string, rowsForLeg: ContractRow[]) {
     for (const row of rowsForLeg) {
-      it(
-        contractTitle(leg, row.title),
-        async () => {
-          await bringUp();
-          await row.run(contractContext(app, leg));
-        },
-        timeout,
-      );
+      testIn(cellKey(name, app), contractTitle(leg, row.title), async () => {
+        await bringUp();
+        await row.run(contractContext(app, leg));
+      });
     }
   }
 
   function consumeLeg(leg: "contract" | "redeploy" | "rollback", app: string) {
     for (const row of consumeRows) {
-      it(
-        ladderConsumeTitle(leg, row.title),
-        async () => {
-          await triggerBeforeUp();
-          await row.run(cell, contractContext(app, leg));
-        },
-        timeout,
-      );
+      testIn(cellKey(name, app), ladderConsumeTitle(leg, row.title), async () => {
+        await triggerBeforeUp();
+        await row.run(cell, contractContext(app, leg));
+      });
     }
   }
 
@@ -156,8 +185,8 @@ function describeVariant(example: ExampleSpec, variant: Variant, offered: Offere
   }
 
   function perApp(title: string, work: () => Promise<void>) {
-    perAppDescribe(() => {
-      it(title, work, timeout);
+    perAppDescribe((app) => {
+      testIn(cellKey(name, app), title, work);
     });
   }
 
@@ -169,31 +198,35 @@ function describeVariant(example: ExampleSpec, variant: Variant, offered: Offere
   }
 
   describe(name, () => {
-    beforeAll(async () => {
-      await target.setup().catch((error: unknown) => {
-        setupFailure = { error };
-      });
-    }, timeout);
+    beforeAll(
+      async () => {
+        await target.setup().catch((error: unknown) => {
+          setupFailure = { error };
+        });
+      },
+      { timeout },
+    );
 
-    afterAll(async () => {
-      await tearDown().catch(() => undefined);
-    }, timeout);
+    afterAll(
+      async () => {
+        await tearDown().catch(() => undefined);
+      },
+      { timeout },
+    );
 
-    perAppDescribe(() => {
+    perAppDescribe((app) => {
       if (hooks?.refuse) {
         const refuse = hooks.refuse;
-        it(REFUSE_TITLE, () => refuse(cell), timeout);
+        testIn(cellKey(name, app), REFUSE_TITLE, async () => {
+          await refuse(cell);
+        });
       }
 
       for (const row of publishRows) {
-        it(
-          ladderTitle("publish", row.title),
-          async () => {
-            await triggerBeforeUp().catch(() => undefined);
-            await row.run(cell);
-          },
-          timeout,
-        );
+        testIn(cellKey(name, app), ladderTitle("publish", row.title), async () => {
+          await triggerBeforeUp().catch(() => undefined);
+          await row.run(cell);
+        });
       }
     });
 
@@ -239,28 +272,20 @@ function describeVariant(example: ExampleSpec, variant: Variant, offered: Offere
       );
     });
 
-    perAppDescribe(() => {
+    perAppDescribe((app) => {
       for (const row of outliveRows) {
-        it(
-          ladderTitle("outlive", row.title),
-          async () => {
-            await triggerBeforeUp();
-            await row.run(cell);
-          },
-          timeout,
-        );
+        testIn(cellKey(name, app), ladderTitle("outlive", row.title), async () => {
+          await triggerBeforeUp();
+          await row.run(cell);
+        });
       }
 
       for (const row of pruneRows) {
-        it(
-          ladderTitle("prune", row.title),
-          async () => {
-            await triggerBeforeUp();
-            await triggerAfterDestroy();
-            await row.run(cell);
-          },
-          timeout,
-        );
+        testIn(cellKey(name, app), ladderTitle("prune", row.title), async () => {
+          await triggerBeforeUp();
+          await triggerAfterDestroy();
+          await row.run(cell);
+        });
       }
     });
   });

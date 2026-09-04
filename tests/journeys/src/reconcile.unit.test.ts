@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { UP_TITLE } from "./plan";
 import { exitCodeFor, reconcile, type TestOutcome, type TestResult } from "./reconcile";
 

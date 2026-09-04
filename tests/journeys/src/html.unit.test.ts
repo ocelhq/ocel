@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { assetPath, firstChunkWith, form, marker, markerOrNone, stamp } from "./html";
 
 describe("marker", () => {

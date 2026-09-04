@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
+import { describe, it } from "bun:test";
 import { reclaimable, sweepable } from "./slugs";
 
 const CELLS = [

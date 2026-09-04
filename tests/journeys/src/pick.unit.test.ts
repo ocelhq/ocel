@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { type Coverage, coverageFrom, coverVariants, type Pick, pickExamples } from "./pick";
 import {
   cellNameOf,

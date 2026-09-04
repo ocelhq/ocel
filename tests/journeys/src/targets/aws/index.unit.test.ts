@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { offeredBy } from "../../offer";
 import { applyFeatures, awsTarget, dryPlans } from "./index";
 

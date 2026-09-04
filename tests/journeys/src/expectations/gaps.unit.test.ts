@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
+import { describe, it } from "bun:test";
 import { EDGE_ISR_TITLE, nextCacheRows } from "../nextCache";
 import { contractTitle, DESTROY_TITLE, planTests, UP_TITLE } from "../plan";
 import { type Edge, EDGES, specForTarget } from "../spec";

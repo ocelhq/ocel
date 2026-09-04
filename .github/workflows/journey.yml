@@ -64,6 +64,7 @@ env:
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
   BUN_VERSION: "1.4.0"
+  FORCE_COLOR: "1"
   BINARIES: packages/native-lib
 
 jobs:

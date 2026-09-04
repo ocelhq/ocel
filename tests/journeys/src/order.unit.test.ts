@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { exampleOf, longestFirst } from "./order";
+import { describe, expect, it } from "bun:test";
+import { longestFirst } from "./order";
 import { spec, specForTarget } from "./spec";
 
 describe("longestFirst", () => {
@@ -28,11 +28,5 @@ describe("longestFirst", () => {
     const rows = specForTarget("vps");
     longestFirst(rows);
     expect(rows.map((row) => row.name)).toEqual(specForTarget("vps").map((row) => row.name));
-  });
-});
-
-describe("exampleOf", () => {
-  it("strips the journey module suffix", () => {
-    expect(exampleOf("next.journey.test.ts")).toBe("next");
   });
 });

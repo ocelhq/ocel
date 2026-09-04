@@ -1,14 +1,49 @@
-import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { readFile, rm } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { type Run, settleAccount } from "./account";
 import { currentRunIdentity } from "./identity";
-import { verdictFile } from "./paths";
+import { longestFirst } from "./order";
+import { cellsDir, packageRoot, prepareFile } from "./paths";
 import { pickExamples, requestedPick } from "./pick";
+import type { PrepareFailures } from "./prepare";
 import { type ExampleSpec, examplesNamed, specForTarget } from "./spec";
-import { selectedTarget } from "./targets";
+import { laneWorkers, selectedTarget } from "./targets";
 import type { Target } from "./targets/types";
 
-export type Verdict = { nonce: string; exitCode: number; report: string };
+function runSuite(
+  target: Target,
+  examples: ExampleSpec[],
+  workers: number,
+  env: NodeJS.ProcessEnv,
+): Promise<Run> {
+  const child = spawn(
+    "bun",
+    [
+      "test",
+      `--parallel=${workers}`,
+      `--timeout=${target.legTimeoutMs}`,
+      ...longestFirst(examples).map((example) => `./tests/${example.name}.journey.test.ts`),
+    ],
+    { cwd: packageRoot, stdio: "inherit", env },
+  );
+  return new Promise<Run>((resolve) => {
+    child.on("close", (exitCode, signal) => resolve({ exitCode, signal }));
+  });
+}
+
+async function prepareLane(target: Target, runId: string): Promise<void> {
+  const began = Date.now();
+  let failures: PrepareFailures = {};
+  try {
+    failures = (await target.prepare?.()) ?? {};
+  } catch (error) {
+    failures = { lane: error instanceof Error ? error.message : String(error) };
+  }
+  const file = prepareFile(runId, target.name);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify({ ms: Date.now() - began, failures })}\n`, "utf8");
+}
 
 export async function runJourney(
   target: Target,
@@ -16,48 +51,24 @@ export async function runJourney(
   leftOut: ExampleSpec[] = [],
 ): Promise<number> {
   const runId = currentRunIdentity();
-  const file = verdictFile(runId, target.name);
-  const nonce = randomUUID();
-  await rm(file, { force: true });
+  await rm(cellsDir(runId, target.name), { recursive: true, force: true });
 
-  const child = spawnSync(
-    "pnpm",
-    ["vitest", "run", ...examples.map((row) => `tests/${row.name}.journey.test.ts`)],
-    {
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        OCEL_TARGET: target.name,
-        OCEL_EXAMPLES: examples.map((row) => row.name).join(","),
-        OCEL_JOURNEY_LEFT_OUT: leftOut.map((row) => row.name).join(","),
-        OCEL_JOURNEY_VERDICT_NONCE: nonce,
-      },
-    },
-  );
-  if (child.signal) {
-    process.stderr.write(`\nvitest was killed by ${child.signal}\n`);
-    return 1;
-  }
-  if (child.status !== 0 && child.status !== 1) {
-    process.stderr.write(`\nvitest exited ${child.status}, which is not a test result\n`);
-    return 1;
-  }
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    OCEL_TARGET: target.name,
+    OCEL_EXAMPLES: examples.map((row) => row.name).join(","),
+    OCEL_JOURNEY_LEFT_OUT: leftOut.map((row) => row.name).join(","),
+  };
+  const workers = laneWorkers(target);
 
-  let verdict: Verdict;
-  try {
-    verdict = JSON.parse(await readFile(file, "utf8")) as Verdict;
-  } catch {
-    process.stderr.write(
-      `\nthe run wrote no account at ${file}: the journey never reconciled and the lane is red\n`,
-    );
-    return 1;
-  }
-  if (verdict.nonce !== nonce) {
-    process.stderr.write(`\nthe account at ${file} was written by another run\n`);
-    return 1;
-  }
+  await prepareLane(target, runId);
+  const runStart = Date.now();
+  const run = await runSuite(target, examples, workers, env);
+  const runEnd = Date.now();
+
+  const verdict = await settleAccount({ target, env, run, runStart, runEnd, workers });
   if (verdict.exitCode !== 0) {
-    process.stderr.write(`\n${verdict.report}\n`);
+    process.stderr.write(`\nthe journey account does not reconcile:\n${verdict.report}\n`);
   }
   return verdict.exitCode;
 }
@@ -84,7 +95,7 @@ async function main(): Promise<number> {
   return runJourney(target, chosen, leftOut);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.main) {
   main().then(
     (code) => {
       process.exitCode = code;

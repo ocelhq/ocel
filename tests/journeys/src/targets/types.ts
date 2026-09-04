@@ -1,3 +1,4 @@
+import type { Fetch } from "../contract";
 import type { Evidence } from "../evidence";
 import type { ExpectationEnvironment } from "../expectations/types";
 import type { PrepareFailures } from "../prepare";
@@ -5,7 +6,7 @@ import type { Compute, Edge, ExampleSpec, Leg, Mode, Suite, TargetName } from ".
 
 export type Deployment = {
   baseUrl: (app: string) => string;
-  fetch: typeof fetch;
+  fetch: Fetch;
 };
 
 export type CellContext = {

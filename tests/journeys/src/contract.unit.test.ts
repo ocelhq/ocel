@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { contract, type ContractContext } from "./contract";
 
 const HEALTH = "GET /health answers with the app name";

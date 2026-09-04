@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { appDirs, configTree, treeRoot } from "./ocel";
 import { specByName } from "./spec";
 import type { CellContext } from "./targets/types";

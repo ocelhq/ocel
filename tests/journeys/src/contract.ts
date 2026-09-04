@@ -6,6 +6,8 @@ import { nextCacheRows } from "./nextCache";
 import { nextRoutingRows } from "./nextRouting";
 import type { Leg, Suite } from "./spec";
 
+export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
 export const INITIAL_GREETING = "journey-hello";
 export const REDEPLOY_GREETING = "redeployed";
 export const SECRET_TOKEN = "journey-secret-never-in-a-body";
@@ -21,7 +23,7 @@ export type ContractContext = {
   greeting: string;
   leg: Leg;
   notes: Map<string, string>;
-  fetch: typeof fetch;
+  fetch: Fetch;
 };
 
 export type ContractRow = {
@@ -34,11 +36,11 @@ export function redact(text: string): string {
   return text.split(SECRET_TOKEN).join(REDACTED);
 }
 
-function requestUrl(input: Parameters<typeof fetch>[0]): string {
+function requestUrl(input: Parameters<Fetch>[0]): string {
   return input instanceof Request ? input.url : String(input);
 }
 
-export function secretGuarded(inner: typeof fetch): typeof fetch {
+export function secretGuarded(inner: Fetch): Fetch {
   return async (input, init) => {
     const res = await inner(input, init);
     const bytes = Buffer.from(await res.clone().arrayBuffer());

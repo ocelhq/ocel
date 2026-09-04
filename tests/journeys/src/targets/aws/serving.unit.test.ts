@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
+import { describe, it } from "bun:test";
+import type { Fetch } from "../../contract";
 import { awaitServing } from "./serving";
 
 function clock(timeoutMs: number) {
@@ -14,7 +15,7 @@ function clock(timeoutMs: number) {
   };
 }
 
-function answering(answers: Array<number | string>): typeof fetch {
+function answering(answers: Array<number | string>): Fetch {
   let served = 0;
   return (async (input: unknown) => {
     const answer = answers[served] ?? answers[answers.length - 1];
@@ -24,7 +25,7 @@ function answering(answers: Array<number | string>): typeof fetch {
     }
     assert.equal(String(input), "https://app.example.com/health");
     return new Response(null, { status: answer });
-  }) as unknown as typeof fetch;
+  }) as unknown as Fetch;
 }
 
 const URLS = new Map([["web", "https://app.example.com"]]);
@@ -70,7 +71,7 @@ describe("awaitServing", () => {
 
   it("waits for every app in the cell", async () => {
     const served = await awaitServing(
-      (async () => new Response(null, { status: 200 })) as unknown as typeof fetch,
+      (async () => new Response(null, { status: 200 })) as unknown as Fetch,
       new Map([
         ["web", "https://web.example.com"],
         ["api", "https://api.example.com"],
