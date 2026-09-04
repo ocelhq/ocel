@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { describe, it } from "vitest";
+import { describe, it } from "bun:test";
 import { accountFiles, DEFAULT_REGION, pinnedEnv } from "./account";
 
 const DIR = "/tmp/journeys/aws-account";

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { legOf, timelineOf, type TimelineInput, timingTable } from "./timeline";
 
 const START = 1_000_000;

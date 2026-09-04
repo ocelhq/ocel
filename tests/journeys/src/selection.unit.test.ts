@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { selectionFor } from "./selection";
 import { cellNameOf } from "./spec";
 import { targetNamed } from "./targets";

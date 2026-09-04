@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { evidence } from "./evidence";
 import { cellEnv, SUPPRESS_RESOURCES_ENV } from "./ocel";
 import { type Compute, type Edge, type Mode, specByName } from "./spec";

@@ -30,8 +30,12 @@ export function treeDir(runId: string, target: string, example: string): string 
   return path.join(laneDir(runId, target), "trees", example);
 }
 
-export function verdictFile(runId: string, target: string): string {
-  return path.join(laneDir(runId, target), "verdict.json");
+export function cellsDir(runId: string, target: string): string {
+  return path.join(laneDir(runId, target), "cells");
+}
+
+export function resultsFile(runId: string, target: string, cell: string): string {
+  return path.join(cellsDir(runId, target), `${cell.replace(/\//g, "__")}.jsonl`);
 }
 
 export function prepareFile(runId: string, target: string): string {

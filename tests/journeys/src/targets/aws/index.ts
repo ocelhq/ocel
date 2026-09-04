@@ -2,7 +2,7 @@ import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { AWS_BASE, JOURNEY_CONFIG, writeJourneyConfig } from "../../config";
-import { INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
+import { type Fetch, INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
 import { cellEnv, configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
@@ -28,7 +28,7 @@ const DEFAULT_VPC_TRIES = 30;
 const SERVING_TIMEOUT_MS = 900_000;
 const SERVING_INTERVAL_MS = 5_000;
 
-let dispatching: Promise<typeof fetch> | undefined;
+let dispatching: Promise<Fetch> | undefined;
 
 const EDGE_FEATURES: Record<Edge, string> = {
   "api-gateway": "apigateway-edge",
@@ -78,7 +78,7 @@ function hostnames(cell: CellContext): Map<string, string> {
   );
 }
 
-async function dispatcher(): Promise<typeof fetch> {
+async function dispatcher(): Promise<Fetch> {
   dispatching ??= (async () => {
     const where = await place();
     return where.endpoint ? emulatorFetch(where.endpoint) : authoritativeFetch(zone());
@@ -86,7 +86,7 @@ async function dispatcher(): Promise<typeof fetch> {
   return dispatching;
 }
 
-function deployment(cell: CellContext, dispatch: typeof fetch): Deployment {
+function deployment(cell: CellContext, dispatch: Fetch): Deployment {
   const hosts = hostnames(cell);
   return {
     baseUrl: (app) => {

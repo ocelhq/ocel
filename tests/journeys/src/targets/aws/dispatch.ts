@@ -1,6 +1,7 @@
 import dns from "node:dns";
 import net from "node:net";
-import { Agent, fetch as undiciFetch } from "undici";
+import { Agent, fetch as undiciFetch } from "undici/index.js";
+import type { Fetch } from "../../contract";
 
 export type Address = { hostname: string; port: number };
 
@@ -19,7 +20,7 @@ export function emulatorAddress(endpoint: string): Address {
   return { hostname: url.hostname, port: url.port === "" ? 80 : Number(url.port) };
 }
 
-export function emulatorFetch(endpoint: string): typeof fetch {
+export function emulatorFetch(endpoint: string): Fetch {
   const { hostname, port } = emulatorAddress(endpoint);
   const dispatcher = new Agent({
     connect: (_options, callback) => {
@@ -30,7 +31,7 @@ export function emulatorFetch(endpoint: string): typeof fetch {
   });
   const dispatch = (input: Parameters<typeof undiciFetch>[0], init?: RequestInit) =>
     undiciFetch(input, { ...(init as Parameters<typeof undiciFetch>[1]), dispatcher });
-  return dispatch as unknown as typeof fetch;
+  return dispatch as unknown as Fetch;
 }
 
 export type LookupAnswer = { address: string; family: number };
@@ -147,7 +148,7 @@ function authority(zone: string): Promise<dns.promises.Resolver> {
   return pending;
 }
 
-export function authoritativeFetch(zone: string): typeof fetch {
+export function authoritativeFetch(zone: string): Fetch {
   const lookup = (hostname: string, options: dns.LookupOptions, callback: LookupCallback): void => {
     authority(zone).then(
       (resolver) => lookupVia(resolver, publicAddresses)(hostname, options, callback),
@@ -157,5 +158,5 @@ export function authoritativeFetch(zone: string): typeof fetch {
   const dispatcher = new Agent({ connect: { lookup: lookup as never } });
   const dispatch = (input: Parameters<typeof undiciFetch>[0], init?: RequestInit) =>
     undiciFetch(input, { ...(init as Parameters<typeof undiciFetch>[1]), dispatcher });
-  return dispatch as unknown as typeof fetch;
+  return dispatch as unknown as Fetch;
 }

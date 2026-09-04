@@ -5,7 +5,8 @@
 | `journeys`    | one example on one target, through the real `ocel` binary, over HTTP |
 | `next-compat` | Next.js's own deployment-adapter harness, by workflow dispatch only  |
 
-Unit tests live beside the code they cover, in vitest for TypeScript and `go test` for Go.
+Unit tests live beside the code they cover, in vitest for TypeScript, `bun test` under
+`journeys`, and `go test` for Go.
 The Go provider suites (`TestLive*`) stay in the provider packages and, for the image build
 and the container dry run, in the CLI; the lifecycle suites (`TestLifecycle*`) stay in the
 provider packages alone. Both run from the provider workflows.

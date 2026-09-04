@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "vitest";
+import { describe, it } from "bun:test";
 import { contractTitle, UP_TITLE } from "../plan";
 import { resolve } from "./index";
 import type { Compute, Edge, Gap } from "./types";

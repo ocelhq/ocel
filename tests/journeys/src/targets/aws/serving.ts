@@ -1,3 +1,5 @@
+import type { Fetch } from "../../contract";
+
 export type ServingReport = {
   host: string;
   waitedMs: number;
@@ -13,7 +15,7 @@ export type ServingWait = {
 };
 
 export async function awaitServing(
-  request: typeof fetch,
+  request: Fetch,
   urls: Map<string, string>,
   { timeoutMs, intervalMs, now, sleep }: ServingWait,
 ): Promise<Record<string, ServingReport>> {

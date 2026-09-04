@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { AWS_BASE, journeyZone, renderConfig, shapeFor, VPS_BASE } from "./config";
 import { evidence } from "./evidence";
 import { type Compute, type Edge, specByName } from "./spec";
