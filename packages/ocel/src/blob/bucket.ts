@@ -4,6 +4,7 @@ import {
 } from "../gen/proto/common/links/v1/links_pb.js";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";
+import { unprovisioned, unprovisionedPhase } from "../utils/phase.js";
 import { rpc } from "../utils/rpc.js";
 import type { AnyUploader } from "./types.js";
 
@@ -40,6 +41,10 @@ export class Bucket<
   }
 
   __config(): ResolvedBucketConfig {
+    const phase = unprovisionedPhase();
+    if (phase) {
+      throw unprovisioned(`bucket("${this.name}")`, "__config", phase);
+    }
     return getConfig(this.name, "bucket");
   }
 }

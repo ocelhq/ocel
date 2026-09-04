@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../utils/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
@@ -9,7 +9,12 @@ vi.mock("../utils/rpc", () => ({
 const { bucket } = await import("./bucket.js");
 const { resolveBucketContext } = await import("./bucket-context.js");
 
+beforeEach(() => {
+  vi.stubEnv("OCEL_PHASE", "");
+});
+
 afterEach(() => {
+  vi.unstubAllEnvs();
   delete process.env.OCEL_RESOURCE_BUCKET_storage;
   delete process.env.OCEL_RUNTIME_ADDRESS;
   delete process.env.OCEL_SESSION_TOKEN;

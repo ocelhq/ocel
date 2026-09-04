@@ -1,3 +1,4 @@
+import { unprovisionedPhase, unprovisionedProxy } from "../utils/phase.js";
 import { Postgres, type PostgresConfig } from "./pg.js";
 import { Pool } from "pg";
 
@@ -6,14 +7,9 @@ type PgReturn = Pool & { connectionString: string };
 export function postgres(id: string, config?: PostgresConfig): PgReturn {
   const pg = new Postgres(id, config);
 
-  if (process.env.OCEL_PHASE === "discovery") {
-    return new Proxy({} as PgReturn, {
-      get(_target, prop) {
-        throw new Error(
-          `'postgres("${id}")' cannot be used during discovery: tried to access '${String(prop)}' before the resource was provisioned`,
-        );
-      },
-    });
+  const phase = unprovisionedPhase();
+  if (phase) {
+    return unprovisionedProxy<PgReturn>(`postgres("${id}")`, phase);
   }
 
   const { host, port, database, username, password } = pg.__config();
