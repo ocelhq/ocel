@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "next dev",
+    "start": "next start",
+    "dev": "next dev",
     "build": "next build",
     "typecheck": "tsc --noEmit"
   },

@@ -17,10 +17,10 @@ describe("a multi-app row", () => {
       "--dir",
       "apps/express",
       "run",
-      "start",
+      "dev",
     ]);
-    expect(appCommand(workspace, "next")).toEqual(["pnpm", "--dir", "apps/next", "run", "start"]);
-    expect(appCommand(composite, "web")).toEqual(["pnpm", "--dir", ".", "run", "start"]);
+    expect(appCommand(workspace, "next")).toEqual(["pnpm", "--dir", "apps/next", "run", "dev"]);
+    expect(appCommand(composite, "web")).toEqual(["pnpm", "--dir", ".", "run", "dev"]);
   });
 
   it("migrates where the config sits, since the schema belongs to the project", () => {

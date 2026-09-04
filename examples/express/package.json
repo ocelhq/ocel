@@ -6,6 +6,7 @@
   "scripts": {
     "migrate": "tsx scripts/migrate.ts",
     "start": "tsx src/server.ts",
+    "dev": "tsx src/server.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
