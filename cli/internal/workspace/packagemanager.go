@@ -68,10 +68,12 @@ var behaviours = map[Manager]behaviour{
 		start:      func(l Location) string { return fmt.Sprintf("npm run start -w %s", l.Path) },
 	},
 	YarnBerry: {
-		runner:   "yarn",
-		runtime:  "node",
-		install:  byName(func(l Location) string { return fmt.Sprintf("yarn workspaces focus %s", l.App.Name) }),
-		build:    byName(func(l Location) string { return fmt.Sprintf("yarn workspaces foreach -R -t --from %s run build", l.App.Name) }),
+		runner:  "yarn",
+		runtime: "node",
+		install: byName(func(l Location) string { return fmt.Sprintf("yarn workspaces focus %s", l.App.Name) }),
+		build: byName(func(l Location) string {
+			return fmt.Sprintf("yarn workspaces foreach -R -t --from %s run build", l.App.Name)
+		}),
 		start:    byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run start", l.App.Name) }),
 		replaces: []string{"yarn install --check-cache"},
 	},
