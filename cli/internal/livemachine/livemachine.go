@@ -131,7 +131,7 @@ func (vm Machine) Forward(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the forwarded daemon socket never answered: %v", err)
 		}
-		time.Sleep(time.Second)
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
