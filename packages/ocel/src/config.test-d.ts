@@ -65,12 +65,16 @@ describe("an app's build", () => {
     });
   });
 
-  it("carries no build context, which is always the app's own directory", () => {
+  it("takes the directory the image is built from, and the command that builds the app there", () => {
     defineConfig({
       slug: "shop",
       apps: [
-        // @ts-expect-error the context is the app directory and nothing configures it
-        { name: "api", path: "services/api", compute: "container", build: { context: "../" } },
+        {
+          name: "api",
+          path: "services/api",
+          compute: "container",
+          build: { context: ".", command: "turbo run build --filter=api" },
+        },
       ],
     });
   });
