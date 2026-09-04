@@ -118,14 +118,31 @@ describe("lookupVia", () => {
           throw new Error("the authority was asked about a name it does not serve");
         },
       },
-      async (name) => {
-        asked.push(name);
-        return { address: "203.0.113.7", family: 4 };
+      async (target) => {
+        asked.push(target);
+        return ["203.0.113.7", "203.0.113.8"];
       },
       "web.j-1.ocel.site",
     );
     assert.deepEqual(asked, ["dualstack.elb.amazonaws.com"]);
     assert.deepEqual(settled, { address: "203.0.113.7", family: 4 });
+  });
+
+  it("names the CNAME target when the fallback has no address for it", async () => {
+    const settled = await answered(
+      {
+        resolveCname: async () => ["d-abc123.execute-api.us-east-1.amazonaws.com"],
+        resolve4: async () => {
+          throw new Error("the authority was asked about a name it does not serve");
+        },
+      },
+      async () => [],
+      "web.j-1.ocel.site",
+    );
+    assert.match(
+      "error" in settled ? settled.error.message : "",
+      /d-abc123\.execute-api\.us-east-1\.amazonaws\.com/,
+    );
   });
 
   it("answers from the authority's own A record when no CNAME stands", async () => {
