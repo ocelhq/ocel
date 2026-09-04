@@ -822,6 +822,10 @@ func TestWhatTheDeployLoginHoldsIsTheSameWhicheverArchitectureTheBoxRuns(t *test
 }
 
 func engineStub(t *testing.T, upAt int) string {
+	return engineStubAnswering(t, upAt, upAt)
+}
+
+func engineStubAnswering(t *testing.T, upAt, answersAt int) string {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -829,6 +833,7 @@ func engineStub(t *testing.T, upAt int) string {
 	stub := "#!/bin/sh\n" +
 		"case \"$1\" in\n" +
 		"rm|run|image|pull) exit 0 ;;\n" +
+		"exec) [ " + fmt.Sprint(answersAt) + " -gt 0 ] && [ \"$(wc -l < " + asks + ")\" -ge " + fmt.Sprint(answersAt) + " ] && exit 0 ; exit 1 ;;\n" +
 		"logs) echo 'run: loading initial config' ; echo 'caddy said why it stopped' ; exit 0 ;;\n" +
 		"inspect)\n" +
 		"  echo call >> " + asks + "\n" +
@@ -892,6 +897,19 @@ func TestTheContainerWriteWaitsForTheProxyItJustCreatedToComeUp(t *testing.T) {
 	}
 	if at := asked(t, dir); at < 2 {
 		t.Errorf("the write asked the engine %d times whether the proxy was up, and a container still reported created is one the write returned on rather than waited for", at)
+	}
+}
+
+func TestTheContainerWriteWaitsForTheProxyToAnswerOverItsAdminSocketNotJustToRun(t *testing.T) {
+	t.Parallel()
+
+	dir := engineStubAnswering(t, 1, 3)
+	said, err := writing(t, dir, containerWriting(5, boundFiles(t)))
+	if err != nil {
+		t.Fatalf("the write of a proxy that ran before its admin socket answered = %v\n%s", err, said)
+	}
+	if at := asked(t, dir); at < 3 {
+		t.Errorf("the write asked the engine %d times, and a proxy that runs but does not yet answer over its admin socket is one the first flip would find silent", at)
 	}
 }
 
