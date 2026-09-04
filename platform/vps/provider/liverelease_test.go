@@ -88,6 +88,30 @@ func releasing(p *vps.Provider, held release, retire string, drain time.Duration
 	}, report)
 }
 
+func inflightOn(t *testing.T, vm machine, held release) int {
+	t.Helper()
+	read := strings.TrimSpace(vm.inside(t, "curl -sS -m 5 http://"+held.address+"/inflight"))
+	count, err := strconv.Atoi(read)
+	if err != nil {
+		return -1
+	}
+	return count
+}
+
+func heldOpenAgainst(t *testing.T, vm machine, held release, want int) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if at := inflightOn(t, vm, held); at >= want {
+			return
+		} else if time.Now().After(deadline) {
+			t.Fatalf("%s reports %d requests held open against it after 30s, want %d: a flip made before the request it is meant to cross reaches the upstream proves nothing about a drain",
+				held.physical, at, want)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func servedBy(t *testing.T, vm machine, path string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 http://"+host.ProxyContainer+path))
@@ -174,7 +198,7 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheHeldRequest
 		}
 	}()
 
-	time.Sleep(2 * time.Second)
+	heldOpenAgainst(t, vm, one, 1)
 	began := time.Now()
 	if err := releasing(p, two, one.address, 30*time.Second, nil); err != nil {
 		close(done)
@@ -246,7 +270,7 @@ func TestLiveARequestOutstandingPastTheDrainWindowGetsFiveOhTwo(t *testing.T) {
 		defer group.Done()
 		held = vm.peers(t, "curl -sS -m 60 -o /dev/null -w '%{http_code}' 'http://"+host.ProxyContainer+"/hold?s=25'")
 	}()
-	time.Sleep(2 * time.Second)
+	heldOpenAgainst(t, vm, one, 1)
 
 	warned := &said{}
 	if err := releasing(p, two, one.address, 3*time.Second, warned); err != nil {
@@ -365,7 +389,7 @@ func TestLiveHijackedConnectionsDoNotSurviveADeploy(t *testing.T) {
 			}
 		}
 	}()
-	time.Sleep(3 * time.Second)
+	heldOpenAgainst(t, vm, one, 2)
 
 	warned := &said{}
 	began := time.Now()
