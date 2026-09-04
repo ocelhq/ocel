@@ -2,6 +2,8 @@ package imagebuild_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -230,6 +232,33 @@ func TestScopingAnInstallKeepsTheCachesAndTheSetupRailpackPutAroundIt(t *testing
 	}
 	if len(scoped.Steps) < len(unscoped.Steps) {
 		t.Errorf("the scoped plan has %d steps against %d for an app with no workspace, so scoping dropped a step railpack generated", len(scoped.Steps), len(unscoped.Steps))
+	}
+}
+
+func TestThePlanNeverCopiesWhatTheContextNoLongerCarries(t *testing.T) {
+	root := t.TempDir()
+	for path, body := range map[string]string{
+		"package.json":      `{"name":"solo","scripts":{"start":"node server.js"}}`,
+		"package-lock.json": `{"lockfileVersion":3}`,
+		"server.js":         "listen()\n",
+		"node_modules/better-sqlite3/patches/a.txt": "patch\n",
+		"node_modules/better-sqlite3/package.json":  `{"name":"better-sqlite3"}`,
+	} {
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	plan := planned(t, root)
+
+	for _, src := range plan.copied("install") {
+		if strings.HasPrefix(filepath.ToSlash(src), "node_modules/") {
+			t.Errorf("the install step copies %q, which the build context excludes, so the daemon cannot checksum it and the build fails before it starts", src)
+		}
 	}
 }
 
