@@ -72,6 +72,8 @@ jobs:
       vps: ${{ steps.lanes.outputs.vps }}
       edges: ${{ steps.lanes.outputs.edges }}
       examples: ${{ steps.lanes.outputs.examples }}
+      seed: ${{ steps.lanes.outputs.seed }}
+      touched: ${{ steps.lanes.outputs.touched }}
       real: ${{ steps.lanes.outputs.real }}
     steps:
       - name: Spend the label that asked for this run
@@ -98,6 +100,7 @@ jobs:
           EXAMPLES: ${{ inputs.examples }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
 
@@ -110,6 +113,8 @@ jobs:
 
           forced=${OCEL_JOURNEY_LANES:-}
           real=false
+          seed=
+          touched=
           if [ "$EVENT" = workflow_dispatch ]; then
             real=true
           elif [ "$ACTION" = labeled ] && [ "$LABEL" = journey:real ]; then
@@ -134,6 +139,8 @@ jobs:
             shared='^(cli|packages|frameworks|pkg|sdk|proto|examples|tests/journeys|tests/shared)/'
             shared="$shared"'|^\.github/(actions/|workflows/journey\.yml$)'
             shared="$shared"'|^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$'
+            seed=$PR
+            touched=$(printf '%s\n' "$files" | sed -n 's|^examples/\([^/]*\)/.*|\1|p' | sort -u | paste -sd, -)
             dev=$(hit "$shared"'|^console/(resources|api|auth|db|web)/')
             aws=$(hit "$shared"'|^platform/(aws|edge)/|^scripts/floci\.sh$')
             vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
@@ -151,6 +158,8 @@ jobs:
             echo "vps=$vps"
             echo "edges=$edges"
             echo "examples=$(echo "$EXAMPLES" | tr ' ' ',')"
+            echo "seed=$seed"
+            echo "touched=$touched"
             echo "real=$real"
           } >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
@@ -217,6 +226,8 @@ jobs:
     env:
       OCEL_TARGET: dev
       OCEL_EXAMPLES: ${{ needs.changes.outputs.examples }}
+      OCEL_JOURNEY_SEED: ${{ needs.changes.outputs.seed }}
+      OCEL_JOURNEY_TOUCHED: ${{ needs.changes.outputs.touched }}
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
       OCEL_RESOURCE_POSTGRES_main: '{"name":"main","postgres":{"host":"localhost","port":5432,"database":"postgres","username":"postgres","password":"postgres"}}'
       OCEL_CLOUD_ADMIN_URL: postgres://postgres:postgres@localhost:5433/postgres
@@ -312,6 +323,8 @@ jobs:
     env:
       OCEL_TARGET: aws
       OCEL_EXAMPLES: ${{ needs.changes.outputs.examples }}
+      OCEL_JOURNEY_SEED: ${{ needs.changes.outputs.seed }}
+      OCEL_JOURNEY_TOUCHED: ${{ needs.changes.outputs.touched }}
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       REAL: ${{ needs.changes.outputs.real }}
@@ -417,6 +430,8 @@ jobs:
     env:
       OCEL_TARGET: vps
       OCEL_EXAMPLES: ${{ needs.changes.outputs.examples }}
+      OCEL_JOURNEY_SEED: ${{ needs.changes.outputs.seed }}
+      OCEL_JOURNEY_TOUCHED: ${{ needs.changes.outputs.touched }}
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       VM: ocel-journey-${{ github.run_id }}-${{ github.run_attempt }}

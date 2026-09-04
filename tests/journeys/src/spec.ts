@@ -45,6 +45,7 @@ export type ExampleSpec = {
   dir: string;
   framework?: Framework;
   kind: Kind;
+  group?: string;
   suites: Suite[];
   apps: string[];
   targets?: TargetName[];
@@ -57,6 +58,7 @@ export const spec: ExampleSpec[] = [
     dir: "express",
     framework: "express",
     kind: "composite",
+    group: "node-http",
     suites: ["health", "static", "product", "probes"],
     apps: ["web"],
   },
@@ -65,6 +67,7 @@ export const spec: ExampleSpec[] = [
     dir: "hono",
     framework: "hono",
     kind: "composite",
+    group: "node-http",
     suites: ["health", "static", "product", "probes"],
     apps: ["web"],
   },
@@ -73,6 +76,7 @@ export const spec: ExampleSpec[] = [
     dir: "fastify",
     framework: "fastify",
     kind: "composite",
+    group: "node-http",
     suites: ["health", "static", "product", "probes"],
     apps: ["web"],
   },

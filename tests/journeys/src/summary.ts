@@ -29,7 +29,7 @@ function row(entry: ReportRow): string {
 
 export function summaryTable(
   report: Report,
-  meta: { target: string; environment: string; runId: string },
+  meta: { target: string; environment: string; runId: string; leftOut: string[] },
 ): string {
   const counts = new Map<Verdict, number>();
   for (const entry of report.rows) {
@@ -42,6 +42,7 @@ export function summaryTable(
   return [
     `## journey · ${meta.target} · ${meta.environment} · run ${meta.runId}`,
     "",
+    ...(meta.leftOut.length > 0 ? [`left out this pass: ${meta.leftOut.join(", ")}`, ""] : []),
     tally,
     "",
     "| cell | test | verdict | issue |",

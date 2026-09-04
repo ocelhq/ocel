@@ -83,7 +83,11 @@ export default class JourneyReporter implements Reporter {
       expectations: expectationsFor(environment),
     });
 
-    const table = summaryTable(report, { target: target.name, environment, runId });
+    const leftOut = (process.env.OCEL_JOURNEY_LEFT_OUT ?? "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => name !== "");
+    const table = summaryTable(report, { target: target.name, environment, runId, leftOut });
     const dir = path.join(outputRoot, runId, target.name);
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, "summary.md"), table, "utf8");

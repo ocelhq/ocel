@@ -72,6 +72,17 @@ left behind, and only projects the harness named.
 
 `--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
+A pull request runs one member of each example group, picked by the pull request number, so
+a rerun of the same pull request picks the same member and different pull requests spread
+the coverage; a member whose directory the diff touches always runs. A full run — workflow
+dispatch, or the `journey:real` label — runs every member. To reproduce a pull request's
+pick on a laptop:
+
+```
+OCEL_JOURNEY_SEED=<pull request number> OCEL_JOURNEY_TOUCHED=<dir,dir> \
+  pnpm --filter @ocel-tests/journeys journey
+```
+
 Real clouds are reached by workflow dispatch, or by putting the `journey:real` label on a
 pull request — one shot, the label comes off again as the run starts. From here only
 `scripts/ec2.sh` spends a real account.
