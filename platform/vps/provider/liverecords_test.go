@@ -11,7 +11,7 @@ import (
 
 func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 
 	records := vm.deploying(t).Records()
@@ -38,7 +38,7 @@ func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *te
 
 func TestLiveTheRootRecordsHelperHandsOwnershipToNothingItDidNotCreate(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 
 	const victim = "/tmp/records-victim"
@@ -76,7 +76,7 @@ func TestLiveTheRootRecordsHelperHandsOwnershipToNothingItDidNotCreate(t *testin
 
 func TestLiveARecordAHelperCouldNotHandOverIsARecordItNeverFlipped(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 
 	const failing = "/tmp/records-failing"

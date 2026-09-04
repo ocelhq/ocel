@@ -71,7 +71,7 @@ func unmade(t *testing.T, vm machine) ([]string, string) {
 
 func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	purged(t, vm)
 
 	p := vm.provider(t)

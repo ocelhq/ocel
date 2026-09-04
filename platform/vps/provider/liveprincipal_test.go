@@ -47,7 +47,7 @@ func standsAsDecided(t *testing.T, vm machine) {
 
 func TestLiveTheDeployKeyOptionOverridesTheMirroredKeys(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	vm.forgetsTheDeployLogin(t)
 
 	named := filepath.Join(t.TempDir(), "deploy")
