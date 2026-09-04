@@ -88,7 +88,7 @@ func stillMoving(t *testing.T, planner planning, class providerkit.Class, held a
 func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	vm := live(t)
 	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel "+helperDir)
-	vm.ssh(t, "sudo userdel "+deployLogin+" 2>/dev/null || true")
+	vm.forgetsTheDeployLogin(t)
 
 	p := vm.provider(t)
 	defer closing(t, p)
@@ -198,7 +198,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	}()
 
 	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel "+helperDir+" /etc/sudoers.d/ocel-seal")
-	vm.ssh(t, "sudo userdel "+deployLogin+" 2>/dev/null || true")
+	vm.forgetsTheDeployLogin(t)
 	unattended := providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Unattended: true}
 	if err := bootstrapper.Apply(ctx, unattended, nil); err != nil {
 		t.Fatalf("an unattended apply over a machine carrying none of ocel's own state = %v, want absent-to-present to proceed", err)

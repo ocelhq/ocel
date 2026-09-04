@@ -159,7 +159,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing.T) {
 	vm := live(t)
 	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
-	vm.ssh(t, "sudo userdel "+deployLogin+" 2>/dev/null || true")
+	vm.forgetsTheDeployLogin(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 

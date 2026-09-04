@@ -2,6 +2,7 @@ package vps_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -22,37 +23,92 @@ type machine struct {
 	known  string
 }
 
-func live(t *testing.T) machine {
-	t.Helper()
+var suite machine
+
+const unreachable = "no incus VM in the environment; run under `scripts/incus.sh run <name> -- go test ./...`"
+
+func TestMain(m *testing.M) {
+	code := 1
+	defer func() { os.Exit(code) }()
+
+	if os.Getenv("OCEL_INCUS_ADDR") != "" {
+		reached, err := handed()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "the live suite cannot reach the VM it was handed: %v\n", err)
+			return
+		}
+		suite = reached
+		defer suite.hangsUp()
+	}
+	code = m.Run()
+}
+
+func handed() (machine, error) {
 	vm := machine{
 		addr: os.Getenv("OCEL_INCUS_ADDR"),
 		user: os.Getenv("OCEL_INCUS_USER"),
 		key:  os.Getenv("OCEL_INCUS_KEY"),
 	}
-	if vm.addr == "" || vm.user == "" || vm.key == "" {
-		t.Skip("no incus VM in the environment; run under `scripts/incus.sh run <name> -- go test ./...`")
+	if vm.user == "" || vm.key == "" {
+		return machine{}, errors.New("OCEL_INCUS_ADDR is set and OCEL_INCUS_USER or OCEL_INCUS_KEY is not")
 	}
 
-	dir := t.TempDir()
-	known := filepath.Join(dir, "known_hosts")
-	vm.known = known
+	dir, err := os.MkdirTemp("", "ocel-live-")
+	if err != nil {
+		return machine{}, err
+	}
+	vm.known = filepath.Join(dir, "known_hosts")
 	scanned, err := exec.Command("ssh-keyscan", "-T", "10", vm.addr).Output()
 	if err != nil {
-		t.Fatalf("ssh-keyscan %s: %v", vm.addr, err)
+		return machine{}, fmt.Errorf("ssh-keyscan %s: %w", vm.addr, err)
 	}
 	if len(strings.TrimSpace(string(scanned))) == 0 {
-		t.Fatalf("ssh-keyscan %s offered no host key", vm.addr)
+		return machine{}, fmt.Errorf("ssh-keyscan %s offered no host key", vm.addr)
 	}
-	if err := os.WriteFile(known, scanned, 0o600); err != nil {
-		t.Fatal(err)
+	if err := os.WriteFile(vm.known, scanned, 0o600); err != nil {
+		return machine{}, err
 	}
 
 	vm.config = filepath.Join(dir, "config")
-	written := fmt.Sprintf("Host *\n  UserKnownHostsFile %s\n  GlobalKnownHostsFile /dev/null\n", known)
+	written := fmt.Sprintf("Host *\n  UserKnownHostsFile %s\n  GlobalKnownHostsFile /dev/null\n"+
+		"  ControlMaster auto\n  ControlPath %s\n  ControlPersist %s\n",
+		vm.known, filepath.Join(dir, "%C"), masterIdle)
 	if err := os.WriteFile(vm.config, []byte(written), 0o600); err != nil {
-		t.Fatal(err)
+		return machine{}, err
 	}
-	return vm
+	return vm, nil
+}
+
+const masterIdle = "600"
+
+func (vm machine) hangsUp() {
+	for _, login := range []string{vm.user, deployLogin} {
+		vm.hangsUpAs(login)
+	}
+}
+
+func (vm machine) hangsUpAs(login string) {
+	_ = exec.Command("ssh", "-F", vm.config, "-i", vm.key,
+		"-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+		"-O", "exit", login+"@"+vm.addr).Run()
+}
+
+func (vm machine) forgetsTheDeployLogin(t *testing.T) {
+	t.Helper()
+	vm.hangsUpAs(deployLogin)
+	vm.ssh(t, "sudo userdel "+deployLogin+" 2>/dev/null || true")
+	if left := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); left != "" {
+		t.Fatalf("%s stands as %q after the userdel that was meant to take it, and what a bootstrap creates cannot be read off a box that already carries it",
+			deployLogin, left)
+	}
+}
+
+func live(t *testing.T) machine {
+	t.Helper()
+	if suite.addr == "" {
+		t.Skip(unreachable)
+	}
+	return suite
 }
 
 type shaping func(*vps.Options)
