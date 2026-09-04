@@ -37,6 +37,8 @@ type fakeACM struct {
 	requested   []*acm.RequestCertificateInput
 	minted      map[string]string
 	deleted     []string
+	deletes     int
+	refusals    int
 	listed      [][]acmtypes.CertificateSummary
 	lists       int
 	describes   int
@@ -95,8 +97,12 @@ func (f *fakeACM) DescribeCertificate(_ context.Context, in *acm.DescribeCertifi
 }
 
 func (f *fakeACM) DeleteCertificate(_ context.Context, in *acm.DeleteCertificateInput, _ ...func(*acm.Options)) (*acm.DeleteCertificateOutput, error) {
+	f.deletes++
 	if f.deleteErr != nil {
 		return nil, f.deleteErr
+	}
+	if f.deletes <= f.refusals {
+		return nil, &acmtypes.ResourceInUseException{}
 	}
 	f.deleted = append(f.deleted, aws.ToString(in.CertificateArn))
 	return &acm.DeleteCertificateOutput{}, nil
@@ -332,10 +338,41 @@ func TestIssuerDiscard(t *testing.T) {
 		}
 	})
 
-	t.Run("a certificate still in use is named, not fatal", func(t *testing.T) {
+	t.Run("a certificate the edge has not released yet is deleted once it lets go", func(t *testing.T) {
 		t.Parallel()
 
-		api := &fakeACM{deleteErr: errors.New("ResourceInUseException")}
+		api := &fakeACM{refusals: 2}
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, func(string) {}); err != nil {
+			t.Fatalf("Discard: %v", err)
+		}
+		if api.deletes != 3 {
+			t.Errorf("deletes = %d, want the two refusals ridden out", api.deletes)
+		}
+		if len(api.deleted) != 1 || api.deleted[0] != testARN {
+			t.Errorf("deleted = %v, want %q", api.deleted, testARN)
+		}
+	})
+
+	t.Run("a certificate still in use once the wait runs out is left standing, not fatal", func(t *testing.T) {
+		t.Parallel()
+
+		api := &fakeACM{deleteErr: &acmtypes.ResourceInUseException{}}
+		var said []string
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, func(m string) { said = append(said, m) }); err != nil {
+			t.Fatalf("Discard: %v", err)
+		}
+		if api.deletes < 2 {
+			t.Errorf("deletes = %d, want the refusal retried", api.deletes)
+		}
+		if len(said) == 0 || !strings.Contains(said[len(said)-1], "standing") || !strings.Contains(said[len(said)-1], testARN) {
+			t.Errorf("said = %v, want the certificate left standing named", said)
+		}
+	})
+
+	t.Run("a refusal that is not the edge holding on is fatal", func(t *testing.T) {
+		t.Parallel()
+
+		api := &fakeACM{deleteErr: errors.New("AccessDeniedException")}
 		var said []string
 		err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, func(m string) { said = append(said, m) })
 		if err == nil {

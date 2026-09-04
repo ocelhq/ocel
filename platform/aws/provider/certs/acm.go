@@ -97,6 +97,10 @@ type Issuer struct {
 const (
 	issueAttempts = 60
 	issueEvery    = 10 * time.Second
+
+	releaseBudget  = 2 * time.Minute
+	releaseFirst   = 2 * time.Second
+	releaseLongest = 20 * time.Second
 )
 
 func (i Issuer) attempts() int {
@@ -115,10 +119,14 @@ func (i Issuer) window() time.Duration {
 }
 
 func (i Issuer) hold(ctx context.Context) error {
+	return i.pause(ctx, i.every())
+}
+
+func (i Issuer) pause(ctx context.Context, d time.Duration) error {
 	if i.Wait != nil {
-		return i.Wait(ctx, i.every())
+		return i.Wait(ctx, d)
 	}
-	return waitFor(ctx, i.every())
+	return waitFor(ctx, d)
 }
 
 func waitFor(ctx context.Context, d time.Duration) error {
@@ -291,13 +299,43 @@ func (i Issuer) Discard(ctx context.Context, cert Certificate, say func(string))
 		say(fmt.Sprintf("Leaving certificate %s standing: ocel did not request it, so it is not ocel's to delete", cert.ARN))
 		return nil
 	}
-	if _, err := i.API.DeleteCertificate(ctx, &acm.DeleteCertificateInput{
-		CertificateArn: aws.String(cert.ARN),
-	}); err != nil && !Gone(err) {
-		say(fmt.Sprintf("Leaving certificate %s standing: %v — delete it in ACM once nothing uses it", cert.ARN, err))
-		return fmt.Errorf("delete certificate %s: %w", cert.ARN, err)
+	err := i.delete(ctx, cert)
+	if InUse(err) {
+		say(fmt.Sprintf("Waiting up to %s for the edge to release certificate %s", releaseBudget, cert.ARN))
+		err = i.awaitRelease(ctx, cert)
 	}
-	return nil
+	if err == nil || Gone(err) {
+		return nil
+	}
+	say(fmt.Sprintf("Leaving certificate %s standing: %v — delete it in ACM once nothing uses it", cert.ARN, err))
+	if InUse(err) {
+		return nil
+	}
+	return fmt.Errorf("delete certificate %s: %w", cert.ARN, err)
+}
+
+func (i Issuer) awaitRelease(ctx context.Context, cert Certificate) error {
+	var err error
+	backoff := releaseFirst
+	for waited := time.Duration(0); waited < releaseBudget; {
+		hold := min(backoff, releaseBudget-waited)
+		if err = i.pause(ctx, hold); err != nil {
+			return err
+		}
+		waited += hold
+		if err = i.delete(ctx, cert); !InUse(err) {
+			return err
+		}
+		backoff = min(backoff*2, releaseLongest)
+	}
+	return err
+}
+
+func (i Issuer) delete(ctx context.Context, cert Certificate) error {
+	_, err := i.API.DeleteCertificate(ctx, &acm.DeleteCertificateInput{
+		CertificateArn: aws.String(cert.ARN),
+	})
+	return err
 }
 
 type pending struct{ error }
@@ -310,4 +348,9 @@ func Pending(err error) bool {
 func Gone(err error) bool {
 	var missing *acmtypes.ResourceNotFoundException
 	return errors.As(err, &missing)
+}
+
+func InUse(err error) bool {
+	var busy *acmtypes.ResourceInUseException
+	return errors.As(err, &busy)
 }
