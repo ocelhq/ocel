@@ -19,9 +19,7 @@ on:
       - "examples/**"
       - "tests/journeys/**"
       - "tests/shared/**"
-      - "scripts/floci.sh"
-      - "scripts/incus.sh"
-      - "scripts/ec2.sh"
+      - "scripts/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -61,11 +59,11 @@ env:
   BINARIES: packages/native-lib
 
 jobs:
-  changes:
-    name: lanes this run drives
+  binary:
+    name: the lanes this run drives, and the binaries they drive
     if: ${{ github.event.action != 'closed' && (github.event.action != 'labeled' || github.event.label.name == 'journey:real') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     outputs:
       dev: ${{ steps.lanes.outputs.dev }}
       aws: ${{ steps.lanes.outputs.aws }}
@@ -149,7 +147,7 @@ jobs:
           if [ "$real" = true ]; then
             edges=$(jq -nc --arg edges "${EDGES:-$PR_EDGES}" '[{name: "real", edges: $edges}]')
           else
-            edges=$(printf '%s\n' $PR_EDGES | jq -Rc '{name: ., edges: .}' | jq -sc .)
+            edges=$(jq -nc --argjson aws "$aws" '[{name: "api-gateway", edges: "api-gateway"} | select($aws), {name: "cloudfront-cloudflare", edges: "cloudfront cloudflare"}]')
           fi
 
           {
@@ -163,16 +161,6 @@ jobs:
             echo "real=$real"
           } >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
-
-  binary:
-    name: the binaries every lane drives
-    needs: changes
-    if: ${{ needs.changes.outputs.dev == 'true' || needs.changes.outputs.aws == 'true' || needs.changes.outputs.vps == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
       - uses: ./.github/actions/node-workspace
         with:
@@ -197,8 +185,8 @@ jobs:
           region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
-      - name: The node bundle the CLI binary is built around
-        run: pnpm turbo run build --filter=ocel
+      - name: Build, typecheck and test the workspace
+        run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./examples/**' --filter='!./tests/*'
 
       - name: Build the binaries a journey drives
         run: |
@@ -217,119 +205,35 @@ jobs:
             ${{ env.BINARIES }}/provider-aws-linux-x64/bin/deploy
             ${{ env.BINARIES }}/provider-vps-linux-x64/bin/deploy
 
-  dev:
-    name: dev
-    needs: [changes, binary]
-    if: ${{ needs.changes.outputs.dev == 'true' && needs.binary.result == 'success' }}
+  aws:
+    name: aws (${{ matrix.edge.name }})
+    needs: binary
+    if: ${{ (needs.binary.outputs.aws == 'true' || needs.binary.outputs.dev == 'true') && needs.binary.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: ${{ needs.binary.outputs.real == 'true' && 120 || 75 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        edge: ${{ fromJSON(needs.binary.outputs.edges) }}
+    concurrency:
+      group: ${{ needs.binary.outputs.real == 'true' && 'real-aws' || format('journey-aws-{0}-{1}', github.event.pull_request.number, matrix.edge.name) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
-      OCEL_TARGET: dev
-      OCEL_EXAMPLES: ${{ needs.changes.outputs.examples }}
-      OCEL_JOURNEY_SEED: ${{ needs.changes.outputs.seed }}
-      OCEL_JOURNEY_TOUCHED: ${{ needs.changes.outputs.touched }}
+      OCEL_TARGET: aws
+      OCEL_EXAMPLES: ${{ needs.binary.outputs.examples }}
+      OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
+      OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
+      CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
+      REAL: ${{ needs.binary.outputs.real }}
+      EDGES: ${{ matrix.edge.edges }}
+      EMULATOR: ocel-journey-${{ matrix.edge.name }}-${{ github.run_id }}-${{ github.run_attempt }}
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
       OCEL_RESOURCE_POSTGRES_main: '{"name":"main","postgres":{"host":"localhost","port":5432,"database":"postgres","username":"postgres","password":"postgres"}}'
       OCEL_CLOUD_ADMIN_URL: postgres://postgres:postgres@localhost:5433/postgres
       BETTER_AUTH_SECRET: journey-secret-not-for-production
       BETTER_AUTH_URL: http://localhost:3000
       NEXT_PUBLIC_BETTER_AUTH_URL: http://localhost:3000
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - uses: ./.github/actions/node-workspace
-        with:
-          turbo-token: ${{ secrets.TURBO_TOKEN }}
-          turbo-team: ${{ vars.TURBO_TEAM }}
-
-      - name: The node bundle the examples import
-        run: pnpm turbo run build --filter=ocel
-
-      - name: Take the binaries this lane drives
-        uses: ./.github/actions/journey-binaries
-
-      - name: Start the services the console stands on
-        run: docker compose up -d
-
-      - name: Wait for Postgres to be ready
-        run: |
-          for svc in postgres ocel-cloud; do
-            echo "Waiting for $svc ..."
-            for i in $(seq 1 60); do
-              if docker compose exec -T "$svc" pg_isready -U postgres >/dev/null 2>&1; then
-                echo "$svc is ready"
-                break
-              fi
-              sleep 1
-              if [ "$i" -eq 60 ]; then
-                echo "$svc did not become ready" >&2
-                exit 1
-              fi
-            done
-          done
-
-      - name: Push control-plane schema
-        run: pnpm --filter @console/db db:push
-
-      - name: Start console/web (Next dev)
-        run: |
-          pnpm --filter @console/web dev > /tmp/web.log 2>&1 &
-          echo "Waiting for console/web on :3000 ..."
-          for i in $(seq 1 90); do
-            if curl -s -o /dev/null http://localhost:3000; then
-              echo "console/web is up"
-              break
-            fi
-            sleep 1
-            if [ "$i" -eq 90 ]; then
-              echo "console/web did not start; last log:" >&2
-              cat /tmp/web.log >&2
-              exit 1
-            fi
-          done
-
-      - name: Run the journey
-        run: pnpm --filter @ocel-tests/journeys journey
-
-      - name: Dump console/web log on failure
-        if: failure()
-        run: cat /tmp/web.log || true
-
-      - name: Upload the evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: journey-evidence-dev
-          path: |
-            tests/journeys/output
-            !tests/journeys/output/**/trees/**/node_modules/**
-            !tests/journeys/output/**/trees/**/packages/**
-          if-no-files-found: warn
-
-  aws:
-    name: aws (${{ matrix.edge.name }})
-    needs: [changes, binary]
-    if: ${{ needs.changes.outputs.aws == 'true' && needs.binary.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ needs.changes.outputs.real == 'true' && 120 || 45 }}
-    strategy:
-      fail-fast: false
-      matrix:
-        edge: ${{ fromJSON(needs.changes.outputs.edges) }}
-    concurrency:
-      group: ${{ needs.changes.outputs.real == 'true' && 'real-aws' || format('journey-aws-{0}-{1}', github.event.pull_request.number, matrix.edge.name) }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
-    env:
-      OCEL_TARGET: aws
-      OCEL_EXAMPLES: ${{ needs.changes.outputs.examples }}
-      OCEL_JOURNEY_SEED: ${{ needs.changes.outputs.seed }}
-      OCEL_JOURNEY_TOUCHED: ${{ needs.changes.outputs.touched }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
-      CLOUDFLARE_API_TOKEN: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
-      REAL: ${{ needs.changes.outputs.real }}
-      EDGES: ${{ matrix.edge.edges }}
-      EMULATOR: ocel-journey-${{ matrix.edge.name }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -346,11 +250,11 @@ jobs:
         uses: ./.github/actions/journey-binaries
 
       - name: Pull the emulator this lane deploys into
-        if: ${{ needs.changes.outputs.real != 'true' }}
+        if: ${{ needs.binary.outputs.aws == 'true' && needs.binary.outputs.real != 'true' }}
         run: docker pull "$OCEL_FLOCI_IMAGE"
 
       - name: Assume the session that may spend the real account
-        if: ${{ needs.changes.outputs.real == 'true' }}
+        if: ${{ needs.binary.outputs.real == 'true' }}
         uses: ./.github/actions/real-aws-session
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -365,7 +269,7 @@ jobs:
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Name the account and the zone this run may touch
-        if: ${{ needs.changes.outputs.real == 'true' }}
+        if: ${{ needs.binary.outputs.real == 'true' }}
         env:
           EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           ZONE: ${{ vars.E2E_PREVIEW_DOMAIN }}
@@ -380,10 +284,11 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Reclaim what a run that died left in the account
-        if: ${{ needs.changes.outputs.real == 'true' }}
+        if: ${{ needs.binary.outputs.real == 'true' }}
         run: pnpm --filter @ocel-tests/journeys sweep --target aws
 
       - name: Run the journey on every edge this cell holds
+        if: ${{ needs.binary.outputs.aws == 'true' }}
         run: |
           set -uo pipefail
           status=0
@@ -401,11 +306,65 @@ jobs:
           exit $status
 
       - name: No emulator left behind
-        if: always()
+        if: ${{ always() && needs.binary.outputs.aws == 'true' }}
         run: |
           for edge in $EDGES; do
             scripts/floci.sh destroy "$EMULATOR-$edge" || echo "could not destroy $EMULATOR-$edge"
           done
+
+      - name: Start the services the console stands on
+        if: ${{ !cancelled() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        run: docker compose up -d
+
+      - name: Wait for Postgres to be ready
+        if: ${{ !cancelled() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        run: |
+          for svc in postgres ocel-cloud; do
+            echo "Waiting for $svc ..."
+            for i in $(seq 1 60); do
+              if docker compose exec -T "$svc" pg_isready -U postgres >/dev/null 2>&1; then
+                echo "$svc is ready"
+                break
+              fi
+              sleep 1
+              if [ "$i" -eq 60 ]; then
+                echo "$svc did not become ready" >&2
+                exit 1
+              fi
+            done
+          done
+
+      - name: Push control-plane schema
+        if: ${{ !cancelled() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        run: pnpm --filter @console/db db:push
+
+      - name: Start console/web (Next dev)
+        if: ${{ !cancelled() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        run: |
+          pnpm --filter @console/web dev > /tmp/web.log 2>&1 &
+          echo "Waiting for console/web on :3000 ..."
+          for i in $(seq 1 90); do
+            if curl -s -o /dev/null http://localhost:3000; then
+              echo "console/web is up"
+              break
+            fi
+            sleep 1
+            if [ "$i" -eq 90 ]; then
+              echo "console/web did not start; last log:" >&2
+              cat /tmp/web.log >&2
+              exit 1
+            fi
+          done
+
+      - name: Run the dev journey
+        if: ${{ !cancelled() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        env:
+          OCEL_TARGET: dev
+        run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: Dump console/web log on failure
+        if: ${{ failure() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        run: cat /tmp/web.log || true
 
       - name: Upload the evidence
         if: always()
@@ -420,20 +379,20 @@ jobs:
 
   vps:
     name: vps
-    needs: [changes, binary]
-    if: ${{ needs.changes.outputs.vps == 'true' && needs.binary.result == 'success' }}
+    needs: binary
+    if: ${{ needs.binary.outputs.vps == 'true' && needs.binary.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ needs.changes.outputs.real == 'true' && 90 || 45 }}
+    timeout-minutes: ${{ needs.binary.outputs.real == 'true' && 90 || 45 }}
     concurrency:
-      group: ${{ needs.changes.outputs.real == 'true' && 'real-vps' || format('journey-vps-{0}', github.event.pull_request.number) }}
+      group: ${{ needs.binary.outputs.real == 'true' && 'real-vps' || format('journey-vps-{0}', github.event.pull_request.number) }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
       OCEL_TARGET: vps
-      OCEL_EXAMPLES: ${{ needs.changes.outputs.examples }}
-      OCEL_JOURNEY_SEED: ${{ needs.changes.outputs.seed }}
-      OCEL_JOURNEY_TOUCHED: ${{ needs.changes.outputs.touched }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
-      CLOUDFLARE_API_TOKEN: ${{ needs.changes.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
+      OCEL_EXAMPLES: ${{ needs.binary.outputs.examples }}
+      OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
+      OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
+      CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       VM: ocel-journey-${{ github.run_id }}-${{ github.run_attempt }}
       BOX: journey-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -441,7 +400,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup the incus host
-        if: ${{ needs.changes.outputs.real != 'true' }}
+        if: ${{ needs.binary.outputs.real != 'true' }}
         uses: ./.github/actions/incus-vm
         with:
           gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
@@ -449,20 +408,20 @@ jobs:
           gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
       - uses: ./.github/actions/node-workspace
-        if: ${{ needs.changes.outputs.real == 'true' }}
+        if: ${{ needs.binary.outputs.real == 'true' }}
         with:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: The node bundle the examples import
-        if: ${{ needs.changes.outputs.real == 'true' }}
+        if: ${{ needs.binary.outputs.real == 'true' }}
         run: pnpm turbo run build --filter=ocel
 
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries
 
       - name: Bring up the box this lane deploys to
-        if: ${{ needs.changes.outputs.real != 'true' }}
+        if: ${{ needs.binary.outputs.real != 'true' }}
         run: |
           set -euo pipefail
           sg incus-admin -c "scripts/incus.sh create $VM"
@@ -474,11 +433,12 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Assume the session that may spend the real account
-        if: ${{ needs.changes.outputs.real == 'true' }}
+        if: ${{ needs.binary.outputs.real == 'true' }}
         uses: ./.github/actions/real-aws-session
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
           role-session-name: ocel-journey-vps-${{ github.run_id }}
@@ -488,7 +448,7 @@ jobs:
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Name the account this run may touch
-        if: ${{ needs.changes.outputs.real == 'true' }}
+        if: ${{ needs.binary.outputs.real == 'true' }}
         env:
           EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           REGION: ${{ vars.E2E_AWS_REGION }}
@@ -500,11 +460,11 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Reclaim boxes a run that died left behind
-        if: ${{ needs.changes.outputs.real == 'true' }}
+        if: ${{ needs.binary.outputs.real == 'true' }}
         run: scripts/ec2.sh sweep
 
       - name: Bring up the box this lane deploys to
-        if: ${{ needs.changes.outputs.real == 'true' }}
+        if: ${{ needs.binary.outputs.real == 'true' }}
         run: |
           set -euo pipefail
           eval "$(scripts/ec2.sh create "$BOX")"
@@ -525,11 +485,11 @@ jobs:
           docker buildx du 2>/dev/null | tail -n 3 || true
 
       - name: No VM left behind
-        if: ${{ always() && needs.changes.outputs.real != 'true' }}
+        if: ${{ always() && needs.binary.outputs.real != 'true' }}
         run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
 
       - name: No box left behind
-        if: ${{ always() && needs.changes.outputs.real == 'true' }}
+        if: ${{ always() && needs.binary.outputs.real == 'true' }}
         run: scripts/ec2.sh destroy "$BOX" || echo "could not destroy $BOX"
 
       - name: Upload the evidence
