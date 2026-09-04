@@ -152,7 +152,7 @@ cmd_bake() {
     cmd_create "$name" > /dev/null
     trap 'discard_half_made "'"$name"'" $?' EXIT
     cmd_ssh "$name" "$@"
-    cmd_ssh "$name" sudo cloud-init clean --logs --configs network
+    cmd_ssh "$name" 'sudo cloud-init clean --logs --configs network && sudo truncate -s 0 /etc/machine-id && sudo rm -f /var/lib/dbus/machine-id'
     incus stop "$name"
     trap - EXIT
 }
