@@ -46,10 +46,7 @@ export type AuthoritativeResolver = {
   resolve4: (hostname: string) => Promise<string[]>;
 };
 
-export type FallbackLookup = (
-  hostname: string,
-  options: { all?: boolean },
-) => Promise<LookupAnswer | LookupAnswer[]>;
+export type FallbackLookup = (target: string) => Promise<string[]>;
 
 export function pickAnswer(
   hostname: string,
@@ -89,7 +86,11 @@ export function lookupVia(resolver: AuthoritativeResolver, fallbackLookup: Fallb
     void (async () => {
       const target = await cnameTarget(resolver, hostname);
       if (target) {
-        return fallbackLookup(target, { all });
+        const addresses = await fallbackLookup(target);
+        if (addresses.length === 0) {
+          throw new Error(`${target} has no address at the public resolvers`);
+        }
+        return pickAnswer(target, addresses, all);
       }
       return pickAnswer(hostname, await resolver.resolve4(hostname), all);
     })().then(
@@ -103,6 +104,26 @@ export function lookupVia(resolver: AuthoritativeResolver, fallbackLookup: Fallb
       (error) => callback(error as NodeJS.ErrnoException),
     );
   };
+}
+
+const publicServers = ["1.1.1.1", "1.0.0.1", "8.8.8.8"];
+
+let publicResolver: dns.promises.Resolver | undefined;
+
+async function publicAddresses(target: string): Promise<string[]> {
+  if (!publicResolver) {
+    publicResolver = new dns.promises.Resolver();
+    publicResolver.setServers(publicServers);
+  }
+  try {
+    return await publicResolver.resolve4(target);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENODATA" || code === "ENOTFOUND") {
+      return [];
+    }
+    throw error;
+  }
 }
 
 const authorities = new Map<string, Promise<dns.promises.Resolver>>();
@@ -129,10 +150,7 @@ function authority(zone: string): Promise<dns.promises.Resolver> {
 export function authoritativeFetch(zone: string): typeof fetch {
   const lookup = (hostname: string, options: dns.LookupOptions, callback: LookupCallback): void => {
     authority(zone).then(
-      (resolver) =>
-        lookupVia(resolver, (name, opts) =>
-          dns.promises.lookup(name, opts as dns.LookupOneOptions),
-        )(hostname, options, callback),
+      (resolver) => lookupVia(resolver, publicAddresses)(hostname, options, callback),
       (error) => callback(error as NodeJS.ErrnoException),
     );
   };
