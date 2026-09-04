@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { reconcile } from "./reconcile";
 import { journeyVerdict, summaryTable } from "./summary";
 
-const ISSUE = "https://github.com/ocelhq/ocel/issues/851";
+const GAP = { id: "no-streamed-body", reason: "the body never arrives", issue: 851 };
 
 describe("summary table", () => {
   const report = reconcile({
@@ -14,7 +14,7 @@ describe("summary table", () => {
       { cell: "express/web", title: "up", outcome: "passed" },
       { cell: "express/web", title: "GET /health | answers", outcome: "failed" },
     ],
-    expectations: { "express/web": { "GET /health | answers": ISSUE } },
+    expectations: { "express/web": { "GET /health | answers": [GAP] } },
   });
   const table = summaryTable(report, {
     target: "dev",
@@ -37,7 +37,7 @@ describe("summary table", () => {
   });
 
   it("links the issue that owns a red cell", () => {
-    expect(table).toContain(`[#851](${ISSUE})`);
+    expect(table).toContain("no-streamed-body [#851](https://github.com/ocelhq/ocel/issues/851)");
   });
 
   it("says nothing about a pick when the pass ran everything", () => {

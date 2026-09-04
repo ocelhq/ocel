@@ -87,11 +87,13 @@ Real clouds are reached by workflow dispatch, or by putting the `journey:real` l
 pull request — one shot, the label comes off again as the run starts. From here only
 `scripts/ec2.sh` spends a real account.
 
-A cell that is expected to fail is listed in `journeys/src/expectations/<environment>.ts`
-under the issue that owns the gap, and un-listed in the pull request that fixes it. The
-account is exact in both directions: a listed cell that passes fails the run, an unlisted
-cell that fails fails the run, and a skipped, `todo` or `only` test fails the run whatever
-the file says.
+Every known gap is one entry in `journeys/src/expectations/gaps.ts`: a slug, a reason,
+the issue that owns it when one does, and the environments, edges, cells and tests it
+affects. A test can sit under several gaps and a gap under many tests; the run resolves the
+list for its own environment. A gap is un-listed in the pull request that fixes it. The
+account is exact in both directions: a listed test that passes fails the run, an unlisted
+test that fails fails the run, and a skipped, `todo` or `only` test fails the run whatever
+the list says.
 
 Evidence and the run's account land under `journeys/output/`, which is untracked and
 uploaded as a workflow artifact.

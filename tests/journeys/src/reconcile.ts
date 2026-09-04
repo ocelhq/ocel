@@ -1,4 +1,4 @@
-import type { Expectations } from "./expectations/types";
+import type { Expectations, Listed } from "./expectations/types";
 import { type PlannedTest, UP_TITLE } from "./plan";
 import type { Leg } from "./spec";
 
@@ -26,7 +26,7 @@ export type ReportRow = {
   title: string;
   leg?: Leg;
   verdict: Verdict;
-  issue?: string;
+  listed: Listed[];
   error?: string;
 };
 
@@ -44,11 +44,7 @@ const FAILING_VERDICTS: ReadonlySet<Verdict> = new Set<Verdict>([
   "unplanned",
 ]);
 
-const DISABLED: ReadonlySet<TestOutcome> = new Set<TestOutcome>([
-  "skipped",
-  "todo",
-  "only",
-]);
+const DISABLED: ReadonlySet<TestOutcome> = new Set<TestOutcome>(["skipped", "todo", "only"]);
 
 export function exitCodeFor(verdicts: Iterable<Verdict>): number {
   for (const verdict of verdicts) {
@@ -65,11 +61,7 @@ function key(cell: string, title: string): string {
 
 type Blocking = "none" | "up-failed" | "up-listed";
 
-function verdictFor(
-  result: TestResult | undefined,
-  issue: string | undefined,
-  blocking: Blocking,
-): Verdict {
+function verdictFor(result: TestResult | undefined, gaps: number, blocking: Blocking): Verdict {
   const listed = blocking === "up-listed";
   if (!result) {
     return listed ? "blocked" : "never-ran";
@@ -78,12 +70,12 @@ function verdictFor(
     return "disabled";
   }
   if (result.outcome === "failed") {
-    if (issue) {
+    if (gaps > 0) {
       return "expected-failure";
     }
     return blocking === "none" ? "unexpected-failure" : "blocked";
   }
-  if (issue) {
+  if (gaps > 0) {
     return listed ? "ok" : "listed-and-passed";
   }
   return "ok";
@@ -100,7 +92,10 @@ function blockingByCell(
     if (up?.outcome !== "failed") {
       continue;
     }
-    blocking.set(cell, expectations[cell]?.[UP_TITLE] ? "up-listed" : "up-failed");
+    blocking.set(
+      cell,
+      (expectations[cell]?.[UP_TITLE]?.length ?? 0) > 0 ? "up-listed" : "up-failed",
+    );
   }
   return blocking;
 }
@@ -118,15 +113,15 @@ export function reconcile(input: {
     const id = key(entry.cell, entry.title);
     seen.add(id);
     const result = byKey.get(id);
-    const issue = input.expectations[entry.cell]?.[entry.title];
+    const listed = input.expectations[entry.cell]?.[entry.title] ?? [];
     const downstream: Blocking =
       entry.title === UP_TITLE ? "none" : (blocking.get(entry.cell) ?? "none");
     return {
       cell: entry.cell,
       title: entry.title,
       leg: entry.leg,
-      verdict: verdictFor(result, issue, downstream),
-      issue,
+      verdict: verdictFor(result, listed.length, downstream),
+      listed,
       error: result?.error,
     };
   });
@@ -137,6 +132,7 @@ export function reconcile(input: {
         cell: result.cell,
         title: result.title,
         verdict: "unplanned",
+        listed: [],
         error: result.error,
       });
     }

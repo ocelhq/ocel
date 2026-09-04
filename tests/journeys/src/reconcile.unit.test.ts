@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { UP_TITLE } from "./plan";
 import { exitCodeFor, reconcile, type TestOutcome, type TestResult } from "./reconcile";
 
-const ISSUE = "https://github.com/ocelhq/ocel/issues/851";
+const GAP = { id: "no-streamed-body", reason: "the body never arrives", issue: 851 };
 
 const planned = [
   { cell: "express/web", title: UP_TITLE, leg: "up" as const },
@@ -31,18 +31,18 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results,
-      expectations: { "express/web": { "GET /health answers": ISSUE } },
+      expectations: { "express/web": { "GET /health answers": [GAP] } },
     });
     expect(report.failed).toBe(false);
     const row = report.rows.find((entry) => entry.title === "GET /health answers");
-    expect(row).toMatchObject({ verdict: "expected-failure", issue: ISSUE });
+    expect(row).toMatchObject({ verdict: "expected-failure", listed: [GAP] });
   });
 
   it("fails when a listed test passes", () => {
     const report = reconcile({
       planned,
       results: allRan(),
-      expectations: { "express/web": { "GET /health answers": ISSUE } },
+      expectations: { "express/web": { "GET /health answers": [GAP] } },
     });
     expect(report.failed).toBe(true);
     expect(report.failures.map((row) => row.verdict)).toContain("listed-and-passed");
@@ -62,7 +62,7 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results,
-      expectations: { "express/web": { "GET /health answers": ISSUE } },
+      expectations: { "express/web": { "GET /health answers": [GAP] } },
     });
     expect(report.failed).toBe(true);
   });
@@ -85,7 +85,7 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results: [result(UP_TITLE, "failed")],
-      expectations: { "express/web": { [UP_TITLE]: ISSUE } },
+      expectations: { "express/web": { [UP_TITLE]: [GAP] } },
     });
     expect(report.failed).toBe(false);
     expect(report.rows.map((row) => row.verdict)).toEqual([
@@ -101,7 +101,7 @@ describe("reconciliation", () => {
       result("destroy", "failed"),
       result(UP_TITLE, "failed"),
     ];
-    const expectations = { "express/web": { [UP_TITLE]: ISSUE } };
+    const expectations = { "express/web": { [UP_TITLE]: [GAP] } };
     for (const ordered of [results, [...results].reverse()]) {
       const report = reconcile({ planned, results: ordered, expectations });
       expect(report.rows.map((row) => row.verdict)).toEqual([
@@ -143,7 +143,7 @@ describe("reconciliation", () => {
       const blocked = reconcile({
         planned,
         results: [result(UP_TITLE, "failed"), result("GET /health answers", outcome)],
-        expectations: { "express/web": { [UP_TITLE]: ISSUE } },
+        expectations: { "express/web": { [UP_TITLE]: [GAP] } },
       });
       expect(blocked.failures.map((row) => row.verdict)).toEqual(["disabled"]);
       expect(exitCodeFor(blocked.rows.map((row) => row.verdict))).toBe(1);
@@ -193,7 +193,9 @@ describe("a multi-app cell", () => {
       verdict: "unexpected-failure",
     });
     expect(
-      report.rows.filter((row) => row.cell !== "workspace/next").every((row) => row.verdict === "ok"),
+      report.rows
+        .filter((row) => row.cell !== "workspace/next")
+        .every((row) => row.verdict === "ok"),
     ).toBe(true);
   });
 
@@ -206,12 +208,14 @@ describe("a multi-app cell", () => {
         ran("express", "GET /health answers", "passed"),
         ran("hono", "GET /health answers", "passed"),
       ],
-      expectations: { "workspace/next": { "GET /health answers": ISSUE } },
+      expectations: { "workspace/next": { "GET /health answers": [GAP] } },
     });
     expect(report.failed).toBe(false);
-    expect(report.rows.find((row) => row.cell === "workspace/next" && row.issue)).toMatchObject({
+    expect(
+      report.rows.find((row) => row.cell === "workspace/next" && row.listed.length > 0),
+    ).toMatchObject({
       verdict: "expected-failure",
-      issue: ISSUE,
+      listed: [GAP],
     });
   });
 });
