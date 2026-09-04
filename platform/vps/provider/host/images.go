@@ -183,8 +183,17 @@ func (h *Host) LoadImage(ctx context.Context, coordinate string, tar io.Reader) 
 	}
 	if !held {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"%s took the image stream and answers to no %s afterwards, so nothing can be released under that coordinate: %s",
-			h.named(), coordinate, strings.TrimSpace(said))
+			"%s took the image stream and answers to no %s afterwards, so nothing can be released under that coordinate: %s\nwhat the box's engine says about it:\n%s",
+			h.named(), coordinate, strings.TrimSpace(said), h.said(ctx, loadEvidenceCommand(), elevation))
 	}
 	return strings.TrimSpace(said), nil
+}
+
+func loadEvidenceCommand() string {
+	return strings.Join([]string{
+		"journalctl -u docker.service -u containerd.service --no-pager -o short-iso -n 60 2>&1 | tail -n 60",
+		"echo '--- disk'; df -h /var/lib/docker /var/lib/containerd 2>&1",
+		"echo '--- memory'; free -m 2>&1",
+		"echo '--- images'; docker system df 2>&1",
+	}, "\n") + "\n"
 }
