@@ -110,7 +110,7 @@ func SetUpDeployFixture(t *testing.T) (root, sockPath string) {
 	root = t.TempDir()
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
-  slug: "test-app",
+  slug: "`+FixtureSlug+`",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
 };
@@ -181,9 +181,11 @@ func StubBuild(deps *cmddeps.Deps, functions []manifestbuilder.Function) {
 	StubRecordedDeploymentIDs(deps)
 }
 
+const FixtureSlug = "test-app"
+
 func FixtureImage(app string) string {
 	sum := sha256.Sum256([]byte("ocel-test-image/" + app))
-	return "ocel/" + app + "@sha256:" + hex.EncodeToString(sum[:])
+	return "ocel/" + FixtureSlug + "/" + app + "@sha256:" + hex.EncodeToString(sum[:])
 }
 
 func StubAppImages(deps *cmddeps.Deps, apps ...string) {
@@ -216,7 +218,7 @@ func WriteUsageMonorepo(t *testing.T, root string) {
 
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
-  slug: "test-app",
+  slug: "`+FixtureSlug+`",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "express" }],
@@ -273,7 +275,7 @@ func writeEdgeConfig(t *testing.T, root, declaration string) {
 
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
-  slug: "test-app",
+  slug: "`+FixtureSlug+`",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "express" }],

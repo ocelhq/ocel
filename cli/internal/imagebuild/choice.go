@@ -11,6 +11,7 @@ import (
 const DockerfileName = "Dockerfile"
 
 type App struct {
+	Slug       string
 	Name       string
 	Workspace  workspace.Location
 	Configured string

@@ -10,7 +10,7 @@ import (
 const someDigest = "sha256:30b585f5c19dd011bedba3bd1ca35d5b53d9db693b3f36295a09fa0a8d77c239"
 
 func TestTheImageIsNamedAfterTheAppAndAddressedByItsDigest(t *testing.T) {
-	image, err := imageFor("Web API", someDigest)
+	image, err := imageFor("Shop", "Web API", someDigest)
 	if err != nil {
 		t.Fatalf("imageFor() = %v", err)
 	}
@@ -18,26 +18,26 @@ func TestTheImageIsNamedAfterTheAppAndAddressedByItsDigest(t *testing.T) {
 	if image.Name != "web-api" {
 		t.Errorf("the image's repository is %q, want the app's own name, which is what a registry is told to hold", image.Name)
 	}
-	if image.Repository != "ocel/web-api" {
-		t.Errorf("the image's repository is %q, want one derived from the app's own name and marked as ocel's", image.Repository)
+	if image.Repository != "ocel/shop/web-api" {
+		t.Errorf("the image's repository is %q, want one scoped to the project and marked as ocel's: two projects that both name an app web share one repository, and a sweep of either removes the other's images", image.Repository)
 	}
 	if image.Tag != "sha256-"+strings.TrimPrefix(someDigest, "sha256:") {
 		t.Errorf("the image's tag is %q, want the digest in the form a docker tag may take", image.Tag)
 	}
-	if want := "ocel/web-api@" + someDigest; image.Ref != want {
+	if want := "ocel/shop/web-api@" + someDigest; image.Ref != want {
 		t.Errorf("the image's ref is %q, want %q, the one coordinate a release is pinned to", image.Ref, want)
 	}
 }
 
 func TestAnAppNameNoRepositoryCanBeDerivedFromIsRefusedAtTheCoordinate(t *testing.T) {
-	if _, err := imageFor(strings.Repeat("a", maxRepository), someDigest); err == nil {
+	if _, err := imageFor("shop", strings.Repeat("a", maxRepository), someDigest); err == nil {
 		t.Error("imageFor() named a repository longer than docker holds, so the build fails at the daemon rather than at the coordinate")
 	}
 }
 
 func TestAnAppNamedInSymbolsAloneIsStillGivenARepository(t *testing.T) {
 	for _, app := range []string{"", "***", "-", "9lives"} {
-		image, err := imageFor(app, someDigest)
+		image, err := imageFor("shop", app, someDigest)
 		if err != nil {
 			t.Errorf("imageFor(%q) = %v, want a repository derived from what the name leaves", app, err)
 			continue
@@ -50,7 +50,7 @@ func TestAnAppNamedInSymbolsAloneIsStillGivenARepository(t *testing.T) {
 
 func TestAnImageWithNoDigestIsRefusedRatherThanNamedAfterNothing(t *testing.T) {
 	for _, digest := range []string{"", "latest", "sha256:short", "md5:30b585f5c19dd011bedba3bd1ca35d5b53d9db693b3f36295a09fa0a8d77c239"} {
-		if _, err := imageFor("web", digest); err == nil {
+		if _, err := imageFor("shop", "web", digest); err == nil {
 			t.Errorf("imageFor(%q) succeeded, so a release could be pinned to something that is not a digest", digest)
 		}
 	}

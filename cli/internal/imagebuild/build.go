@@ -63,7 +63,7 @@ func (b Builder) Build(ctx context.Context, app App) (Image, error) {
 		return Image{}, fmt.Errorf("build %s: %w", app.Name, err)
 	}
 
-	image, err := imageFor(app.Name, resp.ExporterResponse[exptypes.ExporterImageDigestKey])
+	image, err := imageFor(app.Slug, app.Name, resp.ExporterResponse[exptypes.ExporterImageDigestKey])
 	if err != nil {
 		return Image{}, err
 	}
