@@ -502,6 +502,13 @@ jobs:
       - name: Run the journey
         run: pnpm --filter @ocel-tests/journeys journey
 
+      - name: What the runner's daemon holds after the lane
+        if: always()
+        run: |
+          df -h / || true
+          docker system df || true
+          docker buildx du 2>/dev/null | tail -n 3 || true
+
       - name: No VM left behind
         if: ${{ always() && needs.changes.outputs.real != 'true' }}
         run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
