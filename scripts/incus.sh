@@ -18,8 +18,12 @@ usage: scripts/incus.sh <command> [args]
   info <name>            print OCEL_INCUS_{NAME,ADDR,USER,KEY}= lines (eval-able)
   ssh <name> [cmd...]    SSH into the VM
   destroy <name>         delete the VM (incus delete -f), idempotent
-  run <name> -- cmd...   create, run cmd with OCEL_INCUS_* exported,
-                         destroy on exit no matter what
+  bake <name> -- cmd...  create, run cmd on the VM over SSH, then stop it
+                         ready to be cloned
+  clone <base> <name>    copy a baked VM, start it, wait for SSH, print info
+  run [--from <base>] <name> -- cmd...
+                         create (or clone <base>), run cmd with OCEL_INCUS_*
+                         exported, destroy on exit no matter what
 EOF
     exit 2
 }
@@ -136,6 +140,37 @@ discard_half_made() {
     return 0
 }
 
+cmd_bake() {
+    local name=$1
+    shift
+    [ "${1:-}" = "--" ] || usage
+    shift
+    [ $# -gt 0 ] || usage
+    trap 'discard_half_made "'"$name"'" $?' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    cmd_create "$name" > /dev/null
+    trap 'discard_half_made "'"$name"'" $?' EXIT
+    cmd_ssh "$name" "$@"
+    cmd_ssh "$name" sudo cloud-init clean --logs --configs network
+    incus stop "$name"
+    trap - EXIT
+}
+
+cmd_clone() {
+    local base=$1 name=$2
+    ensure_key
+    trap 'discard_half_made "'"$name"'" $?' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    incus copy "$base" "$name"
+    incus start "$name"
+    local addr
+    addr=$(wait_ssh "$name")
+    trap - EXIT
+    print_info "$name" "$addr"
+}
+
 cmd_restore() {
     local name=$1
     incus stop -f "$name" 2>/dev/null || true
@@ -170,6 +205,12 @@ cmd_destroy() {
 }
 
 cmd_run() {
+    local base=""
+    if [ "${1:-}" = "--from" ]; then
+        base=${2:-}
+        [ -n "$base" ] || usage
+        shift 2
+    fi
     local name=$1
     shift
     [ "${1:-}" = "--" ] || usage
@@ -179,7 +220,11 @@ cmd_run() {
     trap 'exit 130' INT
     trap 'exit 143' TERM
     local addr
-    addr=$(cmd_create "$name" | sed -n 's/^OCEL_INCUS_ADDR=//p')
+    if [ -n "$base" ]; then
+        addr=$(cmd_clone "$base" "$name" | sed -n 's/^OCEL_INCUS_ADDR=//p')
+    else
+        addr=$(cmd_create "$name" | sed -n 's/^OCEL_INCUS_ADDR=//p')
+    fi
     [ -n "$addr" ] || die "$name: created without an address, so there is nothing to hand the command"
     OCEL_INCUS_NAME=$name \
         OCEL_INCUS_ADDR=$addr \
@@ -194,6 +239,8 @@ shift
 case "$cmd" in
 fetch) [ $# -eq 0 ] || usage; cmd_fetch ;;
 create) [ $# -eq 1 ] || usage; cmd_create "$@" ;;
+bake) cmd_bake "$@" ;;
+clone) [ $# -eq 2 ] || usage; cmd_clone "$@" ;;
 restore) cmd_restore "$@" ;;
 info) cmd_info "$@" ;;
 ssh) cmd_ssh "$@" ;;

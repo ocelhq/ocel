@@ -7,11 +7,12 @@ usage() {
     cat <<'EOF'
 usage: scripts/incus-fanout.sh <lanes.tsv>
 
-  One lane per line: <vm-name> TAB <report-file> TAB <command>
-  Every lane starts at once as `scripts/incus.sh run <vm-name> -- <command>`
-  with the command's stdout in <report-file>, its stderr in <report-file>.log
-  and "<exit> <seconds>" in <report-file>.status. The host is sampled with
-  vmstat for the duration. Exits nonzero when any lane does.
+  One lane per line: <vm-name> TAB <report-file> TAB <command> [TAB <base>]
+  Every lane starts at once as `scripts/incus.sh run <vm-name> -- <command>`,
+  cloned from <base> when the lane names one, with the command's stdout in
+  <report-file>, its stderr in <report-file>.log and "<exit> <seconds>" in
+  <report-file>.status. The host is sampled with vmstat for the duration.
+  Exits nonzero when any lane does.
 EOF
     exit 2
 }
@@ -29,8 +30,9 @@ as_admin() {
 }
 
 lane() {
-    local name=$1 report=$2 command=$3 start=$SECONDS rc=0
-    as_admin "$here/incus.sh run $name -- $command" > "$report" 2> "$report.log" || rc=$?
+    local name=$1 report=$2 command=$3 base=$4 start=$SECONDS rc=0 from=""
+    [ -z "$base" ] || from="--from $base"
+    as_admin "$here/incus.sh run $from $name -- $command" > "$report" 2> "$report.log" || rc=$?
     echo "$rc $((SECONDS - start))" > "$report.status"
 }
 
@@ -50,9 +52,9 @@ sampler=$!
 
 pids=()
 reports=()
-while IFS=$'\t' read -r name report command; do
+while IFS=$'\t' read -r name report command base; do
     [ -n "$name" ] || continue
-    lane "$name" "$report" "$command" &
+    lane "$name" "$report" "$command" "$base" &
     pids+=($!)
     reports+=("$report")
 done < "$lanes"
