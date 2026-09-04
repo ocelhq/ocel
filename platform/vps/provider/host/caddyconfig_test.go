@@ -159,6 +159,27 @@ func TestTheBaselineBootstrapSeedsReadsBackAsABoxServingNothing(t *testing.T) {
 	}
 }
 
+func TestTheBoxIssuesItsOwnRootBeforeAnyHostnameAsksForIt(t *testing.T) {
+	t.Parallel()
+
+	var seed, flipped map[string]any
+	if err := json.Unmarshal(proxyBaseline, &seed); err != nil {
+		t.Fatal(err)
+	}
+	apps, _ := seed["apps"].(map[string]any)
+	pki, _ := json.Marshal(apps["pki"])
+	if !bytes.Contains(pki, []byte(`"local"`)) {
+		t.Fatalf("the seeded baseline declares no local certificate authority: %s", pki)
+	}
+	if err := json.Unmarshal(mustRender(t, releasing()), &flipped); err != nil {
+		t.Fatal(err)
+	}
+	rendered, _ := json.Marshal(flipped["apps"].(map[string]any)["pki"])
+	if !bytes.Equal(pki, rendered) {
+		t.Errorf("the flip renders the pki app as\n%s\nwant the one the box was bootstrapped with\n%s", rendered, pki)
+	}
+}
+
 func TestTheRedactingLogIsCarriedRatherThanRebuiltOnEveryFlip(t *testing.T) {
 	t.Parallel()
 

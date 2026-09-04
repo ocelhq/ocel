@@ -199,8 +199,9 @@ type caddyAdmin struct {
 }
 
 type caddyApps struct {
-	HTTP caddyHTTP `json:"http"`
-	TLS  *caddyTLS `json:"tls,omitempty"`
+	HTTP caddyHTTP       `json:"http"`
+	TLS  *caddyTLS       `json:"tls,omitempty"`
+	PKI  json.RawMessage `json:"pki,omitempty"`
 }
 
 type caddyTLS struct {
@@ -393,6 +394,7 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 				Servers:     map[string]caddyServer{proxyServer: live},
 			},
 			TLS: pinned,
+			PKI: seeded.Apps.PKI,
 		},
 	}
 	if state.Retiring != "" {
