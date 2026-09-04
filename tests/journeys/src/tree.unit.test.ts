@@ -110,7 +110,17 @@ describe("the packages a tree has to carry", () => {
 });
 
 function cellFor(name: string): CellContext {
-  const cell = { example: specByName(name), dir: "", slug: name, runId: "run", evidence: {} };
+  const example = specByName(name);
+  const cell = {
+    example,
+    name,
+    mode: "full",
+    suites: example.suites,
+    dir: "",
+    slug: name,
+    runId: "run",
+    evidence: {},
+  };
   return cell as unknown as CellContext;
 }
 

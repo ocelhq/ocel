@@ -111,7 +111,7 @@ export default class JourneyReporter implements Reporter {
     );
     const dir = laneDir(runId, target.name);
     await mkdir(dir, { recursive: true });
-    const planned = planTests(examples, target.legs);
+    const planned = planTests(examples, target.legs, target.modes);
     const timing = await this.writeTiming(dir, runId, target.name, planned);
 
     let environment: Awaited<ReturnType<typeof target.guard>>;

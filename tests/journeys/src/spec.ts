@@ -6,7 +6,11 @@ import type { CellContext } from "./targets/types";
 
 export type Framework = "express" | "hono" | "fastify" | "next";
 
-export type Kind = "composite" | "hello" | "ladder" | "workspace";
+export type Kind = "composite" | "ladder" | "workspace";
+
+export type Mode = "full" | "hello";
+
+export type Group = { name: string; preferred: string };
 
 export type Suite =
   | "health"
@@ -46,11 +50,16 @@ export type ExampleSpec = {
   framework?: Framework;
   kind: Kind;
   group?: string;
+  modes?: Mode[];
   suites: Suite[];
   apps: string[];
   targets?: TargetName[];
   hooks?: LadderHooks;
 };
+
+export const groups: Group[] = [{ name: "node-http", preferred: "workspace" }];
+
+const HELLO_SUITES: Suite[] = ["health", "static"];
 
 export const spec: ExampleSpec[] = [
   {
@@ -59,6 +68,7 @@ export const spec: ExampleSpec[] = [
     framework: "express",
     kind: "composite",
     group: "node-http",
+    modes: ["full", "hello"],
     suites: ["health", "static", "product", "probes"],
     apps: ["web"],
   },
@@ -68,6 +78,7 @@ export const spec: ExampleSpec[] = [
     framework: "hono",
     kind: "composite",
     group: "node-http",
+    modes: ["full", "hello"],
     suites: ["health", "static", "product", "probes"],
     apps: ["web"],
   },
@@ -77,6 +88,7 @@ export const spec: ExampleSpec[] = [
     framework: "fastify",
     kind: "composite",
     group: "node-http",
+    modes: ["full", "hello"],
     suites: ["health", "static", "product", "probes"],
     apps: ["web"],
   },
@@ -85,36 +97,16 @@ export const spec: ExampleSpec[] = [
     dir: "next",
     framework: "next",
     kind: "composite",
+    modes: ["full", "hello"],
     suites: ["health", "static", "product", "probes", "next-routing", "next-cache"],
     apps: ["web"],
-  },
-  {
-    name: "hello-express",
-    dir: "hello-express",
-    framework: "express",
-    kind: "hello",
-    suites: ["health", "static"],
-    apps: ["web"],
-  },
-  {
-    name: "hello-next",
-    dir: "hello-next",
-    framework: "next",
-    kind: "hello",
-    suites: ["health", "static"],
-    apps: ["web"],
-  },
-  {
-    name: "hello-workspace",
-    dir: "hello-workspace",
-    kind: "hello",
-    suites: ["health", "static"],
-    apps: ["next", "express"],
   },
   {
     name: "workspace",
     dir: "workspace",
     kind: "workspace",
+    group: "node-http",
+    modes: ["full", "hello"],
     suites: ["health", "static", "product", "probes"],
     apps: ["next", "express"],
   },
@@ -148,6 +140,28 @@ export const spec: ExampleSpec[] = [
     hooks: { ...pulumiHooks, rows: ladderRows },
   },
 ];
+
+export function modesOf(example: ExampleSpec, offered: Mode[]): Mode[] {
+  return (example.modes ?? ["full"]).filter((mode) => offered.includes(mode));
+}
+
+export function cellNameOf(example: ExampleSpec, mode: Mode): string {
+  return mode === "hello" ? `${example.name}-hello` : example.name;
+}
+
+export function suitesOf(example: ExampleSpec, mode: Mode): Suite[] {
+  return mode === "hello"
+    ? example.suites.filter((suite) => HELLO_SUITES.includes(suite))
+    : example.suites;
+}
+
+export function cellNamesOf(example: ExampleSpec): string[] {
+  return (example.modes ?? ["full"]).map((mode) => cellNameOf(example, mode));
+}
+
+export function preferredOf(group: string): string | undefined {
+  return groups.find((row) => row.name === group)?.preferred;
+}
 
 export function specForTarget(target: TargetName): ExampleSpec[] {
   return spec.filter((row) => row.targets === undefined || row.targets.includes(target));

@@ -8,6 +8,15 @@ import { plantWorkspace } from "./tree";
 
 export type Ran = { code: number | null; stdout: string; stderr: string };
 
+export const SUPPRESS_RESOURCES_ENV = "OCEL_DEPLOY_SUPPRESS_RESOURCES";
+
+export function cellEnv(cell: CellContext): NodeJS.ProcessEnv {
+  return {
+    OCEL_JOURNEY_SLUG: cell.slug,
+    ...(cell.mode === "hello" ? { [SUPPRESS_RESOURCES_ENV]: "1" } : {}),
+  };
+}
+
 export const COMMAND_LOG = "commands.jsonl";
 
 export function maskArgs(args: string[]): string {
@@ -18,7 +27,7 @@ export function maskArgs(args: string[]): string {
 }
 
 export function treeRoot(cell: CellContext, target: string): string {
-  return treeDir(cell.runId, target, cell.example.name);
+  return treeDir(cell.runId, target, cell.name);
 }
 
 export function configTree(cell: CellContext, target: string): string {
@@ -30,7 +39,7 @@ export function appDirs(cell: CellContext): string[] {
 }
 
 export async function workTree(cell: CellContext, target: string): Promise<string> {
-  await plantWorkspace(treeRoot(cell, target), `journey-${cell.example.name}`, appDirs(cell));
+  await plantWorkspace(treeRoot(cell, target), `journey-${cell.name}`, appDirs(cell));
   return configTree(cell, target);
 }
 

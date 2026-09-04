@@ -1,8 +1,7 @@
 import type { AppConfig } from "ocel/config";
 import { defineConfig } from "ocel/config";
 
-const run = process.env.OCEL_JOURNEY_RUN;
-const slug = run ? `j-${run}-with-pulumi` : "with-pulumi";
+const slug = process.env.OCEL_JOURNEY_SLUG ?? "with-pulumi";
 
 const config = defineConfig({
   slug,

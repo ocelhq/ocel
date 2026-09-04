@@ -16,14 +16,14 @@ const overlapping: TimelineInput = {
     { example: "with-sst", leg: "up", title: "up", ...at(0, 60) },
     { example: "with-sst", leg: "contract", title: "health", ...at(60, 10) },
     { example: "with-sst", leg: "destroy", title: "destroy", ...at(70, 110) },
-    { example: "hello-next", leg: "up", title: "up", ...at(0, 30) },
-    { example: "hello-next", leg: "contract", title: "health", ...at(30, 5) },
-    { example: "hello-next", title: "publish · a bucket", ...at(35, 5) },
-    { example: "hello-next", leg: "destroy", title: "destroy", ...at(40, 20) },
+    { example: "next-hello", leg: "up", title: "up", ...at(0, 30) },
+    { example: "next-hello", leg: "contract", title: "health", ...at(30, 5) },
+    { example: "next-hello", title: "publish · a bucket", ...at(35, 5) },
+    { example: "next-hello", leg: "destroy", title: "destroy", ...at(40, 20) },
   ],
   modules: [
     { example: "with-sst", duration: 180_000 },
-    { example: "hello-next", duration: 60_000 },
+    { example: "next-hello", duration: 60_000 },
   ],
 };
 
@@ -69,9 +69,9 @@ describe("timelineOf", () => {
   });
 
   it("orders the examples by file wall and folds every leg", () => {
-    expect(timeline.examples.map((row) => row.example)).toEqual(["with-sst", "hello-next"]);
+    expect(timeline.examples.map((row) => row.example)).toEqual(["with-sst", "next-hello"]);
     expect(timeline.examples[1]).toEqual({
-      example: "hello-next",
+      example: "next-hello",
       start: 0,
       legs: { up: 30, contract: 5, other: 5, destroy: 20 },
       file: 60,
@@ -92,7 +92,7 @@ describe("timingTable", () => {
         "| example | start | up | contract | redeploy | rollback | destroy | other | file |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         "| with-sst | 0 | 60 | 10 | 0 | 0 | 110 | 0 | 180 |",
-        "| hello-next | 0 | 30 | 5 | 0 | 0 | 20 | 5 | 60 |",
+        "| next-hello | 0 | 30 | 5 | 0 | 0 | 20 | 5 | 60 |",
         "",
       ].join("\n"),
     );

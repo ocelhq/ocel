@@ -2,9 +2,8 @@ import type { ExampleSpec, Kind } from "./spec";
 
 const RANK: Record<Kind, number> = {
   ladder: 0,
-  hello: 1,
-  composite: 2,
-  workspace: 3,
+  composite: 1,
+  workspace: 2,
 };
 
 export const MODULE_SUFFIX = ".journey.test.ts";

@@ -7,7 +7,7 @@ import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
 import { INITIAL_GREETING, redact, REDACTED, SECRET_TOKEN } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { appHostname, HARNESS_PREFIX } from "../identity";
-import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
+import { cellEnv, exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
 import type { Leg } from "../spec";
 import { migrateCommand, setAppNames } from "../workspace";
@@ -177,7 +177,7 @@ function boxEnv(login: string): NodeJS.ProcessEnv {
 }
 
 function childEnv(cell: CellContext, login: string): NodeJS.ProcessEnv {
-  return { ...boxEnv(login), OCEL_JOURNEY_RUN: cell.runId, OCEL_JOURNEY_ZONE: zone() };
+  return { ...boxEnv(login), ...cellEnv(cell), OCEL_JOURNEY_ZONE: zone() };
 }
 
 async function boxConfig(dir: string, slug: string, login: string): Promise<string> {
@@ -273,7 +273,7 @@ async function deployment(cell: CellContext, started: Standing): Promise<Deploym
     baseUrl: (app) => {
       const url = urls.get(app);
       if (!url) {
-        throw new Error(`${cell.example.name} has no app named ${app} on vps`);
+        throw new Error(`${cell.name} has no app named ${app} on vps`);
       }
       return url;
     },
@@ -309,7 +309,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   await setAppNames(cell.example, drive);
   await drive("deploy", ["deploy", "--yes"]);
   await bindDomains(cell, started);
-  if (cell.example.suites.includes("product")) {
+  if (cell.suites.includes("product")) {
     await drive("migrate", ["run", "--", ...migrateCommand()]);
   }
   return deployment(cell, started);
@@ -387,6 +387,7 @@ async function sweep(runId: string): Promise<void> {
 export const vpsTarget: Target = {
   name: "vps",
   concurrency: 2,
+  modes: ["full", "hello"],
   legTimeoutMs: 600_000,
   legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,
