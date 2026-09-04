@@ -30,7 +30,7 @@ export default {
   apps: [{ name: "api", path: "apps/api", compute: "container" }],
 };
 `)
-	copyFixtureApp(t, "../../imagebuild/testdata/plainserver", filepath.Join(root, "apps", "api"))
+	copyFixtureApp(t, "../../imagebuild/testdata/dockerfileapp", filepath.Join(root, "apps", "api"))
 
 	var stdout, stderr bytes.Buffer
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
