@@ -124,6 +124,8 @@ func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
 			return session.Result{}, true
 		case strings.Contains(command, "docker load"):
 			return session.Result{Stdout: "Loaded image: something-else\n"}, true
+		case strings.Contains(command, "journalctl"):
+			return session.Result{Stdout: "containerd[1]: content digest sha256:abc: not found\n--- disk\n/dev/root 20G 19G 1G 95% /\n"}, true
 		default:
 			return session.Result{}, false
 		}
@@ -133,8 +135,10 @@ func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("LoadImage() succeeded where the machine answers to no such coordinate afterwards")
 	}
-	if !strings.Contains(err.Error(), coordinate) {
-		t.Errorf("LoadImage() = %v, want the coordinate the machine does not hold named", err)
+	for _, named := range []string{coordinate, "content digest sha256:abc", "95%"} {
+		if !strings.Contains(err.Error(), named) {
+			t.Errorf("LoadImage() = %v, want %q in it: a load the box took and then does not hold explains itself with what the box's engine and disk say, or the cause is read off the wrong machine", err, named)
+		}
 	}
 }
 
