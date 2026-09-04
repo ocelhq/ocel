@@ -122,6 +122,7 @@ EOF
     incus start "$name"
     local addr
     addr=$(wait_ssh "$name")
+    incus exec "$name" -- sync
     incus snapshot create "$name" clean
     trap - EXIT
     print_info "$name" "$addr"
