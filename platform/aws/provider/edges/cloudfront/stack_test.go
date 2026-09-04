@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -263,5 +264,40 @@ func TestBindDomainRecordsTheFrontOfADistributionFoundByName(t *testing.T) {
 	}
 	if got := stack.State().Front; got != held.domain {
 		t.Errorf("state records front %q, want %q: a binding onto a distribution found by name still has to say where DNS points", got, held.domain)
+	}
+}
+
+func TestEveryConfigCarriesLoggingSoAnUpdateIsLegal(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	plan := distributionPlan{
+		name:          "storefront",
+		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
+		function:      "arn:aws:cloudfront::111122223333:function/resolver",
+		cachePolicy:   "cache-policy",
+		headersPolicy: "headers-policy",
+		oac:           "origin-access-control",
+	}
+
+	raised, err := createDistribution(context.Background(), w.clients(), plan, nil, "")
+	if err != nil {
+		t.Fatalf("createDistribution: %v", err)
+	}
+	assertLogging(t, "the config sent to CreateDistribution", w.front.distributions[raised.id].config)
+
+	if err := reshapeDistribution(context.Background(), w.clients(), plan, raised.id); err != nil {
+		t.Fatalf("reshapeDistribution: %v", err)
+	}
+	assertLogging(t, "the config sent to UpdateDistribution", w.front.distributions[raised.id].config)
+}
+
+func assertLogging(t *testing.T, what string, config *cftypes.DistributionConfig) {
+	t.Helper()
+	if config.Logging == nil {
+		t.Fatalf("%s carries no Logging block, and CloudFront rejects every UpdateDistribution without one", what)
+	}
+	if aws.ToBool(config.Logging.Enabled) {
+		t.Errorf("%s enables access logging, want it off with an empty bucket and prefix", what)
 	}
 }
