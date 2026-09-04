@@ -4,10 +4,10 @@ import type { Reporter, TestCase, TestModule } from "vitest/node";
 import { expectationsFor } from "./expectations";
 import { currentRunIdentity } from "./identity";
 import { exampleOf } from "./order";
-import { laneDir, laneEdge, prepareFile, verdictFile } from "./paths";
+import { laneDir, prepareFile, verdictFile } from "./paths";
 import { planTests } from "./plan";
 import { reconcile, type TestOutcome, type TestResult } from "./reconcile";
-import { specForTarget } from "./spec";
+import { selectionFor } from "./selection";
 import { journeyVerdict, summaryTable } from "./summary";
 import { laneWorkers, selectedTarget } from "./targets";
 import { timelineOf, type TimelineModule, type TimelineTest, timingTable } from "./timeline";
@@ -105,13 +105,10 @@ export default class JourneyReporter implements Reporter {
     this.runEnd = Date.now();
     const target = selectedTarget();
     const runId = currentRunIdentity();
-    const chosen = process.env.OCEL_EXAMPLES?.split(",").map((name) => name.trim());
-    const examples = specForTarget(target.name).filter(
-      (row) => chosen === undefined || chosen.includes(row.name),
-    );
+    const { examples, naming, covered } = selectionFor(target);
     const dir = laneDir(runId, target.name);
     await mkdir(dir, { recursive: true });
-    const planned = planTests(examples, target.legs, target);
+    const planned = planTests(examples, target.legs, naming, covered);
     const timing = await this.writeTiming(dir, runId, target.name, planned);
 
     let environment: Awaited<ReturnType<typeof target.guard>>;
@@ -176,7 +173,7 @@ export default class JourneyReporter implements Reporter {
       modules: this.modules,
       prepareMs: await prepareMs(runId, target),
     });
-    const table = timingTable(timeline, { target, edge: laneEdge(target), runId });
+    const table = timingTable(timeline, { target, runId });
     await writeFile(
       path.join(dir, "timeline.json"),
       `${JSON.stringify({ runStart: this.runStart, runEnd: this.runEnd, timeline, tests, modules: this.modules }, null, 2)}\n`,

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { currentRunIdentity } from "./identity";
 import { verdictFile } from "./paths";
-import { type Pick, pickExamples } from "./pick";
+import { pickExamples, requestedPick } from "./pick";
 import { type ExampleSpec, examplesNamed, specForTarget } from "./spec";
 import { selectedTarget } from "./targets";
 import type { Target } from "./targets/types";
@@ -60,20 +60,6 @@ export async function runJourney(
     process.stderr.write(`\n${verdict.report}\n`);
   }
   return verdict.exitCode;
-}
-
-function requestedPick(): Pick | undefined {
-  const seed = (process.env.OCEL_JOURNEY_SEED ?? "").trim();
-  if (seed === "") {
-    return undefined;
-  }
-  return {
-    seed,
-    touched: (process.env.OCEL_JOURNEY_TOUCHED ?? "")
-      .split(",")
-      .map((dir) => dir.trim())
-      .filter((dir) => dir !== ""),
-  };
 }
 
 function sayWhatIsLeftOut(seed: string, chosen: ExampleSpec[], leftOut: ExampleSpec[]) {

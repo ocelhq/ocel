@@ -145,7 +145,7 @@ export function timelineOf(input: TimelineInput): Timeline {
   };
 }
 
-export type TimingMeta = { target: string; edge?: string; runId: string };
+export type TimingMeta = { target: string; runId: string };
 
 export function timingTable(timeline: Timeline, meta: TimingMeta): string {
   const stat = [
@@ -162,7 +162,7 @@ export function timingTable(timeline: Timeline, meta: TimingMeta): string {
 
   const columns = [...TIMED_LEGS, OTHER_LEG];
   return [
-    `### timing · ${meta.target} · ${meta.edge ?? "-"} · run ${meta.runId}`,
+    `### timing · ${meta.target} · run ${meta.runId}`,
     "",
     stat,
     "",

@@ -1,6 +1,6 @@
 import type { Evidence } from "../evidence";
 import type { ExpectationEnvironment } from "../expectations/types";
-import type { Compute, ExampleSpec, Leg, Mode, Suite, TargetName } from "../spec";
+import type { Compute, Edge, ExampleSpec, Leg, Mode, Suite, TargetName } from "../spec";
 
 export type Deployment = {
   baseUrl: (app: string) => string;
@@ -12,6 +12,7 @@ export type CellContext = {
   name: string;
   mode: Mode;
   compute: Compute;
+  edge?: Edge;
   suites: Suite[];
   dir: string;
   slug: string;
@@ -26,6 +27,7 @@ export type Target = {
   legs: Leg[];
   modes: Mode[];
   computes: Compute[];
+  edges: Edge[];
   guard: () => Promise<ExpectationEnvironment>;
   prepare?: () => Promise<void>;
   setup: () => Promise<void>;

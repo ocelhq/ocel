@@ -1,18 +1,8 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "vitest";
+import { describe, it } from "vitest";
 import { contractTitle, UP_TITLE } from "../plan";
-import { EDGE_ENV, expectationsFor, resolve } from "./index";
-import type { Compute, Gap } from "./types";
-
-const before = process.env[EDGE_ENV];
-
-afterEach(() => {
-  if (before === undefined) {
-    delete process.env[EDGE_ENV];
-  } else {
-    process.env[EDGE_ENV] = before;
-  }
-});
+import { resolve } from "./index";
+import type { Compute, Edge, Gap } from "./types";
 
 const HEALTH = "GET /health answers with the app name";
 const SVG = "GET /ocel.svg serves the svg at its known length";
@@ -31,7 +21,6 @@ describe("resolve", () => {
         gap("two", [{ on: ["dev"], cells: ["express/web"], tests: [UP_TITLE] }]),
       ],
       "dev",
-      undefined,
     );
     assert.deepEqual(listed["express/web"]?.[UP_TITLE], [
       { id: "one", reason: "reason for one", issue: 1 },
@@ -48,7 +37,6 @@ describe("resolve", () => {
         ]),
       ],
       "dev",
-      undefined,
     );
     assert.equal(listed["express/web"]?.[UP_TITLE]?.length, 1);
     assert.equal(listed["hono/web"]?.[UP_TITLE]?.length, 1);
@@ -58,7 +46,6 @@ describe("resolve", () => {
     const listed = resolve(
       [gap("one", [{ on: ["vps"], cells: ["express/web"], tests: [{ row: HEALTH }] }])],
       "vps",
-      undefined,
     );
     assert.deepEqual(Object.keys(listed["express/web"] ?? {}), [
       HEALTH,
@@ -72,7 +59,6 @@ describe("resolve", () => {
         ]),
       ],
       "vps",
-      undefined,
     );
     assert.deepEqual(Object.keys(named["express/web"] ?? {}), [contractTitle("rollback", HEALTH)]);
   });
@@ -89,7 +75,6 @@ describe("resolve", () => {
         ]),
       ],
       "vps",
-      undefined,
     );
     const titles = Object.keys(listed["express-hello/web"] ?? {});
     assert.ok(titles.length > 0);
@@ -100,7 +85,6 @@ describe("resolve", () => {
     const listed = resolve(
       [gap("one", [{ on: ["vps"], tests: [{ rows: ["product"], legs: ["contract"] }] }])],
       "vps",
-      undefined,
     );
     assert.equal(listed["express-hello/web"], undefined);
     assert.ok(listed["express/web"]);
@@ -116,7 +100,6 @@ describe("resolve", () => {
             ]),
           ],
           "vps",
-          undefined,
         ),
       /one on vps lists express-hello\/web/,
     );
@@ -128,7 +111,6 @@ describe("resolve", () => {
         resolve(
           [gap("one", [{ on: ["dev"], cells: ["express-hello/web"], tests: [UP_TITLE] }])],
           "dev",
-          undefined,
         ),
       /express-hello\/web/,
     );
@@ -144,7 +126,6 @@ describe("resolve", () => {
             ]),
           ],
           "dev",
-          undefined,
         ),
       /one on dev lists express\/web/,
     );
@@ -152,7 +133,7 @@ describe("resolve", () => {
 
   it("refuses a block that names a title no cell plans", () => {
     assert.throws(
-      () => resolve([gap("one", [{ on: ["dev"], tests: ["not a test"] }])], "dev", undefined),
+      () => resolve([gap("one", [{ on: ["dev"], tests: ["not a test"] }])], "dev"),
       /one on dev lists nothing that is planned/,
     );
   });
@@ -163,31 +144,52 @@ describe("resolve", () => {
         resolve(
           [gap("one", [{ on: ["dev"], cells: ["with-transforms/web"], tests: [UP_TITLE] }])],
           "dev",
-          undefined,
         ),
       /with-transforms\/web/,
     );
   });
 
-  it("skips a block listed for another environment or edge", () => {
-    const gaps = [
-      gap("one", [
-        { on: ["vps"], tests: [UP_TITLE] },
-        { on: ["aws"], edge: ["cloudfront"], tests: [UP_TITLE] },
-      ]),
-    ];
-    assert.deepEqual(resolve(gaps, "dev", undefined), {});
-    assert.deepEqual(resolve(gaps, "aws", "cloudflare"), {});
-    assert.ok(resolve(gaps, "aws", "cloudfront")["express/web"]?.[UP_TITLE]);
+  it("skips a block listed for another environment", () => {
+    const gaps = [gap("one", [{ on: ["vps"], tests: [UP_TITLE] }])];
+    assert.deepEqual(resolve(gaps, "dev"), {});
+    assert.ok(resolve(gaps, "vps")["express/web"]?.[UP_TITLE]);
+  });
+
+  it("lists the cells of the edge a block names, and no others", () => {
+    const gaps = [gap("one", [{ on: ["aws"], edge: ["cloudflare"], tests: [UP_TITLE] }])];
+    const listed = resolve(gaps, "aws");
+    assert.ok(listed["express-cloudflare/web"]?.[UP_TITLE]);
+    assert.ok(listed["express-hello-cloudflare-container/web"]?.[UP_TITLE]);
+    assert.equal(listed["express/web"], undefined);
+    assert.equal(listed["express-api-gateway/web"], undefined);
   });
 
   it("skips a block listed for another compute", () => {
     const gaps = [gap("one", [{ on: ["aws"], compute: ["container"], tests: [UP_TITLE] }])];
-    const listed = resolve(gaps, "aws", "cloudfront");
+    const listed = resolve(gaps, "aws");
     assert.ok(listed["express-container/web"]?.[UP_TITLE]);
     assert.ok(listed["express-hello-container/web"]?.[UP_TITLE]);
     assert.equal(listed["express/web"], undefined);
     assert.equal(listed["express-hello/web"], undefined);
+  });
+
+  it("refuses a block naming an edge the target does not run", () => {
+    assert.throws(
+      () => resolve([gap("one", [{ on: ["vps"], edge: ["cloudfront"], tests: [UP_TITLE] }])], "vps"),
+      /one on vps lists cloudfront, which plans none of the tests named/,
+    );
+    assert.throws(
+      () =>
+        resolve(
+          [
+            gap("one", [
+              { on: ["aws"], edge: ["cloudflare", "fastly" as Edge], tests: [UP_TITLE] },
+            ]),
+          ],
+          "aws",
+        ),
+      /one on aws lists fastly, which plans none of the tests named/,
+    );
   });
 
   it("refuses a block naming a compute the target does not run", () => {
@@ -196,7 +198,6 @@ describe("resolve", () => {
         resolve(
           [gap("one", [{ on: ["dev"], compute: ["container"], tests: [UP_TITLE] }])],
           "dev",
-          undefined,
         ),
       /one on dev lists container, which plans none of the tests named/,
     );
@@ -209,9 +210,8 @@ describe("resolve", () => {
             ]),
           ],
           "aws",
-          "cloudfront",
         ),
-      /one on aws on cloudfront lists nowhere, which plans none of the tests named/,
+      /one on aws lists nowhere, which plans none of the tests named/,
     );
   });
 
@@ -221,24 +221,9 @@ describe("resolve", () => {
         resolve(
           [gap("one", [{ on: ["dev"], tests: [UP_TITLE] }]), gap("one", [])],
           "dev",
-          undefined,
         ),
       /one is listed twice/,
     );
-    assert.throws(() => resolve([gap("one", [])], "dev", undefined), /one affects nothing/);
-  });
-});
-
-describe("expectationsFor", () => {
-  it("does not read the edge for an environment that has no edges", () => {
-    process.env[EDGE_ENV] = "not-an-edge";
-    assert.doesNotThrow(() => expectationsFor("dev"));
-    assert.doesNotThrow(() => expectationsFor("vps"));
-  });
-
-  it("names the variable when an aws environment is asked for an edge no gap lists", () => {
-    process.env[EDGE_ENV] = "not-an-edge";
-    assert.throws(() => expectationsFor("aws"), new RegExp(EDGE_ENV));
-    assert.throws(() => expectationsFor("aws.floci"), new RegExp(EDGE_ENV));
+    assert.throws(() => resolve([gap("one", [])], "dev"), /one affects nothing/);
   });
 });

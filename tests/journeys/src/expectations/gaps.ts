@@ -1,6 +1,15 @@
 import { EDGE_ISR_TITLE } from "../nextCache";
-import { DESTROY_TITLE, REDEPLOY_TITLE, UP_TITLE } from "../plan";
+import { DESTROY_TITLE, UP_TITLE } from "../plan";
+import { type Edge, EDGES } from "../spec";
 import type { Gap } from "./types";
+
+function on(edge: Edge, cells: string[]): string[] {
+  return edge === EDGES[0] ? cells : cells.map((cell) => cell.replace("/", `-${edge}/`));
+}
+
+function everyEdge(cells: string[]): string[] {
+  return EDGES.flatMap((edge) => on(edge, cells));
+}
 
 const NODE_HTTP = ["express/web", "hono/web", "fastify/web"];
 const COMPOSITE = [...NODE_HTTP, "next/web"];
@@ -63,31 +72,33 @@ export const gaps: Gap[] = [
     id: "sst-util-global",
     reason: "@ocel/sst reads $util off globalThis, which SST 3.19 does not set",
     issue: 857,
-    affects: [{ on: ["aws", "aws.floci"], cells: ["with-sst/web"], tests: [UP_TITLE] }],
+    affects: [{ on: ["aws", "aws.floci"], cells: everyEdge(["with-sst/web"]), tests: [UP_TITLE] }],
   },
   {
     id: "pulumi-provider-serialisation",
     reason: "@ocel/pulumi's dynamic provider cannot be serialised, so pulumi up fails at preview",
     issue: 856,
-    affects: [{ on: ["aws", "aws.floci"], cells: ["with-pulumi/web"], tests: [UP_TITLE] }],
+    affects: [
+      { on: ["aws", "aws.floci"], cells: everyEdge(["with-pulumi/web"]), tests: [UP_TITLE] },
+    ],
   },
   {
     id: "migrate-needs-link",
     reason:
       "the aws journey migrates through ocel run, which needs a console link the lane never has",
     issue: 911,
-    affects: [{ on: ["aws"], cells: NODE_HTTP, tests: [UP_TITLE] }],
+    affects: [{ on: ["aws"], cells: everyEdge(NODE_HTTP), tests: [UP_TITLE] }],
   },
   {
     id: "build-needs-postgres",
     reason: "ocel build fails collecting page data for /api/todos without a resolved postgres",
     issue: 849,
     affects: [
-      { on: ["aws"], cells: ["next/web", ...WORKSPACE], tests: [UP_TITLE] },
+      { on: ["aws"], cells: everyEdge(["next/web", ...WORKSPACE]), tests: [UP_TITLE] },
       {
         on: ["aws.floci"],
         edge: ["api-gateway"],
-        cells: ["next/web", ...WORKSPACE],
+        cells: on("api-gateway", ["next/web", ...WORKSPACE]),
         tests: [UP_TITLE],
       },
     ],
@@ -100,7 +111,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws", "aws.floci"],
         edge: ["api-gateway"],
-        cells: ["next-hello/web", ...HELLO_WORKSPACE],
+        cells: on("api-gateway", ["next-hello/web", ...HELLO_WORKSPACE]),
         tests: [UP_TITLE],
       },
     ],
@@ -126,7 +137,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws"],
         edge: ["cloudflare"],
-        cells: [...HELLO, ...HELLO_WORKSPACE, "with-transforms/web"],
+        cells: on("cloudflare", [...HELLO, ...HELLO_WORKSPACE, "with-transforms/web"]),
         tests: [UP_TITLE],
       },
     ],
@@ -139,7 +150,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws"],
         edge: ["api-gateway"],
-        cells: ["with-transforms/web"],
+        cells: on("api-gateway", ["with-transforms/web"]),
         tests: [{ row: LINK_QUERY_ROW }],
       },
     ],
@@ -153,8 +164,8 @@ export const gaps: Gap[] = [
       {
         on: ["aws"],
         edge: ["api-gateway"],
-        cells: ["with-transforms/web"],
-        tests: [{ row: LINK_ROW, legs: [REDEPLOY_TITLE] }],
+        cells: on("api-gateway", ["with-transforms/web"]),
+        tests: [{ row: LINK_ROW, legs: ["redeploy"] }],
       },
     ],
   },
@@ -167,7 +178,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws.floci"],
         edge: ["api-gateway"],
-        cells: [...NODE_HTTP, "with-transforms/web"],
+        cells: on("api-gateway", [...NODE_HTTP, "with-transforms/web"]),
         tests: [UP_TITLE],
       },
     ],
@@ -181,7 +192,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws.floci"],
         edge: ["api-gateway"],
-        cells: EVERY_AWS_CELL_BUT_LADDERS,
+        cells: on("api-gateway", EVERY_AWS_CELL_BUT_LADDERS),
         tests: [{ rows: "every", except: [STREAM_ROW, EDGE_ISR_TITLE] }],
       },
     ],
@@ -200,7 +211,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws.floci"],
         edge: ["api-gateway"],
-        cells: ["next/web"],
+        cells: on("api-gateway", ["next/web"]),
         tests: [{ row: EDGE_ISR_TITLE }],
       },
     ],
@@ -232,7 +243,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws.floci"],
         edge: ["cloudflare"],
-        cells: EVERY_AWS_CELL_BUT_LADDERS,
+        cells: on("cloudflare", EVERY_AWS_CELL_BUT_LADDERS),
         tests: [UP_TITLE],
       },
     ],

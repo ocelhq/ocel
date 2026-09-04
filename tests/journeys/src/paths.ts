@@ -18,18 +18,8 @@ export function exampleDir(dir: string): string {
   return path.join(examplesDir, dir);
 }
 
-export function laneEdge(target: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const edge = env.OCEL_AWS_EDGE?.trim();
-  return target === "aws" && edge ? edge : undefined;
-}
-
-export function laneName(target: string, env: NodeJS.ProcessEnv = process.env): string {
-  const edge = laneEdge(target, env);
-  return edge ? `${target}-${edge}` : target;
-}
-
 export function laneDir(runId: string, target: string): string {
-  return path.join(outputRoot, runId, laneName(target));
+  return path.join(outputRoot, runId, target);
 }
 
 export function evidenceDir(runId: string, target: string, example: string): string {

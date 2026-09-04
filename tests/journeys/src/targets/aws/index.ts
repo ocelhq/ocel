@@ -5,8 +5,9 @@ import { INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
 import { cellEnv, configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
+import { offeredBy } from "../../offer";
 import { exampleDir, treeDir } from "../../paths";
-import { cellNamesOf, type Leg, specForTarget } from "../../spec";
+import { cellNamesOf, type Edge, EDGES, type Leg, type Offered, specForTarget } from "../../spec";
 import { copyTree } from "../../tree";
 import { migrateCommand, setAppNames } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
@@ -29,7 +30,7 @@ const SERVING_INTERVAL_MS = 5_000;
 
 let dispatching: Promise<typeof fetch> | undefined;
 
-const EDGE_FEATURES: Record<string, string> = {
+const EDGE_FEATURES: Record<Edge, string> = {
   "api-gateway": "apigateway-edge",
   cloudfront: "cloudfront-edge",
   cloudflare: "cloudflare-edge",
@@ -113,9 +114,8 @@ async function awaitEdge(cell: CellContext, leg: Leg, deployed: Deployment): Pro
   await cell.evidence.write(leg, "serving.json", `${JSON.stringify(served, null, 2)}\n`);
 }
 
-function bootstrapFeatures(): string[] {
-  const edge = EDGE_FEATURES[process.env.OCEL_AWS_EDGE ?? ""];
-  return edge ? [...NEXT_FEATURES, edge] : NEXT_FEATURES;
+export function bootstrapFeatures(offered: Offered): string[] {
+  return [...NEXT_FEATURES, ...offered.edges.map((edge) => EDGE_FEATURES[edge])];
 }
 
 async function awaitDefaultVpc(endpoint: string): Promise<void> {
@@ -154,7 +154,13 @@ async function prepare(): Promise<void> {
   }
   const runId = currentRunIdentity();
   const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", "bootstrap"));
-  const args = ["bootstrap", "production", "--yes", "--features", bootstrapFeatures().join(",")];
+  const args = [
+    "bootstrap",
+    "production",
+    "--yes",
+    "--features",
+    bootstrapFeatures(offeredBy(awsTarget)).join(","),
+  ];
   try {
     await ocel(dir, args, providerEnv(dir, { OCEL_JOURNEY_SLUG: projectSlug(first.name, runId) }));
   } finally {
@@ -200,7 +206,7 @@ async function up(cell: CellContext): Promise<Deployment> {
     `${JSON.stringify(
       {
         slug: cell.slug,
-        edge: process.env.OCEL_AWS_EDGE ?? "default",
+        edge: cell.edge ?? "none",
         compute: cell.compute,
         apps: Object.fromEntries(
           cell.example.apps.map((app) => [app, deployed.baseUrl(app)]),
@@ -316,6 +322,7 @@ export const awsTarget: Target = {
   concurrency: 3,
   modes: ["full", "hello"],
   computes: ["serverless", "container"],
+  edges: EDGES,
   legTimeoutMs: LEG_TIMEOUT_MS,
   legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,
