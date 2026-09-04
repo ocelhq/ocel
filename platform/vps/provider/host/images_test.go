@@ -107,6 +107,9 @@ func TestTheImageIsFedToTheDaemonAndTheCoordinateIsCheckedAfterwards(t *testing.
 		switch {
 		case strings.Contains(command, "docker load"):
 			loaded = true
+			if !strings.Contains(command, "flock -x "+quoted(imagesLock)+" docker load") {
+				t.Errorf("the load runs as %q and takes no lock: two deploys loading onto one box at once share base layers, and the daemon's import writes each blob under one ingest ref, so the second load finds the first's lock and ends with an image missing content", command)
+			}
 		case loaded && strings.Contains(command, "docker image ls"):
 			checked = true
 		}
