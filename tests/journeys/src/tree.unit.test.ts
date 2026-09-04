@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { appDirs, configTree, treeRoot } from "./ocel";
 import { specByName } from "./spec";
 import type { CellContext } from "./targets/types";
-import { splitWorkspaceFile, workspaceClosure, workspaceFileFor } from "./tree";
+import { rootManifest, splitWorkspaceFile, workspaceClosure, workspaceFileFor } from "./tree";
 
 const ROOT_WORKSPACE = `packages:
   - apps/*
@@ -14,6 +14,14 @@ const ROOT_WORKSPACE = `packages:
 
 allowBuilds:
   better-sqlite3: false
+
+overrides:
+  semver: ^7.7.2
+
+catalog:
+  react: ^19.2.0
+
+minimumReleaseAge: 1440
 
 linkWorkspacePackages: true
 `;
@@ -103,11 +111,34 @@ describe("where an app sits in the tree built for it", () => {
   });
 });
 
+describe("the root manifest a tree gets", () => {
+  it("carries every dependency range the repo root declares, so a member resolves as it does at home", () => {
+    const written = JSON.parse(
+      rootManifest("journey-probe", {
+        name: "ocelhq",
+        devEngines: { packageManager: { name: "pnpm", version: "11.10.0" } },
+        dependencies: { typescript: "^6.0.3" },
+        devDependencies: { "@types/node": "^26.1.1", ocel: "workspace:*" },
+      }),
+    );
+    expect(written).toMatchObject({
+      name: "journey-probe",
+      private: true,
+      packageManager: "pnpm@11.10.0",
+      dependencies: { typescript: "^6.0.3" },
+      devDependencies: { "@types/node": "^26.1.1", ocel: "workspace:*" },
+    });
+  });
+});
+
 describe("the workspace file a tree gets", () => {
   it("carries every install-affecting key the repo root declares", () => {
     const carried = splitWorkspaceFile(ROOT_WORKSPACE);
     expect(carried.packages).toEqual(["apps/*", "packages/*", "packages/native/*"]);
     expect(carried.settings).toContain("better-sqlite3: false");
+    expect(carried.settings).toContain("semver: ^7.7.2");
+    expect(carried.settings).toContain("react: ^19.2.0");
+    expect(carried.settings).toContain("minimumReleaseAge: 1440");
     expect(carried.settings).toContain("linkWorkspacePackages: true");
   });
 
