@@ -1,0 +1,8 @@
+{
+  "name": "fixture-next-root",
+  "private": true,
+  "scripts": {
+    "build": "exit 1",
+    "start": "exit 1"
+  }
+}
