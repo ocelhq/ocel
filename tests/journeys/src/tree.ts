@@ -7,6 +7,7 @@ const NEVER_COPIED = [".git", ".next", ".ocel", "dist", "node_modules", "output"
 const NEVER_COPIED_FROM_A_PACKAGE = NEVER_COPIED.filter((name) => name !== "dist");
 
 const WORKSPACE_FILE = "pnpm-workspace.yaml";
+const LOCKFILE = "pnpm-lock.yaml";
 const MANIFEST = "package.json";
 const DEPENDENCY_FIELDS = [
   "dependencies",
@@ -15,7 +16,7 @@ const DEPENDENCY_FIELDS = [
   "peerDependencies",
 ] as const;
 
-type Manifest = {
+export type Manifest = {
   name?: string;
   devEngines?: { packageManager?: { name?: string; version?: string } };
 } & Partial<Record<(typeof DEPENDENCY_FIELDS)[number], Record<string, string>>>;
@@ -124,17 +125,30 @@ export async function workspaceClosure(root: string, appDirs: string[]): Promise
   return [...reached].sort();
 }
 
-export async function declaredPackageManager(root: string): Promise<string | undefined> {
-  const declared = (await readManifest(path.join(root, MANIFEST)))?.devEngines?.packageManager;
+function packageManagerOf(manifest: Manifest): string | undefined {
+  const declared = manifest.devEngines?.packageManager;
   if (!declared?.name || !declared.version) {
     return undefined;
   }
   return `${declared.name}@${declared.version}`;
 }
 
-export function rootManifest(name: string, packageManager: string | undefined): string {
+export function rootManifest(name: string, carried: Manifest): string {
+  const packageManager = packageManagerOf(carried);
+  const declared = Object.fromEntries(
+    DEPENDENCY_FIELDS.flatMap((field) => {
+      const ranges = carried[field];
+      return ranges === undefined ? [] : [[field, ranges] as const];
+    }),
+  );
   return `${JSON.stringify(
-    { name, private: true, type: "module", ...(packageManager ? { packageManager } : {}) },
+    {
+      name,
+      private: true,
+      type: "module",
+      ...(packageManager ? { packageManager } : {}),
+      ...declared,
+    },
     null,
     2,
   )}\n`;
@@ -149,11 +163,12 @@ export async function writeWorkspace(
   await writeFile(path.join(root, WORKSPACE_FILE), workspaceFileFor(members, carried.settings));
   await writeFile(
     path.join(root, MANIFEST),
-    rootManifest(name, await declaredPackageManager(repoRoot)),
+    rootManifest(name, (await readManifest(path.join(repoRoot, MANIFEST))) ?? {}),
   );
 }
 
 export async function writeLockfile(root: string): Promise<void> {
+  await cp(path.join(repoRoot, LOCKFILE), path.join(root, LOCKFILE));
   const args = ["install", "--lockfile-only", "--ignore-scripts", "--prefer-offline"];
   const said = await new Promise<{ code: number | null; output: string }>((resolve, reject) => {
     const child = spawn("pnpm", args, { cwd: root, env: process.env });
@@ -199,7 +214,7 @@ export async function plantWorkspace(
   for (const app of apps) {
     await copyTree(path.join(repoRoot, app), path.join(root, app));
   }
-  const packages = await workspaceClosure(repoRoot, apps);
+  const packages = await workspaceClosure(repoRoot, [...apps, "."]);
   for (const held of packages) {
     await copyInto(path.join(repoRoot, held), path.join(root, held), NEVER_COPIED_FROM_A_PACKAGE);
   }
