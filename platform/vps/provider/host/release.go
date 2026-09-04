@@ -53,13 +53,21 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	if rel.Retire == rel.Target {
 		retiring = ""
 	}
-	compose := func(standing ProxyState, draining string) ProxyState {
+	compose := func(standing ProxyState) ProxyState {
 		standing.Grace = rel.DrainTimeout
 		standing.Routes = Routing(standing.Routes, AppRoute{RouteKey: rel.RouteKey, Upstream: rel.Target})
-		standing.Retiring = draining
 		return standing
 	}
-	held, flipped, err := h.composeProxy(ctx, func(standing ProxyState) ProxyState { return compose(standing, retiring) })
+	held, flipped, err := h.composeProxy(ctx, rel.DrainTimeout, func(standing ProxyState, patient bool) (ProxyState, bool) {
+		if patient && retiring != "" && standing.Retiring != "" && standing.Retiring != retiring {
+			return standing, false
+		}
+		standing = compose(standing)
+		if retiring != "" {
+			standing.Retiring = retiring
+		}
+		return standing, true
+	})
 	if err != nil {
 		return h.stranded(ctx, rel, held, err)
 	}
@@ -83,7 +91,13 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		}
 	}
 	warnExpiry(report, result.Stdout)
-	if _, _, err := h.composeProxy(ctx, func(standing ProxyState) ProxyState { return compose(standing, "") }); err != nil {
+	if _, _, err := h.composeProxy(ctx, rel.DrainTimeout, func(standing ProxyState, _ bool) (ProxyState, bool) {
+		standing = compose(standing)
+		if standing.Retiring == retiring {
+			standing.Retiring = ""
+		}
+		return standing, true
+	}); err != nil {
 		return h.serving(rel, retiring, err)
 	}
 	if _, err := h.ran(ctx, "reload the proxy's steady-state configuration",
@@ -139,10 +153,15 @@ func (h *Host) proxyDocument(ctx context.Context) (proxyDocument, error) {
 	return proxyDocument{text: text, digest: strings.TrimSpace(digest)}, nil
 }
 
-const proxyRewrites = 5
+const (
+	proxyRewrites = 5
+	drainWait     = time.Second
+)
 
-func (h *Host) composeProxy(ctx context.Context, compose func(ProxyState) ProxyState) (proxyDocument, string, error) {
-	for attempt := 1; ; attempt++ {
+func (h *Host) composeProxy(ctx context.Context, patience time.Duration, compose func(ProxyState, bool) (ProxyState, bool)) (proxyDocument, string, error) {
+	rewrites := 0
+	deadline := time.Now().Add(patience)
+	for {
 		held, err := h.proxyDocument(ctx)
 		if err != nil {
 			return proxyDocument{}, "", err
@@ -151,8 +170,18 @@ func (h *Host) composeProxy(ctx context.Context, compose func(ProxyState) ProxyS
 		if err != nil {
 			return held, "", err
 		}
-		written, err := h.writeProxyConfig(ctx, held.digest, compose(standing))
-		if err == nil || !moved(err) || attempt == proxyRewrites {
+		composed, ready := compose(standing, time.Now().Before(deadline))
+		if !ready {
+			select {
+			case <-ctx.Done():
+				return held, "", ctx.Err()
+			case <-time.After(drainWait):
+			}
+			continue
+		}
+		written, err := h.writeProxyConfig(ctx, held.digest, composed)
+		rewrites++
+		if err == nil || !moved(err) || rewrites >= proxyRewrites {
 			return held, written, err
 		}
 	}

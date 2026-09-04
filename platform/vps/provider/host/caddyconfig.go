@@ -575,6 +575,16 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 			ProxyConfig)
 	}
 	state := ProxyState{Grace: grace, Pins: pins}
+	if draining, declared := read.Apps.HTTP.Servers[proxyDrainServer]; declared {
+		if len(draining.Routes) != 1 || draining.Routes[0].Identity != drainIdentity {
+			return ProxyState{}, unwritten("server", proxyDrainServer)
+		}
+		retiring, err := forwardedBy(draining.Routes[0])
+		if err != nil {
+			return ProxyState{}, err
+		}
+		state.Retiring = retiring
+	}
 	entry := map[string]string{}
 	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
 		if route.Identity == boxIdentity {

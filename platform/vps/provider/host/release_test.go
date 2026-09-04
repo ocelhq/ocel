@@ -425,6 +425,115 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 	}
 }
 
+func TestAReleaseLeavesANeighboursDrainAloneAndWaitsForItBeforeStartingItsOwn(t *testing.T) {
+	t.Parallel()
+
+	neighbourDraining, err := RenderProxyConfig(ProxyState{
+		Grace:    30 * time.Second,
+		Routes:   []AppRoute{{RouteKey: keyed("web"), Upstream: retired}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
+		Retiring: "prod-api-0",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	neighbourDone, err := RenderProxyConfig(ProxyState{
+		Grace:  30 * time.Second,
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stood := &flipped{bench: machine(nil), held: string(neighbourDraining)}
+	proxied := servesProxy(stood.bench, &stood.held)
+	reads := 0
+	stood.answer = func(command string) (session.Result, bool) {
+		switch {
+		case readsProxy(command):
+			stood.mu.Lock()
+			reads++
+			if reads == 2 {
+				stood.held = string(neighbourDone)
+			}
+			stood.mu.Unlock()
+			return proxied(command)
+		case strings.Contains(command, quoted("deploy")):
+			return session.Result{}, true
+		default:
+			return proxied(command)
+		}
+	}
+
+	if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
+		t.Fatalf("Release() while a neighbour drained = %v: the box drains one retired upstream at a time, so the flip waits for the neighbour's rather than taking its slot", err)
+	}
+	if reads < 3 {
+		t.Errorf("the release read %s %d times, and a flip that found a neighbour draining had to read again after the wait", ProxyConfig, reads)
+	}
+	state, err := ReadProxyState([]byte(stood.held))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Retiring != "" {
+		t.Errorf("the steady-state configuration still declares %s retiring", state.Retiring)
+	}
+	upstreams := map[string]string{}
+	for _, route := range state.Routes {
+		upstreams[route.App] = route.Upstream
+	}
+	if upstreams["web"] != flipTo || upstreams["api"] != "prod-api-1:8080" {
+		t.Errorf("the box serves %v after the release, want web onto %s beside the neighbour's api", upstreams, flipTo)
+	}
+}
+
+func TestASteadyStateWriteBesideANeighboursDrainKeepsThatDrainDeclared(t *testing.T) {
+	t.Parallel()
+
+	neighbourDraining, err := RenderProxyConfig(ProxyState{
+		Grace:    30 * time.Second,
+		Routes:   []AppRoute{{RouteKey: keyed("web"), Upstream: flipTo}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
+		Retiring: "prod-api-0",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stood := &flipped{bench: machine(nil), held: configFor(t, flipTo)}
+	proxied := servesProxy(stood.bench, &stood.held)
+	writes := 0
+	stood.answer = func(command string) (session.Result, bool) {
+		switch {
+		case writesProxy(command):
+			stood.mu.Lock()
+			writes++
+			collided := writes == 2
+			if collided {
+				stood.held = string(neighbourDraining)
+			}
+			stood.mu.Unlock()
+			if collided {
+				return session.Result{Code: proxyMoved, Stderr: digested(string(neighbourDraining))}, true
+			}
+			return proxied(command)
+		case strings.Contains(command, quoted("deploy")):
+			return session.Result{}, true
+		default:
+			return proxied(command)
+		}
+	}
+	rel := aRelease()
+	rel.Retire = rel.Target
+
+	if err := stood.host().Release(context.Background(), rel, nil); err != nil {
+		t.Fatalf("Release() = %v", err)
+	}
+	state, err := ReadProxyState([]byte(stood.held))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Retiring != "prod-api-0" {
+		t.Errorf("the steady-state write left %q retiring, want the neighbour's prod-api-0 still declared: the drain server is the neighbour's to clear, and dropping it mid-drain leaves its helper counting an upstream the pool no longer names", state.Retiring)
+	}
+}
+
 func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing(t *testing.T) {
 	t.Parallel()
 

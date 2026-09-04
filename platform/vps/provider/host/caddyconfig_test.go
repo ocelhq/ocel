@@ -139,8 +139,8 @@ func TestTheBoxsOwnFileReadsBackAsTheStateThatRenderedIt(t *testing.T) {
 	if len(read.Routes) != 1 || read.Routes[0] != state.Routes[0] {
 		t.Errorf("the routes read back as %v, want %v: a deploy that cannot read the box's other apps overwrites them", read.Routes, state.Routes)
 	}
-	if read.Retiring != "" {
-		t.Errorf("the retiring upstream read back as %q, and a drain server is a property of one flip rather than of the box", read.Retiring)
+	if read.Retiring != state.Retiring {
+		t.Errorf("the retiring upstream read back as %q, want %q: a deploy that cannot read a neighbour's drain server rewrites the box without it, and the neighbour's helper then counts an upstream the pool no longer names", read.Retiring, state.Retiring)
 	}
 }
 
