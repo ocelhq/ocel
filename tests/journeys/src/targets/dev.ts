@@ -12,7 +12,7 @@ import { INITIAL_GREETING, redact, SECRET_TOKEN } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { runOcel, treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
-import { appCommand, migrateCommand, siblingDirs, stateComplaint } from "../workspace";
+import { appCommand, appHomes, migrateCommand, stateComplaint } from "../workspace";
 import type { CellContext, Deployment, Target } from "./types";
 
 const HEALTH_TIMEOUT_MS = 120_000;
@@ -138,7 +138,7 @@ async function serve(
 
 async function stateStaysHome(cell: CellContext, dir: string): Promise<void> {
   const holding: string[] = [];
-  for (const candidate of [dir, ...siblingDirs(cell.example).map((s) => path.join(dir, "..", s))]) {
+  for (const candidate of [dir, ...appHomes(cell.example).map((home) => path.join(dir, home))]) {
     try {
       await access(path.join(candidate, ".ocel"));
       holding.push(candidate);
@@ -159,7 +159,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
   await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
   if (cell.example.suites.includes("product")) {
-    await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand(cell.example)], env);
+    await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
   }
 
   const standing: Standing = { dir, apps: [] };

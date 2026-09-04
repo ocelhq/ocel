@@ -98,6 +98,18 @@ export async function workspacePackages(root: string): Promise<Map<string, strin
   return named;
 }
 
+function under(dir: string, parent: string): boolean {
+  return dir.startsWith(`${parent}/`);
+}
+
+export async function nestedMembers(root: string, appDirs: string[]): Promise<string[]> {
+  const named = await workspacePackages(root);
+  const nested = [...named.values()].filter((dir) =>
+    appDirs.some((app) => under(dir, app)),
+  );
+  return nested.sort();
+}
+
 export async function workspaceClosure(root: string, appDirs: string[]): Promise<string[]> {
   const named = await workspacePackages(root);
   const reached = new Set<string>();
@@ -187,6 +199,13 @@ export async function writeLockfile(root: string): Promise<void> {
   }
 }
 
+async function linkVendored(source: string, dest: string): Promise<void> {
+  const vendored = path.join(source, "node_modules");
+  if (await access(vendored).then(() => true, () => false)) {
+    await symlink(vendored, path.join(dest, "node_modules"), "dir");
+  }
+}
+
 async function copyInto(source: string, dest: string, never: string[]): Promise<string> {
   const skipped = new Set(never);
   await rm(dest, { recursive: true, force: true });
@@ -194,10 +213,7 @@ async function copyInto(source: string, dest: string, never: string[]): Promise<
     recursive: true,
     filter: (from) => !skipped.has(path.basename(from)),
   });
-  const vendored = path.join(source, "node_modules");
-  if (await access(vendored).then(() => true, () => false)) {
-    await symlink(vendored, path.join(dest, "node_modules"), "dir");
-  }
+  await linkVendored(source, dest);
   return dest;
 }
 
@@ -214,11 +230,15 @@ export async function plantWorkspace(
   for (const app of apps) {
     await copyTree(path.join(repoRoot, app), path.join(root, app));
   }
-  const packages = await workspaceClosure(repoRoot, [...apps, "."]);
+  const nested = await nestedMembers(repoRoot, apps);
+  for (const member of nested) {
+    await linkVendored(path.join(repoRoot, member), path.join(root, member));
+  }
+  const packages = await workspaceClosure(repoRoot, [...apps, ...nested, "."]);
   for (const held of packages) {
     await copyInto(path.join(repoRoot, held), path.join(root, held), NEVER_COPIED_FROM_A_PACKAGE);
   }
-  await writeWorkspace(root, name, [...apps, ...packages]);
+  await writeWorkspace(root, name, [...apps, ...nested, ...packages]);
   await writeLockfile(root);
   return packages;
 }

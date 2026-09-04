@@ -105,11 +105,18 @@ export const spec: ExampleSpec[] = [
     apps: ["web"],
   },
   {
+    name: "hello-workspace",
+    dir: "hello-workspace",
+    kind: "hello",
+    suites: ["health", "static"],
+    apps: ["next", "express"],
+  },
+  {
     name: "workspace",
     dir: "workspace",
     kind: "workspace",
     suites: ["health", "static", "product", "probes"],
-    apps: ["next", "express", "hono"],
+    apps: ["next", "express"],
   },
   {
     name: "with-transforms",
