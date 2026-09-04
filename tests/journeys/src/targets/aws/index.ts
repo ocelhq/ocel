@@ -201,6 +201,7 @@ async function up(cell: CellContext): Promise<Deployment> {
       {
         slug: cell.slug,
         edge: process.env.OCEL_AWS_EDGE ?? "default",
+        compute: cell.compute,
         apps: Object.fromEntries(
           cell.example.apps.map((app) => [app, deployed.baseUrl(app)]),
         ),
@@ -252,7 +253,7 @@ async function stands(slug: string): Promise<boolean> {
 async function sweep(runId: string): Promise<void> {
   const where = await place();
   const examples = specForTarget("aws");
-  const cells = examples.flatMap((example) => cellNamesOf(example));
+  const cells = examples.flatMap((example) => cellNamesOf(example, awsTarget));
   const mine = cells.map((name) => projectSlug(name, runId));
   const { reclaim, unreadable } = sweepable(await list(), mine, cells);
 
@@ -260,7 +261,7 @@ async function sweep(runId: string): Promise<void> {
     (slug) => `${slug} carries the harness prefix and names no example in the spec table`,
   );
   for (const stranded of reclaim) {
-    const example = examples.find((row) => cellNamesOf(row).includes(stranded.example));
+    const example = examples.find((row) => cellNamesOf(row, awsTarget).includes(stranded.example));
     if (!example) {
       continue;
     }
@@ -314,6 +315,7 @@ export const awsTarget: Target = {
   name: "aws",
   concurrency: 3,
   modes: ["full", "hello"],
+  computes: ["serverless", "container"],
   legTimeoutMs: LEG_TIMEOUT_MS,
   legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,

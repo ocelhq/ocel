@@ -13,7 +13,7 @@ import type {
   TestPick,
 } from "./types";
 
-export type { Edge, ExpectationEnvironment, Expectations, Gap, Listed } from "./types";
+export type { Compute, Edge, ExpectationEnvironment, Expectations, Gap, Listed } from "./types";
 
 export const EDGE_ENV = "OCEL_AWS_EDGE";
 export const DEFAULT_EDGE: Edge = "cloudfront";
@@ -102,11 +102,18 @@ function hitsFor(block: Affected, planned: PlannedTest[], said: string): Planned
   const titles = new Set(block.tests.flatMap(titlesOf));
   const hits = planned.filter(
     (test) =>
-      (block.cells === undefined || block.cells.includes(test.cell)) && titles.has(test.title),
+      (block.cells === undefined || block.cells.includes(test.cell)) &&
+      (block.compute === undefined || block.compute.includes(test.variant.compute)) &&
+      titles.has(test.title),
   );
   for (const cell of block.cells ?? []) {
     if (!hits.some((hit) => hit.cell === cell)) {
       throw new Error(`${said} lists ${cell}, which plans none of the tests named`);
+    }
+  }
+  for (const compute of block.compute ?? []) {
+    if (!hits.some((hit) => hit.variant.compute === compute)) {
+      throw new Error(`${said} lists ${compute}, which plans none of the tests named`);
     }
   }
   if (hits.length === 0) {
@@ -122,7 +129,7 @@ export function resolve(
 ): Expectations {
   checkIds(listed);
   const target = targetNamed(targetOf[environment]);
-  const planned = planTests(specForTarget(target.name), target.legs, target.modes);
+  const planned = planTests(specForTarget(target.name), target.legs, target);
   const out: Expectations = {};
   for (const gap of listed) {
     const carried = new Set<string>();

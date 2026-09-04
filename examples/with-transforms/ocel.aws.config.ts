@@ -19,5 +19,5 @@ export default defineConfig({
   provider: awsProvider({ transforms: ["./infra/defaults.transform.ts"] }),
   ...(edge ? { edge: edge() } : {}),
   ...(process.env.OCEL_JOURNEY_DNS === "cloudflare" ? { dns: cloudflareDns() } : {}),
-  apps: zonedApps(),
+  apps: zonedApps(process.env.OCEL_JOURNEY_COMPUTE),
 });

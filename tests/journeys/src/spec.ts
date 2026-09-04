@@ -1,3 +1,4 @@
+import type { Compute } from "ocel/config";
 import type { ContractContext } from "./contract";
 import { ladderRows } from "./targets/aws/ladder";
 import { pulumiHooks } from "./targets/aws/ladder-pulumi";
@@ -9,6 +10,12 @@ export type Framework = "express" | "hono" | "fastify" | "next";
 export type Kind = "composite" | "ladder" | "workspace";
 
 export type Mode = "full" | "hello";
+
+export type { Compute };
+
+export type Variant = { mode: Mode; compute: Compute };
+
+export type Offered = { modes: Mode[]; computes: Compute[] };
 
 export type Group = { name: string; preferred: string };
 
@@ -145,8 +152,18 @@ export function modesOf(example: ExampleSpec, offered: Mode[]): Mode[] {
   return (example.modes ?? ["full"]).filter((mode) => offered.includes(mode));
 }
 
-export function cellNameOf(example: ExampleSpec, mode: Mode): string {
-  return mode === "hello" ? `${example.name}-hello` : example.name;
+export function variantsOf(example: ExampleSpec, offered: Offered): Variant[] {
+  return modesOf(example, offered.modes).flatMap((mode) =>
+    offered.computes.map((compute) => ({ mode, compute })),
+  );
+}
+
+export function cellNameOf(example: ExampleSpec, variant: Variant, offered: Offered): string {
+  return [
+    example.name,
+    ...(variant.mode === "hello" ? ["hello"] : []),
+    ...(variant.compute === offered.computes[0] ? [] : [variant.compute]),
+  ].join("-");
 }
 
 export function suitesOf(example: ExampleSpec, mode: Mode): Suite[] {
@@ -155,8 +172,8 @@ export function suitesOf(example: ExampleSpec, mode: Mode): Suite[] {
     : example.suites;
 }
 
-export function cellNamesOf(example: ExampleSpec): string[] {
-  return (example.modes ?? ["full"]).map((mode) => cellNameOf(example, mode));
+export function cellNamesOf(example: ExampleSpec, offered: Offered): string[] {
+  return variantsOf(example, offered).map((variant) => cellNameOf(example, variant, offered));
 }
 
 export function preferredOf(group: string): string | undefined {

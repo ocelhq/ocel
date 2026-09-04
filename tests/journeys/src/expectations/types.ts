@@ -1,8 +1,10 @@
-import type { Leg, Suite } from "../spec";
+import type { Compute, Leg, Suite } from "../spec";
 
 export type ExpectationEnvironment = "aws" | "aws.floci" | "dev" | "vps" | "vps.incus";
 
 export type Edge = "api-gateway" | "cloudfront" | "cloudflare";
+
+export type { Compute };
 
 export type TestPick =
   | string
@@ -12,6 +14,7 @@ export type TestPick =
 export type Affected = {
   on: ExpectationEnvironment[];
   edge?: Edge[];
+  compute?: Compute[];
   cells?: string[];
   tests: TestPick[];
 };

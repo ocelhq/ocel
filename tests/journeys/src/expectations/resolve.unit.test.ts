@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "vitest";
 import { contractTitle, UP_TITLE } from "../plan";
 import { EDGE_ENV, expectationsFor, resolve } from "./index";
-import type { Gap } from "./types";
+import type { Compute, Gap } from "./types";
 
 const before = process.env[EDGE_ENV];
 
@@ -179,6 +179,40 @@ describe("resolve", () => {
     assert.deepEqual(resolve(gaps, "dev", undefined), {});
     assert.deepEqual(resolve(gaps, "aws", "cloudflare"), {});
     assert.ok(resolve(gaps, "aws", "cloudfront")["express/web"]?.[UP_TITLE]);
+  });
+
+  it("skips a block listed for another compute", () => {
+    const gaps = [gap("one", [{ on: ["aws"], compute: ["container"], tests: [UP_TITLE] }])];
+    const listed = resolve(gaps, "aws", "cloudfront");
+    assert.ok(listed["express-container/web"]?.[UP_TITLE]);
+    assert.ok(listed["express-hello-container/web"]?.[UP_TITLE]);
+    assert.equal(listed["express/web"], undefined);
+    assert.equal(listed["express-hello/web"], undefined);
+  });
+
+  it("refuses a block naming a compute the target does not run", () => {
+    assert.throws(
+      () =>
+        resolve(
+          [gap("one", [{ on: ["dev"], compute: ["container"], tests: [UP_TITLE] }])],
+          "dev",
+          undefined,
+        ),
+      /one on dev lists container, which plans none of the tests named/,
+    );
+    assert.throws(
+      () =>
+        resolve(
+          [
+            gap("one", [
+              { on: ["aws"], compute: ["container", "nowhere" as Compute], tests: [UP_TITLE] },
+            ]),
+          ],
+          "aws",
+          "cloudfront",
+        ),
+      /one on aws on cloudfront lists nowhere, which plans none of the tests named/,
+    );
   });
 
   it("refuses two gaps with one id, and a gap that affects nothing", () => {

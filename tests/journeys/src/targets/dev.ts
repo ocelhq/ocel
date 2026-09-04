@@ -253,6 +253,7 @@ export const devTarget: Target = {
   name: "dev",
   concurrency: 4,
   modes: ["full"],
+  computes: ["serverless"],
   legTimeoutMs: 180_000,
   legs: ["up", "contract", "destroy"],
   guard,

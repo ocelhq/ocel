@@ -2,6 +2,8 @@ import type { Expectations, Listed } from "./expectations/types";
 import { type PlannedTest, UP_TITLE } from "./plan";
 import type { Leg } from "./spec";
 
+type Planned = Pick<PlannedTest, "cell" | "title" | "leg">;
+
 export type TestOutcome = "passed" | "failed" | "skipped" | "todo" | "only";
 
 export type TestResult = {
@@ -82,7 +84,7 @@ function verdictFor(result: TestResult | undefined, gaps: number, blocking: Bloc
 }
 
 function blockingByCell(
-  planned: PlannedTest[],
+  planned: Planned[],
   byKey: Map<string, TestResult>,
   expectations: Expectations,
 ): Map<string, Blocking> {
@@ -101,7 +103,7 @@ function blockingByCell(
 }
 
 export function reconcile(input: {
-  planned: PlannedTest[];
+  planned: Planned[];
   results: TestResult[];
   expectations: Expectations;
 }): Report {
