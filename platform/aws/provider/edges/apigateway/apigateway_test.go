@@ -500,6 +500,11 @@ func TestReconcileLeavesTheMethodsItAlreadyOpened(t *testing.T) {
 		t.Fatal("the first reconcile opened no method; the repeat this test covers cannot happen")
 	}
 	integrated := w.gateway.count("PutIntegration")
+	for _, call := range []string{"PutMethodResponse", "PutIntegrationResponse"} {
+		if w.gateway.count(call) == 0 {
+			t.Fatalf("the first reconcile made no %s; the repeat this test covers cannot happen", call)
+		}
+	}
 	w.gateway.calls = nil
 
 	if _, err := e.Reconcile(ctx, testSpec(), edge.StackState{}); err != nil {
@@ -508,8 +513,44 @@ func TestReconcileLeavesTheMethodsItAlreadyOpened(t *testing.T) {
 	if got := w.gateway.count("PutMethod"); got != 0 {
 		t.Errorf("PutMethod calls on the second reconcile = %d, want none; API Gateway rejects a method the resource already carries", got)
 	}
+	if got := w.gateway.count("PutMethodResponse"); got != 0 {
+		t.Errorf("PutMethodResponse calls on the second reconcile = %d, want none; API Gateway rejects a status-code response the method already carries", got)
+	}
+	if got := w.gateway.count("PutIntegrationResponse"); got != 0 {
+		t.Errorf("PutIntegrationResponse calls on the second reconcile = %d, want none; API Gateway rejects a status-code response the integration already carries", got)
+	}
 	if got := w.gateway.count("PutIntegration"); got != integrated {
 		t.Errorf("PutIntegration calls on the second reconcile = %d, want the %d the first made; skipping the method must not skip what it points at", got, integrated)
+	}
+}
+
+func TestReconcileRewritesResponseHeadersThatNoLongerMatchThePlan(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	e := bootstrapped(t, w)
+	if _, err := e.Reconcile(ctx, testSpec(), edge.StackState{}); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	api := w.gateway.named(productionAPIName())
+	resource := api.id + "/_next/static/{proxy+}"
+	method := api.methods[resource+" "+getMethod]
+	if method == nil {
+		t.Fatalf("the static-asset method is missing from %s; the drift this test covers cannot happen", api.id)
+	}
+	method.methodResponses["200"] = map[string]bool{edgeHeaderParameter: true}
+	method.integrationResponse["200"] = map[string]string{edgeHeaderParameter: "'stale'"}
+	w.gateway.calls = nil
+
+	if _, err := e.Reconcile(ctx, testSpec(), edge.StackState{}); err != nil {
+		t.Fatalf("second Reconcile: %v", err)
+	}
+	if got := method.methodResponses["200"]["method.response.header.Content-Type"]; !got {
+		t.Errorf("the method response still declares %v, not the headers the plan names; a header dropped outside Ocel would stay dropped", method.methodResponses["200"])
+	}
+	if got := method.integrationResponse["200"][edgeHeaderParameter]; got != "'"+edgeHeaderValue+"'" {
+		t.Errorf("the integration response maps %s to %q, want %q", edgeHeaderParameter, got, "'"+edgeHeaderValue+"'")
 	}
 }
 

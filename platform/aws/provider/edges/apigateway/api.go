@@ -190,6 +190,64 @@ func ensureMethod(ctx context.Context, c Clients, in *apigateway.PutMethodInput)
 	return nil
 }
 
+func ensureMethodResponse(ctx context.Context, c Clients, in *apigateway.PutMethodResponseInput) error {
+	held, err := c.APIGateway.GetMethodResponse(ctx, &apigateway.GetMethodResponseInput{
+		RestApiId:  in.RestApiId,
+		ResourceId: in.ResourceId,
+		HttpMethod: in.HttpMethod,
+		StatusCode: in.StatusCode,
+	})
+	switch {
+	case err == nil && maps.Equal(held.ResponseParameters, in.ResponseParameters):
+		return nil
+	case err == nil:
+		if _, err := c.APIGateway.DeleteMethodResponse(ctx, &apigateway.DeleteMethodResponseInput{
+			RestApiId:  in.RestApiId,
+			ResourceId: in.ResourceId,
+			HttpMethod: in.HttpMethod,
+			StatusCode: in.StatusCode,
+		}); err != nil && !isNotFound(err) {
+			return err
+		}
+	case !isNotFound(err):
+		return err
+	}
+	var conflict *agtypes.ConflictException
+	if _, err := c.APIGateway.PutMethodResponse(ctx, in); err != nil && !errors.As(err, &conflict) {
+		return err
+	}
+	return nil
+}
+
+func ensureIntegrationResponse(ctx context.Context, c Clients, in *apigateway.PutIntegrationResponseInput) error {
+	held, err := c.APIGateway.GetIntegrationResponse(ctx, &apigateway.GetIntegrationResponseInput{
+		RestApiId:  in.RestApiId,
+		ResourceId: in.ResourceId,
+		HttpMethod: in.HttpMethod,
+		StatusCode: in.StatusCode,
+	})
+	switch {
+	case err == nil && maps.Equal(held.ResponseParameters, in.ResponseParameters):
+		return nil
+	case err == nil:
+		if _, err := c.APIGateway.DeleteIntegrationResponse(ctx, &apigateway.DeleteIntegrationResponseInput{
+			RestApiId:  in.RestApiId,
+			ResourceId: in.ResourceId,
+			HttpMethod: in.HttpMethod,
+			StatusCode: in.StatusCode,
+		}); err != nil && !isNotFound(err) {
+			return err
+		}
+	case !isNotFound(err):
+		return err
+	}
+	var conflict *agtypes.ConflictException
+	if _, err := c.APIGateway.PutIntegrationResponse(ctx, in); err != nil && !errors.As(err, &conflict) {
+		return err
+	}
+	return nil
+}
+
 func putEntryRoute(ctx context.Context, c Clients, plan apiPlan, api, resource string) error {
 	if err := ensureMethod(ctx, c, &apigateway.PutMethodInput{
 		RestApiId:         aws.String(api),
@@ -236,7 +294,7 @@ func putStaticRoute(ctx context.Context, c Clients, plan apiPlan, api, resource 
 	}); err != nil {
 		return fmt.Errorf("point REST API %s at the release's static assets: %w", api, err)
 	}
-	if _, err := c.APIGateway.PutMethodResponse(ctx, &apigateway.PutMethodResponseInput{
+	if err := ensureMethodResponse(ctx, c, &apigateway.PutMethodResponseInput{
 		RestApiId:  aws.String(api),
 		ResourceId: aws.String(resource),
 		HttpMethod: aws.String(getMethod),
@@ -250,7 +308,7 @@ func putStaticRoute(ctx context.Context, c Clients, plan apiPlan, api, resource 
 	}); err != nil {
 		return fmt.Errorf("declare the static-asset response headers on REST API %s: %w", api, err)
 	}
-	if _, err := c.APIGateway.PutIntegrationResponse(ctx, &apigateway.PutIntegrationResponseInput{
+	if err := ensureIntegrationResponse(ctx, c, &apigateway.PutIntegrationResponseInput{
 		RestApiId:  aws.String(api),
 		ResourceId: aws.String(resource),
 		HttpMethod: aws.String(getMethod),

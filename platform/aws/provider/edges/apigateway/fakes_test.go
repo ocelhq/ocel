@@ -387,8 +387,51 @@ func (f *fakeGateway) PutMethodResponse(_ context.Context, in *apigateway.PutMet
 	}
 	f.record("PutMethodResponse " + api.resources[aws.ToString(in.ResourceId)] + " " + aws.ToString(in.StatusCode))
 	m := f.method(api, aws.ToString(in.ResourceId), aws.ToString(in.HttpMethod))
+	if _, held := m.methodResponses[aws.ToString(in.StatusCode)]; held {
+		return nil, &agtypes.ConflictException{Message: aws.String("Method response already exists for this method")}
+	}
 	m.methodResponses[aws.ToString(in.StatusCode)] = in.ResponseParameters
 	return &apigateway.PutMethodResponseOutput{}, nil
+}
+
+func (f *fakeGateway) GetMethodResponse(_ context.Context, in *apigateway.GetMethodResponseInput, _ ...func(*apigateway.Options)) (*apigateway.GetMethodResponseOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	api, ok := f.apis[aws.ToString(in.RestApiId)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
+	}
+	status := aws.ToString(in.StatusCode)
+	f.record("GetMethodResponse " + api.resources[aws.ToString(in.ResourceId)] + " " + status)
+	m, ok := api.methods[aws.ToString(in.ResourceId)+" "+aws.ToString(in.HttpMethod)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no method")}
+	}
+	parameters, held := m.methodResponses[status]
+	if !held {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no method response " + status)}
+	}
+	return &apigateway.GetMethodResponseOutput{StatusCode: in.StatusCode, ResponseParameters: parameters}, nil
+}
+
+func (f *fakeGateway) DeleteMethodResponse(_ context.Context, in *apigateway.DeleteMethodResponseInput, _ ...func(*apigateway.Options)) (*apigateway.DeleteMethodResponseOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	api, ok := f.apis[aws.ToString(in.RestApiId)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
+	}
+	status := aws.ToString(in.StatusCode)
+	f.record("DeleteMethodResponse " + api.resources[aws.ToString(in.ResourceId)] + " " + status)
+	m, ok := api.methods[aws.ToString(in.ResourceId)+" "+aws.ToString(in.HttpMethod)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no method")}
+	}
+	if _, held := m.methodResponses[status]; !held {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no method response " + status)}
+	}
+	delete(m.methodResponses, status)
+	return &apigateway.DeleteMethodResponseOutput{}, nil
 }
 
 func (f *fakeGateway) PutIntegrationResponse(_ context.Context, in *apigateway.PutIntegrationResponseInput, _ ...func(*apigateway.Options)) (*apigateway.PutIntegrationResponseOutput, error) {
@@ -400,8 +443,51 @@ func (f *fakeGateway) PutIntegrationResponse(_ context.Context, in *apigateway.P
 	}
 	f.record("PutIntegrationResponse " + api.resources[aws.ToString(in.ResourceId)] + " " + aws.ToString(in.StatusCode))
 	m := f.method(api, aws.ToString(in.ResourceId), aws.ToString(in.HttpMethod))
+	if _, held := m.integrationResponse[aws.ToString(in.StatusCode)]; held {
+		return nil, &agtypes.ConflictException{Message: aws.String("Integration response already exists for this method")}
+	}
 	m.integrationResponse[aws.ToString(in.StatusCode)] = in.ResponseParameters
 	return &apigateway.PutIntegrationResponseOutput{}, nil
+}
+
+func (f *fakeGateway) GetIntegrationResponse(_ context.Context, in *apigateway.GetIntegrationResponseInput, _ ...func(*apigateway.Options)) (*apigateway.GetIntegrationResponseOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	api, ok := f.apis[aws.ToString(in.RestApiId)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
+	}
+	status := aws.ToString(in.StatusCode)
+	f.record("GetIntegrationResponse " + api.resources[aws.ToString(in.ResourceId)] + " " + status)
+	m, ok := api.methods[aws.ToString(in.ResourceId)+" "+aws.ToString(in.HttpMethod)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no method")}
+	}
+	parameters, held := m.integrationResponse[status]
+	if !held {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no integration response " + status)}
+	}
+	return &apigateway.GetIntegrationResponseOutput{StatusCode: in.StatusCode, ResponseParameters: parameters}, nil
+}
+
+func (f *fakeGateway) DeleteIntegrationResponse(_ context.Context, in *apigateway.DeleteIntegrationResponseInput, _ ...func(*apigateway.Options)) (*apigateway.DeleteIntegrationResponseOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	api, ok := f.apis[aws.ToString(in.RestApiId)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no api")}
+	}
+	status := aws.ToString(in.StatusCode)
+	f.record("DeleteIntegrationResponse " + api.resources[aws.ToString(in.ResourceId)] + " " + status)
+	m, ok := api.methods[aws.ToString(in.ResourceId)+" "+aws.ToString(in.HttpMethod)]
+	if !ok {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no method")}
+	}
+	if _, held := m.integrationResponse[status]; !held {
+		return nil, &agtypes.NotFoundException{Message: aws.String("no integration response " + status)}
+	}
+	delete(m.integrationResponse, status)
+	return &apigateway.DeleteIntegrationResponseOutput{}, nil
 }
 
 func (f *fakeGateway) CreateDeployment(_ context.Context, in *apigateway.CreateDeploymentInput, _ ...func(*apigateway.Options)) (*apigateway.CreateDeploymentOutput, error) {
