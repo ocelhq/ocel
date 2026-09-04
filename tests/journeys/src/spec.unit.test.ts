@@ -4,7 +4,10 @@ import {
   cellNamesOf,
   type ExampleSpec,
   examplesNamed,
+  groups,
   modesOf,
+  preferredOf,
+  spec,
   specByName,
   suitesOf,
 } from "./spec";
@@ -61,5 +64,15 @@ describe("the modes an example runs in", () => {
   it("keeps health and static alone in the hello mode", () => {
     expect(suitesOf(express, "full")).toEqual(express.suites);
     expect(suitesOf(express, "hello")).toEqual(["health", "static"]);
+  });
+});
+
+describe("the groups the spec declares", () => {
+  it("prefers an example that carries the group", () => {
+    for (const group of groups) {
+      const members = spec.filter((row) => row.group === group.name).map((row) => row.name);
+      expect(members).toContain(group.preferred);
+      expect(preferredOf(group.name)).toBe(group.preferred);
+    }
   });
 });

@@ -160,7 +160,17 @@ export function cellNamesOf(example: ExampleSpec): string[] {
 }
 
 export function preferredOf(group: string): string | undefined {
-  return groups.find((row) => row.name === group)?.preferred;
+  const named = groups.find((row) => row.name === group);
+  if (!named) {
+    return undefined;
+  }
+  if (!spec.some((row) => row.group === group && row.name === named.preferred)) {
+    const members = spec.filter((row) => row.group === group).map((row) => row.name);
+    throw new Error(
+      `the ${group} group prefers ${named.preferred}, which is no example of that group (${members.join(", ")})`,
+    );
+  }
+  return named.preferred;
 }
 
 export function specForTarget(target: TargetName): ExampleSpec[] {
