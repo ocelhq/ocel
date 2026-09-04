@@ -56,13 +56,8 @@ describe("resolve", () => {
 
   it("expands a row across the contract legs it names, and the three by default", () => {
     const listed = resolve(
-      [
-        gap("one", [{ on: ["dev"], cells: ["express/web"], tests: [{ row: HEALTH }] }]),
-        gap("two", [
-          { on: ["vps"], cells: ["express/web"], tests: [{ row: HEALTH, legs: ["rollback"] }] },
-        ]),
-      ],
-      "dev",
+      [gap("one", [{ on: ["vps"], cells: ["express/web"], tests: [{ row: HEALTH }] }])],
+      "vps",
       undefined,
     );
     assert.deepEqual(Object.keys(listed["express/web"] ?? {}), [
@@ -70,7 +65,7 @@ describe("resolve", () => {
       contractTitle("redeploy", HEALTH),
       contractTitle("rollback", HEALTH),
     ]);
-    const vps = resolve(
+    const named = resolve(
       [
         gap("two", [
           { on: ["vps"], cells: ["express/web"], tests: [{ row: HEALTH, legs: ["rollback"] }] },
@@ -79,7 +74,7 @@ describe("resolve", () => {
       "vps",
       undefined,
     );
-    assert.deepEqual(Object.keys(vps["express/web"] ?? {}), [contractTitle("rollback", HEALTH)]);
+    assert.deepEqual(Object.keys(named["express/web"] ?? {}), [contractTitle("rollback", HEALTH)]);
   });
 
   it("expands a suite to its rows, minus the titles it excepts", () => {
@@ -87,13 +82,13 @@ describe("resolve", () => {
       [
         gap("one", [
           {
-            on: ["dev"],
+            on: ["vps"],
             cells: ["express-hello/web"],
             tests: [{ rows: ["static"], legs: ["contract"], except: [SVG] }],
           },
         ]),
       ],
-      "dev",
+      "vps",
       undefined,
     );
     const titles = Object.keys(listed["express-hello/web"] ?? {});
@@ -103,8 +98,8 @@ describe("resolve", () => {
 
   it("leaves a cell alone when its plan has none of the tests named and no cell was named", () => {
     const listed = resolve(
-      [gap("one", [{ on: ["dev"], tests: [{ rows: ["product"], legs: ["contract"] }] }])],
-      "dev",
+      [gap("one", [{ on: ["vps"], tests: [{ rows: ["product"], legs: ["contract"] }] }])],
+      "vps",
       undefined,
     );
     assert.equal(listed["express-hello/web"], undefined);
@@ -117,13 +112,41 @@ describe("resolve", () => {
         resolve(
           [
             gap("one", [
-              { on: ["dev"], cells: ["express-hello/web"], tests: [{ rows: ["product"] }] },
+              { on: ["vps"], cells: ["express-hello/web"], tests: [{ rows: ["product"] }] },
+            ]),
+          ],
+          "vps",
+          undefined,
+        ),
+      /one on vps lists express-hello\/web/,
+    );
+  });
+
+  it("refuses a block naming a cell in a mode the target does not offer", () => {
+    assert.throws(
+      () =>
+        resolve(
+          [gap("one", [{ on: ["dev"], cells: ["express-hello/web"], tests: [UP_TITLE] }])],
+          "dev",
+          undefined,
+        ),
+      /express-hello\/web/,
+    );
+  });
+
+  it("refuses a block naming a leg the target does not run", () => {
+    assert.throws(
+      () =>
+        resolve(
+          [
+            gap("one", [
+              { on: ["dev"], cells: ["express/web"], tests: [{ row: HEALTH, legs: ["rollback"] }] },
             ]),
           ],
           "dev",
           undefined,
         ),
-      /one on dev lists express-hello\/web/,
+      /one on dev lists express\/web/,
     );
   });
 
