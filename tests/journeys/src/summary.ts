@@ -1,3 +1,4 @@
+import { issueUrl, type Listed } from "./expectations";
 import { exitCodeFor, type Report, type ReportRow, type Verdict } from "./reconcile";
 
 const MARKS: Record<Verdict, string> = {
@@ -15,16 +16,29 @@ function escape(value: string): string {
   return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
-function link(issue: string | undefined): string {
-  if (!issue) {
-    return "";
-  }
-  const number = issue.split("/").pop();
-  return `[#${number}](${issue})`;
+function link(gap: Listed): string {
+  return gap.issue === undefined ? gap.id : `${gap.id} [#${gap.issue}](${issueUrl(gap.issue)})`;
 }
 
 function row(entry: ReportRow): string {
-  return `| ${escape(entry.cell)} | ${escape(entry.title)} | ${MARKS[entry.verdict]} | ${link(entry.issue)} |`;
+  const why = entry.listed.map(link).join(", ");
+  return `| ${escape(entry.cell)} | ${escape(entry.title)} | ${MARKS[entry.verdict]} | ${why} |`;
+}
+
+function gapLines(report: Report): string[] {
+  const counts = new Map<string, { gap: Listed; red: number }>();
+  for (const entry of report.rows) {
+    for (const gap of entry.listed) {
+      const tally = counts.get(gap.id) ?? { gap, red: 0 };
+      if (entry.verdict === "expected-failure") {
+        tally.red += 1;
+      }
+      counts.set(gap.id, tally);
+    }
+  }
+  return [...counts.values()].map(
+    ({ gap, red }) => `- ${link(gap)} — ${escape(gap.reason)} — red (expected) ${red}`,
+  );
 }
 
 export function summaryTable(
@@ -45,7 +59,9 @@ export function summaryTable(
     ...(meta.leftOut.length > 0 ? [`left out this pass: ${meta.leftOut.join(", ")}`, ""] : []),
     tally,
     "",
-    "| cell | test | verdict | issue |",
+    ...gapLines(report),
+    "",
+    "| cell | test | verdict | gap |",
     "| --- | --- | --- | --- |",
     ...report.rows.map(row),
     "",
