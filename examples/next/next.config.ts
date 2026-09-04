@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
-import { APP, productionHostname } from "./lib/hostname";
 
-const selfHosted = productionHostname(APP);
+// The hostname this app is served on, so the optimizer takes absolute urls to its own images.
+const site = process.env.SITE_HOSTNAME;
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
     deviceSizes: [640, 1080],
     imageSizes: [64],
     minimumCacheTTL: 60,
-    remotePatterns: selfHosted ? [{ protocol: "https", hostname: selfHosted }] : [],
+    remotePatterns: site ? [{ protocol: "https", hostname: site }] : [],
   },
 
   async headers() {

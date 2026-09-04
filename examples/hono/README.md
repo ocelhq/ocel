@@ -14,7 +14,7 @@ ocel dev
 ```
 
 ```bash
-ocel deploy --config ocel.aws.config.ts
+ocel deploy
 OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --config ocel.vps.config.ts
 ```
 

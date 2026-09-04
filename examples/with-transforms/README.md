@@ -4,9 +4,9 @@ Four of the [examples](../README.md) are three rungs of one ladder, and a team c
 it scales. Every rung deploys with `ocel deploy`; what changes is how much of the
 provisioning you have taken back.
 
-**No config — [express](../express).** The reference composite: a provider-less base config
-names the slug and the app, and `ocel.aws.config.ts` and `ocel.vps.config.ts` import it and
-add a provider each. Everything else Ocel provisions from what the app declares. A resource
+**No config — [express](../express).** The reference composite: `ocel.config.ts` names the
+slug, the provider and the app, and `ocel.vps.config.ts` is the same project on a box of
+your own. Everything else Ocel provisions from what the app declares. A resource
 in app code is the provisioning step, so there is nothing to keep in sync and nothing to
 configure. Most projects never need to leave this rung.
 

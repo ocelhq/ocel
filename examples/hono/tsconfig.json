@@ -12,6 +12,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "ocel/**/*.ts", "ocel.config.ts", "ocel.aws.config.ts", "ocel.vps.config.ts"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "ocel/**/*.ts", "ocel.config.ts", "ocel.vps.config.ts"],
   "exclude": ["node_modules"]
 }

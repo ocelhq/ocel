@@ -1,18 +1,26 @@
-import type { AppConfig } from "ocel/config";
+import awsProvider from "@ocel/provider-aws";
 import { defineConfig } from "ocel/config";
-import { APP, productionHostname, projectSlug } from "./lib/hostname";
 
-const config = defineConfig({
-  slug: projectSlug(),
-  apps: [{ name: APP, framework: "next", path: "." }],
+export default defineConfig({
+  slug: "next",
+  provider: awsProvider(),
+
+  // The provider fronts the deployment with its own default edge. Name one instead:
+  // edge: cloudfront(), // or apiGateway(), both from "@ocel/provider-aws/edge"
+  // edge: cloudflare(), // from "ocel/edge"; the token and account id come from the environment
+
+  // Hostname records go into the provider's own dns. Write them into cloudflare instead:
+  // dns: cloudflareDns(), // from "ocel/dns"
+
+  apps: [
+    {
+      name: "web",
+      framework: "next",
+      path: ".",
+      // Serverless unless told otherwise; a container is one image serving every route:
+      // compute: "container",
+      // The hostname production serves on, bound with `ocel domain add`:
+      // domains: { production: "web.example.com" },
+    },
+  ],
 });
-
-export function zonedApps(compute?: string): AppConfig[] | undefined {
-  return config.apps?.map((app) => {
-    const production = productionHostname(app.name);
-    const zoned = production ? { ...app, domains: { production } } : app;
-    return compute === "container" ? { ...zoned, compute } : zoned;
-  });
-}
-
-export default config;
