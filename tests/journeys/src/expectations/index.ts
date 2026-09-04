@@ -1,6 +1,7 @@
 import { contractRows } from "../contract";
 import { contractTitle, type PlannedTest, planTests } from "../plan";
-import { type Leg, type Mode, specForTarget, type Suite, type TargetName } from "../spec";
+import { type Leg, specForTarget, type Suite, type TargetName } from "../spec";
+import { targetNamed } from "../targets";
 import { gaps } from "./gaps";
 import type {
   Affected,
@@ -18,10 +19,6 @@ export const EDGE_ENV = "OCEL_AWS_EDGE";
 export const DEFAULT_EDGE: Edge = "cloudfront";
 export const EDGES: readonly Edge[] = ["api-gateway", "cloudfront", "cloudflare"];
 export const CONTRACT_LEGS: Leg[] = ["contract", "redeploy", "rollback"];
-
-const EVERY_LEG: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"];
-
-const EVERY_MODE: Mode[] = ["full", "hello"];
 
 const EVERY_SUITE: Suite[] = [
   "health",
@@ -124,7 +121,8 @@ export function resolve(
   edge: Edge | undefined,
 ): Expectations {
   checkIds(listed);
-  const planned = planTests(specForTarget(targetOf[environment]), EVERY_LEG, EVERY_MODE);
+  const target = targetNamed(targetOf[environment]);
+  const planned = planTests(specForTarget(target.name), target.legs, target.modes);
   const out: Expectations = {};
   for (const gap of listed) {
     const carried = new Set<string>();
