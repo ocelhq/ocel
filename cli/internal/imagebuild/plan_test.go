@@ -172,7 +172,7 @@ func TestAnAppInAWorkspaceInstallsFromTheRootLockfileAndOnlyWhatItReaches(t *tes
 	plan := plannedFrom(t, loc)
 
 	install := strings.Join(plan.step(t, "install"), "\n")
-	if want := "pnpm install --frozen-lockfile --filter ./apps/web..."; !strings.Contains(install, want) {
+	if want := "pnpm install --frozen-lockfile --filter \"{./apps/web}...\""; !strings.Contains(install, want) {
 		t.Errorf("the install step runs:\n%s\nwant %q — the whole monorepo is installed to serve one app otherwise", install, want)
 	}
 	if strings.Contains(install, "pnpm install --frozen-lockfile --prefer-offline\n") {
@@ -190,7 +190,7 @@ func TestAnAppInAWorkspaceInstallsFromTheRootLockfileAndOnlyWhatItReaches(t *tes
 func TestAnAppInAWorkspaceRunsItsOwnScriptsAndNeverTheRoots(t *testing.T) {
 	plan := plannedFrom(t, located(t, workspaceApp))
 
-	if want := "pnpm --filter ./apps/web run start"; plan.Deploy.StartCommand != want {
+	if want := "pnpm --filter \"{./apps/web}\" run start"; plan.Deploy.StartCommand != want {
 		t.Errorf("the plan starts the app with %q, want %q", plan.Deploy.StartCommand, want)
 	}
 	build := strings.Join(plan.step(t, "build"), "\n")
@@ -206,7 +206,7 @@ func TestAWorkspaceAppWithABuildScriptBuildsWhatItDependsOnFirst(t *testing.T) {
 	plan := plannedFrom(t, loc)
 
 	build := strings.Join(plan.step(t, "build"), "\n")
-	if want := "pnpm --filter ./apps/web... run build"; !strings.Contains(build, want) {
+	if want := "pnpm --filter \"{./apps/web}...\" run build"; !strings.Contains(build, want) {
 		t.Errorf("the build step runs:\n%s\nwant %q — a workspace dependency has to be built before the app that imports it", build, want)
 	}
 }
@@ -288,15 +288,15 @@ func TestANextAppInAWorkspaceIsBuiltAndStartedAsTheAppRatherThanTheRoot(t *testi
 
 	plan := plannedFrom(t, loc)
 
-	if want := "pnpm --filter ./apps/web run start"; plan.Deploy.StartCommand != want {
+	if want := "pnpm --filter \"{./apps/web}\" run start"; plan.Deploy.StartCommand != want {
 		t.Errorf("the plan starts the app with %q, want %q — the root's start script serves nothing", plan.Deploy.StartCommand, want)
 	}
 	build := strings.Join(plan.step(t, "build"), "\n")
-	if want := "pnpm --filter ./apps/web... run build"; !strings.Contains(build, want) {
+	if want := "pnpm --filter \"{./apps/web}...\" run build"; !strings.Contains(build, want) {
 		t.Errorf("the build step runs:\n%s\nwant %q", build, want)
 	}
 	install := strings.Join(plan.step(t, "install"), "\n")
-	if want := "pnpm install --frozen-lockfile --filter ./apps/web..."; !strings.Contains(install, want) {
+	if want := "pnpm install --frozen-lockfile --filter \"{./apps/web}...\""; !strings.Contains(install, want) {
 		t.Errorf("the install step runs:\n%s\nwant %q", install, want)
 	}
 
@@ -327,10 +327,10 @@ func TestANodeAppIsPlannedAsOneEvenWhereAnotherLanguageSitsAtTheRoot(t *testing.
 	plan := planned(t, polyglotApp)
 
 	install := strings.Join(plan.step(t, "install"), "\n")
-	if want := "pnpm install --frozen-lockfile --filter ./apps/web..."; !strings.Contains(install, want) {
+	if want := "pnpm install --frozen-lockfile --filter \"{./apps/web}...\""; !strings.Contains(install, want) {
 		t.Errorf("the install step runs:\n%s\nwant %q — the root carries a go.mod as well, and railpack takes the first language it detects", install, want)
 	}
-	if want := "pnpm --filter ./apps/web run start"; plan.Deploy.StartCommand != want {
+	if want := "pnpm --filter \"{./apps/web}\" run start"; plan.Deploy.StartCommand != want {
 		t.Errorf("the plan starts the app with %q, want %q", plan.Deploy.StartCommand, want)
 	}
 }
