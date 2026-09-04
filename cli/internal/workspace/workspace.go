@@ -3,8 +3,11 @@ package workspace
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -15,6 +18,7 @@ const (
 	manifestName      = "package.json"
 	pnpmWorkspaceFile = "pnpm-workspace.yaml"
 	gitEntry          = ".git"
+	vendorDir         = "node_modules"
 )
 
 type App struct {
@@ -111,6 +115,42 @@ func locatedAt(dir, root string) (Location, error) {
 		)
 	}
 	return located, nil
+}
+
+func (l Location) Members() []string {
+	globs, ok := declaredPackages(l.Root)
+	if !ok {
+		return nil
+	}
+	tree := os.DirFS(l.Root)
+	named := map[string]bool{}
+	for _, glob := range globs {
+		pattern := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(glob), "./"), "/")
+		if strings.HasPrefix(pattern, "!") {
+			continue
+		}
+		matches, err := doublestar.Glob(tree, path.Join(pattern, manifestName))
+		if err != nil {
+			continue
+		}
+		for _, match := range matches {
+			dir := path.Dir(match)
+			if slices.Contains(strings.Split(dir, "/"), vendorDir) {
+				continue
+			}
+			if _, member := memberOf(l.Root, filepath.Join(l.Root, filepath.FromSlash(dir)), globs); !member {
+				continue
+			}
+			m, err := readManifest(filepath.Join(l.Root, filepath.FromSlash(match)))
+			if err != nil || m.Name == "" {
+				continue
+			}
+			named[m.Name] = true
+		}
+	}
+	members := slices.Collect(maps.Keys(named))
+	slices.Sort(members)
+	return members
 }
 
 func describe(dir string, m manifest) App {

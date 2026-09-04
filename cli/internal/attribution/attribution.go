@@ -23,6 +23,7 @@ type App struct {
 	Name      string
 	Path      string
 	Container bool
+	Members   []string
 }
 
 type Usage struct {

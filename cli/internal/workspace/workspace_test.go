@@ -255,6 +255,43 @@ func TestTheAppsOwnScriptsAreWhatTheImageRuns(t *testing.T) {
 	}
 }
 
+func TestTheMembersOfAWorkspaceAreTheNamesItsPackagesGoBy(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		"pnpm-workspace.yaml":                        "packages:\n  - apps/*\n  - packages/*\n  - '!packages/legacy'\n",
+		"pnpm-lock.yaml":                             "lockfileVersion: '9.0'\n",
+		"package.json":                               `{"name":"root"}`,
+		"apps/web/package.json":                      `{"name":"@acme/web"}`,
+		"packages/lib/package.json":                  `{"name":"@acme/lib"}`,
+		"packages/legacy/package.json":               `{"name":"@acme/legacy"}`,
+		"packages/lib/node_modules/dep/package.json": `{"name":"dep"}`,
+	})
+
+	members := located(t, filepath.Join(dir, "apps", "web")).Members()
+
+	want := []string{"@acme/lib", "@acme/web"}
+	if len(members) != len(want) {
+		t.Fatalf("Members() = %v, want %v — an installed dependency and a package the workspace excludes are not members of it", members, want)
+	}
+	for i, name := range want {
+		if members[i] != name {
+			t.Errorf("Members() = %v, want %v", members, want)
+		}
+	}
+}
+
+func TestAnAppInNoWorkspaceHasNoMembersToTellApartFromTheRegistry(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		"package.json":      `{"name":"solo"}`,
+		"package-lock.json": `{"lockfileVersion":3}`,
+	})
+
+	if members := located(t, dir).Members(); len(members) != 0 {
+		t.Errorf("Members() = %v, want none for an app that is its own root", members)
+	}
+}
+
 func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *testing.T) {
 	workspaceFiles := map[string]string{
 		"repo/pnpm-workspace.yaml":   "packages:\n  - apps/*\n",
