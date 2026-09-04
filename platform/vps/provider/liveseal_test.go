@@ -35,15 +35,25 @@ func bootstrapped(t *testing.T, vm machine, class providerkit.Class) *vps.Provid
 		t.Fatal(err)
 	}
 	ctx := context.Background()
+	standing, err := bootstrapper.Describe(ctx, class)
+	if err != nil {
+		t.Fatalf("Describe(%s) = %v", class, err)
+	}
+	if standing.Present && !standing.Unfinished && standing.Stacks[0].DigestCurrent {
+		return p
+	}
 	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", class, err)
 	}
-	t.Cleanup(func() {
-		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
-			t.Errorf("Remove(%s) = %v", class, err)
-		}
-	})
 	return p
+}
+
+func dirties(t *testing.T, vm machine) {
+	t.Helper()
+	t.Cleanup(func() {
+		vm.forgetsTheDeployLogin(t)
+		vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	})
 }
 
 func sealedAt(class providerkit.Class, name string) providerkit.Coordinate {
@@ -101,6 +111,7 @@ func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 	vm := live(t)
 	class := providerkit.ClassProduction
 	p := bootstrapped(t, vm, class)
+	dirties(t, vm)
 
 	ctx := context.Background()
 	bootstrapper, err := p.Bootstrap("")
