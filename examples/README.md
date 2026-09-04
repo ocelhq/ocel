@@ -8,6 +8,7 @@ starts at [express](./express), and the story of that ladder opens
 
 - [hello-express](./hello-express) — an Express 5 app that declares nothing at all.
 - [hello-next](./hello-next) — a Next.js App Router app that declares nothing at all.
+- [hello-workspace](./hello-workspace) — a Next.js app and an Express app that declare nothing at all, deployed as one project.
 
 ## composite
 
@@ -30,4 +31,4 @@ starts at [express](./express), and the story of that ladder opens
 
 ## workspace
 
-- [workspace](./workspace) — one project serving the `next`, `express` and `hono` apps behind one edge.
+- [workspace](./workspace) — one project serving a Next.js app and an Express app behind one edge, declaring its postgres, bucket and env once for both.

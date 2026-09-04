@@ -12,6 +12,7 @@ packages:
   - packages/native-lib/*
   - scripts/*
   - examples/*
+  - examples/*/apps/*
   - tests/*
 
 allowBuilds:

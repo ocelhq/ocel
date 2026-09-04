@@ -1,16 +1,20 @@
 import path from "node:path";
 import type { ExampleSpec } from "./spec";
 
+function nested(example: ExampleSpec): boolean {
+  return example.apps.length > 1;
+}
+
 export function appPath(example: ExampleSpec, app: string): string {
-  return example.kind === "workspace" ? `../${app}` : ".";
+  return nested(example) ? `apps/${app}` : ".";
 }
 
 export function appFolder(example: ExampleSpec, app: string): string | undefined {
   return example.kind === "workspace" ? `/${app}` : undefined;
 }
 
-export function siblingDirs(example: ExampleSpec): string[] {
-  return example.kind === "workspace" ? example.apps : [];
+export function appHomes(example: ExampleSpec): string[] {
+  return nested(example) ? example.apps.map((app) => appPath(example, app)) : [];
 }
 
 export function appCommand(example: ExampleSpec, app: string): string[] {
@@ -29,12 +33,8 @@ export async function setAppNames(
   }
 }
 
-export function migrateCommand(example: ExampleSpec): string[] {
-  const [first] = example.apps;
-  if (!first) {
-    throw new Error(`${example.name} declares no app to migrate through`);
-  }
-  return ["pnpm", "--dir", appPath(example, first), "run", "migrate"];
+export function migrateCommand(): string[] {
+  return ["pnpm", "run", "migrate"];
 }
 
 export function stateComplaint(home: string, withState: string[]): string | undefined {

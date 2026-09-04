@@ -5,10 +5,17 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { appDirs, configTree, treeRoot } from "./ocel";
 import { specByName } from "./spec";
 import type { CellContext } from "./targets/types";
-import { rootManifest, splitWorkspaceFile, workspaceClosure, workspaceFileFor } from "./tree";
+import {
+  nestedMembers,
+  rootManifest,
+  splitWorkspaceFile,
+  workspaceClosure,
+  workspaceFileFor,
+} from "./tree";
 
 const ROOT_WORKSPACE = `packages:
   - apps/*
+  - apps/*/apps/*
   - packages/*
   - packages/native/*
 
@@ -34,6 +41,11 @@ const LAYOUT: Record<string, unknown> = {
   },
   "apps/worker": { name: "@fake/worker", dependencies: { "@fake/sdk": "workspace:^" } },
   "apps/unused": { name: "@fake/unused", dependencies: { "@fake/orphan": "workspace:^" } },
+  "apps/suite": { name: "@fake/suite" },
+  "apps/suite/apps/web": {
+    name: "@fake/suite-web",
+    dependencies: { "@fake/runtime": "workspace:^" },
+  },
   "packages/sdk": {
     name: "@fake/sdk",
     optionalDependencies: { "@fake/native-linux": "workspace:^" },
@@ -80,6 +92,18 @@ describe("the packages a tree has to carry", () => {
     expect(await workspaceClosure(root, ["apps/web", "apps/worker"])).not.toContain("apps/worker");
   });
 
+  it("names the members nested under an app, and nothing beside it", async () => {
+    expect(await nestedMembers(root, ["apps/suite"])).toEqual(["apps/suite/apps/web"]);
+    expect(await nestedMembers(root, ["apps/web"])).toEqual([]);
+  });
+
+  it("reaches what a nested member depends on once the member is named", async () => {
+    expect(await workspaceClosure(root, ["apps/suite"])).toEqual([]);
+    expect(await workspaceClosure(root, ["apps/suite", "apps/suite/apps/web"])).toEqual([
+      "packages/runtime",
+    ]);
+  });
+
   it("ignores a dependency that resolves from the registry rather than the workspace", async () => {
     expect(await workspaceClosure(root, ["apps/web"])).not.toContain("express");
   });
@@ -100,14 +124,9 @@ describe("where an app sits in the tree built for it", () => {
     }
   });
 
-  it("brings the config's own directory and every sibling app it declares", () => {
+  it("brings the config's own directory alone, whatever kind the example is", () => {
     expect(appDirs(cellFor("express"))).toEqual(["examples/express"]);
-    expect(appDirs(cellFor("workspace"))).toEqual([
-      "examples/workspace",
-      "examples/next",
-      "examples/express",
-      "examples/hono",
-    ]);
+    expect(appDirs(cellFor("workspace"))).toEqual(["examples/workspace"]);
   });
 });
 
@@ -134,7 +153,7 @@ describe("the root manifest a tree gets", () => {
 describe("the workspace file a tree gets", () => {
   it("carries every install-affecting key the repo root declares", () => {
     const carried = splitWorkspaceFile(ROOT_WORKSPACE);
-    expect(carried.packages).toEqual(["apps/*", "packages/*", "packages/native/*"]);
+    expect(carried.packages).toEqual(["apps/*", "apps/*/apps/*", "packages/*", "packages/native/*"]);
     expect(carried.settings).toContain("better-sqlite3: false");
     expect(carried.settings).toContain("semver: ^7.7.2");
     expect(carried.settings).toContain("react: ^19.2.0");

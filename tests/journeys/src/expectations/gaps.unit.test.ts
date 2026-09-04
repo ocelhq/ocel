@@ -63,9 +63,8 @@ describe("the gap list", () => {
       "hono/web": [911],
       "fastify/web": [911],
       "next/web": [849],
-      "workspace/next": [907],
-      "workspace/express": [907],
-      "workspace/hono": [907],
+      "workspace/next": [849],
+      "workspace/express": [849],
       "with-sst/web": [857],
       "with-pulumi/web": [856],
     };
@@ -84,7 +83,9 @@ describe("the gap list", () => {
 
   it("lists real-world hello-next and the with-transforms link rows on api-gateway alone", () => {
     const listed = onEdge("aws", "api-gateway");
-    assert.deepEqual(issues(listed, "hello-next/web", UP_TITLE), [906]);
+    for (const cell of ["hello-next/web", "hello-workspace/next", "hello-workspace/express"]) {
+      assert.deepEqual(issues(listed, cell, UP_TITLE), [906], cell);
+    }
     assert.equal(listed["hello-express/web"], undefined);
     assert.deepEqual(
       Object.fromEntries(
@@ -109,7 +110,13 @@ describe("the gap list", () => {
       ["cloudflare", 922],
     ] as const) {
       const listed = onEdge("aws", edge);
-      for (const cell of ["hello-express/web", "hello-next/web", "with-transforms/web"]) {
+      for (const cell of [
+        "hello-express/web",
+        "hello-next/web",
+        "hello-workspace/next",
+        "hello-workspace/express",
+        "with-transforms/web",
+      ]) {
         assert.deepEqual(Object.keys(listed[cell] ?? {}), [UP_TITLE], `${cell} on ${edge}`);
         assert.deepEqual(issues(listed, cell, UP_TITLE), [issue], `${cell} on ${edge}`);
       }
@@ -134,14 +141,15 @@ describe("the gap list", () => {
       "fastify/web": [884],
       "hello-express/web": [],
       "hello-next/web": [906],
+      "hello-workspace/express": [906],
+      "hello-workspace/next": [906],
       "hono/web": [884],
       "next/web": [849],
       "with-pulumi/web": [856],
       "with-sst/web": [857],
       "with-transforms/web": [884],
-      "workspace/express": [907],
-      "workspace/hono": [907],
-      "workspace/next": [907],
+      "workspace/express": [849],
+      "workspace/next": [849],
     });
     assert.deepEqual(issues(listed, "express/web", HEALTH), [854]);
     assert.deepEqual(issues(listed, "express/web", contractTitle("redeploy", HEALTH)), [854]);
@@ -203,9 +211,8 @@ describe("the gap list", () => {
       "fastify/web": [918],
       "hono/web": [918],
       "next/web": [918],
-      "workspace/express": [907],
-      "workspace/hono": [907],
-      "workspace/next": [907],
+      "workspace/express": [918],
+      "workspace/next": [918],
     });
     for (const leg of CONTRACT_LEGS) {
       assert.deepEqual(

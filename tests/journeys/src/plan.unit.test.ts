@@ -41,7 +41,7 @@ describe("planning a workspace row", () => {
   });
 
   it("names the apps after the frameworks the project mounts", () => {
-    expect(workspace.apps).toEqual(["next", "express", "hono"]);
+    expect(workspace.apps).toEqual(["next", "express"]);
   });
 });
 

@@ -6,11 +6,9 @@ const slug = run ? `j-${run}-workspace` : "workspace";
 
 const config = defineConfig({
   slug,
-  discovery: { paths: ["../next/ocel", "../express/ocel", "../hono/ocel"] },
   apps: [
-    { name: "next", framework: "next", path: "../next", folder: "/next" },
-    { name: "express", framework: "express", path: "../express", folder: "/express" },
-    { name: "hono", framework: "hono", path: "../hono", folder: "/hono" },
+    { name: "next", framework: "next", path: "./apps/next", folder: "/next" },
+    { name: "express", framework: "express", path: "./apps/express", folder: "/express" },
   ],
 });
 

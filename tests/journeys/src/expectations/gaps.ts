@@ -5,8 +5,15 @@ import type { Gap } from "./types";
 const NODE_HTTP = ["express/web", "hono/web", "fastify/web"];
 const COMPOSITE = [...NODE_HTTP, "next/web"];
 const HELLO = ["hello-express/web", "hello-next/web"];
-const WORKSPACE = ["workspace/next", "workspace/express", "workspace/hono"];
-const EVERY_AWS_CELL_BUT_LADDERS = [...COMPOSITE, ...HELLO, ...WORKSPACE, "with-transforms/web"];
+const HELLO_WORKSPACE = ["hello-workspace/next", "hello-workspace/express"];
+const WORKSPACE = ["workspace/next", "workspace/express"];
+const EVERY_AWS_CELL_BUT_LADDERS = [
+  ...COMPOSITE,
+  ...HELLO,
+  ...HELLO_WORKSPACE,
+  ...WORKSPACE,
+  "with-transforms/web",
+];
 
 const UPLOAD_ROW = "the upload protocol stores a document and /api/documents lists it";
 const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
@@ -44,23 +51,13 @@ export const gaps: Gap[] = [
     id: "no-bucket-on-a-box",
     reason: "the vps provider serves no bucket, so every composite example is refused at up",
     issue: 918,
-    affects: [{ on: ["vps", "vps.incus"], cells: COMPOSITE, tests: [UP_TITLE] }],
+    affects: [{ on: ["vps", "vps.incus"], cells: [...COMPOSITE, ...WORKSPACE], tests: [UP_TITLE] }],
   },
   {
     id: "no-router-on-a-box",
     reason: "vps serves a Next app from a container behind Caddy, with no cache router in front",
     issue: 900,
     affects: [{ on: ["vps", "vps.incus"], cells: ["next/web"], tests: [{ rows: ["next-cache"] }] }],
-  },
-  {
-    id: "greeting-declared-twice",
-    reason:
-      "every workspace sibling declares GREETING, so discovery refuses before any command runs",
-    issue: 907,
-    affects: [
-      { on: ["vps", "vps.incus", "aws"], cells: WORKSPACE, tests: [UP_TITLE] },
-      { on: ["aws.floci"], edge: ["api-gateway"], cells: WORKSPACE, tests: [UP_TITLE] },
-    ],
   },
   {
     id: "sst-util-global",
@@ -86,8 +83,13 @@ export const gaps: Gap[] = [
     reason: "ocel build fails collecting page data for /api/todos without a resolved postgres",
     issue: 849,
     affects: [
-      { on: ["aws"], cells: ["next/web"], tests: [UP_TITLE] },
-      { on: ["aws.floci"], edge: ["api-gateway"], cells: ["next/web"], tests: [UP_TITLE] },
+      { on: ["aws"], cells: ["next/web", ...WORKSPACE], tests: [UP_TITLE] },
+      {
+        on: ["aws.floci"],
+        edge: ["api-gateway"],
+        cells: ["next/web", ...WORKSPACE],
+        tests: [UP_TITLE],
+      },
     ],
   },
   {
@@ -98,7 +100,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws", "aws.floci"],
         edge: ["api-gateway"],
-        cells: ["hello-next/web"],
+        cells: ["hello-next/web", ...HELLO_WORKSPACE],
         tests: [UP_TITLE],
       },
     ],
@@ -111,7 +113,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws"],
         edge: ["cloudfront"],
-        cells: [...HELLO, "with-transforms/web"],
+        cells: [...HELLO, ...HELLO_WORKSPACE, "with-transforms/web"],
         tests: [UP_TITLE],
       },
     ],
@@ -124,7 +126,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws"],
         edge: ["cloudflare"],
-        cells: [...HELLO, "with-transforms/web"],
+        cells: [...HELLO, ...HELLO_WORKSPACE, "with-transforms/web"],
         tests: [UP_TITLE],
       },
     ],

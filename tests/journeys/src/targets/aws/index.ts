@@ -187,7 +187,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   await awaitEdge(cell, "up", deployed);
 
   if (cell.example.suites.includes("product")) {
-    await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand(cell.example)], env);
+    await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
   }
 
   await cell.evidence.write(

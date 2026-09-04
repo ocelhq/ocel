@@ -4,16 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "migrate": "tsx scripts/migrate.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ocel/provider-aws": "workspace:^",
     "@ocel/provider-vps": "workspace:^",
     "ocel": "workspace:^",
+    "pg": "^8.22.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }

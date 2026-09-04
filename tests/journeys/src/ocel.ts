@@ -5,7 +5,6 @@ import { exampleMember, ocelBin, treeDir } from "./paths";
 import type { Leg } from "./spec";
 import type { CellContext } from "./targets/types";
 import { plantWorkspace } from "./tree";
-import { siblingDirs } from "./workspace";
 
 export type Ran = { code: number | null; stdout: string; stderr: string };
 
@@ -25,9 +24,7 @@ export function configTree(cell: CellContext, target: string): string {
 }
 
 export function appDirs(cell: CellContext): string[] {
-  const siblings = siblingDirs(cell.example);
-  const dirs = siblings.length === 0 ? [cell.example.dir] : [cell.example.dir, ...siblings];
-  return dirs.map(exampleMember);
+  return [exampleMember(cell.example.dir)];
 }
 
 export async function workTree(cell: CellContext, target: string): Promise<string> {

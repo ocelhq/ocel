@@ -310,7 +310,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   await drive("deploy", ["deploy", "--yes"]);
   await bindDomains(cell, started);
   if (cell.example.suites.includes("product")) {
-    await drive("migrate", ["run", "--", ...migrateCommand(cell.example)]);
+    await drive("migrate", ["run", "--", ...migrateCommand()]);
   }
   return deployment(cell, started);
 }
