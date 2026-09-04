@@ -27,12 +27,12 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 		report.Say("Standing " + app.App + " up as " + physical)
 	}
 	if err := p.host.StandUp(ctx, host.Container{
-		Name: physical, App: app.App, Image: app.Image,
+		Name: physical, Project: plan.Ref.Project, App: app.App, Image: app.Image,
 		Class: plan.Ref.Class, Env: app.Values.Delivered, Resolved: true,
 	}); err != nil {
 		return nil, err
 	}
-	if err := p.host.Promote(ctx, plan.Ref.Class, app.App, app.Image); err != nil {
+	if err := p.host.Promote(ctx, plan.Ref.Class, plan.Ref.Project, app.App, app.Image); err != nil {
 		return nil, err
 	}
 	return []providerkit.AppContainer{{

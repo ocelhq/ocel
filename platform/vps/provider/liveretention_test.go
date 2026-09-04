@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	sweepApp  = "sweeper"
-	sweepRepo = "ocel-live-retention"
+	sweepProject = "shop"
+	sweepApp     = "sweeper"
+	sweepRepo    = "ocel-live-retention"
 )
 
 func sweepAt(tag string) string { return sweepRepo + ":" + tag }
@@ -33,7 +34,7 @@ func onABoxSweeping(t *testing.T, tags ...string) (machine, *vps.Provider) {
 	}
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker images -q --filter reference="+sweepRepo+":* | xargs -r sudo docker rmi -f >/dev/null 2>&1 || true")
-		vm.ssh(t, "sudo rm -rf "+host.ReleasesDir()+"/"+sweepApp)
+		vm.ssh(t, "sudo rm -rf "+host.ReleasesDir()+"/"+sweepProject)
 	})
 	return vm, p
 }
@@ -46,7 +47,7 @@ func sweepPlan(t *testing.T, tag string) providerkit.StackPlan {
 	}
 	sum := sha256.Sum256([]byte(tag))
 	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack},
+		Ref:  providerkit.StackRef{Project: sweepProject, Class: providerkit.ClassProduction, Name: stack},
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
 			App:             sweepApp,
@@ -68,7 +69,7 @@ func sweepsUp(t *testing.T, p *vps.Provider, tag string) {
 func windowOf(t *testing.T, vm machine, app string, class providerkit.Class) []string {
 	t.Helper()
 	held := strings.TrimSpace(vm.sshAs(t, deployLogin,
-		"cat "+host.ReleasesDir()+"/"+app+"/"+string(class)))
+		"cat "+host.ReleasesDir()+"/"+sweepProject+"/"+app+"/"+string(class)))
 	if held == "" {
 		return nil
 	}
@@ -114,6 +115,7 @@ func TestLiveAReconcileNeverTakesTheImageUnderARunningContainer(t *testing.T) {
 	sweepsUp(t, p, "r1")
 	vm.ssh(t, "sudo docker run -d --name live-retention-held"+
 		" --label "+host.LabelApp+"="+sweepApp+
+		" --label "+host.LabelProject+"="+sweepProject+
 		" --label "+host.LabelRef+"="+sweepAt("held")+
 		" "+sweepAt("held"))
 	t.Cleanup(func() { vm.ssh(t, "sudo docker rm -f live-retention-held >/dev/null 2>&1 || true") })

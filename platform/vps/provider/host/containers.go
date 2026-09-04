@@ -15,9 +15,10 @@ import (
 const AppPort = "8080"
 
 const (
-	LabelApp = "ocel.app"
-	LabelRef = "ocel.ref"
-	LabelEnv = "ocel.env"
+	LabelApp     = "ocel.app"
+	LabelProject = "ocel.project"
+	LabelRef     = "ocel.ref"
+	LabelEnv     = "ocel.env"
 )
 
 const (
@@ -36,10 +37,11 @@ var stateFields = []struct{ label, selector string }{
 }
 
 type Container struct {
-	Name  string
-	App   string
-	Image string
-	Class providerkit.Class
+	Name    string
+	Project string
+	App     string
+	Image   string
+	Class   providerkit.Class
 
 	Env      map[string]string
 	Resolved bool
@@ -60,6 +62,7 @@ func containerRun(spec Container, held handoff) []string {
 		"--name", spec.Name,
 		"--restart", appRestart,
 		"--network", ProxyNetwork,
+		"--label", LabelProject + "=" + naming.Sanitize(spec.Project),
 		"--label", LabelApp + "=" + spec.App,
 		"--label", LabelRef + "=" + spec.Image,
 		"--label", LabelEnv + "=" + held.digest,

@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 usage() {
-	echo "usage: releases <app> promote <class> <ref> | <app> forget <class> | <app> reconcile <repository>" >&2
+	echo "usage: releases <project>/<app> promote <class> <ref> | <project>/<app> forget <class> | <project>/<app> reconcile <repository>" >&2
 	exit 2
 }
 
@@ -15,20 +15,24 @@ abort() {
 keep=3
 
 [ $# -ge 2 ] || usage
-app=$1
+scope=$1
 verb=$2
 shift 2
 
-case $app in
-'' | *[!a-z0-9-]*) abort "$app is no app this host keeps releases for" ;;
+case $scope in
+/* | */ | */*/* | *[!a-z0-9/-]*) abort "$scope is no project and app this host keeps releases for" ;;
+*/*) ;;
+*) abort "$scope is no project and app this host keeps releases for" ;;
 esac
+project=${scope%/*}
+app=${scope#*/}
 
 root="${OCEL_RELEASES_ROOT:-/var/lib/ocel/releases}"
 [ -d "$root" ] || abort "$root stands as no release window, and ocel bootstrap is what writes one"
 
 hold() {
-	mkdir -p "$root/$app"
-	exec 9<"$root/$app"
+	mkdir -p "$root/$project/$app"
+	exec 9<"$root/$project/$app"
 	flock -x 9
 }
 
@@ -66,7 +70,7 @@ promote)
 	esac
 	coordinate "$ref"
 	hold
-	file="$root/$app/$class"
+	file="$root/$project/$app/$class"
 	: >>"$file"
 	{
 		printf '%s\n' "$ref"
@@ -81,8 +85,9 @@ forget)
 	'' | *[!a-z0-9-]*) abort "$class is no class this host serves" ;;
 	esac
 	hold
-	rm -f "$root/$app/$class"
-	rmdir "$root/$app" 2>/dev/null || true
+	rm -f "$root/$project/$app/$class"
+	rmdir "$root/$project/$app" 2>/dev/null || true
+	rmdir "$root/$project" 2>/dev/null || true
 	;;
 reconcile)
 	[ $# -eq 1 ] || usage
@@ -90,13 +95,13 @@ reconcile)
 	coordinate "$repository"
 
 	: >"$scratch".desired
-	if [ -d "$root/$app" ]; then
-		find "$root/$app" -type f -exec cat {} + >>"$scratch".desired
+	if [ -d "$root/$project/$app" ]; then
+		find "$root/$project/$app" -type f -exec cat {} + >>"$scratch".desired
 	fi
 
-	docker ps --filter "label=ocel.app=$app" --format '{{.Label "ocel.ref"}}' >"$scratch".running
+	docker ps --filter "label=ocel.app=$app" --filter "label=ocel.project=$project" --format '{{.Label "ocel.ref"}}' >"$scratch".running
 	while IFS= read -r running; do
-		[ -n "$running" ] || abort "a container on this host carries ocel.app=$app and names no ocel.ref, and ocel removes nothing while it cannot say what is running"
+		[ -n "$running" ] || abort "a container on this host carries ocel.project=$project and ocel.app=$app and names no ocel.ref, and ocel removes nothing while it cannot say what is running"
 		printf '%s\n' "$running" >>"$scratch".desired
 	done <"$scratch".running
 

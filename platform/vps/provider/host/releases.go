@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -22,19 +23,21 @@ func Repository(coordinate string) (string, bool) {
 	return coordinate[:at], true
 }
 
-func (h *Host) Promote(ctx context.Context, class providerkit.Class, app, coordinate string) error {
+func Scope(project, app string) string { return naming.Sanitize(project) + "/" + app }
+
+func (h *Host) Promote(ctx context.Context, class providerkit.Class, project, app, coordinate string) error {
 	_, err := h.releases(ctx, "record "+coordinate+" as what "+app+" most recently served", "",
-		app, "promote", string(class), coordinate)
+		Scope(project, app), "promote", string(class), coordinate)
 	return err
 }
 
-func (h *Host) Forget(ctx context.Context, class providerkit.Class, app string) error {
+func (h *Host) Forget(ctx context.Context, class providerkit.Class, project, app string) error {
 	_, err := h.releases(ctx, "drop the window "+app+" was served from", "",
-		app, "forget", string(class))
+		Scope(project, app), "forget", string(class))
 	return err
 }
 
-func (h *Host) Reconcile(ctx context.Context, app, coordinate string, report providerkit.Reporter) error {
+func (h *Host) Reconcile(ctx context.Context, project, app, coordinate string, report providerkit.Reporter) error {
 	repository, named := Repository(coordinate)
 	if !named {
 		return providerkit.Refuse(providerkit.CodeInvalid,
@@ -44,7 +47,7 @@ func (h *Host) Reconcile(ctx context.Context, app, coordinate string, report pro
 	if err != nil {
 		return err
 	}
-	said, err := h.releases(ctx, "reconcile "+app+"'s images", elevation, app, "reconcile", repository)
+	said, err := h.releases(ctx, "reconcile "+app+"'s images", elevation, Scope(project, app), "reconcile", repository)
 	if err != nil {
 		return err
 	}
@@ -61,8 +64,8 @@ func (h *Host) Reconcile(ctx context.Context, app, coordinate string, report pro
 	return nil
 }
 
-func (h *Host) releases(ctx context.Context, what, elevation, app string, args ...string) (string, error) {
-	command := quoted(releasesHelper) + " " + quoted(app)
+func (h *Host) releases(ctx context.Context, what, elevation, scope string, args ...string) (string, error) {
+	command := quoted(releasesHelper) + " " + quoted(scope)
 	for _, arg := range args {
 		command += " " + quoted(arg)
 	}

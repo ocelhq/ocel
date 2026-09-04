@@ -124,12 +124,12 @@ func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) 
 		report.Say("Standing " + held.app + " back up as " + record.Physical + " from the image this host already holds")
 	}
 	if err := s.e.machine.StandUp(ctx, host.Container{
-		Name: record.Physical, App: held.app, Image: record.Image, Class: s.state.Class,
+		Name: record.Physical, Project: s.state.Slug, App: held.app, Image: record.Image, Class: s.state.Class,
 		Declared: declaredBy(record),
 	}); err != nil {
 		return err
 	}
-	if err := s.e.machine.Promote(ctx, s.state.Class, held.app, record.Image); err != nil {
+	if err := s.e.machine.Promote(ctx, s.state.Class, s.state.Slug, held.app, record.Image); err != nil {
 		return err
 	}
 	retiring, err := s.e.machine.Serving(ctx, held.key)

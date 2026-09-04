@@ -79,8 +79,8 @@ func (m *machine) StandUp(_ context.Context, spec host.Container) error {
 	return m.refuse("StandUp")
 }
 
-func (m *machine) Promote(_ context.Context, _ providerkit.Class, app, coordinate string) error {
-	m.calls = append(m.calls, "head "+app+" at "+coordinate)
+func (m *machine) Promote(_ context.Context, _ providerkit.Class, project, app, coordinate string) error {
+	m.calls = append(m.calls, "head "+project+"/"+app+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)
 	return m.refuse("Promote")
 }
@@ -321,7 +321,7 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItFlips(t *testing.T) {
 		t.Fatalf("Promote: %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "head web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + host.AppPort}
+	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + host.AppPort}
 	if !slices.Equal(stood.calls, want) {
 		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then flips", stood.calls, want)
 	}
@@ -357,7 +357,7 @@ func TestARollbackStandsThePreviousContainerBackUpAndFlipsOntoIt(t *testing.T) {
 		t.Fatalf("Promote(rollback): %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "head web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + host.AppPort}
+	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + host.AppPort}
 	if !slices.Equal(stood.calls, want) {
 		t.Fatalf("a rollback drove the box as %v, want %v: nothing provisions on this path, so re-pointing at a release that is not running is a ledger edit and not a restored site", stood.calls, want)
 	}

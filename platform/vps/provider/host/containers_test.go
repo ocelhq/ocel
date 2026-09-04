@@ -19,7 +19,7 @@ const (
 )
 
 func aContainer() Container {
-	return Container{Name: physical, App: "web", Image: appImage, Resolved: true}
+	return Container{Name: physical, Project: "shop", App: "web", Image: appImage, Resolved: true}
 }
 
 func imaging(b *bench, held string) {
@@ -61,6 +61,7 @@ func TestAReleaseStandsUpOneLabelledContainerOnTheOneNetworkTargetsResolveAcross
 		"a reboot that does not take the app down":             quoted("--restart") + " " + quoted(appRestart),
 		"the network the proxy reaches it over":                quoted("--network") + " " + quoted(ProxyNetwork),
 		"the app label retention reads":                        quoted("--label") + " " + quoted(LabelApp+"=web"),
+		"the project label retention reads":                    quoted("--label") + " " + quoted(LabelProject+"=shop"),
 		"the ref label retention reads":                        quoted("--label") + " " + quoted(LabelRef+"="+appImage),
 		"the port the app is told to bind":                     quoted("--env") + " " + quoted("PORT="+AppPort),
 		"the image the release names":                          quoted(appImage),
