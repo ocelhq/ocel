@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { shapeFor, writeJourneyConfig } from "./config";
 import { redact, REDACTED } from "./contract";
 import { exampleMember, ocelBin, treeDir } from "./paths";
-import type { Leg } from "./spec";
+import type { Leg, TargetName } from "./spec";
 import type { CellContext } from "./targets/types";
 import { plantWorkspace } from "./tree";
 
@@ -11,12 +12,7 @@ export type Ran = { code: number | null; stdout: string; stderr: string };
 export const SUPPRESS_RESOURCES_ENV = "OCEL_DEPLOY_SUPPRESS_RESOURCES";
 
 export function cellEnv(cell: CellContext): NodeJS.ProcessEnv {
-  return {
-    OCEL_JOURNEY_SLUG: cell.slug,
-    OCEL_JOURNEY_COMPUTE: cell.compute,
-    ...(cell.edge === undefined ? {} : { OCEL_JOURNEY_EDGE: cell.edge }),
-    ...(cell.mode === "hello" ? { [SUPPRESS_RESOURCES_ENV]: "1" } : {}),
-  };
+  return cell.mode === "hello" ? { [SUPPRESS_RESOURCES_ENV]: "1" } : {};
 }
 
 export const COMMAND_LOG = "commands.jsonl";
@@ -40,9 +36,11 @@ export function appDirs(cell: CellContext): string[] {
   return [exampleMember(cell.example.dir)];
 }
 
-export async function workTree(cell: CellContext, target: string): Promise<string> {
+export async function workTree(cell: CellContext, target: TargetName): Promise<string> {
   await plantWorkspace(treeRoot(cell, target), `journey-${cell.name}`, appDirs(cell));
-  return configTree(cell, target);
+  const dir = configTree(cell, target);
+  await writeJourneyConfig(dir, shapeFor(cell, target, process.env));
+  return dir;
 }
 
 export async function spawnOcel(

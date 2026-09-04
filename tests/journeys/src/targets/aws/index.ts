@@ -1,6 +1,7 @@
 import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
+import { AWS_BASE, JOURNEY_CONFIG, writeJourneyConfig } from "../../config";
 import { INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
@@ -10,7 +11,7 @@ import { exampleDir, treeDir } from "../../paths";
 import type { PrepareFailures } from "../../prepare";
 import { cellNamesOf, type Edge, EDGES, type Leg, type Offered, specForTarget } from "../../spec";
 import { copyTree } from "../../tree";
-import { migrateCommand, setAppNames } from "../../workspace";
+import { migrateCommand, setAppNames, setSiteHostnames } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
 import { authoritativeFetch, emulatorFetch } from "./dispatch";
 import { pulumiSweep } from "./ladder-pulumi";
@@ -20,8 +21,6 @@ import { awaitServing } from "./serving";
 import { sweepable } from "./slugs";
 import { awsStore, cliAt, said, type Store } from "./store";
 import { expectationEnvironmentFor } from "./world";
-
-const CONFIG = "ocel.aws.config.ts";
 
 const LEG_TIMEOUT_MS = process.env.AWS_ENDPOINT_URL ? 600_000 : 1_800_000;
 
@@ -46,7 +45,7 @@ async function guard(): Promise<ExpectationEnvironment> {
 function providerEnv(dir: string, held: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    OCEL_CONFIG: path.join(dir, CONFIG),
+    OCEL_CONFIG: path.join(dir, JOURNEY_CONFIG),
     ...held,
   };
 }
@@ -170,14 +169,8 @@ async function prepare(): Promise<PrepareFailures> {
   const bootstrap = async (name: string, args: string[], edge: Edge | undefined): Promise<void> => {
     const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", name));
     try {
-      await ocel(
-        dir,
-        ["bootstrap", "production", "--yes", ...args],
-        providerEnv(dir, {
-          OCEL_JOURNEY_SLUG: slug,
-          ...(edge === undefined ? {} : { OCEL_JOURNEY_EDGE: edge }),
-        }),
-      );
+      await writeJourneyConfig(dir, { base: AWS_BASE, slug, ...(edge === undefined ? {} : { edge }) });
+      await ocel(dir, ["bootstrap", "production", "--yes", ...args], providerEnv(dir, {}));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -227,6 +220,9 @@ async function up(cell: CellContext): Promise<Deployment> {
   await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
   await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
   await setAppNames(cell.example, (name, args) => runOcel(cell, dir, "up", name, args, env));
+  await setSiteHostnames(cell.example, hostnames(cell), (name, args) =>
+    runOcel(cell, dir, "up", name, args, env),
+  );
   await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
   await runOcel(cell, dir, "up", "domain-add", ["domain", "add"], env);
   await runOcel(cell, dir, "up", "deploy-bound", ["deploy", "--yes"], env);
@@ -314,7 +310,8 @@ async function sweep(runId: string): Promise<void> {
       treeDir(runId, "aws", `sweep-${stranded.slug}`),
     );
     try {
-      await ocel(dir, ["destroy", "production", "--yes"], providerEnv(dir, { OCEL_JOURNEY_SLUG: stranded.slug }));
+      await writeJourneyConfig(dir, { base: AWS_BASE, slug: stranded.slug });
+      await ocel(dir, ["destroy", "production", "--yes"], providerEnv(dir, {}));
       process.stdout.write(`swept ${stranded.slug}\n`);
     } catch (error) {
       complaints.push(`${stranded.slug}: ${String(error)}`);

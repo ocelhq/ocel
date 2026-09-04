@@ -3,7 +3,6 @@ import { REDACTED } from "../contract";
 import {
   boxEnvironment,
   issuedByTheBox,
-  journeyZone,
   recordFile,
   slugsOf,
   ssh,
@@ -23,17 +22,6 @@ describe("boxEnvironment", () => {
 
   it("refuses an answer it cannot read rather than guessing a box is disposable", () => {
     expect(() => boxEnvironment("")).toThrow(/whether it runs under incus/);
-  });
-});
-
-describe("journeyZone", () => {
-  it("serves the box's own names when the caller named no zone", () => {
-    expect(journeyZone({})).toBe("localhost");
-    expect(journeyZone({ OCEL_JOURNEY_ZONE: "  " })).toBe("localhost");
-  });
-
-  it("keeps the zone the caller named", () => {
-    expect(journeyZone({ OCEL_JOURNEY_ZONE: "journeys.example" })).toBe("journeys.example");
   });
 });
 

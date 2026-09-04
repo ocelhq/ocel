@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { contractRows } from "../../contract";
+import { JOURNEY_CONFIG } from "../../config";
 import { cellEnv, ocel, spawnOcel, workTree } from "../../ocel";
 import type { LadderRow } from "../../spec";
 import type { CellContext } from "../types";
@@ -162,7 +163,7 @@ export async function refuse(cell: CellContext): Promise<void> {
   const dir = await workTree(cell, "aws");
   const env = {
     ...process.env,
-    OCEL_CONFIG: `${dir}/ocel.aws.config.ts`,
+    OCEL_CONFIG: `${dir}/${JOURNEY_CONFIG}`,
     ...cellEnv(cell),
   };
   const result = await spawnOcel(dir, ["deploy", "--yes"], env);
@@ -207,7 +208,7 @@ export const ladderRows: LadderRow[] = [
       const dir = await workTree(cell, "aws");
       const env = {
         ...process.env,
-        OCEL_CONFIG: `${dir}/ocel.aws.config.ts`,
+        OCEL_CONFIG: `${dir}/${JOURNEY_CONFIG}`,
         ...cellEnv(cell),
       };
       const result = await ocel(dir, ["link", "ls", "--log-format", "json"], env);
