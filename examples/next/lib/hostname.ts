@@ -6,5 +6,5 @@ export function projectSlug(): string {
 
 export function productionHostname(app: string): string | undefined {
   const zone = process.env.OCEL_JOURNEY_ZONE;
-  return zone ? `${app}.${projectSlug()}.${zone}` : undefined;
+  return zone ? `${app}-${projectSlug()}.${zone}` : undefined;
 }
