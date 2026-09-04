@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/workspace"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -303,6 +304,17 @@ func healthPathOf(app projectconfig.App) string {
 	return app.Health.Path
 }
 
+func workspaceMembers(inAnImage bool, appDir string) []string {
+	if !inAnImage {
+		return nil
+	}
+	located, err := workspace.Locate(appDir)
+	if err != nil {
+		return nil
+	}
+	return located.Members()
+}
+
 func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function, compute string) ([]attribution.App, error) {
 	detected := detectedApps(functions)
 	apps := cfg.Apps
@@ -318,7 +330,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 		}
 		out := make([]attribution.App, 0, len(detected))
 		for _, name := range detected {
-			out = append(out, attribution.App{Name: name, Path: ".", Container: container})
+			out = append(out, attribution.App{Name: name, Path: ".", Container: container, Members: workspaceMembers(container, cfg.Dir)})
 		}
 		return out, nil
 	}
@@ -333,7 +345,13 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 			)
 		}
 		named[a.Name] = true
-		out = append(out, attribution.App{Name: a.Name, Path: a.Path, Container: cmp.Or(a.Compute, compute) == string(providerkit.ComputeContainer)})
+		inAnImage := cmp.Or(a.Compute, compute) == string(providerkit.ComputeContainer)
+		out = append(out, attribution.App{
+			Name:      a.Name,
+			Path:      a.Path,
+			Container: inAnImage,
+			Members:   workspaceMembers(inAnImage, filepath.Join(cfg.Dir, a.Path)),
+		})
 	}
 
 	var unnamed []string

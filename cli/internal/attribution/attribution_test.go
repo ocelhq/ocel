@@ -3,6 +3,7 @@ package attribution
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -70,6 +71,75 @@ func TestAContainerAppIsAttributedWithoutASecondInstallOnTheDevelopersDisk(t *te
 	if want := []string{"web -> LINK_TYPE_POSTGRES:main-db [apps/web/src/server.ts]"}; !reflect.DeepEqual(edgeStrings(usages), want) {
 		t.Errorf("edges = %v, want %v — the graph of the app's own files is what attribution needs", edgeStrings(usages), want)
 	}
+}
+
+func workspaceFixture(t *testing.T, installed bool) string {
+	t.Helper()
+	root := t.TempDir()
+	for name, body := range map[string]string{
+		"package.json":                 `{"name":"root","workspaces":["apps/*","packages/*"]}`,
+		"sdk/index.ts":                 "export function postgres(id: string) {\n  return { id, kind: \"postgres\" as const };\n}\n",
+		"packages/shared/package.json": `{"name":"@fixture/shared","main":"index.ts"}`,
+		"packages/shared/index.ts":     "import { postgres } from \"../../sdk/index.js\";\n\nexport const mainDb = postgres(\"main-db\");\n",
+		"apps/web/package.json":        `{"name":"@fixture/web"}`,
+		"apps/web/src/server.ts":       "import express from \"express\";\n\nimport { mainDb } from \"@fixture/shared\";\n\nexport const app = express().get(\"/\", () => mainDb.id);\n",
+	} {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if installed {
+		linked := filepath.Join(root, "node_modules", "@fixture", "shared")
+		if err := os.MkdirAll(filepath.Dir(linked), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(root, "packages", "shared"), linked); err != nil {
+			t.Skipf("this machine makes no symlinks, and a workspace member is linked into node_modules: %v", err)
+		}
+	}
+	return root
+}
+
+func TestAContainerAppsWorkspaceMembersAreReadRatherThanAssumedInstalled(t *testing.T) {
+	members := []string{"@fixture/shared", "@fixture/web"}
+
+	t.Run("a member the developer has not installed stops the deploy", func(t *testing.T) {
+		root := workspaceFixture(t, false)
+
+		_, err := Compute(root, []App{{Name: "web", Path: "apps/web", Container: true, Members: members}},
+			[]Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: stackAt(root, "packages/shared/index.ts")}})
+		if err == nil {
+			t.Fatal("Compute() read a workspace member as a registry package the image installs, so every resource the member declares reaches the app with no edge and no complaint")
+		}
+		if !strings.Contains(err.Error(), "@fixture/shared") {
+			t.Errorf("Compute() = %v, and the reader is never told which import ocel could not follow", err)
+		}
+	})
+
+	t.Run("a member linked into node_modules is followed to what it declares", func(t *testing.T) {
+		root := workspaceFixture(t, true)
+
+		usages, err := Compute(root, []App{{Name: "web", Path: "apps/web", Container: true, Members: members}},
+			[]Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: stackAt(root, "packages/shared/index.ts")}})
+		if err != nil {
+			t.Fatalf("Compute() = %v", err)
+		}
+		if want := []string{"web -> LINK_TYPE_POSTGRES:main-db [apps/web/src/server.ts]"}; !reflect.DeepEqual(edgeStrings(usages), want) {
+			t.Errorf("edges = %v, want %v — the app reaches the resource through a package of its own workspace", edgeStrings(usages), want)
+		}
+	})
+
+	t.Run("a package from the registry is still left to the image to install", func(t *testing.T) {
+		root := workspaceFixture(t, true)
+
+		if _, err := Compute(root, []App{{Name: "web", Path: "apps/web", Container: true, Members: members}}, nil); err != nil {
+			t.Errorf("Compute() = %v, and express is installed by the image rather than declared by this workspace", err)
+		}
+	})
 }
 
 func TestCompute(t *testing.T) {
