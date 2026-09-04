@@ -7,8 +7,8 @@ its own framework's route handler, and ocel works out from each app's imports wh
 resources it is handed.
 
 The config names each app after its framework, points at it under `apps/`, and gives it
-its own env folder and its own production hostname. There is one bootstrap and one edge in
-front of both. `APP_NAME` is the value that tells each running app which hostname is its
+its own env folder, and in production its own hostname. There is one bootstrap and one edge
+in front of both. `APP_NAME` is the value that tells each running app which hostname is its
 own.
 
 The apps live under `apps/*` in the repo's own `pnpm-workspace.yaml`; a project of your own
@@ -24,7 +24,7 @@ APP_NAME=express ocel dev -- pnpm --dir apps/express start
 ```
 
 ```bash
-ocel deploy --config ocel.aws.config.ts
+ocel deploy
 OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --config ocel.vps.config.ts
 ```
 

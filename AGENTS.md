@@ -7,6 +7,8 @@
   Doc-comments only under the literal paths `packages/` and `sdk/` — no other directory
   qualifies, however public its surface feels. An existing comment elsewhere is debt,
   not precedent: never match it, never extend it, delete it when touching nearby code.
+  One exception: an `examples/` config shows a variant that conflicts with what is live
+  as a commented-out line, with one line saying when to pick it — never more.
 - The commits are the ADRs. Rationale belongs in the commit message and PR bodies. Nowhere else.
 - Do not generate changesets unless explicitly instructed.
 - **Clean break** — TODO(alpha): remove when the first non-alpha version ships. Nothing

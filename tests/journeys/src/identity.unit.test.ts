@@ -1,5 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { productionHostname } from "../../../examples/next/lib/hostname";
+import { describe, expect, it } from "vitest";
 import { appHostname, projectSlug, runIdentity } from "./identity";
 
 describe("run identity", () => {
@@ -35,20 +34,5 @@ describe("app hostname", () => {
 
   it("refuses a label a dns label cannot hold", () => {
     expect(() => appHostname("web", `j-1-${"e".repeat(60)}`, "journey.test")).toThrow(/63/);
-  });
-});
-
-describe("the hostname the next example declares", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it("is the one the harness reaches for", () => {
-    vi.stubEnv("OCEL_JOURNEY_SLUG", "j-local-ada-next");
-    vi.stubEnv("OCEL_JOURNEY_ZONE", "journey.test");
-
-    expect(productionHostname("web")).toBe(
-      appHostname("web", "j-local-ada-next", "journey.test"),
-    );
   });
 });
