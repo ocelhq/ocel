@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LinkType } from "../gen/proto/common/links/v1/links_pb.js";
 import { z } from "zod";
 
@@ -17,14 +17,16 @@ const avatar = uploader(
 );
 
 describe("Bucket record", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("refuses its record when this deploy provisioned nothing", () => {
     vi.stubEnv("OCEL_PHASE", "resources-suppressed");
 
     expect(() => bucket("storage", { uploaders: { avatar } }).__config()).toThrow(
       "'bucket(\"storage\")' cannot be used while resources are suppressed",
     );
-
-    vi.unstubAllEnvs();
   });
 });
 
