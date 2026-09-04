@@ -28,21 +28,42 @@ type App struct {
 type Location struct {
 	Root         string
 	Path         string
+	Member       bool
 	Manager      Manager
 	App          App
 	BuildCommand string
 }
 
-func (l Location) InWorkspace() bool { return l.Path != "." }
+func (l Location) InWorkspace() bool { return l.Member }
 
-func (l Location) Rebase(root string) (Location, error) {
-	appDir := filepath.Join(l.Root, filepath.FromSlash(l.Path))
-	rel, err := filepath.Rel(root, appDir)
-	if err != nil || rel == ".." || strings.HasPrefix(filepath.ToSlash(rel), "../") {
-		return Location{}, fmt.Errorf("%s is not inside %s, and an image is built from a directory holding the app it serves: point the build context at a directory %s sits under", appDir, root, appDir)
+func (l Location) Dir() string { return filepath.Join(l.Root, filepath.FromSlash(l.Path)) }
+
+func (l Location) Rebase(context string) (Location, error) {
+	root, err := filepath.Abs(context)
+	if err != nil {
+		return Location{}, err
 	}
-	l.Root, l.Path, l.Manager = root, filepath.ToSlash(rel), detect(root)
-	return l, nil
+	if !under(root, l.Root) {
+		return Location{}, fmt.Errorf(
+			"%s is neither %s nor a directory it sits under: an image is built from a context holding everything the install reads, so build.context may name the app's workspace root, a directory above it, or — for an app in no workspace — a directory above the app itself",
+			root, l.Root,
+		)
+	}
+	rebased, err := locatedAt(l.Dir(), root)
+	if err != nil {
+		return Location{}, err
+	}
+	rebased.BuildCommand = l.BuildCommand
+	return rebased, nil
+}
+
+func under(root, dir string) bool {
+	rel, err := filepath.Rel(root, dir)
+	if err != nil {
+		return false
+	}
+	slashed := filepath.ToSlash(rel)
+	return slashed != ".." && !strings.HasPrefix(slashed, "../")
 }
 
 type manifest struct {
@@ -60,16 +81,27 @@ func Locate(appDir string) (Location, error) {
 	if err != nil {
 		return Location{}, err
 	}
+	root := dir
+	if enclosingRoot, ok := enclosing(dir); ok {
+		root = enclosingRoot
+	}
+	return locatedAt(dir, root)
+}
+
+func locatedAt(dir, root string) (Location, error) {
 	app, err := readManifest(filepath.Join(dir, manifestName))
 	if err != nil {
 		return Location{}, fmt.Errorf("read the %s of the app in %s: %w", manifestName, dir, err)
 	}
 
-	located := Location{Root: dir, Path: ".", App: describe(dir, app)}
-	if root, rel, ok := enclosing(dir); ok {
-		located.Root, located.Path = root, rel
+	rel, err := filepath.Rel(root, dir)
+	if err != nil {
+		return Location{}, err
 	}
-	located.Manager = detect(located.Root)
+	located := Location{Root: root, Path: filepath.ToSlash(rel), App: describe(dir, app), Manager: detect(root)}
+	if globs, ok := declaredPackages(root); ok {
+		_, located.Member = memberOf(root, dir, globs)
+	}
 
 	if dep := workspaceDependency(app); dep != "" && located.Manager == Unknown {
 		return Location{}, fmt.Errorf(
@@ -101,15 +133,15 @@ func appName(m manifest, dir string) string {
 	return filepath.Base(dir)
 }
 
-func enclosing(appDir string) (string, string, bool) {
+func enclosing(appDir string) (string, bool) {
 	for dir := filepath.Dir(appDir); ; dir = filepath.Dir(dir) {
 		if globs, ok := declaredPackages(dir); ok {
-			if rel, member := memberOf(dir, appDir, globs); member {
-				return dir, rel, true
+			if _, member := memberOf(dir, appDir, globs); member {
+				return dir, true
 			}
 		}
 		if atBoundary(dir) {
-			return "", "", false
+			return "", false
 		}
 	}
 }
