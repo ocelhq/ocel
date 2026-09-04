@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
-import { selectedTarget } from "./src/targets";
+import LongestFirstSequencer from "./src/sequencer";
+import { laneWorkers, selectedTarget } from "./src/targets";
 
 const target = selectedTarget();
 
@@ -12,8 +13,9 @@ export default defineConfig({
     testTimeout: target.legTimeoutMs,
     hookTimeout: target.legTimeoutMs,
     fileParallelism: true,
-    maxWorkers: target.concurrency,
+    maxWorkers: laneWorkers(target),
     maxConcurrency: 1,
+    sequence: { sequencer: LongestFirstSequencer },
     server: {
       deps: {
         inline: ["@ocel-tests/shared", "@console/auth", "@console/db"],

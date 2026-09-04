@@ -37,13 +37,14 @@ answering() {
 }
 
 wait_ready() {
-    local name=$1 endpoint deadline=$((SECONDS + READY_WAIT_SECS))
+    local name=$1 endpoint began=$SECONDS deadline=$((SECONDS + READY_WAIT_SECS))
     while [ "$SECONDS" -lt "$deadline" ]; do
         if [ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" != true ]; then
             diagnose_dead "$name" >&2
             die "$name: the container stopped before it answered"
         fi
         if endpoint=$(endpoint_of "$name") && answering "$endpoint"; then
+            echo "floci.sh: $name answered after $((SECONDS - began))s" >&2
             echo "$endpoint"
             return 0
         fi

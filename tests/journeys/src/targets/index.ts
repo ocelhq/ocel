@@ -21,6 +21,14 @@ export function targetNamed(name: string): Target {
   return target;
 }
 
+export function laneWorkers(
+  target: Pick<Target, "concurrency">,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const asked = Number((env.OCEL_JOURNEY_WORKERS ?? "").trim());
+  return Number.isInteger(asked) && asked > 0 ? asked : target.concurrency;
+}
+
 export function selectedTarget(): Target {
   const name = process.env.OCEL_TARGET;
   if (!name) {

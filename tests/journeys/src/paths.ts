@@ -18,14 +18,32 @@ export function exampleDir(dir: string): string {
   return path.join(examplesDir, dir);
 }
 
+export function laneEdge(target: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const edge = env.OCEL_AWS_EDGE?.trim();
+  return target === "aws" && edge ? edge : undefined;
+}
+
+export function laneName(target: string, env: NodeJS.ProcessEnv = process.env): string {
+  const edge = laneEdge(target, env);
+  return edge ? `${target}-${edge}` : target;
+}
+
+export function laneDir(runId: string, target: string): string {
+  return path.join(outputRoot, runId, laneName(target));
+}
+
 export function evidenceDir(runId: string, target: string, example: string): string {
-  return path.join(outputRoot, runId, target, example);
+  return path.join(laneDir(runId, target), example);
 }
 
 export function treeDir(runId: string, target: string, example: string): string {
-  return path.join(outputRoot, runId, target, "trees", example);
+  return path.join(laneDir(runId, target), "trees", example);
 }
 
 export function verdictFile(runId: string, target: string): string {
-  return path.join(outputRoot, runId, target, "verdict.json");
+  return path.join(laneDir(runId, target), "verdict.json");
+}
+
+export function prepareFile(runId: string, target: string): string {
+  return path.join(laneDir(runId, target), "prepare.json");
 }

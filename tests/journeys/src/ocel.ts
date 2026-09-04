@@ -8,6 +8,8 @@ import { plantWorkspace } from "./tree";
 
 export type Ran = { code: number | null; stdout: string; stderr: string };
 
+export const COMMAND_LOG = "commands.jsonl";
+
 export function maskArgs(args: string[]): string {
   const shown = args.map((arg, index) =>
     args[0] === "env" && args[1] === "set" && index === 3 ? REDACTED : arg,
@@ -74,7 +76,12 @@ export async function runOcel(
   args: string[],
   env: NodeJS.ProcessEnv,
 ): Promise<Ran> {
+  const began = Date.now();
   const result = await spawnOcel(dir, args, env);
+  await cell.evidence.append(
+    COMMAND_LOG,
+    JSON.stringify({ leg, name, ms: Date.now() - began, code: result.code }),
+  );
   await cell.evidence.write(leg, `${name}.stdout`, result.stdout);
   await cell.evidence.write(leg, `${name}.stderr`, result.stderr);
   if (result.code !== 0) {
