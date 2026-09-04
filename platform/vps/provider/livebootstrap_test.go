@@ -35,11 +35,20 @@ func (vm machine) attempt(login, command string) (string, error) {
 	return vm.feeding(login, "", command)
 }
 
+func (vm machine) authenticates(login, command string) (string, error) {
+	return vm.dialling(login, "", command, "-o", "ControlPath=none")
+}
+
 func (vm machine) feeding(login, fed, command string) (string, error) {
-	ran := exec.Command("ssh",
+	return vm.dialling(login, fed, command)
+}
+
+func (vm machine) dialling(login, fed, command string, extra ...string) (string, error) {
+	args := append([]string{
 		"-F", vm.config, "-i", vm.key,
 		"-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
-		login+"@"+vm.addr, command)
+	}, extra...)
+	ran := exec.Command("ssh", append(args, login+"@"+vm.addr, command)...)
 	ran.Stdin = strings.NewReader(fed)
 	rendered, err := ran.Output()
 	var exited *exec.ExitError

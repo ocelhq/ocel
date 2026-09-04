@@ -36,7 +36,7 @@ func standsAsDecided(t *testing.T, vm machine) {
 		t.Errorf("/var/lib/ocel stands at %q, want 750", mode)
 	}
 
-	rendered, err := vm.attempt(deployLogin, "id -un")
+	rendered, err := vm.authenticates(deployLogin, "id -un")
 	if err != nil {
 		t.Fatalf("the deploy login refused the keys bootstrap mirrored onto it: %v", err)
 	}
@@ -48,7 +48,7 @@ func standsAsDecided(t *testing.T, vm machine) {
 func TestLiveTheDeployKeyOptionOverridesTheMirroredKeys(t *testing.T) {
 	vm := live(t)
 	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
-	vm.ssh(t, "sudo userdel "+deployLogin+" 2>/dev/null || true")
+	vm.forgetsTheDeployLogin(t)
 
 	named := filepath.Join(t.TempDir(), "deploy")
 	keygen := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-f", named, "-N", "", "-C", "deploy-key-option")
@@ -85,7 +85,7 @@ func TestLiveTheDeployKeyOptionOverridesTheMirroredKeys(t *testing.T) {
 	if written != strings.TrimSpace(string(offered)) {
 		t.Errorf("the deploy login answers to\n%s\nwant the key %q names", written, named+".pub")
 	}
-	if _, err := vm.attempt(deployLogin, "true"); err == nil {
+	if _, err := vm.authenticates(deployLogin, "true"); err == nil {
 		t.Errorf("the deploy login still answers to the bootstrap login's key, and %q named another", "deployKey")
 	}
 }

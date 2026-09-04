@@ -184,7 +184,11 @@ func fixtureBinary(t *testing.T, arch string) []byte {
 
 func fixtures(t *testing.T, vm machine) {
 	t.Helper()
-	if strings.TrimSpace(vm.ssh(t, "sudo docker image inspect "+fixtureBase+" >/dev/null 2>&1 && echo held || echo gone")) != "held" {
+	held := map[string]bool{}
+	for _, tagged := range lines(vm.ssh(t, "sudo docker image ls --format '{{.Repository}}:{{.Tag}}' "+fixtureRepo)) {
+		held[strings.TrimSpace(tagged)] = true
+	}
+	if !held[fixtureBase] {
 		vm.feeds(t, "sudo docker import --change 'ENTRYPOINT [\"/app\"]' - "+fixtureBase+" >/dev/null",
 			fixtureBinary(t, vm.arch(t)))
 	}
@@ -195,7 +199,7 @@ func fixtures(t *testing.T, vm machine) {
 		"hung":    {"MODE=hang"},
 		"crasher": {"MODE=crash"},
 	} {
-		if strings.TrimSpace(vm.ssh(t, "sudo docker image inspect "+fixtureAt(tag)+" >/dev/null 2>&1 && echo held || echo gone")) == "held" {
+		if held[fixtureAt(tag)] {
 			continue
 		}
 		file := "FROM " + fixtureBase + "\n"
