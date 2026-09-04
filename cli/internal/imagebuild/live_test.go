@@ -124,6 +124,30 @@ func TestLiveTheExpressFixtureBuildsAndServesItsVersion(t *testing.T) {
 	}
 }
 
+const workspaceFixture = "../../../examples/express"
+
+func TestLiveAnAppInsideAWorkspaceBuildsFromTheWorkspaceRoot(t *testing.T) {
+	vm := livemachine.Require(t)
+	vm.Engine(t)
+	vm.Forward(t)
+
+	loc := located(t, workspaceFixture)
+	if !loc.InWorkspace() {
+		t.Fatalf("%s is not inside a workspace, so this test proves nothing about one", workspaceFixture)
+	}
+
+	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(),
+		imagebuild.App{Name: "workspace express", Workspace: loc})
+	if err != nil {
+		t.Fatalf("Build() of an app inside a workspace = %v", err)
+	}
+
+	addresses(t, vm, image, "ocel/workspace-express")
+	if held := vm.SSH(t, "docker run --rm --entrypoint sh "+image.Ref+" -c 'ls "+loc.Path+"/node_modules/express/package.json'"); !strings.Contains(held, "package.json") {
+		t.Errorf("the image holds %q where the app's own dependencies belong: the install inside it resolved nothing from the root's lockfile", held)
+	}
+}
+
 func declaredVersion(t *testing.T) string {
 	t.Helper()
 	read, err := os.ReadFile(filepath.Join(journeyFixture, "package.json"))
