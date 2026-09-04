@@ -52,7 +52,7 @@ func dirties(t *testing.T, vm machine) {
 	t.Helper()
 	t.Cleanup(func() {
 		vm.forgetsTheDeployLogin(t)
-		vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+		vm.purges(t)
 	})
 }
 

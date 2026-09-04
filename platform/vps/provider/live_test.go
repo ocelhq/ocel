@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 type machine struct {
@@ -91,6 +92,12 @@ func (vm machine) hangsUpAs(login string) {
 	_ = exec.Command("ssh", "-F", vm.config, "-i", vm.key,
 		"-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
 		"-O", "exit", login+"@"+vm.addr).Run()
+}
+
+func (vm machine) purges(t *testing.T) {
+	t.Helper()
+	vm.ssh(t, "sudo docker rm -f "+host.ProxyContainer+" >/dev/null 2>&1 || true")
+	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
 }
 
 func (vm machine) forgetsTheDeployLogin(t *testing.T) {

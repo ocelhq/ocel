@@ -60,7 +60,7 @@ func (vm machine) dialling(login, fed, command string, extra ...string) (string,
 
 func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 

@@ -71,7 +71,7 @@ func (vm machine) holds(t *testing.T, image string) string {
 
 func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 
@@ -158,7 +158,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 
 func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	vm.forgetsTheDeployLogin(t)
 	p := vm.provider(t)
 	defer closing(t, p)

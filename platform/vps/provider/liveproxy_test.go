@@ -37,7 +37,7 @@ func quote(arg string) string { return "'" + strings.ReplaceAll(arg, "'", `'\''`
 
 func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 
@@ -195,7 +195,7 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 
 func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 
@@ -244,7 +244,7 @@ func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
 
 func TestLiveTheProxysConfigIsStatedAndItsLogCarriesNoQueryString(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 
@@ -287,7 +287,7 @@ func TestLiveTheProxysConfigIsStatedAndItsLogCarriesNoQueryString(t *testing.T) 
 
 func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.T) {
 	vm := live(t)
-	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 

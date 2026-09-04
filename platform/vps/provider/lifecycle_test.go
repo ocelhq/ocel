@@ -957,7 +957,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	run.declares(t, "one")
 	run.resolving(t, lifecycleHostname, edge.ProbeHostname("*."+lifecyclePreviewBase),
 		lifecyclePreview+"."+lifecyclePreviewBase, "unclaimed."+lifecyclePreviewBase)
-	run.vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
+	run.vm.purges(t)
 
 	class := providerkit.ClassProduction
 	fresh := run.must(t, "doctor")
