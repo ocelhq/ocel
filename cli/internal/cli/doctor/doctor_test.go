@@ -7,11 +7,14 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
 var nodeLine = regexp.MustCompile(`(?m)^  ✓ node .* on PATH$`)
@@ -502,4 +505,72 @@ func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.
 			t.Errorf("stdout missing %q; got:\n%s", want, out)
 		}
 	}
+}
+
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func (b *syncBuffer) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf.Reset()
+}
+
+type terminalAsker struct{}
+
+func (terminalAsker) Attended() bool { return true }
+
+func (terminalAsker) Confirm(context.Context, string) (bool, error) { return true, nil }
+
+func waitForFrame(t *testing.T, terminal *syncBuffer) {
+	t.Helper()
+
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		if terminal.String() != "" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the spinner drew nothing, so this run proves nothing about standing it down")
+}
+
+func TestDoctorStandsTheSpinnerDownWhileTheHostTrustAsks(t *testing.T) {
+	var terminal syncBuffer
+	host := provider.Trust{Ask: terminalAsker{}, Out: &terminal}
+	spinner := runui.StartSpinner(runui.Presentation{Format: runui.FormatHuman, TTY: true, Width: 80}, &terminal, "Checking your setup")
+	t.Cleanup(spinner.Stop)
+
+	trust := runui.TrustFor(host, spinner)
+	if trust.Ask != host.Ask || trust.Out != host.Out {
+		t.Errorf("the trust asks through %#v on %#v, want the terminal the process was started on", trust.Ask, trust.Out)
+	}
+	if trust.Suspend == nil {
+		t.Fatal("the trust has no way to stand the spinner down while it asks, so the two share the terminal")
+	}
+
+	waitForFrame(t, &terminal)
+
+	resume := trust.Suspend()
+	terminal.Reset()
+	time.Sleep(500 * time.Millisecond)
+	if drawn := terminal.String(); drawn != "" {
+		t.Errorf("the spinner drew %q over the trust prompt", drawn)
+	}
+
+	resume()
+	waitForFrame(t, &terminal)
 }

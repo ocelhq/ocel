@@ -368,7 +368,7 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 	got := &answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
 
 	spinner := runui.StartSpinner(deps.Presentation(stdout), stdout, "Checking your setup")
-	err := provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
+	err := provider.Drive(ctx, cfg, stderr, stderr, runui.TrustFor(deps.HostTrust, spinner), func(runner *provider.Runner) error {
 		*got = answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
 		got.pkg = runner.Package()
 		client, err := runner.Client()

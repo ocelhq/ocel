@@ -54,7 +54,7 @@ func Run(ctx context.Context, spec Spec, body Body) error {
 	defer ui.Close()
 
 	provW := ui.ProcessWriter()
-	err = provider.Drive(ctx, spec.Config, provW, provW, trustFor(spec.Trust, ui), func(runner *provider.Runner) error {
+	err = provider.Drive(ctx, spec.Config, provW, provW, TrustFor(spec.Trust, ui), func(runner *provider.Runner) error {
 		return body(ctx, runner, ui)
 	})
 	if err != nil {
@@ -76,8 +76,8 @@ func (s Spec) gate() gate {
 	}
 }
 
-func trustFor(trust provider.Trust, ui *Session) provider.Trust {
-	trust.Suspend = ui.Suspend
+func TrustFor(trust provider.Trust, s interface{ Suspend() func() }) provider.Trust {
+	trust.Suspend = s.Suspend
 	return trust
 }
 
