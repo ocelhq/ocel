@@ -255,6 +255,107 @@ func TestTheAppsOwnScriptsAreWhatTheImageRuns(t *testing.T) {
 	}
 }
 
+func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *testing.T) {
+	workspaceFiles := map[string]string{
+		"repo/pnpm-workspace.yaml":   "packages:\n  - apps/*\n",
+		"repo/pnpm-lock.yaml":        "lockfileVersion: '9.0'\n",
+		"repo/package.json":          `{"name":"root"}`,
+		"repo/apps/web/package.json": `{"name":"web","scripts":{"start":"node server.js"}}`,
+	}
+
+	t.Run("the workspace root the app was located in is taken", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, workspaceFiles)
+
+		rebased, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(filepath.Join(dir, "repo"))
+		if err != nil {
+			t.Fatalf("Rebase() = %v", err)
+		}
+		if !rebased.InWorkspace() || rebased.Path != "apps/web" || rebased.Manager != workspace.Pnpm {
+			t.Errorf("Rebase() = %+v, want the app still a member of the workspace it was located in", rebased)
+		}
+	})
+
+	t.Run("a directory above the workspace root is taken, and the app is no longer scoped as a member", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, workspaceFiles)
+
+		rebased, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(dir)
+		if err != nil {
+			t.Fatalf("Rebase() = %v", err)
+		}
+		if rebased.Root != dir || rebased.Path != "repo/apps/web" {
+			t.Errorf("Rebase() = %+v, want the app addressed from the context it was pointed at", rebased)
+		}
+		if rebased.InWorkspace() {
+			t.Errorf("Rebase() left the app a member of a workspace %s declares nothing about, so the install would be filtered against a workspace that is not there", dir)
+		}
+		commands, err := rebased.Commands()
+		if err != nil {
+			t.Fatalf("Commands() = %v", err)
+		}
+		if commands != (workspace.Commands{}) {
+			t.Errorf("Commands() = %+v, want railpack left to plan a context that declares no workspace", commands)
+		}
+	})
+
+	t.Run("a directory holding no lockfile for the app's workspace: dependency is refused", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, map[string]string{
+			"repo/pnpm-workspace.yaml":   "packages:\n  - apps/*\n",
+			"repo/pnpm-lock.yaml":        "lockfileVersion: '9.0'\n",
+			"repo/package.json":          `{"name":"root"}`,
+			"repo/apps/web/package.json": `{"name":"web","dependencies":{"@acme/lib":"workspace:^"}}`,
+		})
+
+		_, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(dir)
+		if err == nil {
+			t.Fatal("Rebase() took a context holding no lockfile for the app's workspace: dependency, so the install inside the image resolves nothing")
+		}
+		if !strings.Contains(err.Error(), "workspace:") || !strings.Contains(err.Error(), pnpmLockName) {
+			t.Errorf("Rebase() = %v, and the reader is never told what the context is missing", err)
+		}
+	})
+
+	t.Run("a directory the app does not sit under is refused by what build.context may name", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, workspaceFiles)
+		elsewhere := filepath.Join(dir, "elsewhere")
+		if err := os.MkdirAll(elsewhere, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(elsewhere)
+		if err == nil {
+			t.Fatal("Rebase() took a context the app is not inside, so the image would be built without the app in it")
+		}
+		if !strings.Contains(err.Error(), "build.context") {
+			t.Errorf("Rebase() = %v, and the reader is never told what build.context may point at", err)
+		}
+	})
+
+	t.Run("a directory inside the workspace but above nothing the app needs is refused", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, dir, workspaceFiles)
+
+		_, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(filepath.Join(dir, "repo", "apps"))
+		if err == nil {
+			t.Fatal("Rebase() took a context below the workspace root, so the install would read a lockfile the context does not carry")
+		}
+	})
+}
+
+const pnpmLockName = "pnpm-lock.yaml"
+
+func located(t *testing.T, dir string) workspace.Location {
+	t.Helper()
+	loc, err := workspace.Locate(dir)
+	if err != nil {
+		t.Fatalf("Locate(%s) = %v", dir, err)
+	}
+	return loc
+}
+
 func TestYarnBerryIsToldFromClassicByEverythingThatNamesIt(t *testing.T) {
 	for _, tt := range []struct {
 		name     string

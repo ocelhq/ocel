@@ -16,9 +16,7 @@ type App struct {
 	Configured string
 }
 
-func (a App) Dir() string {
-	return filepath.Join(a.Workspace.Root, filepath.FromSlash(a.Workspace.Path))
-}
+func (a App) Dir() string { return a.Workspace.Dir() }
 
 type Choice struct {
 	App        App
