@@ -31,10 +31,13 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
 
 var accepted []net.Conn
+
+var inflight atomic.Int64
 
 func main() {
 	if os.Getenv("MODE") == "crash" {
@@ -70,12 +73,19 @@ func main() {
 	mux.HandleFunc("/env", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, os.Getenv(r.URL.Query().Get("name")))
 	})
+	mux.HandleFunc("/inflight", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, strconv.FormatInt(inflight.Load(), 10))
+	})
 	mux.HandleFunc("/hold", func(w http.ResponseWriter, r *http.Request) {
+		inflight.Add(1)
+		defer inflight.Add(-1)
 		held, _ := strconv.Atoi(r.URL.Query().Get("s"))
 		time.Sleep(time.Duration(held) * time.Second)
 		_, _ = io.WriteString(w, release)
 	})
 	mux.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
+		inflight.Add(1)
+		defer inflight.Add(-1)
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		flusher, _ := w.(http.Flusher)
@@ -101,6 +111,8 @@ func main() {
 		if err != nil {
 			return
 		}
+		inflight.Add(1)
+		defer inflight.Add(-1)
 		_, _ = io.WriteString(conn, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
 		for {
 			_, _ = io.WriteString(conn, "\x00tick\xff")
