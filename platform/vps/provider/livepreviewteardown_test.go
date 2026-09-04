@@ -287,7 +287,7 @@ func TestLiveTearingDownOneOfFourLivePreviewsSweepsNoLivePreviewsImage(t *testin
 	for at, pointer := range []string{"pr-1", "pr-2", "pr-3", "pr-4"} {
 		previewUp(t, vm, p, stack, pointer, int64(at)+1)
 	}
-	held := windowOf(t, vm, teardownApp, providerkit.ClassPreview)
+	held := windowOf(t, vm, teardownSlug, teardownApp, providerkit.ClassPreview)
 	if len(held) != 3 {
 		t.Fatalf("the box's preview window reads %v, and this test turns on it being full: past the third live preview of one app the container's ocel.ref label is the sole guard against sweeping a live one", held)
 	}
