@@ -127,7 +127,7 @@ func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
 			return session.Result{}, true
 		case strings.Contains(command, "docker load"):
 			return session.Result{Stdout: "Loaded image: something-else\n"}, true
-		case strings.Contains(command, "journalctl"):
+		case strings.Contains(command, "docker events"):
 			return session.Result{Stdout: "containerd[1]: content digest sha256:abc: not found\n--- disk\n/dev/root 20G 19G 1G 95% /\n"}, true
 		default:
 			return session.Result{}, false
