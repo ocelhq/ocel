@@ -1,0 +1,19 @@
+{
+  "name": "@fixture/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@fixture/greeting": "workspace:^",
+    "express": "~5.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "~5.0.0",
+    "@types/node": "^22.18.8",
+    "typescript": "^5.9.3"
+  }
+}

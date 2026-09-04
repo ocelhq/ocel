@@ -125,8 +125,9 @@ func TestLiveTheExpressFixtureBuildsAndServesItsVersion(t *testing.T) {
 }
 
 const (
-	workspaceExample    = "../../../examples/workspace"
-	workspaceExampleApp = "../express"
+	workspaceFixture    = "testdata/pnpmworkspace-live"
+	workspaceFixtureApp = workspaceFixture + "/apps/web"
+	workspaceGreeting   = "greeting from the workspace package"
 )
 
 func TestLiveAnAppInsideAWorkspaceBuildsFromTheWorkspaceRoot(t *testing.T) {
@@ -134,10 +135,9 @@ func TestLiveAnAppInsideAWorkspaceBuildsFromTheWorkspaceRoot(t *testing.T) {
 	vm.Engine(t)
 	vm.Forward(t)
 
-	fixture := filepath.Join(workspaceExample, workspaceExampleApp)
-	loc := located(t, fixture)
+	loc := located(t, workspaceFixtureApp)
 	if !loc.InWorkspace() {
-		t.Fatalf("%s is not inside a workspace, so this test proves nothing about one", fixture)
+		t.Fatalf("%s is not inside a workspace, so this test proves nothing about one", workspaceFixtureApp)
 	}
 
 	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(),
@@ -149,6 +149,9 @@ func TestLiveAnAppInsideAWorkspaceBuildsFromTheWorkspaceRoot(t *testing.T) {
 	addresses(t, vm, image, "ocel/workspace-express")
 	if held := vm.SSH(t, "docker run --rm --entrypoint sh "+image.Ref+" -c 'ls "+loc.Path+"/node_modules/express/package.json'"); !strings.Contains(held, "package.json") {
 		t.Errorf("the image holds %q where the app's own dependencies belong: the install inside it resolved nothing from the root's lockfile", held)
+	}
+	if said := serves(t, vm, image, 18083); said != workspaceGreeting {
+		t.Errorf("the app answered %q, want %q: the image serves the app only if the workspace package beside it was built and resolved", said, workspaceGreeting)
 	}
 }
 
