@@ -65,6 +65,13 @@ runs:
         sudo incus admin init --auto
         sudo usermod -aG incus-admin "$(id -un)"
 
+    - name: Run the Docker every box ocel bootstraps runs
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -fsSL --retry 5 --retry-delay 2 https://get.docker.com | sudo sh
+        docker version --format 'client {{.Client.Version}} server {{.Server.Version}}'
+
     - name: Keep images in containerd, as every build the cli accepts does
       shell: bash
       run: |
