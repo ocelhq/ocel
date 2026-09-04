@@ -1,0 +1,17 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "generate": {
+      "inputs": [
+        "generate.sh",
+        "package.json",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/platform/vps/provider/**/*.go",
+        "$TURBO_ROOT$/platform/vps/provider/go.mod",
+        "$TURBO_ROOT$/platform/vps/provider/go.sum",
+        "!$TURBO_ROOT$/**/*_test.go"
+      ]
+    }
+  }
+}

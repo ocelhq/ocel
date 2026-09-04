@@ -1,0 +1,8 @@
+{
+  "name": "@platform/vps-host",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "generate": "sh ./generate.sh"
+  }
+}

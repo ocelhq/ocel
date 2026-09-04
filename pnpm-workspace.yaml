@@ -6,6 +6,8 @@ packages:
   - platform/aws/functions/*
   - platform/aws/membrane
   - platform/aws/provider/edges/cloudfront/resolver
+  - platform/aws/provider/payloads
+  - platform/vps/provider/host
   - platform/edge/contract
   - platform/edge/cloudflare/workers/*
   - platform/edge/cloudflare/lib/*

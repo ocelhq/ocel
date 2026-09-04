@@ -81,8 +81,7 @@ jobs:
           region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
-      - if: matrix.group.name == 'cli' || matrix.group.name == 'aws'
-        uses: ./.github/actions/node-workspace
+      - uses: ./.github/actions/node-workspace
         with:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}

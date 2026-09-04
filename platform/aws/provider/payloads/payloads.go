@@ -9,7 +9,7 @@ import (
 	"path"
 )
 
-//go:generate sh ./generate.sh
+//go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/aws-payloads
 
 //go:embed dist
 var embedded embed.FS

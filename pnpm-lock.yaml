@@ -1456,6 +1456,24 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
 
+  platform/aws/provider/payloads:
+    devDependencies:
+      '@platform/aws-image-optimizer':
+        specifier: workspace:*
+        version: link:../../functions/image-optimizer
+      '@platform/aws-membrane':
+        specifier: workspace:*
+        version: link:../../membrane
+      '@platform/aws-revalidator':
+        specifier: workspace:*
+        version: link:../../functions/revalidator
+      '@platform/aws-tag-invalidator':
+        specifier: workspace:*
+        version: link:../../functions/tag-invalidator
+      '@platform/aws-tag-publisher':
+        specifier: workspace:*
+        version: link:../../functions/tag-publisher
+
   platform/edge/cloudflare/lib/auth:
     devDependencies:
       '@types/node':
@@ -1563,6 +1581,8 @@ importers:
       vitest:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
+
+  platform/vps/provider/host: {}
 
   tests/journeys:
     dependencies:

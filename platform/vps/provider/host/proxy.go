@@ -67,7 +67,7 @@ const (
 	networkHeld = "network=held"
 )
 
-//go:generate sh ./generate.sh
+//go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/vps-host
 
 //go:embed proxy.json
 var proxyBaseline []byte
