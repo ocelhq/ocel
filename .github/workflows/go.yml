@@ -11,6 +11,8 @@ on:
       - "packages/ocel/**"
       - "pnpm-lock.yaml"
       - "turbo.json"
+      - "scripts/floci.sh"
+      - "scripts/assert-ran.sh"
       - ".github/workflows/go.yml"
       - ".github/actions/gobuildcache/**"
       - ".github/actions/node-workspace/**"
@@ -27,26 +29,41 @@ permissions:
 jobs:
   go:
     if: github.event.action != 'closed'
-    name: ${{ matrix.module }}
+    name: ${{ matrix.group.name }}
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        module:
-          - cli
-          - sdk
-          - pkg/channel
-          - pkg/naming
-          - pkg/proto
-          - pkg/providerkit
-          - pkg/providerkit/pulumi
-          - platform/edge/contract
-          - platform/aws/provider
-          - platform/vps/provider
-          - platform/edge/cloudflare/deploy
-    defaults:
-      run:
-        working-directory: ${{ matrix.module }}
+        group:
+          - name: cli
+            dirs: cli sdk pkg/naming pkg/proto pkg/channel
+            packages: ./cli/... ./sdk/... ./pkg/naming/... ./pkg/proto/... ./pkg/channel/...
+            sums: |
+              cli/go.sum
+              sdk/go.sum
+              pkg/naming/go.sum
+              pkg/proto/go.sum
+              pkg/channel/go.sum
+              platform/aws/provider/go.sum
+          - name: aws
+            dirs: platform/aws/provider
+            packages: ./platform/aws/provider/...
+            sums: |
+              platform/aws/provider/go.sum
+              cli/go.sum
+          - name: providerkit
+            dirs: platform/vps/provider pkg/providerkit pkg/providerkit/pulumi platform/edge/cloudflare/deploy platform/edge/contract
+            packages: ./platform/vps/provider/... ./pkg/providerkit/... ./pkg/providerkit/pulumi/... ./platform/edge/cloudflare/deploy/... ./platform/edge/contract/...
+            sums: |
+              platform/vps/provider/go.sum
+              pkg/providerkit/go.sum
+              pkg/providerkit/pulumi/go.sum
+              platform/edge/cloudflare/deploy/go.sum
+              platform/edge/contract/go.sum
+    env:
+      DIRS: ${{ matrix.group.dirs }}
+      PACKAGES: ${{ matrix.group.packages }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,8 +71,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: ${{ matrix.module }}/go.mod
-          cache-dependency-path: ${{ matrix.module }}/go.sum
+          go-version-file: go.work
+          cache-dependency-path: ${{ matrix.group.sums }}
 
       - name: Setup gobuildcache
         uses: ./.github/actions/gobuildcache
@@ -64,29 +81,31 @@ jobs:
           region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
-      - if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider'
+      - if: matrix.group.name == 'cli' || matrix.group.name == 'aws'
         uses: ./.github/actions/node-workspace
         with:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: The ocel package the cli e2e deploys against
-        if: matrix.module == 'cli'
-        working-directory: .
+        if: matrix.group.name == 'cli'
         run: pnpm turbo run build --filter=ocel
 
       - name: go generate (embedded dist)
-        if: matrix.module == 'cli' || matrix.module == 'platform/aws/provider' || matrix.module == 'platform/vps/provider'
-        run: go generate ./...
+        if: matrix.group.name == 'cli'
+        run: go generate -C cli ./...
 
       - name: go generate (provider payloads the cli tests build)
-        if: matrix.module == 'cli'
-        working-directory: platform/aws/provider
-        run: go generate ./...
+        if: matrix.group.name == 'cli' || matrix.group.name == 'aws'
+        run: go generate -C platform/aws/provider ./...
+
+      - name: go generate (the vps provider's embedded dist)
+        if: matrix.group.name == 'providerkit'
+        run: go generate -C platform/vps/provider ./...
 
       - name: gofmt
         run: |
-          unformatted=$(gofmt -l .)
+          unformatted=$(gofmt -l $DIRS)
           if [ -n "$unformatted" ]; then
             echo "::error::not gofmt'd:"
             echo "$unformatted"
@@ -94,13 +113,51 @@ jobs:
           fi
 
       - name: go vet
-        run: go vet ./...
+        run: go vet $PACKAGES
 
       - name: go build
-        run: go build ./...
+        run: go build $PACKAGES
 
       - name: go test -race
-        run: go test -race -count=1 ./...
+        run: go test -race -count=1 $PACKAGES
 
       - name: staticcheck
-        run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0-0.dev.0.20260824195211-6cb65e58a558 ./...
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0-0.dev.0.20260824195211-6cb65e58a558 $PACKAGES
+
+      - name: Pull the emulator both suites run against
+        if: matrix.group.name == 'aws'
+        run: docker pull floci/floci:latest
+
+      - name: Run the live conformance suite
+        if: matrix.group.name == 'aws'
+        run: |
+          set -euo pipefail
+          scripts/floci.sh run "ocel-aws-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -C platform/aws/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./... | tee live.json
+
+      - name: Assert the live suite ran
+        if: matrix.group.name == 'aws'
+        run: scripts/assert-ran.sh live.json TestLive
+
+      - name: The node bundle the CLI binary is built around
+        if: matrix.group.name == 'aws'
+        run: |
+          set -euo pipefail
+          pnpm turbo run build --filter=ocel
+          go generate -C cli ./...
+
+      - name: Run the lifecycle suite on an emulator of its own
+        if: matrix.group.name == 'aws'
+        run: |
+          set -euo pipefail
+          scripts/floci.sh run "ocel-aws-lifecycle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -C platform/aws/provider -race -count=1 -timeout 30m -run '^TestLifecycle' -json ./... | tee lifecycle.json
+
+      - name: Assert the lifecycle suite ran
+        if: matrix.group.name == 'aws'
+        run: scripts/assert-ran.sh lifecycle.json TestLifecycle
+
+      - name: No emulator left behind
+        if: ${{ always() && matrix.group.name == 'aws' }}
+        run: |
+          for name in "ocel-aws-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "ocel-aws-lifecycle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; do
+            scripts/floci.sh destroy "$name" || echo "could not destroy $name"
+          done
