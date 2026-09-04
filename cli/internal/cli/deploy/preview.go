@@ -215,6 +215,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		}
 
 		ui.Building()
+		suppressed := suppressResources()
 		browser := deps.BrowserReachable(stdin)
 		scope := envwire.Scope(cfg, true, env.GetIdentity())
 		scope.Browser = browser
@@ -230,10 +231,11 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 					Tier:   environmentv1.Tier_TIER_PREVIEW,
 				}, scope)
 			},
-			command: "ocel preview up",
-			compute: compute,
-			ui:      ui,
-			enabled: !opts.dry && browser,
+			command:    "ocel preview up",
+			compute:    compute,
+			suppressed: suppressed,
+			ui:         ui,
+			enabled:    !opts.dry && browser,
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
@@ -257,7 +259,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			Dry:         opts.dry,
 
 			ImageRegistry:     registry,
-			SuppressResources: suppressResources(),
+			SuppressResources: suppressed,
 		}
 
 		if opts.dry {

@@ -25,8 +25,9 @@ type gateRecovery struct {
 
 	newGate func() *envgate.Gate
 
-	command string
-	compute string
+	command    string
+	compute    string
+	suppressed bool
 
 	ui *runui.Session
 
@@ -53,7 +54,7 @@ func (r gateRecovery) attempt(ctx context.Context, gate *envgate.Gate, prebuilt 
 	if run := runtrace.FromContext(ctx); run != nil {
 		attemptCtx, span = run.StartSpan(ctx, "build", runtrace.AttrRetryCount.Int(retry))
 	}
-	manifest, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.ui, r.compute)
+	manifest, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.ui, r.compute, r.suppressed)
 	endAttemptSpan(span, err)
 	return manifest, err
 }
