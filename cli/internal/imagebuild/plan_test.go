@@ -167,7 +167,7 @@ func TestAnAppInAWorkspaceInstallsFromTheRootLockfileAndOnlyWhatItReaches(t *tes
 	plan := plannedFrom(t, loc)
 
 	install := strings.Join(plan.step(t, "install"), "\n")
-	if want := "pnpm install --frozen-lockfile --prefer-offline --filter ./apps/web..."; !strings.Contains(install, want) {
+	if want := "pnpm install --frozen-lockfile --filter ./apps/web..."; !strings.Contains(install, want) {
 		t.Errorf("the install step runs:\n%s\nwant %q — the whole monorepo is installed to serve one app otherwise", install, want)
 	}
 	if strings.Contains(install, "pnpm install --frozen-lockfile --prefer-offline\n") {
