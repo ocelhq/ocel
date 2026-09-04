@@ -41,7 +41,11 @@ func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, report pro
 	}
 	defer func() { _ = stream.Close() }()
 
-	said, err := l.host.LoadImage(ctx, push.Target, stream)
+	checked := providerkit.CompleteArchive(stream, daemon.Address, push.Target)
+	said, err := l.host.LoadImage(ctx, push.Target, checked)
+	if gap := checked.Gap(); gap != nil {
+		return gap
+	}
 	if err != nil {
 		return err
 	}
