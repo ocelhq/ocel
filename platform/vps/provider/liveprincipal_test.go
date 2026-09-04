@@ -174,8 +174,14 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	keyed := vm.provider(t)
+	defer closing(t, keyed)
+	reading, err := keyed.Bootstrap("")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, taken := range []providerkit.Class{providerkit.ClassPreview, class} {
-		standing, err := forgetting.Describe(ctx, taken)
+		standing, err := reading.Describe(ctx, taken)
 		if err != nil {
 			t.Fatalf("Describe(%s) = %v", taken, err)
 		}
