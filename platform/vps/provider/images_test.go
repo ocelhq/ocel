@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -15,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-const loadedCoordinate = "ocel/web:sha256-abc"
+const loadedCoordinate = "ocel/shop/web:sha256-abc"
 
 type box struct {
 	mu       sync.Mutex
@@ -57,9 +58,11 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 	var said string
 	for _, line := range strings.Split(command, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 2 || fields[0] != "docker" {
+		at := slices.Index(fields, "docker")
+		if at < 0 || len(fields)-at < 2 {
 			continue
 		}
+		fields = fields[at:]
 		switch {
 		case fields[1] == "load":
 			b.holds = true
@@ -194,7 +197,7 @@ func daemonHolding(t *testing.T, tar string) *int {
 func aPush() providerkit.ImagePush {
 	return providerkit.ImagePush{
 		App:    "web",
-		Source: "ocel/web@sha256:abc",
+		Source: "ocel/shop/web@sha256:abc",
 		Target: loadedCoordinate,
 		Digest: "sha256:abc",
 	}
