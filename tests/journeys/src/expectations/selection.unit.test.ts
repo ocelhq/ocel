@@ -54,7 +54,16 @@ describe("expectationsFor", () => {
     const listed = expectationsFor("aws");
     assert.deepEqual(listed["hello-next/web"], { up: "https://github.com/ocelhq/ocel/issues/906" });
     assert.deepEqual(listed["hello-express/web"], {});
-    assert.deepEqual(listed["with-transforms/web"], {});
+    assert.deepEqual(listed["with-transforms/web"], {
+      "GET /api/link/query answers ok after a select through the link":
+        "https://github.com/ocelhq/ocel/issues/925",
+      "redeploy · GET /api/link/query answers ok after a select through the link":
+        "https://github.com/ocelhq/ocel/issues/925",
+      "rollback · GET /api/link/query answers ok after a select through the link":
+        "https://github.com/ocelhq/ocel/issues/925",
+      "redeploy · GET /api/link answers with what it resolved and the greeting it deployed with":
+        "https://github.com/ocelhq/ocel/issues/926",
+    });
   });
 
   it("lists every remaining real-world cell at up under the edge's own issue", () => {
@@ -71,12 +80,15 @@ describe("expectationsFor", () => {
     }
   });
 
-  it("lists no contract title on real aws: a listed up covers the cell behind it", () => {
+  it("lists no contract title under a listed up on real aws: the up covers the cell behind it", () => {
     for (const edge of ["api-gateway", "cloudfront", "cloudflare"]) {
       process.env[EDGE_ENV] = edge;
-      for (const cell of Object.values(expectationsFor("aws"))) {
+      for (const [name, cell] of Object.entries(expectationsFor("aws"))) {
+        if (!("up" in cell)) {
+          continue;
+        }
         const contract = Object.keys(cell).filter((title) => title !== "up");
-        assert.deepEqual(contract, [], edge);
+        assert.deepEqual(contract, [], `${name} on ${edge}`);
       }
     }
   });
