@@ -11,6 +11,7 @@ usage() {
     cat <<'EOF'
 usage: scripts/incus.sh <command> [args]
 
+  fetch                  pull the VM image into the local store once
   create <name>          create VM, inject key via cloud-init, wait for SSH,
                          snapshot 'clean', print info lines
   restore <name>         restore the 'clean' snapshot, wait for SSH
@@ -88,6 +89,10 @@ print_info() {
     printf 'OCEL_INCUS_ADDR=%s\n' "$addr"
     printf 'OCEL_INCUS_USER=%s\n' "$SSH_USER"
     printf 'OCEL_INCUS_KEY=%s\n' "$KEY"
+}
+
+cmd_fetch() {
+    incus image copy "$IMAGE" local: --vm
 }
 
 cmd_create() {
@@ -183,11 +188,12 @@ cmd_run() {
         "$@"
 }
 
-[ $# -ge 2 ] || usage
+[ $# -ge 1 ] || usage
 cmd=$1
 shift
 case "$cmd" in
-create) cmd_create "$@" ;;
+fetch) [ $# -eq 0 ] || usage; cmd_fetch ;;
+create) [ $# -eq 1 ] || usage; cmd_create "$@" ;;
 restore) cmd_restore "$@" ;;
 info) cmd_info "$@" ;;
 ssh) cmd_ssh "$@" ;;
