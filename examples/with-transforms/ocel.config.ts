@@ -16,7 +16,7 @@ export function zonedApps(): AppConfig[] | undefined {
   }
   return config.apps?.map((app) => ({
     ...app,
-    domains: { production: `${app.name}.${slug}.${zone}` },
+    domains: { production: `${app.name}-${slug}.${zone}` },
   }));
 }
 
