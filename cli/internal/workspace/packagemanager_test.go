@@ -1,6 +1,7 @@
 package workspace_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/workspace"
@@ -93,9 +94,40 @@ func TestEachPackageManagerRunsTheAppsOwnScriptsRatherThanTheRoots(t *testing.T)
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.location.Commands(); got != tt.want {
+			got, err := tt.location.Commands()
+			if err != nil {
+				t.Fatalf("Commands() = %v", err)
+			}
+			if got != tt.want {
 				t.Errorf("Commands() = %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAWorkspaceAppWithNothingToStartIsRefusedRatherThanHandedTheRootsStart(t *testing.T) {
+	location := workspace.Location{
+		Root:    "/repo",
+		Path:    "apps/web",
+		Manager: workspace.Pnpm,
+		App:     workspace.App{Name: "@acme/web", Build: true},
+	}
+
+	_, err := location.Commands()
+	if err == nil {
+		t.Fatal("Commands() derived a start command for an app that declares none, so the image would run the workspace root's start script")
+	}
+	for _, want := range []string{"@acme/web", "start", "apps/web/package.json"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Commands() = %v, and the reader is never told about %q", err, want)
+		}
+	}
+}
+
+func TestAnAppThatIsItsOwnRootWithNothingToStartIsLeftToRailpack(t *testing.T) {
+	location := workspace.Location{Root: "/repo/app", Path: ".", Manager: workspace.Npm, App: workspace.App{Name: "solo"}}
+
+	if _, err := location.Commands(); err != nil {
+		t.Errorf("Commands() = %v, and railpack derives the start command of an app that is its own root", err)
 	}
 }

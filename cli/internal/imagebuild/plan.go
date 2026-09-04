@@ -29,7 +29,10 @@ func Plan(loc workspace.Location) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	commands := loc.Commands()
+	commands, err := loc.Commands()
+	if err != nil {
+		return nil, err
+	}
 	result, err := core.GenerateBuildPlan(source, bare, &core.GenerateBuildPlanOptions{
 		BuildCommand: commands.Build,
 		StartCommand: commands.Start,

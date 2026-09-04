@@ -174,15 +174,29 @@ func yarnGeneration(version string) Manager {
 	return YarnBerry
 }
 
-func (l Location) Commands() Commands {
+func (l Location) Commands() (Commands, error) {
 	var commands Commands
 	if l.InWorkspace() {
-		commands = Commands{Install: l.install(), Build: l.build(), Start: l.start()}
+		start := l.start()
+		if start == "" {
+			return Commands{}, fmt.Errorf(
+				"app %q declares no start script, no main and no entry file beside its %s, and it is a member of the workspace at %s: the image would be left starting the workspace root's own start script, which serves something else — give %s a %q script",
+				l.name(), manifestName, l.Root, filepath.ToSlash(filepath.Join(l.Path, manifestName)), "start",
+			)
+		}
+		commands = Commands{Install: l.install(), Build: l.build(), Start: start}
 	}
 	if l.BuildCommand != "" {
 		commands.Build = l.BuildCommand
 	}
-	return commands
+	return commands, nil
+}
+
+func (l Location) name() string {
+	if l.App.Name != "" {
+		return l.App.Name
+	}
+	return filepath.Base(l.Path)
 }
 
 func (l Location) install() string {
