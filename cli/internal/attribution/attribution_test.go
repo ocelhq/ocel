@@ -53,6 +53,25 @@ func edgeStrings(usages []Usage) []string {
 	return out
 }
 
+func TestAContainerAppIsAttributedWithoutASecondInstallOnTheDevelopersDisk(t *testing.T) {
+	root := fixtureRoot(t, "uninstalled")
+	declarations := []Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: stackAt(root, "shared/db.ts")}}
+
+	serverless := []App{{Name: "web", Path: "apps/web"}}
+	if _, err := Compute(root, serverless, declarations); err == nil {
+		t.Fatal("Compute() over a serverless app read an import graph its node_modules cannot resolve, so the fixture proves nothing")
+	}
+
+	usages, err := Compute(root, []App{{Name: "web", Path: "apps/web", Container: true}}, declarations)
+	if err != nil {
+		t.Fatalf("Compute() over a container app = %v — the image installs the app's dependencies, and the deploy already proved it", err)
+	}
+
+	if want := []string{"web -> LINK_TYPE_POSTGRES:main-db [apps/web/src/server.ts]"}; !reflect.DeepEqual(edgeStrings(usages), want) {
+		t.Errorf("edges = %v, want %v — the graph of the app's own files is what attribution needs", edgeStrings(usages), want)
+	}
+}
+
 func TestCompute(t *testing.T) {
 	t.Run("the fixture monorepo's edges match its declared ground truth", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")

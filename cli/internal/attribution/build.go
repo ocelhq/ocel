@@ -39,7 +39,7 @@ var assetLoaders = map[string]api.Loader{
 	".wasm":  api.LoaderEmpty,
 }
 
-func sideEffectFreeModules() api.Plugin {
+func sideEffectFreeModules(installedByTheImage bool) api.Plugin {
 	return api.Plugin{
 		Name: "attribution-side-effect-free-modules",
 		Setup: func(build api.PluginBuild) {
@@ -54,7 +54,8 @@ func sideEffectFreeModules() api.Plugin {
 					PluginData: "resolving",
 				})
 				if len(r.Errors) > 0 {
-					return api.OnResolveResult{External: importedByDependency(args.Importer)}, nil
+					external := importedByDependency(args.Importer) || (installedByTheImage && bareSpecifier(args.Path))
+					return api.OnResolveResult{External: external}, nil
 				}
 				if r.External {
 					return api.OnResolveResult{}, nil
@@ -67,6 +68,10 @@ func sideEffectFreeModules() api.Plugin {
 
 func importedByDependency(importer string) bool {
 	return slices.Contains(strings.Split(filepath.ToSlash(importer), "/"), "node_modules")
+}
+
+func bareSpecifier(path string) bool {
+	return path != "" && !strings.HasPrefix(path, ".") && !filepath.IsAbs(path)
 }
 
 func shakenSurvivors(root string, app App) (map[string]map[string]bool, error) {
@@ -89,7 +94,7 @@ func shakenSurvivors(root string, app App) (map[string]map[string]bool, error) {
 		Metafile:      true,
 		Loader:        assetLoaders,
 		LogOverride:   unresolvableImportLogLevels,
-		Plugins:       []api.Plugin{sideEffectFreeModules()},
+		Plugins:       []api.Plugin{sideEffectFreeModules(app.Container)},
 	})
 	if len(result.Errors) > 0 {
 		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{Color: false})

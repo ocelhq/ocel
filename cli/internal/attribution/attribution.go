@@ -20,8 +20,9 @@ type Declaration struct {
 }
 
 type App struct {
-	Name string
-	Path string
+	Name      string
+	Path      string
+	Container bool
 }
 
 type Usage struct {
