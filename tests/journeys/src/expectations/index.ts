@@ -5,7 +5,6 @@ import { targetNamed } from "../targets";
 import { gaps } from "./gaps";
 import type {
   Affected,
-  Edge,
   ExpectationEnvironment,
   Expectations,
   Gap,
@@ -15,9 +14,6 @@ import type {
 
 export type { Compute, Edge, ExpectationEnvironment, Expectations, Gap, Listed } from "./types";
 
-export const EDGE_ENV = "OCEL_AWS_EDGE";
-export const DEFAULT_EDGE: Edge = "cloudfront";
-export const EDGES: readonly Edge[] = ["api-gateway", "cloudfront", "cloudflare"];
 export const CONTRACT_LEGS: Leg[] = ["contract", "redeploy", "rollback"];
 
 const EVERY_SUITE: Suite[] = [
@@ -38,21 +34,6 @@ const targetOf: Record<ExpectationEnvironment, TargetName> = {
   "vps.incus": "vps",
 };
 
-function isEdge(named: string): named is Edge {
-  return (EDGES as readonly string[]).includes(named);
-}
-
-function edgeFor(environment: ExpectationEnvironment): Edge | undefined {
-  if (targetOf[environment] !== "aws") {
-    return undefined;
-  }
-  const named = process.env[EDGE_ENV] || DEFAULT_EDGE;
-  if (!isEdge(named)) {
-    throw new Error(`${EDGE_ENV} is ${named}, and no gap is listed for it (${EDGES.join(", ")})`);
-  }
-  return named;
-}
-
 function titlesOf(pick: TestPick): string[] {
   if (typeof pick === "string") {
     return [pick];
@@ -66,17 +47,6 @@ function titlesOf(pick: TestPick): string[] {
   return contractRows(suites)
     .filter((row) => !except.has(row.title))
     .flatMap((row) => legs.map((leg) => contractTitle(leg, row.title)));
-}
-
-function applies(block: Affected, environment: ExpectationEnvironment, edge: Edge | undefined) {
-  if (!block.on.includes(environment)) {
-    return false;
-  }
-  return block.edge === undefined || (edge !== undefined && block.edge.includes(edge));
-}
-
-function where(environment: ExpectationEnvironment, edge: Edge | undefined): string {
-  return edge ? `${environment} on ${edge}` : environment;
 }
 
 function listedOf(gap: Gap): Listed {
@@ -104,6 +74,8 @@ function hitsFor(block: Affected, planned: PlannedTest[], said: string): Planned
     (test) =>
       (block.cells === undefined || block.cells.includes(test.cell)) &&
       (block.compute === undefined || block.compute.includes(test.variant.compute)) &&
+      (block.edge === undefined ||
+        (test.variant.edge !== undefined && block.edge.includes(test.variant.edge))) &&
       titles.has(test.title),
   );
   for (const cell of block.cells ?? []) {
@@ -116,17 +88,18 @@ function hitsFor(block: Affected, planned: PlannedTest[], said: string): Planned
       throw new Error(`${said} lists ${compute}, which plans none of the tests named`);
     }
   }
+  for (const edge of block.edge ?? []) {
+    if (!hits.some((hit) => hit.variant.edge === edge)) {
+      throw new Error(`${said} lists ${edge}, which plans none of the tests named`);
+    }
+  }
   if (hits.length === 0) {
     throw new Error(`${said} lists nothing that is planned`);
   }
   return hits;
 }
 
-export function resolve(
-  listed: Gap[],
-  environment: ExpectationEnvironment,
-  edge: Edge | undefined,
-): Expectations {
+export function resolve(listed: Gap[], environment: ExpectationEnvironment): Expectations {
   checkIds(listed);
   const target = targetNamed(targetOf[environment]);
   const planned = planTests(specForTarget(target.name), target.legs, target);
@@ -134,10 +107,10 @@ export function resolve(
   for (const gap of listed) {
     const carried = new Set<string>();
     for (const block of gap.affects) {
-      if (!applies(block, environment, edge)) {
+      if (!block.on.includes(environment)) {
         continue;
       }
-      for (const hit of hitsFor(block, planned, `${gap.id} on ${where(environment, edge)}`)) {
+      for (const hit of hitsFor(block, planned, `${gap.id} on ${environment}`)) {
         const at = JSON.stringify([hit.cell, hit.title]);
         if (carried.has(at)) {
           continue;
@@ -152,7 +125,7 @@ export function resolve(
 }
 
 export function expectationsFor(environment: ExpectationEnvironment): Expectations {
-  return resolve(gaps, environment, edgeFor(environment));
+  return resolve(gaps, environment);
 }
 
 export function issueUrl(issue: number): string {

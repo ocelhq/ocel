@@ -80,10 +80,15 @@ function ladderPhaseTitles(example: ExampleSpec): Array<{ title: string }> {
   return out;
 }
 
-export function planTests(examples: ExampleSpec[], legs: Leg[], offered: Offered): PlannedTest[] {
+export function planTests(
+  examples: ExampleSpec[],
+  legs: Leg[],
+  offered: Offered,
+  variants?: Map<string, Variant[]>,
+): PlannedTest[] {
   const planned: PlannedTest[] = [];
   for (const example of examples) {
-    for (const variant of variantsOf(example, offered)) {
+    for (const variant of variants?.get(example.name) ?? variantsOf(example, offered)) {
       const name = cellNameOf(example, variant, offered);
       for (const app of example.apps) {
         for (const leg of legs) {

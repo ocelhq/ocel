@@ -29,15 +29,18 @@ Then run one cell:
 pnpm --filter @ocel-tests/journeys cell --example express --target dev
 ```
 
-For `aws` that is a floci emulator, one per edge, and the endpoint it prints:
+For `aws` that is a floci emulator and the endpoint it prints:
 
 ```
 scripts/floci.sh create ocel-journeys
 export AWS_ENDPOINT_URL=http://localhost.localstack.cloud:<the port it printed>
-export OCEL_AWS_EDGE=api-gateway
 pnpm --filter @ocel-tests/journeys cell --example express --target aws
 scripts/floci.sh destroy ocel-journeys
 ```
+
+One emulator serves every edge. `OCEL_JOURNEY_EDGES` and `OCEL_JOURNEY_COMPUTES` narrow
+what the target offers, and `OCEL_JOURNEY_COVERAGE=full` runs every variant rather than a
+covering subset.
 
 The host is `localhost.localstack.cloud`, not the `127.0.0.1` the script prints: S3-Control
 addresses its endpoint as `<account>.<host>`, and `<account>.127.0.0.1` resolves nowhere,

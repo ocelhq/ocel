@@ -14,6 +14,7 @@ export function cellEnv(cell: CellContext): NodeJS.ProcessEnv {
   return {
     OCEL_JOURNEY_SLUG: cell.slug,
     OCEL_JOURNEY_COMPUTE: cell.compute,
+    ...(cell.edge === undefined ? {} : { OCEL_JOURNEY_EDGE: cell.edge }),
     ...(cell.mode === "hello" ? { [SUPPRESS_RESOURCES_ENV]: "1" } : {}),
   };
 }

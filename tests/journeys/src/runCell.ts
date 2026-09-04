@@ -21,14 +21,15 @@ import {
   ROLLBACK_TITLE,
   UP_TITLE,
 } from "./plan";
+import { selectionFor } from "./selection";
 import {
   cellNameOf,
   type ExampleSpec,
   ladderTitle,
   type Leg,
+  type Offered,
   suitesOf,
   type Variant,
-  variantsOf,
 } from "./spec";
 import { selectedTarget } from "./targets";
 import type { CellContext, Deployment } from "./targets/types";
@@ -44,16 +45,16 @@ function once<T>(work: Once<T>): Once<T> {
 }
 
 export function describeCell(example: ExampleSpec) {
-  const target = selectedTarget();
-  for (const variant of variantsOf(example, target)) {
-    describeVariant(example, variant);
+  const { naming, covered } = selectionFor(selectedTarget());
+  for (const variant of covered.get(example.name) ?? []) {
+    describeVariant(example, variant, naming);
   }
 }
 
-function describeVariant(example: ExampleSpec, variant: Variant) {
+function describeVariant(example: ExampleSpec, variant: Variant, offered: Offered) {
   const target = selectedTarget();
   const runId = currentRunIdentity();
-  const name = cellNameOf(example, variant, target);
+  const name = cellNameOf(example, variant, offered);
   const slug = projectSlug(name, runId);
   const dir = exampleDir(example.dir);
   const suites = suitesOf(example, variant.mode);
@@ -62,6 +63,7 @@ function describeVariant(example: ExampleSpec, variant: Variant) {
     name,
     mode: variant.mode,
     compute: variant.compute,
+    ...(variant.edge === undefined ? {} : { edge: variant.edge }),
     suites,
     dir,
     slug,

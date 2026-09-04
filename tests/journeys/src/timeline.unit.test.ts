@@ -82,10 +82,10 @@ describe("timelineOf", () => {
 describe("timingTable", () => {
   it("renders the stat line and a row per example", () => {
     expect(
-      timingTable(timelineOf(overlapping), { target: "aws", edge: "cloudfront", runId: "42" }),
+      timingTable(timelineOf(overlapping), { target: "aws", runId: "42" }),
     ).toBe(
       [
-        "### timing · aws · cloudfront · run 42",
+        "### timing · aws · run 42",
         "",
         "wall 200s · Σ files 240s · 2 workers · speed-up 1.2x · max overlap 2 · prepare 12s · tail: with-sst alone for 120s",
         "",
@@ -98,7 +98,7 @@ describe("timingTable", () => {
     );
   });
 
-  it("says the lane had no edge and no solo tail", () => {
+  it("says the lane had no solo tail", () => {
     const table = timingTable(
       timelineOf({
         runStart: START,
@@ -112,7 +112,7 @@ describe("timingTable", () => {
       }),
       { target: "vps", runId: "7" },
     );
-    expect(table).toContain("### timing · vps · - · run 7");
+    expect(table).toContain("### timing · vps · run 7");
     expect(table).toContain("tail: none");
     expect(table).not.toContain("prepare");
   });

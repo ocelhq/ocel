@@ -21,9 +21,9 @@ import { targetNamed } from "./targets";
 
 const ALL_LEGS: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"];
 
-const ALL_MODES: Offered = { modes: ["full", "hello"], computes: ["serverless"] };
+const ALL_MODES: Offered = { modes: ["full", "hello"], computes: ["serverless"], edges: [] };
 
-const FULL: Offered = { modes: ["full"], computes: ["serverless"] };
+const FULL: Offered = { modes: ["full"], computes: ["serverless"], edges: [] };
 
 const STAMP = "GET /api/probes/env reports the greeting and never the secret";
 
@@ -160,25 +160,40 @@ describe("planTests", () => {
   });
 });
 
-describe("planning the computes a target offers", () => {
+describe("planning the computes and edges a target offers", () => {
   const express = specByName("express");
 
   function cellsOn(target: string): string[] {
     return [...new Set(planTests([express], ["up"], targetNamed(target)).map((row) => row.cell))];
   }
 
-  it("plans a container cell beside every aws cell", () => {
+  it("plans a container and an edge cell beside every aws cell", () => {
     expect(cellsOn("aws")).toEqual([
       "express/web",
       "express-container/web",
+      "express-api-gateway/web",
+      "express-api-gateway-container/web",
+      "express-cloudflare/web",
+      "express-cloudflare-container/web",
       "express-hello/web",
       "express-hello-container/web",
+      "express-hello-api-gateway/web",
+      "express-hello-api-gateway-container/web",
+      "express-hello-cloudflare/web",
+      "express-hello-cloudflare-container/web",
     ]);
   });
 
-  it("plans no container cell where the target runs one compute", () => {
+  it("plans no container and no edge cell where the target runs one compute and no edge", () => {
     expect(cellsOn("vps")).toEqual(["express/web", "express-hello/web"]);
     expect(cellsOn("dev")).toEqual(["express/web"]);
+  });
+
+  it("plans only the variants it is handed, when it is handed some", () => {
+    const planned = planTests([express], ["up"], targetNamed("aws"), new Map([
+      ["express", [{ mode: "full", compute: "serverless", edge: "cloudflare" } as const]],
+    ]));
+    expect(planned.map((row) => row.cell)).toEqual(["express-cloudflare/web"]);
   });
 
   it("carries the variant of the cell it planned", () => {
@@ -186,10 +201,12 @@ describe("planning the computes a target offers", () => {
     expect(planned.find((row) => row.cell === "express-container/web")?.variant).toEqual({
       mode: "full",
       compute: "container",
+      edge: "cloudfront",
     });
-    expect(planned.find((row) => row.cell === "express/web")?.variant).toEqual({
+    expect(planned.find((row) => row.cell === "express-cloudflare/web")?.variant).toEqual({
       mode: "full",
       compute: "serverless",
+      edge: "cloudflare",
     });
   });
 });

@@ -1,10 +1,8 @@
-import type { Compute, Leg, Suite } from "../spec";
+import type { Compute, Edge, Leg, Suite } from "../spec";
 
 export type ExpectationEnvironment = "aws" | "aws.floci" | "dev" | "vps" | "vps.incus";
 
-export type Edge = "api-gateway" | "cloudfront" | "cloudflare";
-
-export type { Compute };
+export type { Compute, Edge };
 
 export type TestPick =
   | string

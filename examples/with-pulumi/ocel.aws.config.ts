@@ -12,7 +12,7 @@ const edges: Record<string, () => EdgeDescriptor> = {
   cloudflare,
 };
 
-const edge = edges[process.env.OCEL_AWS_EDGE ?? ""];
+const edge = edges[process.env.OCEL_JOURNEY_EDGE ?? ""];
 
 export default defineConfig({
   ...base,

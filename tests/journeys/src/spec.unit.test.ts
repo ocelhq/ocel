@@ -13,9 +13,14 @@ import {
   suitesOf,
   variantsOf,
 } from "./spec";
+import { targetNamed } from "./targets";
 
-const AWS: Offered = { modes: ["full", "hello"], computes: ["serverless", "container"] };
-const BOX: Offered = { modes: ["full", "hello"], computes: ["container"] };
+const AWS: Offered = {
+  modes: ["full", "hello"],
+  computes: ["serverless", "container"],
+  edges: ["cloudfront", "api-gateway", "cloudflare"],
+};
+const BOX: Offered = { modes: ["full", "hello"], computes: ["container"], edges: [] };
 
 const rows: ExampleSpec[] = [
   { name: "express", dir: "express", framework: "express", kind: "composite", suites: [], apps: [] },
@@ -61,10 +66,10 @@ describe("the modes an example runs in", () => {
   });
 
   it("names a cell of its own for the hello mode, so the two never share a slug", () => {
-    expect(cellNameOf(express, { mode: "full", compute: "serverless" }, AWS)).toBe(
+    expect(cellNameOf(express, { mode: "full", compute: "serverless", edge: "cloudfront" }, AWS)).toBe(
       "express",
     );
-    expect(cellNameOf(express, { mode: "hello", compute: "serverless" }, AWS)).toBe(
+    expect(cellNameOf(express, { mode: "hello", compute: "serverless", edge: "cloudfront" }, AWS)).toBe(
       "express-hello",
     );
   });
@@ -79,32 +84,41 @@ describe("the variants an example runs in", () => {
   const express = specByName("express");
   const transforms = specByName("with-transforms");
 
-  it("pairs every mode the row runs with every compute the target offers", () => {
-    expect(variantsOf(express, AWS)).toEqual([
-      { mode: "full", compute: "serverless" },
+  it("pairs every mode the row runs with every edge and compute the target offers", () => {
+    expect(variantsOf(express, BOX)).toEqual([
       { mode: "full", compute: "container" },
-      { mode: "hello", compute: "serverless" },
       { mode: "hello", compute: "container" },
     ]);
     expect(variantsOf(transforms, AWS)).toEqual([
-      { mode: "full", compute: "serverless" },
-      { mode: "full", compute: "container" },
+      { mode: "full", compute: "serverless", edge: "cloudfront" },
+      { mode: "full", compute: "container", edge: "cloudfront" },
+      { mode: "full", compute: "serverless", edge: "api-gateway" },
+      { mode: "full", compute: "container", edge: "api-gateway" },
+      { mode: "full", compute: "serverless", edge: "cloudflare" },
+      { mode: "full", compute: "container", edge: "cloudflare" },
     ]);
   });
 
-  it("names a cell of its own for a compute the target does not name first", () => {
-    expect(cellNameOf(express, { mode: "full", compute: "container" }, AWS)).toBe(
+  it("names a cell of its own for a compute or an edge the target does not name first", () => {
+    expect(cellNameOf(express, { mode: "full", compute: "container", edge: "cloudfront" }, AWS)).toBe(
       "express-container",
     );
-    expect(cellNameOf(express, { mode: "hello", compute: "container" }, AWS)).toBe(
-      "express-hello-container",
+    expect(cellNameOf(express, { mode: "full", compute: "serverless", edge: "cloudflare" }, AWS)).toBe(
+      "express-cloudflare",
     );
   });
 
-  it("names the target's first compute in no cell name", () => {
-    expect(cellNameOf(express, { mode: "full", compute: "container" }, BOX)).toBe(
-      "express",
-    );
+  it("orders the suffixes mode, edge, compute, so a slug reads the same every run", () => {
+    expect(
+      cellNameOf(express, { mode: "hello", compute: "container", edge: "api-gateway" }, AWS),
+    ).toBe("express-hello-api-gateway-container");
+    expect(
+      cellNameOf(specByName("workspace"), { mode: "hello", compute: "container", edge: "api-gateway" }, AWS),
+    ).toBe("workspace-hello-api-gateway-container");
+  });
+
+  it("names the target's first compute and first edge in no cell name", () => {
+    expect(cellNameOf(express, { mode: "full", compute: "container" }, BOX)).toBe("express");
     expect(cellNamesOf(express, BOX)).toEqual(["express", "express-hello"]);
   });
 
@@ -112,9 +126,27 @@ describe("the variants an example runs in", () => {
     expect(cellNamesOf(express, AWS)).toEqual([
       "express",
       "express-container",
+      "express-api-gateway",
+      "express-api-gateway-container",
+      "express-cloudflare",
+      "express-cloudflare-container",
       "express-hello",
       "express-hello-container",
+      "express-hello-api-gateway",
+      "express-hello-api-gateway-container",
+      "express-hello-cloudflare",
+      "express-hello-cloudflare-container",
     ]);
+  });
+
+  it("leaves the cells of a target that offers no edge untouched", () => {
+    for (const name of ["vps", "dev"] as const) {
+      const target = targetNamed(name);
+      expect(target.edges).toEqual([]);
+      expect(cellNamesOf(express, target).every((cell) => !cell.includes("cloud"))).toBe(true);
+    }
+    expect(cellNamesOf(express, targetNamed("vps"))).toEqual(["express", "express-hello"]);
+    expect(cellNamesOf(express, targetNamed("dev"))).toEqual(["express"]);
   });
 });
 

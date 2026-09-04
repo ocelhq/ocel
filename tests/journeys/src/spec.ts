@@ -11,11 +11,15 @@ export type Kind = "composite" | "ladder" | "workspace";
 
 export type Mode = "full" | "hello";
 
+export type Edge = "cloudfront" | "api-gateway" | "cloudflare";
+
+export const EDGES: Edge[] = ["cloudfront", "api-gateway", "cloudflare"];
+
 export type { Compute };
 
-export type Variant = { mode: Mode; compute: Compute };
+export type Variant = { mode: Mode; compute: Compute; edge?: Edge };
 
-export type Offered = { modes: Mode[]; computes: Compute[] };
+export type Offered = { modes: Mode[]; computes: Compute[]; edges: Edge[] };
 
 export type Group = { name: string; preferred: string };
 
@@ -153,8 +157,13 @@ export function modesOf(example: ExampleSpec, offered: Mode[]): Mode[] {
 }
 
 export function variantsOf(example: ExampleSpec, offered: Offered): Variant[] {
+  const edges: Array<Edge | undefined> = offered.edges.length === 0 ? [undefined] : offered.edges;
   return modesOf(example, offered.modes).flatMap((mode) =>
-    offered.computes.map((compute) => ({ mode, compute })),
+    edges.flatMap((edge) =>
+      offered.computes.map((compute) =>
+        edge === undefined ? { mode, compute } : { mode, compute, edge },
+      ),
+    ),
   );
 }
 
@@ -162,6 +171,7 @@ export function cellNameOf(example: ExampleSpec, variant: Variant, offered: Offe
   return [
     example.name,
     ...(variant.mode === "hello" ? ["hello"] : []),
+    ...(variant.edge === undefined || variant.edge === offered.edges[0] ? [] : [variant.edge]),
     ...(variant.compute === offered.computes[0] ? [] : [variant.compute]),
   ].join("-");
 }

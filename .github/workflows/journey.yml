@@ -33,9 +33,18 @@ on:
         default: "aws vps"
         type: string
       edges:
-        description: "Edges the aws lane runs, space separated."
-        default: "api-gateway cloudfront cloudflare"
+        description: "Edges the aws lane enumerates, space separated. Empty runs every edge it offers."
+        default: ""
         type: string
+      computes:
+        description: "Computes the aws lane enumerates, space separated. Empty runs every compute it offers."
+        default: ""
+        type: string
+      coverage:
+        description: "covering runs one cell per axis value; full runs every variant."
+        default: "full"
+        type: choice
+        options: [full, covering]
       examples:
         description: "Examples each lane runs, space separated."
         default: "express hono fastify next"
@@ -55,7 +64,6 @@ env:
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
   BUN_VERSION: "1.4.0"
-  PR_EDGES: "api-gateway cloudfront cloudflare"
   BINARIES: packages/native-lib
 
 jobs:
@@ -69,6 +77,8 @@ jobs:
       aws: ${{ steps.lanes.outputs.aws }}
       vps: ${{ steps.lanes.outputs.vps }}
       edges: ${{ steps.lanes.outputs.edges }}
+      computes: ${{ steps.lanes.outputs.computes }}
+      coverage: ${{ steps.lanes.outputs.coverage }}
       examples: ${{ steps.lanes.outputs.examples }}
       seed: ${{ steps.lanes.outputs.seed }}
       touched: ${{ steps.lanes.outputs.touched }}
@@ -95,6 +105,8 @@ jobs:
           LABEL: ${{ github.event.label.name }}
           TARGETS: ${{ inputs.targets }}
           EDGES: ${{ inputs.edges }}
+          COMPUTES: ${{ inputs.computes }}
+          COVERAGE: ${{ inputs.coverage }}
           EXAMPLES: ${{ inputs.examples }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
@@ -145,16 +157,20 @@ jobs:
           fi
 
           if [ "$real" = true ]; then
-            edges=$(jq -nc --arg edges "${EDGES:-$PR_EDGES}" '[{name: "real", edges: $edges}]')
+            coverage=${COVERAGE:-full}
           else
-            edges=$(jq -nc --argjson aws "$aws" '[({name: "api-gateway", edges: "api-gateway"} | select($aws)), {name: "cloudfront-cloudflare", edges: "cloudfront cloudflare"}]')
+            coverage=covering
+            EDGES=
+            COMPUTES=
           fi
 
           {
             echo "dev=$dev"
             echo "aws=$aws"
             echo "vps=$vps"
-            echo "edges=$edges"
+            echo "edges=${EDGES:-}"
+            echo "computes=${COMPUTES:-}"
+            echo "coverage=$coverage"
             echo "examples=$(echo "$EXAMPLES" | tr ' ' ',')"
             echo "seed=$seed"
             echo "touched=$touched"
@@ -206,17 +222,13 @@ jobs:
             ${{ env.BINARIES }}/provider-vps-linux-x64/bin/deploy
 
   aws:
-    name: aws (${{ matrix.edge.name }})
+    name: aws
     needs: binary
     if: ${{ (needs.binary.outputs.aws == 'true' || needs.binary.outputs.dev == 'true') && needs.binary.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ needs.binary.outputs.real == 'true' && 120 || 75 }}
-    strategy:
-      fail-fast: false
-      matrix:
-        edge: ${{ fromJSON(needs.binary.outputs.edges) }}
     concurrency:
-      group: ${{ needs.binary.outputs.real == 'true' && 'real-aws' || format('journey-aws-{0}-{1}', github.event.pull_request.number, matrix.edge.name) }}
+      group: ${{ needs.binary.outputs.real == 'true' && 'real-aws' || format('journey-aws-{0}', github.event.pull_request.number) }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
       OCEL_TARGET: aws
@@ -226,8 +238,8 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       REAL: ${{ needs.binary.outputs.real }}
-      EDGES: ${{ matrix.edge.edges }}
-      EMULATOR: ocel-journey-${{ matrix.edge.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+      OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
+      EMULATOR: ocel-journey-${{ github.run_id }}-${{ github.run_attempt }}
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
       OCEL_RESOURCE_POSTGRES_main: '{"name":"main","postgres":{"host":"localhost","port":5432,"database":"postgres","username":"postgres","password":"postgres"}}'
       OCEL_CLOUD_ADMIN_URL: postgres://postgres:postgres@localhost:5433/postgres
@@ -287,52 +299,29 @@ jobs:
         if: ${{ needs.binary.outputs.real == 'true' }}
         run: pnpm --filter @ocel-tests/journeys sweep --target aws
 
-      - name: Run the journey on every edge this cell holds
+      - name: Run the journey
         if: ${{ needs.binary.outputs.aws == 'true' }}
+        env:
+          OCEL_JOURNEY_EDGES: ${{ needs.binary.outputs.edges }}
+          OCEL_JOURNEY_COMPUTES: ${{ needs.binary.outputs.computes }}
         run: |
           set -uo pipefail
-          status=0
           if [ "$REAL" = true ]; then
-            for edge in $EDGES; do
-              echo "::group::aws journey on $edge"
-              OCEL_AWS_EDGE=$edge pnpm --filter @ocel-tests/journeys journey || status=1
-              echo "::endgroup::"
-            done
-            exit $status
+            exec pnpm --filter @ocel-tests/journeys journey
           fi
-
-          pids=()
-          names=()
-          for edge in $EDGES; do
-            OCEL_AWS_EDGE=$edge scripts/floci.sh run "$EMULATOR-$edge" -- \
-              bash -c 'AWS_ENDPOINT_URL=${OCEL_FLOCI_ENDPOINT/127.0.0.1/localhost.localstack.cloud} pnpm --filter @ocel-tests/journeys journey' \
-              > "$RUNNER_TEMP/journey-$edge.log" 2>&1 &
-            pids+=("$!")
-            names+=("$edge")
-          done
-          for i in "${!pids[@]}"; do
-            wait "${pids[$i]}" || status=1
-          done
-          for edge in "${names[@]}"; do
-            echo "::group::aws journey on $edge"
-            cat "$RUNNER_TEMP/journey-$edge.log" || true
-            echo "::endgroup::"
-          done
-          exit $status
+          scripts/floci.sh run "$EMULATOR" -- \
+            bash -c 'AWS_ENDPOINT_URL=${OCEL_FLOCI_ENDPOINT/127.0.0.1/localhost.localstack.cloud} pnpm --filter @ocel-tests/journeys journey'
 
       - name: No emulator left behind
         if: ${{ always() && needs.binary.outputs.aws == 'true' }}
-        run: |
-          for edge in $EDGES; do
-            scripts/floci.sh destroy "$EMULATOR-$edge" || echo "could not destroy $EMULATOR-$edge"
-          done
+        run: scripts/floci.sh destroy "$EMULATOR" || echo "could not destroy $EMULATOR"
 
       - name: Start the services the console stands on
-        if: ${{ !cancelled() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        if: ${{ !cancelled() && needs.binary.outputs.dev == 'true' }}
         run: docker compose up -d
 
       - name: Wait for Postgres to be ready
-        if: ${{ !cancelled() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        if: ${{ !cancelled() && needs.binary.outputs.dev == 'true' }}
         run: |
           for svc in postgres ocel-cloud; do
             echo "Waiting for $svc ..."
@@ -350,11 +339,11 @@ jobs:
           done
 
       - name: Push control-plane schema
-        if: ${{ !cancelled() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        if: ${{ !cancelled() && needs.binary.outputs.dev == 'true' }}
         run: pnpm --filter @console/db db:push
 
       - name: Start console/web (Next dev)
-        if: ${{ !cancelled() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        if: ${{ !cancelled() && needs.binary.outputs.dev == 'true' }}
         run: |
           pnpm --filter @console/web dev > /tmp/web.log 2>&1 &
           echo "Waiting for console/web on :3000 ..."
@@ -372,13 +361,13 @@ jobs:
           done
 
       - name: Run the dev journey
-        if: ${{ !cancelled() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        if: ${{ !cancelled() && needs.binary.outputs.dev == 'true' }}
         env:
           OCEL_TARGET: dev
         run: pnpm --filter @ocel-tests/journeys journey
 
       - name: Dump console/web log on failure
-        if: ${{ failure() && matrix.edge.name == 'cloudfront-cloudflare' && needs.binary.outputs.dev == 'true' }}
+        if: ${{ failure() && needs.binary.outputs.dev == 'true' }}
         run: cat /tmp/web.log || true
 
       - name: Pack the evidence
@@ -396,7 +385,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: journey-evidence-aws-${{ matrix.edge.name }}
+          name: journey-evidence-aws
           path: ${{ runner.temp }}/journey-evidence.tgz
           if-no-files-found: warn
 
@@ -414,6 +403,7 @@ jobs:
       OCEL_EXAMPLES: ${{ needs.binary.outputs.examples }}
       OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
       OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
+      OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       VM: ocel-journey-${{ github.run_id }}-${{ github.run_attempt }}
