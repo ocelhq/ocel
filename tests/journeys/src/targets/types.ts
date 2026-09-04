@@ -1,5 +1,6 @@
 import type { Evidence } from "../evidence";
 import type { ExpectationEnvironment } from "../expectations/types";
+import type { PrepareFailures } from "../prepare";
 import type { Compute, Edge, ExampleSpec, Leg, Mode, Suite, TargetName } from "../spec";
 
 export type Deployment = {
@@ -29,7 +30,7 @@ export type Target = {
   computes: Compute[];
   edges: Edge[];
   guard: () => Promise<ExpectationEnvironment>;
-  prepare?: () => Promise<void>;
+  prepare?: () => Promise<PrepareFailures | void>;
   setup: () => Promise<void>;
   up: (cell: CellContext) => Promise<Deployment>;
   redeploy?: (cell: CellContext, greeting: string) => Promise<Deployment>;

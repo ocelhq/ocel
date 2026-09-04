@@ -7,6 +7,7 @@ import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
 import { cellEnv, configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { offeredBy } from "../../offer";
 import { exampleDir, treeDir } from "../../paths";
+import type { PrepareFailures } from "../../prepare";
 import { cellNamesOf, type Edge, EDGES, type Leg, type Offered, specForTarget } from "../../spec";
 import { copyTree } from "../../tree";
 import { migrateCommand, setAppNames } from "../../workspace";
@@ -114,8 +115,17 @@ async function awaitEdge(cell: CellContext, leg: Leg, deployed: Deployment): Pro
   await cell.evidence.write(leg, "serving.json", `${JSON.stringify(served, null, 2)}\n`);
 }
 
-export function bootstrapFeatures(offered: Offered): string[] {
-  return [...NEXT_FEATURES, ...offered.edges.map((edge) => EDGE_FEATURES[edge])];
+export type DryPlan = { edge: Edge; feature: string };
+
+export function dryPlans(offered: Offered): DryPlan[] {
+  return offered.edges.map((edge) => ({ edge, feature: EDGE_FEATURES[edge] }));
+}
+
+export function applyFeatures(offered: Offered, planned: Edge[]): string[] {
+  return [
+    ...NEXT_FEATURES,
+    ...offered.edges.filter((edge) => planned.includes(edge)).map((edge) => EDGE_FEATURES[edge]),
+  ];
 }
 
 async function awaitDefaultVpc(endpoint: string): Promise<void> {
@@ -143,7 +153,7 @@ async function awaitDefaultVpc(endpoint: string): Promise<void> {
   throw new Error(`the emulator never showed a default VPC, and every deploy looks one up first: ${last}`);
 }
 
-async function prepare(): Promise<void> {
+async function prepare(): Promise<PrepareFailures> {
   const where = await place();
   if (where.world === "floci" && where.endpoint) {
     await awaitDefaultVpc(where.endpoint);
@@ -153,19 +163,47 @@ async function prepare(): Promise<void> {
     throw new Error("no example in the spec table runs on aws, so there is nothing to bootstrap");
   }
   const runId = currentRunIdentity();
-  const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", "bootstrap"));
-  const args = [
-    "bootstrap",
-    "production",
-    "--yes",
-    "--features",
-    bootstrapFeatures(offeredBy(awsTarget)).join(","),
-  ];
-  try {
-    await ocel(dir, args, providerEnv(dir, { OCEL_JOURNEY_SLUG: projectSlug(first.name, runId) }));
-  } finally {
-    await rm(dir, { recursive: true, force: true });
+  const offered = offeredBy(awsTarget);
+  const slug = projectSlug(first.name, runId);
+  const failures: PrepareFailures = {};
+
+  const bootstrap = async (name: string, args: string[], edge: Edge | undefined): Promise<void> => {
+    const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", name));
+    try {
+      await ocel(
+        dir,
+        ["bootstrap", "production", "--yes", ...args],
+        providerEnv(dir, {
+          OCEL_JOURNEY_SLUG: slug,
+          ...(edge === undefined ? {} : { OCEL_JOURNEY_EDGE: edge }),
+        }),
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  const planned: Edge[] = [];
+  for (const plan of dryPlans(offered)) {
+    try {
+      const args = ["--dry", "--features", plan.feature];
+      await bootstrap(`bootstrap-dry-${plan.edge}`, args, plan.edge);
+      planned.push(plan.edge);
+    } catch (error) {
+      (failures.edges ??= {})[plan.edge] = error instanceof Error ? error.message : String(error);
+    }
   }
+
+  try {
+    await bootstrap(
+      "bootstrap",
+      ["--features", applyFeatures(offered, planned).join(",")],
+      offered.edges[0],
+    );
+  } catch (error) {
+    failures.lane = error instanceof Error ? error.message : String(error);
+  }
+  return failures;
 }
 
 async function setup(): Promise<void> {
