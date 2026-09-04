@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -64,7 +65,6 @@ func lifecycle(t *testing.T) journey {
 	dir := t.TempDir()
 	run := journey{
 		vm:       vm,
-		bin:      filepath.Join(dir, "ocel"),
 		project:  filepath.Join(dir, "project"),
 		settings: filepath.Join(dir, "config"),
 		value:    "e2e-" + strconv.FormatInt(time.Now().UnixNano(), 36),
@@ -74,9 +74,9 @@ func lifecycle(t *testing.T) journey {
 	}
 	run.apart(t)
 
-	root := repoRoot(t)
-	build(t, filepath.Join(root, "cli"), run.bin, "./ocel")
-	build(t, ".", filepath.Join(run.installed(), "bin", "deploy"), "./cmd/deploy")
+	cli, deploy := binaries(t)
+	run.bin = cli
+	linked(t, deploy, filepath.Join(run.installed(), "bin", "deploy"))
 	write(t, filepath.Join(run.installed(), "package.json"), run.manifest(t))
 	write(t, filepath.Join(run.project, "ocel.config.ts"), run.declaration(t, vm.user))
 	write(t, filepath.Join(run.project, lifecycleDeployFile), run.declaration(t, host.DeployUser()))
@@ -84,18 +84,26 @@ func lifecycle(t *testing.T) journey {
 	return run
 }
 
+const lifecycleManifest = `{
+  "name": "e2e-app",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.js" }
+}
+`
+
 func (j journey) fixture(t *testing.T, release string) {
 	t.Helper()
-	write(t, filepath.Join(j.project, "app", "package.json"), fmt.Sprintf(
-		"{\n  \"name\": \"e2e-app\",\n  \"version\": %q,\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"start\": \"node server.js\" }\n}\n", release))
+	write(t, filepath.Join(j.project, "app", "release.txt"), release+"\n")
 }
 
 const lifecycleServer = `import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 
-const { version } = JSON.parse(
-  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
-);
+const version = readFileSync(
+  new URL("./release.txt", import.meta.url),
+  "utf8",
+).trim();
 
 createServer((request, response) => {
   const asked = new URL(request.url, "http://box");
@@ -117,6 +125,7 @@ createServer((request, response) => {
 
 func (j journey) declares(t *testing.T, release string) {
 	t.Helper()
+	write(t, filepath.Join(j.project, "app", "package.json"), lifecycleManifest)
 	j.fixture(t, release)
 	write(t, filepath.Join(j.project, "app", "server.js"), lifecycleServer)
 	write(t, filepath.Join(j.project, "ocel", "vars.ts"), fmt.Sprintf(
@@ -211,12 +220,50 @@ func repoRoot(t *testing.T) string {
 	return root
 }
 
-func build(t *testing.T, module, out, pkg string) {
+var (
+	buildOnce sync.Once
+	builtCLI  string
+	builtShip string
+	buildErr  error
+)
+
+func binaries(t *testing.T) (string, string) {
 	t.Helper()
+	buildOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "ocel-e2e-bin-")
+		if err != nil {
+			buildErr = err
+			return
+		}
+		builtCLI, builtShip = filepath.Join(dir, "ocel"), filepath.Join(dir, "deploy")
+		buildErr = errors.Join(
+			built(filepath.Join(repoRoot(t), "cli"), builtCLI, "./ocel"),
+			built(".", builtShip, "./cmd/deploy"))
+	})
+	if buildErr != nil {
+		t.Fatalf("%v\nthe CLI carries an embedded node bundle: `pnpm install --frozen-lockfile && pnpm --filter ocel build && go generate ./...` in cli/ builds it", buildErr)
+	}
+	return builtCLI, builtShip
+}
+
+func built(module, out, pkg string) error {
 	made := exec.Command("go", "build", "-C", module, "-o", out, pkg)
-	if rendered, err := made.CombinedOutput(); err != nil {
-		t.Fatalf("go build -C %s -o %s %s: %v\n%s\nthe CLI carries an embedded node bundle: `pnpm install --frozen-lockfile && pnpm --filter ocel build && go generate ./...` in cli/ builds it",
-			module, out, pkg, err, rendered)
+	rendered, err := made.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("go build -C %s -o %s %s: %w\n%s", module, out, pkg, err, rendered)
+	}
+	return nil
+}
+
+func linked(t *testing.T, from, to string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(to), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(from, to); err != nil && !os.IsExist(err) {
+		if err := os.Symlink(from, to); err != nil && !os.IsExist(err) {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -431,13 +478,26 @@ func (j journey) underLoad(t *testing.T, hostname, retiring string, flipping fun
 	}()
 
 	flipping()
-	time.Sleep(10 * time.Second)
+	settled(&mu, &watched, 20*time.Second)
 	close(stop)
 	group.Wait()
 
 	mu.Lock()
 	defer mu.Unlock()
 	return watched
+}
+
+func settled(mu *sync.Mutex, watched *crossing, within time.Duration) {
+	deadline := time.Now().Add(within)
+	for {
+		mu.Lock()
+		read := watched.drained >= 0 && watched.stopped >= 0
+		mu.Unlock()
+		if read || time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 }
 
 func (j journey) serving(t *testing.T, hostname, want string) {
