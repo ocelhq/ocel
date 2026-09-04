@@ -72,15 +72,15 @@ runs:
         curl -fsSL --retry 5 --retry-delay 2 https://get.docker.com | sudo sh
         docker version --format 'client {{.Client.Version}} server {{.Server.Version}}'
 
-    - name: Keep images in containerd, as every build the cli accepts does
+    - name: Keep images in containerd, as every build the cli accepts does, and keep every layer a lane builds
       shell: bash
       run: |
         set -euo pipefail
         sudo mkdir -p /etc/docker
         if [ -s /etc/docker/daemon.json ]; then
-          jq '.features."containerd-snapshotter" = true' /etc/docker/daemon.json > /tmp/daemon.json
+          jq '.features."containerd-snapshotter" = true | .builder.gc.enabled = false' /etc/docker/daemon.json > /tmp/daemon.json
         else
-          echo '{"features":{"containerd-snapshotter":true}}' > /tmp/daemon.json
+          echo '{"features":{"containerd-snapshotter":true},"builder":{"gc":{"enabled":false}}}' > /tmp/daemon.json
         fi
         sudo install -m 0644 /tmp/daemon.json /etc/docker/daemon.json
         cat /etc/docker/daemon.json
