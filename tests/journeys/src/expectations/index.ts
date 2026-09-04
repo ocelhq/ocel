@@ -1,6 +1,6 @@
 import { contractRows } from "../contract";
 import { contractTitle, type PlannedTest, planTests } from "../plan";
-import { type Leg, specForTarget, type Suite, type TargetName } from "../spec";
+import { type Leg, type Mode, specForTarget, type Suite, type TargetName } from "../spec";
 import { gaps } from "./gaps";
 import type {
   Affected,
@@ -20,6 +20,9 @@ export const EDGES: readonly Edge[] = ["api-gateway", "cloudfront", "cloudflare"
 export const CONTRACT_LEGS: Leg[] = ["contract", "redeploy", "rollback"];
 
 const EVERY_LEG: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"];
+
+const EVERY_MODE: Mode[] = ["full", "hello"];
+
 const EVERY_SUITE: Suite[] = [
   "health",
   "static",
@@ -121,7 +124,7 @@ export function resolve(
   edge: Edge | undefined,
 ): Expectations {
   checkIds(listed);
-  const planned = planTests(specForTarget(targetOf[environment]), EVERY_LEG);
+  const planned = planTests(specForTarget(targetOf[environment]), EVERY_LEG, EVERY_MODE);
   const out: Expectations = {};
   for (const gap of listed) {
     const carried = new Set<string>();

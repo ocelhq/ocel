@@ -1,8 +1,7 @@
 import type { AppConfig } from "ocel/config";
 import { defineConfig } from "ocel/config";
 
-const run = process.env.OCEL_JOURNEY_RUN;
-const slug = run ? `j-${run}-express` : "express";
+const slug = process.env.OCEL_JOURNEY_SLUG ?? "express";
 
 const config = defineConfig({
   slug,

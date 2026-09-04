@@ -6,7 +6,6 @@ import { specByName } from "./spec";
 import { appCommand, appFolder, appHomes, migrateCommand, stateComplaint } from "./workspace";
 
 const workspace = specByName("workspace");
-const hello = specByName("hello-workspace");
 const composite = specByName("express");
 
 const TARGET_CONFIGS = ["ocel.aws.config.ts", "ocel.vps.config.ts"];
@@ -20,7 +19,7 @@ describe("a multi-app row", () => {
       "run",
       "start",
     ]);
-    expect(appCommand(hello, "next")).toEqual(["pnpm", "--dir", "apps/next", "run", "start"]);
+    expect(appCommand(workspace, "next")).toEqual(["pnpm", "--dir", "apps/next", "run", "start"]);
     expect(appCommand(composite, "web")).toEqual(["pnpm", "--dir", ".", "run", "start"]);
   });
 
@@ -30,13 +29,11 @@ describe("a multi-app row", () => {
 
   it("gives each app of a workspace its own env folder, and every other row none", () => {
     expect(workspace.apps.map((app) => appFolder(workspace, app))).toEqual(["/next", "/express"]);
-    expect(hello.apps.map((app) => appFolder(hello, app))).toEqual([undefined, undefined]);
     expect(appFolder(composite, "web")).toBeUndefined();
   });
 
   it("names the app directories that must hold no state of their own", () => {
     expect(appHomes(workspace)).toEqual(["apps/next", "apps/express"]);
-    expect(appHomes(hello)).toEqual(["apps/next", "apps/express"]);
     expect(appHomes(composite)).toEqual([]);
   });
 });
@@ -59,14 +56,12 @@ describe("the state a workspace writes", () => {
   });
 });
 
-describe("the multi-app rows' target configs", () => {
+describe("the workspace row's target configs", () => {
   it("are byte-identical copies of a composite's", async () => {
-    for (const row of [workspace, hello]) {
-      for (const name of TARGET_CONFIGS) {
-        const mine = await readFile(path.join(exampleDir(row.dir), name));
-        const theirs = await readFile(path.join(exampleDir(composite.dir), name));
-        expect(mine.equals(theirs)).toBe(true);
-      }
+    for (const name of TARGET_CONFIGS) {
+      const mine = await readFile(path.join(exampleDir(workspace.dir), name));
+      const theirs = await readFile(path.join(exampleDir(composite.dir), name));
+      expect(mine.equals(theirs)).toBe(true);
     }
   });
 });

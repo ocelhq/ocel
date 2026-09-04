@@ -4,9 +4,9 @@ import { setTimeout as pause } from "node:timers/promises";
 import { INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
-import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
+import { cellEnv, configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { exampleDir, treeDir } from "../../paths";
-import { type Leg, specForTarget } from "../../spec";
+import { cellNamesOf, type Leg, specForTarget } from "../../spec";
 import { copyTree } from "../../tree";
 import { migrateCommand, setAppNames } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
@@ -41,12 +41,16 @@ async function guard(): Promise<ExpectationEnvironment> {
   return expectationEnvironmentFor((await place()).world);
 }
 
-function childEnv(dir: string, runId: string): NodeJS.ProcessEnv {
+function providerEnv(dir: string, held: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     ...process.env,
     OCEL_CONFIG: path.join(dir, CONFIG),
-    OCEL_JOURNEY_RUN: runId,
+    ...held,
   };
+}
+
+function childEnv(cell: CellContext, dir: string): NodeJS.ProcessEnv {
+  return providerEnv(dir, cellEnv(cell));
 }
 
 async function store(): Promise<Store> {
@@ -87,7 +91,7 @@ function deployment(cell: CellContext, dispatch: typeof fetch): Deployment {
     baseUrl: (app) => {
       const host = hosts.get(app);
       if (!host) {
-        throw new Error(`${cell.example.name} has no app named ${app} on aws`);
+        throw new Error(`${cell.name} has no app named ${app} on aws`);
       }
       return `https://${host}`;
     },
@@ -152,7 +156,7 @@ async function prepare(): Promise<void> {
   const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", "bootstrap"));
   const args = ["bootstrap", "production", "--yes", "--features", bootstrapFeatures().join(",")];
   try {
-    await ocel(dir, args, childEnv(dir, runId));
+    await ocel(dir, args, providerEnv(dir, { OCEL_JOURNEY_SLUG: projectSlug(first.name, runId) }));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -174,7 +178,7 @@ async function cellTree(cell: CellContext): Promise<string> {
 
 async function up(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
-  const env = childEnv(dir, cell.runId);
+  const env = childEnv(cell, dir);
 
   await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
   await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
@@ -186,7 +190,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   const deployed = deployment(cell, await dispatcher());
   await awaitEdge(cell, "up", deployed);
 
-  if (cell.example.suites.includes("product")) {
+  if (cell.suites.includes("product")) {
     await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
   }
 
@@ -210,7 +214,7 @@ async function up(cell: CellContext): Promise<Deployment> {
 
 async function redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
   const dir = await cellTree(cell);
-  const env = childEnv(dir, cell.runId);
+  const env = childEnv(cell, dir);
   await runOcel(cell, dir, "redeploy", "env-greeting", ["env", "set", "GREETING", greeting], env);
   await runOcel(cell, dir, "redeploy", "deploy", ["deploy", "--yes"], env);
   const deployed = deployment(cell, await dispatcher());
@@ -220,7 +224,7 @@ async function redeploy(cell: CellContext, greeting: string): Promise<Deployment
 
 async function rollback(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
-  await runOcel(cell, dir, "rollback", "rollback", ["rollback"], childEnv(dir, cell.runId));
+  await runOcel(cell, dir, "rollback", "rollback", ["rollback"], childEnv(cell, dir));
   const deployed = deployment(cell, await dispatcher());
   await awaitEdge(cell, "rollback", deployed);
   return deployed;
@@ -228,7 +232,7 @@ async function rollback(cell: CellContext): Promise<Deployment> {
 
 async function destroy(cell: CellContext): Promise<void> {
   const dir = await cellTree(cell);
-  const env = childEnv(dir, cell.runId);
+  const env = childEnv(cell, dir);
   const hosts = hostnames(cell);
   for (const [app, host] of hosts) {
     await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
@@ -248,18 +252,15 @@ async function stands(slug: string): Promise<boolean> {
 async function sweep(runId: string): Promise<void> {
   const where = await place();
   const examples = specForTarget("aws");
-  const mine = examples.map((example) => projectSlug(example.name, runId));
-  const { reclaim, unreadable } = sweepable(
-    await list(),
-    mine,
-    examples.map((example) => example.name),
-  );
+  const cells = examples.flatMap((example) => cellNamesOf(example));
+  const mine = cells.map((name) => projectSlug(name, runId));
+  const { reclaim, unreadable } = sweepable(await list(), mine, cells);
 
   const complaints: string[] = unreadable.map(
     (slug) => `${slug} carries the harness prefix and names no example in the spec table`,
   );
   for (const stranded of reclaim) {
-    const example = examples.find((row) => row.name === stranded.example);
+    const example = examples.find((row) => cellNamesOf(row).includes(stranded.example));
     if (!example) {
       continue;
     }
@@ -268,7 +269,7 @@ async function sweep(runId: string): Promise<void> {
       treeDir(runId, "aws", `sweep-${stranded.slug}`),
     );
     try {
-      await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir, stranded.run));
+      await ocel(dir, ["destroy", "production", "--yes"], providerEnv(dir, { OCEL_JOURNEY_SLUG: stranded.slug }));
       process.stdout.write(`swept ${stranded.slug}\n`);
     } catch (error) {
       complaints.push(`${stranded.slug}: ${String(error)}`);
@@ -312,6 +313,7 @@ async function sweep(runId: string): Promise<void> {
 export const awsTarget: Target = {
   name: "aws",
   concurrency: 3,
+  modes: ["full", "hello"],
   legTimeoutMs: LEG_TIMEOUT_MS,
   legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,

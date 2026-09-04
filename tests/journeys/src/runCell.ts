@@ -21,7 +21,15 @@ import {
   ROLLBACK_TITLE,
   UP_TITLE,
 } from "./plan";
-import { type ExampleSpec, ladderTitle, type Leg } from "./spec";
+import {
+  cellNameOf,
+  type ExampleSpec,
+  ladderTitle,
+  type Leg,
+  type Mode,
+  modesOf,
+  suitesOf,
+} from "./spec";
 import { selectedTarget } from "./targets";
 import type { CellContext, Deployment } from "./targets/types";
 
@@ -37,18 +45,30 @@ function once<T>(work: Once<T>): Once<T> {
 
 export function describeCell(example: ExampleSpec) {
   const target = selectedTarget();
+  for (const mode of modesOf(example, target.modes)) {
+    describeMode(example, mode);
+  }
+}
+
+function describeMode(example: ExampleSpec, mode: Mode) {
+  const target = selectedTarget();
   const runId = currentRunIdentity();
-  const slug = projectSlug(example.name, runId);
+  const name = cellNameOf(example, mode);
+  const slug = projectSlug(name, runId);
   const dir = exampleDir(example.dir);
+  const suites = suitesOf(example, mode);
   const cell: CellContext = {
     example,
+    name,
+    mode,
+    suites,
     dir,
     slug,
     runId,
-    evidence: evidence(evidenceDir(runId, target.name, example.name)),
+    evidence: evidence(evidenceDir(runId, target.name, name)),
   };
 
-  const rows = contractRows(example.suites);
+  const rows = contractRows(suites);
   const timeout = target.legTimeoutMs;
   const hooks = example.hooks;
   const publishRows = hooks?.rows?.filter((row) => row.phase === "publish") ?? [];
@@ -128,7 +148,7 @@ export function describeCell(example: ExampleSpec) {
 
   function perAppDescribe(body: (app: string) => void) {
     for (const app of example.apps) {
-      describe(cellKey(example.name, app), () => body(app));
+      describe(cellKey(name, app), () => body(app));
     }
   }
 
@@ -145,7 +165,7 @@ export function describeCell(example: ExampleSpec) {
     });
   }
 
-  describe(example.name, () => {
+  describe(name, () => {
     beforeAll(async () => {
       await target.setup().catch((error: unknown) => {
         setupFailure = { error };

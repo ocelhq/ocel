@@ -1,5 +1,13 @@
 import { contractRows } from "./contract";
-import { type ExampleSpec, ladderTitle, type Leg } from "./spec";
+import {
+  cellNameOf,
+  type ExampleSpec,
+  ladderTitle,
+  type Leg,
+  type Mode,
+  modesOf,
+  suitesOf,
+} from "./spec";
 
 export const UP_TITLE = "up";
 export const DESTROY_TITLE = "destroy";
@@ -31,8 +39,12 @@ function ladderConsumeRows(
     .map((row) => ({ title: ladderConsumeTitle(leg, row.title), leg }));
 }
 
-function titlesForLeg(example: ExampleSpec, leg: Leg): Array<{ title: string; leg: Leg }> {
-  const rows = contractRows(example.suites).map((row) => ({
+function titlesForLeg(
+  example: ExampleSpec,
+  mode: Mode,
+  leg: Leg,
+): Array<{ title: string; leg: Leg }> {
+  const rows = contractRows(suitesOf(example, mode)).map((row) => ({
     title: contractTitle(leg, row.title),
     leg,
   }));
@@ -67,20 +79,23 @@ function ladderPhaseTitles(example: ExampleSpec): Array<{ title: string }> {
   return out;
 }
 
-export function planTests(examples: ExampleSpec[], legs: Leg[]): PlannedTest[] {
+export function planTests(examples: ExampleSpec[], legs: Leg[], modes: Mode[]): PlannedTest[] {
   const planned: PlannedTest[] = [];
   for (const example of examples) {
-    for (const app of example.apps) {
-      for (const leg of legs) {
-        for (const entry of titlesForLeg(example, leg)) {
-          planned.push({ cell: cellKey(example.name, app), ...entry });
+    for (const mode of modesOf(example, modes)) {
+      const name = cellNameOf(example, mode);
+      for (const app of example.apps) {
+        for (const leg of legs) {
+          for (const entry of titlesForLeg(example, mode, leg)) {
+            planned.push({ cell: cellKey(name, app), ...entry });
+          }
         }
       }
-    }
-    const [firstApp] = example.apps;
-    if (firstApp) {
-      for (const entry of ladderPhaseTitles(example)) {
-        planned.push({ cell: cellKey(example.name, firstApp), ...entry });
+      const [firstApp] = example.apps;
+      if (firstApp) {
+        for (const entry of ladderPhaseTitles(example)) {
+          planned.push({ cell: cellKey(name, firstApp), ...entry });
+        }
       }
     }
   }

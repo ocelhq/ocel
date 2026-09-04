@@ -9,15 +9,26 @@ import {
   ROLLBACK_TITLE,
   UP_TITLE,
 } from "./plan";
-import { type ExampleSpec, type LadderRow, type Leg, specByName } from "./spec";
+import {
+  type ExampleSpec,
+  type LadderRow,
+  type Leg,
+  type Mode,
+  specByName,
+  suitesOf,
+} from "./spec";
 
 const ALL_LEGS: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"];
+
+const ALL_MODES: Mode[] = ["full", "hello"];
+
+const FULL: Mode[] = ["full"];
 
 const STAMP = "GET /api/probes/env reports the greeting and never the secret";
 
 describe("planning a workspace row", () => {
   const workspace = specByName("workspace");
-  const planned = planTests([workspace], ALL_LEGS);
+  const planned = planTests([workspace], ALL_LEGS, FULL);
 
   it("plans the whole contract once per app", () => {
     for (const app of workspace.apps) {
@@ -45,10 +56,16 @@ describe("planning a workspace row", () => {
   });
 });
 
-describe("planning a hello row", () => {
-  const hello = specByName("hello-express");
-  const planned = planTests([hello], ALL_LEGS);
-  const titles = planned.map((entry) => entry.title);
+describe("planning an example in hello mode", () => {
+  const express = specByName("express");
+  const planned = planTests([express], ALL_LEGS, ALL_MODES);
+  const hello = planned.filter((entry) => entry.cell === "express-hello/web");
+  const titles = hello.map((entry) => entry.title);
+
+  it("plans a cell of its own, so a hello run never collides with the full one", () => {
+    expect(planned.some((entry) => entry.cell === "express/web")).toBe(true);
+    expect(hello.length).toBeGreaterThan(0);
+  });
 
   it("carries no stamp row", () => {
     expect(titles.some((title) => title.endsWith(STAMP))).toBe(false);
@@ -58,15 +75,21 @@ describe("planning a hello row", () => {
     expect(titles).toContain(REDEPLOY_TITLE);
     expect(titles).toContain(ROLLBACK_TITLE);
     for (const leg of ["redeploy", "rollback"] as const) {
-      const rows = planned.filter((entry) => entry.leg === leg && entry.title.includes(" · "));
+      const rows = hello.filter((entry) => entry.leg === leg && entry.title.includes(" · "));
       expect(rows.map((entry) => entry.title)).toEqual(
-        contractRows(hello.suites).map((row) => `${leg} · ${row.title}`),
+        contractRows(suitesOf(express, "hello")).map((row) => `${leg} · ${row.title}`),
       );
     }
   });
 
   it("asserts only that health and static still answer", () => {
-    expect(hello.suites).toEqual(["health", "static"]);
+    expect(suitesOf(express, "hello")).toEqual(["health", "static"]);
+  });
+
+  it("plans nothing at all for a target that offers no hello mode", () => {
+    expect(planTests([express], ALL_LEGS, FULL).every((entry) => entry.cell === "express/web")).toBe(
+      true,
+    );
   });
 });
 
@@ -103,14 +126,14 @@ describe("planTests", () => {
       suites: ["health"],
       apps: ["web"],
     };
-    const planned = planTests([composite], [...ALL_LEGS]);
+    const planned = planTests([composite], [...ALL_LEGS], FULL);
     expect(planned.some((row) => row.title === REFUSE_TITLE)).toBe(false);
     expect(planned.some((row) => row.title.startsWith("publish"))).toBe(false);
   });
 
   it("plans refuse once, before anything else, for a hooked ladder", () => {
     const example = withHooks([publishRow], true);
-    const planned = planTests([example], [...ALL_LEGS]);
+    const planned = planTests([example], [...ALL_LEGS], FULL);
     const titles = planned.filter((row) => row.cell === cellKey("with-sst", "web")).map((row) => row.title);
     expect(titles.filter((title) => title === REFUSE_TITLE).length).toBe(1);
     expect(titles.indexOf(REFUSE_TITLE)).toBeLessThan(titles.indexOf("publish · lists both records"));
@@ -118,7 +141,7 @@ describe("planTests", () => {
 
   it("plans one publish, outlive and prune title but three consume titles", () => {
     const example = withHooks([publishRow, consumeRow, outliveRow, pruneRow], true);
-    const planned = planTests([example], [...ALL_LEGS]).map((row) => row.title);
+    const planned = planTests([example], [...ALL_LEGS], FULL).map((row) => row.title);
     expect(planned).toContain("publish · lists both records");
     expect(planned).toContain("outlive · the record survives");
     expect(planned).toContain("prune · both partitions are empty");
@@ -130,7 +153,7 @@ describe("planTests", () => {
 
   it("plans no refuse title when the example declares no refuse hook", () => {
     const example = withHooks([publishRow], false);
-    const planned = planTests([example], [...ALL_LEGS]);
+    const planned = planTests([example], [...ALL_LEGS], FULL);
     expect(planned.some((row) => row.title === REFUSE_TITLE)).toBe(false);
     expect(planned.some((row) => row.title === "publish · lists both records")).toBe(true);
   });

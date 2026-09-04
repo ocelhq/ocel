@@ -4,11 +4,8 @@ Every one of these deploys with `ocel deploy`. Three of them are rungs of a ladd
 starts at [express](./express), and the story of that ladder opens
 [with-transforms](./with-transforms).
 
-## hello
-
-- [hello-express](./hello-express) — an Express 5 app that declares nothing at all.
-- [hello-next](./hello-next) — a Next.js App Router app that declares nothing at all.
-- [hello-workspace](./hello-workspace) — a Next.js app and an Express app that declare nothing at all, deployed as one project.
+An app that declares nothing is not an example of its own: the journey harness runs one of
+these with its resources suppressed, and the app must still boot and serve.
 
 ## composite
 

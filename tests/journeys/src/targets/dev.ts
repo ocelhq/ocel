@@ -10,7 +10,7 @@ import {
 } from "@ocel-tests/shared/env";
 import { INITIAL_GREETING, redact, SECRET_TOKEN } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
-import { runOcel, treeRoot, workTree } from "../ocel";
+import { cellEnv, runOcel, treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
 import { appCommand, appHomes, migrateCommand, stateComplaint } from "../workspace";
 import type { CellContext, Deployment, Target } from "./types";
@@ -82,7 +82,7 @@ function childEnv(token: string, cell: CellContext): NodeJS.ProcessEnv {
     ...process.env,
     OCEL_ACCESS_TOKEN: token,
     OCEL_API_URL: consoleUrl(),
-    OCEL_JOURNEY_RUN: cell.runId,
+    ...cellEnv(cell),
   };
   for (const name of HARNESS_ONLY_ENV) {
     delete env[name];
@@ -158,7 +158,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   await runOcel(cell, dir, "up", "console-link", ["console", "link", "--create", cell.slug], env);
   await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
   await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
-  if (cell.example.suites.includes("product")) {
+  if (cell.suites.includes("product")) {
     await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
   }
 
@@ -182,7 +182,7 @@ async function up(cell: CellContext): Promise<Deployment> {
     baseUrl: (app) => {
       const url = urls.get(app);
       if (!url) {
-        throw new Error(`${cell.example.name} has no app named ${app} on dev`);
+        throw new Error(`${cell.name} has no app named ${app} on dev`);
       }
       return url;
     },
@@ -252,6 +252,7 @@ async function list(): Promise<string[]> {
 export const devTarget: Target = {
   name: "dev",
   concurrency: 4,
+  modes: ["full"],
   legTimeoutMs: 180_000,
   legs: ["up", "contract", "destroy"],
   guard,

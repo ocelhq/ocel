@@ -4,8 +4,8 @@ import type { Gap } from "./types";
 
 const NODE_HTTP = ["express/web", "hono/web", "fastify/web"];
 const COMPOSITE = [...NODE_HTTP, "next/web"];
-const HELLO = ["hello-express/web", "hello-next/web"];
-const HELLO_WORKSPACE = ["hello-workspace/next", "hello-workspace/express"];
+const HELLO = ["express-hello/web", "hono-hello/web", "fastify-hello/web", "next-hello/web"];
+const HELLO_WORKSPACE = ["workspace-hello/next", "workspace-hello/express"];
 const WORKSPACE = ["workspace/next", "workspace/express"];
 const EVERY_AWS_CELL_BUT_LADDERS = [
   ...COMPOSITE,
@@ -100,7 +100,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws", "aws.floci"],
         edge: ["api-gateway"],
-        cells: ["hello-next/web", ...HELLO_WORKSPACE],
+        cells: ["next-hello/web", ...HELLO_WORKSPACE],
         tests: [UP_TITLE],
       },
     ],

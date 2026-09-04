@@ -1,8 +1,7 @@
 export const APP = "web";
 
 export function projectSlug(): string {
-  const run = process.env.OCEL_JOURNEY_RUN;
-  return run ? `j-${run}-next` : "next";
+  return process.env.OCEL_JOURNEY_SLUG ?? "next";
 }
 
 export function productionHostname(app: string): string | undefined {

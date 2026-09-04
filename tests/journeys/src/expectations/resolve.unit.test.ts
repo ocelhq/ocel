@@ -88,7 +88,7 @@ describe("resolve", () => {
         gap("one", [
           {
             on: ["dev"],
-            cells: ["hello-express/web"],
+            cells: ["express-hello/web"],
             tests: [{ rows: ["static"], legs: ["contract"], except: [SVG] }],
           },
         ]),
@@ -96,7 +96,7 @@ describe("resolve", () => {
       "dev",
       undefined,
     );
-    const titles = Object.keys(listed["hello-express/web"] ?? {});
+    const titles = Object.keys(listed["express-hello/web"] ?? {});
     assert.ok(titles.length > 0);
     assert.ok(!titles.includes(SVG));
   });
@@ -107,7 +107,7 @@ describe("resolve", () => {
       "dev",
       undefined,
     );
-    assert.equal(listed["hello-express/web"], undefined);
+    assert.equal(listed["express-hello/web"], undefined);
     assert.ok(listed["express/web"]);
   });
 
@@ -117,13 +117,13 @@ describe("resolve", () => {
         resolve(
           [
             gap("one", [
-              { on: ["dev"], cells: ["hello-express/web"], tests: [{ rows: ["product"] }] },
+              { on: ["dev"], cells: ["express-hello/web"], tests: [{ rows: ["product"] }] },
             ]),
           ],
           "dev",
           undefined,
         ),
-      /one on dev lists hello-express\/web/,
+      /one on dev lists express-hello\/web/,
     );
   });
 

@@ -3,14 +3,11 @@ import { exampleOf, longestFirst } from "./order";
 import { spec, specForTarget } from "./spec";
 
 describe("longestFirst", () => {
-  it("runs the ladders, then the hellos, then the composites, then the workspace", () => {
+  it("runs the ladders, then the composites, then the workspace", () => {
     expect(longestFirst(specForTarget("aws")).map((row) => row.kind)).toEqual([
       "ladder",
       "ladder",
       "ladder",
-      "hello",
-      "hello",
-      "hello",
       "composite",
       "composite",
       "composite",
@@ -36,6 +33,6 @@ describe("longestFirst", () => {
 
 describe("exampleOf", () => {
   it("strips the journey module suffix", () => {
-    expect(exampleOf("hello-next.journey.test.ts")).toBe("hello-next");
+    expect(exampleOf("next.journey.test.ts")).toBe("next");
   });
 });

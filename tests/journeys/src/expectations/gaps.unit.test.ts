@@ -81,12 +81,12 @@ describe("the gap list", () => {
     }
   });
 
-  it("lists real-world hello-next and the with-transforms link rows on api-gateway alone", () => {
+  it("lists a real-world hello next and the with-transforms link rows on api-gateway alone", () => {
     const listed = onEdge("aws", "api-gateway");
-    for (const cell of ["hello-next/web", "hello-workspace/next", "hello-workspace/express"]) {
+    for (const cell of ["next-hello/web", "workspace-hello/next", "workspace-hello/express"]) {
       assert.deepEqual(issues(listed, cell, UP_TITLE), [906], cell);
     }
-    assert.equal(listed["hello-express/web"], undefined);
+    assert.equal(listed["express-hello/web"], undefined);
     assert.deepEqual(
       Object.fromEntries(
         Object.entries(listed["with-transforms/web"] ?? {}).map(([title, gaps]) => [
@@ -111,10 +111,12 @@ describe("the gap list", () => {
     ] as const) {
       const listed = onEdge("aws", edge);
       for (const cell of [
-        "hello-express/web",
-        "hello-next/web",
-        "hello-workspace/next",
-        "hello-workspace/express",
+        "express-hello/web",
+        "hono-hello/web",
+        "fastify-hello/web",
+        "next-hello/web",
+        "workspace-hello/next",
+        "workspace-hello/express",
         "with-transforms/web",
       ]) {
         assert.deepEqual(Object.keys(listed[cell] ?? {}), [UP_TITLE], `${cell} on ${edge}`);
@@ -138,12 +140,14 @@ describe("the gap list", () => {
     const listed = onEdge("aws.floci", "api-gateway");
     assert.deepEqual(upIssues(listed), {
       "express/web": [884],
+      "express-hello/web": [],
       "fastify/web": [884],
-      "hello-express/web": [],
-      "hello-next/web": [906],
-      "hello-workspace/express": [906],
-      "hello-workspace/next": [906],
+      "fastify-hello/web": [],
       "hono/web": [884],
+      "hono-hello/web": [],
+      "next-hello/web": [906],
+      "workspace-hello/express": [906],
+      "workspace-hello/next": [906],
       "next/web": [849],
       "with-pulumi/web": [856],
       "with-sst/web": [857],
@@ -154,7 +158,7 @@ describe("the gap list", () => {
     assert.deepEqual(issues(listed, "express/web", HEALTH), [854]);
     assert.deepEqual(issues(listed, "express/web", contractTitle("redeploy", HEALTH)), [854]);
     assert.deepEqual(issues(listed, "express/web", STREAM), [851]);
-    assert.deepEqual(issues(listed, "hello-express/web", HEALTH), [854]);
+    assert.deepEqual(issues(listed, "express-hello/web", HEALTH), [854]);
     for (const row of nextCacheRows) {
       const issue = row.title === EDGE_ISR_TITLE ? 899 : 854;
       for (const leg of CONTRACT_LEGS) {
@@ -198,7 +202,7 @@ describe("the gap list", () => {
       assert.ok(!(contractTitle("redeploy", UPLOAD) in cell), name);
     }
     assert.deepEqual(issues(listed, "express/web", UPLOAD), [882]);
-    assert.deepEqual(issues(listed, "hello-express/web", UPLOAD), []);
+    assert.deepEqual(issues(listed, "express-hello/web", UPLOAD), []);
     assert.deepEqual(issues(listed, "next/web", nextCacheRows[0]?.title ?? ""), [898]);
     assert.deepEqual(issues(listed, "workspace/next", nextCacheRows[0]?.title ?? ""), []);
   });
@@ -220,6 +224,6 @@ describe("the gap list", () => {
         [900],
       );
     }
-    assert.equal(vps["hello-express/web"], undefined);
+    assert.equal(vps["express-hello/web"], undefined);
   });
 });
