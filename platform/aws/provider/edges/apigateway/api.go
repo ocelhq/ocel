@@ -2,6 +2,7 @@ package apigateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -170,8 +171,27 @@ func ensureResource(ctx context.Context, c Clients, api string, resources map[st
 	return path, nil
 }
 
+func ensureMethod(ctx context.Context, c Clients, in *apigateway.PutMethodInput) error {
+	_, err := c.APIGateway.GetMethod(ctx, &apigateway.GetMethodInput{
+		RestApiId:  in.RestApiId,
+		ResourceId: in.ResourceId,
+		HttpMethod: in.HttpMethod,
+	})
+	if err == nil {
+		return nil
+	}
+	if !isNotFound(err) {
+		return err
+	}
+	var held *agtypes.ConflictException
+	if _, err := c.APIGateway.PutMethod(ctx, in); err != nil && !errors.As(err, &held) {
+		return err
+	}
+	return nil
+}
+
 func putEntryRoute(ctx context.Context, c Clients, plan apiPlan, api, resource string) error {
-	if _, err := c.APIGateway.PutMethod(ctx, &apigateway.PutMethodInput{
+	if err := ensureMethod(ctx, c, &apigateway.PutMethodInput{
 		RestApiId:         aws.String(api),
 		ResourceId:        aws.String(resource),
 		HttpMethod:        aws.String(anyMethod),
@@ -195,7 +215,7 @@ func putEntryRoute(ctx context.Context, c Clients, plan apiPlan, api, resource s
 }
 
 func putStaticRoute(ctx context.Context, c Clients, plan apiPlan, api, resource string) error {
-	if _, err := c.APIGateway.PutMethod(ctx, &apigateway.PutMethodInput{
+	if err := ensureMethod(ctx, c, &apigateway.PutMethodInput{
 		RestApiId:         aws.String(api),
 		ResourceId:        aws.String(resource),
 		HttpMethod:        aws.String(getMethod),
