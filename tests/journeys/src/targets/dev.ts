@@ -10,6 +10,7 @@ import {
 } from "@ocel-tests/shared/env";
 import { INITIAL_GREETING, redact, SECRET_TOKEN } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
+import { JOURNEY_CONFIG } from "../config";
 import { cellEnv, runOcel, treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
 import { appCommand, appHomes, migrateCommand, stateComplaint } from "../workspace";
@@ -152,8 +153,8 @@ async function stateStaysHome(cell: CellContext, dir: string): Promise<void> {
 
 async function up(cell: CellContext): Promise<Deployment> {
   const token = await accessToken();
-  const env = childEnv(token, cell);
   const dir = await workTree(cell, "dev");
+  const env = { ...childEnv(token, cell), OCEL_CONFIG: path.join(dir, JOURNEY_CONFIG) };
 
   await runOcel(cell, dir, "up", "console-link", ["console", "link", "--create", cell.slug], env);
   await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);

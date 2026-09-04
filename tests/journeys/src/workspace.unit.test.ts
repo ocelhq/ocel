@@ -1,14 +1,16 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { exampleDir } from "./paths";
 import { specByName } from "./spec";
-import { appCommand, appFolder, appHomes, migrateCommand, stateComplaint } from "./workspace";
+import {
+  appCommand,
+  appFolder,
+  appHomes,
+  migrateCommand,
+  setSiteHostnames,
+  stateComplaint,
+} from "./workspace";
 
 const workspace = specByName("workspace");
 const composite = specByName("express");
-
-const TARGET_CONFIGS = ["ocel.aws.config.ts", "ocel.vps.config.ts"];
 
 describe("a multi-app row", () => {
   it("reaches each app under apps/, and a single app where the config sits", () => {
@@ -36,6 +38,19 @@ describe("a multi-app row", () => {
     expect(appHomes(workspace)).toEqual(["apps/next", "apps/express"]);
     expect(appHomes(composite)).toEqual([]);
   });
+
+  it("tells each app its own hostname, in its own folder, and skips an app that has none", async () => {
+    const ran: string[][] = [];
+    const run = async (_name: string, args: string[]) => {
+      ran.push(args);
+    };
+    await setSiteHostnames(workspace, new Map([["next", "next-j.zone"]]), run);
+    await setSiteHostnames(composite, new Map([["web", "web-j.zone"]]), run);
+    expect(ran).toEqual([
+      ["env", "set", "SITE_HOSTNAME", "next-j.zone", "--folder", "/next"],
+      ["env", "set", "SITE_HOSTNAME", "web-j.zone"],
+    ]);
+  });
 });
 
 describe("the state a workspace writes", () => {
@@ -53,15 +68,5 @@ describe("the state a workspace writes", () => {
 
   it("complains when the config's directory holds none", () => {
     expect(stateComplaint(home, [])).toMatch(/holds no \.ocel state/);
-  });
-});
-
-describe("the workspace row's target configs", () => {
-  it("are byte-identical copies of a composite's", async () => {
-    for (const name of TARGET_CONFIGS) {
-      const mine = await readFile(path.join(exampleDir(workspace.dir), name));
-      const theirs = await readFile(path.join(exampleDir(composite.dir), name));
-      expect(mine.equals(theirs)).toBe(true);
-    }
   });
 });

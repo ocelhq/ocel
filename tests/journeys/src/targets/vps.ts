@@ -4,18 +4,18 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
+import { JOURNEY_CONFIG, journeyZone } from "../config";
 import { INITIAL_GREETING, redact, REDACTED, SECRET_TOKEN } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { appHostname, HARNESS_PREFIX } from "../identity";
 import { cellEnv, exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
 import type { Leg } from "../spec";
-import { migrateCommand, setAppNames } from "../workspace";
+import { migrateCommand, setAppNames, setSiteHostnames } from "../workspace";
 import { type Gateway, openGateway } from "./gateway";
 import type { CellContext, Deployment, Target } from "./types";
 
 const DEFAULT_ZONE = "localhost";
-const CONFIG = "ocel.vps.config.ts";
 const DEPLOY_LOGIN = "ocel-deploy";
 const INCUS_MARKER = "/dev/virtio-ports/org.linuxcontainers.incus";
 const PROJECT_RECORDS = "/var/lib/ocel/production/records/projects/production";
@@ -54,10 +54,6 @@ export function boxEnvironment(said: string): ExpectationEnvironment {
   throw new Error(
     `the box answered ${JSON.stringify(verdict)} when asked whether it runs under incus`,
   );
-}
-
-export function journeyZone(env: NodeJS.ProcessEnv): string {
-  return env.OCEL_JOURNEY_ZONE?.trim() || DEFAULT_ZONE;
 }
 
 export function issuedByTheBox(zone: string): boolean {
@@ -177,7 +173,7 @@ function boxEnv(login: string): NodeJS.ProcessEnv {
 }
 
 function childEnv(cell: CellContext, login: string): NodeJS.ProcessEnv {
-  return { ...boxEnv(login), ...cellEnv(cell), OCEL_JOURNEY_ZONE: zone() };
+  return { ...boxEnv(login), ...cellEnv(cell) };
 }
 
 async function boxConfig(dir: string, slug: string, login: string): Promise<string> {
@@ -248,20 +244,28 @@ async function trusted(cell: CellContext): Promise<string | undefined> {
 
 async function bindDomains(cell: CellContext, started: Standing): Promise<void> {
   const root = await trusted(cell);
-  await runOcel(cell, started.dir, "up", "domain-add", ["--config", CONFIG, "domain", "add"], {
+  await runOcel(cell, started.dir, "up", "domain-add", ["--config", JOURNEY_CONFIG, "domain", "add"], {
     ...started.env,
     HTTPS_PROXY: started.gateway.tunnelUrl,
     ...(root ? { SSL_CERT_FILE: root } : {}),
   });
 }
 
+function hostnamesOf(cell: CellContext): Map<string, string> {
+  return new Map(
+    cell.example.apps.map((app) => {
+      const hostname = appHostname(app, cell.slug, zone());
+      if (!hostname) {
+        throw new Error(`${app} has no hostname on ${zone()}`);
+      }
+      return [app, hostname];
+    }),
+  );
+}
+
 async function deployment(cell: CellContext, started: Standing): Promise<Deployment> {
   const urls = new Map<string, string>();
-  for (const app of cell.example.apps) {
-    const hostname = appHostname(app, cell.slug, zone());
-    if (!hostname) {
-      throw new Error(`${app} has no hostname on ${zone()}`);
-    }
+  for (const [app, hostname] of hostnamesOf(cell)) {
     urls.set(app, await started.gateway.serving(hostname));
   }
   await cell.evidence.write(
@@ -297,7 +301,7 @@ async function standingFor(cell: CellContext): Promise<Standing> {
 
 function driving(cell: CellContext, started: Standing, leg: Leg) {
   return (name: string, args: string[]) =>
-    runOcel(cell, started.dir, leg, name, ["--config", CONFIG, ...args], started.env);
+    runOcel(cell, started.dir, leg, name, ["--config", JOURNEY_CONFIG, ...args], started.env);
 }
 
 async function up(cell: CellContext): Promise<Deployment> {
@@ -307,6 +311,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   await drive("env-greeting", ["env", "set", "GREETING", INITIAL_GREETING]);
   await drive("env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN]);
   await setAppNames(cell.example, drive);
+  await setSiteHostnames(cell.example, hostnamesOf(cell), drive);
   await drive("deploy", ["deploy", "--yes"]);
   await bindDomains(cell, started);
   if (cell.suites.includes("product")) {
@@ -347,7 +352,7 @@ async function destroy(cell: CellContext): Promise<void> {
     return;
   }
   standing.delete(cell.slug);
-  const args = ["--config", CONFIG, "destroy", "production", "--yes"];
+  const args = ["--config", JOURNEY_CONFIG, "destroy", "production", "--yes"];
   try {
     await runOcel(cell, started.dir, "destroy", "destroy", args, started.env);
   } catch (refused) {
