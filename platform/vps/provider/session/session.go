@@ -109,6 +109,11 @@ func (s *Session) Close() error {
 		return nil
 	}
 	_, err := output(context.Background(), "ssh", append(s.args(), "-O", "exit", s.dest.Written)...)
+	if err != nil {
+		if _, stat := os.Stat(s.control); errors.Is(stat, os.ErrNotExist) {
+			return nil
+		}
+	}
 	return err
 }
 
@@ -140,7 +145,7 @@ func multiplex() string {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "%C-"+strconv.Itoa(os.Getpid())+"-"+strconv.FormatUint(multiplexed.Add(1), 10))
+	return filepath.Join(dir, strconv.Itoa(os.Getpid())+"-"+strconv.FormatUint(multiplexed.Add(1), 10))
 }
 
 var multiplexed atomic.Uint64
