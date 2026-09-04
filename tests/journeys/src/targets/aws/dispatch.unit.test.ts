@@ -69,14 +69,14 @@ describe("emulatorFetch", () => {
 
   it("dials the emulator for a hostname nothing resolves, keeping the request intact", async () => {
     const dispatch = emulatorFetch(endpoint);
-    const res = await dispatch("https://web.j-1-express.journey.test/api/probes/echo?one=1", {
+    const res = await dispatch("https://web-j-1-express.journey.test/api/probes/echo?one=1", {
       method: "POST",
       headers: { "x-ocel-probe": "probe-value" },
       body: "payload",
     });
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), {
-      host: "web.j-1-express.journey.test",
+      host: "web-j-1-express.journey.test",
       probe: "probe-value",
       url: "/api/probes/echo?one=1",
       method: "POST",
@@ -122,7 +122,7 @@ describe("lookupVia", () => {
         asked.push(target);
         return ["203.0.113.7", "203.0.113.8"];
       },
-      "web.j-1.ocel.site",
+      "web-j-1.ocel.site",
     );
     assert.deepEqual(asked, ["dualstack.elb.amazonaws.com"]);
     assert.deepEqual(settled, { address: "203.0.113.7", family: 4 });
@@ -137,7 +137,7 @@ describe("lookupVia", () => {
         },
       },
       async () => [],
-      "web.j-1.ocel.site",
+      "web-j-1.ocel.site",
     );
     assert.match(
       "error" in settled ? settled.error.message : "",
@@ -156,7 +156,7 @@ describe("lookupVia", () => {
       async () => {
         throw new Error("the fallback was asked about a name that has no CNAME");
       },
-      "web.j-1.ocel.site",
+      "web-j-1.ocel.site",
     );
     assert.deepEqual(settled, { address: "198.51.100.4", family: 4 });
   });
@@ -170,7 +170,7 @@ describe("lookupVia", () => {
       async () => {
         throw new Error("the fallback was asked about a name that has no CNAME");
       },
-      "web.j-1.ocel.site",
+      "web-j-1.ocel.site",
       { all: true },
     );
     assert.deepEqual(settled, {
@@ -193,7 +193,7 @@ describe("lookupVia", () => {
       async () => {
         throw new Error("the fallback was asked about a name that never resolved");
       },
-      "web.j-1.ocel.site",
+      "web-j-1.ocel.site",
     );
     assert.deepEqual(settled, { error: refused("ESERVFAIL") });
   });

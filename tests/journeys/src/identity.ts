@@ -21,10 +21,22 @@ export function projectSlug(example: string, run: string): string {
   return `${HARNESS_PREFIX}${run}-${example}`;
 }
 
+const LONGEST_LABEL = 63;
+
 export function appHostname(
   app: string,
   slug: string,
   zone: string | undefined,
 ): string | undefined {
-  return zone ? `${app}.${slug}.${zone}` : undefined;
+  if (!zone) {
+    return undefined;
+  }
+  const label = `${app}-${slug}`;
+  if (label.length > LONGEST_LABEL) {
+    throw new Error(
+      `${label} is ${label.length} characters, and a dns label holds ${LONGEST_LABEL}. ` +
+        `Shorten the app name or the example name behind ${slug}.`,
+    );
+  }
+  return `${label}.${zone}`;
 }

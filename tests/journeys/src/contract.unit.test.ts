@@ -14,7 +14,7 @@ function answering(app: string): ContractContext["fetch"] {
 function context(asked: string, answered: string): ContractContext {
   return {
     app: asked,
-    baseUrl: `https://${asked}.j-1-workspace.journey.test`,
+    baseUrl: `https://${asked}-j-1-workspace.journey.test`,
     greeting: "journey-hello",
     leg: "contract",
     notes: new Map(),
