@@ -9,7 +9,7 @@ import { exampleDir, treeDir } from "../../paths";
 import { specForTarget } from "../../spec";
 import { migrateCommand, setAppNames } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
-import { emulatorFetch } from "./dispatch";
+import { authoritativeFetch, emulatorFetch } from "./dispatch";
 import { pulumiSweep } from "./ladder-pulumi";
 import { sstSweep } from "./ladder-sst";
 import { place } from "./place";
@@ -72,7 +72,7 @@ function hostnames(cell: CellContext): Map<string, string> {
 async function dispatcher(): Promise<typeof fetch> {
   dispatching ??= (async () => {
     const where = await place();
-    return where.endpoint ? emulatorFetch(where.endpoint) : fetch;
+    return where.endpoint ? emulatorFetch(where.endpoint) : authoritativeFetch(zone());
   })();
   return dispatching;
 }

@@ -1,3 +1,4 @@
+import dns from "node:dns";
 import net from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
 
@@ -27,6 +28,115 @@ export function emulatorFetch(endpoint: string): typeof fetch {
       socket.on("error", (error) => callback(error, null));
     },
   });
+  const dispatch = (input: Parameters<typeof undiciFetch>[0], init?: RequestInit) =>
+    undiciFetch(input, { ...(init as Parameters<typeof undiciFetch>[1]), dispatcher });
+  return dispatch as unknown as typeof fetch;
+}
+
+export type LookupAnswer = { address: string; family: number };
+
+export type LookupCallback = (
+  error: NodeJS.ErrnoException | null,
+  address?: string | LookupAnswer[],
+  family?: number,
+) => void;
+
+export type AuthoritativeResolver = {
+  resolveCname: (hostname: string) => Promise<string[]>;
+  resolve4: (hostname: string) => Promise<string[]>;
+};
+
+export type FallbackLookup = (
+  hostname: string,
+  options: { all?: boolean },
+) => Promise<LookupAnswer | LookupAnswer[]>;
+
+export function pickAnswer(
+  hostname: string,
+  addresses: string[],
+  all: boolean,
+): LookupAnswer | LookupAnswer[] {
+  const answers = addresses.map((address) => ({ address, family: 4 }));
+  if (all) {
+    return answers;
+  }
+  const [first] = answers;
+  if (!first) {
+    throw new Error(`${hostname} has no address in the zone's own answer`);
+  }
+  return first;
+}
+
+async function cnameTarget(
+  resolver: AuthoritativeResolver,
+  hostname: string,
+): Promise<string | undefined> {
+  try {
+    const [target] = await resolver.resolveCname(hostname);
+    return target;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENODATA" || code === "ENOTFOUND") {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+export function lookupVia(resolver: AuthoritativeResolver, fallbackLookup: FallbackLookup) {
+  return (hostname: string, options: dns.LookupOptions, callback: LookupCallback): void => {
+    const all = options?.all === true;
+    void (async () => {
+      const target = await cnameTarget(resolver, hostname);
+      if (target) {
+        return fallbackLookup(target, { all });
+      }
+      return pickAnswer(hostname, await resolver.resolve4(hostname), all);
+    })().then(
+      (answer) => {
+        if (Array.isArray(answer)) {
+          callback(null, answer);
+          return;
+        }
+        callback(null, answer.address, answer.family);
+      },
+      (error) => callback(error as NodeJS.ErrnoException),
+    );
+  };
+}
+
+const authorities = new Map<string, Promise<dns.promises.Resolver>>();
+
+function authority(zone: string): Promise<dns.promises.Resolver> {
+  let pending = authorities.get(zone);
+  if (!pending) {
+    pending = (async () => {
+      const names = await dns.promises.resolveNs(zone);
+      const servers = (await Promise.all(names.map((name) => dns.promises.resolve4(name)))).flat();
+      if (servers.length === 0) {
+        throw new Error(`${zone} publishes no nameserver address to ask about its own names`);
+      }
+      const resolver = new dns.promises.Resolver();
+      resolver.setServers(servers);
+      return resolver;
+    })();
+    pending.catch(() => authorities.delete(zone));
+    authorities.set(zone, pending);
+  }
+  return pending;
+}
+
+export function authoritativeFetch(zone: string): typeof fetch {
+  const lookup = (hostname: string, options: dns.LookupOptions, callback: LookupCallback): void => {
+    authority(zone).then(
+      (resolver) =>
+        lookupVia(resolver, (name, opts) =>
+          dns.promises.lookup(name, opts as dns.LookupOneOptions),
+        )(hostname, options, callback),
+      (error) => callback(error as NodeJS.ErrnoException),
+    );
+  };
+  const dispatcher = new Agent({ connect: { lookup: lookup as never } });
   const dispatch = (input: Parameters<typeof undiciFetch>[0], init?: RequestInit) =>
     undiciFetch(input, { ...(init as Parameters<typeof undiciFetch>[1]), dispatcher });
   return dispatch as unknown as typeof fetch;

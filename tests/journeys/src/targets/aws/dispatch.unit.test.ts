@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { afterAll, beforeAll, describe, it } from "vitest";
-import { emulatorAddress, emulatorFetch } from "./dispatch";
+import {
+  type AuthoritativeResolver,
+  emulatorAddress,
+  emulatorFetch,
+  type FallbackLookup,
+  type LookupAnswer,
+  lookupVia,
+} from "./dispatch";
 
 describe("emulatorAddress", () => {
   it("reads the port the endpoint publishes", () => {
@@ -75,5 +82,102 @@ describe("emulatorFetch", () => {
       method: "POST",
       body: "payload",
     });
+  });
+});
+
+describe("lookupVia", () => {
+  type Settled =
+    | { error: NodeJS.ErrnoException }
+    | { address: string | LookupAnswer[] | undefined; family: number | undefined };
+
+  function refused(code: string): NodeJS.ErrnoException {
+    const error: NodeJS.ErrnoException = new Error(`the authority said ${code}`);
+    error.code = code;
+    return error;
+  }
+
+  function answered(
+    resolver: AuthoritativeResolver,
+    fallback: FallbackLookup,
+    hostname: string,
+    options: { all?: boolean } = {},
+  ): Promise<Settled> {
+    return new Promise((resolve) => {
+      lookupVia(resolver, fallback)(hostname, options, (error, address, family) => {
+        resolve(error ? { error } : { address, family });
+      });
+    });
+  }
+
+  it("hands a CNAME target to the fallback lookup, not to the authority", async () => {
+    const asked: string[] = [];
+    const settled = await answered(
+      {
+        resolveCname: async () => ["dualstack.elb.amazonaws.com"],
+        resolve4: async () => {
+          throw new Error("the authority was asked about a name it does not serve");
+        },
+      },
+      async (name) => {
+        asked.push(name);
+        return { address: "203.0.113.7", family: 4 };
+      },
+      "web.j-1.ocel.site",
+    );
+    assert.deepEqual(asked, ["dualstack.elb.amazonaws.com"]);
+    assert.deepEqual(settled, { address: "203.0.113.7", family: 4 });
+  });
+
+  it("answers from the authority's own A record when no CNAME stands", async () => {
+    const settled = await answered(
+      {
+        resolveCname: async () => {
+          throw refused("ENODATA");
+        },
+        resolve4: async () => ["198.51.100.4", "198.51.100.5"],
+      },
+      async () => {
+        throw new Error("the fallback was asked about a name that has no CNAME");
+      },
+      "web.j-1.ocel.site",
+    );
+    assert.deepEqual(settled, { address: "198.51.100.4", family: 4 });
+  });
+
+  it("returns every address in the array form when all is set", async () => {
+    const settled = await answered(
+      {
+        resolveCname: async () => [],
+        resolve4: async () => ["198.51.100.4", "198.51.100.5"],
+      },
+      async () => {
+        throw new Error("the fallback was asked about a name that has no CNAME");
+      },
+      "web.j-1.ocel.site",
+      { all: true },
+    );
+    assert.deepEqual(settled, {
+      address: [
+        { address: "198.51.100.4", family: 4 },
+        { address: "198.51.100.5", family: 4 },
+      ],
+      family: undefined,
+    });
+  });
+
+  it("carries an authority that fails for any other reason to the callback", async () => {
+    const settled = await answered(
+      {
+        resolveCname: async () => {
+          throw refused("ESERVFAIL");
+        },
+        resolve4: async () => ["198.51.100.4"],
+      },
+      async () => {
+        throw new Error("the fallback was asked about a name that never resolved");
+      },
+      "web.j-1.ocel.site",
+    );
+    assert.deepEqual(settled, { error: refused("ESERVFAIL") });
   });
 });
