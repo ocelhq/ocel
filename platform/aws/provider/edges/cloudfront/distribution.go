@@ -70,20 +70,34 @@ func (p distributionPlan) ready() error {
 func (p distributionPlan) config(aliases []string, certificate string) *cftypes.DistributionConfig {
 	slices.Sort(aliases)
 	config := &cftypes.DistributionConfig{
-		CallerReference: aws.String(capDistributionName(p.name)),
-		Comment:         aws.String(capDistributionName(p.name)),
-		Enabled:         ptr(true),
-		HttpVersion:     cftypes.HttpVersionHttp2and3,
-		IsIPV6Enabled:   ptr(true),
-		PriceClass:      cftypes.PriceClassPriceClassAll,
-		CacheTagConfig:  &cftypes.CacheTagConfig{HeaderName: aws.String(bootstrap.EdgeCacheTagHeader)},
+		CallerReference:              aws.String(capDistributionName(p.name)),
+		Comment:                      aws.String(capDistributionName(p.name)),
+		Enabled:                      ptr(true),
+		HttpVersion:                  cftypes.HttpVersionHttp2and3,
+		IsIPV6Enabled:                ptr(true),
+		PriceClass:                   cftypes.PriceClassPriceClassAll,
+		CacheTagConfig:               &cftypes.CacheTagConfig{HeaderName: aws.String(bootstrap.EdgeCacheTagHeader)},
+		DefaultRootObject:            aws.String(""),
+		WebACLId:                     aws.String(""),
+		ContinuousDeploymentPolicyId: aws.String(""),
+		Staging:                      ptr(false),
 		Logging: &cftypes.LoggingConfig{
 			Enabled:        ptr(false),
 			IncludeCookies: ptr(false),
 			Bucket:         aws.String(""),
 			Prefix:         aws.String(""),
 		},
-		Aliases:         &cftypes.Aliases{Quantity: quantity(aliases), Items: aliases},
+		Restrictions: &cftypes.Restrictions{
+			GeoRestriction: &cftypes.GeoRestriction{
+				RestrictionType: cftypes.GeoRestrictionTypeNone,
+				Quantity:        ptr(int32(0)),
+				Items:           []string{},
+			},
+		},
+		CustomErrorResponses: &cftypes.CustomErrorResponses{Quantity: ptr(int32(0))},
+		CacheBehaviors:       &cftypes.CacheBehaviors{Quantity: ptr(int32(0))},
+		OriginGroups:         &cftypes.OriginGroups{Quantity: ptr(int32(0))},
+		Aliases:              &cftypes.Aliases{Quantity: quantity(aliases), Items: aliases},
 		Origins: &cftypes.Origins{
 			Quantity: ptr(int32(1)),
 			Items: []cftypes.Origin{{
@@ -91,15 +105,25 @@ func (p distributionPlan) config(aliases []string, certificate string) *cftypes.
 				DomainName:            aws.String(p.assetOrigin),
 				OriginAccessControlId: aws.String(p.oac),
 				S3OriginConfig:        &cftypes.S3OriginConfig{OriginAccessIdentity: aws.String("")},
+				OriginPath:            aws.String(""),
+				CustomHeaders:         &cftypes.CustomHeaders{Quantity: ptr(int32(0))},
+				ConnectionAttempts:    ptr(int32(3)),
+				ConnectionTimeout:     ptr(int32(10)),
+				OriginShield:          &cftypes.OriginShield{Enabled: ptr(false)},
 			}},
 		},
 		DefaultCacheBehavior: &cftypes.DefaultCacheBehavior{
-			TargetOriginId:          aws.String(assetOriginID),
-			ViewerProtocolPolicy:    cftypes.ViewerProtocolPolicyRedirectToHttps,
-			Compress:                ptr(true),
-			CachePolicyId:           aws.String(p.cachePolicy),
-			OriginRequestPolicyId:   aws.String(allViewerExceptHostPolicyID),
-			ResponseHeadersPolicyId: aws.String(p.headersPolicy),
+			TargetOriginId:             aws.String(assetOriginID),
+			ViewerProtocolPolicy:       cftypes.ViewerProtocolPolicyRedirectToHttps,
+			Compress:                   ptr(true),
+			CachePolicyId:              aws.String(p.cachePolicy),
+			OriginRequestPolicyId:      aws.String(allViewerExceptHostPolicyID),
+			ResponseHeadersPolicyId:    aws.String(p.headersPolicy),
+			FieldLevelEncryptionId:     aws.String(""),
+			SmoothStreaming:            ptr(false),
+			TrustedSigners:             &cftypes.TrustedSigners{Enabled: ptr(false), Quantity: ptr(int32(0))},
+			TrustedKeyGroups:           &cftypes.TrustedKeyGroups{Enabled: ptr(false), Quantity: ptr(int32(0))},
+			LambdaFunctionAssociations: &cftypes.LambdaFunctionAssociations{Quantity: ptr(int32(0))},
 			AllowedMethods: &cftypes.AllowedMethods{
 				Quantity: ptr(int32(7)),
 				Items: []cftypes.Method{
@@ -122,6 +146,88 @@ func (p distributionPlan) config(aliases []string, certificate string) *cftypes.
 		ViewerCertificate: viewerCertificate(certificate),
 	}
 	return config
+}
+
+func completeFrom(want, held *cftypes.DistributionConfig) *cftypes.DistributionConfig {
+	if want == nil || held == nil {
+		return want
+	}
+	if want.Aliases == nil {
+		want.Aliases = held.Aliases
+	}
+	if want.AnycastIpListId == nil {
+		want.AnycastIpListId = held.AnycastIpListId
+	}
+	if want.CacheBehaviors == nil {
+		want.CacheBehaviors = held.CacheBehaviors
+	}
+	if want.CacheTagConfig == nil {
+		want.CacheTagConfig = held.CacheTagConfig
+	}
+	if want.CallerReference == nil {
+		want.CallerReference = held.CallerReference
+	}
+	if want.Comment == nil {
+		want.Comment = held.Comment
+	}
+	if want.ConnectionFunctionAssociation == nil {
+		want.ConnectionFunctionAssociation = held.ConnectionFunctionAssociation
+	}
+	if want.ContinuousDeploymentPolicyId == nil {
+		want.ContinuousDeploymentPolicyId = held.ContinuousDeploymentPolicyId
+	}
+	if want.CustomErrorResponses == nil {
+		want.CustomErrorResponses = held.CustomErrorResponses
+	}
+	if want.DefaultCacheBehavior == nil {
+		want.DefaultCacheBehavior = held.DefaultCacheBehavior
+	}
+	if want.DefaultRootObject == nil {
+		want.DefaultRootObject = held.DefaultRootObject
+	}
+	if want.Enabled == nil {
+		want.Enabled = held.Enabled
+	}
+	if want.IsIPV6Enabled == nil {
+		want.IsIPV6Enabled = held.IsIPV6Enabled
+	}
+	if want.Logging == nil {
+		want.Logging = held.Logging
+	}
+	if want.OriginGroups == nil {
+		want.OriginGroups = held.OriginGroups
+	}
+	if want.Origins == nil {
+		want.Origins = held.Origins
+	}
+	if want.Restrictions == nil {
+		want.Restrictions = held.Restrictions
+	}
+	if want.Staging == nil {
+		want.Staging = held.Staging
+	}
+	if want.TenantConfig == nil {
+		want.TenantConfig = held.TenantConfig
+	}
+	if want.ViewerCertificate == nil {
+		want.ViewerCertificate = held.ViewerCertificate
+	}
+	if want.ViewerMtlsConfig == nil {
+		want.ViewerMtlsConfig = held.ViewerMtlsConfig
+	}
+	if want.WebACLId == nil {
+		want.WebACLId = held.WebACLId
+	}
+	if want.ConnectionMode == "" {
+		want.ConnectionMode = held.ConnectionMode
+	}
+	if want.HttpVersion == "" {
+		want.HttpVersion = held.HttpVersion
+	}
+	if want.PriceClass == "" {
+		want.PriceClass = held.PriceClass
+	}
+	return want
 }
 
 func viewerCertificate(certificate string) *cftypes.ViewerCertificate {
@@ -208,7 +314,7 @@ func reshapeDistribution(ctx context.Context, c Clients, plan distributionPlan, 
 		return err
 	}
 	aliases, certificate := aliasesOf(held), certificateOf(held)
-	return putConfig(ctx, c, id, etag, plan.config(aliases, certificate))
+	return putConfig(ctx, c, id, etag, completeFrom(plan.config(aliases, certificate), held))
 }
 
 func configOf(ctx context.Context, c Clients, id string) (*cftypes.DistributionConfig, string, error) {
@@ -260,7 +366,7 @@ func serveAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostn
 		certificate = certificateOf(held)
 	}
 	aliases = append(aliases, hostname)
-	if err := putConfig(ctx, c, id, etag, plan.config(aliases, certificate)); err != nil {
+	if err := putConfig(ctx, c, id, etag, completeFrom(plan.config(aliases, certificate), held)); err != nil {
 		return aliasError(hostname, id, err)
 	}
 	return nil
@@ -284,7 +390,7 @@ func dropAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostna
 	if len(aliases) == 0 {
 		certificate = ""
 	}
-	return putConfig(ctx, c, id, etag, plan.config(aliases, certificate))
+	return putConfig(ctx, c, id, etag, completeFrom(plan.config(aliases, certificate), held))
 }
 
 func (p *provider) deleteDistribution(ctx context.Context, c Clients, kind, id string) error {

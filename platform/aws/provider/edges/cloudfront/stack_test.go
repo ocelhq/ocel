@@ -301,3 +301,91 @@ func assertLogging(t *testing.T, what string, config *cftypes.DistributionConfig
 		t.Errorf("%s enables access logging, want it off with an empty bucket and prefix", what)
 	}
 }
+
+func TestEveryConfigSpellsOutTheFieldsAnUpdateInsistsOn(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	plan := distributionPlan{
+		name:          "storefront",
+		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
+		function:      "arn:aws:cloudfront::111122223333:function/resolver",
+		cachePolicy:   "cache-policy",
+		headersPolicy: "headers-policy",
+		oac:           "origin-access-control",
+	}
+
+	raised, err := createDistribution(context.Background(), w.clients(), plan, nil, "")
+	if err != nil {
+		t.Fatalf("createDistribution: %v", err)
+	}
+	assertComplete(t, "the config sent to CreateDistribution", w.front.distributions[raised.id].config)
+
+	if err := reshapeDistribution(context.Background(), w.clients(), plan, raised.id); err != nil {
+		t.Fatalf("reshapeDistribution: %v", err)
+	}
+	assertComplete(t, "the config sent to UpdateDistribution", w.front.distributions[raised.id].config)
+}
+
+func assertComplete(t *testing.T, what string, config *cftypes.DistributionConfig) {
+	t.Helper()
+	for field, set := range map[string]bool{
+		"DefaultRootObject":    config.DefaultRootObject != nil,
+		"Restrictions":         config.Restrictions != nil,
+		"WebACLId":             config.WebACLId != nil,
+		"CustomErrorResponses": config.CustomErrorResponses != nil,
+		"CacheBehaviors":       config.CacheBehaviors != nil,
+		"Staging":              config.Staging != nil,
+	} {
+		if !set {
+			t.Errorf("%s leaves %s nil, and UpdateDistribution refuses a config missing it", what, field)
+		}
+	}
+	behavior := config.DefaultCacheBehavior
+	if behavior == nil {
+		t.Fatalf("%s carries no DefaultCacheBehavior", what)
+	}
+	if behavior.TrustedSigners == nil || aws.ToBool(behavior.TrustedSigners.Enabled) {
+		t.Errorf("%s does not spell out TrustedSigners as disabled", what)
+	}
+	if behavior.TrustedKeyGroups == nil || aws.ToBool(behavior.TrustedKeyGroups.Enabled) {
+		t.Errorf("%s does not spell out TrustedKeyGroups as disabled", what)
+	}
+}
+
+func TestCompleteFromFillsOnlyWhatThePlanLeftOut(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		want *cftypes.DistributionConfig
+		held *cftypes.DistributionConfig
+		acl  string
+	}{
+		{
+			name: "the held config supplies a field the plan never mentions",
+			want: &cftypes.DistributionConfig{},
+			held: &cftypes.DistributionConfig{WebACLId: aws.String("held-acl")},
+			acl:  "held-acl",
+		},
+		{
+			name: "the plan wins over a held config that differs",
+			want: &cftypes.DistributionConfig{WebACLId: aws.String("")},
+			held: &cftypes.DistributionConfig{WebACLId: aws.String("held-acl")},
+			acl:  "",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			merged := completeFrom(tc.want, tc.held)
+
+			if merged.WebACLId == nil {
+				t.Fatalf("WebACLId is nil, want %q", tc.acl)
+			}
+			if got := aws.ToString(merged.WebACLId); got != tc.acl {
+				t.Errorf("WebACLId = %q, want %q", got, tc.acl)
+			}
+		})
+	}
+}
