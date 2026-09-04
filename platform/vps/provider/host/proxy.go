@@ -281,15 +281,16 @@ func imageHeld(attempts int) string {
 func containerRising(attempts int) string {
 	name := quoted(ProxyContainer)
 	inspect := "docker inspect --type container --format "
+	answering := "docker exec " + name + " " + ProxyHelperMount + " config / >/dev/null 2>&1"
 	return "at=0\n" +
 		"while :; do\n" +
-		"if [ \"$(" + inspect + quoted("{{.State.Status}}") + " " + name + " 2>/dev/null)\" = running ]; then exit 0; fi\n" +
+		"if [ \"$(" + inspect + quoted("{{.State.Status}}") + " " + name + " 2>/dev/null)\" = running ] && " + answering + "; then exit 0; fi\n" +
 		"at=$((at + 1))\n" +
 		"[ \"$at\" -lt " + fmt.Sprint(attempts) + " ] || break\n" +
 		"sleep 1\n" +
 		"done\n" +
 		"printf '%s\\n' " + quoted(fmt.Sprintf(
-		"%s was created and did not report running within %ds", ProxyContainer, attempts)) + " >&2\n" +
+		"%s was created and did not answer over its admin socket within %ds", ProxyContainer, attempts)) + " >&2\n" +
 		inspect + quoted("status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}") +
 		" " + name + " >&2 2>&1 || true\n" +
 		"docker logs --tail 2 " + name + " >&2 2>&1 || true\n" +
