@@ -60,6 +60,26 @@ func TestADockerfileBesideAnAppSwitchesTheBuildToIt(t *testing.T) {
 	}
 }
 
+func TestADockerfileInAWorkspaceIsToldWhereItsCopiesAreReadFrom(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	appDir := filepath.Join(root, "apps", "web")
+	write(t, filepath.Join(appDir, imagebuild.DockerfileName))
+	member := workspace.Location{Root: root, Path: "apps/web", Member: true, Manager: workspace.Pnpm}
+
+	notice := chosen(t, imagebuild.App{Name: "web", Workspace: member}).Notice()
+
+	if strings.Count(notice, "\n") != 0 {
+		t.Errorf("the notice is %q, want one line", notice)
+	}
+	for _, want := range []string{"web", imagebuild.DockerfileName, root} {
+		if !strings.Contains(notice, want) {
+			t.Errorf("the notice is %q, and never names %s — a COPY package.json . now reads the workspace root, and nothing else says so", notice, want)
+		}
+	}
+}
+
 func TestAnAppWithNoDockerfileIsBuiltByRailpackAndAnnouncesNothing(t *testing.T) {
 	t.Parallel()
 

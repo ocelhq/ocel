@@ -58,6 +58,8 @@ func (c Choice) Notice() string {
 		return ""
 	case c.App.Configured != "":
 		return fmt.Sprintf("%s builds from %s, the build.dockerfile it names — its build context is still %s", c.App.Name, c.Dockerfile, c.App.Workspace.Root)
+	case c.App.Workspace.InWorkspace():
+		return fmt.Sprintf("%s builds from the %s beside it rather than with railpack, and copies from the workspace root %s, which is its build context — rename or remove %s to go back", c.App.Name, DockerfileName, c.App.Workspace.Root, c.Dockerfile)
 	default:
 		return fmt.Sprintf("%s builds from the %s beside it rather than with railpack — rename or remove %s to go back", c.App.Name, DockerfileName, c.Dockerfile)
 	}
