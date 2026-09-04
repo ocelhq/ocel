@@ -53,7 +53,7 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 	}
 	defer run.Close()
 
-	if err := deps.BuildApp(ctx, cfg, nil, stderr); err != nil {
+	if err := deps.BuildApp(ctx, cfg, nil, "", stderr); err != nil {
 		return err
 	}
 	if err := clientenv.RecordUnresolved(cfg.Dir); err != nil {

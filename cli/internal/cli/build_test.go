@@ -31,7 +31,7 @@ export default {
 
 		var built *projectconfig.Config
 		deps := newDeps()
-		deps.BuildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ io.Writer) error {
+		deps.BuildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ string, _ io.Writer) error {
 			built = cfg
 			clitest.WritePrebuiltFunction(t, cfg.Dir, "api", "index")
 			return nil
@@ -67,7 +67,7 @@ export default { slug: "test-app" };
 `)
 
 		deps := newDeps()
-		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, string, io.Writer) error {
 			return errors.New("boom: app build failed")
 		}
 

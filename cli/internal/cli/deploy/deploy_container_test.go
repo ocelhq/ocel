@@ -22,7 +22,7 @@ func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func(
 	clitest.StubBuild(&deps, nil)
 	clitest.StubAppImages(&deps, "api")
 	built := false
-	deps.BuildAppImages = func(context.Context, *projectconfig.Config, io.Writer) (map[string]string, error) {
+	deps.BuildAppImages = func(context.Context, *projectconfig.Config, string, io.Writer) (map[string]string, error) {
 		built = true
 		return map[string]string{"api": clitest.FixtureImage("api")}, nil
 	}

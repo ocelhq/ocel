@@ -106,7 +106,7 @@ func dockerfileSolve(t *testing.T) client.SolveOpt {
 	if err != nil {
 		t.Fatalf("Choose() = %v", err)
 	}
-	opt, done, err := choice.solve()
+	opt, done, err := choice.solve("")
 	if err != nil {
 		t.Fatalf("solve() = %v", err)
 	}

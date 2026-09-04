@@ -172,7 +172,7 @@ func NodePlatformSuffix(t *testing.T) string {
 }
 
 func StubBuild(deps *cmddeps.Deps, functions []manifestbuilder.Function) {
-	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, string, io.Writer) error {
 		return nil
 	}
 	deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
@@ -194,7 +194,7 @@ func StubAppImages(deps *cmddeps.Deps, apps ...string) {
 		refs[app] = FixtureImage(app)
 	}
 	deps.RequireImageBuilder = func(context.Context, runui.Reporter, *projectconfig.Config) error { return nil }
-	deps.BuildAppImages = func(context.Context, *projectconfig.Config, io.Writer) (map[string]string, error) {
+	deps.BuildAppImages = func(context.Context, *projectconfig.Config, string, io.Writer) (map[string]string, error) {
 		return refs, nil
 	}
 }

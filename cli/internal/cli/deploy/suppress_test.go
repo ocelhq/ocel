@@ -3,13 +3,26 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
+
+func recordBuildPhase(deps *cmddeps.Deps) *string {
+	phase := new(string)
+	built := deps.BuildApp
+	deps.BuildApp = func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, given string, out io.Writer) error {
+		*phase = given
+		return built(ctx, cfg, envByApp, given, out)
+	}
+	return phase
+}
 
 func fixtureWithAnApp(t *testing.T) (root, sockPath string, deps cmddeps.Deps) {
 	t.Helper()
@@ -27,12 +40,16 @@ func fixtureWithAnApp(t *testing.T) (root, sockPath string, deps cmddeps.Deps) {
 func TestDeploySuppressingResources(t *testing.T) {
 	t.Run("the fixture's declaration reaches the manifest by default", func(t *testing.T) {
 		root, sockPath, deps := fixtureWithAnApp(t)
+		phase := recordBuildPhase(&deps)
 
 		var stdout, stderr bytes.Buffer
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
+		if *phase != "" {
+			t.Errorf("the app built in phase %q, want none where everything is provisioned", *phase)
+		}
 		out := stdout.String()
 		if !strings.Contains(out, "RESOURCE name=main") {
 			t.Errorf("stdout = %q, want the discovered resource in the manifest", out)
@@ -46,6 +63,7 @@ func TestDeploySuppressingResources(t *testing.T) {
 
 	t.Run("the env var drops every declaration and tells the provider so", func(t *testing.T) {
 		root, sockPath, deps := fixtureWithAnApp(t)
+		phase := recordBuildPhase(&deps)
 		t.Setenv(suppressResourcesEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
@@ -53,6 +71,9 @@ func TestDeploySuppressingResources(t *testing.T) {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
+		if *phase != providerkit.PhaseResourcesSuppressed {
+			t.Errorf("the app built in phase %q, want %q, so its build resolves no resource", *phase, providerkit.PhaseResourcesSuppressed)
+		}
 		out := stdout.String()
 		if strings.Contains(out, "RESOURCE ") {
 			t.Errorf("stdout = %q, want no resource in the manifest", out)

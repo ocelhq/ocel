@@ -14,6 +14,7 @@ import (
 	"github.com/tailscale/hujson"
 
 	"github.com/ocelhq/ocel/cli/internal/workspace"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const (
@@ -28,7 +29,7 @@ const (
 	providerKey  = "provider"
 )
 
-func Plan(loc workspace.Location) ([]byte, error) {
+func Plan(loc workspace.Location, phase string) ([]byte, error) {
 	source, err := app.NewApp(loc.Root)
 	if err != nil {
 		return nil, fmt.Errorf("read %s as an app railpack can build: %w", loc.Root, err)
@@ -67,11 +68,28 @@ func Plan(loc workspace.Location) ([]byte, error) {
 	if err := scope(result.Plan, loc, commands, outside); err != nil {
 		return nil, err
 	}
+	declarePhase(result.Plan, phase)
 	plan, err := json.Marshal(result.Plan)
 	if err != nil {
 		return nil, fmt.Errorf("serialize the railpack plan for %s: %w", loc.Root, err)
 	}
 	return plan, nil
+}
+
+func declarePhase(built *railpackplan.BuildPlan, phase string) {
+	if phase == "" {
+		return
+	}
+	for i := range built.Steps {
+		step := &built.Steps[i]
+		if step.Name != buildStep {
+			continue
+		}
+		if step.Variables == nil {
+			step.Variables = map[string]string{}
+		}
+		step.Variables[providerkit.PhaseEnvName] = phase
+	}
 }
 
 func nodeConfigFile(root string) (string, func(), error) {

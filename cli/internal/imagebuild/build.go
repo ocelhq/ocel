@@ -24,6 +24,7 @@ const (
 
 type Builder struct {
 	Progress io.Writer
+	Phase    string
 }
 
 func (b Builder) Build(ctx context.Context, app App) (Image, error) {
@@ -45,7 +46,7 @@ func (b Builder) Build(ctx context.Context, app App) (Image, error) {
 		return Image{}, err
 	}
 
-	opt, done, err := choice.solve()
+	opt, done, err := choice.solve(b.Phase)
 	if err != nil {
 		return Image{}, err
 	}
@@ -75,12 +76,12 @@ func (b Builder) Build(ctx context.Context, app App) (Image, error) {
 
 func (c Choice) railpack() bool { return c.Dockerfile == "" }
 
-func (c Choice) solve() (client.SolveOpt, func(), error) {
+func (c Choice) solve(phase string) (client.SolveOpt, func(), error) {
 	if !c.railpack() {
 		opt, err := dockerfileOptions(c.App.Workspace.Root, c.Dockerfile)
 		return opt, func() {}, err
 	}
-	plan, err := Plan(c.App.Workspace)
+	plan, err := Plan(c.App.Workspace, phase)
 	if err != nil {
 		return client.SolveOpt{}, nil, err
 	}
