@@ -19,7 +19,7 @@ import { expectationEnvironmentFor } from "./world";
 
 const CONFIG = "ocel.aws.config.ts";
 
-const LEG_TIMEOUT_MS = 600_000;
+const LEG_TIMEOUT_MS = process.env.AWS_ENDPOINT_URL ? 600_000 : 1_800_000;
 
 const DEFAULT_VPC_TRIES = 30;
 

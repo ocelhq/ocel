@@ -34,10 +34,13 @@ export async function place(): Promise<Where> {
       process.env.AWS_ACCESS_KEY_ID ??= "test";
       process.env.AWS_SECRET_ACCESS_KEY ??= "test";
       process.env.OCEL_JOURNEY_ZONE ??= FLOCI_ZONE;
-    } else if (!process.env.OCEL_JOURNEY_ZONE) {
-      throw new Error(
-        "OCEL_JOURNEY_ZONE names the zone this run's production hostnames hang under, and an aws project with no production hostname has nowhere to serve",
-      );
+    } else {
+      if (!process.env.OCEL_JOURNEY_ZONE) {
+        throw new Error(
+          "OCEL_JOURNEY_ZONE names the zone this run's production hostnames hang under, and an aws project with no production hostname has nowhere to serve",
+        );
+      }
+      process.env.OCEL_JOURNEY_DNS = "cloudflare";
     }
     return where;
   })();
