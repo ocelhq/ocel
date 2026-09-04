@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { redact, REDACTED } from "./contract";
-import { ocelBin, treeDir } from "./paths";
+import { exampleMember, ocelBin, treeDir } from "./paths";
 import type { Leg } from "./spec";
 import type { CellContext } from "./targets/types";
 import { plantWorkspace } from "./tree";
@@ -21,12 +21,13 @@ export function treeRoot(cell: CellContext, target: string): string {
 }
 
 export function configTree(cell: CellContext, target: string): string {
-  return path.join(treeRoot(cell, target), cell.example.dir);
+  return path.join(treeRoot(cell, target), exampleMember(cell.example.dir));
 }
 
 export function appDirs(cell: CellContext): string[] {
   const siblings = siblingDirs(cell.example);
-  return siblings.length === 0 ? [cell.example.dir] : [cell.example.dir, ...siblings];
+  const dirs = siblings.length === 0 ? [cell.example.dir] : [cell.example.dir, ...siblings];
+  return dirs.map(exampleMember);
 }
 
 export async function workTree(cell: CellContext, target: string): Promise<string> {

@@ -83,18 +83,23 @@ function cellFor(name: string): CellContext {
 }
 
 describe("where an app sits in the tree built for it", () => {
-  it("is a member directory of the synthetic root, whatever kind the example is", () => {
+  it("keeps the path the example has in the repo, whatever kind the example is", () => {
     for (const name of ["express", "workspace"]) {
       const cell = cellFor(name);
       expect(configTree(cell, "vps")).toBe(
-        path.join(treeRoot(cell, "vps"), cell.example.dir),
+        path.join(treeRoot(cell, "vps"), "examples", cell.example.dir),
       );
     }
   });
 
   it("brings the config's own directory and every sibling app it declares", () => {
-    expect(appDirs(cellFor("express"))).toEqual(["express"]);
-    expect(appDirs(cellFor("workspace"))).toEqual(["workspace", "next", "express", "hono"]);
+    expect(appDirs(cellFor("express"))).toEqual(["examples/express"]);
+    expect(appDirs(cellFor("workspace"))).toEqual([
+      "examples/workspace",
+      "examples/next",
+      "examples/express",
+      "examples/hono",
+    ]);
   });
 });
 

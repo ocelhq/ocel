@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { access, cp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { exampleDir, repoRoot } from "./paths";
+import { repoRoot } from "./paths";
 
 const NEVER_COPIED = [".git", ".next", ".ocel", "dist", "node_modules", "output"];
 const NEVER_COPIED_FROM_A_PACKAGE = NEVER_COPIED.filter((name) => name !== "dist");
@@ -197,12 +197,9 @@ export async function plantWorkspace(
 ): Promise<string[]> {
   await rm(root, { recursive: true, force: true });
   for (const app of apps) {
-    await copyTree(exampleDir(app), path.join(root, app));
+    await copyTree(path.join(repoRoot, app), path.join(root, app));
   }
-  const packages = await workspaceClosure(
-    repoRoot,
-    apps.map((app) => `examples/${app}`),
-  );
+  const packages = await workspaceClosure(repoRoot, apps);
   for (const held of packages) {
     await copyInto(path.join(repoRoot, held), path.join(root, held), NEVER_COPIED_FROM_A_PACKAGE);
   }

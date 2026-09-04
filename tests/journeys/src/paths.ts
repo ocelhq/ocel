@@ -10,6 +10,10 @@ export const outputRoot = path.join(packageRoot, "output");
 
 export const ocelBin = process.env.OCEL_BIN ?? path.join(repoRoot, "cli", "bin", "ocel");
 
+export function exampleMember(dir: string): string {
+  return path.posix.join("examples", dir);
+}
+
 export function exampleDir(dir: string): string {
   return path.join(examplesDir, dir);
 }
