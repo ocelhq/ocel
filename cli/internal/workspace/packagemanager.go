@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -24,6 +25,8 @@ const (
 	yarnLock  = "yarn.lock"
 	bunLock   = "bun.lock"
 	yarnRcYml = ".yarnrc.yml"
+
+	berryLockHeader = "__metadata:"
 )
 
 type Commands struct {
@@ -33,18 +36,23 @@ type Commands struct {
 }
 
 func detect(root string) Manager {
+	declared := declaredManager(root)
 	present := map[Manager]bool{}
 	for name, manager := range map[string]Manager{
 		pnpmLock:              Pnpm,
 		npmLock:               Npm,
 		"npm-shrinkwrap.json": Npm,
-		yarnLock:              yarnAt(root),
+		yarnLock:              YarnClassic,
 		bunLock:               Bun,
 		"bun.lockb":           Bun,
 	} {
-		if _, err := os.Stat(filepath.Join(root, name)); err == nil {
-			present[manager] = true
+		if _, err := os.Stat(filepath.Join(root, name)); err != nil {
+			continue
 		}
+		if manager == YarnClassic {
+			manager = yarnAt(root, declared)
+		}
+		present[manager] = true
 	}
 	if len(present) == 0 {
 		return Unknown
@@ -54,8 +62,8 @@ func detect(root string) Manager {
 			return manager
 		}
 	}
-	if named := declaredManager(root); named != Unknown {
-		return named
+	if declared != Unknown {
+		return declared
 	}
 	for _, manager := range []Manager{Pnpm, YarnBerry, YarnClassic, Bun, Npm} {
 		if present[manager] {
@@ -65,8 +73,14 @@ func detect(root string) Manager {
 	return Unknown
 }
 
-func yarnAt(root string) Manager {
+func yarnAt(root string, declared Manager) Manager {
 	if _, err := os.Stat(filepath.Join(root, yarnRcYml)); err == nil {
+		return YarnBerry
+	}
+	if declared == YarnBerry {
+		return YarnBerry
+	}
+	if read, err := os.ReadFile(filepath.Join(root, yarnLock)); err == nil && strings.Contains(string(read), berryLockHeader) {
 		return YarnBerry
 	}
 	return YarnClassic
@@ -86,12 +100,17 @@ func declaredManager(root string) Manager {
 	case "bun":
 		return Bun
 	case "yarn":
-		if strings.HasPrefix(version, "1.") {
-			return YarnClassic
-		}
-		return YarnBerry
+		return yarnGeneration(version)
 	}
 	return Unknown
+}
+
+func yarnGeneration(version string) Manager {
+	major, _, _ := strings.Cut(strings.TrimSpace(version), ".")
+	if generation, err := strconv.Atoi(major); err == nil && generation < 2 {
+		return YarnClassic
+	}
+	return YarnBerry
 }
 
 func (l Location) Commands() Commands {

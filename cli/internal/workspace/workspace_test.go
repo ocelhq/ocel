@@ -255,6 +255,65 @@ func TestTheAppsOwnScriptsAreWhatTheImageRuns(t *testing.T) {
 	}
 }
 
+func TestYarnBerryIsToldFromClassicByEverythingThatNamesIt(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		declared string
+		lock     string
+		yarnrc   bool
+		want     workspace.Manager
+	}{
+		{
+			name:   "the .yarnrc.yml beside the lockfile names it",
+			lock:   "# yarn lockfile v1\n",
+			yarnrc: true,
+			want:   workspace.YarnBerry,
+		},
+		{
+			name:     "packageManager names it where nothing else does",
+			declared: "yarn@4.5.0",
+			lock:     "# yarn lockfile v1\n",
+			want:     workspace.YarnBerry,
+		},
+		{
+			name: "the lockfile's own header names it",
+			lock: "__metadata:\n  version: 8\n",
+			want: workspace.YarnBerry,
+		},
+		{
+			name:     "a yarn 1 lockfile under a yarn 1 packageManager stays classic",
+			declared: "yarn@1.22.22",
+			lock:     "# yarn lockfile v1\n",
+			want:     workspace.YarnClassic,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			root := `{"name":"root","workspaces":["apps/*"]}`
+			if tt.declared != "" {
+				root = `{"name":"root","packageManager":"` + tt.declared + `","workspaces":["apps/*"]}`
+			}
+			files := map[string]string{
+				"package.json":          root,
+				"apps/web/package.json": `{"name":"web"}`,
+				"yarn.lock":             tt.lock,
+			}
+			if tt.yarnrc {
+				files[".yarnrc.yml"] = "nodeLinker: node-modules\n"
+			}
+			write(t, dir, files)
+
+			got, err := workspace.Locate(filepath.Join(dir, "apps", "web"))
+			if err != nil {
+				t.Fatalf("Locate() = %v", err)
+			}
+			if got.Manager != tt.want {
+				t.Errorf("Locate().Manager = %q, want %q — a berry install is scoped by a command classic yarn does not have", got.Manager, tt.want)
+			}
+		})
+	}
+}
+
 func TestAGlobTheWorkspaceNegatesLeavesTheAppOutOfIt(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
