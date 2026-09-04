@@ -12,8 +12,11 @@ import (
 
 const (
 	InjectedPortName = "PORT"
+	PhaseEnvName     = "OCEL_PHASE"
 	ownedPrefix      = "OCEL_"
 )
+
+const PhaseResourcesSuppressed = "resources-suppressed"
 
 func ResourceEnvName(kind LinkType, resource string) string {
 	return naming.ResourceEnvName(WireLinkType(kind), resource)
@@ -61,6 +64,9 @@ func (r *deployRun) deliver(ctx context.Context, entry AppEntry, held AppValues)
 				entry.App, name)
 		}
 		delivered[name] = string(link.Wire)
+	}
+	if held.Phase != "" {
+		delivered[PhaseEnvName] = held.Phase
 	}
 	return delivered, nil
 }

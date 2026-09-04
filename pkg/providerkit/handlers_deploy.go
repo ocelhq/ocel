@@ -883,6 +883,7 @@ func (r *deployRun) manifestValues(entry AppEntry, grants []Link) (AppValues, er
 		Owners:    map[string]string{},
 		Links:     grants,
 		Folder:    entry.Manifest.GetFolder(),
+		Phase:     r.plan.Phase,
 	}
 	for _, variable := range entry.Manifest.GetVariables() {
 		switch variable.GetClass() {

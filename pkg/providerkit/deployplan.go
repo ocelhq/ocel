@@ -25,6 +25,7 @@ type DeployPlan struct {
 	PromotionID string
 	Tag         string
 	Builds      map[string]string
+	Phase       string
 }
 
 type AppEntry struct {
@@ -65,6 +66,9 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 		PromotionID: promotionID,
 		Tag:         req.GetTag(),
 		Builds:      make(map[string]string, len(manifest.GetApps())),
+	}
+	if req.GetSuppressResources() {
+		plan.Phase = PhaseResourcesSuppressed
 	}
 	if !ephemeral(env) {
 		plan.Infra = naming.InfraStack(name)

@@ -225,3 +225,30 @@ func TestAnAppIsRefusedBeforeItsRoleIsBuilt(t *testing.T) {
 		}
 	})
 }
+
+func TestASuppressedReleaseTellsAFunctionNothingWasProvisioned(t *testing.T) {
+	plan := providerkit.StackPlan{
+		Kind: providerkit.StackApp,
+		App: &providerkit.AppPlan{
+			App:    "web",
+			Values: providerkit.AppValues{Phase: providerkit.PhaseResourcesSuppressed},
+		},
+	}
+
+	env := releasing(t, Config{}).appEnv(plan, appBundle{}, sessionScope{})
+
+	if got := env[providerkit.PhaseEnvName]; got != providerkit.PhaseResourcesSuppressed {
+		t.Errorf("%s = %q, want %q: a function reads the phase off its environment like a container does",
+			providerkit.PhaseEnvName, got, providerkit.PhaseResourcesSuppressed)
+	}
+}
+
+func TestAReleaseThatProvisionsNamesNoPhase(t *testing.T) {
+	plan := providerkit.StackPlan{Kind: providerkit.StackApp, App: &providerkit.AppPlan{App: "web"}}
+
+	env := releasing(t, Config{}).appEnv(plan, appBundle{}, sessionScope{})
+
+	if got, held := env[providerkit.PhaseEnvName]; held {
+		t.Errorf("%s = %q, want a release that provisions to name no phase at all", providerkit.PhaseEnvName, got)
+	}
+}
