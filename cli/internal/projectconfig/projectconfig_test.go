@@ -176,24 +176,6 @@ export default {
 			},
 		},
 		{
-			name: "discovers each app's own ocel directory beside the project's",
-			config: `
-export default {
-  slug: "test-app",
-  apps: [
-    { name: "web", framework: "next", path: "./apps/web" },
-    { name: "api", framework: "express", path: "./apps/api" },
-  ],
-};
-`,
-			check: func(t *testing.T, root string, cfg *Config) {
-				want := []string{"ocel", "apps/web/ocel", "apps/api/ocel"}
-				if !slices.Equal(cfg.Discovery.Paths, want) {
-					t.Fatalf("Discovery.Paths = %v, want %v", cfg.Discovery.Paths, want)
-				}
-			},
-		},
-		{
 			name: "ignores a leftover project ID",
 			config: `
 export default {

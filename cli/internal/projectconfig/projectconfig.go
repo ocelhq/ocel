@@ -31,20 +31,6 @@ const initHint = "run `ocel init` to create one"
 
 var defaultDiscoveryPaths = []string{"ocel"}
 
-func discoveryPathsFor(apps []App) []string {
-	paths := slices.Clone(defaultDiscoveryPaths)
-	for _, app := range apps {
-		if app.Path == "" {
-			continue
-		}
-		under := filepath.ToSlash(filepath.Join(app.Path, defaultDiscoveryPaths[0]))
-		if !slices.Contains(paths, under) {
-			paths = append(paths, under)
-		}
-	}
-	return paths
-}
-
 type Discovery struct {
 	Paths []string
 }
@@ -362,7 +348,7 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 	}
 	paths := raw.Discovery.Paths
 	if len(paths) == 0 {
-		paths = discoveryPathsFor(apps)
+		paths = slices.Clone(defaultDiscoveryPaths)
 	}
 
 	domains, err := normalizeDomains(raw.Domains)
