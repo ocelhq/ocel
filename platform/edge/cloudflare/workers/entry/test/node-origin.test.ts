@@ -3,27 +3,12 @@ import { describe, expect, it } from "vitest";
 import { resolveServe, type ResolveBase, type ServeFetch } from "../src/index";
 import type { DeploymentRecord, DeploymentsBinding } from "../src/deployments";
 import { edgeOriginFetch } from "../src/signing";
-
-const FN_URL = "https://abc123.lambda-url.eu-west-2.on.aws/";
-
-function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
-  return {
-    app: "api",
-    runtime: "node",
-    buildId: "0123456789abcdef",
-    routingManifest: null,
-    functionUrls: { api: FN_URL },
-    assetPrefix: "",
-    isrPrefix: "",
-    createdAt: 1_000,
-    ...over,
-  };
-}
+import { FN_URL, capturing, makeRecord, withGlobalFetch } from "./origin-deps";
 
 function bindingReturning(record: DeploymentRecord): DeploymentsBinding {
   return {
     async pointerRecord() {
-      return { kind: "record", buildId: record.buildId, record };
+      return { kind: "record", identity: record.identity, record };
     },
   };
 }
@@ -46,30 +31,6 @@ async function resolved(
     deploymentId: "d1", host: "api.example.com", app: record.app },
     base(over),
   );
-}
-
-function capturing(): { calls: Request[]; fetch: typeof fetch } {
-  const calls: Request[] = [];
-  return {
-    calls,
-    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-      calls.push(new Request(input as RequestInfo, init));
-      return new Response("origin");
-    }) as typeof fetch,
-  };
-}
-
-async function withGlobalFetch<T>(
-  replacement: typeof fetch,
-  run: () => Promise<T>,
-): Promise<T> {
-  const original = globalThis.fetch;
-  globalThis.fetch = replacement;
-  try {
-    return await run();
-  } finally {
-    globalThis.fetch = original;
-  }
 }
 
 describe("node runtime serve path", () => {
