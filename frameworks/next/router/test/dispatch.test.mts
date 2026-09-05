@@ -557,6 +557,49 @@ describe("dispatchResult", () => {
     expect(captured?.headers.get("x-forwarded-proto")).toBe("https");
   });
 
+  it("drops the control headers a client sends and forwards every other x-ocel-* header", async () => {
+    let captured: Request | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/api/documents": {
+            kind: "lambda",
+            id: "/api/documents",
+            entryKey: "/api/documents",
+          },
+        },
+      },
+      functionUrls: { "/api/documents": "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req;
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/api/documents",
+        invocationTarget: { pathname: "/api/documents" },
+      },
+      new Request("https://cachelab.ocel.dev/api/documents", {
+        headers: {
+          "x-ocel-entry": "/admin",
+          "next-resume": "1",
+          "x-ocel-probe": "probe-value",
+        },
+      }),
+      deps,
+    );
+
+    expect(captured?.headers.get("x-ocel-entry")).toBe("/api/documents");
+    expect(captured?.headers.get("next-resume")).toBeNull();
+    expect(captured?.headers.get("x-ocel-probe")).toBe("probe-value");
+  });
+
   it("forwards a POST body intact after buffering it off the request stream", async () => {
     let captured: Request | undefined;
     const deps = baseDeps({

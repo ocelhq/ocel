@@ -102,7 +102,7 @@ function serving(path: string, headers: Record<string, string> = {}) {
 
 const forged = {
   "x-ocel-entry": "/admin",
-  "x-ocel-request-id": "forged",
+  "x-ocel-probe": "probe-value",
   "x-middleware-rewrite": "/admin",
   "x-middleware-subrequest": "middleware",
   "next-resume": "1",
@@ -122,11 +122,11 @@ test("the control headers a client forges never reach the local origin", async (
   await serving("/local", forged);
 
   const headers = seen[0]!;
-  expect(headers["x-ocel-request-id"]).toBeUndefined();
   expect(headers["x-middleware-rewrite"]).toBeUndefined();
   expect(headers["x-middleware-subrequest"]).toBeUndefined();
   expect(headers["next-resume"]).toBeUndefined();
   expect(headers["x-keep"]).toBe("yes");
+  expect(headers["x-ocel-probe"]).toBe("probe-value");
 });
 
 test("the entry a client names is replaced by the entry the route resolves to", async () => {
@@ -160,10 +160,14 @@ test("a sibling route is signed against its Function URL", async () => {
 
 test("withoutClientControl keeps everything the app is allowed to see", () => {
   const kept = withoutClientControl(
-    new Headers({ ...forged, cookie: "sid=1", "x-ocel-edge": "cloudfront" }),
+    new Headers({ ...forged, cookie: "sid=1", "x-middleware-skip": "1" }),
   );
 
-  expect([...kept.keys()].sort()).toEqual(["cookie", "x-keep"]);
+  expect([...kept.keys()].sort()).toEqual(["cookie", "x-keep", "x-ocel-probe"]);
+  expect(kept.get("x-ocel-entry")).toBeNull();
+  expect(kept.get("next-resume")).toBeNull();
+  expect(kept.get("x-middleware-skip")).toBeNull();
+  expect(kept.get("x-ocel-probe")).toBe("probe-value");
 });
 
 test("only a deploy that declared an origin router hosts one", () => {

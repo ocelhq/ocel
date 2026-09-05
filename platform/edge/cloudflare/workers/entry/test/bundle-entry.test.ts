@@ -456,24 +456,24 @@ describe("a client-supplied control header", () => {
     ).toHaveLength(1);
   });
 
-  it("is dropped for the whole x-ocel-* namespace, not just the entry", async () => {
+  it("is the only x-ocel-* header dropped; the rest of the namespace is the app's", async () => {
     const origin = recorder();
     await dispatchTo(
       "/blog/hello",
       lambdaDeps(origin, { kind: "lambda", id: "legacy" }),
       smuggled({
-        "x-ocel-empty-body": "1",
-        "x-ocel-cache": "HIT",
-        "x-ocel-entry-modified": "0",
-        "x-ocel-request-id": "spoofed",
+        [ENTRY_HEADER]: "attacker/admin/page",
+        "next-resume": "1",
+        "x-ocel-probe": "probe-value",
+        "x-ocel-injected": "from-the-proxy",
       }),
     );
 
-    expect(
-      [...origin.requests[0].headers.keys()].filter((n) =>
-        n.startsWith("x-ocel-"),
-      ),
-    ).toEqual([]);
+    const forwarded = origin.requests[0].headers;
+    expect(forwarded.has(ENTRY_HEADER)).toBe(false);
+    expect(forwarded.has("next-resume")).toBe(false);
+    expect(forwarded.get("x-ocel-probe")).toBe("probe-value");
+    expect(forwarded.get("x-ocel-injected")).toBe("from-the-proxy");
   });
 });
 

@@ -74,17 +74,12 @@ function withFlightVary(response: Response): Response {
 
 export const ENTRY_HEADER = "x-ocel-entry";
 
-const CONTROL_PREFIX = "x-ocel-";
-
-const CONTROL_HEADERS = ["next-resume"];
+export const CONTROL_HEADERS = [ENTRY_HEADER, "next-resume"];
 
 function withoutControlHeaders(headers: Headers): Headers {
   const kept = new Headers(headers);
   for (const name of [...headers.keys()]) {
-    const lower = name.toLowerCase();
-    if (lower.startsWith(CONTROL_PREFIX) || CONTROL_HEADERS.includes(lower)) {
-      kept.delete(name);
-    }
+    if (CONTROL_HEADERS.includes(name.toLowerCase())) kept.delete(name);
   }
   return kept;
 }
