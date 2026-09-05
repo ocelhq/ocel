@@ -13,6 +13,7 @@ on:
       - "turbo.json"
       - "scripts/floci.sh"
       - "scripts/assert-ran.sh"
+      - ".golangci.yml"
       - ".github/workflows/go.yml"
       - ".github/actions/gobuildcache/**"
       - ".github/actions/node-workspace/**"
@@ -102,26 +103,23 @@ jobs:
         if: matrix.group.name == 'providerkit'
         run: go generate -C platform/vps/provider ./...
 
-      - name: gofmt
-        run: |
-          unformatted=$(gofmt -l $DIRS)
-          if [ -n "$unformatted" ]; then
-            echo "::error::not gofmt'd:"
-            echo "$unformatted"
-            exit 1
-          fi
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.13.2
+          install-only: true
 
-      - name: go vet
-        run: go vet $PACKAGES
+      - name: golangci-lint
+        run: |
+          set -euo pipefail
+          for dir in $DIRS; do
+            (cd "$dir" && golangci-lint run ./...)
+          done
 
       - name: go build
         run: go build $PACKAGES
 
       - name: go test -race
         run: go test -race -count=1 $PACKAGES
-
-      - name: staticcheck
-        run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0-0.dev.0.20260824195211-6cb65e58a558 $PACKAGES
 
       - name: Pull the emulator both suites run against
         if: matrix.group.name == 'aws'
