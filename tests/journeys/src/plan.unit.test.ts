@@ -8,7 +8,7 @@ import {
   ROLLBACK_TITLE,
   UP_TITLE,
 } from "./plan";
-import { healthRows, probeRows, productRows, staticRows } from "./rows";
+import { ENV_ROW, healthRows, probeRows, productRows, staticRows } from "./rows";
 import {
   type Cell,
   cellsOf,
@@ -21,8 +21,6 @@ import {
 } from "./spec";
 
 const ALL_LEGS: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"];
-
-const STAMP = "GET /api/probes/env reports the greeting and never the secret";
 
 function base(fixture: FixtureSpec): Cell {
   return { name: fixtureNameOf(fixture), fixture };
@@ -80,7 +78,11 @@ describe("planning the two concerns of one framework", () => {
 
   it("asks the deploy cell for health, static and the probes, and nothing else", () => {
     expect(deploy.rows).toEqual([...healthRows, ...staticRows, ...probeRows]);
-    expect(deploy.rows.map((row) => row.title)).toContain(STAMP);
+  });
+
+  it("leaves the env row to the sdk cell, since defineEnv is what delivers it", () => {
+    expect(deploy.rows.map((row) => row.title)).not.toContain(ENV_ROW);
+    expect(sdk.rows.map((row) => row.title)).toContain(ENV_ROW);
   });
 
   it("still runs redeploy and rollback with the contract after each", () => {

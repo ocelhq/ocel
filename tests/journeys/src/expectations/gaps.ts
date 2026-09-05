@@ -29,7 +29,7 @@ export const gaps: Gap[] = [
     id: "env-set-needs-provider",
     reason: "ocel env set demands a provider, so dev cannot deliver GREETING or SECRET_TOKEN",
     issue: 881,
-    affects: [{ on: ["dev"], tests: [UP_TITLE], skip: true }],
+    affects: [{ on: ["dev"], cells: SDK_CELLS, tests: [UP_TITLE], skip: true }],
   },
   {
     id: "no-project-delete",

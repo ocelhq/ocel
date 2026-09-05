@@ -20,19 +20,7 @@ async function openSqlite() {
   return new Database(":memory:");
 }
 
-function greeting(): string {
-  return process.env.GREETING ?? "hello";
-}
-
-function hasSecret(): boolean {
-  return (process.env.SECRET_TOKEN ?? "").length > 0;
-}
-
 export const probes: Router = Router();
-
-probes.get("/env", (_req, res) => {
-  res.json({ greeting: greeting(), hasSecret: hasSecret(), arch: process.arch });
-});
 
 probes.get("/native", async (_req, res) => {
   const db = await openSqlite();
