@@ -27,9 +27,30 @@ describe("summary table", () => {
     expect(table.split("\n")[0]).toBe("## journey · dev · dev · run local-ada");
   });
 
-  it("carries one markdown row per planned test", () => {
+  it("lists only the tests that were not green", () => {
     const rows = table.split("\n").filter((line) => line.startsWith("| node/web"));
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toContain("GET /health");
+  });
+
+  it("still counts the green tests in the tally", () => {
+    expect(table.split("\n")[2]).toBe("green 1, red (expected) 1");
+  });
+
+  it("drops the table when everything was green", () => {
+    const green = reconcile({
+      planned: [{ cell: "node/web", title: "up", leg: "up" }],
+      results: [{ cell: "node/web", title: "up", outcome: "passed" }],
+      expectations: {},
+    });
+    const said = summaryTable(green, {
+      target: "dev",
+      environment: "dev",
+      runId: "local-ada",
+      leftOut: [],
+    });
+    expect(said).not.toContain("| cell |");
+    expect(said).toContain("green 1");
   });
 
   it("escapes a pipe inside a test title", () => {
