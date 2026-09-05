@@ -10,41 +10,45 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
+var Version = "dev"
+
 const (
-	identityRule = "▎"
 	identityGap  = "  "
 	identityName = "ocel"
 	accentColor  = 6
+	pillText     = 0
 )
 
 func IdentityBlock(present Presentation, ev *streamv1.IdentityEvent) []string {
-	accent, faint := identityStyles(present)
-	rule := accent.Render(identityRule) + " "
+	pill, faint := identityStyles(present)
 
 	head := identityHeadline(ev)
 	width := vendorWidth(ev)
-	rows := []string{
-		identityRow(rule, faint, width, ev.GetOrigin().GetVendor(), originValues(ev.GetOrigin())),
-		identityRow(rule, faint, width, ev.GetEdge().GetVendor(), []string{ev.GetEdge().GetAccount()}),
-	}
-
-	lines := make([]string, 0, len(rows)+2)
-	for _, row := range rows {
-		if row != "" {
-			lines = append(lines, row)
-		}
-	}
-	if head == "" && len(lines) == 0 {
+	rows := nonEmpty(
+		identityRow(faint, width, ev.GetOrigin().GetVendor(), originValues(ev.GetOrigin())),
+		identityRow(faint, width, ev.GetEdge().GetVendor(), []string{ev.GetEdge().GetAccount()}),
+	)
+	if head == "" && len(rows) == 0 {
 		return nil
 	}
-	return append(append([]string{rule + accent.Render(identityName) + head}, lines...), "")
+
+	lines := []string{"", pill.Render(identityName) + identityGap + faint.Render(Version) + head}
+	if len(rows) > 0 {
+		lines = append(append(lines, ""), rows...)
+	}
+	return append(lines, "")
 }
 
-func identityStyles(present Presentation) (accent, faint lipgloss.Style) {
+func identityStyles(present Presentation) (pill, faint lipgloss.Style) {
 	if !present.Color {
 		return lipgloss.NewStyle(), lipgloss.NewStyle()
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(accentColor)), lipgloss.NewStyle().Faint(true)
+	pill = lipgloss.NewStyle().
+		Background(lipgloss.ANSIColor(accentColor)).
+		Foreground(lipgloss.ANSIColor(pillText)).
+		Bold(true).
+		Padding(0, 1)
+	return pill, lipgloss.NewStyle().Faint(true)
 }
 
 func identityHeadline(ev *streamv1.IdentityEvent) string {
@@ -56,7 +60,7 @@ func identityHeadline(ev *streamv1.IdentityEvent) string {
 }
 
 func vendorWidth(ev *streamv1.IdentityEvent) int {
-	width := ansi.StringWidth(identityName)
+	width := 0
 	for _, vendor := range []string{ev.GetOrigin().GetVendor(), ev.GetEdge().GetVendor()} {
 		if w := ansi.StringWidth(vendor); w > width {
 			width = w
@@ -65,13 +69,13 @@ func vendorWidth(ev *streamv1.IdentityEvent) int {
 	return width
 }
 
-func identityRow(rule string, faint lipgloss.Style, width int, vendor string, values []string) string {
+func identityRow(faint lipgloss.Style, width int, vendor string, values []string) string {
 	values = nonEmpty(values...)
 	if vendor == "" && len(values) == 0 {
 		return ""
 	}
 	pad := strings.Repeat(" ", width-ansi.StringWidth(vendor)) + identityGap
-	return rule + faint.Render(vendor) + pad + strings.Join(values, identityGap)
+	return faint.Render(vendor) + pad + strings.Join(values, identityGap)
 }
 
 func originValues(party *streamv1.Party) []string {

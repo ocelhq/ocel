@@ -59,10 +59,11 @@ func TestRunDeploymentsLs(t *testing.T) {
 			}
 		}
 
-		banner, table, split := strings.Cut(out, "\n\n")
-		if !split || !strings.HasPrefix(banner, "▎ ocel  test-app › production") {
+		cut := strings.LastIndex(out, "\n\n")
+		if cut < 0 || !strings.HasPrefix(out, "\nocel  dev  test-app › production\n") {
 			t.Fatalf("stdout = %q, want the identity banner above the table", out)
 		}
+		table := out[cut+2:]
 		lines := strings.Split(strings.TrimRight(table, "\n"), "\n")
 		if len(lines) != 3 {
 			t.Fatalf("stdout = %q, want a header and two rows", out)
