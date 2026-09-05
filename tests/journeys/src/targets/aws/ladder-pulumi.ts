@@ -22,17 +22,13 @@ const EMULATED_SERVICES = [
 ];
 
 async function pulumiEnv(runId: string): Promise<NodeJS.ProcessEnv> {
-  const where = await place();
-  const env: NodeJS.ProcessEnv = {
+  const state = path.join(laneDir(runId, "aws"), "pulumi-state");
+  await mkdir(state, { recursive: true });
+  return {
     ...process.env,
     PULUMI_CONFIG_PASSPHRASE: "journey",
+    PULUMI_BACKEND_URL: `file://${state}`,
   };
-  if (where.world === "floci") {
-    const state = path.join(laneDir(runId, "aws"), "pulumi-state");
-    await mkdir(state, { recursive: true });
-    env.PULUMI_BACKEND_URL = `file://${state}`;
-  }
-  return env;
 }
 
 async function pulumi(dir: string, args: string[], env: NodeJS.ProcessEnv): Promise<string> {
