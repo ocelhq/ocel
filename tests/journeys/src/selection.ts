@@ -8,10 +8,12 @@ import {
   type FixtureSpec,
   fixtureNameOf,
   fixturesNamed,
+  spec,
   specForTarget,
   type TargetName,
   variantNameOf,
 } from "./spec";
+import { BASE } from "./variants";
 import type { Target } from "./targets/types";
 
 export const ENVIRONMENT_ENV = "OCEL_JOURNEY_ENVIRONMENT";
@@ -55,14 +57,15 @@ export function variantsAsked(
   if (named.length === 0) {
     return undefined;
   }
-  const offered = new Set(rows.flatMap((row) => cellsOf(row, target).map(variantNameOf)));
-  const unknown = named.filter((name) => !offered.has(name));
+  const known = new Set([BASE, ...spec.flatMap((row) => (row.variants ?? []).map((one) => one.name))]);
+  const unknown = named.filter((name) => !known.has(name));
   if (unknown.length > 0) {
     throw new Error(
-      `${target} runs no variant named ${unknown.join(", ")} (${[...offered].join(", ")})`,
+      `no fixture lists a variant named ${unknown.join(", ")} (${[...known].join(", ")})`,
     );
   }
-  return new Set(named);
+  const offered = new Set(rows.flatMap((row) => cellsOf(row, target).map(variantNameOf)));
+  return new Set(named.filter((name) => offered.has(name)));
 }
 
 export function skipsLifted(env: NodeJS.ProcessEnv): boolean {

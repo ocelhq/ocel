@@ -72,13 +72,16 @@ describe("the variants a run narrows to", () => {
     );
   });
 
-  it("refuses a variant no fixture runs on this target", () => {
+  it("refuses a variant no fixture lists anywhere", () => {
     expect(() => variantsAsked(rows, "aws", { [VARIANTS_ENV]: "fastly" })).toThrow(
-      /aws runs no variant named fastly \(base, container/,
+      /no fixture lists a variant named fastly \(base, container/,
     );
-    expect(() => variantsAsked(specForTarget("vps"), "vps", { [VARIANTS_ENV]: "container" })).toThrow(
-      /vps runs no variant named container/,
-    );
+  });
+
+  it("leaves out a variant another target runs, so one list serves every lane", () => {
+    expect(
+      variantsAsked(specForTarget("vps"), "vps", { [VARIANTS_ENV]: "base container cloudflare" }),
+    ).toEqual(new Set(["base"]));
   });
 });
 
