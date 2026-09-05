@@ -17,10 +17,15 @@ import (
 
 func setUpEnvFixture(t *testing.T) string {
 	t.Helper()
-	root, _ := clitest.SetUpDeployFixture(t)
-	t.Setenv(clitest.FakeVarsStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
-	return root
+	return clitest.SetUpEnvGateFixtureWith(t, "[]", envDeclaringScript(fixtureDefinitions))
 }
+
+const fixtureDefinitions = `[
+  {"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SECRET","required":true},
+  {"key":"API_TOKEN","class":"VARIABLE_CLASS_SECRET","required":true},
+  {"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true},
+  {"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}
+]`
 
 func envSet(t *testing.T, root, key, value string, opts envOptions) string {
 	t.Helper()
@@ -89,6 +94,21 @@ func discoveryRuns(t *testing.T, log string) int {
 }
 
 func TestRunEnvSet(t *testing.T) {
+	t.Run("refuses a key no app declares", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "SITE_HOSTNAME", "acme.example", envOptions{}, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSet(SITE_HOSTNAME) err = nil, want a key nothing declares refused: the gate delivers declared keys only, so the value would sit in the store and reach no build and no function")
+		}
+		for _, want := range []string{"SITE_HOSTNAME", "defineEnv"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want %q named", err, want)
+			}
+		}
+	})
+
 	t.Run("names the key it set, and the value it wrote reads back only when revealing is explicit", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 
@@ -280,7 +300,8 @@ func TestRunEnvSet(t *testing.T) {
 	})
 
 	t.Run("does not trust a cached absence for a conditionally scoped key", func(t *testing.T) {
-		root := clitest.SetUpEnvGateFixtureWith(t, "[]", clitest.EnvDeclareOnlyScript)
+		root := clitest.SetUpEnvGateFixtureWith(t,
+			`[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`, clitest.EnvDeclareOnlyScript)
 
 		envSet(t, root, "LOG_LEVEL", "info", envOptions{})
 
