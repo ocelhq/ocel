@@ -978,7 +978,11 @@ func (r *deployRun) warm(ctx context.Context, functions []Function, report Repor
 
 func declaredVariables(held AppValues) []edge.VariableRecord {
 	names := make([]string, 0, len(held.Plain)+len(held.Sensitive)+len(held.Secrets))
-	names = append(names, slices.Sorted(maps.Keys(held.Plain))...)
+	for _, key := range slices.Sorted(maps.Keys(held.Plain)) {
+		if !OcelWritten(key) {
+			names = append(names, key)
+		}
+	}
 	names = append(names, slices.Sorted(maps.Keys(held.Sensitive))...)
 	folders := make(map[string]string, len(held.Secrets))
 	for _, secret := range held.Secrets {

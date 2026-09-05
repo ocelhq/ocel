@@ -123,6 +123,15 @@ type AppValues struct {
 
 const PhaseEnvName = "OCEL_PHASE"
 
+const (
+	URLEnvName       = "OCEL_URL"
+	ClientURLEnvName = "NEXT_PUBLIC_OCEL_URL"
+)
+
+func OcelWritten(key string) bool {
+	return key == URLEnvName || key == ClientURLEnvName
+}
+
 func (v AppValues) Injected() map[string]string {
 	if v.Phase == "" {
 		return nil

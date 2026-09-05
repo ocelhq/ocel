@@ -2,8 +2,6 @@ package clientenv
 
 import (
 	"encoding/json"
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,8 +71,10 @@ func TestGenerate(t *testing.T) {
 			"const schema = { };\n" +
 			"\n" +
 			"export const clientEnv: {\n" +
+			"  readonly NEXT_PUBLIC_OCEL_URL: ClientValue<typeof schema, \"NEXT_PUBLIC_OCEL_URL\">;\n" +
 			"  readonly NEXT_PUBLIC_SITE_URL: ClientValue<typeof schema, \"NEXT_PUBLIC_SITE_URL\">;\n" +
 			"} = {\n" +
+			"  NEXT_PUBLIC_OCEL_URL: inlined(schema, \"NEXT_PUBLIC_OCEL_URL\", process.env.NEXT_PUBLIC_OCEL_URL),\n" +
 			"  NEXT_PUBLIC_SITE_URL: inlined(schema, \"NEXT_PUBLIC_SITE_URL\", process.env.NEXT_PUBLIC_SITE_URL),\n" +
 			"};\n"
 		if got := read(t, filepath.Join(dir, ".ocel", "env-client.ts")); got != want {
@@ -104,9 +104,11 @@ func TestGenerate(t *testing.T) {
 			"const schema = { ...declared(source0), };\n" +
 			"\n" +
 			"export const clientEnv: {\n" +
+			"  readonly NEXT_PUBLIC_OCEL_URL: ClientValue<typeof schema, \"NEXT_PUBLIC_OCEL_URL\">;\n" +
 			"  readonly NEXT_PUBLIC_PORT: ClientValue<typeof schema, \"NEXT_PUBLIC_PORT\">;\n" +
 			"  readonly NEXT_PUBLIC_SITE_URL: ClientValue<typeof schema, \"NEXT_PUBLIC_SITE_URL\">;\n" +
 			"} = {\n" +
+			"  NEXT_PUBLIC_OCEL_URL: inlined(schema, \"NEXT_PUBLIC_OCEL_URL\", process.env.NEXT_PUBLIC_OCEL_URL),\n" +
 			"  NEXT_PUBLIC_PORT: inlined(schema, \"NEXT_PUBLIC_PORT\", process.env.NEXT_PUBLIC_PORT),\n" +
 			"  NEXT_PUBLIC_SITE_URL: inlined(schema, \"NEXT_PUBLIC_SITE_URL\", process.env.NEXT_PUBLIC_SITE_URL),\n" +
 			"};\n"
@@ -323,21 +325,21 @@ func TestGenerate(t *testing.T) {
 		}
 	})
 
-	t.Run("leaves a project with no client values alone", func(t *testing.T) {
+	t.Run("gives a project with no client values the built-in one anyway", func(t *testing.T) {
 		t.Parallel()
 
 		dir := appDir(t)
-		before := read(t, filepath.Join(dir, "tsconfig.json"))
 
 		if err := Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
-		if _, err := os.Stat(filepath.Join(dir, ".ocel", "env-client.ts")); !errors.Is(err, fs.ErrNotExist) {
-			t.Errorf("an accessor was generated for a project with no client-accessible value (err = %v)", err)
+		got := read(t, filepath.Join(dir, ".ocel", "env-client.ts"))
+		if !strings.Contains(got, "NEXT_PUBLIC_OCEL_URL: inlined(schema, \"NEXT_PUBLIC_OCEL_URL\", process.env.NEXT_PUBLIC_OCEL_URL)") {
+			t.Errorf("accessor =\n%s\nwant the deployment url every app is handed, declared or not", got)
 		}
-		if got := read(t, filepath.Join(dir, "tsconfig.json")); got != before {
-			t.Errorf("tsconfig was edited:\n%s", got)
+		if strings.Contains(got, "STRIPE_API_KEY") {
+			t.Errorf("accessor =\n%s\nwant no server value in a browser bundle", got)
 		}
 	})
 
@@ -371,7 +373,7 @@ func TestCheckFresh(t *testing.T) {
 
 		root := t.TempDir()
 		built := []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
-		if err := Record(root, built); err != nil {
+		if err := Record(root, built, true); err != nil {
 			t.Fatalf("Record: %v", err)
 		}
 
@@ -396,7 +398,7 @@ func TestCheckFresh(t *testing.T) {
 			clientVar("PUBLIC_SITE_URL", "https://example.com"),
 			serverVar("STRIPE_API_KEY", "sk-live"),
 		}}}
-		if err := Record(root, built); err != nil {
+		if err := Record(root, built, true); err != nil {
 			t.Fatalf("Record: %v", err)
 		}
 
@@ -413,8 +415,8 @@ func TestCheckFresh(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := RecordUnresolved(root); err != nil {
-			t.Fatalf("RecordUnresolved: %v", err)
+		if err := Record(root, []App{{Name: "storefront"}}, false); err != nil {
+			t.Fatalf("Record: %v", err)
 		}
 
 		err := CheckFresh(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
@@ -435,7 +437,7 @@ func TestCheckFresh(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
+		if err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}, true); err != nil {
 			t.Fatalf("Record: %v", err)
 		}
 
@@ -470,7 +472,7 @@ func TestRecord(t *testing.T) {
 
 		root := t.TempDir()
 
-		err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
+		err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}, true)
 		if err != nil {
 			t.Fatalf("Record: %v", err)
 		}

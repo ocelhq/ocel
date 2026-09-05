@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,7 +89,7 @@ export default {
 			t.Errorf("tsconfig.json = %s, want it to map 'ocel/env/client' at the accessor", tsconfig)
 		}
 
-		if got, want := stdout.String(), "Generated the client accessor for 2 client-accessible variables\n"; got != want {
+		if got, want := stdout.String(), "Generated the client accessor for 3 client-accessible variables\n"; got != want {
 			t.Errorf("stdout = %q, want %q", got, want)
 		}
 	})
@@ -137,7 +136,7 @@ export default {
 		}
 	})
 
-	t.Run("writes nothing for a project with no client-accessible variable", func(t *testing.T) {
+	t.Run("writes the built-in deployment url for a project that declares no client value", func(t *testing.T) {
 		root := setUpGenerateFixture(t, generateSoloConfig, "{}\n")
 
 		deps := newDeps()
@@ -148,17 +147,21 @@ export default {
 			t.Fatalf("runGenerate: %v", err)
 		}
 
-		if _, err := os.Stat(filepath.Join(root, ".ocel", "env-client.ts")); !errors.Is(err, fs.ErrNotExist) {
-			t.Errorf("stat accessor = %v, want it not to exist for a project with no client-accessible variable", err)
+		accessor, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
+		if err != nil {
+			t.Fatalf("runGenerate wrote no accessor: %v", err)
+		}
+		if !strings.Contains(string(accessor), "NEXT_PUBLIC_OCEL_URL") {
+			t.Errorf("accessor = %s, want the deployment url every app is handed", accessor)
 		}
 		tsconfig, err := os.ReadFile(filepath.Join(root, "tsconfig.json"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := string(tsconfig); got != "{}\n" {
-			t.Errorf("tsconfig.json = %q, want it untouched", got)
+		if !strings.Contains(string(tsconfig), ".ocel/env-client.ts") {
+			t.Errorf("tsconfig.json = %s, want it to map 'ocel/env/client' at the accessor", tsconfig)
 		}
-		if got, want := stdout.String(), "No client-accessible variables declared; nothing to generate\n"; got != want {
+		if got, want := stdout.String(), "Generated the client accessor for 1 client-accessible variable\n"; got != want {
 			t.Errorf("stdout = %q, want %q", got, want)
 		}
 	})

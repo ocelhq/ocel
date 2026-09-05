@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
@@ -340,8 +342,18 @@ func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []
 		merged[runtimeAddressEnv] = runtimeAddress
 	}
 	merged[appFolderEnv] = appFolder
+	merged[appurl.Name] = localURL(merged[portEnv])
+	merged[appurl.ClientName] = merged[appurl.Name]
 	return merged
 }
+
+func localURL(port string) string {
+	return "http://localhost:" + cmp.Or(port, os.Getenv(portEnv), defaultDevPort)
+}
+
+const portEnv = "PORT"
+
+const defaultDevPort = "3000"
 
 const appFolderEnv = "OCEL_APP_FOLDER"
 

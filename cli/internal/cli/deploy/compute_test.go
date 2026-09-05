@@ -26,7 +26,7 @@ func TestTheManifestCarriesEveryAppsCompute(t *testing.T) {
 			Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "container"}},
 		}
 		clitest.StubAppImages(&deps, "api")
-		manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless")
+		manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil)
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
@@ -43,7 +43,7 @@ func TestTheManifestCarriesEveryAppsCompute(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		cfg := &projectconfig.Config{Dir: root, Slug: "prebuilt"}
-		_, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "container")
+		_, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "container", nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest() landed an app the config never names on container compute, so a provider would be handed an app with no image")
 		}
@@ -90,7 +90,7 @@ func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	}
 	clitest.StubAppImages(&deps, "api")
 
-	manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "container")
+	manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "container", nil)
 	if err != nil {
 		t.Fatalf("collectAndBuildManifest over a container app with no runtime: %v", err)
 	}

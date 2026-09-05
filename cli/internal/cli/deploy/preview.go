@@ -204,12 +204,12 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	spec.Dry = opts.dry
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
-		knownSlugs, compute, err := preflightPreviewUp(ctx, deps, ui, runner, cfg, env.GetIdentity(), stdout, stdin)
+		standing, err := preflightPreviewUp(ctx, deps, ui, runner, cfg, env.GetIdentity(), stdout, stdin)
 		if err != nil {
 			return err
 		}
 
-		proceed, err := guardNewProject(ctx, ui, cfg, knownSlugs)
+		proceed, err := guardNewProject(ctx, ui, cfg, standing.knownSlugs)
 		if err != nil || !proceed {
 			return err
 		}
@@ -231,7 +231,8 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 				}, scope)
 			},
 			command: "ocel preview up",
-			compute: compute,
+			compute: standing.compute,
+			urls:    standing.urls,
 			ui:      ui,
 			enabled: !opts.dry && browser,
 		}
@@ -279,7 +280,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	})
 }
 
-func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, rep runui.Reporter) error {
+func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, rep runui.Reporter) (edge.PreviewSite, error) {
 	declared := ""
 	if hosts := preflight.Hostnames(cfg, "preview"); len(hosts) > 0 {
 		declared = hosts[0].Name
@@ -289,7 +290,7 @@ func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.Previe
 
 	switch {
 	case declared == "" && base == "":
-		return fmt.Errorf("this project declares no preview domain and this bootstrap has no global one, so a preview deploy has nowhere to serve: "+
+		return edge.PreviewSite{}, fmt.Errorf("this project declares no preview domain and this bootstrap has no global one, so a preview deploy has nowhere to serve: "+
 			"add a project-level domains.preview wildcard (e.g. `domains: { preview: \"*.preview.acme.com\" }`) to %s, "+
 			"or run `ocel domain use '*.preview.acme.com' --preview` once to serve every project's previews on one shared wildcard — "+
 			"a preview domain binds to the whole project, which serves every app and every preview under that one wildcard, so it is never declared per app",
@@ -297,7 +298,7 @@ func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.Previe
 
 	case declared == "":
 		if err := checkGlobalPreviewDomain(wildcard, id, configName); err != nil {
-			return err
+			return edge.PreviewSite{}, err
 		}
 		rep.Diagnostic(fmt.Sprintf("Serving previews on global *.%s", base))
 
@@ -312,7 +313,10 @@ func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.Previe
 	if declared == "" {
 		site = edge.SharedPreview(cfg.Slug, base)
 	}
-	return site.LabelProblem(site.Hosts(pointer, previewAppNames(cfg)))
+	if err := site.LabelProblem(site.Hosts(pointer, previewAppNames(cfg))); err != nil {
+		return edge.PreviewSite{}, err
+	}
+	return site, nil
 }
 
 func previewAppNames(cfg *projectconfig.Config) []string {

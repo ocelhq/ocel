@@ -19,6 +19,7 @@ export {
   type VariableDefinition,
 } from "./definition.js";
 export { EnvClientError } from "./client.js";
+export { deployment, type Deployment } from "./deployment.js";
 export { EnvDefinitionError, EnvEdgeError, EnvValueError } from "./errors.js";
 export { EnvScopeError } from "./scope.js";
 

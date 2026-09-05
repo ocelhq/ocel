@@ -107,6 +107,16 @@ describe("definition errors", () => {
     expect(() => defineEnv({ OCEL_ROTATION_TOKEN: { class: "secret" } })).not.toThrow();
   });
 
+  it("rejects the deployment url under every class, since ocel writes it for every app", () => {
+    for (const key of ["OCEL_URL", "NEXT_PUBLIC_OCEL_URL"]) {
+      for (const variableClass of ["plain", "sensitive", "secret"] as const) {
+        expect(() => defineEnv({ [key]: { class: variableClass } })).toThrow(
+          /deployment\.url/,
+        );
+      }
+    }
+  });
+
   it("allows a name a provider or a bundler gives its own meaning", () => {
     expect(() => defineEnv({ AWS_REGION: { class: "plain" } })).not.toThrow();
     expect(() =>

@@ -144,6 +144,9 @@ func declaredNames(held AppValues) []string {
 	names := make([]string, 0, len(held.Plain)+len(held.Sensitive)+len(held.Secrets))
 	for _, named := range []map[string]string{held.Plain, held.Sensitive} {
 		for key := range named {
+			if OcelWritten(key) {
+				continue
+			}
 			names = append(names, key)
 		}
 	}

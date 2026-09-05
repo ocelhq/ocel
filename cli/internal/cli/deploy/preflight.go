@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/appregistry"
+	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
@@ -24,56 +25,69 @@ func preflightPreview(ctx context.Context, ui *runui.Session, runner *provider.R
 	return bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
 }
 
-func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) ([]string, string, error) {
+type standing struct {
+	knownSlugs []string
+	compute    string
+	urls       map[string]string
+}
+
+func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) (standing, error) {
 	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, "preview")), preflight.Runtimes(cfg), "ocel bootstrap preview")
 	if err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
 	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Package())
 	if err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
 	if err := appregistry.RequireSecret(cfg); err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
 	if err := deps.RequireImageBuilder(ctx, ui, cfg); err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), ui.Warning); err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
 	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
-	if err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, ui); err != nil {
-		return nil, "", err
+	site, err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, ui)
+	if err != nil {
+		return standing{}, err
 	}
-	return resp.GetKnownSlugs(), compute, nil
+	return standing{
+		knownSlugs: resp.GetKnownSlugs(),
+		compute:    compute,
+		urls: appurl.Preview(cfg, func(app string) string {
+			return site.Host(pointer, app)
+		}),
+	}, nil
 }
 
-func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) ([]string, string, error) {
+func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) (standing, error) {
 	domains := preflight.Names(preflight.Hostnames(cfg, "production"))
 	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(ui, domains, cfg), domains, preflight.Runtimes(cfg), "ocel bootstrap production")
 	if err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
 	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Package())
 	if err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
 	if err := appregistry.RequireSecret(cfg); err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
 	if err := deps.RequireImageBuilder(ctx, ui, cfg); err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), ui.Warning); err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
 	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
-		return nil, "", err
+		return standing{}, err
 	}
-	return resp.GetKnownSlugs(), compute, nil
+	return standing{knownSlugs: resp.GetKnownSlugs(), compute: compute, urls: appurl.Production(cfg)}, nil
 }
 
 func settleBootstrap(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
