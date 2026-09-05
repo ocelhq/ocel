@@ -66,6 +66,7 @@ func Execute() error {
 }
 
 func init() {
+	runui.Version = version
 	s := newDeps()
 
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")

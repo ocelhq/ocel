@@ -90,7 +90,9 @@ func (s *Stream) Resume() {
 
 func (s *Stream) Close() error {
 	if s.r != nil {
-		return s.r.Close()
+		err := s.r.Close()
+		fmt.Fprintln(s.w)
+		return err
 	}
 	return nil
 }

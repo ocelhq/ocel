@@ -444,7 +444,7 @@ export default {
 				t.Errorf("stdout missing %q:\n%s", want, out)
 			}
 		}
-		banner := strings.Index(out, "▎")
+		banner := strings.Index(out, "test-app › production")
 		build := strings.Index(out, "Building project")
 		deploy := strings.Index(out, "DEPLOY ")
 		if banner < 0 || build < 0 || deploy < 0 {
@@ -476,7 +476,7 @@ export default {
 		if !strings.Contains(out, "Deployed") {
 			t.Fatalf("stdout = %q, want the deploy to have proceeded", out)
 		}
-		for _, want := range []string{"▎ ocel  test-app › production", "▎ aws   123456789012  us-east-1", "▎ edge  abcd1234"} {
+		for _, want := range []string{"\nocel  dev  test-app › production", "aws   123456789012  us-east-1", "edge  abcd1234"} {
 			if !strings.Contains(out, want+"\n") {
 				t.Errorf("stdout missing %q with no terminal attached:\n%s", want, out)
 			}

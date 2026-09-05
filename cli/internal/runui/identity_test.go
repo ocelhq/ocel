@@ -31,15 +31,17 @@ func TestIdentityBlock(t *testing.T) {
 		{
 			name: "an origin and an edge, each account against its vendor",
 			ev:   awsAndCloudflare,
-			want: "▎ ocel  acme › production\n" +
-				"▎ aws         123456789012  deploy  us-east-1\n" +
-				"▎ cloudflare  a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4\n",
+			want: "\nocel  dev  acme › production\n" +
+				"\n" +
+				"aws         123456789012  deploy  us-east-1\n" +
+				"cloudflare  a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4\n",
 		},
 		{
 			name: "a host with no region reads as principal at host, and no edge line",
 			ev:   vps,
-			want: "▎ ocel  acme › preview\n" +
-				"▎ vps   deploy@srv1.example.com\n",
+			want: "\nocel  dev  acme › preview\n" +
+				"\n" +
+				"vps  deploy@srv1.example.com\n",
 		},
 		{
 			name: "an unnamed project leaves the tier standing alone",
@@ -47,8 +49,9 @@ func TestIdentityBlock(t *testing.T) {
 				Tier:   environmentv1.Tier_TIER_PRODUCTION,
 				Origin: &streamv1.Party{Vendor: "aws", Account: "123456789012", Location: "us-east-1"},
 			},
-			want: "▎ ocel  production\n" +
-				"▎ aws   123456789012  us-east-1\n",
+			want: "\nocel  dev  production\n" +
+				"\n" +
+				"aws  123456789012  us-east-1\n",
 		},
 		{
 			name: "an empty identity says nothing at all",
@@ -66,7 +69,7 @@ func TestIdentityBlock(t *testing.T) {
 		})
 	}
 
-	t.Run("colour paints the rule and the name, and nothing else", func(t *testing.T) {
+	t.Run("colour paints the pill, the version and the vendors, and nothing else", func(t *testing.T) {
 		t.Parallel()
 
 		lines := IdentityBlock(Presentation{Color: true}, awsAndCloudflare)
