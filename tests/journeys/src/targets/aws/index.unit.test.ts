@@ -1,12 +1,23 @@
 import { describe, expect, it } from "bun:test";
-import { bootstrapFeatures } from "./index";
+import { type Cell, cellsOf, specByName, specForTarget } from "../../spec";
+import { cellsBySlugPart } from "./index";
 
-describe("the features the one aws bootstrap applies", () => {
-  it("asks a real account for every feature the provider offers", () => {
-    expect(bootstrapFeatures("real")).toBe("all");
+const fixture = specByName("deploy", "express");
+
+function named(name: string): Cell {
+  return { name, fixture };
+}
+
+describe("cellsBySlugPart", () => {
+  it("keys every cell the aws lane runs, and loses none of them", () => {
+    const cells = specForTarget("aws").flatMap((row) => cellsOf(row, "aws"));
+
+    expect(cellsBySlugPart(cells).size).toBe(cells.length);
   });
 
-  it("leaves the cloudflare edge out under floci, where nothing answers for the Cloudflare API", () => {
-    expect(bootstrapFeatures("floci")).toBe("isr,image-optimization,cloudfront-edge,apigateway-edge");
+  it("refuses two cells that slug to one part, rather than dropping one", () => {
+    expect(() =>
+      cellsBySlugPart([named("deploy/express-api-gateway"), named("deploy/express/api-gateway")]),
+    ).toThrow(/both slug to deploy-express-api-gateway/);
   });
 });
