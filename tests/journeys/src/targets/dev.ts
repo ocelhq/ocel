@@ -11,6 +11,7 @@ import {
 import { INITIAL_GREETING, redact, SECRET_TOKEN } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { JOURNEY_CONFIG } from "../config";
+import { live, relay } from "../live";
 import { runOcel, treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
 import { migrates, setsEnv } from "../rows";
@@ -127,6 +128,9 @@ async function serve(
   };
   child.stdout?.on("data", capture);
   child.stderr?.on("data", capture);
+  const say = live(`${cell.name} up/dev-${app} |`);
+  relay(child.stdout, say);
+  relay(child.stderr, say);
 
   const handle: Running = { app, port, child, output: () => captured };
   try {

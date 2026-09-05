@@ -42,6 +42,10 @@ export function resultsFile(runId: string, target: string, cell: string): string
   return path.join(cellsDir(runId, target), `${fileNameOf(cell)}.jsonl`);
 }
 
+export function liveFile(runId: string, target: string): string {
+  return path.join(laneDir(runId, target), "live.log");
+}
+
 export function prepareFile(runId: string, target: string): string {
   return path.join(laneDir(runId, target), "prepare.json");
 }

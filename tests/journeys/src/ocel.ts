@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { shapeFor, writeJourneyConfig } from "./config";
 import { redact, REDACTED } from "./contract";
+import { live, relay, type Say } from "./live";
 import { fixtureMember, ocelBin, treeDir } from "./paths";
 import type { Leg, TargetName } from "./spec";
 import type { CellContext } from "./targets/types";
@@ -41,19 +42,26 @@ export async function spawnOcel(
   dir: string,
   args: string[],
   env: NodeJS.ProcessEnv,
+  say: Say = live("ocel |"),
 ): Promise<Ran> {
   return new Promise<Ran>((resolve, reject) => {
     const child = spawn(ocelBin, args, { cwd: dir, env });
     let stdout = "";
     let stderr = "";
+    say(`$ ocel ${maskArgs(args)}`);
     child.stdout.on("data", (chunk) => {
       stdout += String(chunk);
     });
     child.stderr.on("data", (chunk) => {
       stderr += String(chunk);
     });
+    relay(child.stdout, say);
+    relay(child.stderr, say);
     child.on("error", reject);
-    child.on("close", (code) => resolve({ code, stdout, stderr }));
+    child.on("close", (code) => {
+      say(`exited ${code}`);
+      resolve({ code, stdout, stderr });
+    });
   });
 }
 
@@ -63,8 +71,13 @@ export function exitedBadly(args: string[], result: Ran): Error {
   );
 }
 
-export async function ocel(dir: string, args: string[], env: NodeJS.ProcessEnv): Promise<Ran> {
-  const result = await spawnOcel(dir, args, env);
+export async function ocel(
+  dir: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  say?: Say,
+): Promise<Ran> {
+  const result = await spawnOcel(dir, args, env, say);
   if (result.code !== 0) {
     throw exitedBadly(args, result);
   }
@@ -80,7 +93,7 @@ export async function runOcel(
   env: NodeJS.ProcessEnv,
 ): Promise<Ran> {
   const began = Date.now();
-  const result = await spawnOcel(dir, args, env);
+  const result = await spawnOcel(dir, args, env, live(`${cell.name} ${leg}/${name} |`));
   await cell.evidence.append(
     COMMAND_LOG,
     JSON.stringify({ leg, name, ms: Date.now() - began, code: result.code }),
