@@ -236,6 +236,17 @@ describe("node middleware forwarding", () => {
     expect(res.headers.getSetCookie()).toEqual(["sid=abc; Path=/"]);
   });
 
+  it("redirects to the middleware's own Location without carrying the request query", async () => {
+    const origin = fakeOrigin(() => mwResponse({ location: "/login" }, { status: 307 }));
+    const res = await serve(
+      new Request("https://app.example/static.txt?a=1"),
+      staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("/login");
+  });
+
   it("forwards a request-header override to the origin", async () => {
     const origin = fakeOrigin((req) => {
       if (new URL(req.url).host === new URL(MW_URL).host) {
