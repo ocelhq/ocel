@@ -30,10 +30,10 @@ func builtWithPhase(t *testing.T, cfg *projectconfig.Config, envByApp map[string
 	return gotReq, gotEnv
 }
 
-func TestBuildHandsTheAppTheSuppressedPhase(t *testing.T) {
+func TestBuildHandsTheAppThePhaseItIsIn(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a suppressed deploy builds every app in the phase", func(t *testing.T) {
+	t.Run("a named phase reaches every app the config lists", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
@@ -46,11 +46,11 @@ func TestBuildHandsTheAppTheSuppressedPhase(t *testing.T) {
 			},
 		}
 
-		req, _ := builtWithPhase(t, cfg, map[string]map[string]string{"web": {"POSTHOG_ID": "ph-123"}}, providerkit.PhaseResourcesSuppressed)
+		req, _ := builtWithPhase(t, cfg, map[string]map[string]string{"web": {"POSTHOG_ID": "ph-123"}}, "discovery")
 
 		for _, app := range req.Apps {
-			if got := app.Env[providerkit.PhaseEnvName]; got != providerkit.PhaseResourcesSuppressed {
-				t.Errorf("app %s built with %s = %q, want %q, so the SDK knows nothing is provisioned", app.Name, providerkit.PhaseEnvName, got, providerkit.PhaseResourcesSuppressed)
+			if got := app.Env[providerkit.PhaseEnvName]; got != "discovery" {
+				t.Errorf("app %s built with %s = %q, want %q, so the SDK knows what it is in", app.Name, providerkit.PhaseEnvName, got, "discovery")
 			}
 		}
 		if got := req.Apps[0].Env["POSTHOG_ID"]; got != "ph-123" {
@@ -64,10 +64,10 @@ func TestBuildHandsTheAppTheSuppressedPhase(t *testing.T) {
 		root := t.TempDir()
 		writeBuilder(t, root)
 
-		_, env := builtWithPhase(t, &projectconfig.Config{Dir: root}, nil, providerkit.PhaseResourcesSuppressed)
+		_, env := builtWithPhase(t, &projectconfig.Config{Dir: root}, nil, "discovery")
 
-		if got, _ := lookup(env, providerkit.PhaseEnvName); got != providerkit.PhaseResourcesSuppressed {
-			t.Errorf("builder env carries %s = %q, want %q", providerkit.PhaseEnvName, got, providerkit.PhaseResourcesSuppressed)
+		if got, _ := lookup(env, providerkit.PhaseEnvName); got != "discovery" {
+			t.Errorf("builder env carries %s = %q, want %q", providerkit.PhaseEnvName, got, "discovery")
 		}
 	})
 
