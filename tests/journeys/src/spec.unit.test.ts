@@ -4,12 +4,15 @@ import {
   cellsOf,
   CONCERNS,
   concernsAsked,
+  legsOf,
+  LIVES,
   type FixtureSpec,
   fixtureNameOf,
   fixturesNamed,
   groupKeyOf,
   groups,
   preferredOf,
+  SERVES,
   spec,
   specByName,
   variantNameOf,
@@ -26,6 +29,7 @@ const rows: FixtureSpec[] = [
     kind: "composite",
     rows: [],
     apps: [],
+    legs: SERVES,
   },
   {
     name: "node",
@@ -35,6 +39,7 @@ const rows: FixtureSpec[] = [
     kind: "composite",
     rows: [],
     apps: [],
+    legs: LIVES,
   },
 ];
 
@@ -52,6 +57,8 @@ describe("the concerns named in the environment", () => {
     expect(concernsAsked("sdk deploy")).toEqual(["deploy", "sdk"]);
     expect(concernsAsked("sdk")).toEqual(["sdk"]);
     expect(concernsAsked("deploy,sdk")).toEqual(["deploy", "sdk"]);
+    expect(concernsAsked("sdk lifecycle deploy")).toEqual(["deploy", "lifecycle", "sdk"]);
+    expect(concernsAsked("lifecycle")).toEqual(["lifecycle"]);
   });
 
   it("refuses a name that is no concern", () => {
@@ -170,7 +177,34 @@ describe("the spec table", () => {
     }
   });
 
+  it("names the legs of every row, and only the lifecycle concern and the ladders live", () => {
+    for (const row of spec) {
+      expect(row.legs.length).toBeGreaterThan(0);
+      expect(row.legs).toEqual(
+        row.concern === "lifecycle" || row.kind === "ladder" ? LIVES : SERVES,
+      );
+    }
+  });
+
   it("refuses a name the concern does not carry", () => {
     expect(() => specByName("deploy", "with-sst")).toThrow(/no deploy fixture named with-sst/);
+  });
+});
+
+describe("the legs a cell runs", () => {
+  const lifecycle = specByName("lifecycle", "next");
+  const sdkNext = specByName("sdk", "next");
+
+  it("is what the fixture lists, kept in the fixture's order", () => {
+    expect(legsOf(lifecycle, LIVES)).toEqual(LIVES);
+    expect(legsOf(lifecycle, ["destroy", "contract", "up", "rollback", "redeploy"])).toEqual(LIVES);
+  });
+
+  it("drops a leg the target cannot run", () => {
+    expect(legsOf(lifecycle, SERVES)).toEqual(SERVES);
+  });
+
+  it("drops a leg the fixture does not ask for, whatever the target offers", () => {
+    expect(legsOf(sdkNext, LIVES)).toEqual(SERVES);
   });
 });

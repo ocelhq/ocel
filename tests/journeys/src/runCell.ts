@@ -22,7 +22,7 @@ import {
 } from "./plan";
 import { readPrepareFailure } from "./prepare";
 import { cellNamed, environmentFrom, selectionFor } from "./selection";
-import { type Cell, ladderTitle, type Leg } from "./spec";
+import { type Cell, ladderTitle, type Leg, legsOf } from "./spec";
 import { selectedTarget } from "./targets";
 import type { CellContext, Deployment } from "./targets/types";
 
@@ -93,6 +93,7 @@ function describeSelected({ name, fixture, variant }: Cell) {
     );
   }
 
+  const legs = legsOf(fixture, target.legs);
   const rows = fixture.rows;
   const hooks = fixture.hooks;
   const publishRows = hooks?.rows?.filter((row) => row.phase === "publish") ?? [];
@@ -220,7 +221,7 @@ function describeSelected({ name, fixture, variant }: Cell) {
     });
     contractPerApp("contract");
 
-    if (target.legs.includes("redeploy")) {
+    if (legs.includes("redeploy")) {
       const redeploy = target.redeploy;
       assert.ok(redeploy, `${target.name} declares a redeploy leg without a redeploy`);
       const redeployed = once(async () => {
@@ -234,7 +235,7 @@ function describeSelected({ name, fixture, variant }: Cell) {
       contractPerApp("redeploy");
     }
 
-    if (target.legs.includes("rollback")) {
+    if (legs.includes("rollback")) {
       const rollback = target.rollback;
       assert.ok(rollback, `${target.name} declares a rollback leg without a rollback`);
       const rolledBack = once(async () => {

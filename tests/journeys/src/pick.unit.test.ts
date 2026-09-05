@@ -14,6 +14,7 @@ import {
   fixtureNameOf,
   groupKeyOf,
   preferredOf,
+  SERVES,
   spec,
   specByName,
   specForTarget,
@@ -53,7 +54,7 @@ describe("picking one member of a group", () => {
     }
   });
 
-  it("picks one member per concern, so a run covers both buckets", () => {
+  it("picks one member per grouped concern", () => {
     const { chosen } = pickFixtures(spec, { seed: "7", touched: [] });
     const picked = chosen.filter((row) => groupKeyOf(row) !== undefined);
     expect(new Set(picked.map((row) => row.concern))).toEqual(new Set(["deploy", "sdk"]));
@@ -94,6 +95,7 @@ describe("picking one member of a group that names no preferred one", () => {
     group: "made-up",
     rows: [],
     apps: ["web"],
+    legs: SERVES,
   }));
 
   it("reaches the same member twice for the same seed", () => {

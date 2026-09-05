@@ -66,10 +66,10 @@ describe("the gap list", () => {
   it("names every cell it lists by the concern the fixture belongs to", () => {
     for (const environment of ENVIRONMENTS) {
       for (const cell of Object.keys(expectationsFor(environment))) {
-        assert.match(cell, /^(deploy|sdk)\//, `${cell} on ${environment}`);
+        assert.match(cell, /^(deploy|lifecycle|sdk)\//, `${cell} on ${environment}`);
       }
       for (const cell of Object.keys(skippedOn(environment))) {
-        assert.match(cell, /^(deploy|sdk)\//, `${cell} on ${environment}`);
+        assert.match(cell, /^(deploy|lifecycle|sdk)\//, `${cell} on ${environment}`);
       }
     }
   });
@@ -108,6 +108,7 @@ describe("the gap list", () => {
 
   it("lists the same real-world up on every serverless edge for the sdk cells that fail everywhere", () => {
     const everywhere: Record<string, number[]> = {
+      "lifecycle/next/web": [849],
       "sdk/node/web": [911],
       "sdk/next/web": [849],
       "sdk/workspace/next": [849],
@@ -178,6 +179,7 @@ describe("the gap list", () => {
       "deploy/next-api-gateway/web": [906],
       "deploy/workspace-api-gateway/express": [906],
       "deploy/workspace-api-gateway/next": [906],
+      "lifecycle/next-api-gateway/web": [849],
       "sdk/node-api-gateway/web": [884],
       "sdk/next-api-gateway/web": [849],
       "sdk/with-pulumi-api-gateway/web": [856],
@@ -187,16 +189,19 @@ describe("the gap list", () => {
       "sdk/workspace-api-gateway/next": [849],
     });
     const node = "sdk/node-api-gateway/web";
+    const lifecycle = "lifecycle/next-api-gateway/web";
     assert.deepEqual(issues(listed, node, HEALTH), [854]);
-    assert.deepEqual(issues(listed, node, contractTitle("redeploy", HEALTH)), [854]);
+    assert.deepEqual(issues(listed, node, contractTitle("redeploy", HEALTH)), []);
+    assert.deepEqual(issues(listed, lifecycle, contractTitle("redeploy", HEALTH)), [854]);
     assert.deepEqual(issues(listed, node, STREAM), [851]);
     assert.deepEqual(issues(listed, "deploy/node-api-gateway/web", HEALTH), [854]);
     for (const row of nextCacheRows) {
       const issue = row.title === EDGE_ISR_TITLE ? 899 : 854;
+      for (const cell of ["sdk/next-api-gateway/web", "deploy/next-api-gateway/web"]) {
+        assert.deepEqual(issues(listed, cell, row.title), [issue], cell);
+      }
       for (const leg of CONTRACT_LEGS) {
-        for (const cell of ["sdk/next-api-gateway/web", "deploy/next-api-gateway/web"]) {
-          assert.deepEqual(issues(listed, cell, contractTitle(leg, row.title)), [issue], cell);
-        }
+        assert.deepEqual(issues(listed, lifecycle, contractTitle(leg, row.title)), [issue], leg);
       }
     }
   });
@@ -255,19 +260,21 @@ describe("the gap list", () => {
     assert.deepEqual(vps, expectationsFor("vps.incus"));
     assert.deepEqual(upIssues(vps, Object.keys(vps)), {
       "deploy/next/web": [],
+      "lifecycle/next/web": [918],
       "sdk/node/web": [918],
       "sdk/next/web": [918],
       "sdk/workspace/express": [918],
       "sdk/workspace/next": [918],
     });
+    for (const cell of ["sdk/next/web", "deploy/next/web"]) {
+      assert.deepEqual(issues(vps, cell, nextCacheRows[0]?.title ?? ""), [900], cell);
+    }
     for (const leg of CONTRACT_LEGS) {
-      for (const cell of ["sdk/next/web", "deploy/next/web"]) {
-        assert.deepEqual(
-          issues(vps, cell, contractTitle(leg, nextCacheRows[0]?.title ?? "")),
-          [900],
-          cell,
-        );
-      }
+      assert.deepEqual(
+        issues(vps, "lifecycle/next/web", contractTitle(leg, nextCacheRows[0]?.title ?? "")),
+        [900],
+        leg,
+      );
     }
     assert.equal(vps["deploy/node/web"], undefined);
   });
