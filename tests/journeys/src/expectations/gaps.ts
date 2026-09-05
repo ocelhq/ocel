@@ -1,28 +1,16 @@
 import { EDGE_ISR_TITLE } from "../nextCache";
 import { DESTROY_TITLE, UP_TITLE } from "../plan";
-import { type Edge, EDGES } from "../spec";
 import type { Gap } from "./types";
-
-function on(edge: Edge, cells: string[]): string[] {
-  return edge === EDGES[0] ? cells : cells.map((cell) => cell.replace("/", `-${edge}/`));
-}
-
-function everyEdge(cells: string[]): string[] {
-  return EDGES.flatMap((edge) => on(edge, cells));
-}
 
 const NODE_HTTP = ["express/web", "hono/web", "fastify/web"];
 const COMPOSITE = [...NODE_HTTP, "next/web"];
-const HELLO = ["express-hello/web", "hono-hello/web", "fastify-hello/web", "next-hello/web"];
-const HELLO_WORKSPACE = ["workspace-hello/next", "workspace-hello/express"];
 const WORKSPACE = ["workspace/next", "workspace/express"];
-const EVERY_AWS_CELL_BUT_LADDERS = [
-  ...COMPOSITE,
-  ...HELLO,
-  ...HELLO_WORKSPACE,
-  ...WORKSPACE,
-  "with-transforms/web",
-];
+const EVERY_AWS_CELL_BUT_LADDERS = [...COMPOSITE, ...WORKSPACE, "with-transforms/web"];
+
+const BASE = ["base"];
+const HELLO = ["hello"];
+const SERVERLESS = ["base", "api-gateway", "cloudflare"];
+const ON_API_GATEWAY = ["api-gateway", "hello-api-gateway"];
 
 const UPLOAD_ROW = "the upload protocol stores a document and /api/documents lists it";
 const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
@@ -34,7 +22,7 @@ export const gaps: Gap[] = [
     id: "env-set-needs-provider",
     reason: "ocel env set demands a provider, so dev cannot deliver GREETING or SECRET_TOKEN",
     issue: 881,
-    affects: [{ on: ["dev"], tests: [UP_TITLE] }],
+    affects: [{ on: ["dev"], tests: [UP_TITLE], skip: true }],
   },
   {
     id: "no-project-delete",
@@ -60,26 +48,55 @@ export const gaps: Gap[] = [
     id: "no-bucket-on-a-box",
     reason: "the vps provider serves no bucket, so every composite example is refused at up",
     issue: 918,
-    affects: [{ on: ["vps", "vps.incus"], cells: [...COMPOSITE, ...WORKSPACE], tests: [UP_TITLE] }],
+    affects: [
+      {
+        on: ["vps", "vps.incus"],
+        cells: [...COMPOSITE, ...WORKSPACE],
+        variants: BASE,
+        tests: [UP_TITLE],
+        skip: true,
+      },
+    ],
   },
   {
     id: "no-router-on-a-box",
     reason: "vps serves a Next app from a container behind Caddy, with no cache router in front",
     issue: 900,
-    affects: [{ on: ["vps", "vps.incus"], cells: ["next/web"], tests: [{ rows: ["next-cache"] }] }],
+    affects: [
+      {
+        on: ["vps", "vps.incus"],
+        cells: ["next/web"],
+        variants: BASE,
+        tests: [{ rows: ["next-cache"] }],
+      },
+    ],
   },
   {
     id: "sst-util-global",
     reason: "@ocel/sst reads $util off globalThis, which SST 3.19 does not set",
     issue: 857,
-    affects: [{ on: ["aws", "aws.floci"], cells: everyEdge(["with-sst/web"]), tests: [UP_TITLE] }],
+    affects: [
+      {
+        on: ["aws", "aws.floci"],
+        cells: ["with-sst/web"],
+        variants: SERVERLESS,
+        tests: [UP_TITLE],
+        skip: true,
+      },
+    ],
   },
   {
     id: "pulumi-provider-serialisation",
     reason: "@ocel/pulumi's dynamic provider cannot be serialised, so pulumi up fails at preview",
     issue: 856,
     affects: [
-      { on: ["aws", "aws.floci"], cells: everyEdge(["with-pulumi/web"]), tests: [UP_TITLE] },
+      {
+        on: ["aws", "aws.floci"],
+        cells: ["with-pulumi/web"],
+        variants: SERVERLESS,
+        tests: [UP_TITLE],
+        skip: true,
+      },
     ],
   },
   {
@@ -87,19 +104,28 @@ export const gaps: Gap[] = [
     reason:
       "the aws journey migrates through ocel run, which needs a console link the lane never has",
     issue: 911,
-    affects: [{ on: ["aws"], cells: everyEdge(NODE_HTTP), tests: [UP_TITLE] }],
+    affects: [
+      { on: ["aws"], cells: NODE_HTTP, variants: SERVERLESS, tests: [UP_TITLE], skip: true },
+    ],
   },
   {
     id: "build-needs-postgres",
     reason: "ocel build fails collecting page data for /api/todos without a resolved postgres",
     issue: 849,
     affects: [
-      { on: ["aws"], cells: everyEdge(["next/web", ...WORKSPACE]), tests: [UP_TITLE] },
+      {
+        on: ["aws"],
+        cells: ["next/web", ...WORKSPACE],
+        variants: SERVERLESS,
+        tests: [UP_TITLE],
+        skip: true,
+      },
       {
         on: ["aws.floci"],
-        edge: ["api-gateway"],
-        cells: on("api-gateway", ["next/web", ...WORKSPACE]),
+        cells: ["next/web", ...WORKSPACE],
+        variants: ["api-gateway"],
         tests: [UP_TITLE],
+        skip: true,
       },
     ],
   },
@@ -110,9 +136,10 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws", "aws.floci"],
-        edge: ["api-gateway"],
-        cells: on("api-gateway", ["next-hello/web", ...HELLO_WORKSPACE]),
+        cells: ["next/web", ...WORKSPACE],
+        variants: ["hello-api-gateway"],
         tests: [UP_TITLE],
+        skip: true,
       },
     ],
   },
@@ -123,9 +150,17 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        edge: ["cloudfront"],
-        cells: [...HELLO, ...HELLO_WORKSPACE, "with-transforms/web"],
+        cells: [...COMPOSITE, ...WORKSPACE],
+        variants: HELLO,
         tests: [UP_TITLE],
+        skip: true,
+      },
+      {
+        on: ["aws"],
+        cells: ["with-transforms/web"],
+        variants: BASE,
+        tests: [UP_TITLE],
+        skip: true,
       },
     ],
   },
@@ -136,9 +171,10 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        edge: ["cloudflare"],
-        cells: on("cloudflare", [...HELLO, ...HELLO_WORKSPACE, "with-transforms/web"]),
+        cells: ["with-transforms/web"],
+        variants: ["cloudflare"],
         tests: [UP_TITLE],
+        skip: true,
       },
     ],
   },
@@ -149,8 +185,8 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        edge: ["api-gateway"],
-        cells: on("api-gateway", ["with-transforms/web"]),
+        cells: ["with-transforms/web"],
+        variants: ["api-gateway"],
         tests: [{ row: LINK_QUERY_ROW }],
       },
     ],
@@ -163,8 +199,8 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        edge: ["api-gateway"],
-        cells: on("api-gateway", ["with-transforms/web"]),
+        cells: ["with-transforms/web"],
+        variants: ["api-gateway"],
         tests: [{ row: LINK_ROW, legs: ["redeploy"] }],
       },
     ],
@@ -177,9 +213,10 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws.floci"],
-        edge: ["api-gateway"],
-        cells: on("api-gateway", [...NODE_HTTP, "with-transforms/web"]),
+        cells: [...NODE_HTTP, "with-transforms/web"],
+        variants: ["api-gateway"],
         tests: [UP_TITLE],
+        skip: true,
       },
     ],
   },
@@ -191,8 +228,8 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws.floci"],
-        edge: ["api-gateway"],
-        cells: on("api-gateway", EVERY_AWS_CELL_BUT_LADDERS),
+        cells: EVERY_AWS_CELL_BUT_LADDERS,
+        variants: ON_API_GATEWAY,
         tests: [{ rows: "every", except: [STREAM_ROW, EDGE_ISR_TITLE] }],
       },
     ],
@@ -201,7 +238,7 @@ export const gaps: Gap[] = [
     id: "no-streamed-body",
     reason: "a floci Function URL never delivers the body of a streamed response and hangs",
     issue: 851,
-    affects: [{ on: ["aws.floci"], edge: ["api-gateway"], tests: [{ row: STREAM_ROW }] }],
+    affects: [{ on: ["aws.floci"], variants: ["api-gateway"], tests: [{ row: STREAM_ROW }] }],
   },
   {
     id: "edge-runtime-isr",
@@ -210,8 +247,8 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws.floci"],
-        edge: ["api-gateway"],
-        cells: on("api-gateway", ["next/web"]),
+        cells: ["next/web"],
+        variants: ["api-gateway"],
         tests: [{ row: EDGE_ISR_TITLE }],
       },
     ],
@@ -220,7 +257,9 @@ export const gaps: Gap[] = [
     id: "aws-container-unimplemented",
     reason: "the aws provider advertises serverless only, so preflight refuses a container app",
     issue: 937,
-    affects: [{ on: ["aws", "aws.floci"], compute: ["container"], tests: [UP_TITLE] }],
+    affects: [
+      { on: ["aws", "aws.floci"], variants: ["container"], tests: [UP_TITLE], skip: true },
+    ],
   },
   {
     id: "cloudfront-stub",
@@ -229,9 +268,10 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws.floci"],
-        edge: ["cloudfront"],
         cells: EVERY_AWS_CELL_BUT_LADDERS,
+        variants: [...BASE, ...HELLO],
         tests: [UP_TITLE],
+        skip: true,
       },
     ],
   },
@@ -242,9 +282,10 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws.floci"],
-        edge: ["cloudflare"],
-        cells: on("cloudflare", EVERY_AWS_CELL_BUT_LADDERS),
+        cells: EVERY_AWS_CELL_BUT_LADDERS,
+        variants: ["cloudflare"],
         tests: [UP_TITLE],
+        skip: true,
       },
     ],
   },

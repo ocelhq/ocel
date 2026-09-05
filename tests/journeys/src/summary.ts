@@ -1,5 +1,13 @@
-import { issueUrl, type Listed } from "./expectations";
+import { issueUrl, type Listed, type Skipped } from "./expectations";
 import { exitCodeFor, type Report, type ReportRow, type Verdict } from "./reconcile";
+
+export type SummaryMeta = {
+  target: string;
+  environment: string;
+  runId: string;
+  leftOut: string[];
+  skipped?: Skipped;
+};
 
 const MARKS: Record<Verdict, string> = {
   ok: "green",
@@ -41,17 +49,22 @@ function gapLines(report: Report): string[] {
   );
 }
 
-export function summaryTable(
-  report: Report,
-  meta: { target: string; environment: string; runId: string; leftOut: string[] },
-): string {
+function skippedLines(skipped: Skipped): string[] {
+  return Object.entries(skipped).map(
+    ([cell, listed]) => `- skipped ${escape(cell)} — ${listed.map(link).join(", ")}`,
+  );
+}
+
+export function summaryTable(report: Report, meta: SummaryMeta): string {
   const counts = new Map<Verdict, number>();
   for (const entry of report.rows) {
     counts.set(entry.verdict, (counts.get(entry.verdict) ?? 0) + 1);
   }
-  const tally = [...counts.entries()]
-    .map(([verdict, count]) => `${MARKS[verdict]} ${count}`)
-    .join(", ");
+  const skipped = Object.keys(meta.skipped ?? {}).length;
+  const tally = [
+    ...[...counts.entries()].map(([verdict, count]) => `${MARKS[verdict]} ${count}`),
+    ...(skipped > 0 ? [`skipped cells ${skipped}`] : []),
+  ].join(", ");
 
   return [
     `## journey · ${meta.target} · ${meta.environment} · run ${meta.runId}`,
@@ -60,6 +73,7 @@ export function summaryTable(
     tally,
     "",
     ...gapLines(report),
+    ...skippedLines(meta.skipped ?? {}),
     "",
     "| cell | test | verdict | gap |",
     "| --- | --- | --- | --- |",

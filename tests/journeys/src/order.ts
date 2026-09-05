@@ -1,4 +1,4 @@
-import type { ExampleSpec, Kind } from "./spec";
+import type { Cell, Kind } from "./spec";
 
 const RANK: Record<Kind, number> = {
   ladder: 0,
@@ -6,6 +6,6 @@ const RANK: Record<Kind, number> = {
   workspace: 2,
 };
 
-export function longestFirst(rows: ExampleSpec[]): ExampleSpec[] {
-  return [...rows].sort((a, b) => RANK[a.kind] - RANK[b.kind]);
+export function longestFirst(cells: Cell[]): Cell[] {
+  return [...cells].sort((a, b) => RANK[a.example.kind] - RANK[b.example.kind]);
 }

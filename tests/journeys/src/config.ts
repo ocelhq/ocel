@@ -48,8 +48,7 @@ export function shapeFor(cell: CellContext, target: TargetName, env: NodeJS.Proc
       return {
         base: AWS_BASE,
         slug: cell.slug,
-        ...(cell.compute === "container" ? { compute: cell.compute } : {}),
-        ...(cell.edge === undefined ? {} : { edge: cell.edge }),
+        ...cell.variant?.config,
         ...(env.OCEL_JOURNEY_DNS === "cloudflare" ? { dns: "cloudflare" as const } : {}),
         ...(zone ? { hostnames: hostnamesOf(cell, zone) } : {}),
       };

@@ -4,22 +4,15 @@ import { ladderRows } from "./targets/aws/ladder";
 import { pulumiHooks } from "./targets/aws/ladder-pulumi";
 import { sstHooks } from "./targets/aws/ladder-sst";
 import type { CellContext } from "./targets/types";
+import { AWS, BASE, hello, helloApiGateway, runsOn, type Variant } from "./variants";
 
 export type Framework = "express" | "hono" | "fastify" | "next";
 
 export type Kind = "composite" | "ladder" | "workspace";
 
-export type Mode = "full" | "hello";
-
 export type Edge = "cloudfront" | "api-gateway" | "cloudflare";
 
-export const EDGES: Edge[] = ["cloudfront", "api-gateway", "cloudflare"];
-
 export type { Compute };
-
-export type Variant = { mode: Mode; compute: Compute; edge?: Edge };
-
-export type Offered = { modes: Mode[]; computes: Compute[]; edges: Edge[] };
 
 export type Group = { name: string; preferred: string };
 
@@ -61,16 +54,18 @@ export type ExampleSpec = {
   framework?: Framework;
   kind: Kind;
   group?: string;
-  modes?: Mode[];
   suites: Suite[];
   apps: string[];
   targets?: TargetName[];
+  variants?: Variant[];
   hooks?: LadderHooks;
 };
 
+export type Cell = { name: string; example: ExampleSpec; variant?: Variant };
+
 export const groups: Group[] = [{ name: "node-http", preferred: "workspace" }];
 
-const HELLO_SUITES: Suite[] = ["health", "static"];
+const COMPOSITE: Variant[] = [hello, ...AWS, helloApiGateway];
 
 export const spec: ExampleSpec[] = [
   {
@@ -79,9 +74,9 @@ export const spec: ExampleSpec[] = [
     framework: "express",
     kind: "composite",
     group: "node-http",
-    modes: ["full", "hello"],
     suites: ["health", "static", "product", "probes"],
     apps: ["web"],
+    variants: COMPOSITE,
   },
   {
     name: "hono",
@@ -89,9 +84,9 @@ export const spec: ExampleSpec[] = [
     framework: "hono",
     kind: "composite",
     group: "node-http",
-    modes: ["full", "hello"],
     suites: ["health", "static", "product", "probes"],
     apps: ["web"],
+    variants: COMPOSITE,
   },
   {
     name: "fastify",
@@ -99,27 +94,27 @@ export const spec: ExampleSpec[] = [
     framework: "fastify",
     kind: "composite",
     group: "node-http",
-    modes: ["full", "hello"],
     suites: ["health", "static", "product", "probes"],
     apps: ["web"],
+    variants: COMPOSITE,
   },
   {
     name: "next",
     dir: "next",
     framework: "next",
     kind: "composite",
-    modes: ["full", "hello"],
     suites: ["health", "static", "product", "probes", "next-routing", "next-cache"],
     apps: ["web"],
+    variants: COMPOSITE,
   },
   {
     name: "workspace",
     dir: "workspace",
     kind: "workspace",
     group: "node-http",
-    modes: ["full", "hello"],
     suites: ["health", "static", "product", "probes"],
     apps: ["next", "express"],
+    variants: COMPOSITE,
   },
   {
     name: "with-transforms",
@@ -129,6 +124,7 @@ export const spec: ExampleSpec[] = [
     suites: ["health", "static", "links"],
     apps: ["web"],
     targets: ["aws"],
+    variants: AWS,
   },
   {
     name: "with-sst",
@@ -138,6 +134,7 @@ export const spec: ExampleSpec[] = [
     suites: ["health", "static", "links"],
     apps: ["web"],
     targets: ["aws"],
+    variants: AWS,
     hooks: { ...sstHooks, rows: ladderRows },
   },
   {
@@ -148,42 +145,45 @@ export const spec: ExampleSpec[] = [
     suites: ["health", "static", "links"],
     apps: ["web"],
     targets: ["aws"],
+    variants: AWS,
     hooks: { ...pulumiHooks, rows: ladderRows },
   },
 ];
 
-export function modesOf(example: ExampleSpec, offered: Mode[]): Mode[] {
-  return (example.modes ?? ["full"]).filter((mode) => offered.includes(mode));
+export function cellNameOf(example: ExampleSpec, variant: Variant | undefined): string {
+  return variant === undefined ? example.name : `${example.name}-${variant.name}`;
 }
 
-export function variantsOf(example: ExampleSpec, offered: Offered): Variant[] {
-  const edges: Array<Edge | undefined> = offered.edges.length === 0 ? [undefined] : offered.edges;
-  return modesOf(example, offered.modes).flatMap((mode) =>
-    edges.flatMap((edge) =>
-      offered.computes.map((compute) =>
-        edge === undefined ? { mode, compute } : { mode, compute, edge },
-      ),
-    ),
-  );
+export function variantsOf(example: ExampleSpec, target: TargetName): Variant[] {
+  const listed = example.variants ?? [];
+  const names = listed.map((one) => one.name);
+  const twice = names.find((name, index) => names.indexOf(name) !== index);
+  if (twice) {
+    throw new Error(`${example.name} lists the ${twice} variant twice`);
+  }
+  return listed.filter((one) => runsOn(one, target));
 }
 
-export function cellNameOf(example: ExampleSpec, variant: Variant, offered: Offered): string {
+export function cellsOf(example: ExampleSpec, target: TargetName): Cell[] {
   return [
-    example.name,
-    ...(variant.mode === "hello" ? ["hello"] : []),
-    ...(variant.edge === undefined || variant.edge === offered.edges[0] ? [] : [variant.edge]),
-    ...(variant.compute === offered.computes[0] ? [] : [variant.compute]),
-  ].join("-");
+    { name: example.name, example },
+    ...variantsOf(example, target).map((variant) => ({
+      name: cellNameOf(example, variant),
+      example,
+      variant,
+    })),
+  ];
 }
 
-export function suitesOf(example: ExampleSpec, mode: Mode): Suite[] {
-  return mode === "hello"
-    ? example.suites.filter((suite) => HELLO_SUITES.includes(suite))
-    : example.suites;
+export function variantNameOf(cell: Pick<Cell, "variant">): string {
+  return cell.variant?.name ?? BASE;
 }
 
-export function cellNamesOf(example: ExampleSpec, offered: Offered): string[] {
-  return variantsOf(example, offered).map((variant) => cellNameOf(example, variant, offered));
+export function suitesOf(example: ExampleSpec, variant: Variant | undefined): Suite[] {
+  const kept = variant?.suites;
+  return kept === undefined
+    ? example.suites
+    : example.suites.filter((suite) => kept.includes(suite));
 }
 
 export function preferredOf(group: string): string | undefined {

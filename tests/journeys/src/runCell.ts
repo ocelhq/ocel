@@ -11,7 +11,6 @@ import { evidence } from "./evidence";
 import { currentRunIdentity, projectSlug } from "./identity";
 import { ledgerFor } from "./ledger";
 import { evidenceDir, exampleDir } from "./paths";
-import { failureFor, readPrepareFailures } from "./prepare";
 import {
   cellKey,
   contractTitle,
@@ -22,16 +21,9 @@ import {
   ROLLBACK_TITLE,
   UP_TITLE,
 } from "./plan";
-import { selectionFor } from "./selection";
-import {
-  cellNameOf,
-  type ExampleSpec,
-  ladderTitle,
-  type Leg,
-  type Offered,
-  suitesOf,
-  type Variant,
-} from "./spec";
+import { readPrepareFailure } from "./prepare";
+import { cellNamed, environmentFrom, selectionFor } from "./selection";
+import { type Cell, ladderTitle, type Leg, suitesOf } from "./spec";
 import { selectedTarget } from "./targets";
 import type { CellContext, Deployment } from "./targets/types";
 
@@ -45,30 +37,25 @@ function once<T>(work: Once<T>): Once<T> {
   };
 }
 
-export function describeCell(example: ExampleSpec) {
-  const { naming, covered } = selectionFor(selectedTarget());
-  for (const variant of covered.get(example.name) ?? []) {
-    describeVariant(example, variant, naming);
-  }
+export function describeCell(name: string) {
+  const target = selectedTarget();
+  describeSelected(cellNamed(selectionFor(target, environmentFrom()), name));
 }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function describeVariant(example: ExampleSpec, variant: Variant, offered: Offered) {
+function describeSelected({ name, example, variant }: Cell) {
   const target = selectedTarget();
   const runId = currentRunIdentity();
-  const name = cellNameOf(example, variant, offered);
   const slug = projectSlug(name, runId);
   const dir = exampleDir(example.dir);
-  const suites = suitesOf(example, variant.mode);
+  const suites = suitesOf(example, variant);
   const cell: CellContext = {
     example,
     name,
-    mode: variant.mode,
-    compute: variant.compute,
-    ...(variant.edge === undefined ? {} : { edge: variant.edge }),
+    ...(variant === undefined ? {} : { variant }),
     suites,
     dir,
     slug,
@@ -120,7 +107,7 @@ function describeVariant(example: ExampleSpec, variant: Variant, offered: Offere
   let greeting = INITIAL_GREETING;
   const notes = new Map<string, string>();
 
-  const prepareFailure = failureFor(readPrepareFailures(runId, target.name), cell.edge);
+  const prepareFailure = readPrepareFailure(runId, target.name);
   let setupFailure: { error: unknown } | undefined = prepareFailure
     ? { error: new Error(prepareFailure) }
     : undefined;

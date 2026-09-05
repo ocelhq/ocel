@@ -1,18 +1,22 @@
 import { describe, expect, it } from "bun:test";
-import { type Coverage, coverageFrom, coverVariants, type Pick, pickExamples } from "./pick";
 import {
-  cellNameOf,
+  type CellsFor,
+  type Coverage,
+  coverageFrom,
+  coverCells,
+  type Pick,
+  pickExamples,
+} from "./pick";
+import {
+  type Cell,
+  cellsOf,
   type ExampleSpec,
-  modesOf,
-  type Offered,
   preferredOf,
   spec,
   specByName,
   specForTarget,
-  type Variant,
-  variantsOf,
+  variantNameOf,
 } from "./spec";
-import { targetNamed } from "./targets";
 
 const nodeHttp = spec.filter((row) => row.group === "node-http").map((row) => row.name);
 
@@ -51,7 +55,8 @@ describe("picking one member of a group", () => {
 
   it("runs every member the diff touches", () => {
     const { chosen, leftOut } = pickExamples(spec, { seed: "7", touched: ["express", "hono"] });
-    expect(names(chosen)).toEqual(expect.arrayContaining(["express", "hono"]));
+    expect(names(chosen)).toContain("express");
+    expect(names(chosen)).toContain("hono");
     expect(names(leftOut)).toEqual(["fastify", PREFERRED]);
   });
 
@@ -91,131 +96,116 @@ describe("picking one member of a group that names no preferred one", () => {
   });
 });
 
-const AWS = targetNamed("aws");
 const ROWS = specForTarget("aws");
 const NODE_HTTP = ROWS.filter((row) => row.group === "node-http");
-const GROUPS = [NODE_HTTP, [specByName("next")]];
 const SEEDS = ["1", "2", "3", "4", "5", "938"];
 
-function cellsOf(rows: ExampleSpec[], offered: Offered, coverage: Coverage, pick: Pick): string[] {
-  const covered = coverVariants(rows, offered, coverage, pick);
-  return rows.flatMap((row) =>
-    (covered.get(row.name) ?? []).map((variant) => cellNameOf(row, variant, offered)),
-  );
+const onAws: CellsFor = (example) => cellsOf(example, "aws");
+
+function cellsOn(
+  rows: ExampleSpec[],
+  cellsFor: CellsFor,
+  coverage: Coverage,
+  pick: Pick | undefined,
+): Cell[] {
+  const covered = coverCells(rows, cellsFor, coverage, pick);
+  return rows.flatMap((row) => covered.get(row.name) ?? []);
 }
 
 const seeded = (seed: string, touched: string[] = []): Pick => ({ seed, touched });
 
-function coveredVariants(rows: ExampleSpec[], pick: Pick): Variant[] {
-  const covered = coverVariants(rows, AWS, "covering", pick);
-  return rows.flatMap((row) => covered.get(row.name) ?? []);
+function variantsCovered(rows: ExampleSpec[], cellsFor: CellsFor, pick: Pick): string[] {
+  return cellsOn(rows, cellsFor, "covering", pick).map(variantNameOf);
 }
 
-function holds(rows: ExampleSpec[], pick: Pick, wanted: Partial<Variant>): boolean {
-  return coveredVariants(rows, pick).some((variant) =>
-    Object.entries(wanted).every(([axis, value]) => variant[axis as keyof Variant] === value),
-  );
-}
-
-describe("covering the axes a target offers one factor at a time", () => {
-  it("runs every variant of every example under full coverage", () => {
-    const covered = coverVariants(ROWS, AWS, "full", seeded("7"));
+describe("covering the variants a group lists, one member each", () => {
+  it("runs every cell of every example under full coverage", () => {
+    const covered = coverCells(ROWS, onAws, "full", seeded("7"));
     for (const row of ROWS) {
-      expect(covered.get(row.name)).toEqual(variantsOf(row, AWS));
+      expect(covered.get(row.name)).toEqual(onAws(row));
     }
   });
 
-  it("runs each non-default edge at the default mode and compute", () => {
+  it("runs each variant the group lists on exactly one member", () => {
     for (const seed of SEEDS) {
-      for (const group of GROUPS) {
-        for (const edge of AWS.edges.slice(1)) {
-          expect(
-            holds(group, seeded(seed), { edge, mode: AWS.modes[0], compute: AWS.computes[0] }),
-          ).toBe(true);
-        }
+      const variants = variantsCovered(NODE_HTTP, onAws, seeded(seed));
+      for (const variant of ["hello", "container", "api-gateway", "cloudflare"]) {
+        expect(variants.filter((one) => one === variant)).toHaveLength(1);
       }
     }
   });
 
-  it("runs each non-default compute at the default mode and edge", () => {
-    for (const seed of SEEDS) {
-      for (const group of GROUPS) {
-        for (const compute of AWS.computes.slice(1)) {
-          expect(
-            holds(group, seeded(seed), { compute, mode: AWS.modes[0], edge: AWS.edges[0] }),
-          ).toBe(true);
-        }
-      }
-    }
+  it("runs the base cell on the group's preferred member", () => {
+    const covered = coverCells(NODE_HTTP, onAws, "covering", seeded("7"));
+    expect(covered.get(PREFERRED)?.map((cell) => cell.name)).toContain(PREFERRED);
   });
 
-  it("runs each non-default mode at the default compute and edge", () => {
+  it("runs a base cell on every member that took no variant", () => {
     for (const seed of SEEDS) {
-      for (const group of GROUPS) {
-        for (const mode of AWS.modes.slice(1)) {
-          expect(
-            holds(group, seeded(seed), { mode, compute: AWS.computes[0], edge: AWS.edges[0] }),
-          ).toBe(true);
-        }
+      const covered = coverCells(NODE_HTTP, onAws, "covering", seeded(seed));
+      for (const row of NODE_HTTP) {
+        expect((covered.get(row.name) ?? []).length).toBeGreaterThan(0);
       }
     }
-  });
-
-  it("runs the default variant on the group's preferred member", () => {
-    const covered = coverVariants(NODE_HTTP, AWS, "covering", seeded("7"));
-    expect(covered.get(PREFERRED)).toContainEqual(variantsOf(specByName(PREFERRED), AWS)[0]);
   });
 
   it("names each cell once", () => {
     for (const seed of SEEDS) {
-      const cells = cellsOf(ROWS, AWS, "covering", seeded(seed));
+      const cells = cellsOn(ROWS, onAws, "covering", seeded(seed)).map((cell) => cell.name);
       expect(new Set(cells).size).toBe(cells.length);
     }
   });
 
-  it("runs the whole product of an example the diff touches", () => {
-    const covered = coverVariants(ROWS, AWS, "covering", seeded("7", ["hono"]));
-    expect(covered.get("hono")).toEqual(variantsOf(specByName("hono"), AWS));
-    expect((covered.get("express") ?? []).length).toBeLessThan(
-      variantsOf(specByName("express"), AWS).length,
-    );
+  it("runs every cell of an example the diff touches", () => {
+    const covered = coverCells(ROWS, onAws, "covering", seeded("7", ["hono"]));
+    expect(covered.get("hono")).toEqual(onAws(specByName("hono")));
+    expect((covered.get("express") ?? []).length).toBeLessThan(onAws(specByName("express")).length);
   });
 
   it("reaches the same cells twice for one seed, and moves them across seeds", () => {
-    expect(cellsOf(ROWS, AWS, "covering", seeded("1234"))).toEqual(
-      cellsOf(ROWS, AWS, "covering", seeded("1234")),
-    );
+    const once = cellsOn(ROWS, onAws, "covering", seeded("1234")).map((cell) => cell.name);
+    expect(cellsOn(ROWS, onAws, "covering", seeded("1234")).map((cell) => cell.name)).toEqual(once);
     const seen = new Set<string>();
     for (let seed = 1; seed <= 40; seed += 1) {
-      for (const cell of cellsOf(NODE_HTTP, AWS, "covering", seeded(String(seed)))) {
-        seen.add(cell);
+      for (const cell of cellsOn(NODE_HTTP, onAws, "covering", seeded(String(seed)))) {
+        seen.add(cell.name);
       }
     }
-    expect(seen.size).toBeGreaterThan(cellsOf(NODE_HTTP, AWS, "covering", seeded("1")).length);
+    expect(seen.size).toBeGreaterThan(
+      cellsOn(NODE_HTTP, onAws, "covering", seeded("1")).length,
+    );
   });
 
-  it("asks a member for no mode it does not run", () => {
-    const ladder = specByName("with-transforms");
-    const covered = coverVariants([ladder], AWS, "covering", seeded("3"));
-    for (const variant of covered.get(ladder.name) ?? []) {
-      expect(modesOf(ladder, AWS.modes)).toContain(variant.mode);
+  it("hands a variant only to a member that has a cell for it", () => {
+    const skipping: CellsFor = (example) =>
+      onAws(example).filter((cell) => !(example.name === "express" && cell.variant?.name === "hello"));
+    for (const seed of SEEDS) {
+      const covered = coverCells(NODE_HTTP, skipping, "covering", seeded(seed));
+      expect(covered.get("express")?.some((cell) => cell.name === "express-hello")).toBe(false);
+      expect(variantsCovered(NODE_HTTP, skipping, seeded(seed))).toContain("hello");
     }
   });
 
-  it("leaves a target with one compute and no edge at its full product", () => {
+  it("drops a variant no member has a cell for", () => {
+    const noCloudflare: CellsFor = (example) =>
+      onAws(example).filter((cell) => cell.variant?.name !== "cloudflare");
+    expect(variantsCovered(NODE_HTTP, noCloudflare, seeded("3"))).not.toContain("cloudflare");
+  });
+
+  it("runs every cell of an example that stands in no group", () => {
     for (const name of ["vps", "dev"] as const) {
-      const target = targetNamed(name);
       const rows = specForTarget(name);
-      const covered = coverVariants(rows, target, "covering", seeded("9"));
+      const cellsFor: CellsFor = (example) => cellsOf(example, name);
+      const covered = coverCells(rows, cellsFor, "covering", seeded("9"));
       for (const row of rows.filter((one) => one.group === undefined)) {
-        expect(covered.get(row.name)).toEqual(variantsOf(row, target));
+        expect(covered.get(row.name)).toEqual(cellsFor(row));
       }
     }
   });
 });
 
 describe("the coverage a run asks for", () => {
-  it("covers rather than runs the whole product when nothing says", () => {
+  it("covers rather than runs every cell when nothing says", () => {
     expect(coverageFrom({})).toBe("covering");
     expect(coverageFrom({ OCEL_JOURNEY_COVERAGE: " " })).toBe("covering");
   });

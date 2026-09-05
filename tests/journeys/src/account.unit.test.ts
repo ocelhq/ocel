@@ -2,10 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { accountOf, plannedFrom, type Run, unhandledFrom } from "./account";
 import type { RecordedRow } from "./ledger";
 import type { PlannedTest } from "./plan";
-import type { Variant } from "./spec";
+import { selectionFor } from "./selection";
 import { targetNamed } from "./targets";
-
-const variant: Variant = { mode: "full", compute: "serverless" };
 
 function run(over: Partial<Run> = {}): Run {
   return { exitCode: 0, signal: null, ...over };
@@ -52,19 +50,20 @@ describe("the errors the suite leaves outside its recorded tests", () => {
 
 describe("what a lane plans from the environment its children read", () => {
   it("plans only the examples the environment names", () => {
-    const planned = plannedFrom(targetNamed("aws"), {
-      OCEL_TARGET: "aws",
-      OCEL_EXAMPLES: "express,next",
-    });
-    const examples = new Set(planned.map((entry) => entry.cell.split("/")[0].split("-")[0]));
+    const aws = targetNamed("aws");
+    const planned = plannedFrom(
+      aws,
+      selectionFor(aws, "aws", { OCEL_EXAMPLES: "express,next", OCEL_JOURNEY_SKIPS: "run" }),
+    );
+    const examples = new Set(planned.map((entry) => entry.example));
     expect([...examples].sort()).toEqual(["express", "next"]);
   });
 });
 
 describe("the account a run settles from its rows", () => {
   const planned: PlannedTest[] = [
-    { cell: "express/web", title: "up", leg: "up", variant },
-    { cell: "express/web", title: "destroy", leg: "destroy", variant },
+    { cell: "express/web", example: "express", app: "web", variant: "base", title: "up", leg: "up" },
+    { cell: "express/web", example: "express", app: "web", variant: "base", title: "destroy", leg: "destroy" },
   ];
   const meta = { target: "dev", environment: "dev", runId: "local-unit", leftOut: [] };
 

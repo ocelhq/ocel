@@ -392,9 +392,6 @@ async function sweep(runId: string): Promise<void> {
 export const vpsTarget: Target = {
   name: "vps",
   concurrency: 2,
-  modes: ["full", "hello"],
-  computes: ["container"],
-  edges: [],
   legTimeoutMs: 600_000,
   legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,

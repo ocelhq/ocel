@@ -1,14 +1,5 @@
 import { contractRows } from "./contract";
-import {
-  cellNameOf,
-  type ExampleSpec,
-  ladderTitle,
-  type Leg,
-  type Offered,
-  suitesOf,
-  type Variant,
-  variantsOf,
-} from "./spec";
+import { type Cell, type ExampleSpec, ladderTitle, type Leg, suitesOf, variantNameOf } from "./spec";
 
 export const UP_TITLE = "up";
 export const DESTROY_TITLE = "destroy";
@@ -16,10 +7,17 @@ export const REDEPLOY_TITLE = "redeploy";
 export const ROLLBACK_TITLE = "rollback";
 export const REFUSE_TITLE = "refuse";
 
-export type PlannedTest = { cell: string; title: string; leg?: Leg; variant: Variant };
+export type PlannedTest = {
+  cell: string;
+  example: string;
+  app: string;
+  variant: string;
+  title: string;
+  leg?: Leg;
+};
 
-export function cellKey(example: string, app: string): string {
-  return `${example}/${app}`;
+export function cellKey(cell: string, app: string): string {
+  return `${cell}/${app}`;
 }
 
 export function contractTitle(leg: Leg, title: string): string {
@@ -40,12 +38,9 @@ function ladderConsumeRows(
     .map((row) => ({ title: ladderConsumeTitle(leg, row.title), leg }));
 }
 
-function titlesForLeg(
-  example: ExampleSpec,
-  variant: Variant,
-  leg: Leg,
-): Array<{ title: string; leg: Leg }> {
-  const rows = contractRows(suitesOf(example, variant.mode)).map((row) => ({
+function titlesForLeg(cell: Cell, leg: Leg): Array<{ title: string; leg: Leg }> {
+  const { example } = cell;
+  const rows = contractRows(suitesOf(example, cell.variant)).map((row) => ({
     title: contractTitle(leg, row.title),
     leg,
   }));
@@ -80,28 +75,22 @@ function ladderPhaseTitles(example: ExampleSpec): Array<{ title: string }> {
   return out;
 }
 
-export function planTests(
-  examples: ExampleSpec[],
-  legs: Leg[],
-  offered: Offered,
-  variants?: Map<string, Variant[]>,
-): PlannedTest[] {
+export function planTests(cells: Cell[], legs: Leg[]): PlannedTest[] {
   const planned: PlannedTest[] = [];
-  for (const example of examples) {
-    for (const variant of variants?.get(example.name) ?? variantsOf(example, offered)) {
-      const name = cellNameOf(example, variant, offered);
-      for (const app of example.apps) {
-        for (const leg of legs) {
-          for (const entry of titlesForLeg(example, variant, leg)) {
-            planned.push({ cell: cellKey(name, app), variant, ...entry });
-          }
+  for (const cell of cells) {
+    const { example } = cell;
+    const shared = { example: example.name, variant: variantNameOf(cell) };
+    for (const app of example.apps) {
+      for (const leg of legs) {
+        for (const entry of titlesForLeg(cell, leg)) {
+          planned.push({ cell: cellKey(cell.name, app), app, ...shared, ...entry });
         }
       }
-      const [firstApp] = example.apps;
-      if (firstApp) {
-        for (const entry of ladderPhaseTitles(example)) {
-          planned.push({ cell: cellKey(name, firstApp), variant, ...entry });
-        }
+    }
+    const [firstApp] = example.apps;
+    if (firstApp) {
+      for (const entry of ladderPhaseTitles(example)) {
+        planned.push({ cell: cellKey(cell.name, firstApp), app: firstApp, ...shared, ...entry });
       }
     }
   }

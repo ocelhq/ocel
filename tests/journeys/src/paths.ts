@@ -41,3 +41,11 @@ export function resultsFile(runId: string, target: string, cell: string): string
 export function prepareFile(runId: string, target: string): string {
   return path.join(laneDir(runId, target), "prepare.json");
 }
+
+export function cellFilesDir(runId: string, target: string): string {
+  return path.join(laneDir(runId, target), "files");
+}
+
+export function cellFile(runId: string, target: string, cell: string): string {
+  return path.join(cellFilesDir(runId, target), `${cell}.journey.test.ts`);
+}

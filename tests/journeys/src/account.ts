@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { expectationsFor } from "./expectations";
+import { type ExpectationEnvironment, expectationsFor } from "./expectations";
 import type { Expectations } from "./expectations/types";
 import { currentRunIdentity } from "./identity";
 import { readRows, type RecordedRow } from "./ledger";
@@ -8,8 +8,8 @@ import { laneDir } from "./paths";
 import { type PlannedTest, planTests } from "./plan";
 import { readPrepared } from "./prepare";
 import { reconcile, type Report, type TestResult } from "./reconcile";
-import { selectionFor } from "./selection";
-import { journeyVerdict, summaryTable } from "./summary";
+import { type Selection, selectionFor } from "./selection";
+import { journeyVerdict, type SummaryMeta, summaryTable } from "./summary";
 import type { Target } from "./targets/types";
 import {
   timelineOf,
@@ -33,7 +33,7 @@ export type TimingInput = {
 export type AccountInput = TimingInput & {
   run: Run;
   expectations: Expectations;
-  meta: { target: string; environment: string; runId: string; leftOut: string[] };
+  meta: SummaryMeta;
 };
 
 export type Timed = { tests: TimelineTest[]; modules: TimelineModule[]; timeline: Timeline };
@@ -45,9 +45,8 @@ export type Account = Timed & {
   verdict: { exitCode: number; report: string };
 };
 
-export function plannedFrom(target: Target, env: NodeJS.ProcessEnv): PlannedTest[] {
-  const { examples, naming, covered } = selectionFor(target, env);
-  return planTests(examples, target.legs, naming, covered);
+export function plannedFrom(target: Target, selection: Selection): PlannedTest[] {
+  return planTests(selection.cells, target.legs);
 }
 
 function key(cell: string, title: string): string {
@@ -149,6 +148,7 @@ async function writeTiming(
 
 export async function settleAccount(input: {
   target: Target;
+  environment: ExpectationEnvironment;
   env: NodeJS.ProcessEnv;
   run: Run;
   runStart: number;
@@ -159,7 +159,8 @@ export async function settleAccount(input: {
   const dir = laneDir(runId, input.target.name);
   await mkdir(dir, { recursive: true });
 
-  const planned = plannedFrom(input.target, input.env);
+  const selection = selectionFor(input.target, input.environment, input.env);
+  const planned = plannedFrom(input.target, selection);
   const prepared = readPrepared(runId, input.target.name);
   const shared: TimingInput = {
     rows: await readRows(runId, input.target.name),
@@ -176,13 +177,6 @@ export async function settleAccount(input: {
     runEnd: input.runEnd,
   });
 
-  let environment: Awaited<ReturnType<typeof input.target.guard>>;
-  try {
-    environment = await input.target.guard();
-  } catch (error) {
-    return { exitCode: 1, report: `the journey account cannot be read: ${String(error)}` };
-  }
-
   const leftOut = (input.env.OCEL_JOURNEY_LEFT_OUT ?? "")
     .split(",")
     .map((name) => name.trim())
@@ -190,8 +184,14 @@ export async function settleAccount(input: {
   const account = accountOf({
     ...shared,
     run: input.run,
-    expectations: expectationsFor(environment),
-    meta: { target: input.target.name, environment, runId, leftOut },
+    expectations: expectationsFor(input.environment),
+    meta: {
+      target: input.target.name,
+      environment: input.environment,
+      runId,
+      leftOut,
+      skipped: selection.skipped,
+    },
   });
 
   await writeFile(path.join(dir, "summary.md"), account.summary, "utf8");

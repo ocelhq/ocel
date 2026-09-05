@@ -1,31 +1,27 @@
 import { describe, expect, it } from "bun:test";
 import {
   cellNameOf,
-  cellNamesOf,
+  cellsOf,
   type ExampleSpec,
   examplesNamed,
   groups,
-  modesOf,
-  type Offered,
   preferredOf,
   spec,
   specByName,
   suitesOf,
+  variantNameOf,
   variantsOf,
 } from "./spec";
-import { targetNamed } from "./targets";
-
-const AWS: Offered = {
-  modes: ["full", "hello"],
-  computes: ["serverless", "container"],
-  edges: ["cloudfront", "api-gateway", "cloudflare"],
-};
-const BOX: Offered = { modes: ["full", "hello"], computes: ["container"], edges: [] };
+import { apiGateway, cloudflare, container, hello, helloApiGateway } from "./variants";
 
 const rows: ExampleSpec[] = [
   { name: "express", dir: "express", framework: "express", kind: "composite", suites: [], apps: [] },
   { name: "hono", dir: "hono", framework: "hono", kind: "composite", suites: [], apps: [] },
 ];
+
+function names(example: ExampleSpec, target: "aws" | "vps" | "dev"): string[] {
+  return cellsOf(example, target).map((cell) => cell.name);
+}
 
 describe("examples named in the environment", () => {
   it("is every row when nothing names one", () => {
@@ -52,101 +48,70 @@ describe("examples named in the environment", () => {
   });
 });
 
-describe("the modes an example runs in", () => {
+describe("the variants an example lists", () => {
   const express = specByName("express");
   const transforms = specByName("with-transforms");
 
-  it("is the full one alone for a row that names none", () => {
-    expect(modesOf(transforms, ["full", "hello"])).toEqual(["full"]);
+  it("is none for a row that lists none", () => {
+    expect(variantsOf(rows[0] as ExampleSpec, "aws")).toEqual([]);
+    expect(names(rows[0] as ExampleSpec, "aws")).toEqual(["express"]);
   });
 
-  it("is what the row and the target both offer", () => {
-    expect(modesOf(express, ["full", "hello"])).toEqual(["full", "hello"]);
-    expect(modesOf(express, ["full"])).toEqual(["full"]);
+  it("is what the row lists and the target runs", () => {
+    expect(variantsOf(express, "aws")).toEqual([
+      hello,
+      container,
+      apiGateway,
+      cloudflare,
+      helloApiGateway,
+    ]);
+    expect(variantsOf(express, "vps")).toEqual([hello]);
+    expect(variantsOf(express, "dev")).toEqual([]);
+    expect(variantsOf(transforms, "aws")).toEqual([container, apiGateway, cloudflare]);
   });
 
-  it("names a cell of its own for the hello mode, so the two never share a slug", () => {
-    expect(cellNameOf(express, { mode: "full", compute: "serverless", edge: "cloudfront" }, AWS)).toBe(
-      "express",
+  it("refuses a row that lists one variant twice", () => {
+    const twice: ExampleSpec = { ...express, variants: [hello, container, hello] };
+    expect(() => variantsOf(twice, "aws")).toThrow(/lists the hello variant twice/);
+  });
+
+  it("names the base cell after the example and a variant's cell after both", () => {
+    expect(cellNameOf(express, undefined)).toBe("express");
+    expect(cellNameOf(express, hello)).toBe("express-hello");
+    expect(cellNameOf(specByName("workspace"), helloApiGateway)).toBe(
+      "workspace-hello-api-gateway",
     );
-    expect(cellNameOf(express, { mode: "hello", compute: "serverless", edge: "cloudfront" }, AWS)).toBe(
+  });
+
+  it("lists the base cell first, then one cell per variant in the order listed", () => {
+    expect(names(express, "aws")).toEqual([
+      "express",
       "express-hello",
-    );
-  });
-
-  it("keeps health and static alone in the hello mode", () => {
-    expect(suitesOf(express, "full")).toEqual(express.suites);
-    expect(suitesOf(express, "hello")).toEqual(["health", "static"]);
-  });
-});
-
-describe("the variants an example runs in", () => {
-  const express = specByName("express");
-  const transforms = specByName("with-transforms");
-
-  it("pairs every mode the row runs with every edge and compute the target offers", () => {
-    expect(variantsOf(express, BOX)).toEqual([
-      { mode: "full", compute: "container" },
-      { mode: "hello", compute: "container" },
-    ]);
-    expect(variantsOf(transforms, AWS)).toEqual([
-      { mode: "full", compute: "serverless", edge: "cloudfront" },
-      { mode: "full", compute: "container", edge: "cloudfront" },
-      { mode: "full", compute: "serverless", edge: "api-gateway" },
-      { mode: "full", compute: "container", edge: "api-gateway" },
-      { mode: "full", compute: "serverless", edge: "cloudflare" },
-      { mode: "full", compute: "container", edge: "cloudflare" },
-    ]);
-  });
-
-  it("names a cell of its own for a compute or an edge the target does not name first", () => {
-    expect(cellNameOf(express, { mode: "full", compute: "container", edge: "cloudfront" }, AWS)).toBe(
-      "express-container",
-    );
-    expect(cellNameOf(express, { mode: "full", compute: "serverless", edge: "cloudflare" }, AWS)).toBe(
-      "express-cloudflare",
-    );
-  });
-
-  it("orders the suffixes mode, edge, compute, so a slug reads the same every run", () => {
-    expect(
-      cellNameOf(express, { mode: "hello", compute: "container", edge: "api-gateway" }, AWS),
-    ).toBe("express-hello-api-gateway-container");
-    expect(
-      cellNameOf(specByName("workspace"), { mode: "hello", compute: "container", edge: "api-gateway" }, AWS),
-    ).toBe("workspace-hello-api-gateway-container");
-  });
-
-  it("names the target's first compute and first edge in no cell name", () => {
-    expect(cellNameOf(express, { mode: "full", compute: "container" }, BOX)).toBe("express");
-    expect(cellNamesOf(express, BOX)).toEqual(["express", "express-hello"]);
-  });
-
-  it("lists every cell name the target's variants make", () => {
-    expect(cellNamesOf(express, AWS)).toEqual([
-      "express",
       "express-container",
       "express-api-gateway",
-      "express-api-gateway-container",
       "express-cloudflare",
-      "express-cloudflare-container",
-      "express-hello",
-      "express-hello-container",
       "express-hello-api-gateway",
-      "express-hello-api-gateway-container",
-      "express-hello-cloudflare",
-      "express-hello-cloudflare-container",
+    ]);
+    expect(names(express, "vps")).toEqual(["express", "express-hello"]);
+    expect(names(express, "dev")).toEqual(["express"]);
+  });
+
+  it("calls the base cell's variant base", () => {
+    expect(cellsOf(express, "aws").map(variantNameOf)).toEqual([
+      "base",
+      "hello",
+      "container",
+      "api-gateway",
+      "cloudflare",
+      "hello-api-gateway",
     ]);
   });
 
-  it("leaves the cells of a target that offers no edge untouched", () => {
-    for (const name of ["vps", "dev"] as const) {
-      const target = targetNamed(name);
-      expect(target.edges).toEqual([]);
-      expect(cellNamesOf(express, target).every((cell) => !cell.includes("cloud"))).toBe(true);
-    }
-    expect(cellNamesOf(express, targetNamed("vps"))).toEqual(["express", "express-hello"]);
-    expect(cellNamesOf(express, targetNamed("dev"))).toEqual(["express"]);
+  it("keeps only the suites a variant keeps", () => {
+    expect(suitesOf(express, undefined)).toEqual(express.suites);
+    expect(suitesOf(express, hello)).toEqual(["health", "static"]);
+    expect(suitesOf(express, container)).toEqual(express.suites);
+    expect(suitesOf(express, helloApiGateway)).toEqual(["health", "static"]);
   });
 });
 

@@ -6,10 +6,9 @@ import { type Fetch, INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
 import { cellEnv, configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
-import { offeredBy } from "../../offer";
 import { exampleDir, treeDir } from "../../paths";
 import type { PrepareFailures } from "../../prepare";
-import { cellNamesOf, type Edge, EDGES, type Leg, type Offered, specForTarget } from "../../spec";
+import { cellsOf, type Leg, specForTarget, variantNameOf } from "../../spec";
 import { copyTree } from "../../tree";
 import { migrateCommand, setAppNames, setSiteHostnames } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
@@ -20,7 +19,7 @@ import { place } from "./place";
 import { awaitServing } from "./serving";
 import { sweepable } from "./slugs";
 import { awsStore, cliAt, said, type Store } from "./store";
-import { expectationEnvironmentFor } from "./world";
+import { expectationEnvironmentFor, type World } from "./world";
 
 const LEG_TIMEOUT_MS = process.env.AWS_ENDPOINT_URL ? 600_000 : 1_800_000;
 
@@ -30,13 +29,8 @@ const SERVING_INTERVAL_MS = 5_000;
 
 let dispatching: Promise<Fetch> | undefined;
 
-const EDGE_FEATURES: Record<Edge, string> = {
-  "api-gateway": "apigateway-edge",
-  cloudfront: "cloudfront-edge",
-  cloudflare: "cloudflare-edge",
-};
-
-const NEXT_FEATURES = ["isr", "image-optimization"];
+const EVERY_FEATURE = "all";
+const FLOCI_FEATURES = ["isr", "image-optimization", "cloudfront-edge", "apigateway-edge"];
 
 async function guard(): Promise<ExpectationEnvironment> {
   return expectationEnvironmentFor((await place()).world);
@@ -114,17 +108,8 @@ async function awaitEdge(cell: CellContext, leg: Leg, deployed: Deployment): Pro
   await cell.evidence.write(leg, "serving.json", `${JSON.stringify(served, null, 2)}\n`);
 }
 
-export type DryPlan = { edge: Edge; feature: string };
-
-export function dryPlans(offered: Offered): DryPlan[] {
-  return offered.edges.map((edge) => ({ edge, feature: EDGE_FEATURES[edge] }));
-}
-
-export function applyFeatures(offered: Offered, planned: Edge[]): string[] {
-  return [
-    ...NEXT_FEATURES,
-    ...offered.edges.filter((edge) => planned.includes(edge)).map((edge) => EDGE_FEATURES[edge]),
-  ];
+export function bootstrapFeatures(world: World): string {
+  return world === "floci" ? FLOCI_FEATURES.join(",") : EVERY_FEATURE;
 }
 
 async function awaitDefaultVpc(endpoint: string): Promise<void> {
@@ -162,41 +147,21 @@ async function prepare(): Promise<PrepareFailures> {
     throw new Error("no example in the spec table runs on aws, so there is nothing to bootstrap");
   }
   const runId = currentRunIdentity();
-  const offered = offeredBy(awsTarget);
   const slug = projectSlug(first.name, runId);
-  const failures: PrepareFailures = {};
-
-  const bootstrap = async (name: string, args: string[], edge: Edge | undefined): Promise<void> => {
-    const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", name));
-    try {
-      await writeJourneyConfig(dir, { base: AWS_BASE, slug, ...(edge === undefined ? {} : { edge }) });
-      await ocel(dir, ["bootstrap", "production", "--yes", ...args], providerEnv(dir, {}));
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  };
-
-  const planned: Edge[] = [];
-  for (const plan of dryPlans(offered)) {
-    try {
-      const args = ["--dry", "--features", plan.feature];
-      await bootstrap(`bootstrap-dry-${plan.edge}`, args, plan.edge);
-      planned.push(plan.edge);
-    } catch (error) {
-      (failures.edges ??= {})[plan.edge] = error instanceof Error ? error.message : String(error);
-    }
-  }
-
+  const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", "bootstrap"));
   try {
-    await bootstrap(
-      "bootstrap",
-      ["--features", applyFeatures(offered, planned).join(",")],
-      offered.edges[0],
+    await writeJourneyConfig(dir, { base: AWS_BASE, slug });
+    await ocel(
+      dir,
+      ["bootstrap", "production", "--yes", "--features", bootstrapFeatures(where.world)],
+      providerEnv(dir, {}),
     );
   } catch (error) {
-    failures.lane = error instanceof Error ? error.message : String(error);
+    return { lane: error instanceof Error ? error.message : String(error) };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
-  return failures;
+  return {};
 }
 
 async function setup(): Promise<void> {
@@ -240,8 +205,7 @@ async function up(cell: CellContext): Promise<Deployment> {
     `${JSON.stringify(
       {
         slug: cell.slug,
-        edge: cell.edge ?? "none",
-        compute: cell.compute,
+        variant: variantNameOf(cell),
         apps: Object.fromEntries(
           cell.example.apps.map((app) => [app, deployed.baseUrl(app)]),
         ),
@@ -293,7 +257,7 @@ async function stands(slug: string): Promise<boolean> {
 async function sweep(runId: string): Promise<void> {
   const where = await place();
   const examples = specForTarget("aws");
-  const cells = examples.flatMap((example) => cellNamesOf(example, awsTarget));
+  const cells = examples.flatMap((example) => cellsOf(example, "aws").map((cell) => cell.name));
   const mine = cells.map((name) => projectSlug(name, runId));
   const { reclaim, unreadable } = sweepable(await list(), mine, cells);
 
@@ -301,7 +265,9 @@ async function sweep(runId: string): Promise<void> {
     (slug) => `${slug} carries the harness prefix and names no example in the spec table`,
   );
   for (const stranded of reclaim) {
-    const example = examples.find((row) => cellNamesOf(row, awsTarget).includes(stranded.example));
+    const example = examples.find((row) =>
+      cellsOf(row, "aws").some((cell) => cell.name === stranded.example),
+    );
     if (!example) {
       continue;
     }
@@ -355,9 +321,6 @@ async function sweep(runId: string): Promise<void> {
 export const awsTarget: Target = {
   name: "aws",
   concurrency: 3,
-  modes: ["full", "hello"],
-  computes: ["serverless", "container"],
-  edges: EDGES,
   legTimeoutMs: LEG_TIMEOUT_MS,
   legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,

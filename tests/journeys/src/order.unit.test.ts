@@ -1,32 +1,32 @@
 import { describe, expect, it } from "bun:test";
 import { longestFirst } from "./order";
-import { spec, specForTarget } from "./spec";
+import { type Cell, cellsOf, spec, specForTarget } from "./spec";
+
+function cells(target: "aws" | "vps"): Cell[] {
+  return specForTarget(target).flatMap((example) => cellsOf(example, target));
+}
 
 describe("longestFirst", () => {
   it("runs the ladders, then the composites, then the workspace", () => {
-    expect(longestFirst(specForTarget("aws")).map((row) => row.kind)).toEqual([
-      "ladder",
-      "ladder",
-      "ladder",
-      "composite",
-      "composite",
-      "composite",
-      "composite",
-      "workspace",
-    ]);
+    const kinds = longestFirst(cells("aws")).map((cell) => cell.example.kind);
+    const firstComposite = kinds.indexOf("composite");
+    const firstWorkspace = kinds.indexOf("workspace");
+    expect(kinds.slice(0, firstComposite).every((kind) => kind === "ladder")).toBe(true);
+    expect(kinds.slice(firstComposite, firstWorkspace).every((kind) => kind === "composite")).toBe(true);
+    expect(kinds.slice(firstWorkspace).every((kind) => kind === "workspace")).toBe(true);
   });
 
   it("holds the spec order inside a rank", () => {
     expect(
-      longestFirst(spec)
-        .filter((row) => row.kind === "composite")
-        .map((row) => row.name),
+      longestFirst(spec.map((example) => ({ name: example.name, example })))
+        .filter((cell) => cell.example.kind === "composite")
+        .map((cell) => cell.name),
     ).toEqual(["express", "hono", "fastify", "next"]);
   });
 
-  it("leaves the rows it was handed alone", () => {
-    const rows = specForTarget("vps");
+  it("leaves the cells it was handed alone", () => {
+    const rows = cells("vps");
     longestFirst(rows);
-    expect(rows.map((row) => row.name)).toEqual(specForTarget("vps").map((row) => row.name));
+    expect(rows.map((cell) => cell.name)).toEqual(cells("vps").map((cell) => cell.name));
   });
 });
