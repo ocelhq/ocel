@@ -69,7 +69,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		}
 		ui.Diagnostic("using prebuilt output in .ocel/output")
 	} else {
-		if err := clientenv.Generate(clients); err != nil {
+		if err := clientenv.Generate(cfg.Dir, clients); err != nil {
 			return nil, err
 		}
 		if err := deps.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {

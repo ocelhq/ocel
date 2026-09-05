@@ -2,6 +2,8 @@ package clientenv
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,6 +49,13 @@ func read(t *testing.T, path string) string {
 	return string(data)
 }
 
+func nestedApp(t *testing.T, root, name string) string {
+	t.Helper()
+	dir := filepath.Join(root, "apps", name)
+	write(t, filepath.Join(dir, "tsconfig.json"), "{\n  \"compilerOptions\": {\n    \"strict\": true\n  }\n}\n")
+	return dir
+}
+
 func appDir(t *testing.T) string {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "tsconfig.json"), "{\n  \"compilerOptions\": {\n    \"strict\": true\n  },\n  \"include\": [\"**/*.ts\"]\n}\n")
@@ -61,7 +70,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		if err := Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -93,7 +102,7 @@ func TestGenerate(t *testing.T) {
 		site := clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")
 		site.Source, site.SchemaSource = envModule, schemaModule
 
-		if err := Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{site, port}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{site, port}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -128,7 +137,7 @@ func TestGenerate(t *testing.T) {
 		b.SchemaSource, b.Schema = local, true
 		c.SchemaSource = shared
 
-		if err := Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{a, b, c}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{a, b, c}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -163,7 +172,7 @@ func TestGenerate(t *testing.T) {
 				port := clientVar("NEXT_PUBLIC_PORT", "8080")
 				port.Source, port.SchemaSource, port.Schema = tc.source, tc.schema, true
 
-				err := Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{port}}})
+				err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{port}}})
 				if err == nil {
 					t.Fatal("Generate = nil, want a refusal: the browser bundle has no side-effect-free module to take the schema from")
 				}
@@ -181,7 +190,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		err := Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{
+		err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{
 			clientVar("NEXT_PUBLIC_APP_ID", "app_1"),
 			clientVar("VITE_APP_ID", "app_2"),
 		}}})
@@ -205,7 +214,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		err := Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{
+		err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{
 			clientVar("PUBLIC_SITE_URL", "https://example.com"),
 			serverVar("STRIPE_API_KEY", "sk-live"),
 		}}})
@@ -227,7 +236,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		if err := Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -247,7 +256,7 @@ func TestGenerate(t *testing.T) {
 		source := "{\n  // the compiler options this project has always had\n  \"compilerOptions\": {\n    \"paths\": {\n      \"@/*\": [\"./src/*\"] // app aliases\n    }\n  }\n}\n"
 		write(t, filepath.Join(dir, "tsconfig.json"), source)
 
-		if err := Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -278,7 +287,7 @@ func TestGenerate(t *testing.T) {
 				dir := t.TempDir()
 				write(t, filepath.Join(dir, "tsconfig.json"), source)
 
-				if err := Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+				if err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
 					t.Fatalf("Generate: %v", err)
 				}
 
@@ -291,7 +300,7 @@ func TestGenerate(t *testing.T) {
 				if err := json.Unmarshal([]byte(updated), &parsed); err != nil {
 					t.Fatalf("tsconfig is no longer parseable (%v):\n%s", err, updated)
 				}
-				want, err := accessorTarget("")
+				want, err := accessorTarget(dir, "", accessorPath(dir, "", dir))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -308,13 +317,13 @@ func TestGenerate(t *testing.T) {
 		dir := appDir(t)
 		apps := []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
 
-		if err := Generate(apps); err != nil {
+		if err := Generate(dir, apps); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 		first := read(t, filepath.Join(dir, "tsconfig.json"))
 		accessor := read(t, filepath.Join(dir, ".ocel", "env-client.ts"))
 
-		if err := Generate(apps); err != nil {
+		if err := Generate(dir, apps); err != nil {
 			t.Fatalf("Generate again: %v", err)
 		}
 		if got := read(t, filepath.Join(dir, "tsconfig.json")); got != first {
@@ -330,7 +339,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		if err := Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -343,12 +352,13 @@ func TestGenerate(t *testing.T) {
 		}
 	})
 
-	t.Run("gives each app its own accessor", func(t *testing.T) {
+	t.Run("keeps each nested app's accessor under the project's own scratch directory", func(t *testing.T) {
 		t.Parallel()
 
-		store, admin := appDir(t), appDir(t)
+		root := t.TempDir()
+		store, admin := nestedApp(t, root, "storefront"), nestedApp(t, root, "admin")
 
-		err := Generate([]App{
+		err := Generate(root, []App{
 			{Name: "storefront", Dir: store, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://store.example.com")}},
 			{Name: "admin", Dir: admin, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_ADMIN_URL", "https://admin.example.com")}},
 		})
@@ -356,11 +366,55 @@ func TestGenerate(t *testing.T) {
 			t.Fatalf("Generate: %v", err)
 		}
 
-		if got := read(t, filepath.Join(store, ".ocel", "env-client.ts")); !strings.Contains(got, "process.env.PUBLIC_SITE_URL") || strings.Contains(got, "ADMIN") {
+		got := read(t, filepath.Join(root, ".ocel", "apps", "storefront", "env-client.ts"))
+		if !strings.Contains(got, "process.env.PUBLIC_SITE_URL") || strings.Contains(got, "ADMIN") {
 			t.Errorf("storefront accessor = %q, want its own key only", got)
 		}
-		if got := read(t, filepath.Join(admin, ".ocel", "env-client.ts")); !strings.Contains(got, "process.env.PUBLIC_ADMIN_URL") || strings.Contains(got, "SITE_URL") {
+		got = read(t, filepath.Join(root, ".ocel", "apps", "admin", "env-client.ts"))
+		if !strings.Contains(got, "process.env.PUBLIC_ADMIN_URL") || strings.Contains(got, "SITE_URL") {
 			t.Errorf("admin accessor = %q, want its own key only", got)
+		}
+		for _, dir := range []string{store, admin} {
+			if _, err := os.Stat(filepath.Join(dir, ".ocel")); !errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("%s holds state of its own (err = %v), want every generated file under the project directory", dir, err)
+			}
+		}
+	})
+
+	t.Run("points a nested app's config at the accessor outside it", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		dir := nestedApp(t, root, "storefront")
+
+		app := App{Name: "storefront", Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://store.example.com")}}
+		if err := Generate(root, []App{app}); err != nil {
+			t.Fatalf("Generate: %v", err)
+		}
+
+		got := mapped(t, filepath.Join(dir, "tsconfig.json"))
+		want := "../../.ocel/apps/storefront/env-client.ts"
+		if len(got) != 1 || got[0] != want {
+			t.Errorf("paths[%q] = %v, want [%q]", specifier, got, want)
+		}
+	})
+
+	t.Run("reaches a nested app's schema module from where the accessor sits", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		dir := nestedApp(t, root, "storefront")
+		site := clientVar("PUBLIC_SITE_URL", "https://store.example.com")
+		site.SchemaSource = filepath.Join(dir, "src", "env.schema.ts")
+
+		app := App{Name: "storefront", Dir: dir, Variables: []manifestbuilder.Variable{site}}
+		if err := Generate(root, []App{app}); err != nil {
+			t.Fatalf("Generate: %v", err)
+		}
+
+		got := read(t, filepath.Join(root, ".ocel", "apps", "storefront", "env-client.ts"))
+		if want := "from \"../../../apps/storefront/src/env.schema\";\n"; !strings.Contains(got, want) {
+			t.Errorf("accessor =\n%s\nwant it to import %q", got, want)
 		}
 	})
 }

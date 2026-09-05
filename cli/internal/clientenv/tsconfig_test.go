@@ -14,7 +14,7 @@ import (
 
 func generate(t *testing.T, dir string) error {
 	t.Helper()
-	return Generate([]App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
+	return Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
 }
 
 func mapped(t *testing.T, path string) []string {
