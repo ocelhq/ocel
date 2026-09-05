@@ -7,7 +7,6 @@ export type ConfigDelta = { compute?: Compute; edge?: Edge };
 export type Variant = {
   name: string;
   on?: TargetName[];
-  env?: Record<string, string>;
   config?: ConfigDelta;
 };
 

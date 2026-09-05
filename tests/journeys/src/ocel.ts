@@ -9,10 +9,6 @@ import { plantWorkspace } from "./tree";
 
 export type Ran = { code: number | null; stdout: string; stderr: string };
 
-export function cellEnv(cell: CellContext): NodeJS.ProcessEnv {
-  return { ...cell.variant?.env };
-}
-
 export const COMMAND_LOG = "commands.jsonl";
 
 export function maskArgs(args: string[]): string {

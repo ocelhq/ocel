@@ -8,7 +8,7 @@ import { JOURNEY_CONFIG, journeyZone } from "../config";
 import { INITIAL_GREETING, redact, REDACTED, SECRET_TOKEN } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { appHostname, HARNESS_PREFIX } from "../identity";
-import { cellEnv, exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
+import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
 import { migrates, setsEnv } from "../rows";
 import type { Leg } from "../spec";
@@ -173,10 +173,6 @@ function boxEnv(login: string): NodeJS.ProcessEnv {
   return env;
 }
 
-function childEnv(cell: CellContext, login: string): NodeJS.ProcessEnv {
-  return { ...boxEnv(login), ...cellEnv(cell) };
-}
-
 async function boxConfig(dir: string, slug: string, login: string): Promise<string> {
   const target = box();
   await mkdir(dir, { recursive: true });
@@ -294,7 +290,7 @@ async function standingFor(cell: CellContext): Promise<Standing> {
   const started: Standing = {
     dir: await workTree(cell, "vps"),
     gateway: await openGateway(box().host),
-    env: childEnv(cell, DEPLOY_LOGIN),
+    env: boxEnv(DEPLOY_LOGIN),
   };
   standing.set(cell.slug, started);
   return started;
