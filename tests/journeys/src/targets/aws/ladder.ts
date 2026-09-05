@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { linkRows } from "../../rows";
 import { JOURNEY_CONFIG } from "../../config";
-import { cellEnv, ocel, spawnOcel, workTree } from "../../ocel";
+import { ocel, spawnOcel, workTree } from "../../ocel";
 import type { LadderRow } from "../../spec";
 import type { CellContext } from "../types";
 import { place } from "./place";
@@ -164,7 +164,6 @@ export async function refuse(cell: CellContext): Promise<void> {
   const env = {
     ...process.env,
     OCEL_CONFIG: `${dir}/${JOURNEY_CONFIG}`,
-    ...cellEnv(cell),
   };
   const result = await spawnOcel(dir, ["deploy", "--yes"], env);
   await cell.evidence.write("up", "refuse.stdout", result.stdout);
@@ -209,7 +208,6 @@ export const ladderRows: LadderRow[] = [
       const env = {
         ...process.env,
         OCEL_CONFIG: `${dir}/${JOURNEY_CONFIG}`,
-        ...cellEnv(cell),
       };
       const result = await ocel(dir, ["link", "ls", "--log-format", "json"], env);
       const parsed = JSON.parse(result.stdout) as {

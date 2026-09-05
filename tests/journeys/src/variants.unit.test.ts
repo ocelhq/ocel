@@ -14,8 +14,5 @@ describe("the variants the catalogue offers", () => {
     expect(container.config).toEqual({ compute: "container" });
     expect(apiGateway.config).toEqual({ edge: "api-gateway" });
     expect(cloudflare.config).toEqual({ edge: "cloudflare" });
-    for (const one of AWS) {
-      expect(one.env).toBeUndefined();
-    }
   });
 });

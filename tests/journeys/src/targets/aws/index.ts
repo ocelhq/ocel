@@ -5,7 +5,7 @@ import { AWS_BASE, JOURNEY_CONFIG, writeJourneyConfig } from "../../config";
 import { type Fetch, INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../identity";
-import { cellEnv, configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
+import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { migrates, setsEnv } from "../../rows";
 import type { PrepareFailures } from "../../prepare";
@@ -37,16 +37,11 @@ async function guard(): Promise<ExpectationEnvironment> {
   return expectationEnvironmentFor((await place()).world);
 }
 
-function providerEnv(dir: string, held: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+function childEnv(dir: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
     OCEL_CONFIG: path.join(dir, JOURNEY_CONFIG),
-    ...held,
   };
-}
-
-function childEnv(cell: CellContext, dir: string): NodeJS.ProcessEnv {
-  return providerEnv(dir, cellEnv(cell));
 }
 
 async function store(): Promise<Store> {
@@ -155,7 +150,7 @@ async function prepare(): Promise<PrepareFailures> {
     await ocel(
       dir,
       ["bootstrap", "production", "--yes", "--features", bootstrapFeatures(where.world)],
-      providerEnv(dir, {}),
+      childEnv(dir),
     );
   } catch (error) {
     return { lane: error instanceof Error ? error.message : String(error) };
@@ -181,7 +176,7 @@ async function cellTree(cell: CellContext): Promise<string> {
 
 async function up(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
-  const env = childEnv(cell, dir);
+  const env = childEnv(dir);
 
   if (setsEnv(cell.fixture.rows)) {
     await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
@@ -222,7 +217,7 @@ async function up(cell: CellContext): Promise<Deployment> {
 
 async function redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
   const dir = await cellTree(cell);
-  const env = childEnv(cell, dir);
+  const env = childEnv(dir);
   if (setsEnv(cell.fixture.rows)) {
     await runOcel(cell, dir, "redeploy", "env-greeting", ["env", "set", "GREETING", greeting], env);
   }
@@ -234,7 +229,7 @@ async function redeploy(cell: CellContext, greeting: string): Promise<Deployment
 
 async function rollback(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
-  await runOcel(cell, dir, "rollback", "rollback", ["rollback"], childEnv(cell, dir));
+  await runOcel(cell, dir, "rollback", "rollback", ["rollback"], childEnv(dir));
   const deployed = deployment(cell, await dispatcher());
   await awaitEdge(cell, "rollback", deployed);
   return deployed;
@@ -242,7 +237,7 @@ async function rollback(cell: CellContext): Promise<Deployment> {
 
 async function destroy(cell: CellContext): Promise<void> {
   const dir = await cellTree(cell);
-  const env = childEnv(cell, dir);
+  const env = childEnv(dir);
   const hosts = hostnames(cell);
   for (const [app, host] of hosts) {
     await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
@@ -281,7 +276,7 @@ async function sweep(runId: string): Promise<void> {
     );
     try {
       await writeJourneyConfig(dir, { base: AWS_BASE, slug: stranded.slug });
-      await ocel(dir, ["destroy", "production", "--yes"], providerEnv(dir, {}));
+      await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir));
       process.stdout.write(`swept ${stranded.slug}\n`);
     } catch (error) {
       complaints.push(`${stranded.slug}: ${String(error)}`);
