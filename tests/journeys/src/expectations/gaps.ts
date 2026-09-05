@@ -175,20 +175,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "cloudflare-no-deployment-yet",
-    reason: "a bound cloudflare hostname answers No deployment yet after two deploys",
-    issue: 922,
-    affects: [
-      {
-        on: ["aws"],
-        cells: ["sdk/with-transforms/web"],
-        variants: ["cloudflare"],
-        tests: [UP_TITLE],
-        skip: true,
-      },
-    ],
-  },
-  {
     id: "link-query-hangs",
     reason: "a select through the postgres link answers an HTML error after ~15s on a real account",
     issue: 925,

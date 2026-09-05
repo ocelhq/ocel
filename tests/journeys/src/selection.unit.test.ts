@@ -132,7 +132,6 @@ describe("what a run selects", () => {
     expect(Object.keys(skipped)).toEqual([
       "sdk/with-transforms",
       "sdk/with-transforms-container",
-      "sdk/with-transforms-cloudflare",
     ]);
     expect(skipped["sdk/with-transforms"]?.map((gap) => gap.issue)).toEqual([923]);
     const narrowed = selectionFor(AWS, "aws", {

@@ -159,8 +159,7 @@ describe("the gap list", () => {
       assert.deepEqual(Object.keys(listed[cell] ?? {}), [UP_TITLE], cell);
       assert.deepEqual(issues(listed, cell, UP_TITLE), [923], cell);
     }
-    assert.deepEqual(Object.keys(listed["sdk/with-transforms-cloudflare/web"] ?? {}), [UP_TITLE]);
-    assert.deepEqual(issues(listed, "sdk/with-transforms-cloudflare/web", UP_TITLE), [922]);
+    assert.equal(listed["sdk/with-transforms-cloudflare/web"], undefined);
   });
 
   it("lists no contract title under a listed up on real aws: the up covers the cell behind it", () => {
@@ -280,6 +279,7 @@ describe("the gap list", () => {
       "deploy/next-cloudflare",
       "deploy/workspace-cloudflare",
       "sdk/with-transforms-api-gateway",
+      "sdk/with-transforms-cloudflare",
     ]);
     assert.deepEqual(alive("aws.floci"), [
       "deploy/node-api-gateway",
