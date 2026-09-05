@@ -211,3 +211,5 @@ platform/vps/provider/cmd/proxyctl/proxyctl
 
 # Turborepo
 .turbo
+
+.vscode/
