@@ -6,6 +6,7 @@ import {
   imageCacheControl,
   IMMUTABLE_CACHE_CONTROL,
   ROUTER_VARY,
+  SERVED_CACHE_CONTROL,
   tierOf,
   variesOn,
 } from "./cacheHeaders";
@@ -15,17 +16,23 @@ function answered(headers: Record<string, string>): Response {
 }
 
 describe("cacheControlFor", () => {
-  it("spells a page that never revalidates as a year of s-maxage alone", () => {
-    expect(cacheControlFor(false)).toBe("s-maxage=31536000");
+  it("spells a page that never revalidates as the served literal", () => {
+    expect(cacheControlFor(false)).toBe(SERVED_CACHE_CONTROL);
   });
 
-  it("gives the rest of the year to stale-while-revalidate", () => {
-    expect(cacheControlFor(5)).toBe("s-maxage=5, stale-while-revalidate=31535995");
-    expect(cacheControlFor(3600)).toBe("s-maxage=3600, stale-while-revalidate=31532400");
+  it("spells a page with any revalidate as the same served literal", () => {
+    expect(cacheControlFor(5)).toBe(SERVED_CACHE_CONTROL);
+    expect(cacheControlFor(3600)).toBe(SERVED_CACHE_CONTROL);
   });
 
   it("reads a zero revalidate as the dynamic literal", () => {
     expect(cacheControlFor(0)).toBe(DYNAMIC_CACHE_CONTROL);
+  });
+});
+
+describe("SERVED_CACHE_CONTROL", () => {
+  it("is a max-age of zero the client must revalidate", () => {
+    expect(SERVED_CACHE_CONTROL).toBe("public, max-age=0, must-revalidate");
   });
 });
 

@@ -851,11 +851,14 @@ async function renderDispatchTarget(
     case "lambda": {
       const fnUrl = functionUrls[target.id];
       if (!fnUrl) return noFunctionUrl(target.id);
-      return doOrigin(
-        withEntry(
-          forward(originUrl(fnUrl, url, result, manifest), request, headers),
-          target.entryKey,
+      return withStatus(
+        await doOrigin(
+          withEntry(
+            forward(originUrl(fnUrl, url, result, manifest), request, headers),
+            target.entryKey,
+          ),
         ),
+        "MISS",
       );
     }
 
@@ -864,10 +867,13 @@ async function renderDispatchTarget(
 
     case "edge": {
       if (!target.entryKey) return noEdgeEntry(result.resolvedPathname);
-      return edgeResponse(
-        deps,
-        target.entryKey,
-        forward(originUrl(url.origin, url, result, manifest), request, headers),
+      return withStatus(
+        await edgeResponse(
+          deps,
+          target.entryKey,
+          forward(originUrl(url.origin, url, result, manifest), request, headers),
+        ),
+        "MISS",
       );
     }
 
