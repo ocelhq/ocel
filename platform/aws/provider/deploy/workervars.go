@@ -3,7 +3,6 @@ package deploy
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -33,9 +32,7 @@ func sharedWorker(kind edge.Kind, f WorkerFacts) (edge.Worker, error) {
 	if err != nil {
 		return edge.Worker{}, err
 	}
-	vars := map[string]string{
-		edge.OriginBodyLimitVar: strconv.Itoa(lambdaOriginBodyLimitBytes),
-	}
+	vars := map[string]string{}
 	for name, value := range map[string]string{
 		edge.AWSRegionVar:          f.Region,
 		edge.StateTableVar:         f.StateTable,

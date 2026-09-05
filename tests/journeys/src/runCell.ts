@@ -144,6 +144,7 @@ function describeSelected({ name, fixture, variant }: Cell) {
       app,
       baseUrl: deployment.baseUrl(app),
       greeting,
+      largeBodyBytes: target.largeBodyBytes,
       leg,
       notes,
       fetch: secretGuarded(deployment.fetch),

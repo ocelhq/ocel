@@ -24,6 +24,8 @@ import { expectationEnvironmentFor, type World } from "./world";
 
 const LEG_TIMEOUT_MS = process.env.AWS_ENDPOINT_URL ? 600_000 : 1_800_000;
 
+const FUNCTION_URL_BODY_BYTES = 4_500_000;
+
 const DEFAULT_VPC_TRIES = 30;
 const SERVING_TIMEOUT_MS = 900_000;
 const SERVING_INTERVAL_MS = 5_000;
@@ -339,6 +341,7 @@ async function sweep(runId: string): Promise<void> {
 export const awsTarget: Target = {
   name: "aws",
   concurrency: 3,
+  largeBodyBytes: FUNCTION_URL_BODY_BYTES,
   legTimeoutMs: LEG_TIMEOUT_MS,
   legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,

@@ -25,8 +25,6 @@ const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
 
 const RevalidateQueueURLVar = "OCEL_REVALIDATE_QUEUE_URL"
 
-const OriginBodyLimitVar = "OCEL_ORIGIN_BODY_LIMIT"
-
 const (
 	OriginSecretVar    = "OCEL_ORIGIN_SECRET"
 	OriginSignedVar    = "OCEL_ORIGIN_SIGNED"

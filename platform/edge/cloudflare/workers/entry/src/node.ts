@@ -1,8 +1,3 @@
-import {
-  bodyWithinBudget,
-  payloadTooLarge,
-  type OriginBodyBudget,
-} from "@framework/next-router/origin-body";
 import { encodeForwardedSearch } from "@framework/next-router/request-target";
 import {
   needsSlashNormalization,
@@ -13,14 +8,13 @@ export interface NodeOriginDeps {
   app: string;
   functionUrls: Record<string, string>;
   originFetch?: typeof fetch;
-  originBodyBudget?: OriginBodyBudget;
 }
 
 export function nodeOrigin(
   deps: NodeOriginDeps,
 ): (request: Request) => Promise<Response> {
   const urls = Object.values(deps.functionUrls);
-  const { app, originFetch, originBodyBudget: budget } = deps;
+  const { app, originFetch } = deps;
 
   return async (request) => {
     if (urls.length !== 1) return noSingleFunctionUrl(app, urls.length);
@@ -41,18 +35,11 @@ export function nodeOrigin(
     headers.set("x-forwarded-host", url.host);
     headers.set("x-forwarded-proto", url.protocol.replace(/:$/, ""));
 
-    let body: BodyInit | null = request.body;
-    if (budget && request.body) {
-      const within = await bodyWithinBudget(request, budget);
-      if (within === undefined) return payloadTooLarge();
-      body = within;
-    }
-
     return originFetch(
       new Request(new URL(url.pathname + encodeForwardedSearch(url.search), urls[0]), {
         method: request.method,
         headers,
-        body,
+        body: request.body,
         redirect: "manual",
       }),
     );

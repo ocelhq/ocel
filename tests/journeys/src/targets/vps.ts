@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
 import { JOURNEY_CONFIG, journeyZone } from "../config";
-import { INITIAL_GREETING, redact, REDACTED, SECRET_TOKEN } from "../contract";
+import { INITIAL_GREETING, redact, REDACTED, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { appHostname, HARNESS_PREFIX } from "../identity";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
@@ -391,6 +391,7 @@ async function sweep(runId: string): Promise<void> {
 export const vpsTarget: Target = {
   name: "vps",
   concurrency: 2,
+  largeBodyBytes: UNCAPPED_BODY_BYTES,
   legTimeoutMs: 600_000,
   legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,

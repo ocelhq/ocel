@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { CONTROL_HEADERS, serve, type RouteDeps } from "@framework/next-router";
 import type { AssetBucket } from "@framework/next-router/assets";
 import { functionUrlImageOrigin } from "@framework/next-router/image";
-import { originBodyBudget } from "@framework/next-router/origin-body";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
 
 import type { Invoke } from "../shared/membrane.mjs";
@@ -46,7 +45,6 @@ export interface RouterHost {
   assetBucket?: AssetBucket;
   imageOptimizerUrl?: string;
   originFetch: typeof fetch;
-  originBodyLimit?: string;
 }
 
 function routerDeps(
@@ -64,7 +62,6 @@ function routerDeps(
     deploymentId: host.deploymentId,
     originFetch: host.originFetch,
     keepCacheTags: host.keepCacheTags,
-    originBodyBudget: originBodyBudget(host.originBodyLimit),
     imageOrigin: functionUrlImageOrigin(
       host.imageOptimizerUrl,
       host.originFetch,
@@ -158,8 +155,5 @@ export function routerHostFromEnv(
       ? { imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL }
       : {}),
     originFetch: siblingOriginFetch(env, region),
-    ...(env.OCEL_ORIGIN_BODY_LIMIT
-      ? { originBodyLimit: env.OCEL_ORIGIN_BODY_LIMIT }
-      : {}),
   };
 }
