@@ -60,7 +60,7 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 	if err := deps.BuildApp(ctx, cfg, appurl.BuildEnv(urls), stderr); err != nil {
 		return err
 	}
-	if err := clientenv.Record(cfg.Dir, builtInClients(cfg, urls), false); err != nil {
+	if err := clientenv.Record(cfg.Dir, builtInClients(cfg, urls)); err != nil {
 		return err
 	}
 

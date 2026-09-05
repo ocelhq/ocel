@@ -37,7 +37,6 @@ describe("a multi-app row", () => {
     expect(appHomes(workspace)).toEqual(["apps/next", "apps/express"]);
     expect(appHomes(composite)).toEqual([]);
   });
-
 });
 
 describe("the state a workspace writes", () => {

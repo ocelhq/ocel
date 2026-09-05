@@ -244,7 +244,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		recordBuildApp(&deps)
 		cfg := prebuiltConfig(root)
 
-		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}, true); err != nil {
+		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -268,7 +268,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		deps := clitest.NewDeps()
 		recordBuildApp(&deps)
 		cfg := prebuiltConfig(root)
-		if err := clientenv.Record(root, []clientenv.App{{Name: "api"}}, false); err != nil {
+		if err := clientenv.Record(root, []clientenv.App{{Name: "api"}}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -277,7 +277,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for an `ocel build` output, want a refusal")
 		}
-		for _, want := range []string{"PUBLIC_SITE_URL", "never inlined", "`ocel build` resolves no values"} {
+		for _, want := range []string{"PUBLIC_SITE_URL", "never inlined", "`ocel build`, which resolves no values"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to state %q", err, want)
 			}
@@ -294,7 +294,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		recordBuildApp(&deps)
 		cfg := prebuiltConfig(root)
 
-		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}, true); err != nil {
+		if err := clientenv.Record(root, []clientenv.App{recordedClientValue()}); err != nil {
 			t.Fatal(err)
 		}
 

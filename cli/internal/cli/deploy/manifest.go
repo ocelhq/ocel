@@ -55,9 +55,10 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	if err != nil {
 		return nil, err
 	}
-	appurl.Add(variables, urls)
+	appurl.Prepend(variables, urls)
 
-	if err := checkAppPaths(cfg); err != nil {
+	configName := filepath.Base(cfg.Path)
+	if err := checkAppPaths(cfg, configName); err != nil {
 		return nil, err
 	}
 	plans := appPlans(cfg, variables)
@@ -74,7 +75,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		if err := deps.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
 			return nil, err
 		}
-		if err := clientenv.Record(cfg.Dir, clients, true); err != nil {
+		if err := clientenv.Record(cfg.Dir, clients); err != nil {
 			return nil, err
 		}
 	}
@@ -105,7 +106,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		ui.Diagnostic("no functions to deploy; deploying infrastructure only")
 	}
 
-	attributionApps, err := toAttributionApps(cfg, functions, compute)
+	attributionApps, err := toAttributionApps(cfg, functions, compute, configName)
 	if err != nil {
 		return nil, err
 	}
@@ -323,10 +324,9 @@ func workspaceMembers(inAnImage bool, appDir string) []string {
 	return located.Members()
 }
 
-func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function, compute string) ([]attribution.App, error) {
+func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function, compute, configName string) ([]attribution.App, error) {
 	detected := detectedApps(functions)
 	apps := cfg.Apps
-	configName := filepath.Base(cfg.Path)
 	container := compute == string(providerkit.ComputeContainer)
 
 	if len(apps) == 0 {
@@ -371,8 +371,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 	return out, nil
 }
 
-func checkAppPaths(cfg *projectconfig.Config) error {
-	configName := filepath.Base(cfg.Path)
+func checkAppPaths(cfg *projectconfig.Config, configName string) error {
 	for _, a := range cfg.Apps {
 		if info, err := os.Stat(filepath.Join(cfg.Dir, a.Path)); err != nil || !info.IsDir() {
 			return fmt.Errorf(
