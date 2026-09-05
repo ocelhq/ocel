@@ -65,6 +65,7 @@ runs:
         sudo apt-get update
         sudo apt-get install -y incus qemu-system-x86 ovmf btrfs-progs
         sudo incus admin init --auto --storage-backend btrfs --storage-create-loop 60
+        sudo incus network set incusbr0 ipv6.address=none ipv6.nat=false
         sudo usermod -aG incus-admin "$(id -un)"
 
     - name: Run the Docker every box ocel bootstraps runs
