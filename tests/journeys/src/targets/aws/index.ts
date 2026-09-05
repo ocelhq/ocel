@@ -239,10 +239,18 @@ async function destroy(cell: CellContext): Promise<void> {
   const dir = await cellTree(cell);
   const env = childEnv(dir);
   const hosts = hostnames(cell);
+  const unbound: string[] = [];
   for (const [app, host] of hosts) {
-    await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
+    try {
+      await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
+    } catch (error) {
+      unbound.push(error instanceof Error ? error.message : String(error));
+    }
   }
   await runOcel(cell, dir, "destroy", "destroy", ["destroy", "production", "--yes"], env);
+  if (unbound.length > 0 && (await stands(cell.slug))) {
+    throw new Error(unbound.join("\n"));
+  }
   await rm(treeRoot(cell, "aws"), { recursive: true, force: true });
 }
 
