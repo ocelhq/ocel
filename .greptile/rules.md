@@ -154,7 +154,7 @@ is the baseline. A comment is justified only as a marker of an intentional gap â
  
 Exception: published packages (`packages/`, the Go `sdk/`) carry public, user-facing
 doc-comments on their exported surface. Those document the API for a consumer, not the
-implementation for a maintainer. An `examples/` config is the other exception: it shows a
+implementation for a maintainer. A fixture config is the other exception: it shows a
 variant that conflicts with what is live as a commented-out line, with one line saying when
 to pick it, and nothing more.
  

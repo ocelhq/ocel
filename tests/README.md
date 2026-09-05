@@ -2,7 +2,7 @@
 
 | suite         | what it drives                                                       |
 | ------------- | -------------------------------------------------------------------- |
-| `journeys`    | one example on one target, through the real `ocel` binary, over HTTP |
+| `journeys`    | one fixture on one target, through the real `ocel` binary, over HTTP |
 | `next-compat` | Next.js's own deployment-adapter harness, by workflow dispatch only  |
 
 Unit tests live beside the code they cover, in vitest for TypeScript, `bun test` under
@@ -13,9 +13,12 @@ provider packages alone. Both run from the provider workflows.
 
 ## Running one journey locally
 
-A cell is one example on one target, named in `journeys/src/spec.ts`. The harness starts
-nothing but the `ocel` binary; bring up what the target needs first. For `dev` that is
-postgres, the control-plane schema and the console:
+A cell is one fixture on one target, named in `journeys/src/spec.ts`. A fixture belongs to
+one concern: `deploy` asks whether a framework runs on a target at all, and its apps under
+`fixtures/deploy/` declare no resources; `sdk` asks whether what an app declares is
+provisioned, linked and usable, from `fixtures/sdk/`. The harness starts nothing but the
+`ocel` binary; bring up what the target needs first. For `dev` that is postgres, the
+control-plane schema and the console:
 
 ```
 go -C cli build -o bin/ocel ./ocel
@@ -27,7 +30,7 @@ pnpm --filter @console/web dev
 Then run one cell:
 
 ```
-pnpm --filter @ocel-tests/journeys cell --example express --target dev
+pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture express --target dev
 ```
 
 For `aws` that is a floci emulator and the endpoint it prints:
@@ -35,14 +38,16 @@ For `aws` that is a floci emulator and the endpoint it prints:
 ```
 scripts/floci.sh create ocel-journeys
 export AWS_ENDPOINT_URL=http://localhost.localstack.cloud:<the port it printed>
-pnpm --filter @ocel-tests/journeys cell --example express --target aws
+pnpm --filter @ocel-tests/journeys cell --concern sdk --fixture express --target aws
 scripts/floci.sh destroy ocel-journeys
 ```
 
-One emulator serves every edge. `OCEL_JOURNEY_VARIANTS` narrows a run to the variants it
-names (`base` among them), `OCEL_JOURNEY_COVERAGE=full` runs every cell rather than a
-covering subset, and `OCEL_JOURNEY_SKIPS=run` drives the cells the gap list marks dead at
-up, which a run otherwise leaves out.
+One emulator serves every edge. `OCEL_JOURNEY_CONCERN` narrows a run to the concerns it
+names, space or comma separated, and unset covers both; `OCEL_JOURNEY_FIXTURES` narrows it
+further to fixtures named `<concern>/<name>`. `OCEL_JOURNEY_VARIANTS` narrows a run to the
+variants it names (`base` among them), `OCEL_JOURNEY_COVERAGE=full` runs every cell rather
+than a covering subset, and `OCEL_JOURNEY_SKIPS=run` drives the cells the gap list marks
+dead at up, which a run otherwise leaves out.
 
 The host is `localhost.localstack.cloud`, not the `127.0.0.1` the script prints: S3-Control
 addresses its endpoint as `<account>.<host>`, and `<account>.127.0.0.1` resolves nowhere,
@@ -57,7 +62,7 @@ node scripts/build-native.mjs --host --target provider-vps
 scripts/incus.sh create journey
 eval "$(scripts/incus.sh info journey)"
 export OCEL_VPS_HOST=$OCEL_INCUS_ADDR OCEL_VPS_USER=$OCEL_INCUS_USER OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY
-pnpm --filter @ocel-tests/journeys cell --example express --target vps
+pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture express --target vps
 ```
 
 `scripts/ec2.sh` is the same box on a real EC2 instance, for when the deploy has to face a
@@ -68,7 +73,7 @@ destroy it when the run ends:
 scripts/ec2.sh create journey
 eval "$(scripts/ec2.sh info journey)"
 export OCEL_VPS_HOST=$OCEL_EC2_ADDR OCEL_VPS_USER=$OCEL_EC2_USER OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY
-pnpm --filter @ocel-tests/journeys cell --example express --target vps
+pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture express --target vps
 scripts/ec2.sh destroy journey
 ```
 
@@ -77,12 +82,14 @@ left behind, and only projects the harness named.
 
 `--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
-A pull request runs one member of each example group, plus every member whose directory the
-diff touches. A full run — workflow dispatch, or the `journey:real` label — runs every
-member. To reproduce a pull request's pick on a laptop:
+A pull request runs the `deploy` bucket alone; a full run — workflow dispatch, or the
+`journey:real` label — runs both, `deploy` cells first. Either way it runs one member of
+each fixture group per concern, plus every member whose directory the diff touches. To
+reproduce a pull request's pick on a laptop:
 
 ```
-OCEL_JOURNEY_SEED=<pull request number> OCEL_JOURNEY_TOUCHED=<dir,dir> \
+OCEL_JOURNEY_CONCERN=deploy OCEL_JOURNEY_SEED=<pull request number> \
+  OCEL_JOURNEY_TOUCHED=<concern/name,concern/name> \
   pnpm --filter @ocel-tests/journeys journey
 ```
 
