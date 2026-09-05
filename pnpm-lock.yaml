@@ -1199,6 +1199,58 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  tests/fixtures/lifecycle/next:
+    dependencies:
+      '@ocel/provider-aws':
+        specifier: workspace:^
+        version: link:../../../../packages/provider-aws
+      '@ocel/provider-vps':
+        specifier: workspace:^
+        version: link:../../../../packages/provider-vps
+      better-sqlite3:
+        specifier: ^13.0.3
+        version: 13.0.3
+      next:
+        specifier: 16.2.10
+        version: 16.2.10(@opentelemetry/api@1.9.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      ocel:
+        specifier: workspace:^
+        version: link:../../../../packages/ocel
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
+      react:
+        specifier: 19.2.4
+        version: 19.2.4
+      react-dom:
+        specifier: 19.2.4
+        version: 19.2.4(react@19.2.4)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
+      '@types/react':
+        specifier: ^19
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19
+        version: 19.2.3(@types/react@19.2.17)
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.0
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   tests/fixtures/sdk/next:
     dependencies:
       '@ocel/provider-aws':
