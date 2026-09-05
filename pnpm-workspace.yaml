@@ -1,4 +1,5 @@
 packages:
+  - www
   - console/*
   - cli/node
   - packages/*
@@ -20,7 +21,7 @@ packages:
 allowBuilds:
   '@bufbuild/buf': true
   aws-sdk: false
-  better-sqlite3: false
+  better-sqlite3: true
   esbuild: true
   protobufjs: false
   sharp: true
