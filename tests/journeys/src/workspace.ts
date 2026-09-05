@@ -9,28 +9,12 @@ export function appPath(fixture: FixtureSpec, app: string): string {
   return nested(fixture) ? `apps/${app}` : ".";
 }
 
-export function appFolder(fixture: FixtureSpec, app: string): string | undefined {
-  return fixture.kind === "workspace" ? `/${app}` : undefined;
-}
-
 export function appHomes(fixture: FixtureSpec): string[] {
   return nested(fixture) ? fixture.apps.map((app) => appPath(fixture, app)) : [];
 }
 
 export function appCommand(fixture: FixtureSpec, app: string): string[] {
   return ["pnpm", "--dir", appPath(fixture, app), "run", "dev"];
-}
-
-export async function setAppNames(
-  fixture: FixtureSpec,
-  run: (name: string, args: string[]) => Promise<unknown>,
-): Promise<void> {
-  for (const app of fixture.apps) {
-    const folder = appFolder(fixture, app);
-    if (folder) {
-      await run(`env-app-${app}`, ["env", "set", "APP_NAME", app, "--folder", folder]);
-    }
-  }
 }
 
 export function migrateCommand(): string[] {

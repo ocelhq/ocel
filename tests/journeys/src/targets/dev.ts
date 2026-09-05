@@ -117,7 +117,7 @@ async function serve(
   const port = await freePort();
   const child = spawn(ocelBin, ["dev", "--", ...appCommand(cell.fixture, app)], {
     cwd: dir,
-    env: { ...env, PORT: String(port), APP_NAME: app },
+    env: { ...env, PORT: String(port) },
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
