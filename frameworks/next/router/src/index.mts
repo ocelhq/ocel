@@ -124,6 +124,7 @@ export interface RouteResult {
   routeMatches?: Record<string, string | string[]>;
   resolvedHeaders?: Headers;
   middleware?: MiddlewareOutcome;
+  middlewareLocation?: string;
 }
 
 export type EdgeEntryKind = "page" | "middleware";
@@ -299,7 +300,7 @@ async function serveRequest(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
-  const pathAndQuery = request.url.replace(/^[a-z][a-z\d+.-]*:\/\/[^/]*/i, "");
+  const pathAndQuery = request.url.replace(ABSOLUTE_URL_ORIGIN, "");
   const queryIndex = pathAndQuery.indexOf("?");
   const rawPath = queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
   if (needsSlashNormalization(rawPath)) {
@@ -352,6 +353,7 @@ async function serveRequest(
   }
 
   let outcome: MiddlewareOutcome | undefined;
+  let middlewareLocation: string | undefined;
   let failure: { error: unknown } | undefined;
 
   const result = (await resolveRoutes({
@@ -432,6 +434,8 @@ async function serveRequest(
           rewrite.pathname = routingPathname(rewrite.pathname);
         }
         outcome = { response, headers: ctx.headers };
+        middlewareLocation =
+          middlewareResult.responseHeaders?.get("location") ?? undefined;
         return middlewareResult;
       } catch (error) {
         failure = { error };
@@ -455,6 +459,7 @@ async function serveRequest(
         deps.manifest,
       ),
       middleware: outcome,
+      middlewareLocation,
     },
     request,
     deps,
@@ -623,6 +628,12 @@ export async function dispatchResult(
 
   const tagged = new Response(response.body, response);
   applyResolvedHeaders(tagged.headers, result.resolvedHeaders);
+  if (
+    isRoutingRedirect(result) &&
+    tagged.headers.get("location") !== result.middlewareLocation
+  ) {
+    carryRequestQuery(tagged.headers, request.url);
+  }
   const middlewareSkip = tagged.headers.get("x-middleware-skip");
   stripMiddlewareHeaders(tagged.headers);
   if (middlewareSkip) tagged.headers.set("x-middleware-skip", middlewareSkip);
@@ -630,6 +641,44 @@ export async function dispatchResult(
     tagged.headers.set("x-matched-path", result.resolvedPathname);
   }
   return tagged;
+}
+
+const ABSOLUTE_URL_ORIGIN = /^[a-z][a-z\d+.-]*:\/\/[^/]*/i;
+
+function carryRequestQuery(headers: Headers, requestUrl: string): void {
+  const location = headers.get("location");
+  if (!location) return;
+  if (!location.startsWith("/") && !ABSOLUTE_URL_ORIGIN.test(location)) return;
+
+  const requestQueryIndex = requestUrl.indexOf("?");
+  if (requestQueryIndex === -1) return;
+  const requestQuery = requestUrl.slice(requestQueryIndex + 1);
+  if (!requestQuery) return;
+
+  const hashIndex = location.indexOf("#");
+  const addressed = hashIndex === -1 ? location : location.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? "" : location.slice(hashIndex);
+  const queryIndex = addressed.indexOf("?");
+  const path = queryIndex === -1 ? addressed : addressed.slice(0, queryIndex);
+  const query = queryIndex === -1 ? "" : addressed.slice(queryIndex + 1);
+
+  const declared = new Set(new URLSearchParams(query).keys());
+  const carried = requestQuery
+    .split("&")
+    .filter((pair) => pair !== "" && !declared.has(queryKey(pair)));
+  if (carried.length === 0) return;
+
+  const merged = query ? [query, ...carried] : carried;
+  headers.set("location", `${path}?${merged.join("&")}${hash}`);
+}
+
+function queryKey(pair: string): string {
+  const raw = pair.split("=", 1)[0]!.replaceAll("+", " ");
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 function applyResolvedHeaders(target: Headers, resolved: Headers | undefined): void {

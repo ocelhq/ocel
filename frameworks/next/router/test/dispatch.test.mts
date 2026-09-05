@@ -927,6 +927,156 @@ describe("dispatchResult", () => {
     expect(res.headers.get("refresh")).toBe("0;url=/redirect-dest");
   });
 
+  it("carries the request query onto a routing redirect that declares none", async () => {
+    const res = await dispatchResult(
+      {
+        status: 307,
+        resolvedHeaders: new Headers({ Location: "/routing/landing" }),
+      },
+      new Request("https://app.example/routing/redirect/has?to=landing"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("/routing/landing?to=landing");
+  });
+
+  it("lets the destination query win over the request's value for the same key", async () => {
+    const res = await dispatchResult(
+      {
+        status: 308,
+        resolvedHeaders: new Headers({ Location: "/dest?to=fixed&keep=1" }),
+      },
+      new Request("https://app.example/old?to=request&extra=2"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.headers.get("location")).toBe("/dest?to=fixed&keep=1&extra=2");
+  });
+
+  it("carries every value of a repeated request param onto the redirect", async () => {
+    const res = await dispatchResult(
+      {
+        status: 307,
+        resolvedHeaders: new Headers({ Location: "/dest" }),
+      },
+      new Request("https://app.example/old?tag=a&tag=b"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.headers.get("location")).toBe("/dest?tag=a&tag=b");
+  });
+
+  it("appends the request query before the destination's hash", async () => {
+    const res = await dispatchResult(
+      {
+        status: 307,
+        resolvedHeaders: new Headers({ Location: "/dest#section" }),
+      },
+      new Request("https://app.example/old?to=landing"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.headers.get("location")).toBe("/dest?to=landing#section");
+  });
+
+  it("leaves a routing redirect untouched when the request carries no query", async () => {
+    const res = await dispatchResult(
+      {
+        status: 308,
+        resolvedHeaders: new Headers({ Location: "/dest" }),
+      },
+      new Request("https://app.example/old"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.headers.get("location")).toBe("/dest");
+  });
+
+  it("carries the request query onto an external routing redirect", async () => {
+    const res = await dispatchResult(
+      {
+        status: 307,
+        resolvedHeaders: new Headers({
+          Location: "https://other.example/landing?a=1",
+        }),
+      },
+      new Request("https://app.example/old?a=2&b=3"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.headers.get("location")).toBe("https://other.example/landing?a=1&b=3");
+  });
+
+  it("leaves the destination's own query byte-identical while appending the request's", async () => {
+    const res = await dispatchResult(
+      {
+        status: 307,
+        resolvedHeaders: new Headers({ Location: "/dest?flag" }),
+      },
+      new Request("https://app.example/old?q=1"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.headers.get("location")).toBe("/dest?flag&q=1");
+  });
+
+  it("re-encodes neither the destination's query nor the request's", async () => {
+    const res = await dispatchResult(
+      {
+        status: 307,
+        resolvedHeaders: new Headers({ Location: "/dest?next=/home&t=a%20b" }),
+      },
+      new Request("https://app.example/old?q=a%20b"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.headers.get("location")).toBe("/dest?next=/home&t=a%20b&q=a%20b");
+  });
+
+  it("leaves a destination path that a URL would re-encode byte-identical", async () => {
+    const res = await dispatchResult(
+      {
+        status: 307,
+        resolvedHeaders: new Headers({ Location: "/a b^c" }),
+      },
+      new Request("https://app.example/old?q=1"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.headers.get("location")).toBe("/a b^c?q=1");
+  });
+
+  it("leaves a hash-only or bare-relative Location alone", async () => {
+    const deps = baseDeps({ assetStore: assetStoreServing({}) });
+    const hash = await dispatchResult(
+      { status: 307, resolvedHeaders: new Headers({ Location: "#top" }) },
+      new Request("https://app.example/old?q=1"),
+      deps,
+    );
+    const relative = await dispatchResult(
+      { status: 307, resolvedHeaders: new Headers({ Location: "foo" }) },
+      new Request("https://app.example/old?q=1"),
+      deps,
+    );
+
+    expect(hash.headers.get("location")).toBe("#top");
+    expect(relative.headers.get("location")).toBe("foo");
+  });
+
+  it("leaves a Refresh routing redirect's target alone", async () => {
+    const res = await dispatchResult(
+      {
+        status: 307,
+        resolvedHeaders: new Headers({ Refresh: "0;url=/redirect-dest" }),
+      },
+      new Request("https://app.example/redirect/a?to=landing"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.headers.get("refresh")).toBe("0;url=/redirect-dest");
+  });
+
   it("serves the page when a headers() rule sets a location without a redirect status", async () => {
     const deps = baseDeps({
       manifest: {
