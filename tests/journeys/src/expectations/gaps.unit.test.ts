@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "bun:test";
 import { contractTitle, DESTROY_TITLE, planTests, UP_TITLE } from "../plan";
-import { EDGE_ISR_TITLE, nextCacheRows } from "../rows";
+import { nextCacheRows } from "../rows";
 import { cellsOf, specForTarget } from "../spec";
 import { gaps } from "./gaps";
 import {
@@ -196,12 +196,11 @@ describe("the gap list", () => {
     assert.deepEqual(issues(listed, node, STREAM), [851]);
     assert.deepEqual(issues(listed, "deploy/node-api-gateway/web", HEALTH), [854]);
     for (const row of nextCacheRows) {
-      const issue = row.title === EDGE_ISR_TITLE ? 899 : 854;
       for (const cell of ["sdk/next-api-gateway/web", "deploy/next-api-gateway/web"]) {
-        assert.deepEqual(issues(listed, cell, row.title), [issue], cell);
+        assert.deepEqual(issues(listed, cell, row.title), [854], cell);
       }
       for (const leg of CONTRACT_LEGS) {
-        assert.deepEqual(issues(listed, lifecycle, contractTitle(leg, row.title)), [issue], leg);
+        assert.deepEqual(issues(listed, lifecycle, contractTitle(leg, row.title)), [854], leg);
       }
     }
   });

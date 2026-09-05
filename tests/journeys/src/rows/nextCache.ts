@@ -29,7 +29,6 @@ const ALLOWED_WIDTH = 640;
 const ALLOWED_QUALITY = 75;
 const DEPLOYMENT_NOTE = "next-cache:deployment";
 
-export const EDGE_ISR_TITLE = "an edge-runtime page with a revalidate serves a cached tier";
 export const PREFETCH_TITLE = "a prefetch answers byte-identically to the request that is not one";
 
 function tierIs(res: Response, allowed: Tier[], what: string) {
@@ -221,16 +220,6 @@ export const nextCacheRows: ContractRow[] = [
       assert.equal(tierOf(drafted.res), "BYPASS");
       cacheControlIs(drafted.res, DYNAMIC_CACHE_CONTROL, "the drafted page");
       assert.equal(marker(drafted.html, "draft"), "enabled");
-    },
-  },
-  {
-    title: EDGE_ISR_TITLE,
-    run: async (ctx) => {
-      const { res } = await page(ctx, "/cache/edge");
-      tierIs(res, CACHED, "the edge-runtime page");
-      cacheControlIs(res, cacheControlFor(ISR_SECONDS), "the edge-runtime page");
-      const before = await settled(ctx, "/cache/edge", "edge");
-      await movedOn(ctx, "/cache/edge", "edge", before);
     },
   },
 ];

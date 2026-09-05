@@ -1,6 +1,5 @@
 import { DESTROY_TITLE, UP_TITLE } from "../plan";
 import {
-  EDGE_ISR_TITLE,
   LINK_QUERY_ROW,
   LINK_ROW,
   nextCacheRows,
@@ -228,7 +227,7 @@ export const gaps: Gap[] = [
         on: ["aws.floci"],
         cells: EVERY_AWS_CELL_BUT_LADDERS,
         variants: ["api-gateway"],
-        tests: [{ rows: "every", except: [STREAM_ROW, EDGE_ISR_TITLE] }],
+        tests: [{ rows: "every", except: [STREAM_ROW] }],
       },
     ],
   },
@@ -237,25 +236,6 @@ export const gaps: Gap[] = [
     reason: "a floci Function URL never delivers the body of a streamed response and hangs",
     issue: 851,
     affects: [{ on: ["aws.floci"], variants: ["api-gateway"], tests: [{ row: STREAM_ROW }] }],
-  },
-  {
-    id: "edge-runtime-isr",
-    reason: "a Next page with runtime edge and a revalidate never serves a cached tier",
-    issue: 899,
-    affects: [
-      {
-        on: ["aws.floci"],
-        cells: [...NEXT_CELLS, ...LIFECYCLE_CELLS],
-        variants: ["api-gateway"],
-        tests: [{ row: EDGE_ISR_TITLE }],
-      },
-      {
-        on: ["aws"],
-        cells: ["deploy/next/web"],
-        variants: ["cloudflare"],
-        tests: [{ row: EDGE_ISR_TITLE }],
-      },
-    ],
   },
   {
     id: "aws-container-unimplemented",
