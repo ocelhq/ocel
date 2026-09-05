@@ -4,8 +4,9 @@ import path from "node:path";
 import { type Run, settleAccount } from "./account";
 import type { ExpectationEnvironment } from "./expectations";
 import { currentRunIdentity } from "./identity";
+import { follow, LIVE_ENV } from "./live";
 import { longestFirst } from "./order";
-import { cellFile, cellFilesDir, cellsDir, packageRoot, prepareFile } from "./paths";
+import { cellFile, cellFilesDir, cellsDir, liveFile, packageRoot, prepareFile } from "./paths";
 import { pickFixtures, requestedPick } from "./pick";
 import type { PrepareFailures } from "./prepare";
 import {
@@ -40,19 +41,25 @@ async function writeCellFiles(runId: string, target: Target, cells: Cell[]): Pro
   return files;
 }
 
-function runSuite(
+async function runSuite(
   target: Target,
   files: string[],
   workers: number,
   env: NodeJS.ProcessEnv,
+  live: string,
 ): Promise<Run> {
+  await rm(live, { force: true });
+  const stop = follow(live);
   const child = spawn(
     "bun",
     ["test", `--parallel=${workers}`, `--timeout=${target.legTimeoutMs}`, ...files],
-    { cwd: packageRoot, stdio: "inherit", env },
+    { cwd: packageRoot, stdio: "inherit", env: { ...env, [LIVE_ENV]: live } },
   );
   return new Promise<Run>((resolve) => {
-    child.on("close", (exitCode, signal) => resolve({ exitCode, signal }));
+    child.on("close", (exitCode, signal) => {
+      stop();
+      resolve({ exitCode, signal });
+    });
   });
 }
 
@@ -103,7 +110,7 @@ export async function runJourney(
   const run =
     files.length === 0
       ? { exitCode: 0, signal: null }
-      : await runSuite(target, files, workers, env);
+      : await runSuite(target, files, workers, env, liveFile(runId, target.name));
   const runEnd = Date.now();
 
   const verdict = await settleAccount({

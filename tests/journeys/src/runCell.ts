@@ -9,6 +9,7 @@ import {
 import { evidence } from "./evidence";
 import { currentRunIdentity, projectSlug } from "./identity";
 import { ledgerFor } from "./ledger";
+import { live } from "./live";
 import { evidenceDir, fixtureDir } from "./paths";
 import {
   cellKey,
@@ -61,6 +62,7 @@ function describeSelected({ name, fixture, variant }: Cell) {
   };
 
   const write = ledgerFor(runId, target.name, name);
+  const say = live(name);
   const timeout = target.legTimeoutMs;
 
   function testIn(key: string, title: string, work: () => Promise<void>) {
@@ -68,8 +70,10 @@ function describeSelected({ name, fixture, variant }: Cell) {
       title,
       async () => {
         const startTime = Date.now();
+        say(`▶ ${title}`);
         try {
           await work();
+          say(`✓ ${title} (${((Date.now() - startTime) / 1000).toFixed(1)}s)`);
           write({
             cell: key,
             title,
@@ -78,6 +82,7 @@ function describeSelected({ name, fixture, variant }: Cell) {
             duration: Date.now() - startTime,
           });
         } catch (error) {
+          say(`✗ ${title}: ${messageOf(error).split("\n")[0]}`);
           write({
             cell: key,
             title,
