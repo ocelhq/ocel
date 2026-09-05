@@ -373,7 +373,7 @@ func TestCheckFresh(t *testing.T) {
 
 		root := t.TempDir()
 		built := []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
-		if err := Record(root, built, true); err != nil {
+		if err := Record(root, built); err != nil {
 			t.Fatalf("Record: %v", err)
 		}
 
@@ -398,7 +398,7 @@ func TestCheckFresh(t *testing.T) {
 			clientVar("PUBLIC_SITE_URL", "https://example.com"),
 			serverVar("STRIPE_API_KEY", "sk-live"),
 		}}}
-		if err := Record(root, built, true); err != nil {
+		if err := Record(root, built); err != nil {
 			t.Fatalf("Record: %v", err)
 		}
 
@@ -415,7 +415,7 @@ func TestCheckFresh(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := Record(root, []App{{Name: "storefront"}}, false); err != nil {
+		if err := Record(root, []App{{Name: "storefront"}}); err != nil {
 			t.Fatalf("Record: %v", err)
 		}
 
@@ -423,7 +423,7 @@ func TestCheckFresh(t *testing.T) {
 		if err == nil {
 			t.Fatal("CheckFresh = nil for an output that inlined no client value, want a refusal")
 		}
-		for _, want := range []string{"PUBLIC_SITE_URL", "never inlined", "`ocel build` resolves no values"} {
+		for _, want := range []string{"PUBLIC_SITE_URL", "never inlined", "`ocel build`, which resolves no values"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to state %q", err, want)
 			}
@@ -437,7 +437,7 @@ func TestCheckFresh(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}, true); err != nil {
+		if err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
 			t.Fatalf("Record: %v", err)
 		}
 
@@ -472,7 +472,7 @@ func TestRecord(t *testing.T) {
 
 		root := t.TempDir()
 
-		err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}, true)
+		err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
 		if err != nil {
 			t.Fatalf("Record: %v", err)
 		}

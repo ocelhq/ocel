@@ -53,8 +53,8 @@ export default {
 		if err != nil {
 			t.Fatalf("the build recorded nothing about its client values: %v", err)
 		}
-		if !strings.Contains(string(record), `"resolved":false`) {
-			t.Errorf("client-digests.json = %s, want it to state that the build resolved no values", record)
+		if !strings.Contains(string(record), `"api":{}`) {
+			t.Errorf("client-digests.json = %s, want it to record the app with nothing inlined: `ocel build` resolves no declared value", record)
 		}
 	})
 

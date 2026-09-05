@@ -140,12 +140,11 @@ func mapSpecifier(dir string) error {
 }
 
 type buildRecord struct {
-	Resolved bool                         `json:"resolved"`
-	Digests  map[string]map[string]string `json:"digests,omitempty"`
+	Digests map[string]map[string]string `json:"digests,omitempty"`
 }
 
-func Record(projectDir string, apps []App, resolved bool) error {
-	record := buildRecord{Resolved: resolved, Digests: make(map[string]map[string]string, len(apps))}
+func Record(projectDir string, apps []App) error {
+	record := buildRecord{Digests: make(map[string]map[string]string, len(apps))}
 	for _, app := range apps {
 		record.Digests[app.Name] = digests(app)
 	}
@@ -191,11 +190,10 @@ func CheckFresh(projectDir string, apps []App) error {
 
 	var causes []string
 	if len(missing) > 0 {
-		cause := "it was not client-accessible when .ocel/output was built"
-		if !record.Resolved {
-			cause = "`ocel build` resolves no values"
-		}
-		causes = append(causes, fmt.Sprintf("%s %s never inlined — %s", strings.Join(missing, ", "), were(missing), cause))
+		causes = append(causes, fmt.Sprintf(
+			"%s %s never inlined — either not client-accessible when .ocel/output was built, or built by `ocel build`, which resolves no values",
+			strings.Join(missing, ", "), were(missing),
+		))
 	}
 	if len(changed) > 0 {
 		causes = append(causes, fmt.Sprintf("the client-accessible value of %s changed since .ocel/output was built", strings.Join(changed, ", ")))
