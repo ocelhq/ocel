@@ -31,4 +31,4 @@ OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --con
 `ocel destroy` takes it all down again.
 
 `apps/*/src/probes.ts` is the test surface — mounted at `/api/probes`, driven by the suites
-under [`tests/`](../../tests), and of no use to the product.
+under [`tests/journeys`](../../../journeys), and of no use to the product.

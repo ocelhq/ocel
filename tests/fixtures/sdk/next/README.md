@@ -5,7 +5,7 @@ uploader named `document` that takes images and PDFs under `documents/` and writ
 when an upload completes, a plain `GREETING` and a secret `SECRET_TOKEN`. The declarations
 sit in `ocel/`, and each one is the provisioning step.
 
-It doubles as the fixture the journey suites under [`tests/`](../../tests) drive through
+It doubles as the fixture the journey suites under [`tests/journeys`](../../../journeys) drive through
 the real binary, so it also carries a framework surface of no use to the product.
 
 ## Run it

@@ -7,7 +7,7 @@
   Doc-comments only under the literal paths `packages/` and `sdk/` — no other directory
   qualifies, however public its surface feels. An existing comment elsewhere is debt,
   not precedent: never match it, never extend it, delete it when touching nearby code.
-  One exception: an `examples/` config shows a variant that conflicts with what is live
+  One exception: a fixture config shows a variant that conflicts with what is live
   as a commented-out line, with one line saying when to pick it — never more.
 - The commits are the ADRs. Rationale belongs in the commit message and PR bodies. Nowhere else.
 - Do not generate changesets unless explicitly instructed.
@@ -81,9 +81,9 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`proto/`** — source of truth for the wire format. Bindings are **generated** — never
   hand-edit generated output.
 - **`scripts/`** — development and release tooling, and the emulator and ladder scripts.
-- **`examples/`, `tests/`** — sample apps used as fixtures, and the suites that drive
-  them through the real binary: the journeys, the dev-server suite and the Next
-  compatibility harness.
+- **`tests/`** — the suites that drive the real binary — the journeys, the dev-server
+  suite and the Next compatibility harness — and under `tests/fixtures/<concern>/` the
+  apps they drive. A fixture directory exercises one concern and nothing else.
 - **`docs/agents/`** — configuration the agent skills read. Not product documentation;
   nothing that explains the code belongs here.
 - **`.github/`** — CI. **`.changeset/`** — the release mechanism; the workflow runs the

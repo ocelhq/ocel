@@ -1,14 +1,17 @@
 {
-  "name": "@ocel-examples/workspace-express",
+  "name": "@ocel-fixtures/sdk-express",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "migrate": "tsx scripts/migrate.ts",
     "start": "tsx src/server.ts",
     "dev": "tsx src/server.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ocel/provider-aws": "workspace:^",
+    "@ocel/provider-vps": "workspace:^",
     "better-sqlite3": "^13.0.3",
     "express": "~5.0.0",
     "ocel": "workspace:^",
