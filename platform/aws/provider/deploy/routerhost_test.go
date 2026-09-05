@@ -10,6 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -224,6 +225,23 @@ func TestASiblingFunctionHostsNoRouter(t *testing.T) {
 	for _, key := range []string{routingManifestEnv, functionURLsEnv} {
 		if _, wired := sibling[key]; wired {
 			t.Errorf("sibling carries %s, want the router wired into the entry function alone", key)
+		}
+	}
+}
+
+func TestAppEnvCarriesTheDeploymentURLToTheFunction(t *testing.T) {
+	t.Parallel()
+
+	app := routedApp()
+	app.Variables = []*contractv1.ManifestVariable{
+		{Key: providerkit.URLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
+		{Key: providerkit.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
+	}
+
+	env := plannedEnv(t, Config{}, app, nil)
+	for _, key := range []string{providerkit.URLEnvName, providerkit.ClientURLEnvName} {
+		if got, want := env[key], "https://shop.example"; got != want {
+			t.Errorf("%s = %q, want %q: server code reads the url off its own environment", key, got, want)
 		}
 	}
 }

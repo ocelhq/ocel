@@ -1633,6 +1633,17 @@ describe("the variables a deployment declares", () => {
     });
   });
 
+  it("hands the deployment url to an edge entry like any other plain value", async () => {
+    const { edge } = varsInvoker({
+      variables: { env: { OCEL_URL: "https://shop.example", NEXT_PUBLIC_OCEL_URL: "https://shop.example" } },
+    });
+
+    expect(await workerEnv(edge)).toMatchObject({
+      OCEL_URL: "https://shop.example",
+      NEXT_PUBLIC_OCEL_URL: "https://shop.example",
+    });
+  });
+
   it("lets a declared value win over the bundle's own env", async () => {
     const { edge } = varsInvoker({
       bundleEnv: { __NEXT_BUILD_ID: "t", SHARED: "from-bundle" },

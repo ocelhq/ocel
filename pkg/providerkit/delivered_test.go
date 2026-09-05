@@ -120,6 +120,20 @@ func TestEveryValueClassIsDeliveredUnderItsBareNameToAContainer(t *testing.T) {
 	}
 }
 
+func TestTheDeploymentURLIsDeliveredToAContainerRatherThanRefusedAsAnOcelName(t *testing.T) {
+	req := namingARegistry(containerDeployRequest("/healthz"))
+	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, providerkit.URLEnvName, "https://shop.example")
+	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, providerkit.ClientURLEnvName, "https://shop.example")
+
+	delivered := deliveredBy(t, req, nil)
+
+	for _, key := range []string{providerkit.URLEnvName, providerkit.ClientURLEnvName} {
+		if got, want := delivered[key], "https://shop.example"; got != want {
+			t.Errorf("a container is handed %s=%q, want %q: ocel writes it for every app, so the guard on its own prefix must not refuse its own entry", key, got, want)
+		}
+	}
+}
+
 func TestALinkRecordIsDeliveredUnderTheNameTheSdkReadsItBy(t *testing.T) {
 	req := namingARegistry(containerDeployRequest("/healthz"))
 	req.Manifest.Resources = []*contractv1.ManifestResource{{
