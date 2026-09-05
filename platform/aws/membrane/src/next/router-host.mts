@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { serve, type RouteDeps } from "@framework/next-router";
+import { CONTROL_HEADERS, serve, type RouteDeps } from "@framework/next-router";
 import type { AssetBucket } from "@framework/next-router/assets";
 import { functionUrlImageOrigin } from "@framework/next-router/image";
 import { originBodyBudget } from "@framework/next-router/origin-body";
@@ -20,18 +20,13 @@ import {
   siblingOriginFetch,
 } from "./router-signing.mjs";
 
-const CONTROL_PREFIXES = ["x-ocel-", "x-middleware-"];
-
-const CONTROL_HEADERS = ["next-resume"];
+const NEXT_INTERNAL_PREFIX = "x-middleware-";
 
 export function withoutClientControl(headers: Headers): Headers {
   const kept = new Headers(headers);
   for (const name of [...headers.keys()]) {
     const lower = name.toLowerCase();
-    if (
-      CONTROL_PREFIXES.some((prefix) => lower.startsWith(prefix)) ||
-      CONTROL_HEADERS.includes(lower)
-    ) {
+    if (lower.startsWith(NEXT_INTERNAL_PREFIX) || CONTROL_HEADERS.includes(lower)) {
       kept.delete(name);
     }
   }

@@ -9,8 +9,8 @@ var EDGE_KIND = 'cloudfront';
 var CACHE_KEY_HEADER = 'x-ocel-cache-key';
 var FORWARDED_HOST_HEADER = 'x-forwarded-host';
 var ORIGIN_SECRET_HEADER = 'x-ocel-origin-secret';
-var CONTROL_PREFIXES = ['x-ocel-', 'x-middleware-'];
-var CONTROL_HEADERS = ['next-resume'];
+var CONTROL_PREFIX = 'x-middleware-';
+var CONTROL_HEADERS = ['x-ocel-entry', 'next-resume', ORIGIN_SECRET_HEADER];
 
 function headerValue(headers, name) {
   var entry = headers[name];
@@ -22,10 +22,7 @@ function stripClientControl(headers) {
   var names = Object.keys(headers);
   for (var i = 0; i < names.length; i++) {
     var name = names[i].toLowerCase();
-    var control = CONTROL_HEADERS.indexOf(name) >= 0;
-    for (var p = 0; !control && p < CONTROL_PREFIXES.length; p++) {
-      control = name.indexOf(CONTROL_PREFIXES[p]) === 0;
-    }
+    var control = CONTROL_HEADERS.indexOf(name) >= 0 || name.indexOf(CONTROL_PREFIX) === 0;
     if (control) delete headers[names[i]];
   }
 }
