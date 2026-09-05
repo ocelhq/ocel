@@ -212,9 +212,11 @@ describe("the shared cache-key variants", () => {
 
   for (const testCase of cacheKeyFixture.cases) {
     it(testCase.name, () => {
-      expect(variantPath(testCase.pathname, H(testCase.headers), "STATIC")).toBe(
-        testCase.variantStatic,
-      );
+      for (const renderingMode of ["STATIC", undefined] as const) {
+        expect(
+          variantPath(testCase.pathname, H(testCase.headers), renderingMode),
+        ).toBe(testCase.variantPrerendered);
+      }
       expect(
         variantPath(testCase.pathname, H(testCase.headers), "PARTIALLY_STATIC"),
       ).toBe(testCase.variantPartiallyStatic);
@@ -252,6 +254,10 @@ describe("variantPath", () => {
 
   it("maps bare RSC on a STATIC route to .rsc", () => {
     expect(variantPath("/blog", H({ RSC: "1" }), "STATIC")).toBe("/blog.rsc");
+  });
+
+  it("maps bare RSC to .rsc when the build declared no rendering mode", () => {
+    expect(variantPath("/blog", H({ RSC: "1" }), undefined)).toBe("/blog.rsc");
   });
 
   it("is non-cacheable for bare RSC on a PPR route (dynamic navigation)", () => {

@@ -100,7 +100,7 @@ export function variantPath(
   if (prefetch === "1") return `${base}.prefetch.rsc`;
   if (prefetch !== null) return null;
 
-  return renderingMode === "STATIC" ? `${base}.rsc` : null;
+  return renderingMode === "PARTIALLY_STATIC" ? null : `${base}.rsc`;
 }
 
 export interface DeploymentScope {

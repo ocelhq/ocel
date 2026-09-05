@@ -212,6 +212,33 @@ describe("dispatchResult", () => {
     expect(captured?.headers.get("next-router-state-tree")).toBe("%5B%22%22%5D");
   });
 
+  it("rewrites the origin's shared-cache header on a bare RSC read of a non-PPR prerender", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/blog": { kind: "prerender", id: "/blog", config: {} } },
+      },
+      functionUrls: { "/blog": "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("flight", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=31536000" },
+        })) as unknown as typeof fetch,
+      cache: missingCache(),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+      new Request("https://app.example/blog", { headers: { rsc: "1" } }),
+      deps,
+    );
+
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
+  });
+
   it("forwards the client's cookie to an uncacheable prerender origin", async () => {
     let captured: Request | undefined;
     const deps = baseDeps({
@@ -1080,7 +1107,7 @@ describe("dispatchResult", () => {
           "/ppr": {
             kind: "prerender",
             id: "/ppr",
-            config: {},
+            config: { renderingMode: "PARTIALLY_STATIC" },
             fallback: { initialRevalidate: 60, initialExpiration: 3600 },
             pprChain: { headers: { "next-resume": "1" } },
           },

@@ -6,7 +6,7 @@
       "pathname": "/blog",
       "headers": {},
       "draft": false,
-      "variantStatic": "/blog",
+      "variantPrerendered": "/blog",
       "variantPartiallyStatic": "/blog"
     },
     {
@@ -16,7 +16,7 @@
         "rsc": "1"
       },
       "draft": false,
-      "variantStatic": "/blog.rsc",
+      "variantPrerendered": "/blog.rsc",
       "variantPartiallyStatic": null
     },
     {
@@ -27,7 +27,7 @@
         "next-router-state-tree": "%5B%22%22%2C%7B%7D%5D"
       },
       "draft": false,
-      "variantStatic": "/blog.rsc",
+      "variantPrerendered": "/blog.rsc",
       "variantPartiallyStatic": null
     },
     {
@@ -38,7 +38,7 @@
         "next-router-prefetch": "1"
       },
       "draft": false,
-      "variantStatic": "/blog.prefetch.rsc",
+      "variantPrerendered": "/blog.prefetch.rsc",
       "variantPartiallyStatic": "/blog.prefetch.rsc"
     },
     {
@@ -49,7 +49,7 @@
         "next-router-prefetch": "0"
       },
       "draft": false,
-      "variantStatic": null,
+      "variantPrerendered": null,
       "variantPartiallyStatic": null
     },
     {
@@ -61,7 +61,7 @@
         "next-router-prefetch": "0"
       },
       "draft": false,
-      "variantStatic": null,
+      "variantPrerendered": null,
       "variantPartiallyStatic": null
     },
     {
@@ -73,7 +73,7 @@
         "next-router-prefetch": "0"
       },
       "draft": false,
-      "variantStatic": null,
+      "variantPrerendered": null,
       "variantPartiallyStatic": null
     },
     {
@@ -84,7 +84,7 @@
         "next-router-prefetch": "2"
       },
       "draft": false,
-      "variantStatic": null,
+      "variantPrerendered": null,
       "variantPartiallyStatic": null
     },
     {
@@ -95,7 +95,7 @@
         "next-router-segment-prefetch": "/blog"
       },
       "draft": false,
-      "variantStatic": "/blog.segments/%2Fblog.segment.rsc",
+      "variantPrerendered": "/blog.segments/%2Fblog.segment.rsc",
       "variantPartiallyStatic": "/blog.segments/%2Fblog.segment.rsc"
     },
     {
@@ -106,7 +106,7 @@
         "next-url": "/photo/1"
       },
       "draft": false,
-      "variantStatic": "/photo.iu/%2Fphoto%2F1.rsc",
+      "variantPrerendered": "/photo.iu/%2Fphoto%2F1.rsc",
       "variantPartiallyStatic": null
     },
     {
@@ -118,7 +118,7 @@
         "next-router-segment-prefetch": "/photo"
       },
       "draft": false,
-      "variantStatic": "/photo.iu/%2Ffeed.segments/%2Fphoto.segment.rsc",
+      "variantPrerendered": "/photo.iu/%2Ffeed.segments/%2Fphoto.segment.rsc",
       "variantPartiallyStatic": "/photo.iu/%2Ffeed.segments/%2Fphoto.segment.rsc"
     },
     {
@@ -126,7 +126,7 @@
       "pathname": "/blog",
       "headers": {},
       "draft": true,
-      "variantStatic": "/blog",
+      "variantPrerendered": "/blog",
       "variantPartiallyStatic": "/blog"
     },
     {
@@ -136,7 +136,7 @@
         "rsc": "1"
       },
       "draft": true,
-      "variantStatic": "/blog.rsc",
+      "variantPrerendered": "/blog.rsc",
       "variantPartiallyStatic": null
     }
   ]
