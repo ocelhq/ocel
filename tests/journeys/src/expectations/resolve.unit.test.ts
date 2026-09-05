@@ -49,10 +49,10 @@ describe("resolve", () => {
 
   it("expands a row across the contract legs it names, and the three by default", () => {
     const out = listed(
-      [gap("one", [{ on: ["vps"], cells: ["sdk/node/web"], tests: [{ row: HEALTH }] }])],
+      [gap("one", [{ on: ["vps"], cells: ["lifecycle/next/web"], tests: [{ row: HEALTH }] }])],
       "vps",
     );
-    assert.deepEqual(Object.keys(out["sdk/node/web"] ?? {}), [
+    assert.deepEqual(Object.keys(out["lifecycle/next/web"] ?? {}), [
       HEALTH,
       contractTitle("redeploy", HEALTH),
       contractTitle("rollback", HEALTH),
@@ -60,12 +60,26 @@ describe("resolve", () => {
     const named = listed(
       [
         gap("two", [
-          { on: ["vps"], cells: ["sdk/node/web"], tests: [{ row: HEALTH, legs: ["rollback"] }] },
+          {
+            on: ["vps"],
+            cells: ["lifecycle/next/web"],
+            tests: [{ row: HEALTH, legs: ["rollback"] }],
+          },
         ]),
       ],
       "vps",
     );
-    assert.deepEqual(Object.keys(named["sdk/node/web"] ?? {}), [contractTitle("rollback", HEALTH)]);
+    assert.deepEqual(Object.keys(named["lifecycle/next/web"] ?? {}), [
+      contractTitle("rollback", HEALTH),
+    ]);
+  });
+
+  it("expands a row on a cell that only serves across the contract leg alone", () => {
+    const out = listed(
+      [gap("one", [{ on: ["vps"], cells: ["sdk/node/web"], tests: [{ row: HEALTH }] }])],
+      "vps",
+    );
+    assert.deepEqual(Object.keys(out["sdk/node/web"] ?? {}), [HEALTH]);
   });
 
   it("expands a set of rows, minus the titles it excepts", () => {
@@ -163,6 +177,21 @@ describe("resolve", () => {
           "dev",
         ),
       /one on dev lists sdk\/node\/web/,
+    );
+  });
+
+  it("refuses a block naming a leg the fixture does not run", () => {
+    assert.throws(
+      () =>
+        resolve(
+          [
+            gap("one", [
+              { on: ["vps"], cells: ["sdk/node/web"], tests: [{ row: HEALTH, legs: ["rollback"] }] },
+            ]),
+          ],
+          "vps",
+        ),
+      /one on vps lists sdk\/node\/web, which plans none of the tests named/,
     );
   });
 

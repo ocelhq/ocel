@@ -24,9 +24,9 @@ export type Kind = "composite" | "ladder" | "workspace";
 
 export type Edge = "cloudfront" | "api-gateway" | "cloudflare";
 
-export type Concern = "deploy" | "sdk";
+export type Concern = "deploy" | "lifecycle" | "sdk";
 
-export const CONCERNS: Concern[] = ["deploy", "sdk"];
+export const CONCERNS: Concern[] = ["deploy", "lifecycle", "sdk"];
 
 export type { Compute };
 
@@ -35,6 +35,10 @@ export type Group = { concern: Concern; name: string; preferred: string };
 export type TargetName = "dev" | "aws" | "vps";
 
 export type Leg = "up" | "contract" | "redeploy" | "rollback" | "destroy";
+
+export const SERVES: Leg[] = ["up", "contract", "destroy"];
+
+export const LIVES: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"];
 
 export type LadderPhase = "publish" | "consume" | "outlive" | "prune";
 
@@ -64,6 +68,7 @@ export type FixtureSpec = {
   group?: string;
   rows: ContractRow[];
   apps: string[];
+  legs: Leg[];
   targets?: TargetName[];
   variants?: Variant[];
   hooks?: LadderHooks;
@@ -92,6 +97,7 @@ export const spec: FixtureSpec[] = [
     group: "node-http",
     rows: SERVED,
     apps: ["web"],
+    legs: SERVES,
     variants: AWS,
   },
   {
@@ -102,6 +108,7 @@ export const spec: FixtureSpec[] = [
     kind: "composite",
     rows: [...SERVED, ...NEXT_SERVED],
     apps: ["web"],
+    legs: SERVES,
     variants: AWS,
   },
   {
@@ -112,6 +119,19 @@ export const spec: FixtureSpec[] = [
     group: "node-http",
     rows: SERVED,
     apps: ["next", "express"],
+    legs: SERVES,
+    variants: AWS,
+  },
+  {
+    name: "next",
+    concern: "lifecycle",
+    dir: "lifecycle/next",
+    runtime: "next",
+    kind: "composite",
+    rows: [...STORED, ...NEXT_SERVED, ...NEXT_STORED],
+    apps: ["web"],
+    legs: LIVES,
+    targets: ["aws", "vps"],
     variants: AWS,
   },
   {
@@ -123,6 +143,7 @@ export const spec: FixtureSpec[] = [
     group: "node-http",
     rows: STORED,
     apps: ["web"],
+    legs: SERVES,
     variants: AWS,
   },
   {
@@ -133,6 +154,7 @@ export const spec: FixtureSpec[] = [
     kind: "composite",
     rows: [...STORED, ...NEXT_SERVED, ...NEXT_STORED],
     apps: ["web"],
+    legs: SERVES,
     variants: AWS,
   },
   {
@@ -143,6 +165,7 @@ export const spec: FixtureSpec[] = [
     group: "node-http",
     rows: STORED,
     apps: ["next", "express"],
+    legs: SERVES,
     variants: AWS,
   },
   {
@@ -153,6 +176,7 @@ export const spec: FixtureSpec[] = [
     kind: "ladder",
     rows: LADDER,
     apps: ["web"],
+    legs: LIVES,
     targets: ["aws"],
     variants: AWS,
   },
@@ -164,6 +188,7 @@ export const spec: FixtureSpec[] = [
     kind: "ladder",
     rows: LADDER,
     apps: ["web"],
+    legs: LIVES,
     targets: ["aws"],
     variants: AWS,
     hooks: { ...sstHooks, rows: ladderRows },
@@ -176,6 +201,7 @@ export const spec: FixtureSpec[] = [
     kind: "ladder",
     rows: LADDER,
     apps: ["web"],
+    legs: LIVES,
     targets: ["aws"],
     variants: AWS,
     hooks: { ...pulumiHooks, rows: ladderRows },
@@ -203,6 +229,10 @@ export function variantsOf(fixture: FixtureSpec, target: TargetName): Variant[] 
     throw new Error(`${fixtureNameOf(fixture)} lists the ${twice} variant twice`);
   }
   return listed.filter((one) => runsOn(one, target));
+}
+
+export function legsOf(one: FixtureSpec, able: Leg[]): Leg[] {
+  return one.legs.filter((leg) => able.includes(leg));
 }
 
 export function cellsOf(fixture: FixtureSpec, target: TargetName): Cell[] {

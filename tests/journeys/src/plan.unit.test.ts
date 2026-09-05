@@ -15,12 +15,11 @@ import {
   type FixtureSpec,
   fixtureNameOf,
   type LadderRow,
-  type Leg,
+  LIVES,
+  SERVES,
   specByName,
   type TargetName,
 } from "./spec";
-
-const ALL_LEGS: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"];
 
 function base(fixture: FixtureSpec): Cell {
   return { name: fixtureNameOf(fixture), fixture };
@@ -28,7 +27,7 @@ function base(fixture: FixtureSpec): Cell {
 
 describe("planning a workspace row", () => {
   const workspace = specByName("sdk", "workspace");
-  const planned = planTests([base(workspace)], ALL_LEGS);
+  const planned = planTests([base(workspace)], LIVES);
 
   it("plans the whole contract once per app", () => {
     for (const app of workspace.apps) {
@@ -39,14 +38,12 @@ describe("planning a workspace row", () => {
     }
   });
 
-  it("gives every app its own lifecycle rows, so one can be red while another is green", () => {
+  it("gives every app its own up and destroy, so one can be red while another is green", () => {
     for (const app of workspace.apps) {
       const titles = planned
         .filter((entry) => entry.cell === `sdk/workspace/${app}`)
         .map((entry) => entry.title);
       expect(titles).toContain(UP_TITLE);
-      expect(titles).toContain(REDEPLOY_TITLE);
-      expect(titles).toContain(ROLLBACK_TITLE);
       expect(titles).toContain(DESTROY_TITLE);
     }
   });
@@ -59,7 +56,7 @@ describe("planning a workspace row", () => {
 describe("planning the two concerns of one runtime", () => {
   const deploy = specByName("deploy", "node");
   const sdk = specByName("sdk", "node");
-  const planned = planTests([base(deploy), base(sdk)], ALL_LEGS);
+  const planned = planTests([base(deploy), base(sdk)], LIVES);
 
   it("gives each concern a cell of its own, so neither can shadow the other", () => {
     expect(planned.some((entry) => entry.cell === "deploy/node/web")).toBe(true);
@@ -85,17 +82,41 @@ describe("planning the two concerns of one runtime", () => {
     expect(sdk.rows.map((row) => row.title)).toContain(ENV_ROW);
   });
 
-  it("still runs redeploy and rollback with the contract after each", () => {
-    const cells = planned.filter((entry) => entry.cell === "deploy/node/web");
+  it("leaves redeploy and rollback out of both, since neither observes a replacement", () => {
+    for (const cell of ["deploy/node/web", "sdk/node/web"]) {
+      const titles = planned.filter((entry) => entry.cell === cell).map((entry) => entry.title);
+      expect(titles).not.toContain(REDEPLOY_TITLE);
+      expect(titles).not.toContain(ROLLBACK_TITLE);
+      expect(titles.some((title) => title.startsWith("redeploy · "))).toBe(false);
+      expect(titles.some((title) => title.startsWith("rollback · "))).toBe(false);
+    }
+  });
+});
+
+describe("planning the legs a fixture asks for", () => {
+  const lifecycle = specByName("lifecycle", "next");
+
+  it("runs redeploy and rollback with the contract after each, where the fixture lives", () => {
+    const cells = planTests([base(lifecycle)], LIVES).filter(
+      (entry) => entry.cell === "lifecycle/next/web",
+    );
     const titles = cells.map((entry) => entry.title);
     expect(titles).toContain(REDEPLOY_TITLE);
     expect(titles).toContain(ROLLBACK_TITLE);
     for (const leg of ["redeploy", "rollback"] as const) {
       const rows = cells.filter((entry) => entry.leg === leg && entry.title.includes(" · "));
       expect(rows.map((entry) => entry.title)).toEqual(
-        deploy.rows.map((row) => `${leg} · ${row.title}`),
+        lifecycle.rows.map((row) => `${leg} · ${row.title}`),
       );
     }
+  });
+
+  it("plans neither where the target cannot replace a release", () => {
+    const titles = planTests([base(lifecycle)], SERVES).map((entry) => entry.title);
+    expect(titles).not.toContain(REDEPLOY_TITLE);
+    expect(titles).not.toContain(ROLLBACK_TITLE);
+    expect(titles).toContain(UP_TITLE);
+    expect(titles).toContain(DESTROY_TITLE);
   });
 });
 
@@ -108,6 +129,7 @@ function withHooks(rows: LadderRow[], refuse: boolean): FixtureSpec {
     kind: "ladder",
     rows: healthRows,
     apps: ["web"],
+    legs: LIVES,
     targets: ["aws"],
     hooks: {
       ...(refuse ? { refuse: async () => undefined } : {}),
@@ -133,15 +155,16 @@ describe("planTests", () => {
       kind: "composite",
       rows: healthRows,
       apps: ["web"],
+      legs: SERVES,
     };
-    const planned = planTests([base(composite)], [...ALL_LEGS]);
+    const planned = planTests([base(composite)], [...LIVES]);
     expect(planned.some((row) => row.title === REFUSE_TITLE)).toBe(false);
     expect(planned.some((row) => row.title.startsWith("publish"))).toBe(false);
   });
 
   it("plans refuse once, before anything else, for a hooked ladder", () => {
     const fixture = withHooks([publishRow], true);
-    const planned = planTests([base(fixture)], [...ALL_LEGS]);
+    const planned = planTests([base(fixture)], [...LIVES]);
     const titles = planned
       .filter((row) => row.cell === cellKey("sdk/with-sst", "web"))
       .map((row) => row.title);
@@ -151,7 +174,7 @@ describe("planTests", () => {
 
   it("plans one publish, outlive and prune title but three consume titles", () => {
     const fixture = withHooks([publishRow, consumeRow, outliveRow, pruneRow], true);
-    const planned = planTests([base(fixture)], [...ALL_LEGS]).map((row) => row.title);
+    const planned = planTests([base(fixture)], [...LIVES]).map((row) => row.title);
     expect(planned).toContain("publish · lists both records");
     expect(planned).toContain("outlive · the record survives");
     expect(planned).toContain("prune · both partitions are empty");
@@ -163,7 +186,7 @@ describe("planTests", () => {
 
   it("plans no refuse title when the fixture declares no refuse hook", () => {
     const fixture = withHooks([publishRow], false);
-    const planned = planTests([base(fixture)], [...ALL_LEGS]);
+    const planned = planTests([base(fixture)], [...LIVES]);
     expect(planned.some((row) => row.title === REFUSE_TITLE)).toBe(false);
     expect(planned.some((row) => row.title === "publish · lists both records")).toBe(true);
   });

@@ -9,8 +9,9 @@ function cells(target: "aws" | "vps"): Cell[] {
 const bare: Cell[] = spec.map((fixture) => ({ name: fixture.dir, fixture }));
 
 describe("longestFirst", () => {
-  it("runs every deploy cell before any sdk cell", () => {
+  it("runs the lifecycle cells first, then the deploy cells, then the sdk ones", () => {
     const concerns = longestFirst(cells("aws")).map((cell) => cell.fixture.concern);
+    expect(concerns.indexOf("deploy")).toBeGreaterThan(concerns.lastIndexOf("lifecycle"));
     expect(concerns.indexOf("sdk")).toBeGreaterThan(concerns.lastIndexOf("deploy"));
   });
 

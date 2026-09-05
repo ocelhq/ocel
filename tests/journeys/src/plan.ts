@@ -1,4 +1,12 @@
-import { type Cell, type FixtureSpec, fixtureNameOf, ladderTitle, type Leg, variantNameOf } from "./spec";
+import {
+  type Cell,
+  type FixtureSpec,
+  fixtureNameOf,
+  ladderTitle,
+  type Leg,
+  legsOf,
+  variantNameOf,
+} from "./spec";
 
 export const UP_TITLE = "up";
 export const DESTROY_TITLE = "destroy";
@@ -74,13 +82,13 @@ function ladderPhaseTitles(fixture: FixtureSpec): Array<{ title: string }> {
   return out;
 }
 
-export function planTests(cells: Cell[], legs: Leg[]): PlannedTest[] {
+export function planTests(cells: Cell[], able: Leg[]): PlannedTest[] {
   const planned: PlannedTest[] = [];
   for (const cell of cells) {
     const { fixture } = cell;
     const shared = { fixture: fixtureNameOf(fixture), variant: variantNameOf(cell) };
     for (const app of fixture.apps) {
-      for (const leg of legs) {
+      for (const leg of legsOf(fixture, able)) {
         for (const entry of titlesForLeg(cell, leg)) {
           planned.push({ cell: cellKey(cell.name, app), app, ...shared, ...entry });
         }

@@ -1,8 +1,9 @@
 import type { Cell, Concern, Kind } from "./spec";
 
 const CONCERN_RANK: Record<Concern, number> = {
-  deploy: 0,
-  sdk: 1,
+  lifecycle: 0,
+  deploy: 1,
+  sdk: 2,
 };
 
 const KIND_RANK: Record<Kind, number> = {

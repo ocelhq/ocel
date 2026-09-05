@@ -39,7 +39,7 @@ describe("the environment a run says it is on", () => {
 
 describe("the concerns a run covers", () => {
   it("covers every concern when nothing names one", () => {
-    expect(concernsFrom({})).toEqual(["deploy", "sdk"]);
+    expect(concernsFrom({})).toEqual(["deploy", "lifecycle", "sdk"]);
   });
 
   it("covers only the bucket it is handed", () => {

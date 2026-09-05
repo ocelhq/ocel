@@ -17,7 +17,13 @@ const SDK_WORKSPACE = ["sdk/workspace/next", "sdk/workspace/express"];
 const DEPLOY_CELLS = [...DEPLOY_NODE_HTTP, "deploy/next/web", ...DEPLOY_WORKSPACE];
 const SDK_CELLS = [...SDK_NODE_HTTP, "sdk/next/web", ...SDK_WORKSPACE];
 const NEXT_CELLS = ["deploy/next/web", "sdk/next/web"];
-const EVERY_AWS_CELL_BUT_LADDERS = [...DEPLOY_CELLS, ...SDK_CELLS, "sdk/with-transforms/web"];
+const LIFECYCLE_CELLS = ["lifecycle/next/web"];
+const EVERY_AWS_CELL_BUT_LADDERS = [
+  ...DEPLOY_CELLS,
+  ...LIFECYCLE_CELLS,
+  ...SDK_CELLS,
+  "sdk/with-transforms/web",
+];
 
 const BASE = ["base"];
 const SERVERLESS = ["base", "api-gateway", "cloudflare"];
@@ -64,7 +70,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["vps", "vps.incus"],
-        cells: SDK_CELLS,
+        cells: [...LIFECYCLE_CELLS, ...SDK_CELLS],
         variants: BASE,
         tests: [UP_TITLE],
         skip: true,
@@ -78,7 +84,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["vps", "vps.incus"],
-        cells: NEXT_CELLS,
+        cells: [...NEXT_CELLS, ...LIFECYCLE_CELLS],
         variants: BASE,
         tests: [{ rows: EVERY_NEXT_CACHE_ROW }],
       },
@@ -128,14 +134,14 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        cells: ["sdk/next/web", ...SDK_WORKSPACE],
+        cells: [...LIFECYCLE_CELLS, "sdk/next/web", ...SDK_WORKSPACE],
         variants: SERVERLESS,
         tests: [UP_TITLE],
         skip: true,
       },
       {
         on: ["aws.floci"],
-        cells: ["sdk/next/web", ...SDK_WORKSPACE],
+        cells: [...LIFECYCLE_CELLS, "sdk/next/web", ...SDK_WORKSPACE],
         variants: ["api-gateway"],
         tests: [UP_TITLE],
         skip: true,
@@ -239,7 +245,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws.floci"],
-        cells: NEXT_CELLS,
+        cells: [...NEXT_CELLS, ...LIFECYCLE_CELLS],
         variants: ["api-gateway"],
         tests: [{ row: EDGE_ISR_TITLE }],
       },
