@@ -121,10 +121,7 @@ type AppValues struct {
 	Phase     string
 }
 
-const (
-	PhaseEnvName             = "OCEL_PHASE"
-	PhaseResourcesSuppressed = "resources-suppressed"
-)
+const PhaseEnvName = "OCEL_PHASE"
 
 func (v AppValues) Injected() map[string]string {
 	if v.Phase == "" {

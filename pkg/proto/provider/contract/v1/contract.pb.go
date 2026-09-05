@@ -1549,16 +1549,15 @@ func (*ManifestResource_Postgres) isManifestResource_Config() {}
 func (*ManifestResource_Bucket) isManifestResource_Config() {}
 
 type DeployRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Manifest          *Manifest              `protobuf:"bytes,1,opt,name=manifest,proto3" json:"manifest,omitempty"`
-	Environment       *v1.Environment        `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
-	Tag               string                 `protobuf:"bytes,3,opt,name=tag,proto3" json:"tag,omitempty"`
-	Edge              *EdgeSelection         `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
-	Dry               bool                   `protobuf:"varint,5,opt,name=dry,proto3" json:"dry,omitempty"`
-	ImageRegistry     *ImageRegistry         `protobuf:"bytes,6,opt,name=image_registry,json=imageRegistry,proto3" json:"image_registry,omitempty"`
-	SuppressResources bool                   `protobuf:"varint,7,opt,name=suppress_resources,json=suppressResources,proto3" json:"suppress_resources,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Manifest      *Manifest              `protobuf:"bytes,1,opt,name=manifest,proto3" json:"manifest,omitempty"`
+	Environment   *v1.Environment        `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
+	Tag           string                 `protobuf:"bytes,3,opt,name=tag,proto3" json:"tag,omitempty"`
+	Edge          *EdgeSelection         `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
+	Dry           bool                   `protobuf:"varint,5,opt,name=dry,proto3" json:"dry,omitempty"`
+	ImageRegistry *ImageRegistry         `protobuf:"bytes,6,opt,name=image_registry,json=imageRegistry,proto3" json:"image_registry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeployRequest) Reset() {
@@ -1631,13 +1630,6 @@ func (x *DeployRequest) GetImageRegistry() *ImageRegistry {
 		return x.ImageRegistry
 	}
 	return nil
-}
-
-func (x *DeployRequest) GetSuppressResources() bool {
-	if x != nil {
-		return x.SuppressResources
-	}
-	return false
 }
 
 type ImageRegistry struct {
@@ -4261,15 +4253,14 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\bpostgres\x18\x03 \x01(\v2 .app.resources.v1.PostgresConfigH\x00R\bpostgres\x128\n" +
 	"\x06bucket\x18\x04 \x01(\v2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n" +
 	"\x06linked\x18\x05 \x01(\bR\x06linkedB\b\n" +
-	"\x06config\"\x8d\x03\n" +
+	"\x06config\"\xde\x02\n" +
 	"\rDeployRequest\x12B\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x12,\n" +
 	"\x03tag\x18\x03 \x01(\tB\x1a\xbaH\x17r\x15\x18@2\x11^[A-Za-z0-9._-]*$R\x03tag\x127\n" +
 	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x10\n" +
 	"\x03dry\x18\x05 \x01(\bR\x03dry\x12J\n" +
-	"\x0eimage_registry\x18\x06 \x01(\v2#.provider.contract.v1.ImageRegistryR\rimageRegistry\x12-\n" +
-	"\x12suppress_resources\x18\a \x01(\bR\x11suppressResources\"\x82\x01\n" +
+	"\x0eimage_registry\x18\x06 \x01(\v2#.provider.contract.v1.ImageRegistryR\rimageRegistry\"\x82\x01\n" +
 	"\rImageRegistry\x12\x16\n" +
 	"\x06server\x18\x01 \x01(\tR\x06server\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x1a\n" +

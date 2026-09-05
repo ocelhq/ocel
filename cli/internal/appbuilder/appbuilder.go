@@ -88,18 +88,6 @@ const appFolderEnv = "OCEL_APP_FOLDER"
 
 var buildOwnedNames = []string{adapterPathEnv, appFolderEnv, deploymentIDEnv, providerkit.PhaseEnvName, "PATH"}
 
-func withPhase(vars map[string]string, phase string) map[string]string {
-	if phase == "" {
-		return vars
-	}
-	merged := make(map[string]string, len(vars)+1)
-	for key, value := range vars {
-		merged[key] = value
-	}
-	merged[providerkit.PhaseEnvName] = phase
-	return merged
-}
-
 func checkVariableNames(vars map[string]string) error {
 	for _, name := range buildOwnedNames {
 		if _, taken := vars[name]; taken {
@@ -144,11 +132,11 @@ type Builder struct {
 	Exec Exec
 }
 
-func Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, phase string, stderr io.Writer) error {
-	return Builder{}.Build(ctx, cfg, envByApp, phase, stderr)
+func Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, stderr io.Writer) error {
+	return Builder{}.Build(ctx, cfg, envByApp, stderr)
 }
 
-func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, phase string, stderr io.Writer) error {
+func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, stderr io.Writer) error {
 	for _, env := range envByApp {
 		if err := checkVariableNames(env); err != nil {
 			return err
@@ -195,7 +183,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 			Cwd:        filepath.Join(cfg.Dir, a.Path),
 			Entrypoint: a.Entrypoint,
 			Framework:  a.Framework,
-			Env:        withPhase(withDeploymentID(envByApp[a.Name], deploymentIDs[a.Name]), phase),
+			Env:        withDeploymentID(envByApp[a.Name], deploymentIDs[a.Name]),
 			Folder:     a.Folder,
 		})
 	}
@@ -211,7 +199,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 	if run == nil {
 		run = runNode
 	}
-	rootEnv := withPhase(envByApp[rootAppEnv], phase)
+	rootEnv := envByApp[rootAppEnv]
 	detectedID := ""
 	if len(cfg.Apps) == 0 {
 		id, err := mintDeploymentID()

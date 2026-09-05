@@ -41,7 +41,7 @@ func newBuildManifestSession(t *testing.T) (*runui.Session, *bytes.Buffer) {
 func recordBuildApp(deps *cmddeps.Deps) *bool {
 	clitest.StubRecordedDeploymentIDs(deps)
 	ran := false
-	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, string, io.Writer) error {
+	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		ran = true
 		return nil
 	}
@@ -214,7 +214,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		generated := ""
 		deps := clitest.NewDeps()
 		clitest.StubRecordedDeploymentIDs(&deps)
-		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, string, io.Writer) error {
+		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 			data, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
 			if err != nil {
 				return err

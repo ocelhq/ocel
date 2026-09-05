@@ -12,14 +12,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-func Build(ctx context.Context, cfg *projectconfig.Config, phase string, progress io.Writer) (map[string]string, error) {
+func Build(ctx context.Context, cfg *projectconfig.Config, progress io.Writer) (map[string]string, error) {
 	var refs map[string]string
 	for _, app := range Apps(cfg) {
 		built, err := Describe(cfg, app)
 		if err != nil {
 			return nil, err
 		}
-		image, err := imagebuild.Builder{Progress: progress, Phase: phase}.Build(ctx, built)
+		image, err := imagebuild.Builder{Progress: progress}.Build(ctx, built)
 		if err != nil {
 			return nil, err
 		}

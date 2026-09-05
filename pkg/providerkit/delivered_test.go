@@ -65,19 +65,6 @@ func TestAResourceIsNamedAsTheRuntimeReadsIt(t *testing.T) {
 	}
 }
 
-func TestASuppressedDeployTellsTheAppNothingWasProvisioned(t *testing.T) {
-	req := namingARegistry(containerDeployRequest("/healthz"))
-	req.Manifest.Resources = nil
-	req.SuppressResources = true
-
-	delivered := deliveredBy(t, req, nil)
-
-	if got := delivered[providerkit.PhaseEnvName]; got != providerkit.PhaseResourcesSuppressed {
-		t.Errorf("%s = %q, want %q so the sdk refuses a resource rather than reading an absent record",
-			providerkit.PhaseEnvName, got, providerkit.PhaseResourcesSuppressed)
-	}
-}
-
 func TestADeployThatProvisionsNamesNoPhase(t *testing.T) {
 	delivered := deliveredBy(t, namingARegistry(containerDeployRequest("/healthz")), nil)
 
