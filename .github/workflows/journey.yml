@@ -16,7 +16,7 @@ on:
       - "console/auth/**"
       - "console/db/**"
       - "console/web/**"
-      - "examples/**"
+      - "tests/fixtures/**"
       - "tests/journeys/**"
       - "tests/shared/**"
       - "scripts/**"
@@ -33,7 +33,7 @@ on:
         default: "aws vps"
         type: string
       variants:
-        description: "Variants each lane enumerates, space separated, base among them. Empty runs every variant an example lists."
+        description: "Variants each lane enumerates, space separated, base among them. Empty runs every variant a fixture lists."
         default: ""
         type: string
       skips:
@@ -46,9 +46,13 @@ on:
         default: "full"
         type: choice
         options: [full, covering]
-      examples:
-        description: "Examples each lane runs, space separated."
-        default: "express hono fastify next"
+      concern:
+        description: "Concerns each lane covers, space separated: deploy asks whether the app runs there, sdk whether its resources do."
+        default: "deploy sdk"
+        type: string
+      fixtures:
+        description: "Fixtures each lane runs, space separated, each named <concern>/<name>. Empty runs every one of the concerns picked."
+        default: ""
         type: string
 
 permissions:
@@ -81,7 +85,8 @@ jobs:
       variants: ${{ steps.lanes.outputs.variants }}
       skips: ${{ steps.lanes.outputs.skips }}
       coverage: ${{ steps.lanes.outputs.coverage }}
-      examples: ${{ steps.lanes.outputs.examples }}
+      concern: ${{ steps.lanes.outputs.concern }}
+      fixtures: ${{ steps.lanes.outputs.fixtures }}
       seed: ${{ steps.lanes.outputs.seed }}
       touched: ${{ steps.lanes.outputs.touched }}
       real: ${{ steps.lanes.outputs.real }}
@@ -109,7 +114,8 @@ jobs:
           VARIANTS: ${{ inputs.variants }}
           SKIPS: ${{ inputs.skips }}
           COVERAGE: ${{ inputs.coverage }}
-          EXAMPLES: ${{ inputs.examples }}
+          CONCERN: ${{ inputs.concern }}
+          FIXTURES: ${{ inputs.fixtures }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
           PR: ${{ github.event.pull_request.number }}
@@ -132,7 +138,8 @@ jobs:
           elif [ "$ACTION" = labeled ] && [ "$LABEL" = journey:real ]; then
             real=true
             TARGETS="aws vps"
-            EXAMPLES="express hono fastify next"
+            CONCERN="deploy sdk"
+            FIXTURES=
           fi
 
           if [ -n "$forced" ]; then
@@ -148,11 +155,11 @@ jobs:
             files=$(git diff --name-only "$BASE" "$HEAD")
             echo "$files"
             hit() { printf '%s\n' "$files" | grep -Eq "$1" && echo true || echo false; }
-            shared='^(cli|packages|frameworks|pkg|sdk|proto|examples|tests/journeys|tests/shared)/'
+            shared='^(cli|packages|frameworks|pkg|sdk|proto|tests/fixtures|tests/journeys|tests/shared)/'
             shared="$shared"'|^\.github/(actions/|workflows/journey\.yml$)'
             shared="$shared"'|^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$'
             seed=$PR
-            touched=$(printf '%s\n' "$files" | sed -n 's|^examples/\([^/]*\)/.*|\1|p' | sort -u | paste -sd, -)
+            touched=$(printf '%s\n' "$files" | sed -n 's|^tests/fixtures/\([^/]*\)/\([^/]*\)/.*|\1/\2|p' | sort -u | paste -sd, -)
             dev=$(hit "$shared"'|^console/(resources|api|auth|db|web)/')
             aws=$(hit "$shared"'|^platform/(aws|edge)/|^scripts/floci\.sh$')
             vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
@@ -160,8 +167,10 @@ jobs:
 
           if [ "$real" = true ]; then
             coverage=${COVERAGE:-full}
+            concern=${CONCERN:-deploy sdk}
           else
             coverage=covering
+            concern=deploy
             VARIANTS=
             SKIPS=
           fi
@@ -173,7 +182,8 @@ jobs:
             echo "variants=${VARIANTS:-}"
             echo "skips=${SKIPS:-skip}"
             echo "coverage=$coverage"
-            echo "examples=$(echo "$EXAMPLES" | tr ' ' ',')"
+            echo "concern=$concern"
+            echo "fixtures=$(echo "${FIXTURES:-}" | tr ' ' ',')"
             echo "seed=$seed"
             echo "touched=$touched"
             echo "real=$real"
@@ -204,7 +214,7 @@ jobs:
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
       - name: Build, typecheck and test the workspace
-        run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./examples/**' --filter='!./tests/*'
+        run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/*'
 
       - name: Build the binaries a journey drives
         run: |
@@ -234,7 +244,8 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
       OCEL_TARGET: aws
-      OCEL_EXAMPLES: ${{ needs.binary.outputs.examples }}
+      OCEL_JOURNEY_CONCERN: ${{ needs.binary.outputs.concern }}
+      OCEL_JOURNEY_FIXTURES: ${{ needs.binary.outputs.fixtures }}
       OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
       OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
@@ -259,7 +270,7 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: The node bundles the examples and the ladders import
+      - name: The node bundles the fixtures and the ladders import
         run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
 
       - name: Take the binaries this lane drives
@@ -402,7 +413,8 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
       OCEL_TARGET: vps
-      OCEL_EXAMPLES: ${{ needs.binary.outputs.examples }}
+      OCEL_JOURNEY_CONCERN: ${{ needs.binary.outputs.concern }}
+      OCEL_JOURNEY_FIXTURES: ${{ needs.binary.outputs.fixtures }}
       OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
       OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
       OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
@@ -430,7 +442,7 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: The node bundle the examples import
+      - name: The node bundle the fixtures import
         if: ${{ needs.binary.outputs.real == 'true' }}
         run: pnpm turbo run build --filter=ocel
 
