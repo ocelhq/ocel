@@ -38,6 +38,12 @@ const BARE_KEY_CLASSES: ReadonlySet<VariableClass> = new Set(["plain"]);
 
 const RESERVED_PREFIXES = ["OCEL_"];
 
+export const URL_KEY = "OCEL_URL";
+
+export const CLIENT_URL_KEY = "NEXT_PUBLIC_OCEL_URL";
+
+const RESERVED_KEYS = [URL_KEY, CLIENT_URL_KEY];
+
 const KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 
 export function isUsableKey(key: string): boolean {
@@ -64,6 +70,11 @@ function validateDefinition(
   if (!KEY_PATTERN.test(key)) {
     throw new EnvDefinitionError(
       `'${key}' is not a usable variable name: use upper-case letters, digits and underscores, starting with a letter or underscore.`,
+    );
+  }
+  if (RESERVED_KEYS.includes(key)) {
+    throw new EnvDefinitionError(
+      `'${key}' is written by Ocel for every app, from the hostname the deploy serves it on, so a declared one would be overwritten before anything read it. Read it as \`deployment.url\` from 'ocel/env'.`,
     );
   }
   const claimed = owner.get(key);

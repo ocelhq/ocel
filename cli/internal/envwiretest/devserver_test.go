@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -54,8 +55,12 @@ func TestDevserverDiscover(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ClientKeys: %v", err)
 			}
-			if len(keys) != 1 || keys[0].Name != "PUBLIC_SITE_URL" {
-				t.Errorf("client keys = %+v, want PUBLIC_SITE_URL", keys)
+			var named []string
+			for _, key := range keys {
+				named = append(named, key.Name)
+			}
+			if want := []string{"NEXT_PUBLIC_OCEL_URL", "PUBLIC_SITE_URL"}; !slices.Equal(named, want) {
+				t.Errorf("client keys = %+v, want %v — the declared one beside the deployment url every app is handed", keys, want)
 			}
 		})
 

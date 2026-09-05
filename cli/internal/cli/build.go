@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
+	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/node"
@@ -53,10 +56,11 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 	}
 	defer run.Close()
 
-	if err := deps.BuildApp(ctx, cfg, nil, stderr); err != nil {
+	urls := appurl.Production(cfg)
+	if err := deps.BuildApp(ctx, cfg, appurl.BuildEnv(urls), stderr); err != nil {
 		return err
 	}
-	if err := clientenv.RecordUnresolved(cfg.Dir); err != nil {
+	if err := clientenv.Record(cfg.Dir, builtInClients(cfg, urls), false); err != nil {
 		return err
 	}
 
@@ -71,4 +75,19 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 	}
 	fmt.Fprintf(stdout, "Built %d %s into .ocel/output\n", len(functions), noun)
 	return nil
+}
+
+func builtInClients(cfg *projectconfig.Config, urls map[string]string) []clientenv.App {
+	if len(cfg.Apps) == 0 {
+		return []clientenv.App{{Dir: cfg.Dir, Variables: appurl.Variables(urls[envwire.RootApp])}}
+	}
+	apps := make([]clientenv.App, 0, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		apps = append(apps, clientenv.App{
+			Name:      a.Name,
+			Dir:       filepath.Join(cfg.Dir, a.Path),
+			Variables: appurl.Variables(urls[a.Name]),
+		})
+	}
+	return apps
 }

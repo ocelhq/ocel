@@ -61,10 +61,6 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 		return err
 	}
 
-	if len(keys) == 0 {
-		fmt.Fprintln(stdout, "No client-accessible variables declared; nothing to generate")
-		return nil
-	}
 	noun := "variables"
 	if len(keys) == 1 {
 		noun = "variable"

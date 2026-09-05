@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/appimages"
+	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
@@ -30,7 +31,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string) (*contractv1.Manifest, error) {
+func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string, urls map[string]string) (*contractv1.Manifest, error) {
 	buildOut := ui.BuildWriter()
 
 	captured := &boundedCapture{}
@@ -54,7 +55,11 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	if err != nil {
 		return nil, err
 	}
+	appurl.Add(variables, urls)
 
+	if err := checkAppPaths(cfg); err != nil {
+		return nil, err
+	}
 	plans := appPlans(cfg, variables)
 	clients := clientApps(plans)
 	if prebuilt {
@@ -69,7 +74,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		if err := deps.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
 			return nil, err
 		}
-		if err := clientenv.Record(cfg.Dir, clients); err != nil {
+		if err := clientenv.Record(cfg.Dir, clients, true); err != nil {
 			return nil, err
 		}
 	}
@@ -341,12 +346,6 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 	named := make(map[string]bool, len(apps))
 	out := make([]attribution.App, 0, len(apps))
 	for _, a := range apps {
-		if info, err := os.Stat(filepath.Join(cfg.Dir, a.Path)); err != nil || !info.IsDir() {
-			return nil, fmt.Errorf(
-				"app %q has path %q, which is not a directory of this project: ocel reads an app's source to tell which resources it may be handed, so a path that names nothing would deploy %q alive with no resource at all — point `apps` in %s at %q's source",
-				a.Name, a.Path, a.Name, configName, a.Name,
-			)
-		}
 		named[a.Name] = true
 		inAnImage := cmp.Or(a.Compute, compute) == string(providerkit.ComputeContainer)
 		out = append(out, attribution.App{
@@ -370,6 +369,19 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 		)
 	}
 	return out, nil
+}
+
+func checkAppPaths(cfg *projectconfig.Config) error {
+	configName := filepath.Base(cfg.Path)
+	for _, a := range cfg.Apps {
+		if info, err := os.Stat(filepath.Join(cfg.Dir, a.Path)); err != nil || !info.IsDir() {
+			return fmt.Errorf(
+				"app %q has path %q, which is not a directory of this project: ocel reads an app's source to tell which resources it may be handed, so a path that names nothing would deploy %q alive with no resource at all — point `apps` in %s at %q's source",
+				a.Name, a.Path, a.Name, configName, a.Name,
+			)
+		}
+	}
+	return nil
 }
 
 func detectedApps(functions []manifestbuilder.Function) []string {

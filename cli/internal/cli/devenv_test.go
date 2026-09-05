@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
@@ -968,6 +969,37 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
 		if env["STRIPE_API_KEY"] != "sk_from_store" {
 			t.Errorf("STRIPE_API_KEY = %q, want the control plane's value", env["STRIPE_API_KEY"])
+		}
+	})
+}
+
+func TestDevGivesEveryAppItsURL(t *testing.T) {
+	t.Run("localhost on the default port where nothing names one", func(t *testing.T) {
+		t.Setenv("PORT", "")
+
+		got := resolvedEnv(nil, nil, nil, nil, "", "")
+		for _, key := range []string{appurl.Name, appurl.ClientName} {
+			if want := "http://localhost:3000"; got[key] != want {
+				t.Errorf("%s = %q, want %q — dev never leaves it unset, so an app may read it without a fallback", key, got[key], want)
+			}
+		}
+	})
+
+	t.Run("the port the project names", func(t *testing.T) {
+		t.Setenv("PORT", "")
+
+		got := resolvedEnv(nil, nil, map[string]string{"PORT": "4321"}, nil, "", "")
+		if want := "http://localhost:4321"; got[appurl.Name] != want {
+			t.Errorf("%s = %q, want %q", appurl.Name, got[appurl.Name], want)
+		}
+	})
+
+	t.Run("the port the shell exports", func(t *testing.T) {
+		t.Setenv("PORT", "8080")
+
+		got := resolvedEnv(nil, nil, nil, nil, "", "")
+		if want := "http://localhost:8080"; got[appurl.Name] != want {
+			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", appurl.Name, got[appurl.Name], want)
 		}
 	})
 }

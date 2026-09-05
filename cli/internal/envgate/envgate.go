@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 type Cell struct {
@@ -155,6 +156,9 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 	for _, definition := range req.GetDefinitions() {
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_DERIVED {
 			return nil, fmt.Errorf("%s is declared as derived, a class ocel writes for the resources an app links and prunes on its own; declare it as plain, sensitive or secret", definition.GetKey())
+		}
+		if providerkit.OcelWritten(definition.GetKey()) {
+			return nil, fmt.Errorf("%s is written by ocel for every app, from the hostname this deploy serves it on, so a declared one would be overwritten before anything read it; read it from `ocel/env` as `deployment.url` instead of declaring it", definition.GetKey())
 		}
 	}
 

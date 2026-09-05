@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const specifier = "ocel/env/client"
@@ -50,12 +51,6 @@ func Generate(apps []App) error {
 
 func GenerateKeys(dir string, keys []Key) error {
 	path := filepath.Join(dir, accessorPath)
-	if len(keys) == 0 {
-		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-	}
-
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(accessorPath), err)
 	}
@@ -149,16 +144,12 @@ type buildRecord struct {
 	Digests  map[string]map[string]string `json:"digests,omitempty"`
 }
 
-func Record(projectDir string, apps []App) error {
-	record := buildRecord{Resolved: true, Digests: make(map[string]map[string]string, len(apps))}
+func Record(projectDir string, apps []App, resolved bool) error {
+	record := buildRecord{Resolved: resolved, Digests: make(map[string]map[string]string, len(apps))}
 	for _, app := range apps {
 		record.Digests[app.Name] = digests(app)
 	}
 	return writeRecord(projectDir, record)
-}
-
-func RecordUnresolved(projectDir string) error {
-	return writeRecord(projectDir, buildRecord{})
 }
 
 func writeRecord(projectDir string, record buildRecord) error {
@@ -185,7 +176,7 @@ func CheckFresh(projectDir string, apps []App) error {
 		for key, digest := range digests(app) {
 			built, ok := recorded[key]
 			switch {
-			case !record.Resolved || !ok:
+			case !ok:
 				missing = append(missing, key)
 			case built != digest:
 				changed = append(changed, key)
@@ -251,7 +242,7 @@ func Keys(variables []manifestbuilder.Variable) ([]Key, error) {
 		}
 		keys = append(keys, key)
 	}
-	return sorted(keys), nil
+	return withBuiltIn(keys), nil
 }
 
 func key(name, source, schemaSource string, schema bool) (Key, error) {
@@ -275,7 +266,8 @@ func sourceOrUnknown(source string) string {
 	return source
 }
 
-func sorted(keys []Key) []Key {
+func withBuiltIn(keys []Key) []Key {
+	keys = append(keys, Key{Name: providerkit.ClientURLEnvName})
 	slices.SortFunc(keys, func(a, b Key) int { return strings.Compare(a.Name, b.Name) })
 	return slices.CompactFunc(keys, func(a, b Key) bool { return a.Name == b.Name })
 }
@@ -296,7 +288,7 @@ func Declared(definitions []*resourcesv1.VariableDefinition) ([]Key, error) {
 		}
 		keys = append(keys, key)
 	}
-	return sorted(keys), nil
+	return withBuiltIn(keys), nil
 }
 
 func digests(app App) map[string]string {
