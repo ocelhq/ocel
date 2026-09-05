@@ -1,26 +1,26 @@
 import { HARNESS_PREFIX } from "../../identity";
 
-export type Stranded = { slug: string; example: string };
+export type Stranded = { slug: string; cell: string };
 
 export type Sweepable = { reclaim: Stranded[]; unreadable: string[] };
 
-export function reclaimable(slug: string, examples: string[]): Stranded | undefined {
+export function reclaimable(slug: string, cells: string[]): Stranded | undefined {
   if (!slug.startsWith(HARNESS_PREFIX)) {
     return undefined;
   }
-  for (const example of [...examples].sort((a, b) => b.length - a.length)) {
-    const suffix = `-${example}`;
+  for (const cell of [...cells].sort((a, b) => b.length - a.length)) {
+    const suffix = `-${cell}`;
     if (!slug.endsWith(suffix)) {
       continue;
     }
     if (slug.length - suffix.length > HARNESS_PREFIX.length) {
-      return { slug, example };
+      return { slug, cell };
     }
   }
   return undefined;
 }
 
-export function sweepable(found: string[], keep: Iterable<string>, examples: string[]): Sweepable {
+export function sweepable(found: string[], keep: Iterable<string>, cells: string[]): Sweepable {
   const mine = new Set(keep);
   const seen = new Set<string>();
   const reclaim: Stranded[] = [];
@@ -30,7 +30,7 @@ export function sweepable(found: string[], keep: Iterable<string>, examples: str
       continue;
     }
     seen.add(slug);
-    const stranded = reclaimable(slug, examples);
+    const stranded = reclaimable(slug, cells);
     if (stranded) {
       reclaim.push(stranded);
     } else {

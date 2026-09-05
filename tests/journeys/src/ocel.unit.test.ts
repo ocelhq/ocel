@@ -3,26 +3,25 @@ import { evidence } from "./evidence";
 import { cellEnv } from "./ocel";
 import { specByName } from "./spec";
 import type { CellContext } from "./targets/types";
-import { container, hello, helloApiGateway, SUPPRESS_RESOURCES_ENV, type Variant } from "./variants";
+import { container, type Variant } from "./variants";
+
+const carrying: Variant = { name: "carrying", env: { OCEL_JOURNEY_PROBE: "1" } };
 
 function cell(variant?: Variant): CellContext {
-  const example = specByName("express");
   return {
-    example,
-    name: "express",
+    fixture: specByName("sdk", "express"),
+    name: "sdk/express",
     ...(variant === undefined ? {} : { variant }),
-    suites: example.suites,
     dir: "/nowhere",
-    slug: "j-1-express",
+    slug: "j-1-sdk-express",
     runId: "1",
     evidence: evidence("/nowhere"),
   };
 }
 
 describe("cellEnv", () => {
-  it("carries the variant's environment, and nothing for a base cell", () => {
-    expect(cellEnv(cell(hello))).toEqual({ [SUPPRESS_RESOURCES_ENV]: "1" });
-    expect(cellEnv(cell(helloApiGateway))).toEqual({ [SUPPRESS_RESOURCES_ENV]: "1" });
+  it("carries the variant's environment, and nothing for a variant that names none", () => {
+    expect(cellEnv(cell(carrying))).toEqual({ OCEL_JOURNEY_PROBE: "1" });
     expect(cellEnv(cell(container))).toEqual({});
     expect(cellEnv(cell())).toEqual({});
   });

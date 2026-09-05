@@ -11,10 +11,10 @@ import {
   tierOf,
   UNCACHED,
   variesOn,
-} from "./cacheHeaders";
-import type { ContractContext, ContractRow } from "./contract";
-import { assetPath, marker, markerOrNone, stamp } from "./html";
-import { page, state, steady, until } from "./nextApp";
+} from "../cacheHeaders";
+import type { ContractContext, ContractRow } from "../contract";
+import { assetPath, marker, markerOrNone, stamp } from "../html";
+import { page, state, steady, until } from "../nextApp";
 
 const ISR_SECONDS = 15;
 const PATH_SECONDS = 3600;
@@ -77,7 +77,6 @@ function imageUrl(ctx: ContractContext, url: string, width: number, quality: num
 export const nextCacheRows: ContractRow[] = [
   {
     title: "a static page is prerendered, frozen, and links assets immutable for a year",
-    suite: "next-cache",
     run: async (ctx) => {
       const { res, html } = await page(ctx, "/cache/static");
       tierIs(res, CACHED, "the static page");
@@ -98,7 +97,6 @@ export const nextCacheRows: ContractRow[] = [
   },
   {
     title: "an ISR page is frozen inside its revalidate window and moves once it passes",
-    suite: "next-cache",
     run: async (ctx) => {
       const { res } = await page(ctx, "/cache/isr");
       tierIs(res, CACHED, "the ISR page");
@@ -108,8 +106,132 @@ export const nextCacheRows: ContractRow[] = [
     },
   },
   {
+    title: "revalidating a path moves the page it names and nothing else",
+    run: async (ctx) => {
+      const { res } = await page(ctx, "/cache/path");
+      tierIs(res, CACHED, "the path page");
+      cacheControlIs(res, cacheControlFor(PATH_SECONDS), "the path page");
+
+      const before = await settled(ctx, "/cache/path", "path");
+      const untouched = await cachedHalf(ctx, "/cache/static", "static");
+      await revalidate(ctx, `path=${encodeURIComponent("/cache/path")}`);
+      await movedOn(ctx, "/cache/path", "path", before);
+      assert.equal(
+        await cachedHalf(ctx, "/cache/static", "static"),
+        untouched,
+        "revalidating one path moved a page it does not name",
+      );
+    },
+  },
+  {
+    title: "a dynamic page moves on every request and is never stored",
+    run: async (ctx) => {
+      const first = await page(ctx, "/cache/dynamic");
+      tierIs(first.res, UNCACHED, "the dynamic page");
+      cacheControlIs(first.res, DYNAMIC_CACHE_CONTROL, "the dynamic page");
+      const second = await page(ctx, "/cache/dynamic");
+      assert.notEqual(
+        stamp(first.html, "dynamic").live,
+        stamp(second.html, "dynamic").live,
+        "the dynamic page answered twice with the same render",
+      );
+    },
+  },
+  {
+    title: "an RSC request answers text/x-component, varies on the router headers and names this deployment",
+    run: async (ctx) => {
+      const { html } = await page(ctx, "/cache/deployment");
+      const id = marker(html, "deployment");
+      assert.ok(id.length > 0, "the page rendered no deployment id");
+
+      const rsc = await ctx.fetch(`${ctx.baseUrl}/cache/deployment`, { headers: { RSC: "1" } });
+      assert.equal(rsc.status, 200);
+      assert.match(rsc.headers.get("content-type") ?? "", /^text\/x-component/);
+      const vary = rsc.headers.get("vary");
+      assert.ok(variesOn(vary, ROUTER_VARY), `the RSC response varied on ${vary}`);
+      cacheControlIs(rsc, DYNAMIC_CACHE_CONTROL, "the RSC response");
+      await rsc.arrayBuffer();
+
+      const before = ctx.notes.get(DEPLOYMENT_NOTE);
+      if (ctx.leg === "redeploy" && before) {
+        assert.notEqual(id, before, "the redeploy served the deployment the first leg did");
+      }
+      ctx.notes.set(DEPLOYMENT_NOTE, id);
+    },
+  },
+  {
+    title: "a prefetch answers byte-identically to the request that is not one",
+    run: async (ctx) => {
+      const read = async (headers: Record<string, string>) => {
+        const res = await ctx.fetch(`${ctx.baseUrl}/cache/static`, { headers });
+        assert.equal(res.status, 200);
+        cacheControlIs(res, cacheControlFor(false), "the flight response");
+        return Buffer.from(await res.arrayBuffer());
+      };
+      const prefetched = await read({ RSC: "1", "Next-Router-Prefetch": "1" });
+      const plain = await read({ RSC: "1" });
+      assert.ok(prefetched.equals(plain), "the prefetch and the plain flight response differ");
+    },
+  },
+  {
+    title: "the image optimizer serves a local and a self-hosted image and refuses a bad host, width or quality",
+    run: async (ctx) => {
+      for (const url of [LOCAL_IMAGE, `${ctx.baseUrl}${LOCAL_IMAGE}`]) {
+        const res = await ctx.fetch(imageUrl(ctx, url, ALLOWED_WIDTH, ALLOWED_QUALITY));
+        assert.equal(res.status, 200, `${url} answered ${res.status}`);
+        assert.match(res.headers.get("content-type") ?? "", /^image\//);
+        cacheControlIs(res, imageCacheControl(IMAGE_TTL_SECONDS), `the optimized ${url}`);
+        await res.arrayBuffer();
+      }
+
+      const refused: Array<[string, string]> = [
+        ["a disallowed host", imageUrl(ctx, "https://images.invalid/ocel.png", ALLOWED_WIDTH, ALLOWED_QUALITY)],
+        ["a disallowed width", imageUrl(ctx, LOCAL_IMAGE, 999, ALLOWED_QUALITY)],
+        ["a disallowed quality", imageUrl(ctx, LOCAL_IMAGE, ALLOWED_WIDTH, 50)],
+      ];
+      for (const [what, url] of refused) {
+        const res = await ctx.fetch(url);
+        assert.equal(res.status, 400, `${what} answered ${res.status}`);
+        await res.arrayBuffer();
+      }
+    },
+  },
+  {
+    title: "draft mode bypasses the cache with a cookie that survives the redirect",
+    run: async (ctx) => {
+      const prerendered = await page(ctx, "/draft");
+      tierIs(prerendered.res, CACHED, "the draft page without the cookie");
+      assert.equal(marker(prerendered.html, "draft"), "disabled");
+
+      const turned = await ctx.fetch(`${ctx.baseUrl}/draft/enable`, { redirect: "manual" });
+      assert.equal(turned.status, 307, `enabling draft mode answered ${turned.status}`);
+      await turned.arrayBuffer();
+      const setCookie = turned.headers.get("set-cookie") ?? "";
+      assert.match(setCookie, /__prerender_bypass=/, "the 307 carried no draft cookie");
+      const cookie = setCookie.split(";")[0]!;
+      assert.equal(new URL(turned.headers.get("location") ?? "", ctx.baseUrl).pathname, "/draft");
+
+      const drafted = await page(ctx, "/draft", { headers: { cookie } });
+      assert.equal(tierOf(drafted.res), "BYPASS");
+      cacheControlIs(drafted.res, DYNAMIC_CACHE_CONTROL, "the drafted page");
+      assert.equal(marker(drafted.html, "draft"), "enabled");
+    },
+  },
+  {
+    title: EDGE_ISR_TITLE,
+    run: async (ctx) => {
+      const { res } = await page(ctx, "/cache/edge");
+      tierIs(res, CACHED, "the edge-runtime page");
+      cacheControlIs(res, cacheControlFor(ISR_SECONDS), "the edge-runtime page");
+      const before = await settled(ctx, "/cache/edge", "edge");
+      await movedOn(ctx, "/cache/edge", "edge", before);
+    },
+  },
+];
+
+export const nextDataCacheRows: ContractRow[] = [
+  {
     title: "a non-ASCII tag holds one upstream call and releases it when the tag is revalidated",
-    suite: "next-cache",
     run: async (ctx) => {
       const { res, html } = await page(ctx, "/cache/data");
       tierIs(res, UNCACHED, "the data-cache page");
@@ -135,135 +257,6 @@ export const nextCacheRows: ContractRow[] = [
       await revalidate(ctx, `tag=${encodeURIComponent(RESUME_TAG)}`);
       const after = await movedOn(ctx, "/cache/data", "data", held);
       assert.ok(Number(after) > Number(held), `the upstream count went from ${held} to ${after}`);
-    },
-  },
-  {
-    title: "revalidating a path moves the page it names and nothing else",
-    suite: "next-cache",
-    run: async (ctx) => {
-      const { res } = await page(ctx, "/cache/path");
-      tierIs(res, CACHED, "the path page");
-      cacheControlIs(res, cacheControlFor(PATH_SECONDS), "the path page");
-
-      const before = await settled(ctx, "/cache/path", "path");
-      const untouched = await cachedHalf(ctx, "/cache/static", "static");
-      await revalidate(ctx, `path=${encodeURIComponent("/cache/path")}`);
-      await movedOn(ctx, "/cache/path", "path", before);
-      assert.equal(
-        await cachedHalf(ctx, "/cache/static", "static"),
-        untouched,
-        "revalidating one path moved a page it does not name",
-      );
-    },
-  },
-  {
-    title: "a dynamic page moves on every request and is never stored",
-    suite: "next-cache",
-    run: async (ctx) => {
-      const first = await page(ctx, "/cache/dynamic");
-      tierIs(first.res, UNCACHED, "the dynamic page");
-      cacheControlIs(first.res, DYNAMIC_CACHE_CONTROL, "the dynamic page");
-      const second = await page(ctx, "/cache/dynamic");
-      assert.notEqual(
-        stamp(first.html, "dynamic").live,
-        stamp(second.html, "dynamic").live,
-        "the dynamic page answered twice with the same render",
-      );
-    },
-  },
-  {
-    title: "an RSC request answers text/x-component, varies on the router headers and names this deployment",
-    suite: "next-cache",
-    run: async (ctx) => {
-      const { html } = await page(ctx, "/cache/deployment");
-      const id = marker(html, "deployment");
-      assert.ok(id.length > 0, "the page rendered no deployment id");
-
-      const rsc = await ctx.fetch(`${ctx.baseUrl}/cache/deployment`, { headers: { RSC: "1" } });
-      assert.equal(rsc.status, 200);
-      assert.match(rsc.headers.get("content-type") ?? "", /^text\/x-component/);
-      const vary = rsc.headers.get("vary");
-      assert.ok(variesOn(vary, ROUTER_VARY), `the RSC response varied on ${vary}`);
-      cacheControlIs(rsc, DYNAMIC_CACHE_CONTROL, "the RSC response");
-      await rsc.arrayBuffer();
-
-      const before = ctx.notes.get(DEPLOYMENT_NOTE);
-      if (ctx.leg === "redeploy" && before) {
-        assert.notEqual(id, before, "the redeploy served the deployment the first leg did");
-      }
-      ctx.notes.set(DEPLOYMENT_NOTE, id);
-    },
-  },
-  {
-    title: "a prefetch answers byte-identically to the request that is not one",
-    suite: "next-cache",
-    run: async (ctx) => {
-      const read = async (headers: Record<string, string>) => {
-        const res = await ctx.fetch(`${ctx.baseUrl}/cache/static`, { headers });
-        assert.equal(res.status, 200);
-        cacheControlIs(res, cacheControlFor(false), "the flight response");
-        return Buffer.from(await res.arrayBuffer());
-      };
-      const prefetched = await read({ RSC: "1", "Next-Router-Prefetch": "1" });
-      const plain = await read({ RSC: "1" });
-      assert.ok(prefetched.equals(plain), "the prefetch and the plain flight response differ");
-    },
-  },
-  {
-    title: "the image optimizer serves a local and a self-hosted image and refuses a bad host, width or quality",
-    suite: "next-cache",
-    run: async (ctx) => {
-      for (const url of [LOCAL_IMAGE, `${ctx.baseUrl}${LOCAL_IMAGE}`]) {
-        const res = await ctx.fetch(imageUrl(ctx, url, ALLOWED_WIDTH, ALLOWED_QUALITY));
-        assert.equal(res.status, 200, `${url} answered ${res.status}`);
-        assert.match(res.headers.get("content-type") ?? "", /^image\//);
-        cacheControlIs(res, imageCacheControl(IMAGE_TTL_SECONDS), `the optimized ${url}`);
-        await res.arrayBuffer();
-      }
-
-      const refused: Array<[string, string]> = [
-        ["a disallowed host", imageUrl(ctx, "https://images.invalid/ocel.png", ALLOWED_WIDTH, ALLOWED_QUALITY)],
-        ["a disallowed width", imageUrl(ctx, LOCAL_IMAGE, 999, ALLOWED_QUALITY)],
-        ["a disallowed quality", imageUrl(ctx, LOCAL_IMAGE, ALLOWED_WIDTH, 50)],
-      ];
-      for (const [what, url] of refused) {
-        const res = await ctx.fetch(url);
-        assert.equal(res.status, 400, `${what} answered ${res.status}`);
-        await res.arrayBuffer();
-      }
-    },
-  },
-  {
-    title: "draft mode bypasses the cache with a cookie that survives the redirect",
-    suite: "next-cache",
-    run: async (ctx) => {
-      const prerendered = await page(ctx, "/draft");
-      tierIs(prerendered.res, CACHED, "the draft page without the cookie");
-      assert.equal(marker(prerendered.html, "draft"), "disabled");
-
-      const turned = await ctx.fetch(`${ctx.baseUrl}/draft/enable`, { redirect: "manual" });
-      assert.equal(turned.status, 307, `enabling draft mode answered ${turned.status}`);
-      await turned.arrayBuffer();
-      const setCookie = turned.headers.get("set-cookie") ?? "";
-      assert.match(setCookie, /__prerender_bypass=/, "the 307 carried no draft cookie");
-      const cookie = setCookie.split(";")[0]!;
-      assert.equal(new URL(turned.headers.get("location") ?? "", ctx.baseUrl).pathname, "/draft");
-
-      const drafted = await page(ctx, "/draft", { headers: { cookie } });
-      assert.equal(tierOf(drafted.res), "BYPASS");
-      cacheControlIs(drafted.res, DYNAMIC_CACHE_CONTROL, "the drafted page");
-      assert.equal(marker(drafted.html, "draft"), "enabled");
-    },
-  },
-  {
-    title: EDGE_ISR_TITLE,
-    suite: "next-cache",
-    run: async (ctx) => {
-      const { res } = await page(ctx, "/cache/edge");
-      tierIs(res, CACHED, "the edge-runtime page");
-      cacheControlIs(res, cacheControlFor(ISR_SECONDS), "the edge-runtime page");
-      const before = await settled(ctx, "/cache/edge", "edge");
-      await movedOn(ctx, "/cache/edge", "edge", before);
     },
   },
 ];

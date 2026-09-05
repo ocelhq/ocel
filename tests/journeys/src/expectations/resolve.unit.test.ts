@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "bun:test";
 import { contractTitle, UP_TITLE } from "../plan";
+import { productRows, staticRows } from "../rows";
 import { resolve } from "./index";
 import type { ExpectationEnvironment, Gap } from "./types";
 
@@ -21,12 +22,12 @@ describe("resolve", () => {
   it("lists a test under every gap that names it", () => {
     const out = listed(
       [
-        gap("one", [{ on: ["dev"], cells: ["express/web"], tests: [UP_TITLE] }], 1),
-        gap("two", [{ on: ["dev"], cells: ["express/web"], tests: [UP_TITLE] }]),
+        gap("one", [{ on: ["dev"], cells: ["sdk/express/web"], tests: [UP_TITLE] }], 1),
+        gap("two", [{ on: ["dev"], cells: ["sdk/express/web"], tests: [UP_TITLE] }]),
       ],
       "dev",
     );
-    assert.deepEqual(out["express/web"]?.[UP_TITLE], [
+    assert.deepEqual(out["sdk/express/web"]?.[UP_TITLE], [
       { id: "one", reason: "reason for one", issue: 1 },
       { id: "two", reason: "reason for two" },
     ]);
@@ -36,22 +37,22 @@ describe("resolve", () => {
     const out = listed(
       [
         gap("one", [
-          { on: ["dev"], cells: ["express/web"], tests: [UP_TITLE] },
+          { on: ["dev"], cells: ["sdk/express/web"], tests: [UP_TITLE] },
           { on: ["dev"], tests: [UP_TITLE] },
         ]),
       ],
       "dev",
     );
-    assert.equal(out["express/web"]?.[UP_TITLE]?.length, 1);
-    assert.equal(out["hono/web"]?.[UP_TITLE]?.length, 1);
+    assert.equal(out["sdk/express/web"]?.[UP_TITLE]?.length, 1);
+    assert.equal(out["sdk/hono/web"]?.[UP_TITLE]?.length, 1);
   });
 
   it("expands a row across the contract legs it names, and the three by default", () => {
     const out = listed(
-      [gap("one", [{ on: ["vps"], cells: ["express/web"], tests: [{ row: HEALTH }] }])],
+      [gap("one", [{ on: ["vps"], cells: ["sdk/express/web"], tests: [{ row: HEALTH }] }])],
       "vps",
     );
-    assert.deepEqual(Object.keys(out["express/web"] ?? {}), [
+    assert.deepEqual(Object.keys(out["sdk/express/web"] ?? {}), [
       HEALTH,
       contractTitle("redeploy", HEALTH),
       contractTitle("rollback", HEALTH),
@@ -59,53 +60,53 @@ describe("resolve", () => {
     const named = listed(
       [
         gap("two", [
-          { on: ["vps"], cells: ["express/web"], tests: [{ row: HEALTH, legs: ["rollback"] }] },
+          { on: ["vps"], cells: ["sdk/express/web"], tests: [{ row: HEALTH, legs: ["rollback"] }] },
         ]),
       ],
       "vps",
     );
-    assert.deepEqual(Object.keys(named["express/web"] ?? {}), [contractTitle("rollback", HEALTH)]);
+    assert.deepEqual(Object.keys(named["sdk/express/web"] ?? {}), [contractTitle("rollback", HEALTH)]);
   });
 
-  it("expands a suite to its rows, minus the titles it excepts", () => {
+  it("expands a set of rows, minus the titles it excepts", () => {
     const out = listed(
       [
         gap("one", [
           {
-            on: ["vps"],
-            cells: ["express/web"],
-            variants: ["hello"],
-            tests: [{ rows: ["static"], legs: ["contract"], except: [SVG] }],
+            on: ["aws"],
+            cells: ["sdk/express/web"],
+            variants: ["container"],
+            tests: [{ rows: staticRows, legs: ["contract"], except: [SVG] }],
           },
         ]),
       ],
-      "vps",
+      "aws",
     );
-    const titles = Object.keys(out["express-hello/web"] ?? {});
+    const titles = Object.keys(out["sdk/express-container/web"] ?? {});
     assert.ok(titles.length > 0);
     assert.ok(!titles.includes(SVG));
-    assert.equal(out["express/web"], undefined);
+    assert.equal(out["sdk/express/web"], undefined);
   });
 
-  it("names a cell by its example and app, and reaches every variant of it unless one is named", () => {
-    const every = listed([gap("one", [{ on: ["vps"], cells: ["express/web"], tests: [UP_TITLE] }])], "vps");
-    assert.ok(every["express/web"]?.[UP_TITLE]);
-    assert.ok(every["express-hello/web"]?.[UP_TITLE]);
+  it("names a cell by its fixture and app, and reaches every variant of it unless one is named", () => {
+    const every = listed([gap("one", [{ on: ["aws"], cells: ["sdk/express/web"], tests: [UP_TITLE] }])], "aws");
+    assert.ok(every["sdk/express/web"]?.[UP_TITLE]);
+    assert.ok(every["sdk/express-container/web"]?.[UP_TITLE]);
     const base = listed(
-      [gap("one", [{ on: ["vps"], cells: ["express/web"], variants: ["base"], tests: [UP_TITLE] }])],
-      "vps",
+      [gap("one", [{ on: ["aws"], cells: ["sdk/express/web"], variants: ["base"], tests: [UP_TITLE] }])],
+      "aws",
     );
-    assert.ok(base["express/web"]?.[UP_TITLE]);
-    assert.equal(base["express-hello/web"], undefined);
+    assert.ok(base["sdk/express/web"]?.[UP_TITLE]);
+    assert.equal(base["sdk/express-container/web"], undefined);
   });
 
   it("leaves a cell alone when its plan has none of the tests named and no cell was named", () => {
     const out = listed(
-      [gap("one", [{ on: ["vps"], tests: [{ rows: ["product"], legs: ["contract"] }] }])],
-      "vps",
+      [gap("one", [{ on: ["aws"], tests: [{ rows: productRows, legs: ["contract"] }] }])],
+      "aws",
     );
-    assert.equal(out["express-hello/web"], undefined);
-    assert.ok(out["express/web"]);
+    assert.equal(out["deploy/express/web"], undefined);
+    assert.ok(out["sdk/express/web"]);
   });
 
   it("refuses a block that names a cell whose plan has none of the tests", () => {
@@ -115,16 +116,15 @@ describe("resolve", () => {
           [
             gap("one", [
               {
-                on: ["vps"],
-                cells: ["express/web"],
-                variants: ["hello"],
-                tests: [{ rows: ["product"] }],
+                on: ["aws"],
+                cells: ["deploy/express/web"],
+                tests: [{ rows: productRows }],
               },
             ]),
           ],
-          "vps",
+          "aws",
         ),
-      /one on vps lists express\/web/,
+      /one on aws lists deploy\/express\/web/,
     );
   });
 
@@ -132,10 +132,10 @@ describe("resolve", () => {
     assert.throws(
       () =>
         resolve(
-          [gap("one", [{ on: ["dev"], cells: ["express/web"], variants: ["hello"], tests: [UP_TITLE] }])],
+          [gap("one", [{ on: ["dev"], cells: ["sdk/express/web"], variants: ["container"], tests: [UP_TITLE] }])],
           "dev",
         ),
-      /one on dev lists express\/web/,
+      /one on dev lists sdk\/express\/web/,
     );
     assert.throws(
       () => resolve([gap("one", [{ on: ["vps"], variants: ["cloudflare"], tests: [UP_TITLE] }])], "vps"),
@@ -157,12 +157,12 @@ describe("resolve", () => {
         resolve(
           [
             gap("one", [
-              { on: ["dev"], cells: ["express/web"], tests: [{ row: HEALTH, legs: ["rollback"] }] },
+              { on: ["dev"], cells: ["sdk/express/web"], tests: [{ row: HEALTH, legs: ["rollback"] }] },
             ]),
           ],
           "dev",
         ),
-      /one on dev lists express\/web/,
+      /one on dev lists sdk\/express\/web/,
     );
   });
 
@@ -177,7 +177,7 @@ describe("resolve", () => {
     assert.throws(
       () =>
         resolve(
-          [gap("one", [{ on: ["dev"], cells: ["with-transforms/web"], tests: [UP_TITLE] }])],
+          [gap("one", [{ on: ["dev"], cells: ["sdk/with-transforms/web"], tests: [UP_TITLE] }])],
           "dev",
         ),
       /with-transforms\/web/,
@@ -187,44 +187,44 @@ describe("resolve", () => {
   it("skips a block listed for another environment", () => {
     const gaps = [gap("one", [{ on: ["vps"], tests: [UP_TITLE] }])];
     assert.deepEqual(resolve(gaps, "dev"), { expectations: {}, skipped: {} });
-    assert.ok(listed(gaps, "vps")["express/web"]?.[UP_TITLE]);
+    assert.ok(listed(gaps, "vps")["sdk/express/web"]?.[UP_TITLE]);
   });
 
   it("lists the cells of the variant a block names, and no others", () => {
     const gaps = [gap("one", [{ on: ["aws"], variants: ["cloudflare"], tests: [UP_TITLE] }])];
     const out = listed(gaps, "aws");
-    assert.ok(out["express-cloudflare/web"]?.[UP_TITLE]);
-    assert.ok(out["with-transforms-cloudflare/web"]?.[UP_TITLE]);
-    assert.equal(out["express/web"], undefined);
-    assert.equal(out["express-api-gateway/web"], undefined);
+    assert.ok(out["sdk/express-cloudflare/web"]?.[UP_TITLE]);
+    assert.ok(out["sdk/with-transforms-cloudflare/web"]?.[UP_TITLE]);
+    assert.equal(out["sdk/express/web"], undefined);
+    assert.equal(out["sdk/express-api-gateway/web"], undefined);
   });
 
   it("names the whole cell a skipping block reaches, under the gap that skips it", () => {
     const { expectations, skipped } = resolve(
       [
-        gap("one", [{ on: ["aws"], cells: ["workspace/next"], variants: ["hello"], tests: [UP_TITLE], skip: true }], 9),
-        gap("two", [{ on: ["aws"], cells: ["express/web"], tests: [{ row: HEALTH }] }]),
+        gap("one", [{ on: ["aws"], cells: ["sdk/workspace/next"], variants: ["container"], tests: [UP_TITLE], skip: true }], 9),
+        gap("two", [{ on: ["aws"], cells: ["sdk/express/web"], tests: [{ row: HEALTH }] }]),
       ],
       "aws",
     );
     assert.deepEqual(skipped, {
-      "workspace-hello": [{ id: "one", reason: "reason for one", issue: 9 }],
+      "sdk/workspace-container": [{ id: "one", reason: "reason for one", issue: 9 }],
     });
-    assert.ok(expectations["workspace-hello/next"]?.[UP_TITLE]);
-    assert.equal(expectations["workspace-hello/express"], undefined);
+    assert.ok(expectations["sdk/workspace-container/next"]?.[UP_TITLE]);
+    assert.equal(expectations["sdk/workspace-container/express"], undefined);
   });
 
   it("lists a skipped cell once however many blocks of one gap skip it", () => {
     const { skipped } = resolve(
       [
         gap("one", [
-          { on: ["aws"], cells: ["express/web"], tests: [UP_TITLE], skip: true },
+          { on: ["aws"], cells: ["sdk/express/web"], tests: [UP_TITLE], skip: true },
           { on: ["aws"], variants: ["base"], tests: [UP_TITLE], skip: true },
         ]),
       ],
       "aws",
     );
-    assert.equal(skipped.express?.length, 1);
+    assert.equal(skipped["sdk/express"]?.length, 1);
   });
 
   it("refuses two gaps with one id, and a gap that affects nothing", () => {

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { ContractContext, ContractRow } from "./contract";
-import { chunksOf, firstChunkWith, form, marker, stamp } from "./html";
-import { pageHtml, state, stateRow, text } from "./nextApp";
+import type { ContractContext, ContractRow } from "../contract";
+import { chunksOf, firstChunkWith, form, marker, stamp } from "../html";
+import { pageHtml, state, stateRow, text } from "../nextApp";
 
 const AFTER_TIMEOUT_MS = 10_000;
 const METHODS_WITH_BODIES = ["POST", "PUT", "PATCH", "DELETE"] as const;
@@ -32,7 +32,6 @@ async function submit(
 export const nextRoutingRows: ContractRow[] = [
   {
     title: "the next handler answers every method with the body it was sent",
-    suite: "next-routing",
     run: async (ctx) => {
       const read = await text(ctx, "/api/next/methods");
       assert.equal(read.res.status, 200);
@@ -61,7 +60,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "the tenant route answers every method with its param and body",
-    suite: "next-routing",
     run: async (ctx) => {
       const read = await text(ctx, "/api/next/tenants/acme");
       assert.equal(read.res.status, 200);
@@ -81,7 +79,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "a dynamic route decodes its param exactly once",
-    suite: "next-routing",
     run: async (ctx) => {
       assert.equal(
         marker(await pageHtml(ctx, "/routing/dynamic/one%2520two"), "param:slug"),
@@ -91,7 +88,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "a catch-all route splits its once-decoded segments",
-    suite: "next-routing",
     run: async (ctx) => {
       assert.equal(
         marker(await pageHtml(ctx, "/routing/catch-all/alpha/one%2520two"), "param:parts"),
@@ -101,7 +97,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "an optional catch-all route serves without segments and once-decodes the ones it has",
-    suite: "next-routing",
     run: async (ctx) => {
       assert.equal(marker(await pageHtml(ctx, "/routing/optional"), "param:parts"), "none");
       assert.equal(
@@ -112,7 +107,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "an unmatched path renders the not-found page and notFound() answers 404",
-    suite: "next-routing",
     run: async (ctx) => {
       const unmatched = await text(ctx, "/nothing-is-mounted-here");
       assert.equal(unmatched.res.status, 404);
@@ -125,7 +119,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "a throwing page answers 500 with the error shell",
-    suite: "next-routing",
     run: async (ctx) => {
       const res = await ctx.fetch(`${ctx.baseUrl}/routing/boom`);
       assert.equal(res.status, 500);
@@ -134,7 +127,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "a bogus static asset is a plain-text 404",
-    suite: "next-routing",
     run: async (ctx) => {
       const res = await ctx.fetch(`${ctx.baseUrl}/_next/static/chunks/ocel-bogus.js`);
       assert.equal(res.status, 404);
@@ -143,7 +135,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "config redirects answer 307 and 308 to the same landing page",
-    suite: "next-routing",
     run: async (ctx) => {
       for (const [path, status] of [
         ["/routing/redirect/temporary", 307],
@@ -157,7 +148,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "config redirects fire only when has matches and missing does not",
-    suite: "next-routing",
     run: async (ctx) => {
       const matched = await ctx.fetch(`${ctx.baseUrl}/routing/redirect/has?to=landing`, {
         redirect: "manual",
@@ -183,7 +173,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "a redirect beats a beforeFiles rewrite, which beats the filesystem",
-    suite: "next-routing",
     run: async (ctx) => {
       assert.equal(
         marker(await pageHtml(ctx, "/routing/precedence/other"), "page"),
@@ -200,7 +189,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "an afterFiles rewrite loses to the filesystem and beats a dynamic route",
-    suite: "next-routing",
     run: async (ctx) => {
       assert.equal(marker(await pageHtml(ctx, "/routing/rewrite/after"), "page"), "filesystem");
       assert.equal(
@@ -211,7 +199,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "a fallback rewrite serves what nothing else matched",
-    suite: "next-routing",
     run: async (ctx) => {
       assert.equal(
         marker(await pageHtml(ctx, "/routing/fallback/anything/at/all"), "page"),
@@ -221,7 +208,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "a config header rides on every routing page",
-    suite: "next-routing",
     run: async (ctx) => {
       const res = await ctx.fetch(`${ctx.baseUrl}/routing/landing`);
       assert.equal(res.status, 200);
@@ -230,7 +216,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "the proxy rewrites, redirects and blocks",
-    suite: "next-routing",
     run: async (ctx) => {
       assert.equal(marker(await pageHtml(ctx, "/mw/rewrite"), "page"), "mw:target");
 
@@ -245,14 +230,12 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "the proxy injects a request header the page renders",
-    suite: "next-routing",
     run: async (ctx) => {
       assert.equal(marker(await pageHtml(ctx, "/mw/inject"), "header:injected"), "from-the-proxy");
     },
   },
   {
     title: "the proxy sets a cookie when it falls through",
-    suite: "next-routing",
     run: async (ctx) => {
       const res = await ctx.fetch(`${ctx.baseUrl}/mw/plain`);
       assert.equal(res.status, 200);
@@ -263,7 +246,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "the stream page sends its shell before its deferred body",
-    suite: "next-routing",
     run: async (ctx) => {
       const res = await ctx.fetch(`${ctx.baseUrl}/stream`);
       assert.equal(res.status, 200);
@@ -275,8 +257,21 @@ export const nextRoutingRows: ContractRow[] = [
     },
   },
   {
+    title: "the edge and the node runtime stamp themselves apart",
+    run: async (ctx) => {
+      const node = stamp(await pageHtml(ctx, "/runtime/node"), "runtime");
+      const edge = stamp(await pageHtml(ctx, "/runtime/edge"), "runtime");
+      assert.equal(node.cached, "nodejs");
+      assert.equal(edge.cached, "edge");
+      assert.notEqual(node.cached, edge.cached);
+      assert.ok(node.live.length > 0 && edge.live.length > 0);
+    },
+  },
+];
+
+export const nextStateRows: ContractRow[] = [
+  {
     title: "a server action runs from a real form post",
-    suite: "next-routing",
     run: async (ctx) => {
       const note = randomUUID();
       const res = await submit(ctx, "/actions", { note });
@@ -288,7 +283,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "a streaming action sends its shell before its deferred body",
-    suite: "next-routing",
     run: async (ctx) => {
       const note = randomUUID();
       const res = await submit(ctx, "/actions/stream", { note });
@@ -304,7 +298,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "after() lands in state within ten seconds",
-    suite: "next-routing",
     run: async (ctx) => {
       const { res, body } = await text(ctx, "/api/next/after");
       assert.equal(res.status, 200);
@@ -314,7 +307,6 @@ export const nextRoutingRows: ContractRow[] = [
   },
   {
     title: "register() ran once in the boot that is answering, before that boot's first request",
-    suite: "next-routing",
     run: async (ctx) => {
       const boot = marker(await pageHtml(ctx, "/runtime/node"), "boot");
       const rows = await state(ctx, [`register:${boot}`, `request:${boot}`]);
@@ -327,18 +319,6 @@ export const nextRoutingRows: ContractRow[] = [
         Date.parse(registered.firstSeen) < Date.parse(requested.firstSeen),
         `register() was first seen at ${registered.firstSeen}, after ${requested.firstSeen}`,
       );
-    },
-  },
-  {
-    title: "the edge and the node runtime stamp themselves apart",
-    suite: "next-routing",
-    run: async (ctx) => {
-      const node = stamp(await pageHtml(ctx, "/runtime/node"), "runtime");
-      const edge = stamp(await pageHtml(ctx, "/runtime/edge"), "runtime");
-      assert.equal(node.cached, "nodejs");
-      assert.equal(edge.cached, "edge");
-      assert.notEqual(node.cached, edge.cached);
-      assert.ok(node.live.length > 0 && edge.live.length > 0);
     },
   },
 ];

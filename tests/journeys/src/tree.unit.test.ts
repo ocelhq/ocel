@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "bun:test";
 import { appDirs, configTree, treeRoot } from "./ocel";
-import { specByName } from "./spec";
+import { type Concern, specByName } from "./spec";
 import type { CellContext } from "./targets/types";
 import {
   nestedMembers,
@@ -109,15 +109,12 @@ describe("the packages a tree has to carry", () => {
   });
 });
 
-function cellFor(name: string): CellContext {
-  const example = specByName(name);
+function cellFor(concern: Concern, name: string): CellContext {
   const cell = {
-    example,
-    name,
-    mode: "full",
-    suites: example.suites,
+    fixture: specByName(concern, name),
+    name: `${concern}/${name}`,
     dir: "",
-    slug: name,
+    slug: `${concern}-${name}`,
     runId: "run",
     evidence: {},
   };
@@ -125,18 +122,21 @@ function cellFor(name: string): CellContext {
 }
 
 describe("where an app sits in the tree built for it", () => {
-  it("keeps the path the example has in the repo, whatever kind the example is", () => {
-    for (const name of ["express", "workspace"]) {
-      const cell = cellFor(name);
+  it("keeps the path the fixture has in the repo, whatever kind the fixture is", () => {
+    for (const [concern, name] of [
+      ["deploy", "express"],
+      ["sdk", "workspace"],
+    ] as const) {
+      const cell = cellFor(concern, name);
       expect(configTree(cell, "vps")).toBe(
-        path.join(treeRoot(cell, "vps"), "examples", cell.example.dir),
+        path.join(treeRoot(cell, "vps"), "tests", "fixtures", cell.fixture.dir),
       );
     }
   });
 
-  it("brings the config's own directory alone, whatever kind the example is", () => {
-    expect(appDirs(cellFor("express"))).toEqual(["examples/express"]);
-    expect(appDirs(cellFor("workspace"))).toEqual(["examples/workspace"]);
+  it("brings the config's own directory alone, whatever kind the fixture is", () => {
+    expect(appDirs(cellFor("deploy", "express"))).toEqual(["tests/fixtures/deploy/express"]);
+    expect(appDirs(cellFor("sdk", "workspace"))).toEqual(["tests/fixtures/sdk/workspace"]);
   });
 });
 

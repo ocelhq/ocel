@@ -3,8 +3,11 @@ import { coverageFrom, coverCells, requestedPick } from "./pick";
 import {
   type Cell,
   cellsOf,
-  type ExampleSpec,
-  examplesNamed,
+  type Concern,
+  concernsAsked,
+  type FixtureSpec,
+  fixtureNameOf,
+  fixturesNamed,
   specForTarget,
   type TargetName,
   variantNameOf,
@@ -14,9 +17,11 @@ import type { Target } from "./targets/types";
 export const ENVIRONMENT_ENV = "OCEL_JOURNEY_ENVIRONMENT";
 export const VARIANTS_ENV = "OCEL_JOURNEY_VARIANTS";
 export const SKIPS_ENV = "OCEL_JOURNEY_SKIPS";
+export const CONCERN_ENV = "OCEL_JOURNEY_CONCERN";
+export const FIXTURES_ENV = "OCEL_JOURNEY_FIXTURES";
 
 export type Selection = {
-  examples: ExampleSpec[];
+  fixtures: FixtureSpec[];
   cells: Cell[];
   skipped: Skipped;
 };
@@ -31,8 +36,18 @@ export function environmentFrom(env: NodeJS.ProcessEnv = process.env): Expectati
   return named as ExpectationEnvironment;
 }
 
+export function concernsFrom(env: NodeJS.ProcessEnv = process.env): Concern[] {
+  return concernsAsked(env[CONCERN_ENV]);
+}
+
+export function fixturesFor(target: TargetName, env: NodeJS.ProcessEnv): FixtureSpec[] {
+  const concerns = concernsFrom(env);
+  const offered = specForTarget(target).filter((row) => concerns.includes(row.concern));
+  return fixturesNamed(offered, env[FIXTURES_ENV]);
+}
+
 export function variantsAsked(
-  rows: ExampleSpec[],
+  rows: FixtureSpec[],
   target: TargetName,
   env: NodeJS.ProcessEnv,
 ): Set<string> | undefined {
@@ -66,21 +81,21 @@ export function selectionFor(
   environment: ExpectationEnvironment,
   env: NodeJS.ProcessEnv = process.env,
 ): Selection {
-  const examples = examplesNamed(specForTarget(target.name), env.OCEL_EXAMPLES);
-  const asked = variantsAsked(examples, target.name, env);
+  const fixtures = fixturesFor(target.name, env);
+  const asked = variantsAsked(fixtures, target.name, env);
   const skips = skipsLifted(env) ? {} : skippedOn(environment);
 
-  const narrowed = (example: ExampleSpec) =>
-    cellsOf(example, target.name).filter(
+  const narrowed = (fixture: FixtureSpec) =>
+    cellsOf(fixture, target.name).filter(
       (cell) => asked === undefined || asked.has(variantNameOf(cell)),
     );
-  const runnable = (example: ExampleSpec) =>
-    narrowed(example).filter((cell) => skips[cell.name] === undefined);
+  const runnable = (fixture: FixtureSpec) =>
+    narrowed(fixture).filter((cell) => skips[cell.name] === undefined);
 
-  const covered = coverCells(examples, runnable, coverageFrom(env), requestedPick(env));
+  const covered = coverCells(fixtures, runnable, coverageFrom(env), requestedPick(env));
   const skipped: Skipped = {};
-  for (const example of examples) {
-    for (const cell of narrowed(example)) {
+  for (const fixture of fixtures) {
+    for (const cell of narrowed(fixture)) {
       const listed = skips[cell.name];
       if (listed) {
         skipped[cell.name] = listed;
@@ -88,8 +103,8 @@ export function selectionFor(
     }
   }
   return {
-    examples,
-    cells: examples.flatMap((example) => covered.get(example.name) ?? []),
+    fixtures,
+    cells: fixtures.flatMap((fixture) => covered.get(fixtureNameOf(fixture)) ?? []),
     skipped,
   };
 }

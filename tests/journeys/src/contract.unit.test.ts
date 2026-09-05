@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { contract, type ContractContext } from "./contract";
-
-const HEALTH = "GET /health answers with the app name";
+import type { ContractContext } from "./contract";
+import { healthRows } from "./rows";
 
 function answering(app: string): ContractContext["fetch"] {
   return async () =>
@@ -14,7 +13,7 @@ function answering(app: string): ContractContext["fetch"] {
 function context(asked: string, answered: string): ContractContext {
   return {
     app: asked,
-    baseUrl: `https://${asked}-j-1-workspace.journey.test`,
+    baseUrl: `https://${asked}-j-1-sdk-workspace.journey.test`,
     greeting: "journey-hello",
     leg: "contract",
     notes: new Map(),
@@ -22,7 +21,7 @@ function context(asked: string, answered: string): ContractContext {
   };
 }
 
-const health = contract.find((row) => row.title === HEALTH);
+const health = healthRows[0];
 
 describe("the health row", () => {
   it("passes when the hostname answers with the app it was asked for", async () => {

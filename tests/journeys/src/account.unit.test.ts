@@ -11,7 +11,7 @@ function run(over: Partial<Run> = {}): Run {
 
 function row(over: Partial<RecordedRow> = {}): RecordedRow {
   return {
-    cell: "express/web",
+    cell: "sdk/express/web",
     title: "up",
     outcome: "passed",
     startTime: 1_000,
@@ -49,21 +49,38 @@ describe("the errors the suite leaves outside its recorded tests", () => {
 });
 
 describe("what a lane plans from the environment its children read", () => {
-  it("plans only the examples the environment names", () => {
+  it("plans only the fixtures the environment names", () => {
     const aws = targetNamed("aws");
     const planned = plannedFrom(
       aws,
-      selectionFor(aws, "aws", { OCEL_EXAMPLES: "express,next", OCEL_JOURNEY_SKIPS: "run" }),
+      selectionFor(aws, "aws", {
+        OCEL_JOURNEY_FIXTURES: "deploy/express,sdk/next",
+        OCEL_JOURNEY_SKIPS: "run",
+      }),
     );
-    const examples = new Set(planned.map((entry) => entry.example));
-    expect([...examples].sort()).toEqual(["express", "next"]);
+    const fixtures = new Set(planned.map((entry) => entry.fixture));
+    expect([...fixtures].sort()).toEqual(["deploy/express", "sdk/next"]);
   });
 });
 
 describe("the account a run settles from its rows", () => {
   const planned: PlannedTest[] = [
-    { cell: "express/web", example: "express", app: "web", variant: "base", title: "up", leg: "up" },
-    { cell: "express/web", example: "express", app: "web", variant: "base", title: "destroy", leg: "destroy" },
+    {
+      cell: "sdk/express/web",
+      fixture: "sdk/express",
+      app: "web",
+      variant: "base",
+      title: "up",
+      leg: "up",
+    },
+    {
+      cell: "sdk/express/web",
+      fixture: "sdk/express",
+      app: "web",
+      variant: "base",
+      title: "destroy",
+      leg: "destroy",
+    },
   ];
   const meta = { target: "dev", environment: "dev", runId: "local-unit", leftOut: [] };
 
@@ -100,7 +117,7 @@ describe("the account a run settles from its rows", () => {
       meta,
     });
     expect(account.verdict.exitCode).toBe(1);
-    expect(account.verdict.report).toContain("NEW RED — express/web › up");
+    expect(account.verdict.report).toContain("NEW RED — sdk/express/web › up");
     expect(account.verdict.report).not.toContain("UNHANDLED");
   });
 
@@ -108,7 +125,7 @@ describe("the account a run settles from its rows", () => {
     const account = accountOf({
       rows: [
         row({ title: "up", startTime: 1_000, duration: 3_000 }),
-        row({ cell: "express-hello/web", title: "up", startTime: 2_000, duration: 9_000 }),
+        row({ cell: "sdk/express-container/web", title: "up", startTime: 2_000, duration: 9_000 }),
       ],
       run: run(),
       runStart: 0,
@@ -118,9 +135,9 @@ describe("the account a run settles from its rows", () => {
       expectations: {},
       meta,
     });
-    expect(account.timeline.examples.map((entry) => [entry.example, entry.file])).toEqual([
-      ["express-hello", 9],
-      ["express", 3],
+    expect(account.timeline.cells.map((entry) => [entry.cell, entry.file])).toEqual([
+      ["sdk/express-container", 9],
+      ["sdk/express", 3],
     ]);
     expect(account.timeline.files).toBe(12);
   });

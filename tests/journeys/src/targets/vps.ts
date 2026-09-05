@@ -10,6 +10,7 @@ import type { ExpectationEnvironment } from "../expectations/types";
 import { appHostname, HARNESS_PREFIX } from "../identity";
 import { cellEnv, exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
+import { migrates } from "../rows";
 import type { Leg } from "../spec";
 import { migrateCommand, setAppNames, setSiteHostnames } from "../workspace";
 import { type Gateway, openGateway } from "./gateway";
@@ -253,7 +254,7 @@ async function bindDomains(cell: CellContext, started: Standing): Promise<void> 
 
 function hostnamesOf(cell: CellContext): Map<string, string> {
   return new Map(
-    cell.example.apps.map((app) => {
+    cell.fixture.apps.map((app) => {
       const hostname = appHostname(app, cell.slug, zone());
       if (!hostname) {
         throw new Error(`${app} has no hostname on ${zone()}`);
@@ -310,11 +311,11 @@ async function up(cell: CellContext): Promise<Deployment> {
 
   await drive("env-greeting", ["env", "set", "GREETING", INITIAL_GREETING]);
   await drive("env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN]);
-  await setAppNames(cell.example, drive);
-  await setSiteHostnames(cell.example, hostnamesOf(cell), drive);
+  await setAppNames(cell.fixture, drive);
+  await setSiteHostnames(cell.fixture, hostnamesOf(cell), drive);
   await drive("deploy", ["deploy", "--yes"]);
   await bindDomains(cell, started);
-  if (cell.suites.includes("product")) {
+  if (migrates(cell.fixture.rows)) {
     await drive("migrate", ["run", "--", ...migrateCommand()]);
   }
   return deployment(cell, started);

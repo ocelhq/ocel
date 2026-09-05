@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { workTree } from "../../ocel";
-import { exampleDir, treeDir } from "../../paths";
+import { fixtureDir, treeDir } from "../../paths";
 import { copyTree } from "../../tree";
 import type { LadderHooks } from "../../spec";
 import { recordPlacement, refuse } from "./ladder";
@@ -53,7 +53,7 @@ function isStageNotFound(error: unknown): boolean {
 }
 
 export async function sstSweep(runId: string): Promise<void> {
-  const dir = await copyTree(exampleDir("with-sst"), treeDir(runId, "aws", "ladder-sweep-with-sst"));
+  const dir = await copyTree(fixtureDir("sdk/with-sst"), treeDir(runId, "aws", "ladder-sweep-with-sst"));
   try {
     const bin = path.join(dir, "node_modules", ".bin", "sst");
     await spawnBin(bin, ["remove", "--stage", `j-${runId}`], dir, await deployEnv());
