@@ -165,7 +165,7 @@ func TestISRWriteSecretHash(t *testing.T) {
 			t.Fatalf("hash = %q, want 64 hex characters", hash)
 		}
 		for _, c := range hash {
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 				t.Fatalf("hash = %q, want lowercase hex", hash)
 			}
 		}

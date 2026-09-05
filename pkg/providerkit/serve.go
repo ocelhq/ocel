@@ -58,7 +58,7 @@ func Serve(spec Spec) error {
 	case <-ctx.Done():
 		return srv.Close()
 	case err := <-served:
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
 		return nil

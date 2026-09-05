@@ -148,7 +148,7 @@ func TestRDSIdentifierPrefix(t *testing.T) {
 		t.Parallel()
 
 		got := rdsIdentifierPrefix(resourceCoordinate("7shop", "prod", "db--main", naming.KindDatabase), "")
-		if first := got[0]; !(first >= 'a' && first <= 'z') {
+		if first := got[0]; first < 'a' || first > 'z' {
 			t.Errorf("rdsIdentifierPrefix() = %q, want a letter first — RDS rejects a leading digit", got)
 		}
 	})

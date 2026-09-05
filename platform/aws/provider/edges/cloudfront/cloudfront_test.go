@@ -496,7 +496,7 @@ func TestDestroyDisablesTheDistributionBeforeDeletingIt(t *testing.T) {
 	disabled := indexOf(t, steps, "UpdateDistribution "+id)
 	waited := indexOf(t, steps, "GetDistribution "+id)
 	deleted := indexOf(t, steps, "DeleteDistribution "+id)
-	if !(disabled < waited && waited < deleted) {
+	if disabled >= waited || waited >= deleted {
 		t.Errorf("the calls were %v, want the distribution disabled, waited out, then deleted", steps)
 	}
 	if len(w.front.distributions) != 0 {

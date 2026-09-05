@@ -229,7 +229,7 @@ func TestAContendedFlipLosesExactlyOnceAndTheRetryWins(t *testing.T) {
 	pointer := providerkit.RecordName{"ledger", ledger.Scope(providerkit.ClassProduction, "shop"), "pointers", edge.DefaultPointer}
 	jostled := &jostle{RecordStore: provider.Records(), at: pointer}
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
-		return ledger.New(jostled, providerkit.Class(state.Class), state.Slug)
+		return ledger.New(jostled, state.Class, state.Slug)
 	})
 
 	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); connect.CodeOf(err) != connect.CodeAborted {

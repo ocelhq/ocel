@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -122,7 +123,8 @@ func TestSetActiveOrganization(t *testing.T) {
 }
 
 func isAPIError(err error, target **APIError) bool {
-	apiErr, ok := err.(*APIError)
+	apiErr := &APIError{}
+	ok := errors.As(err, &apiErr)
 	if !ok {
 		return false
 	}

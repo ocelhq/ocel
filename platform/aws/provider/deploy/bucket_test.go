@@ -177,11 +177,11 @@ func TestBucketPhysicalPrefix(t *testing.T) {
 			t.Errorf("PhysicalPrefix() length %d leaves no room for the %d-character suffix within %d", len(got), s3AutonameSuffixLen, maxS3BucketNameLen)
 		}
 		for _, r := range got {
-			if !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && r != '-' {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
 				t.Fatalf("PhysicalPrefix() = %q, contains %q, which S3 rejects", got, r)
 			}
 		}
-		if first := got[0]; !(first >= 'a' && first <= 'z') && !(first >= '0' && first <= '9') {
+		if first := got[0]; (first < 'a' || first > 'z') && (first < '0' || first > '9') {
 			t.Errorf("PhysicalPrefix() = %q, want a letter or digit first", got)
 		}
 	})

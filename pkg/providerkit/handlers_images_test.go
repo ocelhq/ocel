@@ -454,7 +454,7 @@ func staging(t *testing.T, provider *fake.Provider) *stagingLedger {
 	t.Helper()
 	held := &stagingLedger{}
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
-		held.Ledger = ledger.New(provider.Records(), providerkit.Class(state.Class), state.Slug)
+		held.Ledger = ledger.New(provider.Records(), state.Class, state.Slug)
 		return held
 	})
 	return held

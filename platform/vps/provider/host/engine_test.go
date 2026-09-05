@@ -1,6 +1,7 @@
 package host
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -182,7 +183,8 @@ func (p standingProxy) drives(t *testing.T, argv ...string) string {
 	said, err := run.Output()
 	if err != nil {
 		var stderr string
-		if exited, ok := err.(*exec.ExitError); ok {
+		exited := &exec.ExitError{}
+		if errors.As(err, &exited) {
 			stderr = string(exited.Stderr)
 		}
 		t.Fatalf("%v against the running proxy = %v\n%s", argv, err, stderr)

@@ -88,8 +88,8 @@ func FingerprintVariables(variables []*contractv1.ManifestVariable) string {
 func writeLenPrefixed(h io.Writer, b []byte) {
 	var size [8]byte
 	binary.BigEndian.PutUint64(size[:], uint64(len(b)))
-	h.Write(size[:])
-	h.Write(b)
+	_, _ = h.Write(size[:])
+	_, _ = h.Write(b)
 }
 
 func newPromotionID() (string, error) {

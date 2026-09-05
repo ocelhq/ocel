@@ -132,7 +132,7 @@ func (b Bootstrapper) adoptions(ctx context.Context, req providerkit.BootstrapRe
 		if !ok {
 			continue
 		}
-		adoption, err := adopter.Adoption(ctx, edge.Class(req.Class))
+		adoption, err := adopter.Adoption(ctx, req.Class)
 		if err != nil {
 			return nil, fmt.Errorf("read what the %s edge hands this account to hold: %w", kind, err)
 		}
@@ -185,7 +185,7 @@ func plannedBootstrap(ctx context.Context, front edge.Edge, class providerkit.Cl
 	if !ok {
 		return nil, nil
 	}
-	planned, err := planner.PlanBootstrap(ctx, edge.Class(class))
+	planned, err := planner.PlanBootstrap(ctx, class)
 	if err != nil {
 		return nil, fmt.Errorf("plan the %s edge bootstrap: %w", front.Kind(), err)
 	}
@@ -278,7 +278,7 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 	}
 	for _, front := range fronts {
 		progress(fmt.Sprintf("Tearing down the %s edge", front.Kind()))
-		if err := front.Teardown(ctx, edge.Class(class)); err != nil {
+		if err := front.Teardown(ctx, class); err != nil {
 			return fmt.Errorf("tear down %s edge: %w", front.Kind(), err)
 		}
 	}

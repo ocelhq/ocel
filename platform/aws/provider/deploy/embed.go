@@ -348,7 +348,7 @@ func (p embedPass) updateCode(ctx context.Context, target embedTarget, key strin
 			FunctionName: aws.String(target.FunctionName),
 		})
 		if err != nil {
-			return fmt.Errorf("%w: could not read it back: %v", errUpdateUnsettled, err)
+			return fmt.Errorf("%w: could not read it back: %w", errUpdateUnsettled, err)
 		}
 		switch out.LastUpdateStatus {
 		case lambdatypes.LastUpdateStatusSuccessful:

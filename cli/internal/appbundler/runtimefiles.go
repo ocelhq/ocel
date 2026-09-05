@@ -36,7 +36,7 @@ func reportRuntimeFileRisk(log io.Writer, app, metafile, root string) {
 		fmt.Fprintf(&b, "  %s\n", line)
 	}
 	fmt.Fprintf(&b, "copy them into the artifact yourself, or %s\n", tracingHint)
-	io.WriteString(log, b.String())
+	_, _ = io.WriteString(log, b.String())
 }
 
 func scanRuntimeFileRisk(metafile, root string) []string {

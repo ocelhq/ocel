@@ -80,7 +80,7 @@ func (b Bootstrapper) removedEdgeGroup(ctx context.Context, class providerkit.Cl
 	if !ok {
 		return nil, nil
 	}
-	planned, err := remover.PlanRemoveBootstrap(ctx, edge.Class(class))
+	planned, err := remover.PlanRemoveBootstrap(ctx, class)
 	if err != nil {
 		return nil, fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", front.Kind(), err)
 	}

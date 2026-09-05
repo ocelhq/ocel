@@ -244,18 +244,19 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		}
 		var consented *planv1.ChangePlan
 		rendered := len(plan.GetGroups()) > 0
-		if rendered {
+		switch {
+		case rendered:
 			var notes []string
 			if !runui.Mutates(plan) {
 				notes = append(notes, "No infrastructure changes — applying refreshes bootstrap seals and records.")
 			}
 			consented = ui.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan, notes...)
-		} else if len(going) > 0 {
+		case len(going) > 0:
 			ui.Warning(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it stood up.", strings.Join(going, ", "), Name(tier)))
 			if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
 				ui.Warning(fmt.Sprintf("These projects were deployed against it and break when it goes: %s", strings.Join(dependents, ", ")))
 			}
-		} else {
+		default:
 			ui.Diagnostic("No infrastructure changes — applying refreshes bootstrap seals and records.")
 		}
 		if !picked {

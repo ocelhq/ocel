@@ -46,7 +46,7 @@ func main() {
 	fmt.Printf("DEV_SERVER_ADDR=%s\n", devServerAddr)
 
 	go func() {
-		io.Copy(io.Discard, os.Stdin)
+		_, _ = io.Copy(io.Discard, os.Stdin)
 		stop()
 	}()
 	<-ctx.Done()

@@ -684,7 +684,7 @@ func TestRun(t *testing.T) {
 		if core < 0 || isr < 0 || front < 0 {
 			t.Fatalf("applied %v, want core, isr and the cloudflare edge among them", cfn.applied)
 		}
-		if !(core < isr && isr < front) {
+		if core >= isr || isr >= front {
 			t.Errorf("applied in order %v, want core before isr before the cloudflare edge", cfn.applied)
 		}
 	})

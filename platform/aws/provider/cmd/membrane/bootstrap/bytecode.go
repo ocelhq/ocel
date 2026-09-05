@@ -337,7 +337,7 @@ func untarInto(ctx context.Context, r io.Reader, dir string, ceiling int64) (int
 			return total, fmt.Errorf("extracting the bytecode cache ran out of time: %w", err)
 		}
 		hdr, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return total, nil
 		}
 		if err != nil {

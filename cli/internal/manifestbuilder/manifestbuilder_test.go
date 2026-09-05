@@ -286,7 +286,8 @@ func TestBuild(t *testing.T) {
 			t.Fatal("Build: expected duplicate error, got nil")
 		}
 
-		dupErr, ok := err.(*DuplicateError)
+		dupErr := &DuplicateError{}
+		ok := errors.As(err, &dupErr)
 		if !ok {
 			t.Fatalf("Build error = %T, want *DuplicateError", err)
 		}
@@ -336,7 +337,8 @@ func TestBuild(t *testing.T) {
 			t.Fatal("Build: expected a collision error, got nil")
 		}
 
-		collision, ok := err.(*CollisionError)
+		collision := &CollisionError{}
+		ok := errors.As(err, &collision)
 		if !ok {
 			t.Fatalf("Build error = %T, want *CollisionError", err)
 		}
@@ -361,7 +363,8 @@ func TestBuild(t *testing.T) {
 			t.Fatal("Build: expected a collision error, got nil")
 		}
 
-		collision, ok := err.(*CollisionError)
+		collision := &CollisionError{}
+		ok := errors.As(err, &collision)
 		if !ok {
 			t.Fatalf("Build error = %T, want *CollisionError", err)
 		}

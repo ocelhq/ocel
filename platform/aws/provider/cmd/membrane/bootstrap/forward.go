@@ -79,7 +79,7 @@ func (m *nodeChild) forward(ctx context.Context, inv *invocation, rw *responseWr
 
 	var first [1]byte
 	n, err := io.ReadFull(resp.Body, first[:])
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return true, m.failBeforeFirstByte(ctx, rw, fmt.Sprintf("read upstream body: %v", err))
 	}
 	empty := n == 0

@@ -120,7 +120,7 @@ func (d *Detector) postCallback(ctx context.Context, c Completion) error {
 		return err
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("callback: unexpected status %d", resp.StatusCode)
 	}
