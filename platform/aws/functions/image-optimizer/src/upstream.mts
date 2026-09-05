@@ -37,10 +37,7 @@ class BlockedAddressError extends Error {
   }
 }
 
-export function guardedLookup(
-  deps: UpstreamDeps,
-  allowLocalIP = false,
-): typeof dnsLookup {
+export function guardedLookup(deps: UpstreamDeps, allowLocalIP = false): typeof dnsLookup {
   const resolve = deps.lookup ?? dnsLookup;
   const isReachable = deps.isReachable ?? isReachableAddress;
 
@@ -56,9 +53,7 @@ export function guardedLookup(
     resolve(hostname, opts, (err: NodeJS.ErrnoException | null, addresses: unknown) => {
       if (err) return callback(err, "", 0);
       const list = (addresses as LookupAddress[]) ?? [];
-      const reachable = allowLocalIP
-        ? list
-        : list.filter((entry) => isReachable(entry.address));
+      const reachable = allowLocalIP ? list : list.filter((entry) => isReachable(entry.address));
       if (reachable.length === 0) {
         return callback(new BlockedAddressError(hostname), "", 0);
       }
@@ -95,26 +90,16 @@ export async function fetchUpstream(
       ? (localAgent ??= agentFor(deps, true))
       : (guardedAgent ??= agentFor(deps, false));
   try {
-    return await follow(
-      href,
-      config,
-      agent,
-      deps.isReachable ?? isReachableAddress,
-    );
+    return await follow(href, config, agent, deps.isReachable ?? isReachableAddress);
   } finally {
     if (injected) await agent.close().catch(() => {});
   }
 }
 
-function assertReachableLiteral(
-  url: URL,
-  isReachable: (address: string) => boolean,
-): void {
+function assertReachableLiteral(url: URL, isReachable: (address: string) => boolean): void {
   const hostname = url.hostname;
   const bare =
-    hostname.startsWith("[") && hostname.endsWith("]")
-      ? hostname.slice(1, -1)
-      : hostname;
+    hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
   if (isIP(bare) !== 0 && !isReachable(hostname)) {
     throw upstreamFailure(`unreachable address ${hostname}`);
   }
@@ -155,7 +140,7 @@ async function follow(
       throw upstreamFailure(error);
     }
 
-    const location = header(response.headers["location"]);
+    const location = header(response.headers.location);
     if (REDIRECT_STATUSES.has(response.statusCode) && location) {
       await response.body.dump().catch(() => {});
       if (hop >= maxHops) throw upstreamFailure(`too many redirects for ${href}`);
@@ -179,7 +164,7 @@ async function follow(
       return {
         bytes,
         cacheControl: header(response.headers["cache-control"]),
-        etag: header(response.headers["etag"]),
+        etag: header(response.headers.etag),
       };
     } catch (error) {
       response.body.destroy();
@@ -188,11 +173,7 @@ async function follow(
   }
 }
 
-function resolveHop(
-  location: string,
-  from: URL,
-  config: CompiledImageConfig,
-): URL {
+function resolveHop(location: string, from: URL, config: CompiledImageConfig): URL {
   let next: URL;
   try {
     next = new URL(location, from);

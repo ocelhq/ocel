@@ -6,7 +6,7 @@ import vm from "node:vm";
 import type { Route } from "@next/routing";
 import { describe, expect, it } from "vitest";
 
-import { dispatchResult, ruleDestinationPathname, serve, type RouteDeps } from "../src/index.mjs";
+import { dispatchResult, type RouteDeps, ruleDestinationPathname, serve } from "../src/index.mjs";
 import { assetStoreServing, baseDeps } from "../test-support/dispatch-scenario.mjs";
 
 v8.setFlagsFromString("--expose-gc");
@@ -1405,9 +1405,10 @@ describe("the service-worker chunk", () => {
 });
 
 describe("data-request invocation pathname", () => {
-  function lambdaDeps(
-    manifest: Partial<RouteDeps["manifest"]> = {},
-  ): { deps: RouteDeps; invoked: () => URL } {
+  function lambdaDeps(manifest: Partial<RouteDeps["manifest"]> = {}): {
+    deps: RouteDeps;
+    invoked: () => URL;
+  } {
     let captured: URL | undefined;
     const deps = baseDeps({
       manifest: {
@@ -1496,9 +1497,7 @@ describe("data-request invocation pathname", () => {
       deps,
     );
 
-    expect(invoked().pathname).toBe(
-      "/docs/_next/data/t/middleware/works.json",
-    );
+    expect(invoked().pathname).toBe("/docs/_next/data/t/middleware/works.json");
   });
 
   it("does not treat a lookalike prefix as the app's basePath", async () => {
@@ -1806,9 +1805,7 @@ describe("an afterFiles rewrite shadowed by a dynamic route", () => {
         routes: {
           beforeMiddleware: [],
           beforeFiles: [],
-          afterFiles: [
-            { sourceRegex: "^/rewrite-1(?:/)?$", destination: "/ssr-page?from=config" },
-          ],
+          afterFiles: [{ sourceRegex: "^/rewrite-1(?:/)?$", destination: "/ssr-page?from=config" }],
           dynamicRoutes: [
             { sourceRegex: "^[/]?/(?<nxtPid>[^/]+?)(?:/)?$", destination: "/[id]?nxtPid=$nxtPid" },
           ],
@@ -1821,7 +1818,8 @@ describe("an afterFiles rewrite shadowed by a dynamic route", () => {
         },
       },
       functionUrls: { "/ssr-page": "https://fn.example.com" },
-      fetch: (async () => new Response("ssr-page rendered", { status: 200 })) as unknown as typeof fetch,
+      fetch: (async () =>
+        new Response("ssr-page rendered", { status: 200 })) as unknown as typeof fetch,
       assetStore: assetStoreServing({ "/[id].html": "dynamic route doc" }),
     });
   }
@@ -1912,7 +1910,6 @@ describe("an afterFiles rewrite shadowed by a dynamic route", () => {
     expect(res.headers.get("location")).toBe("/elsewhere");
     expect(res.headers.has("x-matched-path")).toBe(false);
   });
-
 });
 
 describe("a concrete route shadowed by a dynamic sibling", () => {
@@ -2226,9 +2223,7 @@ describe("custom error page substitution", () => {
   }
 
   it("substitutes the /404 entry's body for a 404 document response, keeping the 404 status", async () => {
-    const deps = errorPageDeps(
-      () => new Response("This page could not be found", { status: 404 }),
-    );
+    const deps = errorPageDeps(() => new Response("This page could not be found", { status: 404 }));
 
     const res = await dispatchResult(
       { resolvedPathname: "/not-found", invocationTarget: { pathname: "/not-found" } },
@@ -2241,9 +2236,7 @@ describe("custom error page substitution", () => {
   });
 
   it("substitutes the /500 entry's body for a 5xx document response, keeping the original status", async () => {
-    const deps = errorPageDeps(
-      () => new Response("Internal Server Error", { status: 500 }),
-    );
+    const deps = errorPageDeps(() => new Response("Internal Server Error", { status: 500 }));
 
     const res = await dispatchResult(
       { resolvedPathname: "/not-found", invocationTarget: { pathname: "/not-found" } },
@@ -2311,8 +2304,7 @@ describe("custom error page substitution", () => {
         errorRoutes: { notFound: "/404" },
       },
       functionUrls: { api: "https://fn.example.com", page: "https://fn.example.com" },
-      fetch: (async () =>
-        new Response("Not Found", { status: 404 })) as unknown as typeof fetch,
+      fetch: (async () => new Response("Not Found", { status: 404 })) as unknown as typeof fetch,
     });
 
     const res = await dispatchResult(
@@ -2328,7 +2320,7 @@ describe("custom error page substitution", () => {
   it("passes through an origin 500 that already rendered a text/html document", async () => {
     const deps = errorPageDeps(
       () =>
-        new Response("<html id=\"__next_error__\">origin error boundary</html>", {
+        new Response('<html id="__next_error__">origin error boundary</html>', {
           status: 500,
           headers: { "content-type": "text/html; charset=utf-8", "x-origin": "1" },
         }),
@@ -2342,15 +2334,13 @@ describe("custom error page substitution", () => {
 
     expect(res.status).toBe(500);
     expect(res.headers.get("x-origin")).toBe("1");
-    expect(await res.text()).toBe(
-      "<html id=\"__next_error__\">origin error boundary</html>",
-    );
+    expect(await res.text()).toBe('<html id="__next_error__">origin error boundary</html>');
   });
 
   it("passes through an origin 404 from a matched lambda+page target that already rendered a document", async () => {
     const deps = errorPageDeps(
       () =>
-        new Response("<html id=\"__next_error__\">route-specific not found</html>", {
+        new Response('<html id="__next_error__">route-specific not found</html>', {
           status: 404,
           headers: { "content-type": "text/html; charset=utf-8", "x-origin": "1" },
         }),
@@ -2364,15 +2354,11 @@ describe("custom error page substitution", () => {
 
     expect(res.status).toBe(404);
     expect(res.headers.get("x-origin")).toBe("1");
-    expect(await res.text()).toBe(
-      "<html id=\"__next_error__\">route-specific not found</html>",
-    );
+    expect(await res.text()).toBe('<html id="__next_error__">route-specific not found</html>');
   });
 
   it("still substitutes a bodiless plaintext origin 500 with no content-type", async () => {
-    const deps = errorPageDeps(
-      () => new Response("Internal Server Error", { status: 500 }),
-    );
+    const deps = errorPageDeps(() => new Response("Internal Server Error", { status: 500 }));
 
     const res = await dispatchResult(
       { resolvedPathname: "/not-found", invocationTarget: { pathname: "/not-found" } },
@@ -2438,9 +2424,7 @@ describe("not-found for an unresolved pathname under a flight header", () => {
           },
           errorRoutes: {
             notFound: "/404",
-            ...(overrides.flightRoute === false
-              ? {}
-              : { notFoundFlight: "/_not-found" }),
+            ...(overrides.flightRoute === false ? {} : { notFoundFlight: "/_not-found" }),
           },
         },
         functionUrls: { page: "https://fn.example.com" },
@@ -2531,11 +2515,7 @@ describe("not-found fallback for unmatched pathnames", () => {
         })) as unknown as typeof fetch,
     });
 
-    const res = await dispatchResult(
-      {},
-      new Request("https://app.example/never-registered"),
-      deps,
-    );
+    const res = await dispatchResult({}, new Request("https://app.example/never-registered"), deps);
 
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("<html>custom 404</html>");
@@ -2553,11 +2533,7 @@ describe("not-found fallback for unmatched pathnames", () => {
       assetStore: assetStoreServing({}),
     });
 
-    const res = await dispatchResult(
-      {},
-      new Request("https://app.example/never-registered"),
-      deps,
-    );
+    const res = await dispatchResult({}, new Request("https://app.example/never-registered"), deps);
 
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("Not Found");
@@ -2687,10 +2663,7 @@ describe("not-found fallback for unmatched pathnames", () => {
       assetStore: assetStoreServing({ "/dashboard.html": "<html>dashboard</html>" }),
     });
 
-    const res = await serve(
-      new Request("https://app.example/catch-all"),
-      deps,
-    );
+    const res = await serve(new Request("https://app.example/catch-all"), deps);
 
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("<html>custom 404</html>");
@@ -2699,13 +2672,8 @@ describe("not-found fallback for unmatched pathnames", () => {
 
 describe("ruleDestinationPathname substitution with prefix-colliding groups", () => {
   it("does not let a numbered $1 eat into $10", () => {
-    const sourceRegex =
-      "^/(a)/(b)/(c)/(d)/(e)/(f)/(g)/(h)/(i)/(j)(?:/)?$";
-    const out = ruleDestinationPathname(
-      sourceRegex,
-      "/$1-$10",
-      "/a/b/c/d/e/f/g/h/i/j",
-    );
+    const sourceRegex = "^/(a)/(b)/(c)/(d)/(e)/(f)/(g)/(h)/(i)/(j)(?:/)?$";
+    const out = ruleDestinationPathname(sourceRegex, "/$1-$10", "/a/b/c/d/e/f/g/h/i/j");
 
     expect(out).toBe("/a-j");
   });

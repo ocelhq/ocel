@@ -1,14 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import {
-  cellNamed,
   CONCERN_ENV,
+  cellNamed,
   concernsFrom,
   ENVIRONMENT_ENV,
   environmentFrom,
   FIXTURES_ENV,
   fixturesFor,
-  selectionFor,
   SKIPS_ENV,
+  selectionFor,
   skipsLifted,
   VARIANTS_ENV,
   variantsAsked,
@@ -21,7 +21,10 @@ const VPS = targetNamed("vps");
 
 const FULL = { OCEL_JOURNEY_COVERAGE: "full" };
 
-function cellsOf(env: NodeJS.ProcessEnv, environment: "aws" | "aws.floci" | "vps" = "aws"): string[] {
+function cellsOf(
+  env: NodeJS.ProcessEnv,
+  environment: "aws" | "aws.floci" | "vps" = "aws",
+): string[] {
   const target = environment === "vps" ? VPS : AWS;
   return selectionFor(target, environment, env).cells.map((cell) => cell.name);
 }
@@ -129,10 +132,7 @@ describe("what a run selects", () => {
       ...FULL,
       [FIXTURES_ENV]: "sdk/with-transforms",
     });
-    expect(Object.keys(skipped)).toEqual([
-      "sdk/with-transforms",
-      "sdk/with-transforms-container",
-    ]);
+    expect(Object.keys(skipped)).toEqual(["sdk/with-transforms", "sdk/with-transforms-container"]);
     expect(skipped["sdk/with-transforms"]?.map((gap) => gap.issue)).toEqual([923]);
     const narrowed = selectionFor(AWS, "aws", {
       ...FULL,

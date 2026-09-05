@@ -1,20 +1,14 @@
 import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-
-import { isrEntryStore, type EntryStore } from "./isr-writer.mjs";
 import {
-  entriesAdopted,
-  providerObjectStore,
-  type ObjectStore,
-} from "./object-store.mjs";
-
-import {
+  type CacheEntryFile,
   entryObjectKey,
   isGuardRejection,
-  tagRecordUpdate,
-  type CacheEntryFile,
   type TagRecord,
+  tagRecordUpdate,
 } from "@framework/next-cache";
+import { type EntryStore, isrEntryStore } from "./isr-writer.mjs";
+import { entriesAdopted, type ObjectStore, providerObjectStore } from "./object-store.mjs";
 
 export type { CacheEntryFile, TagRecord } from "@framework/next-cache";
 
@@ -61,14 +55,9 @@ export function awsCacheStore(): CacheStore {
   };
   const fetchKey = (hash: string) => `${prefix}/fetch-cache/${hash}.cache.json`;
 
-  async function read(
-    from: ObjectStore,
-    key: string,
-  ): Promise<CacheEntryFile | null> {
+  async function read(from: ObjectStore, key: string): Promise<CacheEntryFile | null> {
     try {
-      const out = await from.client.send(
-        new GetObjectCommand({ Bucket: from.bucket, Key: key }),
-      );
+      const out = await from.client.send(new GetObjectCommand({ Bucket: from.bucket, Key: key }));
       return JSON.parse(await streamToString(out.Body));
     } catch (err: any) {
       if (err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) {
@@ -78,11 +67,7 @@ export function awsCacheStore(): CacheStore {
     }
   }
 
-  async function write(
-    to: ObjectStore,
-    key: string,
-    entry: CacheEntryFile,
-  ): Promise<void> {
+  async function write(to: ObjectStore, key: string, entry: CacheEntryFile): Promise<void> {
     await to.client.send(
       new PutObjectCommand({
         Bucket: to.bucket,

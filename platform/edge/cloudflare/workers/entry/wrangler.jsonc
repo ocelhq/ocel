@@ -4,22 +4,18 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-13",
   "observability": {
-    "enabled": true,
+    "enabled": true
   },
   "upload_source_maps": true,
   "compatibility_flags": ["nodejs_compat"],
   "define": {
     "__dirname": "\"/\"",
-    "__filename": "\"/index.js\"",
+    "__filename": "\"/index.js\""
   },
   "vars": {
     "OCEL_APP": "web",
-    "OCEL_SLUG": "dev",
+    "OCEL_SLUG": "dev"
   },
-  "services": [
-    { "binding": "DEPLOYMENTS", "service": "deployments-store" },
-  ],
-  "worker_loaders": [
-    { "binding": "LOADER" },
-  ],
+  "services": [{ "binding": "DEPLOYMENTS", "service": "deployments-store" }],
+  "worker_loaders": [{ "binding": "LOADER" }]
 }

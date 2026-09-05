@@ -36,7 +36,9 @@ if (mode === "collect") {
   if (!out || fragments.length === 0) {
     usage();
   }
-  const merged = mergeBaselineManifest(fragments.map((path) => JSON.parse(readFileSync(path, "utf8"))));
+  const merged = mergeBaselineManifest(
+    fragments.map((path) => JSON.parse(readFileSync(path, "utf8"))),
+  );
   write(out, merged);
   console.error(
     `[ocel-e2e] merged ${fragments.length} fragments into ${out} (${Object.keys(merged.suites).length} suites)`,
@@ -46,7 +48,7 @@ if (mode === "collect") {
 }
 
 function write(path, manifest) {
-  writeFileSync(path, JSON.stringify(manifest, null, 2) + "\n");
+  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 function usage() {

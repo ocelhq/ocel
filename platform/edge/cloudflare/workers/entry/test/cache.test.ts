@@ -1,30 +1,27 @@
-import { describe, expect, it, vi } from "vitest";
-
 import { deltaSeconds } from "@framework/next-router/http-cache";
-
+import cacheKeyFixture from "@platform/edge-contract/fixtures/cache-key" with { type: "json" };
+import { describe, expect, it, vi } from "vitest";
 import {
   admissionDrawMs,
   admissionJitterMs,
   admitRefresh,
+  type CacheDeps,
+  type CacheTarget,
   cacheKey,
   deploymentScope,
+  type EntryMeta,
   evaluate,
-  refreshOutcome,
+  hasDraftCookie,
+  type RefreshOutcome,
   refreshBackoffSeconds,
+  refreshOutcome,
   refreshSentinelTtlSeconds,
-  serveCached,
   sentinelUrl,
+  serveCached,
   serveCachedImage,
   storeInColo,
   variantPath,
-  type CacheDeps,
-  type CacheTarget,
-  type EntryMeta,
-  type RefreshOutcome,
 } from "../src/cache";
-import cacheKeyFixture from "@platform/edge-contract/fixtures/cache-key" with { type: "json" };
-import { hasDraftCookie } from "../src/cache";
-import type { TagVerdict } from "../src/tag-clock";
 import { coloDeps } from "./cache-deps";
 
 function testDeps(
@@ -123,11 +120,7 @@ function lagCache(clock: { ms: number }, lagMs: number): Cache {
 
 type CountingOrigin = (() => Promise<Response>) & { calls: number };
 
-function countingOrigin(
-  cacheControl: string,
-  body = "rendered",
-  status = 200,
-): CountingOrigin {
+function countingOrigin(cacheControl: string, body = "rendered", status = 200): CountingOrigin {
   const fn = (async () => {
     fn.calls++;
     return new Response(body, {
@@ -168,8 +161,7 @@ function countingRun(outcome: RefreshOutcome | "threw" = "landed") {
   return run;
 }
 
-const req = (url = "https://app.example/", init?: RequestInit) =>
-  new Request(url, init);
+const req = (url = "https://app.example/", init?: RequestInit) => new Request(url, init);
 
 describe("evaluate", () => {
   const at = (lastModified: number, over: Partial<EntryMeta> = {}): EntryMeta => ({
@@ -213,18 +205,18 @@ describe("the shared cache-key variants", () => {
   for (const testCase of cacheKeyFixture.cases) {
     it(testCase.name, () => {
       for (const renderingMode of ["STATIC", undefined] as const) {
-        expect(
-          variantPath(testCase.pathname, H(testCase.headers), renderingMode),
-        ).toBe(testCase.variantPrerendered);
+        expect(variantPath(testCase.pathname, H(testCase.headers), renderingMode)).toBe(
+          testCase.variantPrerendered,
+        );
       }
-      expect(
-        variantPath(testCase.pathname, H(testCase.headers), "PARTIALLY_STATIC"),
-      ).toBe(testCase.variantPartiallyStatic);
+      expect(variantPath(testCase.pathname, H(testCase.headers), "PARTIALLY_STATIC")).toBe(
+        testCase.variantPartiallyStatic,
+      );
 
       const cookie = testCase.draft ? "__prerender_bypass=1" : "other=1";
-      expect(
-        hasDraftCookie(new Request("https://app.example/", { headers: { cookie } })),
-      ).toBe(testCase.draft);
+      expect(hasDraftCookie(new Request("https://app.example/", { headers: { cookie } }))).toBe(
+        testCase.draft,
+      );
     });
   }
 });
@@ -385,9 +377,9 @@ describe("cacheKey", () => {
 
   it("reports a per-visitor dynamic variant as non-cacheable", () => {
     const url = new URL("https://app.example/blog");
-    expect(
-      cacheKey(scope, "/blog", url, H({ RSC: "1" }), "PARTIALLY_STATIC", []),
-    ).toEqual({ cacheable: false });
+    expect(cacheKey(scope, "/blog", url, H({ RSC: "1" }), "PARTIALLY_STATIC", [])).toEqual({
+      cacheable: false,
+    });
   });
 
   it("gives an intercepted segment prefetch a different colo key than the same URL without next-url", () => {
@@ -415,10 +407,7 @@ describe("refreshOutcome", () => {
 });
 
 describe("serveCached", () => {
-  const target = (
-    name: string,
-    over: Partial<CacheTarget> = {},
-  ): CacheTarget => ({
+  const target = (name: string, over: Partial<CacheTarget> = {}): CacheTarget => ({
     key: `https://cache.ocel/build/${name}`,
     ...over,
   });
@@ -431,8 +420,8 @@ describe("serveCached", () => {
       revalidate: 60,
       expiration: 600,
     });
-    const origin = gatedOrigin(async () =>
-      new Response("rendered", { headers: { "cache-control": "s-maxage=60" } }),
+    const origin = gatedOrigin(
+      async () => new Response("rendered", { headers: { "cache-control": "s-maxage=60" } }),
     );
 
     const burst = Promise.all([
@@ -464,9 +453,7 @@ describe("serveCached", () => {
 
     const joiner = await Promise.race([
       serveCached(req(), t, deps, origin, origin),
-      new Promise<"stranded">((resolve) =>
-        setTimeout(() => resolve("stranded"), 1_000),
-      ),
+      new Promise<"stranded">((resolve) => setTimeout(() => resolve("stranded"), 1_000)),
     ]);
 
     expect(joiner).not.toBe("stranded");
@@ -477,24 +464,12 @@ describe("serveCached", () => {
     const deps = testDeps(clock);
     const origin = countingOrigin("s-maxage=60");
 
-    const first = await serveCached(
-      req(),
-      target("hit"),
-      deps,
-      origin,
-      origin,
-    );
+    const first = await serveCached(req(), target("hit"), deps, origin, origin);
     expect(first.headers.get("x-ocel-cache")).toBe("MISS");
     await deps.flush();
 
     clock.ms = 1_000;
-    const second = await serveCached(
-      req(),
-      target("hit"),
-      deps,
-      origin,
-      origin,
-    );
+    const second = await serveCached(req(), target("hit"), deps, origin, origin);
 
     expect(second.headers.get("x-ocel-cache")).toBe("HIT");
     expect(origin.calls).toBe(1);
@@ -589,9 +564,7 @@ describe("serveCached", () => {
     const first = await serveCached(req(), target("immutable"), deps, origin, origin);
 
     expect(first.headers.get("x-ocel-cache")).toBe("MISS");
-    expect(first.headers.get("cache-control")).toBe(
-      "public, max-age=0, must-revalidate",
-    );
+    expect(first.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
   });
 
   it("serves the browser a revalidating Cache-Control, never the stored TTL", async () => {
@@ -605,9 +578,7 @@ describe("serveCached", () => {
     const hit = await serveCached(req(), target("cc"), deps, origin, origin);
 
     for (const res of [miss, hit]) {
-      expect(res.headers.get("cache-control")).toBe(
-        "public, max-age=0, must-revalidate",
-      );
+      expect(res.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
       expect(res.headers.get("x-ocel-origin-cache-control")).toBeNull();
       expect(res.headers.get("x-ocel-entry-modified")).toBeNull();
     }
@@ -630,13 +601,7 @@ describe("serveCached", () => {
     expect(drafted.headers.get("x-ocel-cache")).toBe("BYPASS");
     await deps.flush();
 
-    const after = await serveCached(
-      req(),
-      target("draft"),
-      deps,
-      origin,
-      origin,
-    );
+    const after = await serveCached(req(), target("draft"), deps, origin, origin);
     expect(after.headers.get("x-ocel-cache")).toBe("MISS");
   });
 
@@ -663,13 +628,7 @@ describe("serveCached", () => {
     await deps.flush();
 
     clock.ms = 1_000;
-    const redeploy = await serveCached(
-      req(),
-      target("new-build"),
-      deps,
-      origin,
-      origin,
-    );
+    const redeploy = await serveCached(req(), target("new-build"), deps, origin, origin);
     expect(redeploy.headers.get("x-ocel-cache")).toBe("MISS");
     expect(origin.calls).toBe(2);
   });
@@ -1047,7 +1006,11 @@ describe("serveCached", () => {
     const origin = countingOrigin("s-maxage=1");
     const refresh = countingOrigin("s-maxage=1");
     const t = target("tag-stale", { revalidate: 3600, expiration: 7200, tags: ["posts"] });
-    const clockTags = { async freshness() { return "stale" as const; } };
+    const clockTags = {
+      async freshness() {
+        return "stale" as const;
+      },
+    };
 
     await serveCached(req(), t, deps, origin, refresh, clockTags);
     await deps.flush();
@@ -1065,8 +1028,16 @@ describe("serveCached", () => {
     const origin = countingOrigin("s-maxage=1");
     const refresh = countingOrigin("s-maxage=1");
     const t = target("tag-expired", { revalidate: 3600, expiration: 7200, tags: ["posts"] });
-    const fresh = { async freshness() { return "fresh" as const; } };
-    const expired = { async freshness() { return "expired" as const; } };
+    const fresh = {
+      async freshness() {
+        return "fresh" as const;
+      },
+    };
+    const expired = {
+      async freshness() {
+        return "expired" as const;
+      },
+    };
 
     await serveCached(req(), t, deps, origin, refresh, fresh);
     await deps.flush();
@@ -1086,7 +1057,11 @@ describe("serveCached", () => {
     const origin = countingOrigin("s-maxage=1");
     const refresh = countingOrigin("s-maxage=1");
     const t = target("untrusted", { revalidate: 3600, expiration: 7200, tags: ["posts"] });
-    const clockUntrusted = { async freshness() { return "untrusted" as const; } };
+    const clockUntrusted = {
+      async freshness() {
+        return "untrusted" as const;
+      },
+    };
 
     await serveCached(req(), t, deps, origin, refresh, clockUntrusted);
     await deps.flush();
@@ -1104,11 +1079,12 @@ describe("serveCached", () => {
     const deps = testDeps(clock, cache);
     const t = target("populate", { revalidate: 60, expiration: 600 });
 
-    const origin = gatedOrigin(async () =>
-      new Response("rendered", {
-        status: 200,
-        headers: { "cache-control": "s-maxage=60" },
-      }),
+    const origin = gatedOrigin(
+      async () =>
+        new Response("rendered", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        }),
     );
 
     const burst = Promise.all([
@@ -1125,11 +1101,7 @@ describe("serveCached", () => {
 
     expect(origin.calls).toBe(1);
     expect(cache.puts).toBe(1);
-    expect(responses.map((res) => res.headers.get("x-ocel-cache"))).toEqual([
-      "MISS",
-      "HIT",
-      "HIT",
-    ]);
+    expect(responses.map((res) => res.headers.get("x-ocel-cache"))).toEqual(["MISS", "HIT", "HIT"]);
     for (const res of responses) {
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("rendered");
@@ -1148,11 +1120,12 @@ describe("serveCached", () => {
     const deps = testDeps(clock, cache);
     const t = target("unstorable-leader", { revalidate: 60, expiration: 600 });
 
-    const origin = gatedOrigin(async () =>
-      new Response("uncacheable", {
-        status: 200,
-        headers: { "cache-control": "no-store" },
-      }),
+    const origin = gatedOrigin(
+      async () =>
+        new Response("uncacheable", {
+          status: 200,
+          headers: { "cache-control": "no-store" },
+        }),
     );
 
     const burst = Promise.all([

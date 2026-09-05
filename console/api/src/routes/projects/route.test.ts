@@ -49,10 +49,7 @@ describe("POST /api/projects", () => {
         .select()
         .from(project)
         .where(
-          and(
-            eq(project.organizationId, session.organization.id),
-            eq(project.slug, "my-project"),
-          ),
+          and(eq(project.organizationId, session.organization.id), eq(project.slug, "my-project")),
         );
       expect(row).toBeTruthy();
       expect(row.name).toBe("My Project");
@@ -66,10 +63,7 @@ describe("POST /api/projects", () => {
 
     try {
       const response = await createProject(
-        postRequest(
-          { name: "My Project", slug: "Not A Slug!" },
-          session.headers,
-        ),
+        postRequest({ name: "My Project", slug: "Not A Slug!" }, session.headers),
       );
 
       expect(response.status).toBe(400);
@@ -116,16 +110,10 @@ describe("POST /api/projects", () => {
 
     try {
       const responseA = await createProject(
-        postRequest(
-          { name: "Org A Project", slug: "shared-slug" },
-          sessionA.headers,
-        ),
+        postRequest({ name: "Org A Project", slug: "shared-slug" }, sessionA.headers),
       );
       const responseB = await createProject(
-        postRequest(
-          { name: "Org B Project", slug: "shared-slug" },
-          sessionB.headers,
-        ),
+        postRequest({ name: "Org B Project", slug: "shared-slug" }, sessionB.headers),
       );
 
       expect(responseA.status).toBe(201);
@@ -155,17 +143,10 @@ describe("GET /api/projects", () => {
     const otherSession = await createTestSessionWithOrganization();
 
     try {
+      await createProject(postRequest({ name: "Alpha", slug: "alpha" }, session.headers));
+      await createProject(postRequest({ name: "Beta", slug: "beta" }, session.headers));
       await createProject(
-        postRequest({ name: "Alpha", slug: "alpha" }, session.headers),
-      );
-      await createProject(
-        postRequest({ name: "Beta", slug: "beta" }, session.headers),
-      );
-      await createProject(
-        postRequest(
-          { name: "Not Mine", slug: "not-mine" },
-          otherSession.headers,
-        ),
+        postRequest({ name: "Not Mine", slug: "not-mine" }, otherSession.headers),
       );
 
       const response = await listProjects(getRequest(session.headers));
@@ -173,15 +154,9 @@ describe("GET /api/projects", () => {
       expect(response.status).toBe(200);
       const body = await response.json();
       expect(body).toHaveLength(2);
-      expect(body.map((p: { slug: string }) => p.slug).sort()).toEqual([
-        "alpha",
-        "beta",
-      ]);
+      expect(body.map((p: { slug: string }) => p.slug).sort()).toEqual(["alpha", "beta"]);
       expect(
-        body.every(
-          (p: { organizationId: string }) =>
-            p.organizationId === session.organization.id,
-        ),
+        body.every((p: { organizationId: string }) => p.organizationId === session.organization.id),
       ).toBe(true);
     } finally {
       await session.cleanup();

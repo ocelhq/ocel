@@ -4,7 +4,10 @@ export const routeId = "/";
 export function body(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     v: 1,
-    headers: { "x-prerender-revalidate": "s3cr3t-preview-mode-id", "x-forwarded-host": "example.com" },
+    headers: {
+      "x-prerender-revalidate": "s3cr3t-preview-mode-id",
+      "x-forwarded-host": "example.com",
+    },
     expect: { header: "x-nextjs-cache", value: "REVALIDATED" },
     isrPrefix,
     routeId,

@@ -40,10 +40,7 @@ function decode(value: string): string | undefined {
   }
 }
 
-export function validate(
-  payload: ImageOriginRequest,
-  config: CompiledImageConfig,
-): Validation {
+export function validate(payload: ImageOriginRequest, config: CompiledImageConfig): Validation {
   const { url, w, q } = payload;
 
   if (!url) return invalid('"url" parameter is required');
@@ -67,9 +64,7 @@ export function validate(
     }
     if (config.localPatterns) {
       if (!parsed) return malformed();
-      const allowed = config.localPatterns.some((pattern) =>
-        matchLocalPattern(pattern, parsed),
-      );
+      const allowed = config.localPatterns.some((pattern) => matchLocalPattern(pattern, parsed));
       if (!allowed) return invalid('"url" parameter is not allowed');
     }
   } else {

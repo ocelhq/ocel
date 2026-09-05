@@ -11,7 +11,9 @@ export interface RevalidationMessage {
 
 export type Rejection = "malformed" | "unsupported-version";
 
-export type ParseResult = { ok: true; message: RevalidationMessage } | { ok: false; reason: Rejection };
+export type ParseResult =
+  | { ok: true; message: RevalidationMessage }
+  | { ok: false; reason: Rejection };
 
 const headerName = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
@@ -29,7 +31,10 @@ function isKeyPrefix(value: string): boolean {
     .split("/")
     .every(
       (segment) =>
-        segment !== "." && segment !== ".." && segment !== "fetch-cache" && keySegment.test(segment),
+        segment !== "." &&
+        segment !== ".." &&
+        segment !== "fetch-cache" &&
+        keySegment.test(segment),
     );
 }
 

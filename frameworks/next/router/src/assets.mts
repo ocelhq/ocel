@@ -82,10 +82,7 @@ export function cacheControlFor(pathname: string): string {
 function storedPathnames(pathname: string, basePath = ""): string[] {
   if (pathname.endsWith(".html")) return [pathname];
   if (pathname === "/" || pathname === basePath) {
-    return [
-      pathname === "/" ? "/index.html" : `${pathname}/index.html`,
-      pathname,
-    ];
+    return [pathname === "/" ? "/index.html" : `${pathname}/index.html`, pathname];
   }
   const document = `${pathname}.html`;
   return hasExtension(pathname) ? [pathname, document] : [document, pathname];
@@ -130,9 +127,7 @@ export async function serveStaticAsset(
   const cached = await deps.cache.match(request);
   if (cached) return cached;
 
-  let hit:
-    | { pathname: string; object: AssetObject & { body: ReadableStream } }
-    | undefined;
+  let hit: { pathname: string; object: AssetObject & { body: ReadableStream } } | undefined;
   for (const pathname of storedPathnames(url.pathname, deps.basePath)) {
     const object = await deps.store.get(`${deps.assetPrefix}${pathname}`);
     if (object?.body) {

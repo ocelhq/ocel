@@ -22,11 +22,7 @@ export function Chip({
   ...props
 }: ComponentProps<typeof Badge> & { tone?: Tone }) {
   return (
-    <Badge
-      variant={tones[tone]}
-      className={cn(tone === "ink" && inked, className)}
-      {...props}
-    />
+    <Badge variant={tones[tone]} className={cn(tone === "ink" && inked, className)} {...props} />
   );
 }
 

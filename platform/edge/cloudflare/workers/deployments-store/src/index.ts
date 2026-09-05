@@ -4,9 +4,9 @@ import { bearer } from "@platform/cf-auth";
 
 import { authorized } from "./auth";
 import { DeploymentsStore } from "./deployments-do";
-import { SCHEMA_VERSION } from "./store";
-import type { DeploymentRecord, PointerRecordResult, Promotion } from "./store";
 import type { Env } from "./env";
+import type { DeploymentRecord, PointerRecordResult, Promotion } from "./store";
+import { SCHEMA_VERSION } from "./store";
 
 export { DeploymentsStore };
 
@@ -28,7 +28,7 @@ export default class extends WorkerEntrypoint<Env> {
     const segments = url.pathname.split("/").filter(Boolean);
     if (segments.length < 2) return new Response("Not Found", { status: 404 });
     const slug = segments[0];
-    const sub = "/" + segments.slice(1).join("/");
+    const sub = `/${segments.slice(1).join("/")}`;
     const store = stub(this.env, slug);
 
     if (request.method === "GET" && sub === "/schema-version") {
@@ -119,10 +119,6 @@ export default class extends WorkerEntrypoint<Env> {
     pointer?: string;
     knownIdentity?: string;
   }): Promise<PointerRecordResult> {
-    return stub(this.env, args.slug).pointerRecord(
-      args.app,
-      args.pointer,
-      args.knownIdentity,
-    );
+    return stub(this.env, args.slug).pointerRecord(args.app, args.pointer, args.knownIdentity);
   }
 }

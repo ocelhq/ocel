@@ -1,9 +1,5 @@
 import type { Icon } from "@phosphor-icons/react";
-import {
-  CheckCircleIcon,
-  CircleHalfIcon,
-  CircleIcon,
-} from "@phosphor-icons/react/dist/ssr";
+import { CheckCircleIcon, CircleHalfIcon, CircleIcon } from "@phosphor-icons/react/dist/ssr";
 
 type Column = {
   label: string;
@@ -43,20 +39,14 @@ const columns: Column[] = [
     dot: "border border-dim",
     icon: CircleIcon,
     iconClass: "text-dim",
-    items: [
-      "GCP provider parity",
-      "Team access & scoped roles",
-      "Interop plugin ecosystem",
-    ],
+    items: ["GCP provider parity", "Team access & scoped roles", "Interop plugin ecosystem"],
   },
 ];
 
 export function Roadmap() {
   return (
     <section className="relative overflow-hidden border-t border-border">
-      <span className="absolute right-10 top-11 font-mono text-[15px] text-faint">
-        +
-      </span>
+      <span className="absolute right-10 top-11 font-mono text-[15px] text-faint">+</span>
       <span className="pointer-events-none absolute -right-6 top-1/2 hidden origin-center rotate-90 font-mono text-[10.5px] tracking-[0.14em] text-dim md:block">
         FIG. 03 — ROADMAP
       </span>
@@ -68,8 +58,8 @@ export function Roadmap() {
           We ship fast — and in public.
         </h2>
         <p className="mt-4 max-w-[54ch] text-[15px] leading-[1.65] text-muted-foreground">
-          Open source means you don't take the roadmap on faith. Here's what's
-          shipped, what's in flight, and what's next — updated as we commit.
+          Open source means you don't take the roadmap on faith. Here's what's shipped, what's in
+          flight, and what's next — updated as we commit.
         </p>
 
         <div className="mt-[34px] grid grid-cols-1 border-[1.5px] border-foreground md:grid-cols-3">
@@ -78,11 +68,7 @@ export function Roadmap() {
             return (
               <div
                 key={col.label}
-                className={
-                  i < 2
-                    ? "border-b border-border md:border-b-0 md:border-r"
-                    : ""
-                }
+                className={i < 2 ? "border-b border-border md:border-b-0 md:border-r" : ""}
               >
                 <header className="flex items-center gap-2.5 border-b border-border px-6 py-3.5">
                   <span className={`size-[9px] rounded-full ${col.dot}`} />
@@ -99,9 +85,7 @@ export function Roadmap() {
                       key={item}
                       className={
                         "flex items-start gap-3 px-6 py-3.5 text-sm leading-[1.5] text-foreground" +
-                        (j < col.items.length - 1
-                          ? " border-b border-border"
-                          : "")
+                        (j < col.items.length - 1 ? " border-b border-border" : "")
                       }
                     >
                       <IconMark

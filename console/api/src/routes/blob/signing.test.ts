@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  canonicalUploadPayload,
-  signUpload,
-  verifyUpload,
-  type SignedFile,
-} from "./signing";
+import { canonicalUploadPayload, type SignedFile, signUpload, verifyUpload } from "./signing";
 
 const file: SignedFile = {
   key: "org/proj/user/avatar.png",
@@ -26,9 +21,7 @@ describe("upload callback signing", () => {
 
   it("rejects when the signed file identity is tampered", () => {
     const sig = signUpload("s3cret", "sess_1", file);
-    expect(
-      verifyUpload("s3cret", "sess_1", { ...file, size: 2048 }, sig),
-    ).toBe(false);
+    expect(verifyUpload("s3cret", "sess_1", { ...file, size: 2048 }, sig)).toBe(false);
   });
 
   it("rejects a garbage signature without throwing on length mismatch", () => {

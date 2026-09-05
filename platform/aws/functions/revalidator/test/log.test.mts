@@ -1,7 +1,6 @@
-import { afterEach, expect, it, vi } from "vitest";
-
-import { context, report } from "../src/log.mjs";
 import { parseMessage } from "@platform/edge-contract/revalidation";
+import { afterEach, expect, it, vi } from "vitest";
+import { context, report } from "../src/log.mjs";
 import { body, host, isrPrefix } from "./fixture.mjs";
 
 const bypassToken = "s3cr3t-preview-mode-id";
@@ -36,8 +35,16 @@ it("emits one JSON line carrying the dedup ingredients and the outcome", () => {
 it("never emits the message's headers", () => {
   const lines = captured();
 
-  report(context("msg-1", message!), { event: "RevalidateExpectMiss", expected: "REVALIDATED", got: "STALE" });
-  report(context("msg-1", message!), { event: "RevalidateFailed", reason: "status-not-ok", status: 500 });
+  report(context("msg-1", message!), {
+    event: "RevalidateExpectMiss",
+    expected: "REVALIDATED",
+    got: "STALE",
+  });
+  report(context("msg-1", message!), {
+    event: "RevalidateFailed",
+    reason: "status-not-ok",
+    status: 500,
+  });
 
   const emitted = lines.join("\n");
   expect(emitted).not.toContain(bypassToken);

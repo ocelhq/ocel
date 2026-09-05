@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from "vitest";
-import { deployment } from "./index.js";
 import { deployment as edgeDeployment } from "./edge.js";
+import { deployment } from "./index.js";
 
 describe("the deployment ocel writes", () => {
   it("types its url as a string an app may read without a fallback", () => {

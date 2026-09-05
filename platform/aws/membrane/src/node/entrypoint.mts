@@ -2,19 +2,17 @@ import http from "node:http";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 import { awaitLiveValues } from "../shared/live-values.mjs";
-import { fetchToNodeHandler, type FetchHandler } from "./fetch-bridge.mjs";
 import {
+  type Invoke,
   installCompileCacheFlush,
   installCompileCacheWarm,
   reportFatalBoot,
   serveInvoke,
   serveServer,
-  type Invoke,
 } from "../shared/membrane.mjs";
+import { type FetchHandler, fetchToNodeHandler } from "./fetch-bridge.mjs";
 
-type Loaded =
-  | { kind: "server"; value: http.Server }
-  | { kind: "export"; value: unknown };
+type Loaded = { kind: "server"; value: http.Server } | { kind: "export"; value: unknown };
 
 async function loadUserApp(entrypoint: string): Promise<Loaded> {
   const href = isAbsolute(entrypoint) ? pathToFileURL(entrypoint).href : entrypoint;
@@ -103,7 +101,7 @@ function interceptListen(): ListenHook {
     captured = this;
     const cb = args.find((a) => typeof a === "function");
     if (cb) setImmediate(cb);
-    waiters.forEach((w) => w(this));
+    for (const w of waiters) w(this);
     return this;
   } as typeof http.Server.prototype.listen;
 

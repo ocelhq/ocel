@@ -3,19 +3,19 @@ import path from "node:path";
 import { cellOf, type ExpectationEnvironment, expectationsFor } from "./expectations";
 import type { Expectations } from "./expectations/types";
 import { currentRunIdentity } from "./identity";
-import { readRows, type RecordedRow } from "./ledger";
+import { type RecordedRow, readRows } from "./ledger";
 import { laneDir } from "./paths";
 import { type PlannedTest, planTests } from "./plan";
 import { readPrepared } from "./prepare";
-import { reconcile, type Report, type TestResult } from "./reconcile";
+import { type Report, reconcile, type TestResult } from "./reconcile";
 import { type Selection, selectionFor } from "./selection";
 import { journeyVerdict, type SummaryMeta, summaryTable } from "./summary";
 import type { Target } from "./targets/types";
 import {
-  timelineOf,
   type Timeline,
   type TimelineModule,
   type TimelineTest,
+  timelineOf,
   timingTable,
 } from "./timeline";
 

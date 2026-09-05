@@ -7,9 +7,7 @@ export interface ProjectManifest {
   prerender: any;
 }
 
-export async function loadProjectManifest(
-  projectDir: string,
-): Promise<ProjectManifest | null> {
+export async function loadProjectManifest(projectDir: string): Promise<ProjectManifest | null> {
   let config: any;
   try {
     const serverFiles = JSON.parse(
@@ -24,9 +22,7 @@ export async function loadProjectManifest(
   const distDir = join(projectDir, config.distDir || ".next");
   let prerender: any = null;
   try {
-    prerender = JSON.parse(
-      await readFile(join(distDir, "prerender-manifest.json"), "utf8"),
-    );
+    prerender = JSON.parse(await readFile(join(distDir, "prerender-manifest.json"), "utf8"));
   } catch {}
 
   return { config, distDir, prerender };

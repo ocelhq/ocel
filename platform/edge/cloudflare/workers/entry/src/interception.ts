@@ -1,18 +1,13 @@
-import {
-  cacheKey,
-  deserialize,
-  tagsOf,
-  type CacheEntryFile,
-} from "@framework/next-cache";
+import { type CacheEntryFile, cacheKey, deserialize, tagsOf } from "@framework/next-cache";
 
 import { evaluate, staleWindowMs } from "./cache";
 import { lruSet } from "./lru";
 import {
   createTagClock,
-  parseJson,
-  storeText,
   type ObjectStoreReader,
+  parseJson,
   type SnapshotCache,
+  storeText,
   type TagClock,
 } from "./tag-clock";
 
@@ -95,9 +90,7 @@ export async function intercept(
     const ageSeconds = (now - entry.lastModified) / 1000;
     const { revalidate, expiration } = entryWindow(entry, target);
     const window =
-      revalidate !== undefined
-        ? Math.max(1, revalidate - Math.floor(ageSeconds))
-        : STATIC_WINDOW;
+      revalidate !== undefined ? Math.max(1, revalidate - Math.floor(ageSeconds)) : STATIC_WINDOW;
     const meta = { lastModified: entry.lastModified, revalidate, expiration };
 
     const ungatedStaleness = (): { stale: boolean; staleForMs?: number } =>
@@ -121,11 +114,7 @@ export async function intercept(
 
     const prefetchMode = request.headers.get("next-router-prefetch");
     const isPrefetch = prefetchMode === "1";
-    if (
-      isPrefetch &&
-      value.kind === "APP_PAGE" &&
-      value.postponed !== undefined
-    ) {
+    if (isPrefetch && value.kind === "APP_PAGE" && value.postponed !== undefined) {
       const response = reconstruct(request, value);
       if (!response) return null;
       if (!response.headers.has("x-nextjs-postponed")) {
@@ -196,14 +185,12 @@ function entryWindow(
   const declared = entry.cacheControl;
   if (declared === undefined) {
     return {
-      revalidate:
-        typeof target.revalidate === "number" ? target.revalidate : undefined,
+      revalidate: typeof target.revalidate === "number" ? target.revalidate : undefined,
       expiration: target.expiration,
     };
   }
   return {
-    revalidate:
-      typeof declared.revalidate === "number" ? declared.revalidate : undefined,
+    revalidate: typeof declared.revalidate === "number" ? declared.revalidate : undefined,
     expiration: declared.expire ?? target.expiration,
   };
 }
@@ -263,9 +250,7 @@ async function readEntry(
   return entry;
 }
 
-function entryMap(
-  store: ObjectStoreReader,
-): Map<string, { at: number; entry: CacheEntryFile }> {
+function entryMap(store: ObjectStoreReader): Map<string, { at: number; entry: CacheEntryFile }> {
   let map = entryMemo.get(store);
   if (!map) entryMemo.set(store, (map = new Map()));
   return map;
@@ -290,10 +275,7 @@ function refreshEntry(deps: InterceptDeps, key: string): void {
   deps.waitUntil?.(run);
 }
 
-async function fetchEntry(
-  store: ObjectStoreReader,
-  key: string,
-): Promise<CacheEntryFile | null> {
+async function fetchEntry(store: ObjectStoreReader, key: string): Promise<CacheEntryFile | null> {
   const body = await storeText(store, key);
   if (body === null) return null;
 
@@ -313,10 +295,7 @@ function headersFrom(map: Record<string, any> | undefined): Headers {
   return headers;
 }
 
-function reconstruct(
-  request: Request,
-  value: Record<string, any>,
-): Response | null {
+function reconstruct(request: Request, value: Record<string, any>): Response | null {
   const restored = deserialize(value);
   const status = typeof value.status === "number" ? value.status : 200;
 
@@ -352,18 +331,11 @@ function reconstruct(
 }
 
 function hasSegment(value: Record<string, any>, segmentPath: string): boolean {
-  return (
-    value?.segmentHeaders !== undefined &&
-    value?.segmentData?.[segmentPath] !== undefined
-  );
+  return value?.segmentHeaders !== undefined && value?.segmentData?.[segmentPath] !== undefined;
 }
 
-function reconstructSegment(
-  value: Record<string, any>,
-  segmentPath: string,
-): Response | null {
-  const segments: Map<string, Uint8Array> | undefined =
-    deserialize(value).segmentData;
+function reconstructSegment(value: Record<string, any>, segmentPath: string): Response | null {
+  const segments: Map<string, Uint8Array> | undefined = deserialize(value).segmentData;
   const body = segments?.get(segmentPath);
   if (!body) return null;
   if (!value.segmentHeaders) return null;

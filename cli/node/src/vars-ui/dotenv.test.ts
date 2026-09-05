@@ -44,10 +44,12 @@ describe("parseDotenv", () => {
   });
 
   it("unescapes inside double quotes but not single quotes", () => {
-    expect(parse(String.raw`A="line\nnext\t\"q\" \\"` + "\n" + String.raw`B='raw\nstays'`)).toEqual({
-      A: 'line\nnext\t"q" \\',
-      B: String.raw`raw\nstays`,
-    });
+    expect(parse(`${String.raw`A="line\nnext\t\"q\" \\"`}\n${String.raw`B='raw\nstays'`}`)).toEqual(
+      {
+        A: 'line\nnext\t"q" \\',
+        B: String.raw`raw\nstays`,
+      },
+    );
   });
 
   it("trims nothing inside quotes and ignores what follows the closing quote", () => {

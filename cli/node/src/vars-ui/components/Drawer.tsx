@@ -11,14 +11,14 @@ import {
 import {
   addressKey,
   folderName,
+  type MatrixRow,
   names,
   readersOf,
   referenceLine,
   sizeLine,
+  type Variant,
   variantAt,
   whenLine,
-  type MatrixRow,
-  type Variant,
 } from "../model";
 import { useValue } from "../signals";
 import { catalogue, closeDrawer, drawer, history, historyError, problems, state } from "../store";
@@ -37,7 +37,9 @@ export function Drawer() {
         <SheetContent data-slot="drawer" className="gap-0 data-[side=right]:sm:max-w-md">
           <SheetHeader className="border-b border-border p-6 pr-14">
             <SheetTitle className="font-mono text-base">{row.key}</SheetTitle>
-            <SheetDescription className="sr-only">Details and history of {row.key}</SheetDescription>
+            <SheetDescription className="sr-only">
+              Details and history of {row.key}
+            </SheetDescription>
             <Where variant={variant} />
           </SheetHeader>
           <div className="flex-1 overflow-y-auto p-6 text-sm">
@@ -100,7 +102,11 @@ function Facts({ row, variant }: { row: MatrixRow; variant: Variant }) {
       </Fact>
       <Fact label="Here">
         <span className="font-mono text-foreground">
-          {variant.set ? `set · v${variant.version}` : variant.owed ? "required, not set" : "not set"}
+          {variant.set
+            ? `set · v${variant.version}`
+            : variant.owed
+              ? "required, not set"
+              : "not set"}
         </span>
       </Fact>
       {variant.reference && (
@@ -136,7 +142,9 @@ function History() {
   const failed = useValue(historyError);
   const versions = useValue(history);
   if (failed) {
-    return <p className="font-mono text-xs text-destructive">△ Could not read the history: {failed}</p>;
+    return (
+      <p className="font-mono text-xs text-destructive">△ Could not read the history: {failed}</p>
+    );
   }
   if (versions === null) return <p className="font-sans text-[13.5px] text-body">Reading…</p>;
   if (versions.length === 0) {

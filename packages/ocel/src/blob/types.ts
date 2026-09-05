@@ -24,13 +24,9 @@ export interface CompletedFile {
   path: string;
 }
 
-export type ParsedInput<TInput> = TInput extends z.ZodType
-  ? z.infer<TInput>
-  : undefined;
+export type ParsedInput<TInput> = TInput extends z.ZodType ? z.infer<TInput> : undefined;
 
-export type LimitValue<TMetadata, T> =
-  | T
-  | ((ctx: { metadata: TMetadata }) => T);
+export type LimitValue<TMetadata, T> = T | ((ctx: { metadata: TMetadata }) => T);
 
 export interface Limits<TMetadata> {
   maxFileSize?: LimitValue<TMetadata, number>;
@@ -43,23 +39,13 @@ export interface StructuredPath {
   randomSuffix?: boolean;
 }
 
-export type PathFn<TMetadata> = (ctx: {
-  file: FileInfo;
-  metadata: TMetadata;
-}) => string;
+export type PathFn<TMetadata> = (ctx: { file: FileInfo; metadata: TMetadata }) => string;
 
 export type PathConfig<TMetadata> = StructuredPath | PathFn<TMetadata>;
 
-export interface UploaderAuth<
-  TReq,
-  TInput extends z.ZodType | undefined,
-  TMetadata,
-> {
+export interface UploaderAuth<TReq, TInput extends z.ZodType | undefined, TMetadata> {
   input?: TInput;
-  middleware: (ctx: {
-    req: TReq;
-    input: ParsedInput<TInput>;
-  }) => MaybePromise<TMetadata>;
+  middleware: (ctx: { req: TReq; input: ParsedInput<TInput> }) => MaybePromise<TMetadata>;
 }
 
 export interface UploaderUpload<TMetadata> {
@@ -67,17 +53,10 @@ export interface UploaderUpload<TMetadata> {
   limits?: Limits<TMetadata>;
   path?: PathConfig<TMetadata>;
   contentDisposition?: string;
-  onUploadComplete?: (ctx: {
-    metadata: TMetadata;
-    file: CompletedFile;
-  }) => MaybePromise<void>;
+  onUploadComplete?: (ctx: { metadata: TMetadata; file: CompletedFile }) => MaybePromise<void>;
 }
 
-export interface Uploader<
-  TInputParsed = unknown,
-  TMetadata = unknown,
-  TReq = BlobRequest,
-> {
+export interface Uploader<TInputParsed = unknown, TMetadata = unknown, TReq = BlobRequest> {
   readonly auth: UploaderAuth<TReq, z.ZodType | undefined, TMetadata>;
   readonly upload: UploaderUpload<TMetadata>;
   readonly __input?: TInputParsed;

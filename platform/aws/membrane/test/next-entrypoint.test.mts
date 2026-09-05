@@ -1,11 +1,11 @@
-import net from "node:net";
 import { EventEmitter } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { writeNextProjectFixture } from "./next-project-fixture.mjs";
 import { noteRevalidation } from "../src/next/revalidation-signal.mjs";
+import { writeNextProjectFixture } from "./next-project-fixture.mjs";
 
 const launcherModule = `module.exports = {
   async handler(req, res, ctx) {

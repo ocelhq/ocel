@@ -15,17 +15,13 @@ export async function verifyOrganizationMembership(
   const rows = await db
     .select({ id: member.id })
     .from(member)
-    .where(
-      and(eq(member.userId, userId), eq(member.organizationId, organizationId)),
-    )
+    .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId)))
     .limit(1);
 
   return rows.length > 0;
 }
 
-export async function getSessionUserId(
-  headers: Headers,
-): Promise<string | null> {
+export async function getSessionUserId(headers: Headers): Promise<string | null> {
   const session = await auth.api.getSession({ headers });
   return session?.user.id ?? null;
 }
@@ -43,10 +39,7 @@ export async function getActiveOrganizationSession(
     return null;
   }
 
-  const isMember = await verifyOrganizationMembership(
-    session.user.id,
-    activeOrganizationId,
-  );
+  const isMember = await verifyOrganizationMembership(session.user.id, activeOrganizationId);
   if (!isMember) {
     return null;
   }

@@ -5,7 +5,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { AWS_CLI_RETRY_ENV } from "./aws.mjs";
-import { BUILD_LOG_FILE, DEPLOY_RESULT_FILE, STATE_FILE, envSegment, lambdaLogGroups, markerLines } from "./lib.mjs";
+import {
+  BUILD_LOG_FILE,
+  DEPLOY_RESULT_FILE,
+  envSegment,
+  lambdaLogGroups,
+  markerLines,
+  STATE_FILE,
+} from "./lib.mjs";
 
 const DEFAULT_LOG_WINDOW_MS = 60 * 60 * 1000;
 
@@ -54,7 +61,10 @@ function printLambdaLogs() {
   }
 
   const env = result.environment ? envSegment(result.environment) : "";
-  const filters = [`Key=ocel:project,Values=${state.slug}`, ...(env ? [`Key=ocel:env,Values=${env}`] : [])];
+  const filters = [
+    `Key=ocel:project,Values=${state.slug}`,
+    ...(env ? [`Key=ocel:env,Values=${env}`] : []),
+  ];
 
   let groups;
   try {
@@ -97,7 +107,9 @@ function printLambdaLogs() {
         ]),
       );
       for (const event of events.events ?? []) {
-        console.log(`${new Date(event.timestamp).toISOString()} ${(event.message ?? "").trimEnd()}`);
+        console.log(
+          `${new Date(event.timestamp).toISOString()} ${(event.message ?? "").trimEnd()}`,
+        );
       }
     } catch (err) {
       console.log(`(could not read ${group}: ${err.message})`);

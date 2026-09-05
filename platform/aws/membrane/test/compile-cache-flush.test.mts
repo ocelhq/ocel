@@ -1,6 +1,6 @@
-import net from "node:net";
 import { EventEmitter } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
@@ -71,7 +71,7 @@ async function flushOver(
   await waitFor(() => controlConns.size > 0);
 
   for (const conn of controlConns) {
-    conn.write(JSON.stringify({ type: "flush-compile-cache" }) + "\n");
+    conn.write(`${JSON.stringify({ type: "flush-compile-cache" })}\n`);
   }
   await waitFor(() => messages.some((m) => m.type === "compile-cache-flushed"));
 

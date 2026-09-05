@@ -43,9 +43,13 @@ export const REF_HINT_LEN = 12;
 export const REF_HASH_LEN = 8;
 
 export function previewRef({ dir }) {
-  const normalized = String(dir ?? "").trim().replace(/\/+$/, "");
+  const normalized = String(dir ?? "")
+    .trim()
+    .replace(/\/+$/, "");
   if (!normalized) {
-    throw new Error("previewRef needs a directory: neither NEXT_TEST_DIR nor a working directory was set");
+    throw new Error(
+      "previewRef needs a directory: neither NEXT_TEST_DIR nor a working directory was set",
+    );
   }
   const hint = sanitizeToken(basename(normalized)).slice(0, REF_HINT_LEN).replace(/-+$/, "");
   const hash = createHash("sha256").update(normalized).digest("hex").slice(0, REF_HASH_LEN);
@@ -129,7 +133,10 @@ export function withPinnedTypeScript(pkg) {
   }
 
   if (pkg.pnpm?.overrides?.typescript !== TYPESCRIPT_PIN) {
-    patched.pnpm = { ...pkg.pnpm, overrides: { ...pkg.pnpm?.overrides, typescript: TYPESCRIPT_PIN } };
+    patched.pnpm = {
+      ...pkg.pnpm,
+      overrides: { ...pkg.pnpm?.overrides, typescript: TYPESCRIPT_PIN },
+    };
     changed = true;
   }
 
@@ -205,7 +212,9 @@ export function goldenDifferences(withHeader, without) {
   const b = headerMap(without?.headers);
   for (const name of [...new Set([...a.keys(), ...b.keys()])].sort()) {
     if (a.get(name) !== b.get(name)) {
-      differences.push(`header ${name}: with=${a.get(name) ?? "(absent)"} without=${b.get(name) ?? "(absent)"}`);
+      differences.push(
+        `header ${name}: with=${a.get(name) ?? "(absent)"} without=${b.get(name) ?? "(absent)"}`,
+      );
     }
   }
   return differences;
@@ -274,11 +283,13 @@ export const BYTECODE_EMBEDDED_MARKER = "loaded embedded compile cache from ";
 export const BYTECODE_EMBED_ENV = "OCEL_BYTECODE_EMBED";
 
 export function bytecodeEmbedEnabled(env) {
-  return (env ?? {})[BYTECODE_EMBED_ENV] === "1";
+  return env?.[BYTECODE_EMBED_ENV] === "1";
 }
 
 export function embeddedBytecodePath(key) {
-  const name = String(key ?? "").split("/").pop();
+  const name = String(key ?? "")
+    .split("/")
+    .pop();
   if (!bytecodeCacheKeyName(name)) return null;
   return `.ocel/bytecode/${name.slice(0, -".gz".length)}`;
 }
@@ -335,7 +346,10 @@ export function bytecodeRehydrateOutcome(message, key) {
   if (text.includes("before rehydrating the compile cache:")) {
     return { kind: "clear-error", message: text };
   }
-  if (text.includes("compile cache disabled") || text.includes("no aws config for the compile cache:")) {
+  if (
+    text.includes("compile cache disabled") ||
+    text.includes("no aws config for the compile cache:")
+  ) {
     return { kind: "disabled", message: text };
   }
   return null;
@@ -361,7 +375,10 @@ export function logWindowVerdict({ attempts, failures, confirmed, events, pageLi
       detail: `${tried}, but the final read came back with ${events} events — the ${pageLimit}-event page maximum`,
     };
   }
-  return { kind: "read", detail: `${tried}, the last of them returning all ${events} events in the window` };
+  return {
+    kind: "read",
+    detail: `${tried}, the last of them returning all ${events} events in the window`,
+  };
 }
 
 export const WARM_SUMMARY_MARKER = "ocel: warm invocation:";
@@ -371,7 +388,11 @@ export function warmSummaryOutcome(message) {
   const at = text.indexOf(WARM_SUMMARY_MARKER);
   if (at === -1) return null;
   try {
-    return { kind: "summary", summary: JSON.parse(text.slice(at + WARM_SUMMARY_MARKER.length)), message: text };
+    return {
+      kind: "summary",
+      summary: JSON.parse(text.slice(at + WARM_SUMMARY_MARKER.length)),
+      message: text,
+    };
   } catch (err) {
     return { kind: "unreadable", message: text, reason: err.message };
   }
@@ -398,13 +419,19 @@ export function warmCoverage(summary, key) {
   switch (state) {
     case "published":
       if (summary?.uploaded !== true) {
-        return { kind: "failed", detail: `published without uploaded:true (${walk}) — the two cannot both be true` };
+        return {
+          kind: "failed",
+          detail: `published without uploaded:true (${walk}) — the two cannot both be true`,
+        };
       }
       if (uncounted) {
         return { kind: "partial", detail: walk };
       }
       if (entries === 0) {
-        return { kind: "failed", detail: `published a cache for a bundle reporting no entries at all (${walk})` };
+        return {
+          kind: "failed",
+          detail: `published a cache for a bundle reporting no entries at all (${walk})`,
+        };
       }
       if (loaded !== entries || (stoppedBy && stoppedBy !== "complete")) {
         return { kind: "partial", detail: walk };
@@ -418,7 +445,10 @@ export function warmCoverage(summary, key) {
           : "the instance started on a cache that already existed, so nothing was walked or written",
       };
     case "disabled":
-      return { kind: "failed", detail: `nothing to warm: ${summary?.error ?? "(no reason given)"}` };
+      return {
+        kind: "failed",
+        detail: `nothing to warm: ${summary?.error ?? "(no reason given)"}`,
+      };
     case "failed":
       return { kind: "failed", detail: `${walk}: ${summary?.error ?? "(no reason given)"}` };
     default:
@@ -431,7 +461,9 @@ const WARM_COVERAGE_RANK = ["failed", "unproven", "partial", "complete"];
 export function strongestCoverage(verdicts) {
   return (verdicts ?? []).reduce((best, verdict) => {
     if (!best) return verdict;
-    return WARM_COVERAGE_RANK.indexOf(verdict.kind) > WARM_COVERAGE_RANK.indexOf(best.kind) ? verdict : best;
+    return WARM_COVERAGE_RANK.indexOf(verdict.kind) > WARM_COVERAGE_RANK.indexOf(best.kind)
+      ? verdict
+      : best;
   }, null);
 }
 
@@ -499,29 +531,47 @@ export function zipEntryNames(buffer) {
     if (locator < 0 || buffer.readUInt32LE(locator) !== ZIP64_LOCATOR_SIGNATURE) {
       throw new Error("zip end-of-central-directory is saturated but carries no zip64 locator");
     }
-    const zip64 = asIndex(buffer.readBigUInt64LE(locator + 8), buffer.length, "zip64 end-of-central-directory offset");
+    const zip64 = asIndex(
+      buffer.readBigUInt64LE(locator + 8),
+      buffer.length,
+      "zip64 end-of-central-directory offset",
+    );
     if (buffer.readUInt32LE(zip64) !== ZIP64_EOCD_SIGNATURE) {
       throw new Error(`no zip64 end-of-central-directory record at byte ${zip64}`);
     }
-    count = asIndex(buffer.readBigUInt64LE(zip64 + 32), Number.MAX_SAFE_INTEGER, "zip64 entry count");
-    start = asIndex(buffer.readBigUInt64LE(zip64 + 48), buffer.length, "zip64 central directory offset");
+    count = asIndex(
+      buffer.readBigUInt64LE(zip64 + 32),
+      Number.MAX_SAFE_INTEGER,
+      "zip64 entry count",
+    );
+    start = asIndex(
+      buffer.readBigUInt64LE(zip64 + 48),
+      buffer.length,
+      "zip64 central directory offset",
+    );
   }
 
   const names = [];
   let offset = start;
   for (let i = 0; i < count; i++) {
     if (offset + ZIP_CENTRAL_MIN_SIZE > buffer.length) {
-      throw new Error(`zip central directory entry ${i} runs past the end of the buffer at byte ${offset}`);
+      throw new Error(
+        `zip central directory entry ${i} runs past the end of the buffer at byte ${offset}`,
+      );
     }
     if (buffer.readUInt32LE(offset) !== ZIP_CENTRAL_SIGNATURE) {
-      throw new Error(`zip central directory entry ${i} at byte ${offset} has no central-file-header signature`);
+      throw new Error(
+        `zip central directory entry ${i} at byte ${offset} has no central-file-header signature`,
+      );
     }
     const nameLen = buffer.readUInt16LE(offset + 28);
     const extraLen = buffer.readUInt16LE(offset + 30);
     const commentLen = buffer.readUInt16LE(offset + 32);
     const nameAt = offset + ZIP_CENTRAL_MIN_SIZE;
     if (nameAt + nameLen > buffer.length) {
-      throw new Error(`zip central directory entry ${i} names ${nameLen} bytes past the end of the buffer`);
+      throw new Error(
+        `zip central directory entry ${i} names ${nameLen} bytes past the end of the buffer`,
+      );
     }
     names.push(buffer.toString("utf8", nameAt, nameAt + nameLen));
     offset = nameAt + nameLen + extraLen + commentLen;
@@ -534,7 +584,9 @@ function findZipEOCD(buffer) {
   for (let at = buffer.length - ZIP_EOCD_MIN_SIZE; at >= floor; at--) {
     if (buffer.readUInt32LE(at) === ZIP_EOCD_SIGNATURE) return at;
   }
-  throw new Error(`no zip end-of-central-directory record in ${buffer.length} bytes; this is not a zip`);
+  throw new Error(
+    `no zip end-of-central-directory record in ${buffer.length} bytes; this is not a zip`,
+  );
 }
 
 function asIndex(value, limit, what) {
@@ -559,9 +611,13 @@ export function planProblems(output, { resultWritten, listed, ref }) {
   }
   const readBack = String(listed ?? "").trim();
   if (!readBack) {
-    problems.push("`ocel preview ls` read nothing back, so nothing proves the account is as the plan found it");
+    problems.push(
+      "`ocel preview ls` read nothing back, so nothing proves the account is as the plan found it",
+    );
   } else if (readBack.includes(ref)) {
-    problems.push(`\`ocel preview ls\` shows ${ref} standing in the account, and only an apply may stand one up`);
+    problems.push(
+      `\`ocel preview ls\` shows ${ref} standing in the account, and only an apply may stand one up`,
+    );
   }
   return problems;
 }
@@ -609,7 +665,9 @@ export function suiteResultFromJest(results) {
       if (assertion.status === "passed") {
         passed += 1;
       } else if (assertion.status === "failed") {
-        failed.push([...(assertion.ancestorTitles ?? []), assertion.title].filter(Boolean).join(" "));
+        failed.push(
+          [...(assertion.ancestorTitles ?? []), assertion.title].filter(Boolean).join(" "),
+        );
       } else {
         pending += 1;
       }
@@ -661,7 +719,11 @@ export function mergeBaselineManifest(manifests) {
   }
   return {
     version: 2,
-    suites: Object.fromEntries(Object.keys(suites).sort().map((suite) => [suite, suites[suite]])),
+    suites: Object.fromEntries(
+      Object.keys(suites)
+        .sort()
+        .map((suite) => [suite, suites[suite]]),
+    ),
     rules: { include: [BASELINE_INCLUDE_PATTERN], exclude: [...exclude].sort() },
   };
 }

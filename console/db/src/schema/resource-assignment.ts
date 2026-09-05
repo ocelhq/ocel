@@ -1,7 +1,7 @@
 import { relations } from "drizzle-orm";
 import { jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import { project } from "./project";
 import { user } from "./auth-schema";
+import { project } from "./project";
 
 export const resourceAssignment = pgTable(
   "resource_assignment",
@@ -36,16 +36,13 @@ export const resourceAssignment = pgTable(
   ],
 );
 
-export const resourceAssignmentRelations = relations(
-  resourceAssignment,
-  ({ one }) => ({
-    user: one(user, {
-      fields: [resourceAssignment.userId],
-      references: [user.id],
-    }),
-    project: one(project, {
-      fields: [resourceAssignment.projectId],
-      references: [project.id],
-    }),
+export const resourceAssignmentRelations = relations(resourceAssignment, ({ one }) => ({
+  user: one(user, {
+    fields: [resourceAssignment.userId],
+    references: [user.id],
   }),
-);
+  project: one(project, {
+    fields: [resourceAssignment.projectId],
+    references: [project.id],
+  }),
+}));

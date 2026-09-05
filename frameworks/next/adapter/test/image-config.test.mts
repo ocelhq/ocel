@@ -1,10 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, test, vi } from "vitest";
-import {
-  compileImageConfig,
-  imageConfigHash,
-  serializeImageConfig,
-} from "../src/image-config.mts";
+import { compileImageConfig, imageConfigHash, serializeImageConfig } from "../src/image-config.mts";
 import { defaultImages } from "./fixtures.mts";
 
 type Images = Parameters<typeof compileImageConfig>[0];
@@ -23,8 +19,7 @@ function remotePattern(pattern: Record<string, unknown> | URL) {
   return compile({ remotePatterns: [pattern] }).remotePatterns[0]!;
 }
 
-const matches = (source: string, value: string) =>
-  new RegExp(source).test(value);
+const matches = (source: string, value: string) => new RegExp(source).test(value);
 
 test("compiles the default image config Next hands the adapter", () => {
   expect(compile()).toEqual({
@@ -79,9 +74,7 @@ test.each([
   ["evilexample.com", false],
   ["a.example.com.", false],
 ])("*.example.com against %s is %s", (hostname, expected) => {
-  expect(
-    matches(remotePattern({ hostname: "*.example.com" }).hostname, hostname),
-  ).toBe(expected);
+  expect(matches(remotePattern({ hostname: "*.example.com" }).hostname, hostname)).toBe(expected);
 });
 
 test.each([
@@ -92,9 +85,7 @@ test.each([
   ["evilexample.com", false],
   ["a.example.com.", false],
 ])("**.example.com against %s is %s", (hostname, expected) => {
-  expect(
-    matches(remotePattern({ hostname: "**.example.com" }).hostname, hostname),
-  ).toBe(expected);
+  expect(matches(remotePattern({ hostname: "**.example.com" }).hostname, hostname)).toBe(expected);
 });
 
 test("a literal hostname matches nothing else", () => {
@@ -136,9 +127,7 @@ test("an omitted pathname allows every path", () => {
 });
 
 test("normalizes a URL remote pattern into matchable fields", () => {
-  const compiled = remotePattern(
-    new URL("https://images.example.com/media/**"),
-  );
+  const compiled = remotePattern(new URL("https://images.example.com/media/**"));
 
   expect(compiled).toMatchObject({ protocol: "https", port: "", search: "" });
   expect(matches(compiled.hostname, "images.example.com")).toBe(true);
@@ -158,11 +147,7 @@ test("configHash is stable across runs and independent of key order", () => {
   const a = imageConfigHash(compile());
   const b = imageConfigHash(compile());
   const reordered = imageConfigHash(
-    JSON.parse(
-      JSON.stringify(
-        Object.fromEntries(Object.entries(compile()).reverse()),
-      ),
-    ),
+    JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(compile()).reverse()))),
   );
 
   expect(a).toBe(b);
@@ -179,17 +164,15 @@ test.each([
   ["remotePatterns", [{ hostname: "*.example.com" }]],
   ["localPatterns", [{ pathname: "/assets/**", search: "" }]],
 ])("configHash changes when %s changes", (key, value) => {
-  expect(imageConfigHash(compile({ [key]: value }))).not.toBe(
-    imageConfigHash(compile()),
-  );
+  expect(imageConfigHash(compile({ [key]: value }))).not.toBe(imageConfigHash(compile()));
 });
 
 test("the artifact bytes are what configHash is taken over", () => {
   const compiled = compile();
 
-  expect(
-    createHash("sha256").update(serializeImageConfig(compiled)).digest("hex"),
-  ).toBe(imageConfigHash(compiled));
+  expect(createHash("sha256").update(serializeImageConfig(compiled)).digest("hex")).toBe(
+    imageConfigHash(compiled),
+  );
 });
 
 test.each([

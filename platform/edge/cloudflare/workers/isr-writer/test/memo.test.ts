@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CAPACITY, MEMO_TTL_MS, forget, memoize, memoized } from "../src/memo";
+import { CAPACITY, forget, MEMO_TTL_MS, memoize, memoized } from "../src/memo";
 
 afterEach(() => {
   vi.useRealTimers();

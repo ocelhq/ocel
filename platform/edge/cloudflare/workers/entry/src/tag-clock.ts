@@ -1,10 +1,10 @@
 import {
   readableSnapshot,
-  tagFreshness,
-  tagSnapshotKey,
   type TagFreshness,
   type TagRecord,
   type TagSnapshot,
+  tagFreshness,
+  tagSnapshotKey,
 } from "@framework/next-cache";
 
 import { settledWithin } from "./cache";
@@ -64,17 +64,11 @@ function snapshotCell(cfg: { isrPrefix: string }, store: ObjectStoreReader): Sna
   return cell;
 }
 
-function current(
-  cfg: { isrPrefix: string },
-  store: ObjectStoreReader,
-): SnapshotCell | undefined {
+function current(cfg: { isrPrefix: string }, store: ObjectStoreReader): SnapshotCell | undefined {
   return snapshotCells.get(store)?.get(cfg.isrPrefix);
 }
 
-export function dropSnapshotMemo(
-  cfg: { isrPrefix: string },
-  store: ObjectStoreReader,
-): void {
+export function dropSnapshotMemo(cfg: { isrPrefix: string }, store: ObjectStoreReader): void {
   snapshotCells.get(store)?.delete(cfg.isrPrefix);
 }
 
@@ -86,14 +80,10 @@ export async function invalidateSnapshot(
   try {
     const key = tagSnapshotKey(cfg.isrPrefix);
     await deps.snapshotCache?.delete?.(new Request(snapshotCacheUrl(key)));
-  } catch {
-  }
+  } catch {}
 }
 
-export function createTagClock(
-  cfg: { isrPrefix: string },
-  deps: TagClockDeps,
-): TagClock {
+export function createTagClock(cfg: { isrPrefix: string }, deps: TagClockDeps): TagClock {
   return {
     async freshness(tags, timestamp, now) {
       if (tags.length === 0) return "fresh";
@@ -187,10 +177,7 @@ async function matchSnapshot(
   }
 }
 
-export async function storeText(
-  store: ObjectStoreReader,
-  key: string,
-): Promise<string | null> {
+export async function storeText(store: ObjectStoreReader, key: string): Promise<string | null> {
   const object = await store.get(key);
   return object ? object.text() : null;
 }

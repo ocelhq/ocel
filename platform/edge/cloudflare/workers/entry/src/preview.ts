@@ -26,7 +26,7 @@ export function previewTarget(
   const base = normalizeBaseDomain(baseDomain);
   if (base === "") return null;
 
-  const baseSuffix = "." + base;
+  const baseSuffix = `.${base}`;
   if (!h.endsWith(baseSuffix)) return null;
 
   const label = h.slice(0, -baseSuffix.length);
@@ -52,10 +52,7 @@ export interface GlobalPreviewTarget {
   app?: string;
 }
 
-export function globalPreviewTarget(
-  host: string,
-  baseDomain: string,
-): GlobalPreviewTarget | null {
+export function globalPreviewTarget(host: string, baseDomain: string): GlobalPreviewTarget | null {
   const label = previewLabel(host, baseDomain);
   if (label === null) return null;
 
@@ -72,7 +69,7 @@ function previewLabel(host: string, baseDomain: string): string | null {
   const base = normalizeBaseDomain(baseDomain);
   if (base === "") return null;
 
-  const baseSuffix = "." + base;
+  const baseSuffix = `.${base}`;
   if (!h.endsWith(baseSuffix)) return null;
 
   const label = h.slice(0, -baseSuffix.length);

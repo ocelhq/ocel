@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { type DragEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,7 +12,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 import {
@@ -20,17 +26,17 @@ import {
   baselineOf,
   editable,
   folderName,
+  type Group,
   isDirty,
+  type KeyLine,
   names,
   overrideOptions,
   plural,
+  type Reference,
   readBy,
   referenceLine,
   revealable,
   setForOptions,
-  type Group,
-  type KeyLine,
-  type Reference,
   type Variant,
 } from "../model";
 import { useValue } from "../signals";
@@ -64,8 +70,8 @@ import {
   revealGroup,
   saving,
   search,
-  selectVisible,
   selected,
+  selectVisible,
   setDraft,
   setFor,
   setSearch,
@@ -122,6 +128,7 @@ export function Table() {
   const owedLens = useValue(owedOnly);
   const total = list.keys.length + list.groups.reduce((sum, group) => sum + group.keys, 0);
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target; every action in it is a button
     <section
       data-slot="card"
       className="relative border-[1.5px] border-foreground bg-card"
@@ -187,9 +194,7 @@ export function Table() {
           {!list.flat && <span>{plural(list.groups.length, "folder")}</span>}
           <span>{plural(total, "key")}</span>
         </span>
-        <span>
-          Drop a .env file here to fill root values, or on a folder to fill that folder
-        </span>
+        <span>Drop a .env file here to fill root values, or on a folder to fill that folder</span>
       </footer>
       {target !== null && (
         <div
@@ -198,7 +203,9 @@ export function Table() {
           className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 border-[1.5px] border-primary bg-background text-center"
         >
           <Glyph className="text-2xl text-primary">↓</Glyph>
-          <p className="font-mono text-sm text-foreground">Drop to fill {folderName(target)} values</p>
+          <p className="font-mono text-sm text-foreground">
+            Drop to fill {folderName(target)} values
+          </p>
           <p className="max-w-md font-sans text-[13.5px] text-body">
             Keys the project declares fill in as unsaved drafts; nothing is written until you save
           </p>
@@ -237,12 +244,7 @@ function Toolbar() {
       className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5"
     >
       <Select value={env} items={items} onValueChange={(name) => pickEnvironment(name ?? "")}>
-        <SelectTrigger
-          size="sm"
-          aria-label="environment"
-          data-action="environment"
-          className="h-8"
-        >
+        <SelectTrigger size="sm" aria-label="environment" data-action="environment" className="h-8">
           <span className="text-muted-foreground">env</span>
           <SelectValue />
         </SelectTrigger>
@@ -254,11 +256,7 @@ function Toolbar() {
           ))}
         </SelectContent>
       </Select>
-      {owedLens && (
-        <Chip tone="owed">
-          {plural(list.keys.length, "cell")} the deploy needs
-        </Chip>
-      )}
+      {owedLens && <Chip tone="owed">{plural(list.keys.length, "cell")} the deploy needs</Chip>}
       {!owedLens && list.flat && <Chip tone="muted">results across every folder</Chip>}
       <span className="flex-1" />
       <Input
@@ -283,9 +281,7 @@ function Toolbar() {
         }}
       />
       <DropdownMenu>
-        <DropdownMenuTrigger
-          render={<Button variant="command" size="xs" data-action="import" />}
-        >
+        <DropdownMenuTrigger render={<Button variant="command" size="xs" data-action="import" />}>
           <Glyph>↑</Glyph>
           Import .env
         </DropdownMenuTrigger>
@@ -336,8 +332,8 @@ function Empty() {
       <>No variable is named like “{query.trim()}”.</>
     ) : current.matrix.rows.length === 0 ? (
       <>
-        This project declares no variables yet. Keys come from <code>defineEnv</code> in app
-        code; this page cannot create one.
+        This project declares no variables yet. Keys come from <code>defineEnv</code> in app code;
+        this page cannot create one.
       </>
     ) : (
       <>Nothing reads a variable here.</>
@@ -383,7 +379,9 @@ function FolderGroup({ group, open }: { group: Group; open: boolean }) {
         <th scope="rowgroup" className={cn(cellKey, "font-normal")} colSpan={3}>
           <span className="inline-flex flex-wrap items-center gap-3">
             <span className="font-mono text-[13px] font-medium">{group.folder}</span>
-            <span className="font-mono text-xs text-muted-foreground">{plural(group.keys, "key")}</span>
+            <span className="font-mono text-xs text-muted-foreground">
+              {plural(group.keys, "key")}
+            </span>
             {group.owed > 0 && (
               <Chip tone="owed" data-slot="owed-count">
                 {group.owed} to fill
@@ -400,8 +398,8 @@ function FolderGroup({ group, open }: { group: Group; open: boolean }) {
         <tr className="border-b border-border">
           <td />
           <td colSpan={3} className="py-3 pl-2 font-sans text-[13.5px] text-body">
-            Nothing is set for {group.folder}; every key it reads inherits the root. Use a
-            root row’s menu, or drop a .env file here, to set one.
+            Nothing is set for {group.folder}; every key it reads inherits the root. Use a root
+            row’s menu, or drop a .env file here, to set one.
           </td>
         </tr>
       )}
@@ -565,7 +563,9 @@ function Value({ line }: { line: KeyLine }) {
             tone={line.orphaned ? "owed" : "default"}
             title={`overridden in ${names(line.overrides)}${line.orphaned ? "; an override names an environment that no longer exists" : ""}`}
           >
-            {line.overrides.length === 1 ? line.overrides[0] : plural(line.overrides.length, "override")}
+            {line.overrides.length === 1
+              ? line.overrides[0]
+              : plural(line.overrides.length, "override")}
           </Chip>
         )}
       </div>

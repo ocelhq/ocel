@@ -18,9 +18,7 @@ describe("storagePolicy", () => {
   });
 
   it("refuses to store private / no-store / no-cache responses", () => {
-    expect(
-      storagePolicy("private, no-cache, no-store, max-age=0, must-revalidate"),
-    ).toBeNull();
+    expect(storagePolicy("private, no-cache, no-store, max-age=0, must-revalidate")).toBeNull();
   });
 
   it("refuses responses with no positive s-maxage", () => {

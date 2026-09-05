@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
+import type http from "node:http";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import type http from "node:http";
 import type { ProjectManifest } from "./project-manifest.mjs";
 
 const MAIN_KEY_PREFIX = "v4";
@@ -33,7 +33,7 @@ class PagesRuntimeIncrementalCache {
   async get(cacheKey: string, ctx: any): Promise<any> {
     if (ctx?.kind !== "FETCH") return null;
     const entry = await this.handler.get(cacheKey, ctx);
-    if (!entry || entry.value?.kind !== "FETCH") return null;
+    if (entry?.value?.kind !== "FETCH") return null;
 
     const revalidate = ctx.revalidate || entry.value.revalidate;
     const age = (Date.now() - (entry.lastModified || 0)) / 1000;

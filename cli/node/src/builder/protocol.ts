@@ -13,7 +13,7 @@ interface ProtocolRecord {
 }
 
 function emit(record: ProtocolRecord): void {
-  process.stdout.write("\n" + PROTOCOL_PREFIX + JSON.stringify(record) + "\n");
+  process.stdout.write(`\n${PROTOCOL_PREFIX}${JSON.stringify(record)}\n`);
 }
 
 export function log(level: Level, message: string, app?: string, stage?: string): void {
@@ -36,7 +36,11 @@ export function isReported(err: unknown): boolean {
 
 let spanCounter = 0;
 
-export async function withSpan<T>(stage: string, app: string | undefined, fn: () => Promise<T>): Promise<T> {
+export async function withSpan<T>(
+  stage: string,
+  app: string | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
   const id = `${stage}:${app ?? ""}:${++spanCounter}`;
   emit({ type: "span_start", id, stage, app });
   try {

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LinkType } from "./gen/proto/common/links/v1/links_pb.js";
 import { linkKey } from "./utils/get-config.js";
@@ -26,9 +26,7 @@ const fixtures = new URL("proto/common/links/v1/fixtures/", repoRoot());
 
 const types = Object.values(LinkType).filter(
   (value): value is LinkType =>
-    typeof value === "number" &&
-    value !== LinkType.UNSPECIFIED &&
-    value !== LinkType.CUSTOM,
+    typeof value === "number" && value !== LinkType.UNSPECIFIED && value !== LinkType.CUSTOM,
 );
 
 function fileOf(type: LinkType) {
@@ -75,8 +73,6 @@ describe("the link conformance fixtures", () => {
     const body = raw(LinkType.BUCKET);
     vi.stubEnv(linkKey("uploads", LinkType.BUCKET), body);
 
-    expect(bucket("uploads", { uploaders: {} }).__config()).toMatchObject(
-      JSON.parse(body).bucket,
-    );
+    expect(bucket("uploads", { uploaders: {} }).__config()).toMatchObject(JSON.parse(body).bucket);
   });
 });

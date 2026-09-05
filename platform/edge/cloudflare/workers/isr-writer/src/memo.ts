@@ -20,11 +20,7 @@ export function memoized(isrPrefix: string): Memo | undefined {
   return memo;
 }
 
-export function memoize(
-  isrPrefix: string,
-  hash: string | undefined,
-  refreshed: boolean,
-): Memo {
+export function memoize(isrPrefix: string, hash: string | undefined, refreshed: boolean): Memo {
   if (memos.size >= CAPACITY && !memos.has(isrPrefix)) {
     const oldest = memos.keys().next().value;
     if (oldest !== undefined) memos.delete(oldest);

@@ -1,10 +1,10 @@
+import cjsDep from "cjs-dep";
 import express from "express";
+import { stamp } from "fake-dep";
+import { label } from "workspace-pkg";
+import { banner } from "./config";
 import { greeting } from "./greeting.js";
 import { render } from "./lib/db";
-import { banner } from "./config";
-import { stamp } from "fake-dep";
-import cjsDep from "cjs-dep";
-import { label } from "workspace-pkg";
 
 const app = express();
 app.use(express.json());

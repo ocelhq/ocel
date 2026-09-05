@@ -1,19 +1,14 @@
+import type { AssetBucket } from "@framework/next-router/assets";
 import { describe, expect, it } from "vitest";
-
+import type { DeploymentRecord, DeploymentsBinding, PointerRecordResult } from "../src/deployments";
 import {
   EDGE_HEADER,
-  resolveServe,
-  serve,
   type ResolveBase,
   type RouteDeps,
+  resolveServe,
   type ServeFetch,
+  serve,
 } from "../src/index";
-import type { AssetBucket } from "@framework/next-router/assets";
-import type {
-  DeploymentRecord,
-  DeploymentsBinding,
-  PointerRecordResult,
-} from "../src/deployments";
 
 function routedDeps(): RouteDeps {
   const store: AssetBucket = {
@@ -67,7 +62,11 @@ const originRecord: DeploymentRecord = {
 };
 
 function bindingReturning(result: PointerRecordResult): DeploymentsBinding {
-  return { async pointerRecord() { return result; } };
+  return {
+    async pointerRecord() {
+      return result;
+    },
+  };
 }
 
 const base: ResolveBase = {
@@ -108,10 +107,7 @@ describe("the edge marks every response as its own", () => {
   });
 
   it("marks what the router serves", async () => {
-    const response = await serve(
-      new Request("https://shop.example.com/a"),
-      routedDeps(),
-    );
+    const response = await serve(new Request("https://shop.example.com/a"), routedDeps());
 
     expect(response.status).toBe(200);
     expect(response.headers.get(EDGE_HEADER)).toBe("cloudflare");
@@ -124,9 +120,7 @@ describe("the edge marks every response as its own", () => {
     );
 
     expect(typeof served).toBe("function");
-    const response = await (served as ServeFetch)(
-      new Request("https://origin.example.com/"),
-    );
+    const response = await (served as ServeFetch)(new Request("https://origin.example.com/"));
     expect(response.headers.get(EDGE_HEADER)).toBe("cloudflare");
   });
 });

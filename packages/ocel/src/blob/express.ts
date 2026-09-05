@@ -1,18 +1,15 @@
 import type {
   Request as ExpressRequest,
-  RequestHandler,
   Response as ExpressResponse,
+  RequestHandler,
 } from "express";
 import type { z } from "zod";
 import type { Bucket } from "./bucket.js";
-import {
-  createRouteHandler as coreCreateRouteHandler,
-  type RouteOptions,
-} from "./route.js";
-import { uploader as coreUploader } from "./uploader.js";
+import { createRouteHandler as coreCreateRouteHandler, type RouteOptions } from "./route.js";
 import type { ParsedInput, Uploader, UploaderAuth, UploaderUpload } from "./types.js";
+import { uploader as coreUploader } from "./uploader.js";
 
-export { bucket, Bucket, type BucketOptions } from "./bucket.js";
+export { Bucket, type BucketOptions, bucket } from "./bucket.js";
 export type { RouteOptions } from "./route.js";
 export type {
   CompletedFile,
@@ -22,29 +19,22 @@ export type {
   Uploader,
 } from "./types.js";
 
-export function uploader<
-  TInput extends z.ZodType | undefined = undefined,
-  TMetadata = unknown,
->(
+export function uploader<TInput extends z.ZodType | undefined = undefined, TMetadata = unknown>(
   auth: UploaderAuth<ExpressRequest, TInput, TMetadata>,
   upload?: UploaderUpload<TMetadata>,
 ): Uploader<ParsedInput<TInput>, TMetadata, ExpressRequest> {
   return coreUploader<TInput, TMetadata, ExpressRequest>(auth, upload);
 }
 
-async function sendResponse(
-  res: ExpressResponse,
-  webRes: Response,
-): Promise<void> {
+async function sendResponse(res: ExpressResponse, webRes: Response): Promise<void> {
   res.status(webRes.status);
-  webRes.headers.forEach((value, key) => res.setHeader(key, value));
+  webRes.headers.forEach((value, key) => {
+    res.setHeader(key, value);
+  });
   res.end(Buffer.from(await webRes.arrayBuffer()));
 }
 
-export function createRouteHandler(
-  bucket: Bucket,
-  options?: RouteOptions,
-): RequestHandler {
+export function createRouteHandler(bucket: Bucket, options?: RouteOptions): RequestHandler {
   const { GET, POST } = coreCreateRouteHandler(bucket, options);
   return (req, res, next) => {
     if (req.originalUrl) req.url = req.originalUrl;

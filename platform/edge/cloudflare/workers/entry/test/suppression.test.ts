@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vitest";
-
 import { refreshHeader } from "@framework/next-cache";
+import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps } from "../src/index";
 import { coloDeps } from "./cache-deps";
@@ -26,16 +25,13 @@ function missingCache(waitUntil: (p: Promise<unknown>) => void = () => {}) {
 }
 
 const isrPrefix = "prod/p/app/build";
-const cacheObject = (routePath: string) =>
-  `${isrPrefix}/cache/${routePath}.cache.json`;
+const cacheObject = (routePath: string) => `${isrPrefix}/cache/${routePath}.cache.json`;
 
 function storeOf(entries: Record<string, unknown>) {
   return {
     async get(key: string) {
       const entry = entries[key];
-      return entry === undefined
-        ? null
-        : { text: async () => JSON.stringify(entry) };
+      return entry === undefined ? null : { text: async () => JSON.stringify(entry) };
     },
   };
 }
@@ -98,9 +94,7 @@ function blogDeps(
         : {
             config: { isrPrefix },
             now: () => over.now ?? 2_000,
-            store: storeOf(
-              over.entry ? { [cacheObject("blog")]: over.entry } : {},
-            ),
+            store: storeOf(over.entry ? { [cacheObject("blog")]: over.entry } : {}),
           },
   };
 }
@@ -277,10 +271,7 @@ describe("self-revalidation suppression", () => {
   it("never stamps a pages-router data request", async () => {
     const origin = recorder();
 
-    await dispatchBlog(
-      blogDeps(origin),
-      new Request("https://app.example/_next/data/t/blog.json"),
-    );
+    await dispatchBlog(blogDeps(origin), new Request("https://app.example/_next/data/t/blog.json"));
 
     expect(origin.purposes()).toEqual([null]);
   });

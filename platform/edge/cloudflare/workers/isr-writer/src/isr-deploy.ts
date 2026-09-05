@@ -1,7 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-
-import * as registry from "./registry";
 import type { Env } from "./env";
+import * as registry from "./registry";
 
 export class IsrDeploy extends DurableObject<Env> {
   async initialize(secretHash: string): Promise<void> {

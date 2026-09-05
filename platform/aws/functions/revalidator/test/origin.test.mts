@@ -1,9 +1,17 @@
-import { expect, it, vi } from "vitest";
-
-import { originTimeoutMs } from "../src/limits.mjs";
 import { parseMessage, type RevalidationMessage } from "@platform/edge-contract/revalidation";
-import { resolve, type OriginDeps, type Target } from "../src/origin.mjs";
-import { body, bucket, credentials, host, isrPrefix, originDocument, recordUrl, region } from "./fixture.mjs";
+import { expect, it, vi } from "vitest";
+import { originTimeoutMs } from "../src/limits.mjs";
+import { type OriginDeps, resolve, type Target } from "../src/origin.mjs";
+import {
+  body,
+  bucket,
+  credentials,
+  host,
+  isrPrefix,
+  originDocument,
+  recordUrl,
+  region,
+} from "./fixture.mjs";
 
 function message(overrides: Record<string, unknown> = {}): RevalidationMessage {
   const parsed = parseMessage(body(overrides));
@@ -53,7 +61,10 @@ it("reads the deploy's own record, under the isrPrefix, signed as the function's
 
   const resolution = await resolve(deps, message());
 
-  expect(resolution).toEqual({ ok: true, target: { url: `https://${host}/blog/post`, region: "us-east-1" } });
+  expect(resolution).toEqual({
+    ok: true,
+    target: { url: `https://${host}/blog/post`, region: "us-east-1" },
+  });
   expect(requests[0]!.url).toBe(recordUrl);
   expect(requests[0]!.headers.get("authorization")).toContain(`/${region}/s3/aws4_request`);
 });
@@ -102,7 +113,9 @@ it("refuses a recorded origin reached over http", async () => {
 });
 
 it("refuses a record of an unknown version", async () => {
-  const { deps } = harness(record(JSON.stringify({ v: 2, functionUrls: { "/": `https://${host}/` } })));
+  const { deps } = harness(
+    record(JSON.stringify({ v: 2, functionUrls: { "/": `https://${host}/` } })),
+  );
 
   await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unusable" });
 });
@@ -117,14 +130,23 @@ it("calls a missing record unusable and a failing read unavailable", async () =>
   const missing = harness(() => new Response(null, { status: 404 }));
   const failing = harness(() => new Response(null, { status: 503 }));
 
-  await expect(resolve(missing.deps, message())).resolves.toEqual({ ok: false, reason: "origin-unusable" });
-  await expect(resolve(failing.deps, message())).resolves.toEqual({ ok: false, reason: "origin-unavailable" });
+  await expect(resolve(missing.deps, message())).resolves.toEqual({
+    ok: false,
+    reason: "origin-unusable",
+  });
+  await expect(resolve(failing.deps, message())).resolves.toEqual({
+    ok: false,
+    reason: "origin-unavailable",
+  });
 });
 
 it("reports an unreachable record as unavailable rather than throwing", async () => {
   const { deps } = harness(new Error("connect ECONNREFUSED"));
 
-  await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unavailable" });
+  await expect(resolve(deps, message())).resolves.toEqual({
+    ok: false,
+    reason: "origin-unavailable",
+  });
 });
 
 it("reads on the documented budget when no caller overrides it", async () => {
@@ -147,7 +169,10 @@ it("resolves nothing, and reads nothing, when no asset bucket is configured", as
   const { deps, requests } = harness(record());
   deps.bucket = undefined;
 
-  await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unconfigured" });
+  await expect(resolve(deps, message())).resolves.toEqual({
+    ok: false,
+    reason: "origin-unconfigured",
+  });
   expect(requests).toEqual([]);
 });
 

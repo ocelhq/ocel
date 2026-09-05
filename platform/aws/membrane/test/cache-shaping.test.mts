@@ -1,13 +1,13 @@
 import { expect, test } from "vitest";
 import {
+  type OriginShaping,
   originShaping,
   releaseOf,
   shapeOriginCache,
-  type OriginShaping,
 } from "../src/next/cache-shaping.mjs";
-import { invalidatesByCacheTag, routerMode } from "../src/shared/edge-kind.mjs";
 import { noteTags } from "../src/next/origin-tags.mjs";
 import type { ProjectManifest } from "../src/next/project-manifest.mjs";
+import { invalidatesByCacheTag, routerMode } from "../src/shared/edge-kind.mjs";
 
 const prefix = "prod/shop/web/r0a1b2c3d/isr";
 
@@ -77,9 +77,7 @@ test("the gate stays shut when the deploy declared no origin router", () => {
 
 test("the gate opens when the deploy declared the origin hosts the router", () => {
   expect(routerMode({ OCEL_ORIGIN_ROUTER: "1" } as NodeJS.ProcessEnv)).toBe(true);
-  expect(
-    originShaping(manifest(isrRoutes), { OCEL_ORIGIN_ROUTER: "1" } as any),
-  ).not.toBeNull();
+  expect(originShaping(manifest(isrRoutes), { OCEL_ORIGIN_ROUTER: "1" } as any)).not.toBeNull();
 });
 
 test("only a front the deploy declared tag-purging is given cache tags", () => {
@@ -118,11 +116,7 @@ test("leaves the tag header off when the prefix names no release", () => {
 });
 
 test("shapes s-maxage from the manifest for a route it revalidates", () => {
-  const headers = serve(
-    shaping(),
-    "/isr",
-    fakeRes({ "content-type": "text/html; charset=utf-8" }),
-  );
+  const headers = serve(shaping(), "/isr", fakeRes({ "content-type": "text/html; charset=utf-8" }));
 
   expect(headers["cache-control"]).toBe("s-maxage=60, stale-while-revalidate=600");
 });
@@ -169,11 +163,7 @@ test("matches a route reached through its data route", () => {
 
 test("leaves a route the manifest never revalidates alone", () => {
   for (const url of ["/never", "/zero", "/unknown", "/bad/thing"]) {
-    const headers = serve(
-      shaping(),
-      url,
-      fakeRes({ "content-type": "text/html; charset=utf-8" }),
-    );
+    const headers = serve(shaping(), url, fakeRes({ "content-type": "text/html; charset=utf-8" }));
     expect(headers["cache-control"]).toBeUndefined();
   }
 });

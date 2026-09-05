@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as z from "zod";
-import { buildEnv, BuildEnvError } from "./build-env.js";
+import { BuildEnvError, buildEnv } from "./build-env.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { TooLargeError, readCapped } from "../src/stream.mjs";
+import { readCapped, TooLargeError } from "../src/stream.mjs";
 
 async function* chunks(...values: Uint8Array[]): AsyncIterable<Uint8Array> {
   for (const value of values) yield value;

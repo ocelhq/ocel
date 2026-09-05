@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PROTOCOL_PREFIX, isReported, log, reportError, withSpan } from "./protocol.js";
+import { isReported, log, PROTOCOL_PREFIX, reportError, withSpan } from "./protocol.js";
 
 function captureStdout(): { lines: string[] } {
   const lines: string[] = [];
@@ -11,7 +11,7 @@ function captureStdout(): { lines: string[] } {
 }
 
 function parseRecord(line: string): unknown {
-  expect(line.startsWith("\n" + PROTOCOL_PREFIX)).toBe(true);
+  expect(line.startsWith(`\n${PROTOCOL_PREFIX}`)).toBe(true);
   return JSON.parse(line.slice(1 + PROTOCOL_PREFIX.length));
 }
 
@@ -58,7 +58,11 @@ describe("protocol records", () => {
     const { lines } = captureStdout();
     const failure = new Error("no entrypoint resolved");
 
-    await expect(withSpan("build", "api", async () => { throw failure; })).rejects.toBe(failure);
+    await expect(
+      withSpan("build", "api", async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
 
     const records = lines.map(parseRecord);
     expect(records[0]).toMatchObject({ type: "span_start", stage: "build", app: "api" });
@@ -72,7 +76,11 @@ describe("protocol records", () => {
     const failure = new Error("boom");
 
     expect(isReported(failure)).toBe(false);
-    await expect(withSpan("build", "api", async () => { throw failure; })).rejects.toBe(failure);
+    await expect(
+      withSpan("build", "api", async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
     expect(isReported(failure)).toBe(true);
   });
 
@@ -85,6 +93,9 @@ describe("protocol records", () => {
     const { lines } = captureStdout();
     reportError("could not detect a runtime");
 
-    expect(parseRecord(lines[0]!)).toEqual({ type: "error", message: "could not detect a runtime" });
+    expect(parseRecord(lines[0]!)).toEqual({
+      type: "error",
+      message: "could not detect a runtime",
+    });
   });
 });

@@ -1,18 +1,16 @@
-import { describe, expect, it } from "vitest";
-
-import type { CacheDeps } from "../src/cache";
+import fixtures from "@framework/next-router/fixtures/image-conformance.json";
 import {
   functionUrlImageOrigin,
-  unprovisionedImageOrigin,
   type ImageConfig,
   type ImageOriginRequest,
+  unprovisionedImageOrigin,
 } from "@framework/next-router/image";
+import { describe, expect, it } from "vitest";
+import type { CacheDeps } from "../src/cache";
 import { serveImage } from "../src/image";
-import fixtures from "@framework/next-router/fixtures/image-conformance.json";
 import { coloDeps } from "./cache-deps";
 
-const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]
-  .config;
+const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
 
 const OPTIMIZER_URL = "https://opt123.lambda-url.us-east-1.on.aws/";
 
@@ -81,9 +79,7 @@ describe("functionUrlImageOrigin", () => {
     const [call] = recorded.calls;
     expect(call.url).toBe(OPTIMIZER_URL);
     expect(call.init?.method).toBe("POST");
-    expect(new Headers(call.init?.headers).get("content-type")).toBe(
-      "application/json",
-    );
+    expect(new Headers(call.init?.headers).get("content-type")).toBe("application/json");
     expect(JSON.parse(String(call.init?.body))).toEqual(PAYLOAD);
   });
 
@@ -99,9 +95,7 @@ describe("functionUrlImageOrigin", () => {
 
   it("relays the optimizer's own statuses untouched", async () => {
     for (const status of [400, 500, 502]) {
-      const recorded = recordingFetch(
-        () => new Response(`body ${status}`, { status }),
-      );
+      const recorded = recordingFetch(() => new Response(`body ${status}`, { status }));
       const origin = functionUrlImageOrigin(OPTIMIZER_URL, recorded.fetch)!;
       const response = await origin(PAYLOAD);
       expect(response.status).toBe(status);
@@ -191,8 +185,7 @@ describe("functionUrlImageOrigin", () => {
   });
 
   it("is unbound when the configured URL is not a URL", () => {
-    expect(functionUrlImageOrigin("opt123.lambda-url.us-east-1.on.aws", fetch))
-      .toBeUndefined();
+    expect(functionUrlImageOrigin("opt123.lambda-url.us-east-1.on.aws", fetch)).toBeUndefined();
     expect(functionUrlImageOrigin("/_next/image", fetch)).toBeUndefined();
   });
 

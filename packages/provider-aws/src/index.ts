@@ -23,8 +23,6 @@ export interface AwsProviderOptions {
 }
 
 /** Declares AWS as the provider `ocel deploy` provisions into. */
-export default function awsProvider(
-  options: AwsProviderOptions = {},
-): ProviderDescriptor {
+export default function awsProvider(options: AwsProviderOptions = {}): ProviderDescriptor {
   return { package: "@ocel/provider-aws", options };
 }

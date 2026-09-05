@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-const declareEnvMock = vi.hoisted(() =>
-  vi.fn(() => Promise.resolve({ cells: [] as unknown[] })),
-);
+const declareEnvMock = vi.hoisted(() => vi.fn(() => Promise.resolve({ cells: [] as unknown[] })));
 const reportEnvProblemsMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
 const source = vi.hoisted(() => ({ override: undefined as string | undefined }));
@@ -23,8 +21,7 @@ vi.mock("../utils/rpc", () => ({
   },
 }));
 
-const { defineEnv, EnvDefinitionError, EnvScopeError, EnvValueError } =
-  await import("./index.js");
+const { defineEnv, EnvDefinitionError, EnvScopeError, EnvValueError } = await import("./index.js");
 const { envSchema } = await import("./schema.js");
 
 async function flushDeclarations() {
@@ -45,9 +42,7 @@ interface Problem {
 }
 
 function reportedProblems(): Problem[] {
-  const [call] = reportEnvProblemsMock.mock.calls as unknown as [
-    [{ problems: Problem[] }],
-  ];
+  const [call] = reportEnvProblemsMock.mock.calls as unknown as [[{ problems: Problem[] }]];
   return call![0].problems;
 }
 
@@ -79,15 +74,9 @@ describe("definition errors", () => {
     defineEnv({ DUPE_KEY: { class: "plain" } });
 
     source.override = "/project/env.second.ts";
-    expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(
-      EnvDefinitionError,
-    );
-    expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(
-      /DUPE_KEY/,
-    );
-    expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(
-      /env\.first\.ts/,
-    );
+    expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(EnvDefinitionError);
+    expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(/DUPE_KEY/);
+    expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(/env\.first\.ts/);
   });
 
   it("lets the file that declared a key declare it again", () => {
@@ -98,9 +87,7 @@ describe("definition errors", () => {
   });
 
   it("rejects an Ocel-owned name for a bare-key class", () => {
-    expect(() => defineEnv({ OCEL_THING: { class: "plain" } })).toThrow(
-      /reserved/i,
-    );
+    expect(() => defineEnv({ OCEL_THING: { class: "plain" } })).toThrow(/reserved/i);
   });
 
   it("allows an Ocel-owned name for a class that is never delivered bare", () => {
@@ -110,30 +97,20 @@ describe("definition errors", () => {
   it("rejects the deployment url under every class, since ocel writes it for every app", () => {
     for (const key of ["OCEL_URL", "NEXT_PUBLIC_OCEL_URL"]) {
       for (const variableClass of ["plain", "sensitive", "secret"] as const) {
-        expect(() => defineEnv({ [key]: { class: variableClass } })).toThrow(
-          /deployment\.url/,
-        );
+        expect(() => defineEnv({ [key]: { class: variableClass } })).toThrow(/deployment\.url/);
       }
     }
   });
 
   it("allows a name a provider or a bundler gives its own meaning", () => {
     expect(() => defineEnv({ AWS_REGION: { class: "plain" } })).not.toThrow();
-    expect(() =>
-      defineEnv({ NEXT_PUBLIC_ID: { class: "plain", client: true } }),
-    ).not.toThrow();
-    expect(() =>
-      defineEnv({ VITE_ID: { class: "plain", client: true } }),
-    ).not.toThrow();
+    expect(() => defineEnv({ NEXT_PUBLIC_ID: { class: "plain", client: true } })).not.toThrow();
+    expect(() => defineEnv({ VITE_ID: { class: "plain", client: true } })).not.toThrow();
   });
 
   it("rejects a name that is not a usable environment variable name", () => {
-    expect(() => defineEnv({ "BAD#KEY": { class: "plain" } })).toThrow(
-      EnvDefinitionError,
-    );
-    expect(() => defineEnv({ "lower-case": { class: "plain" } })).toThrow(
-      EnvDefinitionError,
-    );
+    expect(() => defineEnv({ "BAD#KEY": { class: "plain" } })).toThrow(EnvDefinitionError);
+    expect(() => defineEnv({ "lower-case": { class: "plain" } })).toThrow(EnvDefinitionError);
   });
 
   it("rejects client access on an encrypted class from an untyped caller", () => {
@@ -180,7 +157,6 @@ describe("definition errors", () => {
       }),
     ).toThrow(/accepts a missing value/i);
   });
-
 });
 
 describe("the declaration payload", () => {
@@ -356,9 +332,7 @@ describe("the confidentiality of a schema's complaint", () => {
     defineEnv({ REDACT_SENSITIVE: { class: "sensitive", schema: echoingSchema() } });
     await flushDeclarations();
 
-    expect(JSON.stringify(reportEnvProblemsMock.mock.calls)).not.toContain(
-      SECRET_VALUE,
-    );
+    expect(JSON.stringify(reportEnvProblemsMock.mock.calls)).not.toContain(SECRET_VALUE);
     const [problem] = reportedProblems();
     expect(problem!.key).toBe("REDACT_SENSITIVE");
     expect(problem!.kind).toBe(2);
@@ -558,17 +532,13 @@ describe("reading a live value", () => {
   it("does not take a published entry that is not a string as a value", () => {
     push(1, { LIVE_NOT_A_STRING: 42 as unknown as string });
 
-    expect(() => defineEnv({ LIVE_NOT_A_STRING: { class: "secret" } })).toThrow(
-      EnvValueError,
-    );
+    expect(() => defineEnv({ LIVE_NOT_A_STRING: { class: "secret" } })).toThrow(EnvValueError);
   });
 
   it("fails init loudly when the push carried no value for a declared key", () => {
     push(1, { SOMETHING_ELSE: "x" });
 
-    expect(() => defineEnv({ LIVE_ABSENT_FROM_PUSH: { class: "secret" } })).toThrow(
-      EnvValueError,
-    );
+    expect(() => defineEnv({ LIVE_ABSENT_FROM_PUSH: { class: "secret" } })).toThrow(EnvValueError);
     expect(() => defineEnv({ LIVE_ABSENT_FROM_PUSH: { class: "secret" } })).toThrow(
       /ocel env set LIVE_ABSENT_FROM_PUSH/,
     );
@@ -686,21 +656,19 @@ describe("folder scoping", () => {
     expect(() => defineEnv({ [key]: { class: "plain", folders: [folder] } })).toThrow(
       EnvDefinitionError,
     );
-    expect(() => defineEnv({ [key]: { class: "plain", folders: [folder] } })).toThrow(
-      message,
-    );
+    expect(() => defineEnv({ [key]: { class: "plain", folders: [folder] } })).toThrow(message);
   });
 
   it("rejects a scope that names one folder twice", () => {
-    expect(() =>
-      defineEnv({ SCOPE_DUPE: { class: "plain", folders: ["/web", "/web"] } }),
-    ).toThrow(/\/web/);
+    expect(() => defineEnv({ SCOPE_DUPE: { class: "plain", folders: ["/web", "/web"] } })).toThrow(
+      /\/web/,
+    );
   });
 
   it("rejects an empty scope, which would silently mean unscoped", () => {
-    expect(() =>
-      defineEnv({ SCOPE_EMPTY: { class: "plain", folders: [] } }),
-    ).toThrow(EnvDefinitionError);
+    expect(() => defineEnv({ SCOPE_EMPTY: { class: "plain", folders: [] } })).toThrow(
+      EnvDefinitionError,
+    );
   });
 
   it("carries the scope on the declaration", async () => {
@@ -749,10 +717,7 @@ describe("folder scoping", () => {
 
   it("says nothing when every folder a scope names is set", async () => {
     declareEnvMock.mockResolvedValue({
-      cells: [
-        cell("SCOPE_COMPLETE", "a", "/web"),
-        cell("SCOPE_COMPLETE", "b", "/admin"),
-      ],
+      cells: [cell("SCOPE_COMPLETE", "a", "/web"), cell("SCOPE_COMPLETE", "b", "/admin")],
     });
     defineEnv({ SCOPE_COMPLETE: { class: "plain", folders: ["/web", "/admin"] } });
     await flushDeclarations();

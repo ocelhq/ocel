@@ -23,13 +23,8 @@ describe("the deployable bundle", () => {
     );
 
     const probe = join(out, "probe.mjs");
-    writeFileSync(
-      probe,
-      'import("./index.mjs").then(() => console.log("loaded"));\n',
-    );
+    writeFileSync(probe, 'import("./index.mjs").then(() => console.log("loaded"));\n');
 
-    expect(execFileSync(process.execPath, [probe], { encoding: "utf8" }).trim()).toBe(
-      "loaded",
-    );
+    expect(execFileSync(process.execPath, [probe], { encoding: "utf8" }).trim()).toBe("loaded");
   }, 120_000);
 });

@@ -5,11 +5,11 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  SKIP_DRIFT_CHECK_ENV,
-  STATE_FILE,
   previewRefForApp,
   projectSlugForRun,
   renderOcelConfig,
+  SKIP_DRIFT_CHECK_ENV,
+  STATE_FILE,
 } from "./lib.mjs";
 
 const TEARDOWN_TIMEOUT_MS = 20 * 60 * 1000;
@@ -37,7 +37,8 @@ const res = spawnSync(
 );
 
 if (res.error || res.signal || res.status !== 0) {
-  const why = res.error?.message ?? (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
+  const why =
+    res.error?.message ?? (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
   console.error(
     `[ocel-e2e] TEARDOWN FAILED for preview ${ref} of project ${slug}: ${why}\n` +
       `[ocel-e2e] its Lambdas and stacks are still live; remove them by running ` +
@@ -55,7 +56,9 @@ function resolveIdentity() {
   try {
     state = JSON.parse(readFileSync(join(appDir, STATE_FILE), "utf8")) ?? {};
   } catch {
-    console.error(`[ocel-e2e] no readable ${STATE_FILE}; re-deriving the project slug and preview ref`);
+    console.error(
+      `[ocel-e2e] no readable ${STATE_FILE}; re-deriving the project slug and preview ref`,
+    );
   }
   return {
     slug: state.slug || projectSlugForRun(),

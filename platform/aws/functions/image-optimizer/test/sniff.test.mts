@@ -2,9 +2,11 @@ import { describe, expect, test } from "vitest";
 import {
   AVIF,
   BMP,
+  detectContentType,
   GIF,
   HEIC,
   ICO,
+  isAnimated,
   JPEG,
   JXL,
   PNG,
@@ -12,8 +14,6 @@ import {
   SVG,
   TIFF,
   WEBP,
-  detectContentType,
-  isAnimated,
 } from "../src/sniff.mjs";
 import { animatedGif, ico, solid, stillGif, svg } from "./images.mjs";
 

@@ -277,9 +277,7 @@ export function concernsAsked(asked: string | undefined): Concern[] {
   }
   const unknown = named.filter((name) => !(CONCERNS as string[]).includes(name));
   if (unknown.length > 0) {
-    throw new Error(
-      `${unknown.join(", ")} is no concern a journey runs (${CONCERNS.join(", ")})`,
-    );
+    throw new Error(`${unknown.join(", ")} is no concern a journey runs (${CONCERNS.join(", ")})`);
   }
   return CONCERNS.filter((concern) => named.includes(concern));
 }

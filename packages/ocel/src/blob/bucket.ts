@@ -1,7 +1,4 @@
-import {
-  LinkType,
-  type BucketProperties,
-} from "../gen/proto/common/links/v1/links_pb.js";
+import { type BucketProperties, LinkType } from "../gen/proto/common/links/v1/links_pb.js";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";
 import { unprovisioned, unprovisionedPhase } from "../utils/phase.js";
@@ -15,9 +12,7 @@ export interface BucketOptions<TUploaders extends Record<string, AnyUploader>> {
 
 export type ResolvedBucketConfig = Pick<BucketProperties, "bucket">;
 
-export class Bucket<
-  TUploaders extends Record<string, AnyUploader> = Record<string, AnyUploader>,
-> {
+export class Bucket<TUploaders extends Record<string, AnyUploader> = Record<string, AnyUploader>> {
   private type = LinkType.BUCKET;
 
   constructor(

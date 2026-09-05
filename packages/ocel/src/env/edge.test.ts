@@ -4,13 +4,9 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 
-const {
-  defineEnv,
-  EnvDefinitionError,
-  EnvEdgeError,
-  EnvScopeError,
-  EnvValueError,
-} = await import("./edge.js");
+const { defineEnv, EnvDefinitionError, EnvEdgeError, EnvScopeError, EnvValueError } = await import(
+  "./edge.js"
+);
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -28,19 +24,14 @@ describe("declaring on the edge", () => {
   });
 
   it("still refuses a definition the node build would refuse", () => {
-    expect(() =>
-      defineEnv({ "not a key": { class: "plain" } } as never),
-    ).toThrow(EnvDefinitionError);
-    expect(() =>
-      defineEnv({ OCEL_TAKEN: { class: "plain" } }),
-    ).toThrow(EnvDefinitionError);
+    expect(() => defineEnv({ "not a key": { class: "plain" } } as never)).toThrow(
+      EnvDefinitionError,
+    );
+    expect(() => defineEnv({ OCEL_TAKEN: { class: "plain" } })).toThrow(EnvDefinitionError);
   });
 
   it("answers symbol reads with undefined rather than throwing", () => {
-    const env = defineEnv({ EDGE_SYMBOL: { class: "plain" } }) as Record<
-      symbol,
-      unknown
-    >;
+    const env = defineEnv({ EDGE_SYMBOL: { class: "plain" } }) as Record<symbol, unknown>;
     expect(env[Symbol.toStringTag]).toBeUndefined();
     expect(env[Symbol.for("nodejs.util.inspect.custom")]).toBeUndefined();
   });
@@ -93,10 +84,7 @@ describe("reading on the edge", () => {
   });
 
   it("throws for a key no defineEnv call declares", () => {
-    const env = defineEnv({ EDGE_DECLARED: { class: "plain" } }) as Record<
-      string,
-      unknown
-    >;
+    const env = defineEnv({ EDGE_DECLARED: { class: "plain" } }) as Record<string, unknown>;
     expect(() => void env.EDGE_UNDECLARED).toThrow(EnvValueError);
   });
 
@@ -119,12 +107,9 @@ describe("reading on the edge", () => {
   });
 
   it("names the entry the shim is running when it knows one", () => {
-    (globalThis as Record<string, unknown>)[ENTRY_GLOBAL] =
-      "middleware_app/api/edge/route";
+    (globalThis as Record<string, unknown>)[ENTRY_GLOBAL] = "middleware_app/api/edge/route";
     const env = defineEnv({ EDGE_ENTRY_NAMED: { class: "secret" } });
-    expect(() => void env.EDGE_ENTRY_NAMED).toThrow(
-      /middleware_app\/api\/edge\/route/,
-    );
+    expect(() => void env.EDGE_ENTRY_NAMED).toThrow(/middleware_app\/api\/edge\/route/);
   });
 
   it("asserts the folder scope against the app's binding", () => {
@@ -183,9 +168,7 @@ describe("the edge build's surface", () => {
   });
 
   it("is wired to the edge conditions ahead of import", async () => {
-    const manifest = JSON.parse(
-      await readFile(join(here, "../../package.json"), "utf8"),
-    );
+    const manifest = JSON.parse(await readFile(join(here, "../../package.json"), "utf8"));
     const entry = manifest.exports["./env"];
     const keys = Object.keys(entry);
     for (const condition of ["edge-light", "workerd", "worker"]) {
@@ -212,16 +195,12 @@ describe("the edge module graph", () => {
         const specifier = match[2]!;
         if (/^\s*type\b/.test(clause)) continue;
         if (specifier.startsWith(".")) {
-          await walk(
-            resolvePath(dirname(file), specifier.replace(/\.js$/, ".ts")),
-          );
+          await walk(resolvePath(dirname(file), specifier.replace(/\.js$/, ".ts")));
           continue;
         }
         offences.push(`${file} imports '${specifier}'`);
       }
-      for (const [, specifier] of source.matchAll(
-        /^\s*import\s*["']([^"']+)["']/gm,
-      )) {
+      for (const [, specifier] of source.matchAll(/^\s*import\s*["']([^"']+)["']/gm)) {
         offences.push(`${file} side-effect imports '${specifier}'`);
       }
     }
@@ -229,8 +208,6 @@ describe("the edge module graph", () => {
     await walk(join(here, "edge.ts"));
 
     expect(offences).toEqual([]);
-    expect([...visited].map((f) => f.slice(here.length + 1)).sort()).not.toContain(
-      "declare.ts",
-    );
+    expect([...visited].map((f) => f.slice(here.length + 1)).sort()).not.toContain("declare.ts");
   });
 });

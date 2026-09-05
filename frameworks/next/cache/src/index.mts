@@ -1,10 +1,18 @@
 export {
+  type BoundCacheTags,
+  boundCacheTags,
+  type StoredCacheTags,
+  storedCacheTags,
+} from "./cache-tags.mjs";
+export type { EdgeCacheRpc, FetchCacheEntry } from "./edge-cache-rpc.mjs";
+export { cacheKey, variantHeadersFile } from "./naming.mjs";
+export {
   isGuardRejection,
-  tagRecordUpdate,
-  tagSortKey,
   type TagAttribute,
   type TagRecordUpdate,
   type TagUpdateItem,
+  tagRecordUpdate,
+  tagSortKey,
 } from "./tag-index.mjs";
 export {
   latest,
@@ -15,14 +23,6 @@ export {
   type StoredTagSnapshot,
   type TagSnapshotStore,
 } from "./tag-snapshot.mjs";
-export type { EdgeCacheRpc, FetchCacheEntry } from "./edge-cache-rpc.mjs";
-export {
-  boundCacheTags,
-  storedCacheTags,
-  type BoundCacheTags,
-  type StoredCacheTags,
-} from "./cache-tags.mjs";
-export { cacheKey, variantHeadersFile } from "./naming.mjs";
 
 export interface CacheEntryFile {
   lastModified: number;
@@ -115,9 +115,7 @@ export const refreshHeader = "x-ocel-refresh";
 
 export function tagsOf(value: Record<string, any>, ctx: any): string[] {
   if (value?.kind === "FETCH") {
-    return [
-      ...new Set([...(ctx?.tags ?? []), ...(ctx?.softTags ?? []), ...(value.tags ?? [])]),
-    ];
+    return [...new Set([...(ctx?.tags ?? []), ...(ctx?.softTags ?? []), ...(value.tags ?? [])])];
   }
   const header = value?.headers?.[TAGS_HEADER];
   return typeof header === "string" && header.length > 0 ? header.split(",") : [];
@@ -163,9 +161,10 @@ export function deserialize(value: Record<string, any>): Record<string, any> {
     out.rscData = value.rscData ? base64ToBytes(value.rscData) : undefined;
     if (value.segmentData) {
       out.segmentData = new Map(
-        Object.entries(value.segmentData as Record<string, string>).map(
-          ([path, b64]) => [path, base64ToBytes(b64)],
-        ),
+        Object.entries(value.segmentData as Record<string, string>).map(([path, b64]) => [
+          path,
+          base64ToBytes(b64),
+        ]),
       );
     }
   }

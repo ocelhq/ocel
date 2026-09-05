@@ -24,9 +24,7 @@ interface Row {
 
 function check(config: TrailingSlashConfig, rows: Row[]) {
   it.each(rows)("$what: $path", (row) => {
-    expect(canonicalPathname(row.path, config, row.isDataRequest ?? false)).toBe(
-      row.canonical,
-    );
+    expect(canonicalPathname(row.path, config, row.isDataRequest ?? false)).toBe(row.canonical);
     expect(routingPathname(row.path)).toBe(row.routing);
     expect(canonicalPathname(row.path, config, row.isDataRequest ?? false) !== row.path).toBe(
       row.redirects,
@@ -539,12 +537,9 @@ describe("needsSlashNormalization / normalizeRepeatedSlashes", () => {
     },
   );
 
-  it.each(["/a", "/a/b", "/basepath/en/x", "/"])(
-    "leaves %s alone",
-    (path) => {
-      expect(needsSlashNormalization(path)).toBe(false);
-    },
-  );
+  it.each(["/a", "/a/b", "/basepath/en/x", "/"])("leaves %s alone", (path) => {
+    expect(needsSlashNormalization(path)).toBe(false);
+  });
 
   it.each([
     ["/a//b", "/a/b"],

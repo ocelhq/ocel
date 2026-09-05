@@ -24,10 +24,7 @@ export function destroyProject(slug) {
   }
 
   const dir = mkdtempSync(join(tmpdir(), `ocel-e2e-teardown-${slug}-`));
-  writeFileSync(
-    join(dir, "ocel.config.ts"),
-    renderOcelConfig({ slug }),
-  );
+  writeFileSync(join(dir, "ocel.config.ts"), renderOcelConfig({ slug }));
   linkSidecar(dir, sidecarDir);
 
   console.error(`[ocel-e2e] destroying the preview footprint of project ${slug} (from ${dir})`);
@@ -43,7 +40,9 @@ export function destroyProject(slug) {
   );
 
   if (res.error || res.signal || res.status !== 0) {
-    const why = res.error?.message ?? (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
+    const why =
+      res.error?.message ??
+      (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
     console.error(
       `[ocel-e2e] PROJECT TEARDOWN FAILED for ${slug}: ${why}\n` +
         `[ocel-e2e] its preview footprint is still billing — store instance, staged ` +

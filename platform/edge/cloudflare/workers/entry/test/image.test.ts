@@ -1,14 +1,12 @@
-import { describe, expect, it } from "vitest";
-
-import { serve, type RouteDeps } from "../src/index";
 import type { AssetBucket } from "@framework/next-router/assets";
-import type { CacheDeps } from "../src/cache";
-import type { ImageConfig } from "@framework/next-router/image";
 import fixtures from "@framework/next-router/fixtures/image-conformance.json";
+import type { ImageConfig } from "@framework/next-router/image";
+import { describe, expect, it } from "vitest";
+import type { CacheDeps } from "../src/cache";
+import { type RouteDeps, serve } from "../src/index";
 import { coloDeps } from "./cache-deps";
 
-const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]
-  .config;
+const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
 
 const ASSET_PREFIX = "prod/p1/web/r3f8a1c9d/assets";
 
@@ -145,10 +143,7 @@ describe("the /_next/image route", () => {
     });
     deps.manifest.assetHashes = { "/a.png": "f".repeat(64) };
     const image = () =>
-      serve(
-        imageRequest("https://app.example/_next/image?url=%2Fa.png&w=640&q=75"),
-        deps,
-      );
+      serve(imageRequest("https://app.example/_next/image?url=%2Fa.png&w=640&q=75"), deps);
 
     expect((await image()).headers.get("x-ocel-cache")).toBe("MISS");
     await Promise.all(pending.splice(0));
@@ -182,10 +177,7 @@ describe("the /_next/image route", () => {
       });
     };
     const image = (deps: RouteDeps) =>
-      serve(
-        imageRequest("https://app.example/_next/image?url=%2Fa.png&w=640&q=75"),
-        deps,
-      );
+      serve(imageRequest("https://app.example/_next/image?url=%2Fa.png&w=640&q=75"), deps);
 
     const first = imageDeps({ cache, imageOrigin, deploymentId: "d1" });
     const second = imageDeps({ cache, imageOrigin, deploymentId: "d2" });

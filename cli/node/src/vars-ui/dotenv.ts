@@ -24,7 +24,7 @@ function closingDoubleQuote(body: string): number {
   return -1;
 }
 
-function unescape(body: string): string {
+function unescapeQuoted(body: string): string {
   return body.replace(/\\(.)/g, (whole, char: string) => escapes[char] ?? whole);
 }
 
@@ -65,7 +65,7 @@ export function parseDotenv(text: string): DotenvEntry[] {
       }
       body = lines[i]!;
     }
-    out.set(key, quote === '"' ? unescape(value) : value);
+    out.set(key, quote === '"' ? unescapeQuoted(value) : value);
   }
   return [...out].map(([key, value]) => ({ key, value }));
 }

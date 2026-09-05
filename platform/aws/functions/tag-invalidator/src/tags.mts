@@ -9,17 +9,12 @@ export interface InvalidationPaths {
   dropped: string[];
 }
 
-export function invalidationBatches(
-  release: string,
-  tags: readonly string[],
-): InvalidationPaths {
+export function invalidationBatches(release: string, tags: readonly string[]): InvalidationPaths {
   const { tags: stored, unstorable } = storedCacheTags(release, tags);
 
   const batches: string[][] = [];
   for (let i = 0; i < stored.length; i += pathsPerInvalidation) {
-    batches.push(
-      stored.slice(i, i + pathsPerInvalidation).map((tag) => tagPathPrefix + tag),
-    );
+    batches.push(stored.slice(i, i + pathsPerInvalidation).map((tag) => tagPathPrefix + tag));
   }
   return { batches, dropped: unstorable };
 }

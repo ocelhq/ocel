@@ -1,9 +1,9 @@
+import { afterAll, describe, it } from "bun:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import { afterAll, describe, it } from "bun:test";
 import { REDACTED, SECRET_TOKEN } from "./contract";
 import { follow, LIVE_ENV, lines, live, relay } from "./live";
 

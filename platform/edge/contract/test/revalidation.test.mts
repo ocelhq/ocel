@@ -8,7 +8,10 @@ it("accepts a well-formed message", () => {
     ok: true,
     message: {
       v: 1,
-      headers: { "x-prerender-revalidate": "s3cr3t-preview-mode-id", "x-forwarded-host": "example.com" },
+      headers: {
+        "x-prerender-revalidate": "s3cr3t-preview-mode-id",
+        "x-forwarded-host": "example.com",
+      },
       expect: { header: "x-nextjs-cache", value: "REVALIDATED" },
       isrPrefix,
       routeId,
@@ -20,7 +23,9 @@ it("accepts a well-formed message", () => {
 });
 
 it("names no host, and keeps no field that could carry one", () => {
-  const parsed = parseMessage(body({ url: "https://attacker.lambda-url.us-east-1.on.aws/x", host: "attacker" }));
+  const parsed = parseMessage(
+    body({ url: "https://attacker.lambda-url.us-east-1.on.aws/x", host: "attacker" }),
+  );
 
   expect(parsed.ok && Object.keys(parsed.message).sort()).toEqual([
     "enqueuedAt",
@@ -48,7 +53,10 @@ it("rejects a body that is not JSON", () => {
 });
 
 it("rejects a message missing a dedup ingredient", () => {
-  expect(parseMessage(body({ lastModified: "1700000000000" }))).toEqual({ ok: false, reason: "malformed" });
+  expect(parseMessage(body({ lastModified: "1700000000000" }))).toEqual({
+    ok: false,
+    reason: "malformed",
+  });
 });
 
 it("rejects a message naming no route id", () => {
@@ -56,7 +64,10 @@ it("rejects a message naming no route id", () => {
 });
 
 it("rejects a header map holding a non-string value", () => {
-  expect(parseMessage(body({ headers: { "x-ocel-entry": 7 } }))).toEqual({ ok: false, reason: "malformed" });
+  expect(parseMessage(body({ headers: { "x-ocel-entry": 7 } }))).toEqual({
+    ok: false,
+    reason: "malformed",
+  });
 });
 
 it("rejects a route path that is not a path", () => {
@@ -87,5 +98,8 @@ it("accepts the isrPrefix shape the deploy actually builds", () => {
 });
 
 it("rejects a header map holding a name that is not a token", () => {
-  expect(parseMessage(body({ headers: { "bad header": "x" } }))).toEqual({ ok: false, reason: "malformed" });
+  expect(parseMessage(body({ headers: { "bad header": "x" } }))).toEqual({
+    ok: false,
+    reason: "malformed",
+  });
 });

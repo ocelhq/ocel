@@ -1,8 +1,6 @@
-import type { Route } from "@next/routing";
 import { describe, expect, it } from "vitest";
-
-import { serve, type RouteDeps } from "../src/index.mjs";
 import type { AssetBucket } from "../src/assets.mjs";
+import { type RouteDeps, serve } from "../src/index.mjs";
 
 function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore"] {
   const store: AssetBucket = {

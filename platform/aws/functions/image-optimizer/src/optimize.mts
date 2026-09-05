@@ -1,16 +1,16 @@
 import { createHash } from "node:crypto";
+import { loadImageConfig } from "./config.mjs";
 import {
-  IMAGE_PASSTHROUGH,
   type CompiledImageConfig,
+  IMAGE_PASSTHROUGH,
   type ImageOriginRequest,
   type OriginResponse,
 } from "./contract.mjs";
-import { loadImageConfig } from "./config.mjs";
-import { ImageError, BOOTSTRAP_MESSAGE, upstreamFailure } from "./errors.mjs";
+import { BOOTSTRAP_MESSAGE, ImageError, upstreamFailure } from "./errors.mjs";
 import { assetKey, releaseAssetPrefix } from "./keys.mjs";
 import { extensionFor } from "./sniff.mjs";
 import type { ObjectStore } from "./store.mjs";
-import { transform, type Transformed } from "./transform.mjs";
+import { type Transformed, transform } from "./transform.mjs";
 import { fetchUpstream, type UpstreamDeps, type UpstreamImage } from "./upstream.mjs";
 import { validate } from "./validate.mjs";
 
@@ -37,10 +37,7 @@ export async function optimize(
   }
 }
 
-async function run(
-  payload: ImageOriginRequest,
-  deps: OptimizeDeps,
-): Promise<OriginResponse> {
+async function run(payload: ImageOriginRequest, deps: OptimizeDeps): Promise<OriginResponse> {
   const assetPrefix = releaseAssetPrefix(payload.assetPrefix);
   const config = await loadImageConfig(deps.store, assetPrefix, payload.configHash);
 
@@ -90,9 +87,7 @@ function respond(
   const headers: Record<string, string> = {
     "content-type": transformed.contentType,
     ...(source.cacheControl ? { "cache-control": source.cacheControl } : {}),
-    etag: transformed.unmodified
-      ? upstreamEtag(source)
-      : contentEtag(transformed.bytes),
+    etag: transformed.unmodified ? upstreamEtag(source) : contentEtag(transformed.bytes),
     "content-disposition": contentDisposition(
       config.contentDispositionType,
       fileName(href, transformed.contentType),
@@ -110,9 +105,7 @@ function contentEtag(bytes: Uint8Array): string {
 }
 
 function upstreamEtag(source: UpstreamImage): string {
-  return source.etag
-    ? Buffer.from(source.etag).toString("base64url")
-    : contentEtag(source.bytes);
+  return source.etag ? Buffer.from(source.etag).toString("base64url") : contentEtag(source.bytes);
 }
 
 function fileName(href: string, contentType: string): string {

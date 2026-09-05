@@ -7,8 +7,8 @@ import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
-import { migrates, setsEnv } from "../../rows";
 import type { PrepareFailures } from "../../prepare";
+import { migrates, setsEnv } from "../../rows";
 import { type Cell, cellsOf, type Leg, specForTarget, variantNameOf } from "../../spec";
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
@@ -19,7 +19,7 @@ import { sstSweep } from "./ladder-sst";
 import { place } from "./place";
 import { awaitServing } from "./serving";
 import { sweepable } from "./slugs";
-import { awsStore, cliAt, said, type Store } from "./store";
+import { awsStore, cliAt, type Store, said } from "./store";
 import { expectationEnvironmentFor, type World } from "./world";
 
 const LEG_TIMEOUT_MS = process.env.AWS_ENDPOINT_URL ? 600_000 : 1_800_000;
@@ -132,7 +132,9 @@ async function awaitDefaultVpc(endpoint: string): Promise<void> {
     }
     await pause(1000);
   }
-  throw new Error(`the emulator never showed a default VPC, and every deploy looks one up first: ${last}`);
+  throw new Error(
+    `the emulator never showed a default VPC, and every deploy looks one up first: ${last}`,
+  );
 }
 
 async function prepare(): Promise<PrepareFailures> {
@@ -181,7 +183,14 @@ async function up(cell: CellContext): Promise<Deployment> {
   const env = childEnv(dir);
 
   if (setsEnv(cell.fixture.rows)) {
-    await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
+    await runOcel(
+      cell,
+      dir,
+      "up",
+      "env-greeting",
+      ["env", "set", "GREETING", INITIAL_GREETING],
+      env,
+    );
     await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
   }
   await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
@@ -202,9 +211,7 @@ async function up(cell: CellContext): Promise<Deployment> {
       {
         slug: cell.slug,
         variant: variantNameOf(cell),
-        apps: Object.fromEntries(
-          cell.fixture.apps.map((app) => [app, deployed.baseUrl(app)]),
-        ),
+        apps: Object.fromEntries(cell.fixture.apps.map((app) => [app, deployed.baseUrl(app)])),
       },
       null,
       2,

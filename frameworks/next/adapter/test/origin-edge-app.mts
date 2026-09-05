@@ -1,8 +1,8 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
-import { createServer } from "node:http";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { createServer } from "node:http";
 import { createRequire } from "node:module";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { vi } from "vitest";
@@ -71,10 +71,8 @@ const defaultEdgeRouteHandler = `async () => new Response("edge route")`;
 export async function buildOriginEdgeApp(
   options: OriginEdgeAppOptions = {},
 ): Promise<OriginEdgeApp> {
-  const middlewareEntryKey =
-    options.middlewareEntryKey ?? "middleware_middleware";
-  const edgeRouteEntryKey =
-    options.edgeRouteEntryKey ?? "middleware_app/api/edge/route";
+  const middlewareEntryKey = options.middlewareEntryKey ?? "middleware_middleware";
+  const edgeRouteEntryKey = options.edgeRouteEntryKey ?? "middleware_app/api/edge/route";
   const edgeAssets = options.edgeAssets ?? {};
 
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-origin-edge-"));
@@ -94,17 +92,11 @@ export async function buildOriginEdgeApp(
 
   const mwChunk = await write(
     ".next/server/edge/chunks/mw.js",
-    register(
-      middlewareEntryKey,
-      options.middlewareHandler ?? defaultMiddlewareHandler,
-    ),
+    register(middlewareEntryKey, options.middlewareHandler ?? defaultMiddlewareHandler),
   );
   const routeChunk = await write(
     ".next/server/edge/chunks/route.js",
-    register(
-      edgeRouteEntryKey,
-      options.edgeRouteHandler ?? defaultEdgeRouteHandler,
-    ),
+    register(edgeRouteEntryKey, options.edgeRouteHandler ?? defaultEdgeRouteHandler),
   );
   const nodeHandler = await write(
     ".next/server/app/api/docs/route.js",
@@ -226,8 +218,7 @@ export async function buildOriginEdgeApp(
 
   await adapter.onBuildComplete!(args as never);
 
-  const readJson = async (rel: string) =>
-    JSON.parse(await readFile(join(outputDir, rel), "utf8"));
+  const readJson = async (rel: string) => JSON.parse(await readFile(join(outputDir, rel), "utf8"));
 
   const funcDir = (id: string) => join(outputDir, "functions", `${id}.func`);
 
@@ -271,12 +262,10 @@ export async function listenOn(
 
 export function serveDispatch(dispatch: Dispatch): Promise<RunningServer> {
   return listenOn((req, res) => {
-    Promise.resolve(dispatch.handler(req, res, { waitUntil: () => {} })).catch(
-      (error: unknown) => {
-        res.statusCode = 500;
-        res.end(String(error));
-      },
-    );
+    Promise.resolve(dispatch.handler(req, res, { waitUntil: () => {} })).catch((error: unknown) => {
+      res.statusCode = 500;
+      res.end(String(error));
+    });
   });
 }
 

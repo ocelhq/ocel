@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  type Address,
   addressKey,
   applyDotenv,
   catalogueOf,
@@ -10,8 +11,12 @@ import {
   environmentsOf,
   held,
   isDirty,
+  type Lens,
   listingOf,
+  type MatrixCell,
+  type MatrixRow,
   names,
+  type OtherValue,
   overrideOptions,
   owedCount,
   owedSet,
@@ -21,6 +26,8 @@ import {
   referenceLine,
   removeSummary,
   revealable,
+  type SaveResult,
+  type State,
   saveSummary,
   setForOptions,
   sizeLine,
@@ -28,13 +35,6 @@ import {
   unfilledOwed,
   variantAt,
   variantsOf,
-  type Address,
-  type Lens,
-  type SaveResult,
-  type MatrixCell,
-  type MatrixRow,
-  type OtherValue,
-  type State,
 } from "./model";
 
 const cell = (over: Partial<MatrixCell>): MatrixCell => ({
@@ -112,10 +112,22 @@ describe("catalogueOf", () => {
     const catalogue = catalogueOf(
       stateOf(
         [
-          row("A", [cell({}), cell({ folder: "/web" }), cell({ folder: "/api", set: true, version: 1 })]),
-          row("B", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], { scope: ["/web"] }),
-          row("C", [cell({}), cell({ folder: "/web", problem: "too short", set: true, version: 2 })]),
-          row("D", [cell({}), cell({ folder: "/web", overrides: [{ environment: "qa", version: 1 }] })]),
+          row("A", [
+            cell({}),
+            cell({ folder: "/web" }),
+            cell({ folder: "/api", set: true, version: 1 }),
+          ]),
+          row("B", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], {
+            scope: ["/web"],
+          }),
+          row("C", [
+            cell({}),
+            cell({ folder: "/web", problem: "too short", set: true, version: 2 }),
+          ]),
+          row("D", [
+            cell({}),
+            cell({ folder: "/web", overrides: [{ environment: "qa", version: 1 }] }),
+          ]),
         ],
         ["qa"],
         ["", "/api", "/web"],
@@ -136,7 +148,11 @@ describe("catalogueOf", () => {
     expect(catalogue.variants.get("B  ")?.state).toBe("forbidden");
     expect(catalogue.variants.get("B /web ")).toMatchObject({ kind: "folder", owed: true });
     expect(catalogue.variants.get("C /web ")?.problem).toBe("too short");
-    expect(catalogue.variants.get("D /web qa")).toMatchObject({ kind: "environment", set: true, version: 1 });
+    expect(catalogue.variants.get("D /web qa")).toMatchObject({
+      kind: "environment",
+      set: true,
+      version: 1,
+    });
   });
 
   it("anchors a key with no root cell on a forbidden root", () => {
@@ -144,14 +160,22 @@ describe("catalogueOf", () => {
       stateOf([row("W", [cell({ folder: "/web", set: true, version: 1 })])]),
       [],
     );
-    expect(catalogue.variants.get("W  ")).toMatchObject({ kind: "root", state: "forbidden", set: false });
+    expect(catalogue.variants.get("W  ")).toMatchObject({
+      kind: "root",
+      state: "forbidden",
+      set: false,
+    });
   });
 
   it("flags orphaned overrides", () => {
     const catalogue = catalogueOf(
       stateOf([
         row("A", [
-          cell({ set: true, version: 5, overrides: [{ environment: "gone", version: 2, orphaned: true }] }),
+          cell({
+            set: true,
+            version: 5,
+            overrides: [{ environment: "gone", version: 2, orphaned: true }],
+          }),
         ]),
       ]),
       [],
@@ -164,7 +188,9 @@ describe("catalogueOf", () => {
       stateOf([row("A", [cell({}), cell({ folder: "/web", set: true, version: 1 })])], ["staging"]),
       [at("A", "/web"), at("A", "", "staging"), at("A", "/web", "staging")],
     );
-    expect(variantsOf(catalogue).map((v) => [v.at.folder, v.at.environment, v.extra, v.set])).toEqual([
+    expect(
+      variantsOf(catalogue).map((v) => [v.at.folder, v.at.environment, v.extra, v.set]),
+    ).toEqual([
       ["", "", false, false],
       ["", "staging", true, false],
       ["/web", "", false, true],
@@ -175,12 +201,18 @@ describe("catalogueOf", () => {
   it("carries the class down so a secret is never revealable", () => {
     const catalogue = catalogueOf(
       stateOf([
-        row("S", [cell({ set: true, version: 1 }), cell({ folder: "/web", set: true, version: 1 })], { class: "secret" }),
+        row(
+          "S",
+          [cell({ set: true, version: 1 }), cell({ folder: "/web", set: true, version: 1 })],
+          { class: "secret" },
+        ),
         row("P", [cell({ set: true, version: 1 }), cell({ folder: "/web" })]),
       ]),
       [],
     );
-    expect(variantsOf(catalogue).map((v) => [v.at.key, v.at.folder, v.class, revealable(v)])).toEqual([
+    expect(
+      variantsOf(catalogue).map((v) => [v.at.key, v.at.folder, v.class, revealable(v)]),
+    ).toEqual([
       ["S", "", "secret", false],
       ["S", "/web", "secret", false],
       ["P", "", "plain", true],
@@ -192,7 +224,10 @@ describe("catalogueOf", () => {
       stateOf([row("A", [cell({ reference: { slug: "other", folder: "", key: "A" } })])]),
       [],
     );
-    expect(catalogue.variants.get("A  ")).toMatchObject({ set: true, reference: { slug: "other" } });
+    expect(catalogue.variants.get("A  ")).toMatchObject({
+      set: true,
+      reference: { slug: "other" },
+    });
   });
 
   it("answers any declared address on demand, as an extra when the catalogue lacks it", () => {
@@ -210,8 +245,20 @@ describe("catalogueOf", () => {
 describe("listingOf", () => {
   const current = stateOf(
     [
-      row("A", [cell({ set: true, version: 3, overrides: [{ environment: "qa", version: 1 }] }), cell({ folder: "/web" }), cell({ folder: "/api", set: true, version: 1 })]),
-      row("B", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" }), cell({ folder: "/api", state: "forbidden" })], { scope: ["/web"] }),
+      row("A", [
+        cell({ set: true, version: 3, overrides: [{ environment: "qa", version: 1 }] }),
+        cell({ folder: "/web" }),
+        cell({ folder: "/api", set: true, version: 1 }),
+      ]),
+      row(
+        "B",
+        [
+          cell({ state: "forbidden" }),
+          cell({ folder: "/web", state: "required" }),
+          cell({ folder: "/api", state: "forbidden" }),
+        ],
+        { scope: ["/web"] },
+      ),
       row("C", [cell({ state: "required" }), cell({ folder: "/web" })]),
       row("S", [cell({ set: true, version: 1 })], { class: "secret" }),
     ],
@@ -223,7 +270,9 @@ describe("listingOf", () => {
   it("lists root keys first, keeping a scoped key as a pointer, then one group per folder", () => {
     const listing = listingOf(current, catalogue, none, lens());
     expect(listing.flat).toBe(false);
-    expect(listing.keys.map((line) => [line.row.key, line.variant.state, line.inherits, line.overrides])).toEqual([
+    expect(
+      listing.keys.map((line) => [line.row.key, line.variant.state, line.inherits, line.overrides]),
+    ).toEqual([
       ["A", "optional", null, ["qa"]],
       ["B", "forbidden", null, []],
       ["C", "required", null, []],
@@ -237,16 +286,17 @@ describe("listingOf", () => {
 
   it("lists in a group only the keys with a cell of their own there, never the ones that merely inherit", () => {
     const listing = listingOf(current, catalogue, none, lens());
-    expect(listing.groups.map((group) => group.lines.map((line) => addressKey(line.variant.at)))).toEqual([
-      ["B /web "],
-      ["A /api "],
-    ]);
+    expect(
+      listing.groups.map((group) => group.lines.map((line) => addressKey(line.variant.at))),
+    ).toEqual([["B /web "], ["A /api "]]);
   });
 
   it("lists an asked-for cell in its group as an extra that inherits the root", () => {
     const asked = catalogueOf(current, [at("A", "/web")]);
     const listing = listingOf(current, asked, none, lens());
-    expect(listing.groups[0]?.lines.map((line) => [line.row.key, line.inherits, line.variant.extra])).toEqual([
+    expect(
+      listing.groups[0]?.lines.map((line) => [line.row.key, line.inherits, line.variant.extra]),
+    ).toEqual([
       ["A", "root", true],
       ["B", null, false],
     ]);
@@ -255,15 +305,22 @@ describe("listingOf", () => {
 
   it("shows an environment's overrides, or what falls through to the base", () => {
     const listing = listingOf(current, catalogue, none, lens({ environment: "qa" }));
-    expect(listing.keys.map((line) => [line.row.key, line.variant.at.environment, line.inherits, line.variant.set])).toEqual([
+    expect(
+      listing.keys.map((line) => [
+        line.row.key,
+        line.variant.at.environment,
+        line.inherits,
+        line.variant.set,
+      ]),
+    ).toEqual([
       ["A", "qa", null, true],
       ["B", "", null, false],
       ["C", "qa", "base", false],
       ["S", "qa", "base", false],
     ]);
-    expect(listing.groups[1]?.lines.map((line) => [addressKey(line.variant.at), line.inherits])).toEqual([
-      ["A /api qa", "base"],
-    ]);
+    expect(
+      listing.groups[1]?.lines.map((line) => [addressKey(line.variant.at), line.inherits]),
+    ).toEqual([["A /api qa", "base"]]);
   });
 
   it("flattens across folders when searching", () => {
@@ -274,7 +331,13 @@ describe("listingOf", () => {
   });
 
   it("flattens to the cells a deploy is owed, wherever they live", () => {
-    const owed = owedSet({ deploy: "dpl_1", owed: [{ key: "C", folder: "" }, { key: "B", folder: "/web" }] });
+    const owed = owedSet({
+      deploy: "dpl_1",
+      owed: [
+        { key: "C", folder: "" },
+        { key: "B", folder: "/web" },
+      ],
+    });
     const listing = listingOf(current, catalogue, owed, lens({ owedOnly: true }));
     expect(listing.flat).toBe(true);
     expect(listing.groups).toEqual([]);
@@ -286,7 +349,9 @@ describe("listingOf", () => {
 
   it("offers an override only for environments the address lacks", () => {
     expect(overrideOptions(current, catalogue, at("A"))).toEqual(["staging"]);
-    expect(overrideOptions(current, catalogueOf(current, [at("A", "", "staging")]), at("A"))).toEqual([]);
+    expect(
+      overrideOptions(current, catalogueOf(current, [at("A", "", "staging")]), at("A")),
+    ).toEqual([]);
     expect(overrideOptions(current, catalogue, at("C", "/web"))).toEqual(["qa", "staging"]);
   });
 
@@ -300,7 +365,15 @@ describe("listingOf", () => {
 
   it("lists orphaned environments after the live ones", () => {
     const orphaned = stateOf(
-      [row("A", [cell({ set: true, version: 1, overrides: [{ environment: "gone", version: 1, orphaned: true }] })])],
+      [
+        row("A", [
+          cell({
+            set: true,
+            version: 1,
+            overrides: [{ environment: "gone", version: 1, orphaned: true }],
+          }),
+        ]),
+      ],
       ["qa"],
     );
     expect(environmentsOf(orphaned)).toEqual([
@@ -318,17 +391,19 @@ describe("readersOf", () => {
   ];
 
   it("names every app for an unscoped key, since each reads the root", () => {
-    expect(readersOf(row("A", [cell({}), cell({ folder: "/web" })]), apps).map((a) => a.name)).toEqual([
-      "web",
-      "api",
-      "root-app",
-    ]);
+    expect(
+      readersOf(row("A", [cell({}), cell({ folder: "/web" })]), apps).map((a) => a.name),
+    ).toEqual(["web", "api", "root-app"]);
   });
 
   it("names only the apps bound to a scoped key's folders", () => {
     const scoped = row(
       "B",
-      [cell({ state: "forbidden" }), cell({ folder: "/web" }), cell({ folder: "/api", state: "forbidden" })],
+      [
+        cell({ state: "forbidden" }),
+        cell({ folder: "/web" }),
+        cell({ folder: "/api", state: "forbidden" }),
+      ],
       { scope: ["/web"] },
     );
     expect(readersOf(scoped, apps).map((a) => a.name)).toEqual(["web"]);
@@ -355,8 +430,13 @@ describe("applyDotenv", () => {
       [
         row("A", [cell({ set: true, version: 1 }), cell({ folder: "/web" })]),
         row("S", [cell({}), cell({ folder: "/web" })], { class: "secret" }),
-        row("R", [cell({ reference: { slug: "billing", folder: "", key: "R" } }), cell({ folder: "/web" })]),
-        row("W", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], { scope: ["/web"] }),
+        row("R", [
+          cell({ reference: { slug: "billing", folder: "", key: "R" } }),
+          cell({ folder: "/web" }),
+        ]),
+        row("W", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], {
+          scope: ["/web"],
+        }),
       ],
       [],
     ),
@@ -400,8 +480,13 @@ describe("planCopy", () => {
       [
         row("A", [cell({ set: true, version: 4 }), cell({ folder: "/web" })]),
         row("S", [cell({}), cell({ folder: "/web" })], { class: "secret" }),
-        row("R", [cell({ reference: { slug: "billing", folder: "", key: "R" } }), cell({ folder: "/web" })]),
-        row("W", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], { scope: ["/web"] }),
+        row("R", [
+          cell({ reference: { slug: "billing", folder: "", key: "R" } }),
+          cell({ folder: "/web" }),
+        ]),
+        row("W", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], {
+          scope: ["/web"],
+        }),
       ],
       ["staging"],
     ),
@@ -416,21 +501,55 @@ describe("planCopy", () => {
   });
 
   it("fills empty cells, marks set ones as overwrites, and keeps versions read here", () => {
-    const plan = planCopy(catalogue, ["staging"], [
-      other({ key: "A", value: "a-there" }),
-      other({ key: "A", folder: "/web", value: "a-web" }),
-      other({ key: "S", class: "secret" }),
-      other({ key: "A", environment: "staging", value: "a-staging" }),
-    ]);
+    const plan = planCopy(
+      catalogue,
+      ["staging"],
+      [
+        other({ key: "A", value: "a-there" }),
+        other({ key: "A", folder: "/web", value: "a-web" }),
+        other({ key: "S", class: "secret" }),
+        other({ key: "A", environment: "staging", value: "a-staging" }),
+      ],
+    );
     expect(plan.overwrites).toEqual([
-      { at: at("A"), class: "plain", there: "a-there", hereSet: true, hereVersion: 4, materialise: false },
+      {
+        at: at("A"),
+        class: "plain",
+        there: "a-there",
+        hereSet: true,
+        hereVersion: 4,
+        materialise: false,
+      },
     ]);
     expect(plan.fills).toEqual([
-      { at: at("A", "/web"), class: "plain", there: "a-web", hereSet: false, hereVersion: 0, materialise: true },
-      { at: at("S"), class: "secret", there: undefined, hereSet: false, hereVersion: 0, materialise: false },
-      { at: at("A", "", "staging"), class: "plain", there: "a-staging", hereSet: false, hereVersion: 0, materialise: true },
+      {
+        at: at("A", "/web"),
+        class: "plain",
+        there: "a-web",
+        hereSet: false,
+        hereVersion: 0,
+        materialise: true,
+      },
+      {
+        at: at("S"),
+        class: "secret",
+        there: undefined,
+        hereSet: false,
+        hereVersion: 0,
+        materialise: false,
+      },
+      {
+        at: at("A", "", "staging"),
+        class: "plain",
+        there: "a-staging",
+        hereSet: false,
+        hereVersion: 0,
+        materialise: true,
+      },
     ]);
-    expect(copyTree(plan).map((branch) => [branch.folder, branch.cells.map((c) => addressKey(c.at))])).toEqual([
+    expect(
+      copyTree(plan).map((branch) => [branch.folder, branch.cells.map((c) => addressKey(c.at))]),
+    ).toEqual([
       ["", ["S  ", "A  staging", "A  "]],
       ["/web", ["A /web "]],
     ]);
@@ -444,12 +563,16 @@ describe("planCopy", () => {
   });
 
   it("skips what cannot land here and says why", () => {
-    const plan = planCopy(catalogue, [], [
-      other({ key: "NOPE", value: "x" }),
-      other({ key: "W", value: "x" }),
-      other({ key: "A", environment: "gone", value: "x" }),
-      other({ key: "R", value: "x" }),
-    ]);
+    const plan = planCopy(
+      catalogue,
+      [],
+      [
+        other({ key: "NOPE", value: "x" }),
+        other({ key: "W", value: "x" }),
+        other({ key: "A", environment: "gone", value: "x" }),
+        other({ key: "R", value: "x" }),
+      ],
+    );
     expect(plan.skipped.map((s) => s.reason)).toEqual([
       "NOPE is not declared here",
       "nothing reads W in root here",
@@ -466,7 +589,9 @@ describe("recovery", () => {
         row("A", [cell({ set: true, version: 1 }), cell({ folder: "/web" })]),
         row("B", [cell({ state: "required" }), cell({ folder: "/web" })]),
         row("C", [cell({ set: true, version: 2, problem: "bad" }), cell({ folder: "/web" })]),
-        row("D", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], { scope: ["/web"] }),
+        row("D", [cell({ state: "forbidden" }), cell({ folder: "/web", state: "required" })], {
+          scope: ["/web"],
+        }),
       ],
       [],
     ),
@@ -504,9 +629,7 @@ describe("names", () => {
   });
 
   it("folds the tail past five into a count", () => {
-    expect(names(["a", "b", "c", "d", "e", "f", "g"])).toBe(
-      "a, b, c, d, e and 2 others",
-    );
+    expect(names(["a", "b", "c", "d", "e", "f", "g"])).toBe("a, b, c, d, e and 2 others");
   });
 });
 
@@ -514,7 +637,10 @@ describe("dirtyEntries", () => {
   const catalogue = catalogueOf(
     stateOf(
       [
-        row("A", [cell({ set: true, version: 3 }), cell({ folder: "/web", set: true, version: 1 })]),
+        row("A", [
+          cell({ set: true, version: 3 }),
+          cell({ folder: "/web", set: true, version: 1 }),
+        ]),
         row("B", [cell({ state: "required" })]),
       ],
       ["staging"],
@@ -614,9 +740,9 @@ describe("reduceSave", () => {
   });
 
   it("summarises a removal the same way", () => {
-    expect(removeSummary(reduceSave(new Map(), new Map(), new Map(), [{ at: at("A"), ok: true }]))).toBe(
-      "Removed 1 value.",
-    );
+    expect(
+      removeSummary(reduceSave(new Map(), new Map(), new Map(), [{ at: at("A"), ok: true }])),
+    ).toBe("Removed 1 value.");
     expect(removeSummary(reduceSave(new Map(), new Map(), new Map(), results))).toBe(
       "Removed 1 of 3 values; 1 changed underneath you and 1 failed — see the marked rows.",
     );

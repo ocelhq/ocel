@@ -18,10 +18,7 @@ export async function writeEntry(
   }
 }
 
-export async function readEntry(
-  bucket: R2Bucket,
-  objectKey: string,
-): Promise<string | null> {
+export async function readEntry(bucket: R2Bucket, objectKey: string): Promise<string | null> {
   const object = await bucket.get(objectKey);
   return object === null ? null : object.text();
 }

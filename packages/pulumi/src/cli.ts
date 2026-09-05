@@ -13,11 +13,11 @@ export interface Target {
 export function runLink(args: string[], target: Target, input?: string): void {
   checkTarget(target);
   const [runtime, entry] = ocelCommand(target.project);
-  const result = spawnSync(
-    runtime,
-    [entry, "link", ...args, ...flagsFor(target)],
-    { cwd: target.project, input, encoding: "utf8" },
-  );
+  const result = spawnSync(runtime, [entry, "link", ...args, ...flagsFor(target)], {
+    cwd: target.project,
+    input,
+    encoding: "utf8",
+  });
   if (result.error) {
     throw result.error;
   }

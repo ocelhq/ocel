@@ -47,9 +47,9 @@ describe("reaching the ocel CLI", () => {
   });
 
   it("refuses a target no link could be published to before spawning anything", () => {
-    expect(() =>
-      runLink(["ls"], { ...target, project: "" }),
-    ).toThrow(/an ocel project is required/);
+    expect(() => runLink(["ls"], { ...target, project: "" })).toThrow(
+      /an ocel project is required/,
+    );
     expect(run).not.toHaveBeenCalled();
   });
 });

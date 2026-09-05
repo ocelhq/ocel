@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { apiGateway, AWS, cloudflare, container, runsOn } from "./variants";
+import { AWS, apiGateway, cloudflare, container, runsOn } from "./variants";
 
 describe("the variants the catalogue offers", () => {
   it("runs every one of them on aws alone", () => {

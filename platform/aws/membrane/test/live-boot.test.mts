@@ -1,5 +1,5 @@
-import net from "node:net";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -19,7 +19,7 @@ let connections: net.Socket[];
 let messages: { type: string; payload: any }[];
 
 function push(message: unknown): void {
-  for (const conn of connections) conn.write(JSON.stringify(message) + "\n");
+  for (const conn of connections) conn.write(`${JSON.stringify(message)}\n`);
 }
 
 function waitForConnection(): Promise<void> {

@@ -1,12 +1,12 @@
 import { ruleKeywords, type TransformRule } from "./define";
 import {
   allowedFields,
-  isSurfaceType,
-  reservedTagPrefix,
-  surfaceFields,
   type EnvClass,
   type GateContext,
+  isSurfaceType,
+  reservedTagPrefix,
   type SurfaceType,
+  surfaceFields,
   type TagMap,
 } from "./surface";
 
@@ -50,9 +50,7 @@ export function evaluate(
     }
   }
   return {
-    resources: request.resources.map((resource) =>
-      evaluateResource(request, resource, modules),
-    ),
+    resources: request.resources.map((resource) => evaluateResource(request, resource, modules)),
   };
 }
 
@@ -142,12 +140,12 @@ function applyTransform(
   }
 
   if (typeof transform === "function") {
-    const returned = (
-      transform as (
-        a: Record<string, unknown>,
-        c: typeof ctx,
-      ) => Record<string, unknown> | void
-    )(args, ctx);
+    const returned =
+      // biome-ignore lint/suspicious/noConfusingVoidType: a transform may mutate in place and return nothing
+      (transform as (a: Record<string, unknown>, c: typeof ctx) => Record<string, unknown> | void)(
+        args,
+        ctx,
+      );
     surfaces[key] = returned ?? args;
   } else {
     Object.assign(args, transform);

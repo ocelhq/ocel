@@ -1,19 +1,12 @@
 import { createExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
+import type { DeploymentRecord, DeploymentsBinding, PointerRecordResult } from "../src/deployments";
 import worker, { type Env } from "../src/index";
-import type {
-  DeploymentRecord,
-  DeploymentsBinding,
-  PointerRecordResult,
-} from "../src/deployments";
-import { FN_URL, capturing, makeRecord, withGlobalFetch } from "./origin-deps";
+import { capturing, FN_URL, makeRecord, withGlobalFetch } from "./origin-deps";
 
 type PointerArgs = Parameters<DeploymentsBinding["pointerRecord"]>[0];
 
-function answering(
-  result: PointerRecordResult,
-): DeploymentsBinding & { calls: PointerArgs[] } {
+function answering(result: PointerRecordResult): DeploymentsBinding & { calls: PointerArgs[] } {
   return {
     calls: [],
     async pointerRecord(args: PointerArgs) {
@@ -23,9 +16,7 @@ function answering(
   };
 }
 
-function recording(
-  record: DeploymentRecord,
-): DeploymentsBinding & { calls: PointerArgs[] } {
+function recording(record: DeploymentRecord): DeploymentsBinding & { calls: PointerArgs[] } {
   return answering({ kind: "record", identity: record.identity, record });
 }
 
@@ -58,7 +49,7 @@ describe("production resolution of the slug's sole app", () => {
     expect(binding.calls[0].pointer).toBeUndefined();
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("origin");
-    expect(wire.calls[0].url).toBe(FN_URL + "users");
+    expect(wire.calls[0].url).toBe(`${FN_URL}users`);
   });
 
   it("answers the baked-in 404 when the slug carries more than one app", async () => {

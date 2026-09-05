@@ -69,11 +69,7 @@ async function runMiddleware(moduleOrPromise, req, res, ctx, nextConfig) {
         ? await moduleOrPromise
         : moduleOrPromise;
   } catch (error) {
-    return fail(
-      res,
-      `entry ${MIDDLEWARE_ENTRY_KEY} failed to load`,
-      error?.stack ?? error,
-    );
+    return fail(res, `entry ${MIDDLEWARE_ENTRY_KEY} failed to load`, error?.stack ?? error);
   }
 
   const adapterFn = module && (module.default || module);
@@ -100,10 +96,7 @@ async function runMiddleware(moduleOrPromise, req, res, ctx, nextConfig) {
         page: {},
         body: hasBody ? Readable.toWeb(req) : undefined,
         signal: controller.signal,
-        waitUntil:
-          ctx && typeof ctx.waitUntil === "function"
-            ? (p) => ctx.waitUntil(p)
-            : undefined,
+        waitUntil: ctx && typeof ctx.waitUntil === "function" ? (p) => ctx.waitUntil(p) : undefined,
       },
       page: "middleware",
     });
@@ -191,7 +184,7 @@ module.exports = function createDispatch({
   const dynamic = routes.dynamic.map(([source, key]) => [new RegExp(source, "i"), key]);
 
   const entryForPathname = (pathname) => {
-    if (Object.prototype.hasOwnProperty.call(routes.exact, pathname)) {
+    if (Object.hasOwn(routes.exact, pathname)) {
       return routes.exact[pathname];
     }
     for (const [re, key] of dynamic) if (re.test(pathname)) return key;
@@ -251,7 +244,7 @@ module.exports = function createDispatch({
   };
 
   if (primary) loadEntry(primary);
-  if (Object.prototype.hasOwnProperty.call(entries, MIDDLEWARE_ENTRY_KEY)) {
+  if (Object.hasOwn(entries, MIDDLEWARE_ENTRY_KEY)) {
     loadEntry(MIDDLEWARE_ENTRY_KEY);
   }
 
@@ -265,15 +258,12 @@ module.exports = function createDispatch({
       if (typeof key !== "string") {
         return fail(res, `no entry serves ${pathname} in this bundle`);
       }
-      if (!Object.prototype.hasOwnProperty.call(entries, key)) {
+      if (!Object.hasOwn(entries, key)) {
         return fail(res, `bundle carries no entry ${key}`);
       }
       const entry = loadEntry(key);
       if (entry.error) {
-        return fail(
-          res,
-          `entry ${key} failed to load: ${entry.error?.message ?? entry.error}`,
-        );
+        return fail(res, `entry ${key} failed to load: ${entry.error?.message ?? entry.error}`);
       }
       if (key === MIDDLEWARE_ENTRY_KEY) {
         return runMiddleware(entry.module, req, res, ctx, nextConfig);
@@ -284,8 +274,7 @@ module.exports = function createDispatch({
             entry.module = module;
             return callHandler(module, key, req, res, ctx);
           },
-          (error) =>
-            fail(res, `entry ${key} failed to load`, error?.stack ?? error),
+          (error) => fail(res, `entry ${key} failed to load`, error?.stack ?? error),
         );
       }
       return callHandler(entry.module, key, req, res, ctx);

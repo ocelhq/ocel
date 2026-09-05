@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-import { doneLabel, owedCount, tallyLine, type State } from "../model";
+import { doneLabel, owedCount, type State, tallyLine } from "../model";
 import { useValue } from "../signals";
 import { dirty, finishing, leave, leaveDiscarding, saving } from "../store";
 import { Glyph, SectionLabel } from "./Chip";
@@ -10,7 +10,9 @@ export function Masthead({ current }: { current: State }) {
   const owed = owedCount(current);
   const recovery = current.recovery !== undefined;
   const pending = useValue(dirty).length;
-  const busy = useValue(saving) || useValue(finishing);
+  const isSaving = useValue(saving);
+  const isFinishing = useValue(finishing);
+  const busy = isSaving || isFinishing;
   return (
     <header className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b-[1.5px] border-foreground pb-6">
       <div>

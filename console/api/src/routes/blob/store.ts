@@ -1,8 +1,4 @@
-import {
-  GetObjectTaggingCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
+import { GetObjectTaggingCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const PRESIGN_TTL_S = 60 * 60;
@@ -64,17 +60,14 @@ export async function presignPut(args: PresignPutArgs): Promise<string> {
   });
 }
 
-export async function objectSessionTag(
-  key: string,
-): Promise<string | undefined> {
+export async function objectSessionTag(key: string): Promise<string | undefined> {
   try {
     const { TagSet } = await s3Client().send(
       new GetObjectTaggingCommand({ Bucket: blobConfig().bucket, Key: key }),
     );
     return TagSet?.find((t) => t.Key === SESSION_TAG_KEY)?.Value;
   } catch (err) {
-    const status = (err as { $metadata?: { httpStatusCode?: number } })
-      .$metadata?.httpStatusCode;
+    const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
     const name = (err as { name?: string }).name;
     if (status === 404 || name === "NotFound" || name === "NoSuchKey") {
       return undefined;

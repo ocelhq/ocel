@@ -1,8 +1,8 @@
-import { createConnectTransport } from "@connectrpc/connect-node";
 import type { Interceptor } from "@connectrpc/connect";
-import type { Bucket } from "./bucket.js";
+import { createConnectTransport } from "@connectrpc/connect-node";
 import { getRuntimeAddress, getSessionToken } from "../utils/get-config.js";
-import { createBucketClient, type BucketServiceClient } from "./bucket-client.js";
+import type { Bucket } from "./bucket.js";
+import { type BucketServiceClient, createBucketClient } from "./bucket-client.js";
 
 export interface BucketContext {
   client: BucketServiceClient;

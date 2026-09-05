@@ -20,7 +20,7 @@ const MARKS: Record<Verdict, string> = {
   unplanned: "UNPLANNED",
 };
 
-function escape(value: string): string {
+function escapeCell(value: string): string {
   return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
@@ -30,7 +30,7 @@ function link(gap: Listed): string {
 
 function row(entry: ReportRow): string {
   const why = entry.listed.map(link).join(", ");
-  return `| ${escape(entry.cell)} | ${escape(entry.title)} | ${MARKS[entry.verdict]} | ${why} |`;
+  return `| ${escapeCell(entry.cell)} | ${escapeCell(entry.title)} | ${MARKS[entry.verdict]} | ${why} |`;
 }
 
 function gapLines(report: Report): string[] {
@@ -45,13 +45,13 @@ function gapLines(report: Report): string[] {
     }
   }
   return [...counts.values()].map(
-    ({ gap, red }) => `- ${link(gap)} — ${escape(gap.reason)} — red (expected) ${red}`,
+    ({ gap, red }) => `- ${link(gap)} — ${escapeCell(gap.reason)} — red (expected) ${red}`,
   );
 }
 
 function skippedLines(skipped: Skipped): string[] {
   return Object.entries(skipped).map(
-    ([cell, listed]) => `- skipped ${escape(cell)} — ${listed.map(link).join(", ")}`,
+    ([cell, listed]) => `- skipped ${escapeCell(cell)} — ${listed.map(link).join(", ")}`,
   );
 }
 

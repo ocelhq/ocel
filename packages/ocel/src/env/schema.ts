@@ -32,10 +32,7 @@ export function sourceOf(definitions: Definitions): string {
 }
 
 /** The {@link envSchema} export of a module, whatever it is named. */
-export type Declared<TModule> = Extract<
-  TModule[keyof TModule],
-  { readonly [SOURCE]: string }
->;
+export type Declared<TModule> = Extract<TModule[keyof TModule], { readonly [SOURCE]: string }>;
 
 type Holding<TModule> = [Declared<TModule>] extends [never]
   ? "this module exports nothing made by envSchema()"

@@ -1,7 +1,7 @@
 import { describe, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 import { defineEnv } from "./index.js";
-import { declared, envSchema, inlined, type ClientValue } from "./schema.js";
+import { type ClientValue, declared, envSchema, inlined } from "./schema.js";
 
 describe("a client accessor typed from envSchema()", () => {
   const schema = envSchema({

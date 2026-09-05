@@ -1,5 +1,5 @@
-import { afterEach, expect, test, vi } from "vitest";
 import type { TagRecordUpdate } from "@framework/next-cache";
+import { afterEach, expect, test, vi } from "vitest";
 import type {
   TagSnapshotRead,
   UseCacheEntry,
@@ -205,9 +205,7 @@ test("misses an entry past its expire duration whatever its revalidate says", as
 
   await handler.set(
     "k",
-    Promise.resolve(
-      entry("payload", { timestamp: Date.now() - 10_000, revalidate: 5, expire: 5 }),
-    ),
+    Promise.resolve(entry("payload", { timestamp: Date.now() - 10_000, revalidate: 5, expire: 5 })),
   );
 
   expect(await handler.get("k", [])).toBeUndefined();
@@ -296,9 +294,7 @@ test("swallows a failed write, costing only the entry", async () => {
   const { handler } = await loadSynced(store);
   store.breakObjects();
 
-  await expect(
-    handler.set("k", Promise.resolve(entry("payload"))),
-  ).resolves.toBeUndefined();
+  await expect(handler.set("k", Promise.resolve(entry("payload")))).resolves.toBeUndefined();
   expect(store.objects.size).toBe(0);
 });
 
@@ -345,9 +341,7 @@ test("survives a pending entry that never materialises", async () => {
 test("misses without a durable backend at all", async () => {
   const { handler } = await load(null);
 
-  await expect(
-    handler.set("k", Promise.resolve(entry("payload"))),
-  ).resolves.toBeUndefined();
+  await expect(handler.set("k", Promise.resolve(entry("payload")))).resolves.toBeUndefined();
   await expect(handler.get("k", [])).resolves.toBeUndefined();
 });
 

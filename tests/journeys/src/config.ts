@@ -65,7 +65,9 @@ function appOverlay(overlay: Overlay): string {
     lines.push(`    compute: ${JSON.stringify(overlay.compute)},`);
   }
   if (overlay.hostnames) {
-    lines.push(`    ...(hostnames[app.name] ? { domains: { production: hostnames[app.name] } } : {}),`);
+    lines.push(
+      `    ...(hostnames[app.name] ? { domains: { production: hostnames[app.name] } } : {}),`,
+    );
   }
   return lines.join("\n");
 }

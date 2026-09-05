@@ -1,9 +1,8 @@
 import { areTagsExpired, mergeRecord, type TagRecord } from "@framework/next-cache";
-
-import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
-import { now } from "./use-cache-entry.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
 import { mirrorTag } from "./tags-manifest.mjs";
+import { now } from "./use-cache-entry.mjs";
+import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
 
 export interface TagClock {
   updateTags(tags: string[], durations?: { expire?: number }): Promise<void>;
@@ -92,8 +91,7 @@ async function sync(): Promise<void> {
       state.etag = read.etag;
     }
     state.hasSynced = true;
-  } catch {
-  }
+  } catch {}
 }
 
 function startSync(): Promise<void> {
@@ -116,9 +114,7 @@ export const tagClock: TagClock = {
         ? {
             ...existing,
             stale: at,
-            ...(durations.expire !== undefined
-              ? { expired: at + durations.expire * 1000 }
-              : {}),
+            ...(durations.expire !== undefined ? { expired: at + durations.expire * 1000 } : {}),
           }
         : { ...existing, expired: at };
       state.records.set(tag, updated);
@@ -134,8 +130,7 @@ export const tagClock: TagClock = {
         const record = state.records.get(tag)!;
         try {
           await backend.writeTag(tag, { ...record, writtenAt: at });
-        } catch {
-        }
+        } catch {}
       }),
     );
   },
@@ -168,10 +163,7 @@ export const tagClock: TagClock = {
   },
 };
 
-export async function tagsExpireEntry(
-  tags: string[],
-  lastModified: number,
-): Promise<boolean> {
+export async function tagsExpireEntry(tags: string[], lastModified: number): Promise<boolean> {
   await tagClock.refreshTags();
   return areTagsExpired(tags, state.records, lastModified, Date.now());
 }

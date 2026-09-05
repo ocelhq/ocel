@@ -10,9 +10,7 @@ export function getCloudAdminUrl(): URL {
   return new URL(raw);
 }
 
-export async function withCloudAdminClient<T>(
-  fn: (client: Client) => Promise<T>,
-): Promise<T> {
+export async function withCloudAdminClient<T>(fn: (client: Client) => Promise<T>): Promise<T> {
   const client = new Client({
     connectionString: getCloudAdminUrl().toString(),
   });

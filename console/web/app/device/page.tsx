@@ -11,8 +11,7 @@ function normalizeCode(raw: string) {
 function DeviceVerificationForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session, isPending: isSessionPending } =
-    authClient.useSession();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
 
   const initialCode = searchParams.get("user_code") ?? "";
   const [userCode, setUserCode] = useState(initialCode);
@@ -55,9 +54,7 @@ function DeviceVerificationForm() {
       const verificationPath = initialCode
         ? `/device?user_code=${encodeURIComponent(initialCode)}`
         : "/device";
-      router.replace(
-        `/sign-in?redirect=${encodeURIComponent(verificationPath)}`,
-      );
+      router.replace(`/sign-in?redirect=${encodeURIComponent(verificationPath)}`);
       return;
     }
 
@@ -109,11 +106,7 @@ function DeviceVerificationForm() {
           </button>
         </form>
 
-        {error && (
-          <p className="text-center text-sm text-red-600 dark:text-red-400">
-            {error}
-          </p>
-        )}
+        {error && <p className="text-center text-sm text-red-600 dark:text-red-400">{error}</p>}
       </div>
     </div>
   );

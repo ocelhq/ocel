@@ -41,9 +41,7 @@ describe("defineTransform", () => {
     expect(rules).toHaveLength(2);
     expect(rules[0]!.function!.lambda).toEqual({ memorySizeMb: 512 });
     expect(rules[1]!.function!.vpc).toEqual({
-      securityGroupIds: [
-        { $ocelOutput: { link: "network", property: "primaryGroupId" } },
-      ],
+      securityGroupIds: [{ $ocelOutput: { link: "network", property: "primaryGroupId" } }],
     });
   });
 

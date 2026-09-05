@@ -7,8 +7,8 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   buildOriginEdgeApp,
   listenOn,
-  serveDispatch,
   type RunningServer,
+  serveDispatch,
 } from "./origin-edge-app.mjs";
 
 const running: RunningServer[] = [];
@@ -48,9 +48,7 @@ test("compiles waived edge middleware into a Node entry on a non-programmable ed
 
 test("runs the compiled middleware entry in plain Node, with no edge sandbox", async () => {
   const app = await buildOriginEdgeApp({ allowDegraded: "edge-middleware" });
-  const origin = await started(
-    serveDispatch(app.dispatchIn(app.manifest.middleware!.id)),
-  );
+  const origin = await started(serveDispatch(app.dispatchIn(app.manifest.middleware!.id)));
 
   const response = await fetch(`${origin.origin}/dashboard?a=1`, {
     headers: {
@@ -61,9 +59,7 @@ test("runs the compiled middleware entry in plain Node, with no edge sandbox", a
   });
 
   expect(response.headers.get("x-middleware-next")).toBe("1");
-  expect(response.headers.get("x-mw-url")).toBe(
-    "https://app.example/dashboard?a=1",
-  );
+  expect(response.headers.get("x-mw-url")).toBe("https://app.example/dashboard?a=1");
   expect(response.headers.get("x-mw-self")).toBe("true");
   expect(response.headers.get("x-mw-build")).toBe("test-build");
 });
@@ -93,9 +89,7 @@ test("serves a waived edge route through the bundle's own dispatch", async () =>
         },
       })`,
   });
-  const origin = await started(
-    serveDispatch(app.dispatchIn(app.manifest.middleware!.id)),
-  );
+  const origin = await started(serveDispatch(app.dispatchIn(app.manifest.middleware!.id)));
 
   const response = await fetch(`${origin.origin}/api/edge`, {
     method: "POST",
@@ -106,9 +100,7 @@ test("serves a waived edge route through the bundle's own dispatch", async () =>
   expect(response.status).toBe(201);
   expect(response.headers.get("x-echo-method")).toBe("POST");
   expect(response.headers.get("x-echo-agent")).toBe("probe");
-  expect(response.headers.get("x-echo-entry")).toBe(
-    "middleware_app/api/edge/route",
-  );
+  expect(response.headers.get("x-echo-entry")).toBe("middleware_app/api/edge/route");
   expect(await response.text()).toBe("ping");
 });
 
@@ -132,9 +124,7 @@ test("a waived edge route proxying an encoded upstream emits a body its headers 
     allowDegraded: "edge-middleware,edge-runtime",
     edgeRouteHandler: `async () => fetch(${JSON.stringify(upstream.origin)})`,
   });
-  const origin = await started(
-    serveDispatch(app.dispatchIn(app.manifest.middleware!.id)),
-  );
+  const origin = await started(serveDispatch(app.dispatchIn(app.manifest.middleware!.id)));
 
   const response = await fetch(`${origin.origin}/api/edge`);
 
@@ -165,9 +155,7 @@ test("a waived edge middleware proxying an encoded upstream emits a body its hea
     allowDegraded: "edge-middleware",
     middlewareHandler: `async () => fetch(${JSON.stringify(upstream.origin)})`,
   });
-  const origin = await started(
-    serveDispatch(app.dispatchIn(app.manifest.middleware!.id)),
-  );
+  const origin = await started(serveDispatch(app.dispatchIn(app.manifest.middleware!.id)));
 
   const response = await fetch(`${origin.origin}/dashboard`, {
     headers: { "x-ocel-entry": "/_middleware" },
@@ -188,9 +176,7 @@ test("a waived edge route reads an edge asset the bundle carries", async () => {
     edgeRouteHandler: `async () =>
       new Response(await (await fetch("blob:greeting.txt")).text())`,
   });
-  const origin = await started(
-    serveDispatch(app.dispatchIn(app.manifest.middleware!.id)),
-  );
+  const origin = await started(serveDispatch(app.dispatchIn(app.manifest.middleware!.id)));
 
   const response = await fetch(`${origin.origin}/api/edge`);
 
@@ -198,9 +184,7 @@ test("a waived edge route reads an edge asset the bundle carries", async () => {
 });
 
 test("a waived edge route's compiled cache handler writes without throwing", async () => {
-  const cacheHandler = fileURLToPath(
-    new URL("../src/edge-cache-handler.cjs", import.meta.url),
-  );
+  const cacheHandler = fileURLToPath(new URL("../src/edge-cache-handler.cjs", import.meta.url));
   const app = await buildOriginEdgeApp({
     allowDegraded: "edge-middleware,edge-runtime",
     edgeRouteHandler: `async () => {
@@ -216,9 +200,7 @@ test("a waived edge route's compiled cache handler writes without throwing", asy
       return new Response(String(await cache.get("k", { kind: "FETCH" })))
     }`,
   });
-  const origin = await started(
-    serveDispatch(app.dispatchIn(app.manifest.middleware!.id)),
-  );
+  const origin = await started(serveDispatch(app.dispatchIn(app.manifest.middleware!.id)));
 
   try {
     const response = await fetch(`${origin.origin}/api/edge`);
@@ -232,9 +214,7 @@ test("a waived edge route's compiled cache handler writes without throwing", asy
 test("keeps a waived edge entry's own env out of the process it shares", async () => {
   vi.stubEnv("__NEXT_BUILD_ID", "already-running");
   const app = await buildOriginEdgeApp({ allowDegraded: "edge-middleware" });
-  const origin = await started(
-    serveDispatch(app.dispatchIn(app.manifest.middleware!.id)),
-  );
+  const origin = await started(serveDispatch(app.dispatchIn(app.manifest.middleware!.id)));
 
   const response = await fetch(`${origin.origin}/dashboard`, {
     headers: { "x-ocel-entry": "/_middleware" },
@@ -280,9 +260,7 @@ test("emits neither an edge bundle nor a Node entry when the need is not waived"
 
   expect(app.manifest.middleware).toMatchObject({ runtime: "edge" });
   expect(app.hasEdgeBundle).toBe(false);
-  await expect(
-    readFile(join(app.funcDir("bundle-0"), "__ocel_edge_0.cjs")),
-  ).rejects.toThrow();
+  await expect(readFile(join(app.funcDir("bundle-0"), "__ocel_edge_0.cjs"))).rejects.toThrow();
 });
 
 test("declares the degraded needs whether or not they are waived", async () => {

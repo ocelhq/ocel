@@ -1,6 +1,6 @@
+import { Pool } from "pg";
 import { unprovisionedPhase, unprovisionedProxy } from "../utils/phase.js";
 import { Postgres, type PostgresConfig } from "./pg.js";
-import { Pool } from "pg";
 
 export { UnprovisionedResourceError } from "../utils/phase.js";
 

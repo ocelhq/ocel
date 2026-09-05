@@ -1,6 +1,6 @@
-import net from "node:net";
 import { EventEmitter } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -88,10 +88,10 @@ test("the loaded application answers over the loopback server", async () => {
 test("a warm request is answered unsupported rather than left to time out", async () => {
   for (const conn of controlConns) {
     conn.write(
-      JSON.stringify({
+      `${JSON.stringify({
         type: "warm-compile-cache",
         payload: { deadlineMs: 1_700_000_000_000, ceilingBytes: 64 << 20 },
-      }) + "\n",
+      })}\n`,
     );
   }
   await waitFor(() => messages.some((m) => m.type === "compile-cache-warmed"));

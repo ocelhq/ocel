@@ -1,7 +1,7 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createRequire } from "node:module";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { loadTagsManifest, mirrorTag, mirrorTagsInto } from "../src/next/tags-manifest.mjs";

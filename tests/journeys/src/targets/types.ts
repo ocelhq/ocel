@@ -27,6 +27,7 @@ export type Target = {
   legTimeoutMs: number;
   legs: Leg[];
   guard: () => Promise<ExpectationEnvironment>;
+  // biome-ignore lint/suspicious/noConfusingVoidType: a target with nothing to prepare resolves to nothing
   prepare?: () => Promise<PrepareFailures | void>;
   setup: () => Promise<void>;
   up: (cell: CellContext) => Promise<Deployment>;

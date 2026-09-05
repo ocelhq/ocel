@@ -1,13 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { REDACTED } from "../contract";
-import {
-  boxEnvironment,
-  issuedByTheBox,
-  recordFile,
-  slugsOf,
-  ssh,
-  strandedSlugs,
-} from "./vps";
+import { boxEnvironment, issuedByTheBox, recordFile, slugsOf, ssh, strandedSlugs } from "./vps";
 
 const IDENTITY = "/nonexistent/ocel-journey-identity";
 

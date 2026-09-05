@@ -1,4 +1,4 @@
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { readCapped } from "./stream.mjs";
 
 export interface ObjectStore {
@@ -16,9 +16,7 @@ export function s3Store(client: S3Client, bucket: string): ObjectStore {
     async get(key, limit) {
       let output;
       try {
-        output = await client.send(
-          new GetObjectCommand({ Bucket: bucket, Key: key }),
-        );
+        output = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       } catch (error) {
         if (isNotFound(error)) return undefined;
         throw error;

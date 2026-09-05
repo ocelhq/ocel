@@ -15,10 +15,7 @@ export async function uploadStatus(request: Request): Promise<Response> {
     return Response.json({ error: "Missing sessionId" }, { status: 400 });
   }
 
-  const [row] = await db
-    .select()
-    .from(uploadSession)
-    .where(eq(uploadSession.id, sessionId));
+  const [row] = await db.select().from(uploadSession).where(eq(uploadSession.id, sessionId));
 
   if (!row || row.userId !== userId) {
     return Response.json({ error: "Not found" }, { status: 404 });

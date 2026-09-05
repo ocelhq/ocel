@@ -31,15 +31,9 @@ export function Hero() {
             "radial-gradient(ellipse 75% 95% at 62% 45%,transparent 25%,var(--background) 80%)",
         }}
       />
-      <span className="absolute left-[41%] top-[30px] font-mono text-[15px] text-primary">
-        +
-      </span>
-      <span className="absolute right-16 top-9 font-mono text-[15px] text-faint">
-        +
-      </span>
-      <span className="absolute bottom-10 left-9 font-mono text-[15px] text-faint">
-        +
-      </span>
+      <span className="absolute left-[41%] top-[30px] font-mono text-[15px] text-primary">+</span>
+      <span className="absolute right-16 top-9 font-mono text-[15px] text-faint">+</span>
+      <span className="absolute bottom-10 left-9 font-mono text-[15px] text-faint">+</span>
       <span className="absolute bottom-[52px] right-[36%] font-mono text-[15px] text-primary">
         +
       </span>
@@ -57,11 +51,9 @@ export function Hero() {
             <span className="text-primary"> your own cloud.</span>
           </h1>
           <p className="mt-5 max-w-[44ch] text-[16.5px] leading-[1.62] text-muted-foreground">
-            The deploy experience you love, running in the account you already
-            pay for. Zero-config deploys, real dev infra, and an SDK that turns{" "}
-            <span className="bg-chip px-[5px] py-px font-mono text-[14.5px]">
-              postgres("main")
-            </span>{" "}
+            The deploy experience you love, running in the account you already pay for. Zero-config
+            deploys, real dev infra, and an SDK that turns{" "}
+            <span className="bg-chip px-[5px] py-px font-mono text-[14.5px]">postgres("main")</span>{" "}
             into a database.
           </p>
           <div className="mt-7 flex items-center gap-3">
@@ -106,22 +98,19 @@ export function Hero() {
           {step === 0 && (
             <div className="mt-2.5">
               <GithubLogo className="mr-1.5 inline-block h-[15px] w-[15px] -translate-y-px align-middle text-foreground" />
-              get started — sign in with Github?{" "}
-              <span className="text-dim">[Y/n]</span>
+              get started — sign in with Github? <span className="text-dim">[Y/n]</span>
               <Cursor /> <span className="text-faint">← click to approve</span>
             </div>
           )}
           {step >= 1 && (
             <div className="mt-2.5">
               <GithubLogo className="mr-1.5 inline-block h-[15px] w-[15px] -translate-y-px align-middle text-foreground" />
-              get started — sign in with Github?{" "}
-              <span className="text-dim">[Y/n]</span> y
+              get started — sign in with Github? <span className="text-dim">[Y/n]</span> y
             </div>
           )}
           {step >= 2 && (
             <div>
-              <span className="text-primary">→</span> opening
-              github.com/login/oauth …
+              <span className="text-primary">→</span> opening github.com/login/oauth …
             </div>
           )}
           {step >= 3 && (
@@ -130,10 +119,7 @@ export function Hero() {
                 <span className="text-chart-2">✓</span> authenticated as{" "}
                 <span className="bg-chip px-1">@you</span>{" "}
                 <span className="text-dim">
-                  —{" "}
-                  <span className="text-primary">
-                    heading to your console →
-                  </span>
+                  — <span className="text-primary">heading to your console →</span>
                 </span>
               </div>
               <div>

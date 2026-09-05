@@ -198,7 +198,12 @@ function linksPartition(slug: string): string {
 
 type RawItem = { sk: string; body: string };
 
-async function queryItems(cli: Cli, table: string, pk: string, skPrefix: string): Promise<RawItem[]> {
+async function queryItems(
+  cli: Cli,
+  table: string,
+  pk: string,
+  skPrefix: string,
+): Promise<RawItem[]> {
   const found: RawItem[] = [];
   for (const item of await queryPartition(cli, table, pk, skPrefix)) {
     const sk = (item.sk as { S?: string } | undefined)?.S;

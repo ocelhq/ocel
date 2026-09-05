@@ -5,7 +5,9 @@ import { afterAll, describe, expect, it } from "vitest";
 import { hasDep } from "./detect.js";
 
 const roots: string[] = [];
-afterAll(() => roots.forEach((d) => rmSync(d, { recursive: true, force: true })));
+afterAll(() => {
+  for (const d of roots) rmSync(d, { recursive: true, force: true });
+});
 
 function dirWith(pkg: unknown): string {
   const dir = mkdtempSync(path.join(tmpdir(), "detect-"));

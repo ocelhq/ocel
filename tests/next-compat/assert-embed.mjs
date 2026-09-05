@@ -5,34 +5,34 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  describeFunction,
+  fetchFunctionLogs,
+  getObject,
   LAMBDA_ARCH,
   LIST_RETRY_DEADLINE_MS,
   LOG_DEADLINE_MS,
   LOG_PAGE_LIMIT,
   LOG_POLL_INTERVAL_MS,
-  POLL_INTERVAL_MS,
-  describeFunction,
-  fetchFunctionLogs,
-  getObject,
   listObjectKeys,
+  POLL_INTERVAL_MS,
   resolveBootstrapBucket,
   resolveFunctionName,
   sleep,
 } from "./aws.mjs";
 import {
+  appAssetPrefix,
   BYTECODE_EMBED_ENV,
   BYTECODE_S3_REHYDRATE_MARKER,
-  DEPLOY_RESULT_FILE,
-  TAG_PROBE_ROUTE,
-  appAssetPrefix,
   bytecodeCacheKeyName,
   bytecodeCacheKeyPrefix,
-  bytecodeEmbedEnabled,
   bytecodeEmbeddedOutcome,
+  bytecodeEmbedEnabled,
+  DEPLOY_RESULT_FILE,
   embeddedArtifactPairs,
   embeddedBytecodePath,
   logWindowVerdict,
   summarizeOutcomes,
+  TAG_PROBE_ROUTE,
   tagProbeTag,
   zipEntryNames,
 } from "./lib.mjs";
@@ -73,9 +73,11 @@ if (!result.slug || !app?.name || !app?.buildId) {
 }
 
 const assetBucket =
-  process.env.OCEL_ASSET_BUCKET || resolveBootstrapBucket("AssetBucket", "$OCEL_ASSET_BUCKET", fail);
+  process.env.OCEL_ASSET_BUCKET ||
+  resolveBootstrapBucket("AssetBucket", "$OCEL_ASSET_BUCKET", fail);
 const artifactBucket =
-  process.env.OCEL_ARTIFACT_BUCKET || resolveBootstrapBucket("ArtifactBucket", "$OCEL_ARTIFACT_BUCKET", fail);
+  process.env.OCEL_ARTIFACT_BUCKET ||
+  resolveBootstrapBucket("ArtifactBucket", "$OCEL_ARTIFACT_BUCKET", fail);
 const functionName = resolveFunctionName(result.slug, app.name, result.environment, fail);
 
 const keyPrefix = bytecodeCacheKeyPrefix({
@@ -87,7 +89,9 @@ const keyPrefix = bytecodeCacheKeyPrefix({
   }),
   functionName,
 });
-const cacheNames = (await listRetrying(assetBucket, keyPrefix)).map((full) => full.slice(keyPrefix.length));
+const cacheNames = (await listRetrying(assetBucket, keyPrefix)).map((full) =>
+  full.slice(keyPrefix.length),
+);
 const candidates = cacheNames.filter((name) => bytecodeCacheKeyName(name)?.arch === LAMBDA_ARCH);
 if (candidates.length !== 1) {
   fail(
@@ -99,10 +103,14 @@ if (candidates.length !== 1) {
 const cacheKey = keyPrefix + candidates[0];
 const entryName = embeddedBytecodePath(cacheKey);
 if (!entryName) {
-  fail(`could not derive an embedded tar path from ${cacheKey} — its name is not node<version>-<arch>.tar.gz`);
+  fail(
+    `could not derive an embedded tar path from ${cacheKey} — its name is not node<version>-<arch>.tar.gz`,
+  );
 }
 const taskPath = `${TASK_ROOT}/${entryName}`;
-log(`the cache is published at s3://${assetBucket}/${cacheKey}, so the artifact must carry ${entryName}`);
+log(
+  `the cache is published at s3://${assetBucket}/${cacheKey}, so the artifact must carry ${entryName}`,
+);
 
 const artifactPrefix = `${result.slug}/`;
 const artifactKeys = await listRetrying(artifactBucket, artifactPrefix);
@@ -138,11 +146,15 @@ if (codeSha === originalSha) {
       `per-bundle lines.`,
   );
 }
-log(`${functionName} CodeSha256 ${codeSha} differs from the originally-uploaded ${originalKey} (${originalSha})`);
+log(
+  `${functionName} CodeSha256 ${codeSha} differs from the originally-uploaded ${originalKey} (${originalSha})`,
+);
 
 const location = fn.Code?.Location;
 if (!location) {
-  fail(`lambda get-function reported no Code.Location for ${functionName}, so its package cannot be inspected`);
+  fail(
+    `lambda get-function reported no Code.Location for ${functionName}, so its package cannot be inspected`,
+  );
 }
 const packageBytes = await downloadPackage(location);
 const packageSha = shaBase64(packageBytes);
@@ -181,7 +193,10 @@ log(`bursting ${BURST_SIZE} concurrent requests to force fresh sandboxes`);
 const burstResults = await Promise.all(
   Array.from({ length: BURST_SIZE }, (_, i) => {
     const burstTag = tagProbeTag(`embed-burst-${Date.now()}-${process.pid}-${i}`);
-    const burstTarget = new URL(TAG_PROBE_ROUTE + `?tag=${encodeURIComponent(burstTag)}`, base).toString();
+    const burstTarget = new URL(
+      `${TAG_PROBE_ROUTE}?tag=${encodeURIComponent(burstTag)}`,
+      base,
+    ).toString();
     return fetch(burstTarget, { method: "POST" })
       .then((r) => r.ok)
       .catch(() => false);
@@ -238,7 +253,13 @@ for (;;) {
   }
 }
 
-const coverage = logWindowVerdict({ attempts, failures, confirmed, events: finalEvents, pageLimit: LOG_PAGE_LIMIT });
+const coverage = logWindowVerdict({
+  attempts,
+  failures,
+  confirmed,
+  events: finalEvents,
+  pageLimit: LOG_PAGE_LIMIT,
+});
 if (coverage.kind === "unread") {
   fail(
     `could not read /aws/lambda/${functionName} to the end of the burst window within ` +
@@ -259,7 +280,9 @@ if (coverage.kind === "truncated") {
   );
 }
 if (failures) {
-  log(`read the burst window despite ${failures} failed attempt${failures === 1 ? "" : "s"}: ${coverage.detail}`);
+  log(
+    `read the burst window despite ${failures} failed attempt${failures === 1 ? "" : "s"}: ${coverage.detail}`,
+  );
 }
 
 if (s3Hits.length) {
@@ -267,7 +290,12 @@ if (s3Hits.length) {
     `${s3Hits.length} instance${s3Hits.length === 1 ? "" : "s"} fetched the compile cache from S3 after the burst, ` +
       `which the embedded copy exists to make unnecessary — the local read was skipped or failed and fell through ` +
       `(${embedFailures.length} embedded-leg failure line${embedFailures.length === 1 ? "" : "s"}${
-        embedFailures.length ? `: ${embedFailures.slice(0, 3).map((o) => o.message).join(" | ")}` : ""
+        embedFailures.length
+          ? `: ${embedFailures
+              .slice(0, 3)
+              .map((o) => o.message)
+              .join(" | ")}`
+          : ""
       }). S3 lines: ${s3Hits.slice(0, 3).join(" | ")}`,
   );
 }
@@ -277,7 +305,12 @@ if (embeddedHits.length === 0) {
     `no instance reported loading the embedded compile cache from ${taskPath} within ${LOG_DEADLINE_MS / 1000}s of the ` +
       `burst, and none reported fetching from S3 either — ${summarizeOutcomes(embedFailures)} in ` +
       `/aws/lambda/${functionName}${
-        embedFailures.length ? `; samples: ${embedFailures.slice(0, 5).map((o) => o.message).join(" | ")}` : ""
+        embedFailures.length
+          ? `; samples: ${embedFailures
+              .slice(0, 5)
+              .map((o) => o.message)
+              .join(" | ")}`
+          : ""
       }. Either every burst request landed on an instance that was already warm (no cold start runs a read leg at all), ` +
       `or the membrane on this deployment predates the embedded leg and never looks for the tar.`,
   );
@@ -351,7 +384,9 @@ async function downloadPackage(location) {
   }
   const body = Buffer.from(await response.arrayBuffer());
   if (body.length > MAX_PACKAGE_BYTES) {
-    fail(`${functionName}'s deployment package is ${body.length} bytes, past anything the embed pass could produce`);
+    fail(
+      `${functionName}'s deployment package is ${body.length} bytes, past anything the embed pass could produce`,
+    );
   }
   return body;
 }

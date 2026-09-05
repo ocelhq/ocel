@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
 import { JOURNEY_CONFIG, journeyZone } from "../config";
-import { INITIAL_GREETING, redact, REDACTED, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
+import { INITIAL_GREETING, REDACTED, redact, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { appHostname, HARNESS_PREFIX } from "../identity";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
@@ -241,11 +241,18 @@ async function trusted(cell: CellContext): Promise<string | undefined> {
 
 async function bindDomains(cell: CellContext, started: Standing): Promise<void> {
   const root = await trusted(cell);
-  await runOcel(cell, started.dir, "up", "domain-add", ["--config", JOURNEY_CONFIG, "domain", "add"], {
-    ...started.env,
-    HTTPS_PROXY: started.gateway.tunnelUrl,
-    ...(root ? { SSL_CERT_FILE: root } : {}),
-  });
+  await runOcel(
+    cell,
+    started.dir,
+    "up",
+    "domain-add",
+    ["--config", JOURNEY_CONFIG, "domain", "add"],
+    {
+      ...started.env,
+      HTTPS_PROXY: started.gateway.tunnelUrl,
+      ...(root ? { SSL_CERT_FILE: root } : {}),
+    },
+  );
 }
 
 function hostnamesOf(cell: CellContext): Map<string, string> {

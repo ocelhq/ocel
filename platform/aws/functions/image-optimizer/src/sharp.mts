@@ -8,11 +8,7 @@ const { default: sharp } = await import("sharp");
 
 sharp.block({ operation: ["VipsForeignLoad"] });
 sharp.unblock({
-  operation: [
-    "VipsForeignLoadJpegBuffer",
-    "VipsForeignLoadPngBuffer",
-    "VipsForeignLoadWebpBuffer",
-  ],
+  operation: ["VipsForeignLoadJpegBuffer", "VipsForeignLoadPngBuffer", "VipsForeignLoadWebpBuffer"],
 });
 
 sharp.cache(false);

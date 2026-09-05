@@ -15,7 +15,7 @@ if (!base) {
 
 const bucket = process.env.OCEL_ASSET_BUCKET || resolveAssetBucket();
 const tag = tagProbeTag(`${Date.now()}-${process.pid}`);
-const target = new URL(TAG_PROBE_ROUTE + `?tag=${encodeURIComponent(tag)}`, base).toString();
+const target = new URL(`${TAG_PROBE_ROUTE}?tag=${encodeURIComponent(tag)}`, base).toString();
 
 const before = snapshotsCarrying(tag);
 if (before.length > 0) {
@@ -49,7 +49,9 @@ log(`published to ${carriers.join(", ")}`);
 
 const dlq = deadLetterDepth();
 if (dlq > 0) {
-  fail(`the publisher's dead-letter queue holds ${dlq} message(s); invalidations are being dropped`);
+  fail(
+    `the publisher's dead-letter queue holds ${dlq} message(s); invalidations are being dropped`,
+  );
 }
 
 log("tag publisher carried the invalidation end to end");
@@ -81,7 +83,14 @@ function snapshotsCarrying(tag) {
 }
 
 function deadLetterDepth() {
-  const url = aws(["sqs", "list-queues", "--query", "QueueUrls[?contains(@, `TagPublisherDeadLetter`)] | [0]", "--output", "text"]);
+  const url = aws([
+    "sqs",
+    "list-queues",
+    "--query",
+    "QueueUrls[?contains(@, `TagPublisherDeadLetter`)] | [0]",
+    "--output",
+    "text",
+  ]);
   if (!url || url === "None") return 0;
   const depth = aws([
     "sqs",

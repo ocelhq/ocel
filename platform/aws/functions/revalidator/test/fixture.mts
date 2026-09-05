@@ -10,11 +10,17 @@ export const host = "abc123.lambda-url.us-east-1.on.aws";
 export const originUrl = `https://${host}/`;
 export const recordUrl = `https://${bucket}.s3.${region}.amazonaws.com/${isrPrefix}/origin.json`;
 
-export function originDocument(functionUrls: Record<string, unknown> = { [routeId]: originUrl }): string {
+export function originDocument(
+  functionUrls: Record<string, unknown> = { [routeId]: originUrl },
+): string {
   return JSON.stringify({ v: 1, functionUrls });
 }
 
-export const credentials = { accessKeyId: "AKIAEXAMPLE", secretAccessKey: "shhh", sessionToken: "session" };
+export const credentials = {
+  accessKeyId: "AKIAEXAMPLE",
+  secretAccessKey: "shhh",
+  sessionToken: "session",
+};
 
 export function recordFetch(document: string = originDocument()): typeof fetch {
   return (async (input: string | Request) => {

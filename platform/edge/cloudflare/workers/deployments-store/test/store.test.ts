@@ -1,9 +1,8 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
-import { SCHEMA_VERSION, ensureSchema } from "../src/store";
-import type { DeploymentRecord, Promotion } from "../src/store";
 import type { Env } from "../src/env";
+import type { DeploymentRecord, Promotion } from "../src/store";
+import { ensureSchema, SCHEMA_VERSION } from "../src/store";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {}
@@ -68,8 +67,12 @@ describe("promote", () => {
     await store.putStaged(makeRecord({ identity: "deploy-1" }));
     await store.putStaged(makeRecord({ identity: "deploy-2" }));
 
-    await store.promote(makePromotion({ promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" } }));
-    await store.promote(makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }));
+    await store.promote(
+      makePromotion({ promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" } }),
+    );
+    await store.promote(
+      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }),
+    );
 
     expect(await store.pointerIdentity("web")).toBe("deploy-2");
   });
@@ -81,18 +84,14 @@ describe("named pointers", () => {
     await store.putStaged(makeRecord({ identity: "prod-deploy" }));
     await store.putStaged(makeRecord({ identity: "preview-deploy" }));
 
-    await store.promote(
-      makePromotion({ promotionId: "prod", builds: { web: "prod-deploy" } }),
-    );
+    await store.promote(makePromotion({ promotionId: "prod", builds: { web: "prod-deploy" } }));
     await store.promote(
       makePromotion({ promotionId: "prev", builds: { web: "preview-deploy" } }),
       "flaky-web-2626",
     );
 
     expect(await store.pointerIdentity("web")).toBe("prod-deploy");
-    expect(await store.pointerIdentity("web", "flaky-web-2626")).toBe(
-      "preview-deploy",
-    );
+    expect(await store.pointerIdentity("web", "flaky-web-2626")).toBe("preview-deploy");
   });
 
   it("resolves a named pointer's record through pointerRecord", async () => {
@@ -193,7 +192,9 @@ describe("pointerRecord", () => {
     await store.putStaged(makeRecord({ identity: "deploy-1" }));
     await store.putStaged(makeRecord({ identity: "deploy-2" }));
     await store.promote(makePromotion({ promotionId: "promo-1", builds: { web: "deploy-1" } }));
-    await store.promote(makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }));
+    await store.promote(
+      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }),
+    );
 
     expect(await store.pointerRecord("web", undefined, "deploy-1")).toEqual({
       kind: "record",
@@ -232,9 +233,7 @@ describe("pointerRecord", () => {
     const store = storeStub();
     await store.putStaged(makeRecord());
     await store.putStaged(makeRecord({ app: "admin", identity: "deploy-9" }));
-    await store.promote(
-      makePromotion({ builds: { web: "deploy-1", admin: "deploy-9" } }),
-    );
+    await store.promote(makePromotion({ builds: { web: "deploy-1", admin: "deploy-9" } }));
 
     expect(await store.pointerRecord(undefined)).toEqual({
       kind: "ambiguous-app",
@@ -274,8 +273,12 @@ describe("history", () => {
     const store = storeStub();
     await store.putStaged(makeRecord({ identity: "deploy-1" }));
     await store.putStaged(makeRecord({ identity: "deploy-2" }));
-    await store.promote(makePromotion({ promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" } }));
-    await store.promote(makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }));
+    await store.promote(
+      makePromotion({ promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" } }),
+    );
+    await store.promote(
+      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }),
+    );
 
     expect(await store.history()).toEqual([
       { promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" }, active: true },
@@ -289,7 +292,13 @@ describe("history", () => {
     await store.promote(makePromotion({ tag: "v1.2.3" }));
 
     expect(await store.history()).toEqual([
-      { promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" }, tag: "v1.2.3", active: true },
+      {
+        promotionId: "promo-1",
+        ts: 1_000,
+        builds: { web: "deploy-1" },
+        tag: "v1.2.3",
+        active: true,
+      },
     ]);
   });
 });
@@ -419,17 +428,16 @@ describe("prune", () => {
     const result = await store.prune(1);
 
     expect(result.removedRecordKeys).toEqual(["record:web/deploy-1~fpP"]);
-    expect(result.survivingRecordKeys).toEqual([
-      "record:web/deploy-1~fpV",
-      "record:web/deploy-2",
-    ]);
+    expect(result.survivingRecordKeys).toEqual(["record:web/deploy-1~fpV", "record:web/deploy-2"]);
     expect(result.survivingPointerRecordKeys).toEqual(["record:web/deploy-2"]);
   });
 
   it("pins the active promotion even when it falls outside the keep window", async () => {
     const store = storeStub();
     await seedPromotions(store, 5);
-    await store.promote(makePromotion({ promotionId: "promo-1", ts: 6_000, builds: { web: "deploy-1" } }));
+    await store.promote(
+      makePromotion({ promotionId: "promo-1", ts: 6_000, builds: { web: "deploy-1" } }),
+    );
 
     const result = await store.prune(2);
 
@@ -456,7 +464,11 @@ describe("prune", () => {
       );
       await store.putStaged(makeRecord({ identity: `prev-${i}` }));
       await store.promote(
-        makePromotion({ promotionId: `prev-${i}`, ts: i * 1_000 + 500, builds: { web: `prev-${i}` } }),
+        makePromotion({
+          promotionId: `prev-${i}`,
+          ts: i * 1_000 + 500,
+          builds: { web: `prev-${i}` },
+        }),
         "staging",
       );
     }
@@ -485,7 +497,11 @@ describe("removePointer", () => {
       );
       await store.putStaged(makeRecord({ identity: `prev-${i}` }));
       await store.promote(
-        makePromotion({ promotionId: `prev-${i}`, ts: i * 1_000 + 500, builds: { web: `prev-${i}` } }),
+        makePromotion({
+          promotionId: `prev-${i}`,
+          ts: i * 1_000 + 500,
+          builds: { web: `prev-${i}` },
+        }),
         "staging",
       );
     }

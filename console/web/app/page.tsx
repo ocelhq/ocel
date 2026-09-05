@@ -47,11 +47,7 @@ export default function Home() {
 }
 
 function Eyebrow({ children }: { children: ReactNode }) {
-  return (
-    <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-primary">
-      {children}
-    </div>
-  );
+  return <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-primary">{children}</div>;
 }
 
 function SectionHeading({ children }: { children: ReactNode }) {
@@ -63,11 +59,7 @@ function SectionHeading({ children }: { children: ReactNode }) {
 }
 
 function Container({ children }: { children: ReactNode }) {
-  return (
-    <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">
-      {children}
-    </div>
-  );
+  return <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">{children}</div>;
 }
 
 function DarkCodePane({
@@ -143,21 +135,17 @@ const cliVerbs = [
 function Cli() {
   return (
     <section className="relative border-t-[1.5px] border-foreground">
-      <span className="absolute right-10 top-11 font-mono text-[15px] text-faint">
-        +
-      </span>
+      <span className="absolute right-10 top-11 font-mono text-[15px] text-faint">+</span>
       <Container>
         <div className="grid grid-cols-1 items-center gap-[52px] md:grid-cols-2">
           <div>
             <Eyebrow>01 — THE CLI</Eyebrow>
             <SectionHeading>
-              Works with the framework{" "}
-              <span className="text-primary">you already use.</span>
+              Works with the framework <span className="text-primary">you already use.</span>
             </SectionHeading>
             <p className="mt-[18px] max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
-              Zero-config deploys into the account you already own — the one
-              thing everything else is built on. Point it at a project and it
-              detects the framework, no config to write.
+              Zero-config deploys into the account you already own — the one thing everything else
+              is built on. Point it at a project and it detects the framework, no config to write.
             </p>
             <div className="mt-[26px] flex flex-wrap items-center gap-2">
               {frameworks.map(({ name, Logo }) => (
@@ -168,14 +156,10 @@ function Cli() {
                   <span className="flex w-4 justify-center text-foreground">
                     <Logo className="h-4 w-auto" />
                   </span>
-                  <span className="font-mono text-[12.5px] text-muted-foreground">
-                    {name}
-                  </span>
+                  <span className="font-mono text-[12.5px] text-muted-foreground">{name}</span>
                 </span>
               ))}
-              <span className="font-mono text-[12.5px] text-dim">
-                + more added all the time
-              </span>
+              <span className="font-mono text-[12.5px] text-dim">+ more added all the time</span>
             </div>
             <div className="mt-[26px] flex flex-wrap items-center gap-4">
               <CommandLine command="npm i -g ocel" />
@@ -209,9 +193,7 @@ function Cli() {
                 </span>
                 <span className="text-dim">
                   {cmd.desc}
-                  {cmd.note ? (
-                    <span className="text-faint"> — {cmd.note}</span>
-                  ) : null}
+                  {cmd.note ? <span className="text-faint"> — {cmd.note}</span> : null}
                 </span>
               </div>
             ))}
@@ -221,20 +203,14 @@ function Cli() {
           {cliVerbs.map((step, i) => (
             <div
               key={step.cmd}
-              className={
-                i < 2
-                  ? "border-b border-border p-6 md:border-b-0 md:border-r"
-                  : "p-6"
-              }
+              className={i < 2 ? "border-b border-border p-6 md:border-b-0 md:border-r" : "p-6"}
             >
               <div className="mb-3">
                 <span className="inline-block bg-chip px-2 py-[3px] font-mono text-[13px] text-foreground">
                   {step.cmd}
                 </span>
               </div>
-              <div className="text-sm leading-[1.6] text-muted-foreground">
-                {step.body}
-              </div>
+              <div className="text-sm leading-[1.6] text-muted-foreground">{step.body}</div>
             </div>
           ))}
         </div>
@@ -301,10 +277,9 @@ async function Sdk() {
           <Eyebrow>02 — SDK</Eyebrow>
           <SectionHeading>Application-defined infrastructure.</SectionHeading>
           <p className="mx-auto mt-4 max-w-[48ch] text-[15px] leading-[1.65] text-muted-foreground">
-            Your app comes first; cloud resources are a consequence of what it
-            needs. Call a primitive, use it right there — no separate IaC wiring
-            before a line of product code. On deploy, each call lands as real
-            infrastructure in your own AWS account.
+            Your app comes first; cloud resources are a consequence of what it needs. Call a
+            primitive, use it right there — no separate IaC wiring before a line of product code. On
+            deploy, each call lands as real infrastructure in your own AWS account.
           </p>
         </div>
 
@@ -325,12 +300,8 @@ async function Sdk() {
           <div className="min-w-0 border-[1.5px] border-foreground bg-card shadow-[6px_6px_0_0_var(--hard-shadow)]">
             <div className="flex items-center gap-2.5 border-b-[1.5px] border-foreground px-4 py-3">
               <FaAws className="size-6 shrink-0 text-foreground" />
-              <span className="text-[13px] font-semibold text-foreground">
-                Your AWS account
-              </span>
-              <span className="ml-auto font-mono text-[11px] text-dim">
-                provisioned on deploy
-              </span>
+              <span className="text-[13px] font-semibold text-foreground">Your AWS account</span>
+              <span className="ml-auto font-mono text-[11px] text-dim">provisioned on deploy</span>
             </div>
             {sdkResources.map((r) => (
               <div
@@ -339,34 +310,19 @@ async function Sdk() {
               >
                 <r.Icon className="size-6 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
-                  <div className="text-[13px] font-medium text-foreground">
-                    {r.service}
-                  </div>
-                  <div className="text-[12px] text-muted-foreground">
-                    {r.blurb}
-                  </div>
+                  <div className="text-[13px] font-medium text-foreground">{r.service}</div>
+                  <div className="text-[12px] text-muted-foreground">{r.blurb}</div>
                 </div>
-                <span className="ml-auto shrink-0 font-mono text-[11.5px] text-dim">
-                  {r.call}
-                </span>
+                <span className="ml-auto shrink-0 font-mono text-[11.5px] text-dim">{r.call}</span>
               </div>
             ))}
             <div className="flex items-center gap-3 px-4 py-3.5">
-              <span
-                aria-hidden
-                className="size-6 shrink-0 border border-dashed border-dim"
-              />
+              <span aria-hidden className="size-6 shrink-0 border border-dashed border-dim" />
               <div className="min-w-0">
-                <div className="text-[13px] font-medium text-muted-foreground">
-                  More primitives
-                </div>
-                <div className="text-[12px] text-dim">
-                  cron, workflows &amp; more
-                </div>
+                <div className="text-[13px] font-medium text-muted-foreground">More primitives</div>
+                <div className="text-[12px] text-dim">cron, workflows &amp; more</div>
               </div>
-              <span className="ml-auto shrink-0 font-mono text-[11px] text-dim">
-                soon
-              </span>
+              <span className="ml-auto shrink-0 font-mono text-[11px] text-dim">soon</span>
             </div>
           </div>
         </div>
@@ -374,13 +330,7 @@ async function Sdk() {
         <div className="mt-12 flex justify-center">
           <Button
             variant="outline"
-            render={
-              <Link
-                href="https://ocel.app/docs/sdk"
-                target="_blank"
-                rel="noreferrer"
-              />
-            }
+            render={<Link href="https://ocel.app/docs/sdk" target="_blank" rel="noreferrer" />}
             className="h-auto rounded-none border-foreground px-6 py-3 text-[13px] font-semibold normal-case tracking-normal"
           >
             Explore the SDK docs ↗
@@ -411,9 +361,7 @@ const devModeTiles: { label: string; visual: ReactNode; copy: string }[] = [
       <div className="flex items-center gap-2 font-mono text-[12.5px]">
         <span className="text-dim line-through decoration-dim">.env</span>
         <span className="text-primary">→</span>
-        <span className="bg-chip px-2 py-[3px] text-foreground">
-          process.env
-        </span>
+        <span className="bg-chip px-2 py-[3px] text-foreground">process.env</span>
       </div>
     ),
     copy: "Connection strings and keys are injected at boot. No .env stitching between services.",
@@ -450,9 +398,7 @@ const devModeTiles: { label: string; visual: ReactNode; copy: string }[] = [
 function DevMode() {
   return (
     <section className="relative border-t border-border">
-      <span className="absolute left-[44%] top-10 font-mono text-[15px] text-primary">
-        +
-      </span>
+      <span className="absolute left-[44%] top-10 font-mono text-[15px] text-primary">+</span>
       <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">
         <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
           <div>
@@ -460,15 +406,13 @@ function DevMode() {
             <SectionHeading>Dev that mirrors production.</SectionHeading>
             <p className="mt-4 max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
               No emulators, no Docker, no shared staging database.{" "}
-              <span className="bg-chip px-[5px] py-px font-mono text-[13.5px]">
-                ocel dev
-              </span>{" "}
-              connects you to real cloud resources in seconds — a private
-              sandbox for every developer on the team.
+              <span className="bg-chip px-[5px] py-px font-mono text-[13.5px]">ocel dev</span>{" "}
+              connects you to real cloud resources in seconds — a private sandbox for every
+              developer on the team.
             </p>
             <p className="mt-3.5 max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
-              When your code reaches production it runs against your own
-              account. No code changes. It just works.
+              When your code reaches production it runs against your own account. No code changes.
+              It just works.
             </p>
           </div>
           <Terminal
@@ -483,20 +427,12 @@ function DevMode() {
               <span className="text-chart-2">●</span> sandbox ready{" "}
               <span className="text-dim">— 4s, real infra</span>
             </div>
-            <div className="text-dim">
-              &nbsp;&nbsp;postgres main ······· connected
-            </div>
-            <div className="text-dim">
-              &nbsp;&nbsp;bucket uploads ······ connected
-            </div>
-            <div className="text-dim">
-              &nbsp;&nbsp;queue emails ········ connected
-            </div>
+            <div className="text-dim">&nbsp;&nbsp;postgres main ······· connected</div>
+            <div className="text-dim">&nbsp;&nbsp;bucket uploads ······ connected</div>
+            <div className="text-dim">&nbsp;&nbsp;queue emails ········ connected</div>
             <div className="mt-2">
               <span className="text-primary">→</span> watching src/{" "}
-              <span className="text-dim">
-                — your team gets their own sandboxes too
-              </span>
+              <span className="text-dim">— your team gets their own sandboxes too</span>
             </div>
           </Terminal>
         </div>
@@ -514,9 +450,7 @@ function DevMode() {
                 {tile.label}
               </div>
               <div className="mb-3.5">{tile.visual}</div>
-              <p className="text-[13.5px] leading-[1.55] text-muted-foreground">
-                {tile.copy}
-              </p>
+              <p className="text-[13.5px] leading-[1.55] text-muted-foreground">{tile.copy}</p>
             </div>
           ))}
         </div>
@@ -536,9 +470,9 @@ function Console() {
           <Eyebrow>04 — CONSOLE</Eyebrow>
           <SectionHeading>A dashboard for infra you still own.</SectionHeading>
           <p className="mx-auto mt-4 max-w-[52ch] text-[15px] leading-[1.65] text-muted-foreground">
-            Git integration, environments and variables, team access, logs and
-            metrics — everything you'd expect from a platform, connected to your
-            production account with scoped access. Nothing hosted in ours.
+            Git integration, environments and variables, team access, logs and metrics — everything
+            you'd expect from a platform, connected to your production account with scoped access.
+            Nothing hosted in ours.
           </p>
         </div>
         <div className="mt-14 border-[1.5px] border-foreground bg-card shadow-[6px_6px_0_0_var(--hard-shadow)]">
@@ -559,18 +493,15 @@ function Console() {
 function Interop() {
   return (
     <section className="relative border-t border-border">
-      <span className="absolute bottom-9 right-12 font-mono text-[15px] text-faint">
-        +
-      </span>
+      <span className="absolute bottom-9 right-12 font-mono text-[15px] text-faint">+</span>
       <div className="mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-12 px-5 py-16 md:grid-cols-2 md:px-10 md:py-[84px]">
         <div>
           <Eyebrow>05 — INTEROP</Eyebrow>
           <SectionHeading>Bring your own IaC.</SectionHeading>
           <p className="mt-4 max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
-            Already on Pulumi or SST? Interop mode hands resource provisioning
-            to your tool — configure your database however you want. Ocel
-            deploys the app and consumes the outputs. Plugins shape what Ocel
-            manages: tag functions, pin them in a VPC, and more.
+            Already on Pulumi or SST? Interop mode hands resource provisioning to your tool —
+            configure your database however you want. Ocel deploys the app and consumes the outputs.
+            Plugins shape what Ocel manages: tag functions, pin them in a VPC, and more.
           </p>
         </div>
         <DarkCodePane file="ocel.json">
@@ -600,9 +531,8 @@ function Pricing() {
           <Eyebrow>06 — THE MATH</Eyebrow>
           <SectionHeading>Read the bill, not the brochure.</SectionHeading>
           <p className="mt-4 max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
-            Seat-priced platforms charge for the privilege of marking up compute
-            you already pay a cloud for. Ocel runs in your account — the only
-            bill is the one you already have.
+            Seat-priced platforms charge for the privilege of marking up compute you already pay a
+            cloud for. Ocel runs in your account — the only bill is the one you already have.
           </p>
         </div>
         <div className="min-w-0 border-[1.5px] border-foreground bg-card font-mono text-sm text-foreground shadow-[6px_6px_0_0_var(--hard-shadow)]">
@@ -661,12 +591,8 @@ function Faq() {
                 (i < 2 ? " border-b max-md:border-b" : " max-md:border-t")
               }
             >
-              <div className="mb-2 text-[15px] font-semibold text-foreground">
-                {f.q}
-              </div>
-              <div className="text-sm leading-[1.6] text-muted-foreground">
-                {f.a}
-              </div>
+              <div className="mb-2 text-[15px] font-semibold text-foreground">{f.q}</div>
+              <div className="text-sm leading-[1.6] text-muted-foreground">{f.a}</div>
             </div>
           ))}
         </div>
@@ -678,12 +604,8 @@ function Faq() {
 function CtaBand() {
   return (
     <section className="relative overflow-hidden bg-foreground px-5 py-16 text-center md:px-10 md:py-20">
-      <span className="absolute left-[60px] top-10 font-mono text-[15px] text-dim">
-        +
-      </span>
-      <span className="absolute bottom-11 right-20 font-mono text-[15px] text-primary">
-        +
-      </span>
+      <span className="absolute left-[60px] top-10 font-mono text-[15px] text-dim">+</span>
+      <span className="absolute bottom-11 right-20 font-mono text-[15px] text-primary">+</span>
       <h2 className="text-pretty text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-background md:text-[40px]">
         Deploy to your own cloud in minutes.
       </h2>
@@ -708,16 +630,6 @@ const footerCols = [
   },
 ];
 
-function OneMoreThingBreak() {
-  return (
-    <div className="pb-6 pt-18 text-center md:pb-8 md:pt-24">
-      <span className="font-mono text-xs tracking-[0.14em] text-dim">
-        — ONE MORE THING —
-      </span>
-    </div>
-  );
-}
-
 function OneMoreThing() {
   return (
     <section
@@ -740,9 +652,8 @@ function OneMoreThing() {
           Oh — and it's <span className="text-primary">open source.</span>
         </h2>
         <p className="mx-auto mt-[18px] max-w-[52ch] text-[15px] leading-[1.65] text-muted-foreground">
-          MIT licensed. Nothing runs in our account. If you stopped using Ocel
-          tomorrow, the infrastructure and the code describing it are still
-          yours to read and run.
+          MIT licensed. Nothing runs in our account. If you stopped using Ocel tomorrow, the
+          infrastructure and the code describing it are still yours to read and run.
         </p>
         <div className="mt-6 flex justify-center gap-3">
           <Button className="h-auto rounded-none bg-foreground px-[22px] py-3 text-sm font-semibold normal-case tracking-normal text-background hover:bg-foreground/85">
@@ -768,10 +679,7 @@ function Footer() {
           </div>
         </div>
         {footerCols.map((col) => (
-          <div
-            key={col.title}
-            className="text-[13px] leading-[2.1] text-muted-foreground"
-          >
+          <div key={col.title} className="text-[13px] leading-[2.1] text-muted-foreground">
             <div className="mb-1.5 font-mono text-[11px] tracking-[0.1em] text-dim">
               {col.title}
             </div>

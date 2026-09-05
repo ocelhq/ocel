@@ -1,16 +1,9 @@
 import { fromJson } from "@bufbuild/protobuf";
 import { readLive } from "../env/live.js";
-import {
-  LinkSchema,
-  LinkType,
-  type Link,
-} from "../gen/proto/common/links/v1/links_pb.js";
+import { type Link, LinkSchema, LinkType } from "../gen/proto/common/links/v1/links_pb.js";
 
 /** The link types an app resolves; a custom record is read by transforms alone. */
-export type LinkCase = Exclude<
-  NonNullable<Link["properties"]["case"]>,
-  "custom"
->;
+export type LinkCase = Exclude<NonNullable<Link["properties"]["case"]>, "custom">;
 
 export type LinkProperties<TCase extends LinkCase> = Extract<
   Link["properties"],
@@ -27,9 +20,7 @@ const typeOfCase: {
 
 /** The type a link's properties case declares; UNSPECIFIED when it carries none. */
 export function linkTypeOf(link: Link): LinkType {
-  return link.properties.case
-    ? typeOfCase[link.properties.case]
-    : LinkType.UNSPECIFIED;
+  return link.properties.case ? typeOfCase[link.properties.case] : LinkType.UNSPECIFIED;
 }
 
 /** The env key a link of the given type is delivered under. */

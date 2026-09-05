@@ -24,16 +24,13 @@ function missingCache(waitUntil: (p: Promise<unknown>) => void = () => {}) {
 }
 
 const isrPrefix = "prod/p/app/build";
-const cacheObject = (routePath: string) =>
-  `${isrPrefix}/cache/${routePath}.cache.json`;
+const cacheObject = (routePath: string) => `${isrPrefix}/cache/${routePath}.cache.json`;
 
 function storeOf(entries: Record<string, unknown>) {
   return {
     async get(key: string) {
       const entry = entries[key];
-      return entry === undefined
-        ? null
-        : { text: async () => JSON.stringify(entry) };
+      return entry === undefined ? null : { text: async () => JSON.stringify(entry) };
     },
   };
 }
@@ -206,11 +203,7 @@ describe("a lambda route's bundle entry", () => {
       "https://fn.example.com",
       "https://fn.example.com",
     ]);
-    expect(origin.entries()).toEqual([
-      "app/page",
-      "app/about/page",
-      "app/api/hook/route",
-    ]);
+    expect(origin.entries()).toEqual(["app/page", "app/about/page", "app/api/hook/route"]);
   });
 });
 
@@ -381,13 +374,9 @@ describe("a PPR prerender whose parent is a node bundle", () => {
     expect(origin.requests.length).toBeGreaterThanOrEqual(2);
     expect(new Set(origin.entries())).toEqual(new Set(["app/ppr/page"]));
     expect(
-      origin.requests.some(
-        (r) => r.method === "GET" && r.headers.get("purpose") !== "prefetch",
-      ),
+      origin.requests.some((r) => r.method === "GET" && r.headers.get("purpose") !== "prefetch"),
     ).toBe(true);
-    expect(
-      origin.requests.some((r) => r.headers.has("x-prerender-revalidate")),
-    ).toBe(false);
+    expect(origin.requests.some((r) => r.headers.has("x-prerender-revalidate"))).toBe(false);
   });
 
   it("drops a client's entry header on the resume of an entryless prerender", async () => {
@@ -406,10 +395,7 @@ describe("a PPR prerender whose parent is a node bundle", () => {
 });
 
 describe("a client-supplied control header", () => {
-  const lambdaDeps = (
-    origin: ReturnType<typeof recorder>,
-    target: Record<string, unknown>,
-  ) =>
+  const lambdaDeps = (origin: ReturnType<typeof recorder>, target: Record<string, unknown>) =>
     deps({
       manifest: {
         buildId: "t",
@@ -448,12 +434,8 @@ describe("a client-supplied control header", () => {
       smuggled({ [ENTRY_HEADER]: "attacker/admin/page" }),
     );
 
-    expect(origin.requests[0].headers.get(ENTRY_HEADER)).toBe(
-      "app/blog/[slug]/page",
-    );
-    expect(
-      [...origin.requests[0].headers].filter(([n]) => n === ENTRY_HEADER),
-    ).toHaveLength(1);
+    expect(origin.requests[0].headers.get(ENTRY_HEADER)).toBe("app/blog/[slug]/page");
+    expect([...origin.requests[0].headers].filter(([n]) => n === ENTRY_HEADER)).toHaveLength(1);
   });
 
   it("is the only x-ocel-* header dropped; the rest of the namespace is the app's", async () => {

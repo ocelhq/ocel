@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { outputRoot } from "../../paths";
-import { accountFiles, pinnedEnv, PROFILE_VARS } from "./account";
+import { accountFiles, PROFILE_VARS, pinnedEnv } from "./account";
 import { answersAsFloci, awsStore } from "./store";
 import { detectWorld, type Where } from "./world";
 

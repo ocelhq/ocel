@@ -57,17 +57,14 @@ export const probeRows: ContractRow[] = [
     run: async (ctx) => {
       for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"]) {
         const sent = method === "GET" ? undefined : JSON.stringify({ method });
-        const res = await ctx.fetch(
-          `${ctx.baseUrl}/api/probes/echo/deep/path?one=1&two=2`,
-          {
-            method,
-            headers: {
-              "x-ocel-probe": "probe-value",
-              ...(sent ? { "content-type": "application/json" } : {}),
-            },
-            body: sent,
+        const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/echo/deep/path?one=1&two=2`, {
+          method,
+          headers: {
+            "x-ocel-probe": "probe-value",
+            ...(sent ? { "content-type": "application/json" } : {}),
           },
-        );
+          body: sent,
+        });
         assert.equal(res.status, 200);
         const echo = (await res.json()) as {
           method: string;

@@ -6,7 +6,10 @@ import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
 
 export const nextRunner = { run: spawnBuild };
 
-export async function buildNext(input: AppInput, options: BuildOptions): Promise<FunctionSummary[]> {
+export async function buildNext(
+  input: AppInput,
+  options: BuildOptions,
+): Promise<FunctionSummary[]> {
   const pkg = JSON.parse(readFileSync(path.join(input.cwd, "package.json"), "utf8"));
   if (!pkg.scripts?.build) {
     throw new Error(`ocel: app "${input.name}" has no "build" script in package.json`);
@@ -44,7 +47,9 @@ async function spawnBuild(
     });
     child.on("error", reject);
     child.on("exit", (code) =>
-      code === 0 ? resolve() : reject(new Error(`${command} ${args.join(" ")} exited with code ${code}`)),
+      code === 0
+        ? resolve()
+        : reject(new Error(`${command} ${args.join(" ")} exited with code ${code}`)),
     );
   });
 }

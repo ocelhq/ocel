@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-
-import { resolveServe, type ResolveBase, type ServeFetch } from "../src/index";
 import type { DeploymentRecord, DeploymentsBinding } from "../src/deployments";
+import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import { edgeOriginFetch } from "../src/signing";
-import { FN_URL, capturing, makeRecord, withGlobalFetch } from "./origin-deps";
+import { capturing, FN_URL, makeRecord, withGlobalFetch } from "./origin-deps";
 
 function bindingReturning(record: DeploymentRecord): DeploymentsBinding {
   return {
@@ -27,8 +26,13 @@ async function resolved(
   over: Partial<ResolveBase> = {},
 ): Promise<ServeFetch | Response> {
   return resolveServe(
-    { binding: bindingReturning(record), slug: "p1",
-    deploymentId: "d1", host: "api.example.com", app: record.app },
+    {
+      binding: bindingReturning(record),
+      slug: "p1",
+      deploymentId: "d1",
+      host: "api.example.com",
+      app: record.app,
+    },
     base(over),
   );
 }
@@ -89,9 +93,7 @@ describe("node runtime serve path", () => {
 
     await serve(new Request("https://api.example.com/search?a=1&b=2"));
 
-    expect(wire.calls[0].url).toBe(
-      "https://abc123.lambda-url.eu-west-2.on.aws/search?a=1&b=2",
-    );
+    expect(wire.calls[0].url).toBe("https://abc123.lambda-url.eu-west-2.on.aws/search?a=1&b=2");
   });
 
   it("sets the forwarded host and proto so the origin can build absolute URLs", async () => {
@@ -210,7 +212,9 @@ describe("node runtime serve path", () => {
   it("answers 502 rather than guessing when the app published several Function URLs", async () => {
     const wire = capturing();
     const serve = (await resolved(
-      makeRecord({ functionUrls: { api: FN_URL, worker: "https://d.lambda-url.eu-west-2.on.aws/" } }),
+      makeRecord({
+        functionUrls: { api: FN_URL, worker: "https://d.lambda-url.eu-west-2.on.aws/" },
+      }),
       { originFetch: wire.fetch },
     )) as ServeFetch;
 

@@ -8,9 +8,7 @@ interface LiveValues {
 export const NO_GENERATION = 0;
 
 function published(): Partial<LiveValues> | undefined {
-  return (globalThis as Record<symbol, unknown>)[LIVE_VALUES] as
-    | Partial<LiveValues>
-    | undefined;
+  return (globalThis as Record<symbol, unknown>)[LIVE_VALUES] as Partial<LiveValues> | undefined;
 }
 
 export function liveGeneration(): number {

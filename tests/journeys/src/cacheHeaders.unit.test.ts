@@ -3,11 +3,11 @@ import {
   CACHE_HEADER,
   cacheControlFor,
   DYNAMIC_CACHE_CONTROL,
-  imageCacheControl,
   IMMUTABLE_CACHE_CONTROL,
+  imageCacheControl,
   ROUTER_VARY,
-  sameDirectives,
   SERVED_CACHE_CONTROL,
+  sameDirectives,
   tierOf,
   variesOn,
 } from "./cacheHeaders";

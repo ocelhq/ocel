@@ -1,11 +1,6 @@
-import assert from "node:assert/strict";
 import { afterAll, beforeAll, describe, it } from "bun:test";
-import {
-  type ContractRow,
-  INITIAL_GREETING,
-  REDEPLOY_GREETING,
-  secretGuarded,
-} from "./contract";
+import assert from "node:assert/strict";
+import { type ContractRow, INITIAL_GREETING, REDEPLOY_GREETING, secretGuarded } from "./contract";
 import { evidence } from "./evidence";
 import { currentRunIdentity, projectSlug } from "./identity";
 import { ledgerFor } from "./ledger";
@@ -23,7 +18,7 @@ import {
 } from "./plan";
 import { readPrepareFailure } from "./prepare";
 import { cellNamed, environmentFrom, selectionFor } from "./selection";
-import { type Cell, ladderTitle, type Leg, legsOf } from "./spec";
+import { type Cell, type Leg, ladderTitle, legsOf } from "./spec";
 import { selectedTarget } from "./targets";
 import type { CellContext, Deployment } from "./targets/types";
 

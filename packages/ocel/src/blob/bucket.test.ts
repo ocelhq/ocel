@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LinkType } from "../gen/proto/common/links/v1/links_pb.js";
 import { z } from "zod";
+import { LinkType } from "../gen/proto/common/links/v1/links_pb.js";
 
 const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 

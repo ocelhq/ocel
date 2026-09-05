@@ -1,4 +1,4 @@
-import { handle, type BatchResponse, type SqsRecord } from "./handle.mjs";
+import { type BatchResponse, handle, type SqsRecord } from "./handle.mjs";
 
 export const handler = async (event: { Records?: SqsRecord[] }): Promise<BatchResponse> =>
   handle(

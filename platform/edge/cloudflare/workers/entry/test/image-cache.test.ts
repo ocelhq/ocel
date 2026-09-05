@@ -1,17 +1,15 @@
-import { describe, expect, it } from "vitest";
-
-import type { CacheDeps } from "../src/cache";
+import fixtures from "@framework/next-router/fixtures/image-conformance.json";
 import {
   IMAGE_PASSTHROUGH,
-  unprovisionedImageOrigin,
   type ImageConfig,
+  unprovisionedImageOrigin,
 } from "@framework/next-router/image";
-import { serveImage, type ImageDeps } from "../src/image";
-import fixtures from "@framework/next-router/fixtures/image-conformance.json";
+import { describe, expect, it } from "vitest";
+import type { CacheDeps } from "../src/cache";
+import { type ImageDeps, serveImage } from "../src/image";
 import { coloDeps } from "./cache-deps";
 
-const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]
-  .config;
+const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
 
 function testDeps(clock: { ms: number }): CacheDeps & { flush: () => Promise<void> } {
   const pending: Promise<unknown>[] = [];
@@ -54,9 +52,7 @@ function optimizer(body: string, init: ResponseInit = {}) {
   return fn;
 }
 
-function deps(
-  overrides: Partial<ImageDeps> & { slug: string },
-): ImageDeps {
+function deps(overrides: Partial<ImageDeps> & { slug: string }): ImageDeps {
   return {
     config: BASE_CONFIG,
     basePath: "",
@@ -146,10 +142,7 @@ describe("the image colo tier", () => {
     await get(d);
     await cache.flush();
 
-    origin = Object.assign(
-      async () => new Response("no optimizer", { status: 502 }),
-      { calls: 0 },
-    );
+    origin = Object.assign(async () => new Response("no optimizer", { status: 502 }), { calls: 0 });
     clock.ms = 20 * 60 * 60 * 1000;
     const stale = await get(d);
     expect(stale.status).toBe(200);
@@ -215,9 +208,7 @@ describe("the image colo tier", () => {
     clock.ms = 1_000;
     const head = await get(d, IMAGE, { method: "HEAD" });
     expect(head.headers.get("x-ocel-cache")).toBe("HIT");
-    expect(head.headers.get("cache-control")).toBe(
-      "public, max-age=14400, must-revalidate",
-    );
+    expect(head.headers.get("cache-control")).toBe("public, max-age=14400, must-revalidate");
     expect(head.body).toBeNull();
     expect(origin.calls).toBe(1);
   });
@@ -380,9 +371,7 @@ describe("the image cache key", () => {
     await cache.flush();
 
     clock.ms = 1_000;
-    const sameDeployment = await get(
-      deps({ slug: "nohash", cache, origin, deploymentId: "d1" }),
-    );
+    const sameDeployment = await get(deps({ slug: "nohash", cache, origin, deploymentId: "d1" }));
     expect(sameDeployment.headers.get("x-ocel-cache")).toBe("HIT");
 
     const redeployed = await get(deps({ slug: "nohash", cache, origin, deploymentId: "d2" }));
@@ -507,9 +496,7 @@ describe("the image cache key", () => {
     await cache.flush();
 
     clock.ms = 1_000;
-    expect((await get(d, "url=%2Fa.png&w=750&q=75")).headers.get("x-ocel-cache")).toBe(
-      "MISS",
-    );
+    expect((await get(d, "url=%2Fa.png&w=750&q=75")).headers.get("x-ocel-cache")).toBe("MISS");
   });
 });
 
@@ -543,9 +530,9 @@ describe("the ttl the browser is told", () => {
   });
 
   it("reads s-maxage ahead of max-age", async () => {
-    expect(
-      await cacheControlFor("ttl-smaxage", upstream("s-maxage=86400, max-age=60")),
-    ).toBe("public, max-age=86400, must-revalidate");
+    expect(await cacheControlFor("ttl-smaxage", upstream("s-maxage=86400, max-age=60"))).toBe(
+      "public, max-age=86400, must-revalidate",
+    );
   });
 
   it("never consults Expires", async () => {
@@ -560,9 +547,9 @@ describe("the ttl the browser is told", () => {
   });
 
   it("uses the minimum when the upstream said nothing", async () => {
-    expect(
-      await cacheControlFor("ttl-none", optimizer("optimized")),
-    ).toBe("public, max-age=14400, must-revalidate");
+    expect(await cacheControlFor("ttl-none", optimizer("optimized"))).toBe(
+      "public, max-age=14400, must-revalidate",
+    );
   });
 
   it("ignores the upstream entirely on the optimization-failure passthrough", async () => {
@@ -618,9 +605,7 @@ describe("the ttl the browser is told", () => {
     clock.ms = 1_000;
     const hit = await get(d);
     expect(hit.headers.get("x-ocel-cache")).toBe("HIT");
-    expect(hit.headers.get("cache-control")).toBe(
-      "public, max-age=86400, must-revalidate",
-    );
+    expect(hit.headers.get("cache-control")).toBe("public, max-age=86400, must-revalidate");
     expect(hit.headers.get("vary")).toBe("accept");
   });
 
@@ -692,18 +677,14 @@ describe("what the image cache key does and does not collapse", () => {
 
     const staticImport = await get(d, src("/_next/static/media/logo.abc123.png"));
     expect(staticImport.headers.get("x-ocel-cache")).toBe("MISS");
-    expect(staticImport.headers.get("cache-control")).toBe(
-      "public, max-age=315360000, immutable",
-    );
+    expect(staticImport.headers.get("cache-control")).toBe("public, max-age=315360000, immutable");
     await cache.flush();
 
     clock.ms = 1_000;
     const fromPublic = await get(d, src("/logo.png"));
     expect(fromPublic.headers.get("x-ocel-cache")).toBe("HIT");
     expect(await fromPublic.text()).toBe("optimized");
-    expect(fromPublic.headers.get("cache-control")).toBe(
-      "public, max-age=14400, must-revalidate",
-    );
+    expect(fromPublic.headers.get("cache-control")).toBe("public, max-age=14400, must-revalidate");
     expect(o.calls).toBe(1);
   });
 
@@ -727,9 +708,7 @@ describe("what the image cache key does and does not collapse", () => {
     clock.ms = 1_000;
     const staticImport = await get(d, src("/_next/static/media/logo.abc123.png"));
     expect(staticImport.headers.get("x-ocel-cache")).toBe("HIT");
-    expect(staticImport.headers.get("cache-control")).toBe(
-      "public, max-age=315360000, immutable",
-    );
+    expect(staticImport.headers.get("cache-control")).toBe("public, max-age=315360000, immutable");
     expect(o.calls).toBe(1);
   });
 
@@ -777,10 +756,7 @@ describe("what the image cache key does and does not collapse", () => {
     clock.ms = 1_000;
     for (const equivalent of ["/x/../a.png", "/x/y/../../a.png", "/./a.png"]) {
       const response = await get(d, src(equivalent));
-      expect([equivalent, response.headers.get("x-ocel-cache")]).toEqual([
-        equivalent,
-        "HIT",
-      ]);
+      expect([equivalent, response.headers.get("x-ocel-cache")]).toEqual([equivalent, "HIT"]);
     }
     expect(o.calls).toBe(1);
   });
@@ -823,9 +799,7 @@ describe("what the image cache key does and does not collapse", () => {
     await cache.flush();
 
     clock.ms = 1_000;
-    expect((await get(d, "url=%2Fa.png&w=640&q=75")).headers.get("x-ocel-cache")).toBe(
-      "MISS",
-    );
+    expect((await get(d, "url=%2Fa.png&w=640&q=75")).headers.get("x-ocel-cache")).toBe("MISS");
     expect(o.calls).toBe(2);
   });
 });

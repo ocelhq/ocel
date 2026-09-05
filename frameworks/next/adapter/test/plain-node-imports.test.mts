@@ -10,9 +10,9 @@ const packageDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = join(packageDir, "src");
 
 async function workspaceDependencies(): Promise<Set<string>> {
-  const manifest = JSON.parse(
-    await readFile(join(packageDir, "package.json"), "utf8"),
-  ) as { dependencies?: Record<string, string> };
+  const manifest = JSON.parse(await readFile(join(packageDir, "package.json"), "utf8")) as {
+    dependencies?: Record<string, string>;
+  };
   return new Set(
     Object.entries(manifest.dependencies ?? {})
       .filter(([, range]) => range.startsWith("workspace:"))
@@ -31,9 +31,7 @@ async function workspaceSpecifiers(): Promise<string[]> {
   const found = new Set<string>();
   for (const file of files) {
     const source = await readFile(join(srcDir, file), "utf8");
-    for (const [, specifier] of source.matchAll(
-      /^import[^"']*["']([^"'.][^"']*)["']/gm,
-    )) {
+    for (const [, specifier] of source.matchAll(/^import[^"']*["']([^"'.][^"']*)["']/gm)) {
       if (workspaceDeps.has(packageOf(specifier!))) found.add(specifier!);
     }
   }

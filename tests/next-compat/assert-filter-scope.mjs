@@ -49,18 +49,22 @@ const stillScheduled = (upstream.rules?.exclude ?? [])
 if (stillScheduled.length > 0) {
   problems.push(
     `${stillScheduled.length} suite(s) upstream puts out of deploy-adapter scope are still ` +
-      `scheduled:\n  ` + stillScheduled.join("\n  "),
+      `scheduled:\n  ` +
+      stillScheduled.join("\n  "),
   );
 }
 
-const ours = paths.filter((path) => path !== UPSTREAM_MANIFEST).map((path) => require(resolve(root, path)));
+const ours = paths
+  .filter((path) => path !== UPSTREAM_MANIFEST)
+  .map((path) => require(resolve(root, path)));
 const deadWeight = ours
   .flatMap((manifest) => Object.keys(manifest.suites ?? {}))
   .filter((suite) => files.includes(suite) && !scheduled.has(suite));
 if (deadWeight.length > 0) {
   problems.push(
     `${deadWeight.length} suite(s) our baseline lists never run, so their recorded cases are ` +
-      `dead weight:\n  ` + deadWeight.join("\n  "),
+      `dead weight:\n  ` +
+      deadWeight.join("\n  "),
   );
 }
 

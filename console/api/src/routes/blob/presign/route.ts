@@ -29,21 +29,14 @@ export async function presignUpload(request: Request): Promise<Response> {
       { status: 400 },
     );
   }
-  const { projectId, bucket, files, metadata, contentDisposition, callbackBaseUrl } =
-    parsed.data;
+  const { projectId, bucket, files, metadata, contentDisposition, callbackBaseUrl } = parsed.data;
 
-  const [foundProject] = await db
-    .select()
-    .from(project)
-    .where(eq(project.id, projectId));
+  const [foundProject] = await db.select().from(project).where(eq(project.id, projectId));
 
   if (!foundProject) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
-  const isMember = await verifyOrganizationMembership(
-    userId,
-    foundProject.organizationId,
-  );
+  const isMember = await verifyOrganizationMembership(userId, foundProject.organizationId);
   if (!isMember) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }

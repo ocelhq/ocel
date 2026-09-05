@@ -2,12 +2,12 @@ import { expect, test } from "vitest";
 import { SHARP_CONCURRENCY, sharp } from "../src/sharp.mjs";
 
 test("VIPS_BLOCK_UNTRUSTED is set, and was set before sharp loaded", () => {
-  expect(process.env["VIPS_BLOCK_UNTRUSTED"]).toBe("1");
+  expect(process.env.VIPS_BLOCK_UNTRUSTED).toBe("1");
 });
 
 test("both concurrency layers are pinned", () => {
   expect(sharp.concurrency()).toBe(SHARP_CONCURRENCY);
-  expect(process.env["UV_THREADPOOL_SIZE"]).toBe("4");
+  expect(process.env.UV_THREADPOOL_SIZE).toBe("4");
 });
 
 test("the operation cache is off", () => {

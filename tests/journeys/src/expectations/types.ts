@@ -3,7 +3,13 @@ import type { Leg } from "../spec";
 
 export type ExpectationEnvironment = "aws" | "aws.floci" | "dev" | "vps" | "vps.incus";
 
-export const ENVIRONMENTS: ExpectationEnvironment[] = ["aws", "aws.floci", "dev", "vps", "vps.incus"];
+export const ENVIRONMENTS: ExpectationEnvironment[] = [
+  "aws",
+  "aws.floci",
+  "dev",
+  "vps",
+  "vps.incus",
+];
 
 export type TestPick =
   | string

@@ -12,8 +12,7 @@ function formatForDisplay(code: string) {
 function DeviceApprovalForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session, isPending: isSessionPending } =
-    authClient.useSession();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
 
   const userCode = searchParams.get("user_code") ?? "";
   const [status, setStatus] = useState<
@@ -93,9 +92,7 @@ function DeviceApprovalForm() {
           </h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             Signed in as{" "}
-            <span className="font-medium text-black dark:text-zinc-50">
-              {session.user.email}
-            </span>
+            <span className="font-medium text-black dark:text-zinc-50">{session.user.email}</span>
           </p>
         </div>
 
@@ -104,8 +101,8 @@ function DeviceApprovalForm() {
         </div>
 
         <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
-          A CLI device is requesting access to your Ocel account. If you
-          didn&apos;t initiate this, deny it.
+          A CLI device is requesting access to your Ocel account. If you didn&apos;t initiate this,
+          deny it.
         </p>
 
         <div className="flex gap-3">
@@ -127,11 +124,7 @@ function DeviceApprovalForm() {
           </button>
         </div>
 
-        {error && (
-          <p className="text-center text-sm text-red-600 dark:text-red-400">
-            {error}
-          </p>
-        )}
+        {error && <p className="text-center text-sm text-red-600 dark:text-red-400">{error}</p>}
       </div>
     </div>
   );

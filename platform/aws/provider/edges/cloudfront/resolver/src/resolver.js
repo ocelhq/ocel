@@ -20,9 +20,9 @@ function headerValue(headers, name) {
 
 function stripClientControl(headers) {
   var names = Object.keys(headers);
-  for (var i = 0; i < names.length; i++) {
-    var name = names[i].toLowerCase();
-    var control = CONTROL_HEADERS.indexOf(name) >= 0 || name.indexOf(CONTROL_PREFIX) === 0;
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i].toLowerCase();
+    const control = CONTROL_HEADERS.indexOf(name) >= 0 || name.indexOf(CONTROL_PREFIX) === 0;
     if (control) delete headers[names[i]];
   }
 }
@@ -85,17 +85,18 @@ function unreadableRoutes() {
 async function routeFor(host) {
   try {
     return { route: await kvs.get(host, { format: 'json' }) };
-  } catch (err) {
-    var claimed;
+  } catch (_err) {
+    let claimed;
     try {
       claimed = await kvs.exists(host);
-    } catch (probe) {
+    } catch (_probe) {
       return { unreadable: true };
     }
     return claimed ? { unreadable: true } : { route: null };
   }
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: CloudFront Functions calls handler by name
 async function handler(event) {
   var request = event.request;
   var host = headerValue(request.headers, 'host');
@@ -114,7 +115,7 @@ async function handler(event) {
   };
 
   if (request.uri.indexOf(STATIC_PREFIX) === 0) {
-    var assets = {
+    const assets = {
       domainName: route.assets,
       originAccessControlConfig: {
         enabled: true,
@@ -124,7 +125,7 @@ async function handler(event) {
       },
       customHeaders: {},
     };
-    var path = assetOriginPath(route.assetPrefix);
+    const path = assetOriginPath(route.assetPrefix);
     if (path !== '') assets.originPath = path;
     cf.updateRequestOrigin(assets);
     return request;

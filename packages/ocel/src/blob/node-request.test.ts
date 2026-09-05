@@ -8,18 +8,16 @@ vi.mock("../utils/rpc", () => ({
 }));
 
 const { bucket } = await import("./bucket.js");
-import { encodeMetadata } from "./metadata.js";
-import { createRouteHandler } from "./route.js";
-import type { BucketContext } from "./bucket-context.js";
+
 import type { BucketServiceClient } from "./bucket-client.js";
+import type { BucketContext } from "./bucket-context.js";
+import { createRouteHandler } from "./route.js";
 import { uploader } from "./uploader.js";
 
 function fakeContext(overrides: Partial<Record<string, unknown>> = {}) {
   const presignUpload = vi.fn(async (_req: unknown) => ({
     sessionId: "sess-1",
-    files: [
-      { url: "https://store/put/a", key: "avatars/photo.jpg", name: "photo.jpg" },
-    ],
+    files: [{ url: "https://store/put/a", key: "avatars/photo.jpg", name: "photo.jpg" }],
   }));
   const client = {
     presignUpload,

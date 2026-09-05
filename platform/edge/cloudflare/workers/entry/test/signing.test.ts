@@ -45,8 +45,7 @@ describe("edgeOriginFetch", () => {
     expect(auth).toContain("/us-east-1/lambda/aws4_request");
     expect(signed?.headers.get("x-amz-date")).toBeTruthy();
 
-    const signedHeaders =
-      /SignedHeaders=([^,]+)/.exec(auth)?.[1] ?? "";
+    const signedHeaders = /SignedHeaders=([^,]+)/.exec(auth)?.[1] ?? "";
     expect(signedHeaders).toContain("host");
     expect(signedHeaders).not.toContain("cookie");
     expect(signedHeaders).not.toContain("accept-encoding");
@@ -85,9 +84,9 @@ describe("edgeOriginFetch", () => {
 
   it("fails loudly rather than mis-signing a non-Function-URL host", async () => {
     const origin = edgeOriginFetch("AKIAEXAMPLE", "secretkey")!;
-    await expect(
-      origin(new Request("https://fn.example.com/x")),
-    ).rejects.toThrow(/non-Function-URL host/);
+    await expect(origin(new Request("https://fn.example.com/x"))).rejects.toThrow(
+      /non-Function-URL host/,
+    );
   });
 });
 

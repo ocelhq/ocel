@@ -1,13 +1,13 @@
 import {
-  VariableClass as WireClass,
-  VariableProblem_Kind,
   type VariableCell,
+  VariableProblem_Kind,
+  VariableClass as WireClass,
 } from "../gen/proto/app/resources/v1/variables_pb.js";
 import { rpc } from "../utils/rpc.js";
 import {
   complaint,
-  isRequired,
   type Definitions,
+  isRequired,
   type VariableClass,
   type VariableDefinition,
 } from "./definition.js";
@@ -20,10 +20,7 @@ const WIRE_CLASS: Record<VariableClass, WireClass> = {
   secret: WireClass.SECRET,
 };
 
-export async function declareEnv(
-  definitions: Definitions,
-  source: string,
-): Promise<void> {
+export async function declareEnv(definitions: Definitions, source: string): Promise<void> {
   const { cells } = await rpc.resource.declareEnv({
     definitions: Object.entries(definitions).map(([key, definition]) => ({
       key,
@@ -50,10 +47,7 @@ interface ReportedProblem {
   detail: string;
 }
 
-function validate(
-  definitions: Definitions,
-  cells: readonly VariableCell[],
-): ReportedProblem[] {
+function validate(definitions: Definitions, cells: readonly VariableCell[]): ReportedProblem[] {
   const problems: ReportedProblem[] = [];
 
   for (const [key, definition] of Object.entries(definitions)) {

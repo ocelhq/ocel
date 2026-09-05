@@ -11,17 +11,12 @@ export async function createTodo(title: string): Promise<Todo> {
 }
 
 export async function listTodos(): Promise<Todo[]> {
-  const { rows } = await pg.query<Todo>(
-    "SELECT id, title, done FROM todos ORDER BY id",
-  );
+  const { rows } = await pg.query<Todo>("SELECT id, title, done FROM todos ORDER BY id");
   return rows;
 }
 
 export async function getTodo(id: number): Promise<Todo | undefined> {
-  const { rows } = await pg.query<Todo>(
-    "SELECT id, title, done FROM todos WHERE id = $1",
-    [id],
-  );
+  const { rows } = await pg.query<Todo>("SELECT id, title, done FROM todos WHERE id = $1", [id]);
   return rows[0];
 }
 

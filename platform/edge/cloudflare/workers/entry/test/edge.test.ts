@@ -1,8 +1,6 @@
 import { env } from "cloudflare:test";
+import type { AssetBucket } from "@framework/next-router/assets";
 import { describe, expect, it } from "vitest";
-
-import { dispatchResult, serve, type RouteDeps } from "../src/index";
-import { coloDeps } from "./cache-deps";
 import {
   createEdgeInvoker,
   type EdgeCacheBinding,
@@ -12,8 +10,9 @@ import {
   type EdgeObjectStore,
   type EdgeVariables,
 } from "../src/edge";
-import type { AssetBucket } from "@framework/next-router/assets";
+import { dispatchResult, type RouteDeps, serve } from "../src/index";
 import type { ObjectStoreReader } from "../src/tag-clock";
+import { coloDeps } from "./cache-deps";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
@@ -181,7 +180,11 @@ function futureBundleInvoker(): EdgeInvoker {
   return createEdgeInvoker(
     env.LOADER,
     { bundleKey, id: `edge-future-${seq}`, compatDate: "2026-03-10" },
-    { async get(key) { return key === bundleKey ? storedJson(json) : null; } },
+    {
+      async get(key) {
+        return key === bundleKey ? storedJson(json) : null;
+      },
+    },
   );
 }
 
@@ -194,7 +197,11 @@ function missingBundleInvoker(): EdgeInvoker {
       id: `edge-missing-${seq}`,
       compatDate: "2026-03-10",
     },
-    { async get() { return null; } },
+    {
+      async get() {
+        return null;
+      },
+    },
   );
 }
 
@@ -258,10 +265,7 @@ function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
   } as RouteDeps;
 }
 
-function staticDeps(
-  middleware: unknown,
-  overrides: Partial<RouteDeps> = {},
-): RouteDeps {
+function staticDeps(middleware: unknown, overrides: Partial<RouteDeps> = {}): RouteDeps {
   return deps({
     manifest: {
       buildId: "t",
@@ -335,9 +339,7 @@ describe("middleware matchers", () => {
     ];
 
     expect((await gated(matchers)).calls).toBe(0);
-    expect(
-      (await gated(matchers, { headers: { "x-gate": "on" } })).calls,
-    ).toBe(1);
+    expect((await gated(matchers, { headers: { "x-gate": "on" } })).calls).toBe(1);
   });
 
   it("honours a matcher's missing condition", async () => {
@@ -349,9 +351,7 @@ describe("middleware matchers", () => {
     ];
 
     expect((await gated(matchers)).calls).toBe(1);
-    expect(
-      (await gated(matchers, { headers: { "x-skip": "1" } })).calls,
-    ).toBe(0);
+    expect((await gated(matchers, { headers: { "x-skip": "1" } })).calls).toBe(0);
   });
 });
 
@@ -465,21 +465,16 @@ describe("middleware responses", () => {
     expect(res.headers.get("x-keep")).toBe("1");
   });
 
-  it.each([204, 304])(
-    "returns a middleware's %i, which carries no body at all",
-    async (status) => {
-      const edge = middlewareInvoker(
-        `async () => new Response(null, { status: ${status} })`,
-      );
+  it.each([204, 304])("returns a middleware's %i, which carries no body at all", async (status) => {
+    const edge = middlewareInvoker(`async () => new Response(null, { status: ${status} })`);
 
-      const res = await serve(
-        new Request("https://app.example/static.txt"),
-        staticDeps({ entryKey: MIDDLEWARE_KEY }, { edge }),
-      );
+    const res = await serve(
+      new Request("https://app.example/static.txt"),
+      staticDeps({ entryKey: MIDDLEWARE_KEY }, { edge }),
+    );
 
-      expect(res.status).toBe(status);
-    },
-  );
+    expect(res.status).toBe(status);
+  });
 
   it("keeps the x-middleware-* control headers off a rewritten response", async () => {
     const edge = middlewareInvoker(
@@ -511,9 +506,7 @@ describe("middleware responses", () => {
 
     expect(await res.text()).toBe("origin");
     expect(res.headers.get("x-keep")).toBe("1");
-    expect(
-      [...res.headers.keys()].filter((n) => n.startsWith("x-middleware-")),
-    ).toEqual([]);
+    expect([...res.headers.keys()].filter((n) => n.startsWith("x-middleware-"))).toEqual([]);
   });
 
   it("redirects with the middleware's Set-Cookie intact", async () => {
@@ -663,9 +656,8 @@ describe("edge dispatch", () => {
   });
 
   it("invokes an entry whose chunk requires a Node builtin", async () => {
-    const edge = invokerFor(
-      { "middleware_app/edge": "" },
-      (entryKey) => nodeRequireChunkFor(entryKey),
+    const edge = invokerFor({ "middleware_app/edge": "" }, (entryKey) =>
+      nodeRequireChunkFor(entryKey),
     );
 
     const res = await dispatchResult(
@@ -908,9 +900,7 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
       undefined,
       undefined,
       {
-        "server/edge/assets/pic.png": new Uint8Array([
-          0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe,
-        ]),
+        "server/edge/assets/pic.png": new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]),
       },
     );
 
@@ -1040,9 +1030,7 @@ describe("edge-parented prerenders", () => {
       interception: {
         config: { isrPrefix },
         now: () => 2_000,
-        store: storeOf(
-          entry ? { [`${isrPrefix}/cache/edge-blog.cache.json`]: entry } : {},
-        ),
+        store: storeOf(entry ? { [`${isrPrefix}/cache/edge-blog.cache.json`]: entry } : {}),
       },
     } as Partial<RouteDeps>);
   }
@@ -1231,9 +1219,7 @@ describe("the URL middleware is handed", () => {
         skipMiddlewareUrlNormalize: scenario.skipMiddlewareUrlNormalize,
         pathnames,
         routes: emptyRoutes,
-        dispatch: Object.fromEntries(
-          pathnames.map((path) => [path, { kind: "static" }]),
-        ),
+        dispatch: Object.fromEntries(pathnames.map((path) => [path, { kind: "static" }])),
         middleware: {
           entryKey: MIDDLEWARE_KEY,
           ...(scenario.matchers !== undefined && { matchers: scenario.matchers }),
@@ -1412,10 +1398,7 @@ describe("the URL middleware is handed", () => {
          })`,
       );
 
-      const res = await serve(
-        get(`${PAGE}/`),
-        pageDeps({ trailingSlash: true, edge }),
-      );
+      const res = await serve(get(`${PAGE}/`), pageDeps({ trailingSlash: true, edge }));
 
       expect(res.status).toBe(307);
       expect(res.headers.get("location")).toBe(location);
@@ -1449,10 +1432,7 @@ describe("the URL middleware is handed", () => {
       [true, PAGE],
       [false, `${PAGE}/`],
       [false, PAGE],
-    ])("under trailingSlash: %s, shows middleware %s as requested", async (
-      trailingSlash,
-      path,
-    ) => {
+    ])("under trailingSlash: %s, shows middleware %s as requested", async (trailingSlash, path) => {
       const res = await serve(
         get(path),
         pageDeps({ trailingSlash, skipTrailingSlashRedirect: true }),
@@ -1595,10 +1575,7 @@ describe("the variables a deployment declares", () => {
           return {
             text: async () => "",
             arrayBuffer: async () =>
-              sealed.buffer.slice(
-                sealed.byteOffset,
-                sealed.byteOffset + sealed.byteLength,
-              ),
+              sealed.buffer.slice(sealed.byteOffset, sealed.byteOffset + sealed.byteLength),
           };
         }
         return null;
@@ -1621,8 +1598,7 @@ describe("the variables a deployment declares", () => {
   }
 
   const workerEnv = async (edge: EdgeInvoker) =>
-    JSON.parse(await (await edge("e", new Request("https://x/"))).text()) as
-      Record<string, string>;
+    JSON.parse(await (await edge("e", new Request("https://x/"))).text()) as Record<string, string>;
 
   it("hands a plain value to the worker under its own name", async () => {
     const { edge } = varsInvoker({ variables: { env: { API_URL: "https://api" } } });
@@ -1635,7 +1611,9 @@ describe("the variables a deployment declares", () => {
 
   it("hands the deployment url to an edge entry like any other plain value", async () => {
     const { edge } = varsInvoker({
-      variables: { env: { OCEL_URL: "https://shop.example", NEXT_PUBLIC_OCEL_URL: "https://shop.example" } },
+      variables: {
+        env: { OCEL_URL: "https://shop.example", NEXT_PUBLIC_OCEL_URL: "https://shop.example" },
+      },
     });
 
     expect(await workerEnv(edge)).toMatchObject({
@@ -1668,9 +1646,7 @@ describe("the variables a deployment declares", () => {
 
   it("unseals what the origin sealed in Go, prefixed and never bare", async () => {
     const sealed = bytesOf(GO_SEALED);
-    expect(sealed.length).toBe(
-      NONCE_BYTES + JSON.stringify(GO_VALUES).length + TAG_BYTES,
-    );
+    expect(sealed.length).toBe(NONCE_BYTES + JSON.stringify(GO_VALUES).length + TAG_BYTES);
 
     const { edge } = varsInvoker({
       variables: { envelope: GO_ENVELOPE },
@@ -1687,9 +1663,7 @@ describe("the variables a deployment declares", () => {
   it("unseals a nonce-prefixed AES-GCM payload of its own making", async () => {
     const values = { TOKEN: "t0ken" };
     const sealed = await seal(GO_ENVELOPE, JSON.stringify(values));
-    expect(sealed.length).toBe(
-      NONCE_BYTES + JSON.stringify(values).length + TAG_BYTES,
-    );
+    expect(sealed.length).toBe(NONCE_BYTES + JSON.stringify(values).length + TAG_BYTES);
 
     const { edge } = varsInvoker({ variables: { envelope: GO_ENVELOPE }, sealed });
 
@@ -1732,8 +1706,7 @@ describe("the variables a deployment declares", () => {
         cache: { rpc: remoteStub(), scope: "prod/p/app/b1" },
         variables: { valueFingerprint },
       }).edge;
-    const served = async (edge: EdgeInvoker) =>
-      (await edge("e", new Request("https://x/"))).text();
+    const served = async (edge: EdgeInvoker) => (await edge("e", new Request("https://x/"))).text();
 
     expect(await served(deployment("fp-1"))).toBe("1");
     expect(await served(deployment("fp-1"))).toBe("2");

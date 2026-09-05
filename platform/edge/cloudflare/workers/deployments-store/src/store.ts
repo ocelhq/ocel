@@ -129,10 +129,7 @@ function setMeta(store: SqlStore, key: string, value: string): void {
 
 function getPointer(store: SqlStore, name: string): string | undefined {
   const row = store.sql
-    .exec<{ promotion_id: string }>(
-      `SELECT promotion_id FROM pointers WHERE name = ?`,
-      name,
-    )
+    .exec<{ promotion_id: string }>(`SELECT promotion_id FROM pointers WHERE name = ?`, name)
     .toArray()[0];
   return row?.promotion_id;
 }
@@ -209,17 +206,11 @@ export function promote(
   });
 }
 
-function pointerBuilds(
-  store: SqlStore,
-  pointer: string,
-): Record<string, string> | undefined {
+function pointerBuilds(store: SqlStore, pointer: string): Record<string, string> | undefined {
   const promotionId = getPointer(store, pointer);
   if (!promotionId) return undefined;
   const row = store.sql
-    .exec<{ builds: string }>(
-      `SELECT builds FROM promotions WHERE promotion_id = ?`,
-      promotionId,
-    )
+    .exec<{ builds: string }>(`SELECT builds FROM promotions WHERE promotion_id = ?`, promotionId)
     .toArray()[0];
   if (!row) return undefined;
   return JSON.parse(row.builds) as Record<string, string>;
@@ -265,10 +256,7 @@ export function pointerRecord(
   return { kind: "record", identity, record: rec };
 }
 
-export function history(
-  store: SqlStore,
-  pointer: string = DEFAULT_POINTER,
-): HistoryEntry[] {
+export function history(store: SqlStore, pointer: string = DEFAULT_POINTER): HistoryEntry[] {
   const activeId = getPointer(store, pointer);
   return store.sql
     .exec<{ promotion_id: string; ts: number; builds: string; tag: string | null }>(
@@ -303,8 +291,7 @@ export function prune(
       .toArray();
 
     const kept: { promotionId: string; builds: Record<string, string> }[] = [];
-    const removed: { promotionId: string; builds: Record<string, string> }[] =
-      [];
+    const removed: { promotionId: string; builds: Record<string, string> }[] = [];
     rows.forEach((r, i) => {
       if (i < keepN || r.promotion_id === activeId) {
         kept.push({
@@ -324,16 +311,9 @@ export function prune(
     );
 
     for (const p of removed) {
-      store.sql.exec(
-        `DELETE FROM promotions WHERE promotion_id = ?`,
-        p.promotionId,
-      );
+      store.sql.exec(`DELETE FROM promotions WHERE promotion_id = ?`, p.promotionId);
       for (const [app, identity] of Object.entries(p.builds)) {
-        store.sql.exec(
-          `DELETE FROM records WHERE app = ? AND identity = ?`,
-          app,
-          identity,
-        );
+        store.sql.exec(`DELETE FROM records WHERE app = ? AND identity = ?`, app, identity);
       }
     }
 
@@ -347,9 +327,7 @@ export function prune(
   });
 }
 
-function promotedRecordKeys(
-  promotions: { builds: Record<string, string> }[],
-): string[] {
+function promotedRecordKeys(promotions: { builds: Record<string, string> }[]): string[] {
   const keys = new Set<string>();
   for (const p of promotions) {
     for (const [app, identity] of Object.entries(p.builds)) {
@@ -359,10 +337,7 @@ function promotedRecordKeys(
   return [...keys].sort();
 }
 
-export function removePointer(
-  store: SqlStore,
-  pointer: string = DEFAULT_POINTER,
-): PruneResult {
+export function removePointer(store: SqlStore, pointer: string = DEFAULT_POINTER): PruneResult {
   return store.transactionSync(() => {
     const rows = store.sql
       .exec<{ promotion_id: string; builds: string }>(
@@ -382,11 +357,7 @@ export function removePointer(
     for (const p of removed) {
       store.sql.exec(`DELETE FROM promotions WHERE promotion_id = ?`, p.promotionId);
       for (const [app, identity] of Object.entries(p.builds)) {
-        store.sql.exec(
-          `DELETE FROM records WHERE app = ? AND identity = ?`,
-          app,
-          identity,
-        );
+        store.sql.exec(`DELETE FROM records WHERE app = ? AND identity = ?`, app, identity);
       }
     }
     store.sql.exec(`DELETE FROM pointers WHERE name = ?`, pointer);
@@ -433,9 +404,7 @@ export function initialize(
 function storedIdentity(store: SqlStore): Identity | undefined {
   const ownerToken = getMeta(store, OWNER_KEY);
   const secret = getMeta(store, SECRET_KEY);
-  return ownerToken !== undefined && secret !== undefined
-    ? { ownerToken, secret }
-    : undefined;
+  return ownerToken !== undefined && secret !== undefined ? { ownerToken, secret } : undefined;
 }
 
 export function storedSecret(store: SqlStore): string | undefined {

@@ -42,7 +42,10 @@ export const productRows: ContractRow[] = [
       assert.equal(res.status, 200);
       const rows = body as Array<{ id: number }>;
       const ids = rows.map((row) => row.id);
-      assert.deepEqual([...ids].sort((a, b) => a - b), ids);
+      assert.deepEqual(
+        [...ids].sort((a, b) => a - b),
+        ids,
+      );
       assert.ok(ids.includes(first.id) && ids.includes(second.id));
     },
   },
@@ -100,8 +103,9 @@ export const productRows: ContractRow[] = [
       const deadline = Date.now() + 30_000;
       for (;;) {
         const { body } = await json(ctx, "/api/documents");
-        const row = (body as Array<{ key: string; name: string; mime_type: string; owner_id: string | null }>)
-          .find((candidate) => candidate.key === key);
+        const row = (
+          body as Array<{ key: string; name: string; mime_type: string; owner_id: string | null }>
+        ).find((candidate) => candidate.key === key);
         if (row) {
           assert.equal(row.name, "report.pdf");
           assert.equal(row.mime_type, "application/pdf");

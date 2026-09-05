@@ -1,14 +1,14 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { refreshHeader, variantHeadersFile, type TagRecord } from "@framework/next-cache";
+import { refreshHeader, type TagRecord, variantHeadersFile } from "@framework/next-cache";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import OcelCacheHandler from "../src/next/cache-handler.mjs";
-import { runWithWaitUntil } from "../src/shared/background.mjs";
-import { setTagClockStore } from "../src/next/tag-clock.mjs";
-import { revalidationTicks } from "../src/next/revalidation-signal.mjs";
-import { collectTags, notedTags } from "../src/next/origin-tags.mjs";
 import type { CacheEntryFile, CacheStore } from "../src/next/cache-store.mjs";
+import { collectTags, notedTags } from "../src/next/origin-tags.mjs";
+import { revalidationTicks } from "../src/next/revalidation-signal.mjs";
+import { setTagClockStore } from "../src/next/tag-clock.mjs";
+import { runWithWaitUntil } from "../src/shared/background.mjs";
 
 function fakeStore() {
   const entries = new Map<string, CacheEntryFile>();
@@ -382,9 +382,7 @@ test("reports a miss rather than throwing when the store fails", async () => {
   seedPage(store, "index");
   store.breakReads();
 
-  await expect(
-    new OcelCacheHandler().get("/", { kind: "APP_PAGE" }),
-  ).resolves.toBeNull();
+  await expect(new OcelCacheHandler().get("/", { kind: "APP_PAGE" })).resolves.toBeNull();
 });
 
 test("round-trips a page written by set through get", async () => {
@@ -453,9 +451,7 @@ test("leaves a fetch entry's window unrecorded", async () => {
   expect(store.fetches.get("hash")?.cacheControl).toBeUndefined();
 });
 
-function seedProjection(
-  projection: Record<string, Record<string, unknown>>,
-): void {
+function seedProjection(projection: Record<string, Record<string, unknown>>): void {
   OcelCacheHandler.variantHeaders = projection;
 }
 
@@ -550,9 +546,7 @@ test("a rewritten entry still serves segment prefetch and RSC negotiation", asyn
 
   const written = store.entries.get("blog")!;
   expect(written.value.segmentHeaders["x-nextjs-postponed"]).toBe("2");
-  expect(written.value.segmentData["/_tree"]).toBe(
-    Buffer.from("TREE").toString("base64"),
-  );
+  expect(written.value.segmentData["/_tree"]).toBe(Buffer.from("TREE").toString("base64"));
 
   const served = await new OcelCacheHandler({
     _requestHeaders: { rsc: "1" },

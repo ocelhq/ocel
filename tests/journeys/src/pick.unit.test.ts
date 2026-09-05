@@ -193,9 +193,7 @@ describe("covering the variants a group lists, one member each", () => {
         seen.add(cell.name);
       }
     }
-    expect(seen.size).toBeGreaterThan(
-      cellsOn(NODE_HTTP, onAws, "covering", seeded("1")).length,
-    );
+    expect(seen.size).toBeGreaterThan(cellsOn(NODE_HTTP, onAws, "covering", seeded("1")).length);
   });
 
   it("hands a variant only to a member that has a cell for it", () => {
@@ -205,9 +203,9 @@ describe("covering the variants a group lists, one member each", () => {
       );
     for (const seed of SEEDS) {
       const covered = coverCells(NODE_HTTP, skipping, "covering", seeded(seed));
-      expect(
-        covered.get("sdk/node")?.some((cell) => cell.name === "sdk/node-container"),
-      ).toBe(false);
+      expect(covered.get("sdk/node")?.some((cell) => cell.name === "sdk/node-container")).toBe(
+        false,
+      );
       expect(variantsCovered(NODE_HTTP, skipping, seeded(seed))).toContain("container");
     }
   });

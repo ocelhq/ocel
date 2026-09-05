@@ -2,12 +2,9 @@ import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 import { UploadState } from "../gen/proto/app/blob/v1/blob_pb.js";
 import type { Bucket } from "./bucket.js";
+import { type BucketContext, resolveBucketContext } from "./bucket-context.js";
 import { generateKey } from "./keys.js";
 import { decodeMetadata, encodeMetadata } from "./metadata.js";
-import {
-  resolveBucketContext,
-  type BucketContext,
-} from "./bucket-context.js";
 import type {
   AnyUploader,
   BlobRequest,
@@ -30,9 +27,7 @@ function headerOf(req: RouteRequest, name: string): string | null {
   if (typeof (headers as { get?: unknown }).get === "function") {
     return (headers as { get(n: string): string | null }).get(name);
   }
-  const value = (headers as Record<string, string | string[] | undefined>)[
-    name.toLowerCase()
-  ];
+  const value = (headers as Record<string, string | string[] | undefined>)[name.toLowerCase()];
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
 }
@@ -108,11 +103,7 @@ function mimeMatches(patterns: string[], mimeType: string): boolean {
   });
 }
 
-function validateFiles(
-  up: AnyUploader,
-  files: FileInfo[],
-  metadata: unknown,
-): string | undefined {
+function validateFiles(up: AnyUploader, files: FileInfo[], metadata: unknown): string | undefined {
   const maxCount = resolveLimit(up.upload.limits?.maxFileCount, metadata);
   const minCount = resolveLimit(up.upload.limits?.minFileCount, metadata);
   const maxSize = resolveLimit(up.upload.limits?.maxFileSize, metadata);
@@ -214,11 +205,7 @@ async function handlePresign(
   });
 }
 
-async function handleCallback(
-  bucket: Bucket,
-  ctx: BucketContext,
-  req: RouteRequest,
-) {
+async function handleCallback(bucket: Bucket, ctx: BucketContext, req: RouteRequest) {
   const parsed = callbackBody.safeParse(await requestJson(req));
   if (!parsed.success) return json({ error: "invalid callback request" }, 400);
 
@@ -255,10 +242,7 @@ async function handleCallback(
   return json({ ok: true });
 }
 
-async function handlePoll(
-  ctx: BucketContext,
-  req: RouteRequest,
-) {
+async function handlePoll(ctx: BucketContext, req: RouteRequest) {
   const sessionId = new URL(requestUrl(req)).searchParams.get("sessionId");
   if (!sessionId) return json({ error: "missing sessionId" }, 400);
 
@@ -278,10 +262,7 @@ export interface RouteHandlers {
   POST: (req: RouteRequest, middlewareReq?: unknown) => Promise<Response>;
 }
 
-export function createRouteHandler(
-  bucket: Bucket,
-  options: RouteOptions = {},
-): RouteHandlers {
+export function createRouteHandler(bucket: Bucket, options: RouteOptions = {}): RouteHandlers {
   let ctx = options.runtime;
   const getCtx = () => (ctx ??= resolveBucketContext(bucket));
 

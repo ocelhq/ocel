@@ -3,10 +3,7 @@ import ipaddr from "ipaddr.js";
 const IPV4_COMPATIBLE = ipaddr.parse("::") as ipaddr.IPv6;
 
 export function isReachableAddress(address: string): boolean {
-  const bare =
-    address.startsWith("[") && address.endsWith("]")
-      ? address.slice(1, -1)
-      : address;
+  const bare = address.startsWith("[") && address.endsWith("]") ? address.slice(1, -1) : address;
 
   if (!ipaddr.isValid(bare)) return false;
 

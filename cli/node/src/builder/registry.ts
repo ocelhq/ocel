@@ -11,9 +11,18 @@ export interface Runtime {
 }
 
 const NODE_ENTRYPOINTS = [
-  "src/server.ts", "src/server.js", "src/index.ts", "src/index.js",
-  "src/app.ts", "src/app.js", "index.ts", "index.js",
-  "server.ts", "server.js", "app.ts", "app.js",
+  "src/server.ts",
+  "src/server.js",
+  "src/index.ts",
+  "src/index.js",
+  "src/app.ts",
+  "src/app.js",
+  "index.ts",
+  "index.js",
+  "server.ts",
+  "server.js",
+  "app.ts",
+  "app.js",
 ];
 
 const nodeSpec: RuntimeSpec = { name: "node", entrypointCandidates: NODE_ENTRYPOINTS };

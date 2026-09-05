@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { LinkType } from "../gen/proto/common/links/v1/links_pb.js";
-import {
-  getConfig,
-  getRuntimeAddress,
-  linkKey,
-  linkTypeOf,
-} from "./get-config.js";
+import { getConfig, getRuntimeAddress, linkKey, linkTypeOf } from "./get-config.js";
 
 const LIVE_VALUES = Symbol.for("ocel.env.liveValues");
 
@@ -39,12 +34,8 @@ describe("getConfig", () => {
   };
 
   it("keys a link by its type's enum name", () => {
-    expect(linkKey("main", LinkType.POSTGRES)).toBe(
-      "OCEL_RESOURCE_POSTGRES_main",
-    );
-    expect(linkKey("storage", LinkType.BUCKET)).toBe(
-      "OCEL_RESOURCE_BUCKET_storage",
-    );
+    expect(linkKey("main", LinkType.POSTGRES)).toBe("OCEL_RESOURCE_POSTGRES_main");
+    expect(linkKey("storage", LinkType.BUCKET)).toBe("OCEL_RESOURCE_BUCKET_storage");
   });
 
   it("reads a POSTGRES link's typed properties from OCEL_RESOURCE_POSTGRES_<id>", () => {
@@ -110,9 +101,7 @@ describe("getConfig", () => {
   });
 
   it("throws when the resource env var is undefined", () => {
-    expect(() => getConfig("missing", "bucket")).toThrow(
-      "OCEL_RESOURCE_BUCKET_missing",
-    );
+    expect(() => getConfig("missing", "bucket")).toThrow("OCEL_RESOURCE_BUCKET_missing");
   });
 });
 
@@ -123,12 +112,10 @@ describe("linkTypeOf", () => {
         properties: { case: "postgres", value: {} },
       } as never),
     ).toBe(LinkType.POSTGRES);
-    expect(
-      linkTypeOf({ properties: { case: "bucket", value: {} } } as never),
-    ).toBe(LinkType.BUCKET);
-    expect(linkTypeOf({ properties: { case: undefined } } as never)).toBe(
-      LinkType.UNSPECIFIED,
+    expect(linkTypeOf({ properties: { case: "bucket", value: {} } } as never)).toBe(
+      LinkType.BUCKET,
     );
+    expect(linkTypeOf({ properties: { case: undefined } } as never)).toBe(LinkType.UNSPECIFIED);
   });
 });
 

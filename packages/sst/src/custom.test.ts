@@ -33,14 +33,12 @@ describe("the record a custom link publishes as", () => {
   });
 
   it("refuses a record with nothing to read", () => {
-    expect(() => customLink("network", { properties: {} })).toThrow(
-      /carries no properties/,
-    );
+    expect(() => customLink("network", { properties: {} })).toThrow(/carries no properties/);
   });
 
   it("refuses a property that never resolved", () => {
-    expect(() =>
-      customLink("network", { properties: { vpcId: undefined } }),
-    ).toThrow(/vpcId as undefined/);
+    expect(() => customLink("network", { properties: { vpcId: undefined } })).toThrow(
+      /vpcId as undefined/,
+    );
   });
 });

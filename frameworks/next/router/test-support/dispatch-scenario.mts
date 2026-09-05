@@ -1,7 +1,6 @@
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
-
-import type { RouteDeps } from "../src/index.mjs";
 import type { AssetBucket } from "../src/assets.mjs";
+import type { RouteDeps } from "../src/index.mjs";
 
 export type TestManifest = Omit<RoutingManifest, "entry"> & { entry?: string };
 
@@ -9,9 +8,7 @@ export type TestRouteDeps = Omit<Partial<RouteDeps>, "manifest"> & {
   manifest?: TestManifest;
 };
 
-export function assetStoreServing(
-  files: Record<string, string>,
-): RouteDeps["assetStore"] {
+export function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore"] {
   const store: AssetBucket = {
     async get(key) {
       const body = files[key];

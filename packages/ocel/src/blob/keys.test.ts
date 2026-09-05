@@ -5,9 +5,7 @@ const file = { name: "photo.jpg", size: 10, mimeType: "image/jpeg" };
 
 describe("generateKey", () => {
   it("uses prefix + sanitized name for the structured form", () => {
-    expect(generateKey({ prefix: "avatars/" }, { file, metadata: {} })).toBe(
-      "avatars/photo.jpg",
-    );
+    expect(generateKey({ prefix: "avatars/" }, { file, metadata: {} })).toBe("avatars/photo.jpg");
   });
 
   it("defaults to just the sanitized name when no path is given", () => {
@@ -16,18 +14,12 @@ describe("generateKey", () => {
 
   it("sanitizes unsafe characters and strips directory traversal", () => {
     expect(
-      generateKey(
-        { prefix: "x/" },
-        { file: { ...file, name: "../a b/c!.png" }, metadata: {} },
-      ),
+      generateKey({ prefix: "x/" }, { file: { ...file, name: "../a b/c!.png" }, metadata: {} }),
     ).toBe("x/c-.png");
   });
 
   it("inserts a random token before the extension when randomSuffix is set", () => {
-    const key = generateKey(
-      { prefix: "avatars/", randomSuffix: true },
-      { file, metadata: {} },
-    );
+    const key = generateKey({ prefix: "avatars/", randomSuffix: true }, { file, metadata: {} });
     expect(key).toMatch(/^avatars\/photo-[a-z0-9]{8}\.jpg$/);
   });
 

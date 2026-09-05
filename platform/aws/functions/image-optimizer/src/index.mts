@@ -1,7 +1,7 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import type { ImageOriginRequest, OriginResponse } from "./contract.mjs";
 import { BOOTSTRAP_MESSAGE } from "./errors.mjs";
-import { optimize, type OptimizeDeps } from "./optimize.mjs";
+import { type OptimizeDeps, optimize } from "./optimize.mjs";
 import { s3Store } from "./store.mjs";
 
 interface FunctionUrlEvent {
@@ -36,7 +36,7 @@ let store: ReturnType<typeof s3Store> | undefined;
 
 function assetStore(): ReturnType<typeof s3Store> {
   if (store) return store;
-  const bucket = process.env["OCEL_IMAGE_ASSET_BUCKET"];
+  const bucket = process.env.OCEL_IMAGE_ASSET_BUCKET;
   if (!bucket) throw new Error("OCEL_IMAGE_ASSET_BUCKET is not set");
   return (store = s3Store(new S3Client({}), bucket));
 }

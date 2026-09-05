@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { linkRows } from "../../rows";
 import { JOURNEY_CONFIG } from "../../config";
 import { live } from "../../live";
 import { ocel, spawnOcel, workTree } from "../../ocel";
+import { linkRows } from "../../rows";
 import type { LadderRow } from "../../spec";
 import type { CellContext } from "../types";
 import { place } from "./place";
@@ -97,7 +97,9 @@ async function functionConfiguration(functionArn: string): Promise<FunctionConfi
   return JSON.parse(raw) as FunctionConfiguration;
 }
 
-type PolicyDocument = { Statement: Array<{ Effect?: string; Action?: string | string[]; Resource?: string | string[] }> };
+type PolicyDocument = {
+  Statement: Array<{ Effect?: string; Action?: string | string[]; Resource?: string | string[] }>;
+};
 
 async function attachedManagedPolicyArns(roleName: string): Promise<string[]> {
   const raw = await (await cli())([
@@ -114,7 +116,10 @@ async function attachedManagedPolicyArns(roleName: string): Promise<string[]> {
     .filter((arn): arn is string => Boolean(arn));
 }
 
-async function inlinePolicyDocument(roleName: string, policyName: string): Promise<PolicyDocument | undefined> {
+async function inlinePolicyDocument(
+  roleName: string,
+  policyName: string,
+): Promise<PolicyDocument | undefined> {
   let raw: string;
   try {
     raw = await (await cli())([
@@ -138,7 +143,11 @@ async function inlinePolicyDocument(roleName: string, policyName: string): Promi
   return JSON.parse(raw) as PolicyDocument;
 }
 
-function statementsGrant(document: PolicyDocument | undefined, action: string, resource: string): boolean {
+function statementsGrant(
+  document: PolicyDocument | undefined,
+  action: string,
+  resource: string,
+): boolean {
   if (!document) {
     return false;
   }
@@ -216,7 +225,11 @@ export const ladderRows: LadderRow[] = [
       };
       for (const name of LINK_NAMES) {
         const listed = parsed.links.filter((row) => row.name === name);
-        assert.equal(listed.length, 1, `ocel link ls lists ${listed.length} records named ${name}, want 1`);
+        assert.equal(
+          listed.length,
+          1,
+          `ocel link ls lists ${listed.length} records named ${name}, want 1`,
+        );
         assert.ok(listed[0]!.type.length > 0, `${name} is listed with no type`);
         assert.ok(listed[0]!.source.length > 0, `${name} is listed with no source`);
         assert.ok(listed[0]!.owner.length > 0, `${name} is listed with no owner`);
@@ -224,14 +237,19 @@ export const ladderRows: LadderRow[] = [
     },
   },
   {
-    title: "each record is stamped with the publisher's URN and holds nothing beside the sealed value",
+    title:
+      "each record is stamped with the publisher's URN and holds nothing beside the sealed value",
     phase: "publish",
     run: async (cell) => {
       const records = await (await linkStore()).records(cell.slug);
       for (const name of LINK_NAMES) {
         const record = records.find((row) => row.name === name);
         assert.ok(record, `no record named ${name} is published`);
-        assert.match(record!.owner, /^urn:/, `${name}'s record is owned by ${record!.owner}, not a publisher URN`);
+        assert.match(
+          record!.owner,
+          /^urn:/,
+          `${name}'s record is owned by ${record!.owner}, not a publisher URN`,
+        );
         assert.deepEqual(
           record!.redactedProperties,
           {},
@@ -254,7 +272,8 @@ export const ladderRows: LadderRow[] = [
     },
   },
   {
-    title: "grants are scoped to the named resource: orders carries rds-db:connect, network carries none",
+    title:
+      "grants are scoped to the named resource: orders carries rds-db:connect, network carries none",
     phase: "publish",
     run: async (cell) => {
       const records = await (await linkStore()).records(cell.slug);
@@ -303,7 +322,11 @@ export const ladderRows: LadderRow[] = [
       for (const name of LINK_NAMES) {
         const record = records.find((row) => row.name === name);
         assert.ok(record, `no record named ${name} is published`);
-        assert.match(record!.owner, /^urn:/, `${name} is now owned by ${record!.owner}, not the publisher`);
+        assert.match(
+          record!.owner,
+          /^urn:/,
+          `${name} is now owned by ${record!.owner}, not the publisher`,
+        );
       }
       const ocelIndex = await (await linkStore()).ownerIndex(cell.slug, "OCEL");
       for (const name of LINK_NAMES) {
@@ -315,7 +338,8 @@ export const ladderRows: LadderRow[] = [
     },
   },
   {
-    title: "every tagged function carries the postgres env key with no clear-text host, database or password",
+    title:
+      "every tagged function carries the postgres env key with no clear-text host, database or password",
     phase: "consume",
     run: async (cell, live) => {
       assert.ok(live, "consume ran with no live deployment to read the link report from");
@@ -331,10 +355,7 @@ export const ladderRows: LadderRow[] = [
         const key = `OCEL_RESOURCE_POSTGRES_${LINK_NAME}`;
         assert.ok(key in variables, `${arn} carries no ${key}`);
         for (const [envKey, value] of Object.entries(variables)) {
-          assert.ok(
-            !value.includes(body.host),
-            `${arn}'s ${envKey} carries the host in the clear`,
-          );
+          assert.ok(!value.includes(body.host), `${arn}'s ${envKey} carries the host in the clear`);
           assert.ok(
             !value.includes(body.database),
             `${arn}'s ${envKey} carries the database in the clear`,
@@ -344,7 +365,8 @@ export const ladderRows: LadderRow[] = [
     },
   },
   {
-    title: "a VPC config equal to the published ids, and execution roles with the VPC policy and the published grants",
+    title:
+      "a VPC config equal to the published ids, and execution roles with the VPC policy and the published grants",
     phase: "consume",
     run: async (cell) => {
       const placement = placementFor(cell.slug);

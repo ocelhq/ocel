@@ -71,9 +71,7 @@ function cacheKey(deps: DeploymentsDeps): string {
   return deps.host;
 }
 
-export async function resolveDeployment(
-  deps: DeploymentsDeps,
-): Promise<DeploymentResolution> {
+export async function resolveDeployment(deps: DeploymentsDeps): Promise<DeploymentResolution> {
   const now = (deps.now ?? Date.now)();
   const cache = cacheMap(deps.binding);
   const key = cacheKey(deps);

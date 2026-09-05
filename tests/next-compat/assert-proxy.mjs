@@ -38,7 +38,9 @@ async function assertBlocked() {
   const response = await fetch(new URL("/mw/blocked", base));
   const body = await response.text();
   if (response.status !== 403 || !body.includes("blocked by proxy.ts")) {
-    fail(`/mw/blocked answered status ${response.status} body ${JSON.stringify(body)} — expected 403 "blocked by proxy.ts"`);
+    fail(
+      `/mw/blocked answered status ${response.status} body ${JSON.stringify(body)} — expected 403 "blocked by proxy.ts"`,
+    );
   }
   log("direct response: /mw/blocked answered 403 from proxy.ts, never reaching a route");
 }

@@ -1,9 +1,9 @@
-import { AwsClient } from "aws4fetch";
-
-import { originTimeoutMs } from "./limits.mjs";
 import type { RevalidationMessage } from "@platform/edge-contract/revalidation";
+import { AwsClient } from "aws4fetch";
+import { originTimeoutMs } from "./limits.mjs";
 
 class ResolvedTarget {
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: the private field is what keeps a Target nominal
   readonly #resolved = true;
 
   constructor(
@@ -14,10 +14,7 @@ class ResolvedTarget {
 
 export type Target = ResolvedTarget;
 
-export type ResolveFailure =
-  | "origin-unconfigured"
-  | "origin-unavailable"
-  | "origin-unusable";
+export type ResolveFailure = "origin-unconfigured" | "origin-unavailable" | "origin-unusable";
 
 export type Resolution = { ok: true; target: Target } | { ok: false; reason: ResolveFailure };
 
@@ -88,7 +85,10 @@ async function read(deps: OriginDeps, isrPrefix: string): Promise<RouteUrls> {
   try {
     const response = await deps.fetch(url, { method: "GET", headers: signed.headers, signal });
     if (!response.ok) {
-      return { ok: false, reason: response.status === 404 ? "origin-unusable" : "origin-unavailable" };
+      return {
+        ok: false,
+        reason: response.status === 404 ? "origin-unusable" : "origin-unavailable",
+      };
     }
     return document(await response.text());
   } catch {

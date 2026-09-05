@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import fixtures from "../fixtures/image-conformance.json" with { type: "json" };
 import {
   getSupportedMimeType,
+  type ImageConfig,
   serveImage,
   unprovisionedImageOrigin,
-  type ImageConfig,
 } from "../src/image.mjs";
 
 const ORIGIN_REJECTIONS = new Set([
@@ -104,10 +104,7 @@ for (const { variant, config, cases } of variants) {
 
       for (const fixture of pngCases) {
         it(`${fixture.name} serves ${fixture.contentType}`, () => {
-          const negotiated = getSupportedMimeType(
-            config.formats,
-            fixture.request.accept ?? "",
-          );
+          const negotiated = getSupportedMimeType(config.formats, fixture.request.accept ?? "");
           expect(negotiated || "image/png").toBe(fixture.contentType);
         });
       }

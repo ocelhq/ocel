@@ -26,9 +26,7 @@ export async function retryTransientOrigin(
       const response = await attempt();
       if (!isServiceThrottle(response)) return response;
       await response.body?.cancel();
-      lastError = new Error(
-        `middleware origin throttled (429) on attempt ${i + 1}/${ATTEMPTS}`,
-      );
+      lastError = new Error(`middleware origin throttled (429) on attempt ${i + 1}/${ATTEMPTS}`);
     } catch (error) {
       lastError = error;
     }

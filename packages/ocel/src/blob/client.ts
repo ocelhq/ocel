@@ -8,9 +8,7 @@ type InputOf<B, K extends UploaderName<B>> =
 
 type UploadArgs<B, K extends UploaderName<B>> = {
   files: BrowserFile[];
-} & (InputOf<B, K> extends undefined
-  ? { input?: undefined }
-  : { input: InputOf<B, K> });
+} & (InputOf<B, K> extends undefined ? { input?: undefined } : { input: InputOf<B, K> });
 
 export interface BrowserFile {
   name: string;
@@ -76,9 +74,7 @@ async function pollUntilTerminal(
 ): Promise<PollResponse> {
   const deadline = Date.now() + maxMs;
   for (;;) {
-    const res = await fetchImpl(
-      `${baseUrl}?op=poll&sessionId=${encodeURIComponent(sessionId)}`,
-    );
+    const res = await fetchImpl(`${baseUrl}?op=poll&sessionId=${encodeURIComponent(sessionId)}`);
     const body = (await res.json()) as PollResponse;
     if (body.state === "succeeded" || body.state === "expired") return body;
     if (Date.now() >= deadline) return { state: "expired" };
@@ -144,9 +140,7 @@ export function createUploadClient<B extends Bucket<Record<string, AnyUploader>>
 
       if (status.state !== "succeeded") {
         throw new Error(
-          status.state === "expired"
-            ? "upload expired"
-            : (status.error ?? "upload failed"),
+          status.state === "expired" ? "upload expired" : (status.error ?? "upload failed"),
         );
       }
 

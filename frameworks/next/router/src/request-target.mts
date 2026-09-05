@@ -10,7 +10,5 @@ export function encodeRequestTarget(pathname: string): string {
 export function encodeForwardedSearch(search: string): string {
   const first = search.indexOf("?");
   if (first === -1) return search;
-  return (
-    search.slice(0, first + 1) + search.slice(first + 1).replaceAll("?", "%3F")
-  );
+  return search.slice(0, first + 1) + search.slice(first + 1).replaceAll("?", "%3F");
 }

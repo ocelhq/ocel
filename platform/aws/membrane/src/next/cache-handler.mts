@@ -1,12 +1,5 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-
-import {
-  awsCacheStore,
-  type CacheEntryFile,
-  type CacheStore,
-  type TagRecord,
-} from "./cache-store.mjs";
 import {
   boundCacheTags,
   cacheKey,
@@ -16,8 +9,14 @@ import {
   variantHeadersFile,
 } from "@framework/next-cache";
 import { background } from "../shared/background.mjs";
+import {
+  awsCacheStore,
+  type CacheEntryFile,
+  type CacheStore,
+  type TagRecord,
+} from "./cache-store.mjs";
+import { notedTags, noteTags } from "./origin-tags.mjs";
 import { noteRevalidation } from "./revalidation-signal.mjs";
-import { noteTags, notedTags } from "./origin-tags.mjs";
 import { recordTags, tagsExpireEntry } from "./tag-clock.mjs";
 
 function unchunk(html: any): string {
@@ -83,18 +82,13 @@ function loadVariantHeaders(): Record<string, Record<string, unknown>> {
   }
 }
 
-function isProjection(
-  parsed: unknown,
-): parsed is Record<string, Record<string, unknown>> {
+function isProjection(parsed: unknown): parsed is Record<string, Record<string, unknown>> {
   return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed);
 }
 
 const RSC_REQUEST = Symbol.for("ocel.rsc-request");
 
-function negotiateVariant(
-  value: Record<string, any>,
-  isRscRequest: boolean,
-): Record<string, any> {
+function negotiateVariant(value: Record<string, any>, isRscRequest: boolean): Record<string, any> {
   if (!isRscRequest || value.kind !== "APP_PAGE") return value;
   if (value.rscHeaders) return { ...value, headers: value.rscHeaders };
   const { "content-type": _dropped, ...headers } = value.headers ?? {};
@@ -186,18 +180,12 @@ export default class OcelCacheHandler {
         ...(cacheControl && { cacheControl }),
       };
       background(() =>
-        isFetch
-          ? store.writeFetch(key, entry)
-          : store.writeEntry(cacheKey(key), entry),
+        isFetch ? store.writeFetch(key, entry) : store.writeEntry(cacheKey(key), entry),
       );
-    } catch {
-    }
+    } catch {}
   }
 
-  async revalidateTag(
-    tags: string | string[],
-    durations?: { expire?: number },
-  ): Promise<void> {
+  async revalidateTag(tags: string | string[], durations?: { expire?: number }): Promise<void> {
     const list = typeof tags === "string" ? [tags] : tags;
     if (list.length === 0) return;
 
@@ -205,9 +193,7 @@ export default class OcelCacheHandler {
     const record: TagRecord = durations
       ? {
           stale: now,
-          ...(durations.expire !== undefined
-            ? { expired: now + durations.expire * 1000 }
-            : {}),
+          ...(durations.expire !== undefined ? { expired: now + durations.expire * 1000 } : {}),
         }
       : { expired: now };
 

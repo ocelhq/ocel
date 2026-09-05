@@ -79,8 +79,7 @@ function findByGo(buildTarget, goos, goarch) {
 
 function findByNode(buildTarget, nodePlatform, nodeArch) {
   return supportedPlatforms(buildTarget).find(
-    (entry) =>
-      entry.nodePlatform === nodePlatform && entry.nodeArch === nodeArch,
+    (entry) => entry.nodePlatform === nodePlatform && entry.nodeArch === nodeArch,
   );
 }
 
@@ -120,9 +119,7 @@ function parseArgs(argv) {
 }
 
 function unshipped(target, nodePlatform, nodeArch) {
-  return new Error(
-    `no native package for ${target} on ${nodePlatform}-${nodeArch}`,
-  );
+  return new Error(`no native package for ${target} on ${nodePlatform}-${nodeArch}`);
 }
 
 function resolveTarget(args, buildTarget) {
@@ -135,18 +132,14 @@ function resolveTarget(args, buildTarget) {
   }
 
   if (!args.goos || !args.goarch) {
-    throw new Error(
-      "Either --host, or both --goos and --goarch, must be provided.",
-    );
+    throw new Error("Either --host, or both --goos and --goarch, must be provided.");
   }
 
   const known = PLATFORM_MATRIX.find(
     (entry) => entry.goos === args.goos && entry.goarch === args.goarch,
   );
   if (!known) {
-    throw new Error(
-      `Unsupported GOOS/GOARCH combination: ${args.goos}/${args.goarch}`,
-    );
+    throw new Error(`Unsupported GOOS/GOARCH combination: ${args.goos}/${args.goarch}`);
   }
 
   const entry = findByGo(buildTarget, args.goos, args.goarch);
@@ -183,10 +176,7 @@ function buildOne(target, buildTarget, binary, platform, outPath, version) {
 
   const buildArgs = ["build", "-o", outPath];
   if (version) {
-    buildArgs.push(
-      "-ldflags",
-      `-X ${buildTarget.versionLdflagPkg}.version=${version}`,
-    );
+    buildArgs.push("-ldflags", `-X ${buildTarget.versionLdflagPkg}.version=${version}`);
   }
   buildArgs.push(binary.cmd);
 
@@ -228,9 +218,7 @@ function main() {
   }
 
   for (const binary of buildTarget.binaries) {
-    const outPath = args.out
-      ? resolve(args.out)
-      : binaryOutPath(buildTarget, binary, platform);
+    const outPath = args.out ? resolve(args.out) : binaryOutPath(buildTarget, binary, platform);
     buildOne(args.target, buildTarget, binary, platform, outPath, args.version);
   }
 }

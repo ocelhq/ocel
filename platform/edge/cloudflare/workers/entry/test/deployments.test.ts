@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  RECORD_CACHE_MAX,
-  resolveDeployment,
-  type PointerRecordResult,
   type DeploymentRecord,
   type DeploymentsBinding,
   type DeploymentsDeps,
+  type PointerRecordResult,
+  RECORD_CACHE_MAX,
+  resolveDeployment,
 } from "../src/deployments";
 
 function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {

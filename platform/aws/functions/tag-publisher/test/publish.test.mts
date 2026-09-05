@@ -1,9 +1,9 @@
-import { tagSnapshotKey, type TagRecord, type TagSnapshot } from "@framework/next-cache";
+import { type TagRecord, type TagSnapshot, tagSnapshotKey } from "@framework/next-cache";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { publishAll } from "../src/publish.mjs";
-import { isrWriteSecret } from "../src/writer.mjs";
 import type { Raises } from "../src/records.mjs";
+import { isrWriteSecret } from "../src/writer.mjs";
 
 const PREFIX = "prod/acme/web/BUILD1";
 const KEY = tagSnapshotKey(PREFIX);
@@ -48,9 +48,7 @@ const commands = {
 } as any;
 
 function raises(records: Record<string, TagRecord>): Raises {
-  return new Map([
-    [PREFIX, { records: new Map(Object.entries(records)), sequenceNumbers: ["1"] }],
-  ]);
+  return new Map([[PREFIX, { records: new Map(Object.entries(records)), sequenceNumbers: ["1"] }]]);
 }
 
 function publisher(s3: FakeS3, fetchImpl: any) {
@@ -140,7 +138,9 @@ describe("publishAll", () => {
       etag: "v0",
     });
     const fetchImpl = vi.fn(async (url: string) =>
-      url.includes(other) ? new Response(null, { status: 401 }) : new Response(null, { status: 204 }),
+      url.includes(other)
+        ? new Response(null, { status: 401 })
+        : new Response(null, { status: 204 }),
     );
     const both: Raises = new Map([
       [PREFIX, { records: new Map([["cart", { expired: 500 }]]), sequenceNumbers: ["1", "2"] }],

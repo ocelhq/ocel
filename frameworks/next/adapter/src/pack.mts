@@ -29,10 +29,7 @@ export interface PackOptions<T> {
   seedAssets?: Record<string, string>;
 }
 
-export function packBundles<T>(
-  members: readonly T[],
-  opts: PackOptions<T>,
-): PackResult<T> {
+export function packBundles<T>(members: readonly T[], opts: PackOptions<T>): PackResult<T> {
   const {
     entryKeyOf,
     assetsOf,
@@ -92,14 +89,9 @@ export function packBundles<T>(
       const conflicts = entries.some(
         ([dest, abs]) => dest in bundle.assets && bundle.assets[dest] !== abs,
       );
-      const delta = bytesOf(
-        entries.filter(([dest]) => !(dest in bundle.assets)),
-      );
+      const delta = bytesOf(entries.filter(([dest]) => !(dest in bundle.assets)));
 
-      if (
-        bundle.members.length > 0 &&
-        (conflicts || bundle.sizeBytes + delta > budgetBytes)
-      ) {
+      if (bundle.members.length > 0 && (conflicts || bundle.sizeBytes + delta > budgetBytes)) {
         bundle = open();
       }
       absorb(bundle, assets);
@@ -137,10 +129,7 @@ function byKey<T>(entryKeyOf: (member: T) => string) {
   };
 }
 
-function assertUniqueEntryKeys<T>(
-  members: readonly T[],
-  entryKeyOf: (member: T) => string,
-): void {
+function assertUniqueEntryKeys<T>(members: readonly T[], entryKeyOf: (member: T) => string): void {
   const seen = new Set<string>();
   for (const member of members) {
     const key = entryKeyOf(member);

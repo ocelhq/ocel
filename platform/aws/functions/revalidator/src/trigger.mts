@@ -1,8 +1,7 @@
+import type { RevalidationMessage } from "@platform/edge-contract/revalidation";
 import { AwsClient } from "aws4fetch";
-
 import { triggerTimeoutMs } from "./limits.mjs";
 import type { Outcome } from "./log.mjs";
-import type { RevalidationMessage } from "@platform/edge-contract/revalidation";
 import type { Target } from "./origin.mjs";
 
 export interface TriggerDeps {
@@ -27,7 +26,8 @@ export async function trigger(
     return { event: "RevalidateFailed", reason: signal.aborted ? "timeout" : "fetch-failed" };
   }
 
-  if (!response.ok) return { event: "RevalidateFailed", reason: "status-not-ok", status: response.status };
+  if (!response.ok)
+    return { event: "RevalidateFailed", reason: "status-not-ok", status: response.status };
   if (message.expect === null) return { event: "RevalidateOk" };
 
   const got = response.headers.get(message.expect.header);

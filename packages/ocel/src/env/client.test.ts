@@ -54,7 +54,7 @@ function withBuildEnv(env: Record<string, string>): void {
 
 async function load(source: string): Promise<{ clientEnv: Record<string, unknown> }> {
   const dir = mkdtempSync(join(tmpdir(), "ocel-env-client-"));
-  writeFileSync(join(dir, "env.schema.ts"), `import { z } from "zod";\n` + DECLARATIONS);
+  writeFileSync(join(dir, "env.schema.ts"), `import { z } from "zod";\n${DECLARATIONS}`);
   const file = join(dir, "env-client.ts");
   writeFileSync(file, source);
   return import(pathToFileURL(file).href);

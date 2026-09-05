@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 
 import { triggerTimeoutMs } from "../src/limits.mjs";
-import { trigger, type TriggerDeps } from "../src/trigger.mjs";
+import { type TriggerDeps, trigger } from "../src/trigger.mjs";
 import { credentials, host, resolved } from "./fixture.mjs";
 
 function responding(response: Response): { deps: TriggerDeps; requests: Request[] } {
@@ -30,7 +30,9 @@ it("sends HEAD to the resolved target carrying the message's headers and no othe
   const sent = requests[0]!;
   expect(sent.method).toBe("HEAD");
   expect(sent.url).toBe(`https://${host}/blog/post`);
-  const carried = [...sent.headers.keys()].filter((name) => !name.startsWith("x-amz-") && name !== "authorization");
+  const carried = [...sent.headers.keys()].filter(
+    (name) => !name.startsWith("x-amz-") && name !== "authorization",
+  );
   expect(carried.sort()).toEqual(["x-forwarded-host", "x-prerender-revalidate"]);
   expect(sent.headers.get("x-prerender-revalidate")).toBe("s3cr3t-preview-mode-id");
   expect(sent.headers.get("x-forwarded-host")).toBe("example.com");

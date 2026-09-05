@@ -1,30 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  asSegmentPayload,
-  isSegmentPayload,
-  isSegmentPrefetch,
-} from "../src/segment.mjs";
+import { asSegmentPayload, isSegmentPayload, isSegmentPrefetch } from "../src/segment.mjs";
 
 describe("the segment-prefetch payload guard", () => {
   const H = (init?: Record<string, string>) => new Headers(init);
 
   it("reads a segment prefetch only where variantPath mints a segment key", () => {
-    expect(
-      isSegmentPrefetch(H({ RSC: "1", "next-router-segment-prefetch": "/_tree" })),
-    ).toBe(true);
-    expect(isSegmentPrefetch(H({ "next-router-segment-prefetch": "/_tree" }))).toBe(
-      false,
-    );
-    expect(isSegmentPrefetch(H({ RSC: "1", "next-router-prefetch": "1" }))).toBe(
-      false,
-    );
+    expect(isSegmentPrefetch(H({ RSC: "1", "next-router-segment-prefetch": "/_tree" }))).toBe(true);
+    expect(isSegmentPrefetch(H({ "next-router-segment-prefetch": "/_tree" }))).toBe(false);
+    expect(isSegmentPrefetch(H({ RSC: "1", "next-router-prefetch": "1" }))).toBe(false);
   });
 
   it("accepts the two shapes the client accepts: a segment payload and a 204 miss", () => {
-    expect(
-      isSegmentPayload(new Response("seg", { headers: { "x-nextjs-postponed": "2" } })),
-    ).toBe(true);
+    expect(isSegmentPayload(new Response("seg", { headers: { "x-nextjs-postponed": "2" } }))).toBe(
+      true,
+    );
     expect(isSegmentPayload(new Response(null, { status: 204 }))).toBe(true);
   });
 

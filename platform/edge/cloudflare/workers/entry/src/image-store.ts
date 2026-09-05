@@ -1,11 +1,6 @@
 import { NEXT_CACHE_STATUS } from "@framework/next-router/http-cache";
 
-import {
-  imageStorable,
-  refreshOnce,
-  servedFromStore,
-  type CacheDeps,
-} from "./cache";
+import { type CacheDeps, imageStorable, refreshOnce, servedFromStore } from "./cache";
 
 export interface StoredImage {
   body: ReadableStream | null;
@@ -42,10 +37,7 @@ export function imageObjectKey(slug: string, digest: string): string {
   return `images/${slug}/${digest}`;
 }
 
-export async function readImage(
-  store: ImageStore,
-  key: string,
-): Promise<Response | null> {
+export async function readImage(store: ImageStore, key: string): Promise<Response | null> {
   let object: StoredImage | null;
   try {
     object = await store.get(key);
@@ -62,9 +54,7 @@ export async function readImage(
   return servedFromStore(new Response(object.body, { headers }), false);
 }
 
-function storedHeaders(
-  metadata: Record<string, string> | undefined,
-): Headers | undefined {
+function storedHeaders(metadata: Record<string, string> | undefined): Headers | undefined {
   if (metadata?.[ENTRY_VERSION] !== ENTRY_FORMAT) return undefined;
   let stored: unknown;
   try {
@@ -106,11 +96,7 @@ function metadataSize(metadata: Record<string, string>): number {
   return total;
 }
 
-async function writeImage(
-  store: ImageStore,
-  key: string,
-  response: Response,
-): Promise<void> {
+async function writeImage(store: ImageStore, key: string, response: Response): Promise<void> {
   const customMetadata = storedMetadata(response);
   const size = metadataSize(customMetadata);
   if (size > METADATA_BUDGET) {

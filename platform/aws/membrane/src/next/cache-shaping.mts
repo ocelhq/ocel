@@ -1,8 +1,8 @@
 import type http from "node:http";
 import { storedCacheTags } from "@framework/next-cache";
+import { invalidatesByCacheTag, routerMode } from "../shared/edge-kind.mjs";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import type { ProjectManifest } from "./project-manifest.mjs";
-import { invalidatesByCacheTag, routerMode } from "../shared/edge-kind.mjs";
 
 const cacheTagHeader = "cache-tag";
 
@@ -82,20 +82,12 @@ export function shapeOriginCache(
   } as typeof res.writeHead;
 }
 
-function shape(
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
-  shaping: OriginShaping,
-): void {
+function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: OriginShaping): void {
   if (!cacheable(req, res)) return;
 
   if (shaping.release !== null) {
     const noted = notedTags(req.headers as Record<string | symbol, any>);
-    const { tags, unstorable, overflowed } = storedCacheTags(
-      shaping.release,
-      noted,
-      tagsPerObject,
-    );
+    const { tags, unstorable, overflowed } = storedCacheTags(shaping.release, noted, tagsPerObject);
     if (tags.length > 0) res.setHeader(cacheTagHeader, tags.join(","));
     const lost = [...unstorable, ...overflowed];
     if (lost.length > 0) {
@@ -126,9 +118,7 @@ function cacheable(req: http.IncomingMessage, res: http.ServerResponse): boolean
 }
 
 function personal(declared: string): boolean {
-  return directives(declared).some((name) =>
-    ["private", "no-store", "no-cache"].includes(name),
-  );
+  return directives(declared).some((name) => ["private", "no-store", "no-cache"].includes(name));
 }
 
 function directives(declared: string): string[] {
@@ -149,10 +139,7 @@ function cacheControlOf({ revalidate, expire }: Window): string {
     : `s-maxage=${revalidate}`;
 }
 
-function windowFor(
-  url: string | undefined,
-  shaping: OriginShaping,
-): Window | undefined {
+function windowFor(url: string | undefined, shaping: OriginShaping): Window | undefined {
   const route = routeOf(url, shaping.basePath);
   const exact = shaping.routes.get(route);
   if (exact) return exact;

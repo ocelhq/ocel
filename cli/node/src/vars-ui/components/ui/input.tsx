@@ -1,7 +1,7 @@
-import * as React from "react"
-import { Input as InputPrimitive } from "@base-ui/react/input"
+import { Input as InputPrimitive } from "@base-ui/react/input";
+import type * as React from "react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   return (
@@ -10,11 +10,11 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
       data-slot="input"
       className={cn(
         "h-9 w-full min-w-0 rounded-none border border-input bg-card px-3 py-1 font-mono text-[13px] text-foreground transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 aria-invalid:border-destructive",
-        className
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
-export { Input }
+export { Input };

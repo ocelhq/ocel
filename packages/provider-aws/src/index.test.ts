@@ -21,20 +21,14 @@ describe("awsProvider", () => {
     expect(JSON.parse(JSON.stringify(config.provider))).toEqual({
       package: "@ocel/provider-aws",
       options: {
-        transforms: [
-          "./infra/defaults.transform.ts",
-          "./infra/vpc.transform.ts",
-        ],
+        transforms: ["./infra/defaults.transform.ts", "./infra/vpc.transform.ts"],
       },
     });
   });
 
   it("leaves the options bag without a transforms key when none is authored", () => {
     expect(
-      Object.hasOwn(
-        awsProvider({ region: "us-east-1" }).options as object,
-        "transforms",
-      ),
+      Object.hasOwn(awsProvider({ region: "us-east-1" }).options as object, "transforms"),
     ).toBe(false);
   });
 
@@ -42,16 +36,14 @@ describe("awsProvider", () => {
     expect(
       awsProvider({
         certificates: {
-          "app.acme.com":
-            "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+          "app.acme.com": "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
         },
       }),
     ).toEqual({
       package: "@ocel/provider-aws",
       options: {
         certificates: {
-          "app.acme.com":
-            "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
+          "app.acme.com": "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
         },
       },
     });

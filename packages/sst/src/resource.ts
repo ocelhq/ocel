@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { checkTarget, runLink, type Target } from "./cli.js";
 import { customLink, type DescribedCustom } from "./custom.js";
 import type { Grant, SSTInclude } from "./grants.js";
-import { postgresLink, type DescribedPostgres } from "./postgres.js";
+import { type DescribedPostgres, postgresLink } from "./postgres.js";
 
 /** An SST component, as SST already describes itself to its own link consumers. */
 export interface SSTPostgresLinkable {
@@ -70,11 +70,7 @@ function linkProvider<I extends LinkInputs>(
   });
 
   const set = (inputs: I) =>
-    runLink(
-      ["set", "--owner", inputs.owner],
-      inputs,
-      `${JSON.stringify(recordFor(inputs))}\n`,
-    );
+    runLink(["set", "--owner", inputs.owner], inputs, `${JSON.stringify(recordFor(inputs))}\n`);
 
   return {
     async create(inputs: I) {
@@ -85,10 +81,7 @@ function linkProvider<I extends LinkInputs>(
     async diff(_id: string, olds: LinkState, news: I) {
       const replaces = replacesFor(olds, news);
       return {
-        changes:
-          replaces.length > 0 ||
-          !resolved(news) ||
-          olds.digest !== digestOf(news),
+        changes: replaces.length > 0 || !resolved(news) || olds.digest !== digestOf(news),
         replaces,
         deleteBeforeReplace: replaces.length > 0,
       };
@@ -117,8 +110,7 @@ export const postgresProvider = linkProvider<PostgresInputs>(
 
 export const customProvider = linkProvider<CustomInputs>(
   (inputs) => customLink(inputs.name, { properties: inputs.properties }),
-  (inputs) =>
-    Object.values(inputs.properties).every((value) => value !== undefined),
+  (inputs) => Object.values(inputs.properties).every((value) => value !== undefined),
 );
 
 /**
@@ -175,11 +167,7 @@ export interface DescribedCustomResource {
  * directory holding `ocel.config.ts`, which is the SST config root unless it is
  * given.
  */
-export function custom(
-  name: string,
-  resource: DescribedCustomResource,
-  opts?: LinkOptions,
-): void {
+export function custom(name: string, resource: DescribedCustomResource, opts?: LinkOptions): void {
   const util = host();
   const target: Target = {
     project: opts?.project ?? configRoot(),
@@ -198,9 +186,7 @@ export function custom(
 }
 
 function idFor(inputs: LinkInputs): string {
-  return [inputs.class, inputs.environment, inputs.name]
-    .filter(Boolean)
-    .join("/");
+  return [inputs.class, inputs.environment, inputs.name].filter(Boolean).join("/");
 }
 
 const identity = ["name", "owner", "project", "class", "environment"] as const;
@@ -209,17 +195,9 @@ function replacesFor(olds: LinkState, news: LinkInputs): string[] {
   return identity.filter((field) => olds[field] !== news[field]);
 }
 
-const linkFields = [
-  "host",
-  "port",
-  "database",
-  "username",
-  "password",
-] as const;
+const linkFields = ["host", "port", "database", "username", "password"] as const;
 
-function describe(
-  resource: SSTPostgresLinkable | DescribedPostgresResource,
-): DescribedPostgres {
+function describe(resource: SSTPostgresLinkable | DescribedPostgresResource): DescribedPostgres {
   if (typeof (resource as SSTPostgresLinkable).getSSTLink === "function") {
     const described = (resource as SSTPostgresLinkable).getSSTLink();
     return {
@@ -246,23 +224,14 @@ interface DynamicHost {
   getStack(): string;
   getProject(): string;
   dynamic: {
-    Resource: new (
-      provider: unknown,
-      name: string,
-      props: Record<string, unknown>,
-    ) => unknown;
+    Resource: new (provider: unknown, name: string, props: Record<string, unknown>) => unknown;
   };
 }
 
 const dynamicType = "pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource";
 
 function ownerFor(util: DynamicHost, logical: string): string {
-  return [
-    `urn:pulumi:${util.getStack()}`,
-    util.getProject(),
-    dynamicType,
-    logical,
-  ].join("::");
+  return [`urn:pulumi:${util.getStack()}`, util.getProject(), dynamicType, logical].join("::");
 }
 
 function host(): DynamicHost {

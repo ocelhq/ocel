@@ -1,7 +1,6 @@
 import type { Route } from "@next/routing";
-
-import type { RouteDeps } from "../src/index.mjs";
 import type { AssetBucket } from "../src/assets.mjs";
+import type { RouteDeps } from "../src/index.mjs";
 
 export function assetStoreServing(
   files: Record<string, string>,
@@ -130,11 +129,7 @@ export function deps(scenario: Scenario): RouteDeps {
       skipTrailingSlashRedirect: scenario.skipTrailingSlashRedirect,
       pathnames: pages,
       routes: {
-        beforeMiddleware: manifestRoutes(
-          !!scenario.trailingSlash,
-          basePath,
-          scenario.headerRoutes,
-        ),
+        beforeMiddleware: manifestRoutes(!!scenario.trailingSlash, basePath, scenario.headerRoutes),
         beforeFiles: [],
         afterFiles: [],
         dynamicRoutes: [],

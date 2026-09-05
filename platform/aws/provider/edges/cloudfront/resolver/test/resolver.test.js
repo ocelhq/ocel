@@ -1,8 +1,6 @@
 import { readFileSync } from "node:fs";
-
-import { describe, expect, it } from "vitest";
-
 import fixture from "@platform/edge-contract/fixtures/cache-key" with { type: "json" };
+import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("../src/resolver.js", import.meta.url), "utf8");
 
@@ -87,9 +85,13 @@ describe("the resolver", () => {
   });
 
   it("tells a viewer the store is unreadable rather than that the site does not exist", async () => {
-    const { answered, origins } = await resolve(request("/blog"), { "shop.example.com": ROUTE }, {
-      failing: true,
-    });
+    const { answered, origins } = await resolve(
+      request("/blog"),
+      { "shop.example.com": ROUTE },
+      {
+        failing: true,
+      },
+    );
 
     expect(answered.statusCode).toBe(503);
     expect(answered.headers["x-ocel-edge"].value).toBe("cloudfront");

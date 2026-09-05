@@ -15,7 +15,10 @@ export const LOG_PAGE_LIMIT = 1000;
 
 export const LAMBDA_ARCH = "x86_64";
 
-export const AWS_CLI_RETRY_ENV = Object.freeze({ AWS_RETRY_MODE: "standard", AWS_MAX_ATTEMPTS: "4" });
+export const AWS_CLI_RETRY_ENV = Object.freeze({
+  AWS_RETRY_MODE: "standard",
+  AWS_MAX_ATTEMPTS: "4",
+});
 
 export function aws(args) {
   return execFileSync("aws", args, {
@@ -79,7 +82,9 @@ export function getObject(bucket, key, maxBuffer = 128 * 1024 * 1024) {
 }
 
 export function describeFunction(functionName) {
-  return JSON.parse(aws(["lambda", "get-function", "--function-name", functionName, "--output", "json"]));
+  return JSON.parse(
+    aws(["lambda", "get-function", "--function-name", functionName, "--output", "json"]),
+  );
 }
 
 export function resolveFunctionName(slug, app, environment, fail) {

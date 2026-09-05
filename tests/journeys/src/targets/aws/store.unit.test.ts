@@ -1,5 +1,5 @@
-import assert from "node:assert/strict";
 import { describe, it } from "bun:test";
+import assert from "node:assert/strict";
 import { awsLinkStore, awsStore, type Cli } from "./store";
 
 const TABLES: Record<string, string> = {
@@ -87,9 +87,7 @@ describe("deployedSlugs", () => {
       if (describeStacks(args)) {
         return tableAsked(args);
       }
-      return args.includes("--starting-token")
-        ? page(["j-1-hello"])
-        : page(["j-1-node"], "more");
+      return args.includes("--starting-token") ? page(["j-1-hello"]) : page(["j-1-node"], "more");
     });
     assert.deepEqual(await awsStore(undefined, cli).deployedSlugs(), ["j-1-node", "j-1-hello"]);
     assert.equal(calls.filter((args) => args[0] === "dynamodb").length, 4);
@@ -145,7 +143,11 @@ function linksPage(items: Array<{ sk: string; body: Record<string, unknown> }>):
   });
 }
 
-function recordItem(sk: string, record: Record<string, unknown>, owner: string): { sk: string; body: Record<string, unknown> } {
+function recordItem(
+  sk: string,
+  record: Record<string, unknown>,
+  owner: string,
+): { sk: string; body: Record<string, unknown> } {
   return {
     sk,
     body: { version: 1, updatedAt: 0, record: b64(JSON.stringify(record)), owner },
@@ -153,7 +155,8 @@ function recordItem(sk: string, record: Record<string, unknown>, owner: string):
 }
 
 describe("awsLinkStore", () => {
-  const owner = "urn:pulumi:j-1::with-sst::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-orders";
+  const owner =
+    "urn:pulumi:j-1::with-sst::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-orders";
 
   it("asks for the state table the provider writes link values into", async () => {
     const { cli, calls } = cliOver((args) =>
@@ -184,11 +187,17 @@ describe("awsLinkStore", () => {
             name: "orders",
             postgres: {},
             source: "sst",
-            grants: [{ actions: ["rds-db:connect"], resources: ["arn:aws:rds-db:x"], label: "connect" }],
+            grants: [
+              { actions: ["rds-db:connect"], resources: ["arn:aws:rds-db:x"], label: "connect" },
+            ],
           },
           owner,
         ),
-        recordItem("links#network#records#*#", { name: "network", custom: {}, source: "sst" }, owner),
+        recordItem(
+          "links#network#records#*#",
+          { name: "network", custom: {}, source: "sst" },
+          owner,
+        ),
       ]);
     });
 
@@ -234,7 +243,14 @@ describe("awsLinkStore", () => {
     const names = await awsLinkStore(undefined, cli).ownerIndex(SLUG, owner);
     assert.deepEqual(names, ["orders"]);
     const queried = calls.find((args) => args[0] === "dynamodb");
-    assert.ok(queried?.includes(JSON.stringify({ ":pk": { S: `values#${SLUG}#production` }, ":sk": { S: `linkowners#${owner}#` } })));
+    assert.ok(
+      queried?.includes(
+        JSON.stringify({
+          ":pk": { S: `values#${SLUG}#production` },
+          ":sk": { S: `linkowners#${owner}#` },
+        }),
+      ),
+    );
   });
 
   it("reports no index for an owner that never published there", async () => {

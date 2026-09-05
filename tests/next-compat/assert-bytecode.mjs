@@ -5,31 +5,31 @@ import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import {
+  fetchFunctionLogs,
+  getObject,
   LAMBDA_ARCH,
   LIST_RETRY_DEADLINE_MS,
   LOG_DEADLINE_MS,
   LOG_POLL_INTERVAL_MS,
-  POLL_INTERVAL_MS,
-  fetchFunctionLogs,
-  getObject,
   listObjectKeys,
+  POLL_INTERVAL_MS,
   resolveBootstrapBucket,
   resolveFunctionName,
   sleep,
 } from "./aws.mjs";
 import {
-  DEPLOY_RESULT_FILE,
-  TAG_PROBE_ROUTE,
-  WARM_SUMMARY_MARKER,
   appAssetPrefix,
   bytecodeCacheKeyName,
   bytecodeCacheKeyPrefix,
   bytecodeEmbedEnabled,
   bytecodeRehydrateOutcome,
+  DEPLOY_RESULT_FILE,
   strongestCoverage,
   summarizeOutcomes,
+  TAG_PROBE_ROUTE,
   tagProbeTag,
   tarEntryNames,
+  WARM_SUMMARY_MARKER,
   warmCoverage,
   warmSummaryOutcome,
 } from "./lib.mjs";
@@ -58,10 +58,14 @@ if (!result.slug || !app?.name || !app?.buildId) {
 }
 const deployedAt = Date.parse(result.deployedAt ?? "");
 if (!Number.isFinite(deployedAt)) {
-  fail(`${resultPath} carries no readable deployedAt (${JSON.stringify(result.deployedAt)}) — nothing here can say when the warm pass ran`);
+  fail(
+    `${resultPath} carries no readable deployedAt (${JSON.stringify(result.deployedAt)}) — nothing here can say when the warm pass ran`,
+  );
 }
 
-const bucket = process.env.OCEL_ASSET_BUCKET || resolveBootstrapBucket("AssetBucket", "$OCEL_ASSET_BUCKET", fail);
+const bucket =
+  process.env.OCEL_ASSET_BUCKET ||
+  resolveBootstrapBucket("AssetBucket", "$OCEL_ASSET_BUCKET", fail);
 const prefix = appAssetPrefix({
   environment: result.environment,
   slug: result.slug,
@@ -111,7 +115,9 @@ const key = keyPrefix + candidates[0];
 log(`s3://${bucket}/${key} already exists, before this script has issued a request`);
 
 const warmLogStart = deployedAt - WARM_LOG_LOOKBACK_MS;
-log(`polling CloudWatch for the deploy's warm summary since ${new Date(warmLogStart).toISOString()}`);
+log(
+  `polling CloudWatch for the deploy's warm summary since ${new Date(warmLogStart).toISOString()}`,
+);
 const warmDeadline = Date.now() + LOG_DEADLINE_MS;
 const verdicts = [];
 const seenWarmEventIds = new Set();
@@ -137,7 +143,9 @@ while (Date.now() < warmDeadline && verdicts.length === 0) {
     const outcome = warmSummaryOutcome(event.message);
     if (!outcome) continue;
     if (outcome.kind === "unreadable") {
-      warn(`a warm summary in /aws/lambda/${functionName} could not be read as JSON (${outcome.reason}): ${outcome.message}`);
+      warn(
+        `a warm summary in /aws/lambda/${functionName} could not be read as JSON (${outcome.reason}): ${outcome.message}`,
+      );
       continue;
     }
     const verdict = warmCoverage(outcome.summary, key);
@@ -177,7 +185,9 @@ if (coverage.kind === "unproven") {
 if (coverage.kind === "partial") {
   warn(`the warm pass did not cover the whole bundle: ${coverage.detail}`);
 } else {
-  log(`the deploy's warm pass published this object and covered the whole bundle: ${coverage.detail}`);
+  log(
+    `the deploy's warm pass published this object and covered the whole bundle: ${coverage.detail}`,
+  );
 }
 
 const body = getObject(bucket, key);
@@ -192,10 +202,14 @@ let entryNames;
 try {
   entryNames = tarEntryNames(archive);
 } catch (err) {
-  fail(`s3://${bucket}/${key} decompresses to ${archive.length} bytes that are not a valid tar: ${err.message}`);
+  fail(
+    `s3://${bucket}/${key} decompresses to ${archive.length} bytes that are not a valid tar: ${err.message}`,
+  );
 }
 if (entryNames.length === 0) {
-  fail(`s3://${bucket}/${key} decompresses to an empty tar — no compile cache was actually archived`);
+  fail(
+    `s3://${bucket}/${key} decompresses to an empty tar — no compile cache was actually archived`,
+  );
 }
 if (!entryNames.some((name) => name.includes("/"))) {
   fail(
@@ -229,7 +243,10 @@ log(`bursting ${REHYDRATE_BURST_SIZE} concurrent requests to force fresh sandbox
 const burstResults = await Promise.all(
   Array.from({ length: REHYDRATE_BURST_SIZE }, (_, i) => {
     const burstTag = tagProbeTag(`bytecode-burst-${Date.now()}-${process.pid}-${i}`);
-    const burstTarget = new URL(TAG_PROBE_ROUTE + `?tag=${encodeURIComponent(burstTag)}`, base).toString();
+    const burstTarget = new URL(
+      `${TAG_PROBE_ROUTE}?tag=${encodeURIComponent(burstTag)}`,
+      base,
+    ).toString();
     return fetch(burstTarget, { method: "POST" })
       .then((r) => r.ok)
       .catch(() => false);
@@ -287,7 +304,10 @@ if (!hit && !logsSucceeded) {
 }
 if (!hit) {
   const samples = observed.length
-    ? `; samples: ${observed.slice(0, 5).map((o) => o.message).join(" | ")}`
+    ? `; samples: ${observed
+        .slice(0, 5)
+        .map((o) => o.message)
+        .join(" | ")}`
     : "";
   fail(
     `no instance reported rehydrating the compile cache from ${key} within ${LOG_DEADLINE_MS / 1000}s of the burst ` +

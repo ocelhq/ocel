@@ -7,7 +7,20 @@ import type {
 
 import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
 
-import { isNextStaticPathname, serveStaticAsset, type AssetStoreDeps } from "./assets.mjs";
+import { type AssetStoreDeps, isNextStaticPathname, serveStaticAsset } from "./assets.mjs";
+import { withStatus, withVercelCacheAlias } from "./http-cache.mjs";
+import { localeOf, resolveLocale } from "./i18n.mjs";
+import {
+  type ImageCache,
+  type ImageOrigin,
+  isImageRequest,
+  serveImage,
+  unprovisionedImageOrigin,
+} from "./image.mjs";
+import { retainOwner } from "./origin-response.mjs";
+import { encodeForwardedSearch, encodeRequestTarget } from "./request-target.mjs";
+import { retryTransientOrigin } from "./retry.mjs";
+import { asSegmentPayload, isSegmentPrefetch } from "./segment.mjs";
 import {
   canonicalPathname,
   isNextDataPathname,
@@ -18,19 +31,6 @@ import {
   routingPathname,
   withoutBasePath,
 } from "./trailing-slash.mjs";
-import { localeOf, resolveLocale } from "./i18n.mjs";
-import { withStatus, withVercelCacheAlias } from "./http-cache.mjs";
-import { retainOwner } from "./origin-response.mjs";
-import { asSegmentPayload, isSegmentPrefetch } from "./segment.mjs";
-import {
-  isImageRequest,
-  serveImage,
-  unprovisionedImageOrigin,
-  type ImageCache,
-  type ImageOrigin,
-} from "./image.mjs";
-import { retryTransientOrigin } from "./retry.mjs";
-import { encodeForwardedSearch, encodeRequestTarget } from "./request-target.mjs";
 
 type HeadersInit = NonNullable<ConstructorParameters<typeof Headers>[0]>;
 
@@ -166,7 +166,6 @@ export interface RouteDeps {
 
   originFetch?: typeof fetch;
 
-
   imageOrigin?: ImageOrigin;
 
   imageCache?: ImageCache;
@@ -180,10 +179,7 @@ export interface RouteDeps {
   keepCacheTags?: boolean;
 }
 
-function imageResponse(
-  request: Request,
-  deps: RouteDeps,
-): Promise<Response> | undefined {
+function imageResponse(request: Request, deps: RouteDeps): Promise<Response> | undefined {
   const { manifest } = deps;
   if (!manifest.images) return undefined;
   const url = new URL(request.url);
@@ -281,20 +277,11 @@ async function trailingSlashRedirect(
   return new Response(null, { status: 308, headers });
 }
 
-export async function serve(
-  request: Request,
-  deps: RouteDeps,
-): Promise<Response> {
-  return withVercelCacheAlias(
-    await serveRequest(request, deps),
-    deps.manifest.vercelCacheAlias,
-  );
+export async function serve(request: Request, deps: RouteDeps): Promise<Response> {
+  return withVercelCacheAlias(await serveRequest(request, deps), deps.manifest.vercelCacheAlias);
 }
 
-async function serveRequest(
-  request: Request,
-  deps: RouteDeps,
-): Promise<Response> {
+async function serveRequest(request: Request, deps: RouteDeps): Promise<Response> {
   const pathAndQuery = request.url.replace(ABSOLUTE_URL_ORIGIN, "");
   const queryIndex = pathAndQuery.indexOf("?");
   const rawPath = queryIndex === -1 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
@@ -393,11 +380,7 @@ async function serveRequest(
           return {};
         }
         const mwUrl = new URL(ctx.url);
-        mwUrl.pathname = middlewarePathname(
-          requested,
-          deps.manifest,
-          deps.manifest.buildId,
-        );
+        mwUrl.pathname = middlewarePathname(requested, deps.manifest, deps.manifest.buildId);
         if (deps.manifest.i18n) {
           mwUrl.pathname = resolveLocale(
             deps.manifest.i18n,
@@ -419,18 +402,13 @@ async function serveRequest(
               redirect: "manual",
             }),
         );
-        const middlewareResult = responseToMiddlewareResult(
-          response,
-          ctx.headers,
-          mwUrl,
-        );
+        const middlewareResult = responseToMiddlewareResult(response, ctx.headers, mwUrl);
         const rewrite = middlewareResult.rewrite;
         if (rewrite && rewrite.origin === mwUrl.origin) {
           rewrite.pathname = routingPathname(rewrite.pathname);
         }
         outcome = { response, headers: ctx.headers };
-        middlewareLocation =
-          middlewareResult.responseHeaders?.get("location") ?? undefined;
+        middlewareLocation = middlewareResult.responseHeaders?.get("location") ?? undefined;
         return middlewareResult;
       } catch (error) {
         failure = { error };
@@ -570,9 +548,7 @@ function matchesConfigRewrite(
       if (dynamic.destination?.split("?")[0] !== resolvedPathname) continue;
       try {
         if (new RegExp(dynamic.sourceRegex).test(destination)) return true;
-      } catch {
-        continue;
-      }
+      } catch {}
     }
   }
   return false;
@@ -623,10 +599,7 @@ export async function dispatchResult(
 
   const tagged = new Response(response.body, response);
   applyResolvedHeaders(tagged.headers, result.resolvedHeaders);
-  if (
-    isRoutingRedirect(result) &&
-    tagged.headers.get("location") !== result.middlewareLocation
-  ) {
+  if (isRoutingRedirect(result) && tagged.headers.get("location") !== result.middlewareLocation) {
     carryRequestQuery(tagged.headers, request.url);
   }
   const middlewareSkip = tagged.headers.get("x-middleware-skip");
@@ -690,10 +663,7 @@ const NEXT_ACTION_REVALIDATED = "x-action-revalidated";
 
 export const OCEL_REVALIDATED = "x-ocel-revalidated";
 
-async function noteRevalidation(
-  response: Response,
-  deps: RouteDeps,
-): Promise<Response> {
+async function noteRevalidation(response: Response, deps: RouteDeps): Promise<Response> {
   if (response.headers.has(NEXT_ACTION_REVALIDATED)) await deps.onRevalidated?.();
   return response;
 }
@@ -719,18 +689,11 @@ function middlewarePrefetchProbe(
   });
 }
 
-async function dispatch(
-  result: RouteResult,
-  request: Request,
-  deps: RouteDeps,
-): Promise<Response> {
-  const { manifest, functionUrls } = deps;
+async function dispatch(result: RouteResult, request: Request, deps: RouteDeps): Promise<Response> {
+  const { manifest } = deps;
   const doFetch = deps.fetch ?? fetch;
-  const doOrigin = originFetch(deps);
   const url = new URL(request.url);
-  const headers = withoutControlHeaders(
-    result.middleware?.headers ?? request.headers,
-  );
+  const headers = withoutControlHeaders(result.middleware?.headers ?? request.headers);
 
   const assetUrl =
     manifest.i18n && result.invocationTarget
@@ -799,10 +762,7 @@ async function dispatch(
     : response;
 }
 
-const SERVER_ACTION_CONTENT_TYPES = [
-  "application/x-www-form-urlencoded",
-  "multipart/form-data",
-];
+const SERVER_ACTION_CONTENT_TYPES = ["application/x-www-form-urlencoded", "multipart/form-data"];
 
 function isServerAction(request: Request): boolean {
   if (request.method !== "POST") return false;
@@ -812,10 +772,7 @@ function isServerAction(request: Request): boolean {
   return SERVER_ACTION_CONTENT_TYPES.includes(media);
 }
 
-function documentMethodNotAllowed(
-  request: Request,
-  target: DispatchTarget,
-): Response | undefined {
+function documentMethodNotAllowed(request: Request, target: DispatchTarget): Response | undefined {
   if (target.kind !== "static" && target.kind !== "prerender") return undefined;
   if (request.method === "GET" || request.method === "HEAD") return undefined;
   if (isServerAction(request)) return undefined;
@@ -877,10 +834,7 @@ async function renderDispatchTarget(
   }
 }
 
-function notFoundRoute(
-  request: Request,
-  manifest: RoutingManifest,
-): string | undefined {
+function notFoundRoute(request: Request, manifest: RoutingManifest): string | undefined {
   const routes = manifest.errorRoutes;
   if (!routes) return undefined;
   if (isFlightRequest(request.headers) && routes.notFoundFlight) {
@@ -899,9 +853,7 @@ async function notFoundResponse(
   staticAsset: (at?: URL) => Promise<Response>,
 ): Promise<Response> {
   const notFoundPathname = notFoundRoute(request, deps.manifest);
-  const notFoundTarget = notFoundPathname
-    ? deps.manifest.dispatch[notFoundPathname]
-    : undefined;
+  const notFoundTarget = notFoundPathname ? deps.manifest.dispatch[notFoundPathname] : undefined;
   if (!notFoundPathname || !notFoundTarget) return fallback();
   if (notFoundTarget.kind === "lambda" && !deps.functionUrls[notFoundTarget.id]) {
     return fallback();
@@ -936,7 +888,7 @@ function errorRouteKind(status: number): "notFound" | "serverError" | undefined 
 
 function isRenderedDocument(response: Response): boolean {
   const contentType = response.headers.get("content-type");
-  if (!contentType || !contentType.startsWith("text/html")) return false;
+  if (!contentType?.startsWith("text/html")) return false;
   const contentLength = response.headers.get("content-length");
   return contentLength === null || Number(contentLength) > 0;
 }
@@ -1016,19 +968,14 @@ async function prerenderResponse(
   deps: RouteDeps,
 ): Promise<Response> {
   const edgeEntryKey = target.edgeEntryKey;
-  const fnUrl =
-    edgeEntryKey || target.id === undefined
-      ? undefined
-      : deps.functionUrls[target.id];
+  const fnUrl = edgeEntryKey || target.id === undefined ? undefined : deps.functionUrls[target.id];
   if (!fnUrl && !edgeEntryKey) return noRenderer(target.id);
 
   const doFetch = originFetch(deps);
   const forwardUrl = originUrl(fnUrl ?? url.origin, url, result, deps.manifest);
   const render = (rendered: Request) => {
     const entried = withEntry(rendered, target.entryKey);
-    return edgeEntryKey
-      ? edgeResponse(deps, edgeEntryKey, entried)
-      : doFetch(entried);
+    return edgeEntryKey ? edgeResponse(deps, edgeEntryKey, entried) : doFetch(entried);
   };
 
   if (deps.prerender) {
@@ -1075,12 +1022,7 @@ function searchFromQuery(query: Record<string, string | string[]>): string {
   return search ? `?${search}` : "";
 }
 
-function originUrl(
-  fnUrl: string,
-  url: URL,
-  result: RouteResult,
-  manifest: RoutingManifest,
-): URL {
+function originUrl(fnUrl: string, url: URL, result: RouteResult, manifest: RoutingManifest): URL {
   const pathname = result.invocationTarget?.pathname ?? url.pathname;
   const query = result.invocationTarget?.query;
   const search = query ? searchFromQuery(query) : url.search;
@@ -1197,10 +1139,7 @@ function invokeMiddleware(
     return retryTransientOrigin(() => {
       const request = makeRequest();
       const url = new URL(request.url);
-      const forwardUrl = new URL(
-        url.pathname + encodeForwardedSearch(url.search),
-        fnUrl,
-      );
+      const forwardUrl = new URL(url.pathname + encodeForwardedSearch(url.search), fnUrl);
       return doOrigin(
         withEntry(
           forward(forwardUrl, request, withoutControlHeaders(request.headers)),
@@ -1245,9 +1184,7 @@ async function edgeResponse(
   }
 }
 
-function isRoutingRedirect(
-  result: RouteResult,
-): result is RouteResult & { status: number } {
+function isRoutingRedirect(result: RouteResult): result is RouteResult & { status: number } {
   return (
     result.status !== undefined &&
     result.status >= 300 &&
@@ -1259,14 +1196,9 @@ function isRoutingRedirect(
 
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
-function middlewareResponse(
-  outcome: MiddlewareOutcome | undefined,
-  status?: number,
-): Response {
+function middlewareResponse(outcome: MiddlewareOutcome | undefined, status?: number): Response {
   if (!outcome) return new Response(null, { status: status ?? 200 });
-  const body = NULL_BODY_STATUSES.has(outcome.response.status)
-    ? null
-    : outcome.response.body;
+  const body = NULL_BODY_STATUSES.has(outcome.response.status) ? null : outcome.response.body;
   const response = new Response(body, outcome.response);
   stripMiddlewareHeaders(response.headers);
   return response;
@@ -1302,10 +1234,7 @@ function middlewareOverrides(outcome: MiddlewareOutcome | undefined): Set<string
   );
 }
 
-export function isOnDemandRevalidate(
-  request: Request,
-  config: { bypassToken?: string },
-): boolean {
+export function isOnDemandRevalidate(request: Request, config: { bypassToken?: string }): boolean {
   return (
     config.bypassToken !== undefined &&
     config.bypassToken !== "" &&
@@ -1319,9 +1248,7 @@ export function shouldBypass(
   config: { bypassFor?: RouteHas[]; bypassToken?: string },
 ): boolean {
   if (isOnDemandRevalidate(request, config)) return true;
-  return (config.bypassFor ?? []).some((has) =>
-    matchesHas(has, request.headers, url),
-  );
+  return (config.bypassFor ?? []).some((has) => matchesHas(has, request.headers, url));
 }
 
 function matchesHas(has: RouteHas, headers: Headers, url: URL): boolean {
@@ -1337,11 +1264,7 @@ function matchesHas(has: RouteHas, headers: Headers, url: URL): boolean {
   }
 }
 
-function hasValue(
-  has: RouteHas,
-  headers: Headers,
-  url: URL,
-): string | string[] | undefined {
+function hasValue(has: RouteHas, headers: Headers, url: URL): string | string[] | undefined {
   switch (has.type) {
     case "header":
       return headers.get(has.key) ?? undefined;
@@ -1366,4 +1289,3 @@ function cookieValue(header: string | null, key: string): string | undefined {
   }
   return undefined;
 }
-

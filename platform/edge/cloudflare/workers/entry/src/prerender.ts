@@ -3,26 +3,26 @@ import {
   ENTRY_HEADER,
   isOnDemandRevalidate,
   isRscRequest,
-  shouldBypass,
   type PrerenderContext,
   type Prerenderer,
+  shouldBypass,
 } from "@framework/next-router";
 import { headResponse, withStatus } from "@framework/next-router/http-cache";
 import { asSegmentPayload, isSegmentPrefetch } from "@framework/next-router/segment";
 
 import {
   admitRefresh,
+  type CacheDeps,
+  type CacheTarget,
   cacheKey,
   hasDraftCookie,
   refreshOutcome,
+  SUPPRESS_SELF_REVALIDATION,
   serveCached,
   servedFromStore,
   storeInColo,
-  SUPPRESS_SELF_REVALIDATION,
-  type CacheDeps,
-  type CacheTarget,
 } from "./cache";
-import { intercept, type InterceptDeps, type InterceptionConfig } from "./interception";
+import { type InterceptDeps, type InterceptionConfig, intercept } from "./interception";
 import { composePpr, resumeRequest } from "./ppr";
 import { enqueued, type RevalidationRoute } from "./revalidation";
 import { createTagClock, type TagClock } from "./tag-clock";
@@ -53,10 +53,7 @@ export function coloPrerender(deps: PrerenderTierDeps): Prerenderer {
   return (context) => prerender(context, deps);
 }
 
-async function prerender(
-  ctx: PrerenderContext,
-  deps: PrerenderTierDeps,
-): Promise<Response> {
+async function prerender(ctx: PrerenderContext, deps: PrerenderTierDeps): Promise<Response> {
   const { request, url, target, headers, render, forward, forwardUrl } = ctx;
   const cache = deps.cache;
   const edgeEntryKey = target.edgeEntryKey;
@@ -66,8 +63,7 @@ async function prerender(
     ? async (rendered: Request) => asSegmentPayload(await render(rendered))
     : render;
 
-  const personalized =
-    hasDraftCookie(request) || headers.has("x-middleware-set-cookie");
+  const personalized = hasDraftCookie(request) || headers.has("x-middleware-set-cookie");
   const onDemand =
     isOnDemandRevalidate(request, target.config) &&
     (request.method === "GET" || request.method === "HEAD") &&
@@ -75,9 +71,7 @@ async function prerender(
 
   if (
     !onDemand &&
-    (shouldBypass(request, url, target.config) ||
-      request.method !== "GET" ||
-      personalized)
+    (shouldBypass(request, url, target.config) || request.method !== "GET" || personalized)
   ) {
     const response = await answer(forward(request, headers));
     return withStatus(response, "BYPASS");
@@ -97,11 +91,9 @@ async function prerender(
   }
 
   const isNextData =
-    url.pathname.startsWith(deps.basePath + "/_next/data/") &&
-    url.pathname.endsWith(".json");
+    url.pathname.startsWith(`${deps.basePath}/_next/data/`) && url.pathname.endsWith(".json");
 
-  const admissionTier =
-    deps.interception && !isNextData ? deps.interception : undefined;
+  const admissionTier = deps.interception && !isNextData ? deps.interception : undefined;
 
   const suppressed = SUPPRESS_SELF_REVALIDATION && admissionTier !== undefined;
 
@@ -137,9 +129,7 @@ async function prerender(
     admissionTier && revalidates && target.id !== undefined && routePath.startsWith("/")
       ? {
           headers: {
-            ...(target.entryKey !== undefined
-              ? { [ENTRY_HEADER]: target.entryKey }
-              : {}),
+            ...(target.entryKey !== undefined ? { [ENTRY_HEADER]: target.entryKey } : {}),
             "x-forwarded-host": publicUrl.host,
             "x-forwarded-proto": publicUrl.protocol.replace(/:$/, ""),
           },
@@ -249,14 +239,7 @@ async function prerender(
         }
         return composePpr(
           hit,
-          render(
-            resumeRequest(
-              forwardUrl,
-              request,
-              hit.postponed,
-              target.pprChain?.headers,
-            ),
-          ),
+          render(resumeRequest(forwardUrl, request, hit.postponed, target.pprChain?.headers)),
         );
       }
     }
@@ -294,14 +277,7 @@ async function prerender(
     return withStatus(response, "MISS");
   }
 
-  return serveCached(
-    request,
-    cacheTarget,
-    cacheDeps,
-    cachingOrigin,
-    originBlocking,
-    tagClock,
-  );
+  return serveCached(request, cacheTarget, cacheDeps, cachingOrigin, originBlocking, tagClock);
 }
 
 function once<T>(run: () => Promise<T>): () => Promise<T> {

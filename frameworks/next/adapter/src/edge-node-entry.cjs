@@ -11,12 +11,7 @@ function installAssetFetch() {
   assetPaths = new Map();
   const inner = globalThis.fetch;
   globalThis.fetch = (input, init) => {
-    const url =
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.href
-          : input?.url;
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input?.url;
     const file = assetFile(url);
     if (file === undefined) return inner(input, init);
     return Promise.resolve(new Response(readFileSync(file)));
@@ -131,9 +126,7 @@ async function load(dir, spec) {
   const registered = await globalThis._ENTRIES?.[spec.entryKey];
   const handler = registered?.[spec.handlerExport];
   if (typeof handler !== "function") {
-    throw new Error(
-      `ocel: edge entry ${spec.entryKey} registered no ${spec.handlerExport} export`,
-    );
+    throw new Error(`ocel: edge entry ${spec.entryKey} registered no ${spec.handlerExport} export`);
   }
   return handler;
 }
@@ -177,10 +170,7 @@ exports.entry = function entry(dir, spec) {
         body: Readable.toWeb(req),
         signal: controller.signal,
       });
-      await writeResponse(
-        await invoke(handler, spec.entryKey, request, ctx && ctx.waitUntil),
-        res,
-      );
+      await writeResponse(await invoke(handler, spec.entryKey, request, ctx?.waitUntil), res);
     },
   }));
 };

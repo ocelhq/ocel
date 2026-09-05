@@ -1,6 +1,6 @@
 import { complaint, type VariableDefinition } from "./definition.js";
-import { parse } from "./standard.js";
 import { EnvValueError } from "./errors.js";
+import { parse } from "./standard.js";
 
 const BAKED_PREFIX = "OCEL_VAR_";
 
@@ -27,13 +27,9 @@ export function coerce(
 }
 
 function unset(key: string): EnvValueError {
-  return new EnvValueError(
-    `'${key}' has no value. Set one with \`ocel env set ${key} <VALUE>\`.`,
-  );
+  return new EnvValueError(`'${key}' has no value. Set one with \`ocel env set ${key} <VALUE>\`.`);
 }
 
 export function undeclared(key: string): EnvValueError {
-  return new EnvValueError(
-    `'${key}' is not a declared variable. Add it to a defineEnv call.`,
-  );
+  return new EnvValueError(`'${key}' is not a declared variable. Add it to a defineEnv call.`);
 }

@@ -1,7 +1,4 @@
-import {
-  LinkType,
-  type PostgresProperties,
-} from "../gen/proto/common/links/v1/links_pb.js";
+import { LinkType, type PostgresProperties } from "../gen/proto/common/links/v1/links_pb.js";
 import type { Component } from "../utils/component.js";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";

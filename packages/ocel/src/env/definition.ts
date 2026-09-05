@@ -13,9 +13,7 @@ interface VariableOptions<TSchema extends StandardSchemaV1 = StandardSchemaV1> {
   folders?: readonly string[];
 }
 
-export type VariableDefinition<
-  TSchema extends StandardSchemaV1 = StandardSchemaV1,
-> =
+export type VariableDefinition<TSchema extends StandardSchemaV1 = StandardSchemaV1> =
   | (VariableOptions<TSchema> & {
       class: "plain";
 
@@ -52,21 +50,14 @@ export function isUsableKey(key: string): boolean {
 
 const owner = new Map<string, string>();
 
-export function validateDefinitions(
-  definitions: Definitions,
-  source: string,
-): void {
+export function validateDefinitions(definitions: Definitions, source: string): void {
   for (const [key, definition] of Object.entries(definitions)) {
     validateDefinition(key, definition, source);
     owner.set(key, source);
   }
 }
 
-function validateDefinition(
-  key: string,
-  definition: VariableDefinition,
-  source: string,
-): void {
+function validateDefinition(key: string, definition: VariableDefinition, source: string): void {
   if (!KEY_PATTERN.test(key)) {
     throw new EnvDefinitionError(
       `'${key}' is not a usable variable name: use upper-case letters, digits and underscores, starting with a letter or underscore.`,
@@ -120,10 +111,7 @@ export function isRequired(definition: VariableDefinition): boolean {
   return parse(definition.schema, undefined).ok === false;
 }
 
-export function complaint(
-  definition: VariableDefinition,
-  message: string,
-): string {
+export function complaint(definition: VariableDefinition, message: string): string {
   if (definition.class === "plain") return message;
   return `withheld, because a '${definition.class}' value's schema message can quote the value itself`;
 }

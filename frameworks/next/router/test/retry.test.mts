@@ -5,7 +5,10 @@ import { isServiceThrottle, retryTransientOrigin } from "../src/retry.mjs";
 const noDelay = { sleep: async () => {}, random: () => 0 };
 
 function throttled() {
-  return new Response(null, { status: 429, headers: { "x-amzn-errortype": "TooManyRequestsException" } });
+  return new Response(null, {
+    status: 429,
+    headers: { "x-amzn-errortype": "TooManyRequestsException" },
+  });
 }
 
 describe("retryTransientOrigin", () => {

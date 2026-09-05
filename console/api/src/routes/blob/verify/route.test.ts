@@ -39,19 +39,14 @@ async function seedSession(
       body: JSON.stringify({
         projectId,
         bucket: "storage",
-        files: [
-          { key: "a.png", name: "a.png", size: 3, mimeType: "image/png" },
-        ],
+        files: [{ key: "a.png", name: "a.png", size: 3, mimeType: "image/png" }],
         metadata: encodedMetadata,
         callbackBaseUrl: "http://localhost:3000/api/upload",
       }),
     }),
   );
   const { sessionId, files } = await presignRes.json();
-  const [row] = await db
-    .select()
-    .from(uploadSession)
-    .where(eq(uploadSession.id, sessionId));
+  const [row] = await db.select().from(uploadSession).where(eq(uploadSession.id, sessionId));
   return { sessionId, secret: row.secret, key: files[0].key };
 }
 
@@ -97,10 +92,7 @@ describe("POST /api/blob/verify", () => {
       const file = { key, name: "a.png", size: 3, mimeType: "image/png" };
 
       const res = await verifyUploadSignature(
-        verifyRequest(
-          { sessionId, signature: "deadbeef", file },
-          session.headers,
-        ),
+        verifyRequest({ sessionId, signature: "deadbeef", file }, session.headers),
       );
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -114,10 +106,7 @@ describe("POST /api/blob/verify", () => {
   it("rejects a signature over a tampered file (different key)", async () => {
     const session = await createTestSessionWithOrganization();
     try {
-      const { sessionId, secret, key } = await seedSession(
-        session,
-        "verify-tampered",
-      );
+      const { sessionId, secret, key } = await seedSession(session, "verify-tampered");
       const file = { key, name: "a.png", size: 3, mimeType: "image/png" };
       const signature = signUpload(secret, sessionId, file);
 

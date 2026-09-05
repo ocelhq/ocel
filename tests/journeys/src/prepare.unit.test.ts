@@ -1,6 +1,6 @@
+import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterAll, describe, expect, it } from "bun:test";
 import { outputRoot, prepareFile } from "./paths";
 import { readPrepared, readPrepareFailure } from "./prepare";
 

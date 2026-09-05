@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { legOf, timelineOf, type TimelineInput, timingTable } from "./timeline";
+import { legOf, type TimelineInput, timelineOf, timingTable } from "./timeline";
 
 const START = 1_000_000;
 
@@ -81,9 +81,7 @@ describe("timelineOf", () => {
 
 describe("timingTable", () => {
   it("renders the stat line and a row per cell", () => {
-    expect(
-      timingTable(timelineOf(overlapping), { target: "aws", runId: "42" }),
-    ).toBe(
+    expect(timingTable(timelineOf(overlapping), { target: "aws", runId: "42" })).toBe(
       [
         "### timing · aws · run 42",
         "",

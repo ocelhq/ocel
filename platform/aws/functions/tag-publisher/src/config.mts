@@ -1,4 +1,4 @@
-import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
+import { GetParameterCommand, type SSMClient } from "@aws-sdk/client-ssm";
 
 export interface Config {
   assetBucket: string;
@@ -15,9 +15,7 @@ function required(name: string): string {
 }
 
 async function parameter(ssm: SSMClient, name: string): Promise<string> {
-  const out = await ssm.send(
-    new GetParameterCommand({ Name: name, WithDecryption: true }),
-  );
+  const out = await ssm.send(new GetParameterCommand({ Name: name, WithDecryption: true }));
   const value = out.Parameter?.Value;
   if (value === undefined || value === "") {
     throw new Error(`SSM parameter ${name} is empty`);
