@@ -8,7 +8,7 @@ import {
   consoleUrl,
   HARNESS_ONLY_ENV,
 } from "@ocel-tests/shared/env";
-import { INITIAL_GREETING, redact, SECRET_TOKEN } from "../contract";
+import { INITIAL_GREETING, redact, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { JOURNEY_CONFIG } from "../config";
 import { runOcel, treeRoot, workTree } from "../ocel";
@@ -255,6 +255,7 @@ async function list(): Promise<string[]> {
 export const devTarget: Target = {
   name: "dev",
   concurrency: 4,
+  largeBodyBytes: UNCAPPED_BODY_BYTES,
   legTimeoutMs: 180_000,
   legs: ["up", "contract", "destroy"],
   guard,

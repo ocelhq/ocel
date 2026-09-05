@@ -23,6 +23,7 @@ export type CellContext = {
 export type Target = {
   name: TargetName;
   concurrency: number;
+  largeBodyBytes: number;
   legTimeoutMs: number;
   legs: Leg[];
   guard: () => Promise<ExpectationEnvironment>;

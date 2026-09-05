@@ -4,7 +4,7 @@ import {
   type ContractRow,
   describeResponse,
   json,
-  LARGE_BYTES,
+  LARGE_RESPONSE_BYTES,
   SLEEP_MS,
 } from "../contract";
 
@@ -85,27 +85,28 @@ export const probeRows: ContractRow[] = [
     },
   },
   {
-    title: "POST /api/probes/large accepts a five megabyte body",
+    title: "POST /api/probes/large round-trips a body the size the origin takes",
     run: async (ctx) => {
-      const body = randomBytes(LARGE_BYTES);
+      const body = randomBytes(ctx.largeBodyBytes);
       const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/large`, {
         method: "POST",
         headers: { "content-type": "application/octet-stream" },
         body,
       });
-      assert.equal(res.status, 200);
-      const probe = (await res.json()) as { bytes: number; sha256: string };
-      assert.equal(probe.bytes, LARGE_BYTES);
+      const text = await res.text();
+      assert.equal(res.status, 200, describeResponse(res, text));
+      const probe = JSON.parse(text) as { bytes: number; sha256: string };
+      assert.equal(probe.bytes, ctx.largeBodyBytes);
       assert.equal(probe.sha256, createHash("sha256").update(body).digest("hex"));
     },
   },
   {
     title: "GET /api/probes/large returns five megabytes with a checksum",
     run: async (ctx) => {
-      const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/large?bytes=${LARGE_BYTES}`);
+      const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/large?bytes=${LARGE_RESPONSE_BYTES}`);
       assert.equal(res.status, 200);
       const bytes = Buffer.from(await res.arrayBuffer());
-      assert.equal(bytes.byteLength, LARGE_BYTES);
+      assert.equal(bytes.byteLength, LARGE_RESPONSE_BYTES);
       assert.equal(
         createHash("sha256").update(bytes).digest("hex"),
         res.headers.get("x-ocel-sha256"),

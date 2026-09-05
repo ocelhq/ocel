@@ -3,7 +3,6 @@ package deploy
 import (
 	"fmt"
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
@@ -222,12 +221,11 @@ func (r *release) routerHost(plan providerkit.StackPlan) (*routerHost, error) {
 		AssetPrefix:       prefix,
 		ImageOptimizerURL: r.cfg.ImageOptimizerURL,
 		Env: map[string]string{
-			routingManifestEnv:      routingManifestInTask,
-			assetPrefixEnv:          prefix,
-			slugEnv:                 r.cfg.Slug,
-			appNameEnv:              plan.App.App,
-			deploymentIDEnv:         plan.App.Deployment,
-			edge.OriginBodyLimitVar: strconv.Itoa(lambdaOriginBodyLimitBytes),
+			routingManifestEnv: routingManifestInTask,
+			assetPrefixEnv:     prefix,
+			slugEnv:            r.cfg.Slug,
+			appNameEnv:         plan.App.App,
+			deploymentIDEnv:    plan.App.Deployment,
 		},
 	}
 	if r.cfg.AssetBucket != "" {

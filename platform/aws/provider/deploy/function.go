@@ -71,12 +71,6 @@ const (
 	outputKeyFunctionURL = "url"
 
 	outputKeyFunctionName = "functionName"
-
-	lambdaSyncInvokePayloadLimitBytes = 6291456
-
-	lambdaEventEnvelopeMarginBytes = 2048
-
-	lambdaOriginBodyLimitBytes = lambdaSyncInvokePayloadLimitBytes - lambdaEventEnvelopeMarginBytes
 )
 
 func bytecodeCacheEnabled() bool {

@@ -23,11 +23,6 @@ import { withStatus, withVercelCacheAlias } from "./http-cache.mjs";
 import { retainOwner } from "./origin-response.mjs";
 import { asSegmentPayload, isSegmentPrefetch } from "./segment.mjs";
 import {
-  bodyWithinBudget,
-  payloadTooLarge,
-  type OriginBodyBudget,
-} from "./origin-body.mjs";
-import {
   isImageRequest,
   serveImage,
   unprovisionedImageOrigin,
@@ -171,7 +166,6 @@ export interface RouteDeps {
 
   originFetch?: typeof fetch;
 
-  originBodyBudget?: OriginBodyBudget;
 
   imageOrigin?: ImageOrigin;
 
@@ -1112,20 +1106,8 @@ const CACHE_TAG_HEADER = "cache-tag";
 
 function originFetch(deps: RouteDeps): typeof fetch {
   const doFetch = deps.originFetch ?? deps.fetch ?? fetch;
-  const budget = deps.originBodyBudget;
   return (async (input, init) => {
-    let request: Request | undefined;
-    if (budget) {
-      request = new Request(input as RequestInfo, init);
-      if (request.body) {
-        const body = await bodyWithinBudget(request, budget);
-        if (body === undefined) return payloadTooLarge();
-        if (body !== request.body) request = new Request(request, { body });
-      }
-    }
-    const response = retainOwner(
-      await (request ? doFetch(request) : doFetch(input as RequestInfo, init)),
-    );
+    const response = retainOwner(await doFetch(input as RequestInfo, init));
     const hasEmptyBody = response.headers.has(EMPTY_BODY_HEADER);
     const keepCacheTags = deps.keepCacheTags === true;
     const hasCacheTags =

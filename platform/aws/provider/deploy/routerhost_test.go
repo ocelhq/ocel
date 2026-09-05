@@ -3,7 +3,6 @@ package deploy
 import (
 	"encoding/json"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -114,7 +113,6 @@ func TestRouterHostNamesTheEntryAndWhatTheRouterReads(t *testing.T) {
 		appNameEnv:                "web",
 		deploymentIDEnv:           "d1",
 		edge.ImageOptimizerURLVar: "https://optimizer.lambda-url.us-east-1.on.aws/",
-		edge.OriginBodyLimitVar:   strconv.Itoa(lambdaOriginBodyLimitBytes),
 	}
 	for key, value := range want {
 		if host.Env[key] != value {

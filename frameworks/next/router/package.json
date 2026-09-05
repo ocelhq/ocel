@@ -11,7 +11,6 @@
     "./http-cache": "./src/http-cache.mts",
     "./i18n": "./src/i18n.mts",
     "./image": "./src/image.mts",
-    "./origin-body": "./src/origin-body.mts",
     "./origin-response": "./src/origin-response.mts",
     "./request-target": "./src/request-target.mts",
     "./retry": "./src/retry.mts",

@@ -9,13 +9,15 @@ export const SECRET_TOKEN = "journey-secret-never-in-a-body";
 export const REDACTED = "<redacted>";
 
 export const OCEL_SVG_BYTES = 365;
-export const LARGE_BYTES = 5 * 1024 * 1024;
+export const LARGE_RESPONSE_BYTES = 5 * 1024 * 1024;
+export const UNCAPPED_BODY_BYTES = 5 * 1024 * 1024;
 export const SLEEP_MS = 25_000;
 
 export type ContractContext = {
   app: string;
   baseUrl: string;
   greeting: string;
+  largeBodyBytes: number;
   leg: Leg;
   notes: Map<string, string>;
   fetch: Fetch;

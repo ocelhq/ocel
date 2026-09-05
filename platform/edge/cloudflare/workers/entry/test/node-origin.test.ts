@@ -134,33 +134,11 @@ describe("node runtime serve path", () => {
     expect(wire.calls).toHaveLength(0);
   });
 
-  it("answers 413 for a body over the origin's payload budget", async () => {
+  it("forwards a body far past any origin's own limit, leaving the refusal to the origin", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), {
-      originFetch: wire.fetch,
-      originBodyBudget: { maxBytes: 16 },
-    })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
 
-    const response = await serve(
-      new Request("https://api.example.com/upload", {
-        method: "POST",
-        headers: { "content-type": "application/octet-stream" },
-        body: new Uint8Array(64),
-      }),
-    );
-
-    expect(response.status).toBe(413);
-    expect(wire.calls).toHaveLength(0);
-  });
-
-  it("takes a five megabyte binary body against the lambda budget, measured raw", async () => {
-    const wire = capturing();
-    const serve = (await resolved(makeRecord(), {
-      originFetch: wire.fetch,
-      originBodyBudget: { maxBytes: 6_291_456 - 2048 },
-    })) as ServeFetch;
-
-    const size = 5 * 1024 * 1024;
+    const size = 8 * 1024 * 1024;
     const response = await serve(
       new Request("https://api.example.com/api/probes/large", {
         method: "POST",
@@ -174,31 +152,9 @@ describe("node runtime serve path", () => {
     expect((await wire.calls[0].arrayBuffer()).byteLength).toBe(size);
   });
 
-  it("answers 413 for a binary body past the lambda budget", async () => {
+  it("forwards a json body to the origin", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), {
-      originFetch: wire.fetch,
-      originBodyBudget: { maxBytes: 6_291_456 - 2048 },
-    })) as ServeFetch;
-
-    const response = await serve(
-      new Request("https://api.example.com/api/probes/large", {
-        method: "POST",
-        headers: { "content-type": "application/octet-stream" },
-        body: new Uint8Array(6_291_456),
-      }),
-    );
-
-    expect(response.status).toBe(413);
-    expect(wire.calls).toHaveLength(0);
-  });
-
-  it("forwards a body inside the origin's payload budget", async () => {
-    const wire = capturing();
-    const serve = (await resolved(makeRecord(), {
-      originFetch: wire.fetch,
-      originBodyBudget: { maxBytes: 1024 },
-    })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
 
     await serve(
       new Request("https://api.example.com/orders", {
@@ -211,12 +167,9 @@ describe("node runtime serve path", () => {
     expect(await wire.calls[0].json()).toEqual({ sku: "x" });
   });
 
-  it("measures a streamed body with no content-length and forwards it intact", async () => {
+  it("forwards a streamed body with no content-length intact", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), {
-      originFetch: wire.fetch,
-      originBodyBudget: { maxBytes: 1024 },
-    })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
 
     const request = streamedPost(512);
     expect(request.headers.get("content-length")).toBeNull();
@@ -226,19 +179,6 @@ describe("node runtime serve path", () => {
     expect(response.status).not.toBe(413);
     expect(wire.calls).toHaveLength(1);
     expect((await wire.calls[0].arrayBuffer()).byteLength).toBe(512);
-  });
-
-  it("answers 413 for a streamed body with no content-length past the budget", async () => {
-    const wire = capturing();
-    const serve = (await resolved(makeRecord(), {
-      originFetch: wire.fetch,
-      originBodyBudget: { maxBytes: 1024 },
-    })) as ServeFetch;
-
-    const response = await serve(streamedPost(4096));
-
-    expect(response.status).toBe(413);
-    expect(wire.calls).toHaveLength(0);
   });
 
   it("binds none of next's machinery onto the forwarded request", async () => {

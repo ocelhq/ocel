@@ -25,6 +25,5 @@ export interface Env {
   OCEL_STATE_TABLE?: string;
   OCEL_ISR_BUCKET?: string;
   OCEL_IMAGE_OPTIMIZER_URL?: string;
-  OCEL_ORIGIN_BODY_LIMIT?: string;
   LOADER?: WorkerLoader;
 }

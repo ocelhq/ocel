@@ -6,7 +6,6 @@ import {
   type RouteResult,
 } from "@framework/next-router";
 import type { AssetStoreDeps } from "@framework/next-router/assets";
-import { originBodyBudget } from "@framework/next-router/origin-body";
 
 import { deploymentScope, type CacheDeps } from "./cache";
 import { functionUrlImageOrigin } from "@framework/next-router/image";
@@ -150,7 +149,6 @@ const originRuntime: ServeRuntime = {
       app: deployments.app ?? record.app,
       functionUrls: record.functionUrls,
       originFetch: base.originFetch,
-      originBodyBudget: base.originBodyBudget,
     }),
 };
 
@@ -325,7 +323,6 @@ export default {
       {
         fetch,
         originFetch,
-        originBodyBudget: originBodyBudget(env.OCEL_ORIGIN_BODY_LIMIT),
         imageOrigin: functionUrlImageOrigin(
           env.OCEL_IMAGE_OPTIMIZER_URL,
           originFetch ?? fetch,
