@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
@@ -23,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -978,7 +978,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "")
 
 		got := resolvedEnv(nil, nil, nil, nil, "", "")
-		for _, key := range []string{appurl.Name, appurl.ClientName} {
+		for _, key := range []string{providerkit.URLEnvName, providerkit.ClientURLEnvName} {
 			if want := "http://localhost:3000"; got[key] != want {
 				t.Errorf("%s = %q, want %q — dev never leaves it unset, so an app may read it without a fallback", key, got[key], want)
 			}
@@ -989,8 +989,8 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "")
 
 		got := resolvedEnv(nil, nil, map[string]string{"PORT": "4321"}, nil, "", "")
-		if want := "http://localhost:4321"; got[appurl.Name] != want {
-			t.Errorf("%s = %q, want %q", appurl.Name, got[appurl.Name], want)
+		if want := "http://localhost:4321"; got[providerkit.URLEnvName] != want {
+			t.Errorf("%s = %q, want %q", providerkit.URLEnvName, got[providerkit.URLEnvName], want)
 		}
 	})
 
@@ -998,8 +998,8 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "8080")
 
 		got := resolvedEnv(nil, nil, nil, nil, "", "")
-		if want := "http://localhost:8080"; got[appurl.Name] != want {
-			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", appurl.Name, got[appurl.Name], want)
+		if want := "http://localhost:8080"; got[providerkit.URLEnvName] != want {
+			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", providerkit.URLEnvName, got[providerkit.URLEnvName], want)
 		}
 	})
 }

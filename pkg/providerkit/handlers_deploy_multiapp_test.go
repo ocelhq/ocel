@@ -194,6 +194,29 @@ func TestDeployFinishesASiblingOfAFailedAppAndWithholdsPromotion(t *testing.T) {
 	}
 }
 
+func TestDeployServesAProjectHostnameOnTheFirstAppAlone(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	if result, _ := deploy(t, client, twoAppRequest()); !result.GetSuccess() {
+		t.Fatalf("the deploy that creates the edge surface = %q", result.GetError())
+	}
+	hostnameAdded(t, client, "shop.example")
+
+	result, _ := deploy(t, client, twoAppRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	served := providerkit.AttributeHostnames([]string{"shop.example"}, [][]string{nil, nil})
+	if want := []string{"https://" + served[0][0]}; !slices.Equal(servedAppURLs(result, "web"), want) {
+		t.Errorf("web is served %v, want %v", servedAppURLs(result, "web"), want)
+	}
+	if got := servedAppURLs(result, "admin"); len(got) != 0 {
+		t.Errorf("admin is served %v, want nothing: one app answers for a project hostname, and appurl hands admin no url either", got)
+	}
+}
+
 func TestDeployReportsAppOutcomesInManifestOrderWhicheverFinishesFirst(t *testing.T) {
 	for _, first := range []string{"web", "admin"} {
 		t.Run(first+" finishes first", func(t *testing.T) {

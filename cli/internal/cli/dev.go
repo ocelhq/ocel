@@ -18,7 +18,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
-	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
@@ -31,6 +30,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 var (
@@ -342,8 +342,8 @@ func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []
 		merged[runtimeAddressEnv] = runtimeAddress
 	}
 	merged[appFolderEnv] = appFolder
-	merged[appurl.Name] = localURL(merged[portEnv])
-	merged[appurl.ClientName] = merged[appurl.Name]
+	merged[providerkit.URLEnvName] = localURL(merged[portEnv])
+	merged[providerkit.ClientURLEnvName] = merged[providerkit.URLEnvName]
 	return merged
 }
 
