@@ -20,6 +20,7 @@ import {
 } from "./trailing-slash.mjs";
 import { localeOf, resolveLocale } from "./i18n.mjs";
 import { withStatus, withVercelCacheAlias } from "./http-cache.mjs";
+import { retainOwner } from "./origin-response.mjs";
 import { asSegmentPayload, isSegmentPrefetch } from "./segment.mjs";
 import {
   originBodyBytes,
@@ -761,7 +762,7 @@ async function dispatch(
     return new Response(null, { status: result.status });
   }
   if (result.externalRewrite) {
-    return doFetch(new Request(result.externalRewrite, request));
+    return retainOwner(await doFetch(new Request(result.externalRewrite, request)));
   }
   if (!result.resolvedPathname) {
     const probe = middlewarePrefetchProbe(request, url.pathname, manifest);
@@ -1126,9 +1127,9 @@ function originFetch(deps: RouteDeps): typeof fetch {
         }
       }
     }
-    const response = await (request
-      ? doFetch(request)
-      : doFetch(input as RequestInfo, init));
+    const response = retainOwner(
+      await (request ? doFetch(request) : doFetch(input as RequestInfo, init)),
+    );
     const hasEmptyBody = response.headers.has(EMPTY_BODY_HEADER);
     const keepCacheTags = deps.keepCacheTags === true;
     const hasCacheTags =

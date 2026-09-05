@@ -1,8 +1,16 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import v8 from "node:v8";
+import vm from "node:vm";
+
 import type { Route } from "@next/routing";
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, ruleDestinationPathname, serve, type RouteDeps } from "../src/index.mjs";
 import { assetStoreServing, baseDeps } from "../test-support/dispatch-scenario.mjs";
+
+v8.setFlagsFromString("--expose-gc");
+const collectGarbage = vm.runInNewContext("gc") as () => void;
 
 describe("dispatchResult", () => {
   it("serves a static route from the R2 asset store", async () => {
@@ -667,6 +675,41 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("signed");
     expect(signedUrl).toBe("https://fn.example.com/api/documents");
     expect(plainCalled).toBe(false);
+  });
+
+  it("keeps an origin body readable after the fetch Response it came from is collected", async () => {
+    const server = createServer((_req, res) => res.end("page"));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/api/documents": { kind: "lambda", id: "/api/documents" } },
+      },
+      functionUrls: { "/api/documents": `http://127.0.0.1:${port}` },
+    });
+
+    try {
+      const res = await dispatchResult(
+        {
+          resolvedPathname: "/api/documents",
+          invocationTarget: { pathname: "/api/documents" },
+        },
+        new Request("https://app.example/api/documents"),
+        deps,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      collectGarbage();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(await res.text()).toBe("page");
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   it("forwards an external rewrite through plain fetch, never originFetch", async () => {
