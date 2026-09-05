@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 type capturedResponse struct {
@@ -313,6 +315,42 @@ func TestHandleInvocationForward(t *testing.T) {
 		}
 		if got := cap.trailer.Get(headerErrorType); got != errTypeUpstream {
 			t.Errorf("error trailer = %q, want %q", got, errTypeUpstream)
+		}
+	})
+
+	t.Run("app outliving the deadline answers 504 before lambda kills the function", func(t *testing.T) {
+		node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			select {
+			case <-r.Context().Done():
+			case <-time.After(5 * time.Second):
+			}
+			io.WriteString(w, "too late")
+		}))
+		defer node.Close()
+
+		rt, cap := fakeRuntime(t, []byte(getEvent))
+		m := &nodeChild{nodePort: portOf(t, node), client: newLoopbackClient()}
+
+		deadline := time.Now().Add(completionMargin + 300*time.Millisecond)
+		ctx, cancel := context.WithDeadline(t.Context(), deadline)
+		defer cancel()
+
+		if err := handleInvocation(ctx, rt, m); err != nil {
+			t.Fatalf("handleInvocation: %v", err)
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("response delivered after the deadline; lambda would already have killed the function")
+		}
+
+		p, body := splitPrelude(t, cap.body)
+		if p.StatusCode != http.StatusGatewayTimeout {
+			t.Errorf("statusCode = %d, want 504", p.StatusCode)
+		}
+		if !strings.Contains(string(body), "deadline") {
+			t.Errorf("body = %q, want it to name the deadline", body)
+		}
+		if got := cap.trailer.Get(headerErrorType); got != "" {
+			t.Errorf("timeout before first byte must use the prelude, not a trailer; got %q", got)
 		}
 	})
 }

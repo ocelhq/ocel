@@ -23,16 +23,15 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, m *nodeChild) erro
 	m.live.refreshIfStale(ctx)
 
 	ctx = lambdacontext.NewContext(ctx, inv.lc)
-	if inv.deadlineMs > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithDeadline(ctx, time.UnixMilli(inv.deadlineMs))
-		defer cancel()
-	}
-
 	rw, err := rt.startResponse(ctx, inv.lc.AwsRequestID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: start response for %s: %v\n", inv.lc.AwsRequestID, err)
 		return nil
+	}
+	if inv.deadlineMs > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, time.UnixMilli(inv.deadlineMs))
+		defer cancel()
 	}
 
 	if isWarmInvocation(inv.Payload) {
@@ -43,7 +42,9 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, m *nodeChild) erro
 	}
 
 	waiter := m.registerWaiter(inv.lc.AwsRequestID)
-	reached, err := m.forward(ctx, inv, rw)
+	appCtx, cancelApp := answerBefore(ctx)
+	reached, err := m.forward(appCtx, inv, rw)
+	cancelApp()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: deliver response for %s: %v\n", inv.lc.AwsRequestID, err)
 	}
@@ -56,22 +57,30 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, m *nodeChild) erro
 	return nil
 }
 
+func answerBefore(ctx context.Context) (context.Context, context.CancelFunc) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return context.WithCancel(ctx)
+	}
+	return context.WithDeadline(ctx, deadline.Add(-completionMargin))
+}
+
 func (m *nodeChild) forward(ctx context.Context, inv *invocation, rw *responseWriter) (reached bool, err error) {
 	ev, err := parseEvent(inv.Payload)
 	if err != nil {
-		return false, m.fail(rw, fmt.Sprintf("bad event payload: %v", err))
+		return false, m.fail(rw, http.StatusBadGateway, fmt.Sprintf("bad event payload: %v", err))
 	}
 
 	resp, err := m.forwardToNode(ctx, ev)
 	if err != nil {
-		return false, m.fail(rw, fmt.Sprintf("upstream request failed: %v", err))
+		return false, m.failBeforeFirstByte(ctx, rw, fmt.Sprintf("upstream request failed: %v", err))
 	}
 	defer resp.Body.Close()
 
 	var first [1]byte
 	n, err := io.ReadFull(resp.Body, first[:])
 	if err != nil && err != io.EOF {
-		return true, m.fail(rw, fmt.Sprintf("read upstream body: %v", err))
+		return true, m.failBeforeFirstByte(ctx, rw, fmt.Sprintf("read upstream body: %v", err))
 	}
 	empty := n == 0
 	sentinel := empty && !selfTerminating(resp.StatusCode)
@@ -81,7 +90,7 @@ func (m *nodeChild) forward(ctx context.Context, inv *invocation, rw *responseWr
 
 	prelude, err := encodePrelude(resp.StatusCode, resp.Header)
 	if err != nil {
-		return true, m.fail(rw, fmt.Sprintf("encode prelude: %v", err))
+		return true, m.fail(rw, http.StatusBadGateway, fmt.Sprintf("encode prelude: %v", err))
 	}
 	if _, err := rw.Write(prelude); err != nil {
 		return true, err
@@ -162,9 +171,16 @@ func selfTerminating(status int) bool {
 	return status == http.StatusNoContent || status == http.StatusNotModified
 }
 
-func (m *nodeChild) fail(rw *responseWriter, message string) error {
+func (m *nodeChild) failBeforeFirstByte(ctx context.Context, rw *responseWriter, message string) error {
+	if ctx.Err() == context.DeadlineExceeded {
+		return m.fail(rw, http.StatusGatewayTimeout, "app did not answer before the invocation deadline")
+	}
+	return m.fail(rw, http.StatusBadGateway, message)
+}
+
+func (m *nodeChild) fail(rw *responseWriter, status int, message string) error {
 	header := http.Header{"Content-Type": []string{"text/plain; charset=utf-8"}}
-	prelude, err := encodePrelude(http.StatusBadGateway, header)
+	prelude, err := encodePrelude(status, header)
 	if err != nil {
 		return rw.closeWithError(errTypeUpstream, message)
 	}
