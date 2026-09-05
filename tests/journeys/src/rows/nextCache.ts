@@ -29,6 +29,7 @@ const ALLOWED_QUALITY = 75;
 const DEPLOYMENT_NOTE = "next-cache:deployment";
 
 export const EDGE_ISR_TITLE = "an edge-runtime page with a revalidate serves a cached tier";
+export const PREFETCH_TITLE = "a prefetch answers byte-identically to the request that is not one";
 
 function tierIs(res: Response, allowed: Tier[], what: string) {
   const tier = tierOf(res);
@@ -160,7 +161,7 @@ export const nextCacheRows: ContractRow[] = [
     },
   },
   {
-    title: "a prefetch answers byte-identically to the request that is not one",
+    title: PREFETCH_TITLE,
     run: async (ctx) => {
       const read = async (headers: Record<string, string>) => {
         const res = await ctx.fetch(`${ctx.baseUrl}/cache/static`, { headers });
