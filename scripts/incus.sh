@@ -83,8 +83,25 @@ diagnose_no_ssh() {
     echo "incus.sh: cloud-init installs sshd over the network, so no SSH usually"
     echo "incus.sh: means the VM has no egress. cloud-init reports:"
     incus exec "$name" -- cloud-init status --long 2>&1 | sed 's/^/    /' || true
-    echo "incus.sh: check egress with:"
-    echo "incus.sh:   incus exec $name -- curl -4 -sS -o /dev/null -w '%{http_code}\\n' http://archive.ubuntu.com/ubuntu/"
+    diagnose_section "guest addresses and routes" \
+        incus exec "$name" -- sh -c 'ip -4 -br addr; ip -4 route; cat /etc/resolv.conf'
+    diagnose_section "guest name resolution" \
+        incus exec "$name" -- getent hosts archive.ubuntu.com
+    diagnose_section "guest egress (http status)" \
+        incus exec "$name" -- curl -4 -sS -m 10 -o /dev/null -w '%{http_code}\n' http://archive.ubuntu.com/ubuntu/
+    diagnose_section "guest cloud-init log tail" \
+        incus exec "$name" -- tail -n 30 /var/log/cloud-init.log
+    diagnose_section "host bridge" \
+        sh -c "incus network show incusbr0; ip -4 -br addr show incusbr0"
+    diagnose_section "host forwarding" \
+        sudo -n sh -c 'sysctl net.ipv4.ip_forward; nft list ruleset; iptables-save'
+}
+
+diagnose_section() {
+    local title=$1
+    shift
+    echo "incus.sh: --- $title"
+    "$@" 2>&1 | sed 's/^/    /' || true
 }
 
 print_info() {
