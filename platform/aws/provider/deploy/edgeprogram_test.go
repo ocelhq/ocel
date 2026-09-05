@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -75,7 +76,7 @@ func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
 		edge.ImageOptimizerURLVar:  "https://optimizer.example",
 		edge.RevalidateQueueURLVar: "https://queue.example",
 		edge.EdgeAccessKeyIDVar:    "AKIA",
-		edge.OriginBodyEncodingVar: edge.OriginBodyEncodingBase64,
+		edge.OriginBodyLimitVar:    strconv.Itoa(lambdaOriginBodyLimitBytes),
 	} {
 		if worker.Vars[name] != want {
 			t.Errorf("Vars[%s] = %q, want %q", name, worker.Vars[name], want)

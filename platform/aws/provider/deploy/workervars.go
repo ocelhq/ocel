@@ -34,8 +34,7 @@ func sharedWorker(kind edge.Kind, f WorkerFacts) (edge.Worker, error) {
 		return edge.Worker{}, err
 	}
 	vars := map[string]string{
-		edge.OriginBodyLimitVar:    strconv.Itoa(lambdaOriginBodyLimitBytes),
-		edge.OriginBodyEncodingVar: edge.OriginBodyEncodingBase64,
+		edge.OriginBodyLimitVar: strconv.Itoa(lambdaOriginBodyLimitBytes),
 	}
 	for name, value := range map[string]string{
 		edge.AWSRegionVar:          f.Region,

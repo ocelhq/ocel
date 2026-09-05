@@ -52,7 +52,6 @@ export interface RouterHost {
   imageOptimizerUrl?: string;
   originFetch: typeof fetch;
   originBodyLimit?: string;
-  originBodyEncoding?: string;
 }
 
 function routerDeps(
@@ -70,10 +69,7 @@ function routerDeps(
     deploymentId: host.deploymentId,
     originFetch: host.originFetch,
     keepCacheTags: host.keepCacheTags,
-    originBodyBudget: originBodyBudget(
-      host.originBodyLimit,
-      host.originBodyEncoding,
-    ),
+    originBodyBudget: originBodyBudget(host.originBodyLimit),
     imageOrigin: functionUrlImageOrigin(
       host.imageOptimizerUrl,
       host.originFetch,
@@ -169,9 +165,6 @@ export function routerHostFromEnv(
     originFetch: siblingOriginFetch(env, region),
     ...(env.OCEL_ORIGIN_BODY_LIMIT
       ? { originBodyLimit: env.OCEL_ORIGIN_BODY_LIMIT }
-      : {}),
-    ...(env.OCEL_ORIGIN_BODY_ENCODING
-      ? { originBodyEncoding: env.OCEL_ORIGIN_BODY_ENCODING }
       : {}),
   };
 }

@@ -25,10 +25,7 @@ const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
 
 const RevalidateQueueURLVar = "OCEL_REVALIDATE_QUEUE_URL"
 
-const (
-	OriginBodyLimitVar    = "OCEL_ORIGIN_BODY_LIMIT"
-	OriginBodyEncodingVar = "OCEL_ORIGIN_BODY_ENCODING"
-)
+const OriginBodyLimitVar = "OCEL_ORIGIN_BODY_LIMIT"
 
 const (
 	OriginSecretVar    = "OCEL_ORIGIN_SECRET"
@@ -36,9 +33,4 @@ const (
 	OriginRouterVar    = "OCEL_ORIGIN_ROUTER"
 	CacheTagPurgeVar   = "OCEL_CACHE_TAG_PURGE"
 	OriginSecretHeader = "x-ocel-origin-secret"
-)
-
-const (
-	OriginBodyEncodingIdentity = "identity"
-	OriginBodyEncodingBase64   = "base64"
 )

@@ -3,6 +3,7 @@ package deploy
 import (
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -105,15 +106,14 @@ func TestRouterHostNamesTheEntryAndWhatTheRouterReads(t *testing.T) {
 		t.Errorf("entry = %q, want the route id the plan names", host.Entry)
 	}
 	want := map[string]string{
-		routingManifestEnv:         routingManifestInTask,
-		assetBucketEnv:             "assets-bucket",
-		assetPrefixEnv:             appAssetPrefix(coord),
-		slugEnv:                    "shop",
-		appNameEnv:                 "web",
-		deploymentIDEnv:            "d1",
-		edge.ImageOptimizerURLVar:  "https://optimizer.lambda-url.us-east-1.on.aws/",
-		edge.OriginBodyLimitVar:    "6289408",
-		edge.OriginBodyEncodingVar: edge.OriginBodyEncodingBase64,
+		routingManifestEnv:        routingManifestInTask,
+		assetBucketEnv:            "assets-bucket",
+		assetPrefixEnv:            appAssetPrefix(coord),
+		slugEnv:                   "shop",
+		appNameEnv:                "web",
+		deploymentIDEnv:           "d1",
+		edge.ImageOptimizerURLVar: "https://optimizer.lambda-url.us-east-1.on.aws/",
+		edge.OriginBodyLimitVar:   strconv.Itoa(lambdaOriginBodyLimitBytes),
 	}
 	for key, value := range want {
 		if host.Env[key] != value {
