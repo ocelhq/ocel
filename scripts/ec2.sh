@@ -5,6 +5,7 @@ STATE_ROOT="${OCEL_EC2_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/ocel-ec2}"
 REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
 AMI_PARAM=/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
 INSTANCE_TYPE="${OCEL_EC2_INSTANCE_TYPE:-t3.small}"
+APT_MIRROR="${OCEL_EC2_APT_MIRROR:-http://archive.ubuntu.com/ubuntu}"
 SSH_USER=ubuntu
 SSH_WAIT_SECS="${OCEL_EC2_SSH_WAIT:-300}"
 ROOT_SIZE_GIB=20
@@ -114,7 +115,7 @@ wait_ssh() {
     local name=$1 addr=$2 deadline=$((SECONDS + SSH_WAIT_SECS)) opts
     mapfile -t opts < <(ssh_opts "$(key_path "$name")")
     while [ "$SECONDS" -lt "$deadline" ]; do
-        if ssh "${opts[@]}" -o ConnectTimeout=5 "$SSH_USER@$addr" true 2>/dev/null; then
+        if ssh "${opts[@]}" -o ConnectTimeout=5 "$SSH_USER@$addr" 'cloud-init status --wait >/dev/null 2>&1; test $? -ne 1' 2>/dev/null; then
             return 0
         fi
         sleep 5
@@ -203,6 +204,10 @@ cmd_create() {
 #cloud-config
 ssh_authorized_keys:
   - $(cat "$(key_path "$name").pub")
+apt:
+  primary:
+    - arches: [default]
+      uri: $APT_MIRROR
 EOF
     instance=$(aws ec2 run-instances \
         --region "$region" \
