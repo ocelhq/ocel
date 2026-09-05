@@ -4,12 +4,16 @@ import {
   writeFile,
   readFile,
   readdir,
+  readlink,
+  realpath,
   stat,
+  lstat,
+  symlink,
   utimes,
 } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   PHASE_DEVELOPMENT_SERVER,
@@ -2816,4 +2820,117 @@ test("treats an empty matcher list as covering everything for the blast-radius w
   }
 
   expect(lines.some((l) => l.includes("matcher covers"))).toBe(true);
+});
+
+async function withNodeModules(projectDir: string): Promise<void> {
+  await mkdir(join(projectDir, "node_modules"), { recursive: true });
+}
+
+async function withVendorPackage(projectDir: string): Promise<string> {
+  const pkgDir = join(projectDir, "vendor/pkg");
+  await mkdir(pkgDir, { recursive: true });
+  await writeFile(join(pkgDir, "index.js"), "module.exports = 1");
+  return pkgDir;
+}
+
+test("rewrites an absolute symlink asset into a link inside the bundle", async () => {
+  const { projectDir, args } = await synthProject();
+  await withNodeModules(projectDir);
+  const pkgDir = await withVendorPackage(projectDir);
+  const link = join(projectDir, "node_modules/pkg");
+  await symlink(pkgDir, link);
+  args.outputs.appRoutes[0]!.assets = {
+    "vendor/pkg": pkgDir,
+    "node_modules/pkg": link,
+  };
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect((await partitionFuncDirs(projectDir)).real).toEqual(["bundle-0.func"]);
+  const bundle = join(functionsDir(projectDir), "bundle-0.func");
+  const dest = join(bundle, "node_modules/pkg");
+  expect(isAbsolute(await readlink(dest))).toBe(false);
+  expect(await realpath(dest)).toBe(await realpath(join(bundle, "vendor/pkg")));
+  expect(await readFile(join(dest, "index.js"), "utf8")).toBe(
+    "module.exports = 1",
+  );
+});
+
+test("leaves a relative symlink asset resolving inside the bundle", async () => {
+  const { projectDir, args } = await synthProject();
+  await withNodeModules(projectDir);
+  const pkgDir = await withVendorPackage(projectDir);
+  const link = join(projectDir, "node_modules/pkg");
+  await symlink("../vendor/pkg", link);
+  args.outputs.appRoutes[0]!.assets = {
+    "vendor/pkg": pkgDir,
+    "node_modules/pkg": link,
+  };
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect((await partitionFuncDirs(projectDir)).real).toEqual(["bundle-0.func"]);
+  const bundle = join(functionsDir(projectDir), "bundle-0.func");
+  const dest = join(bundle, "node_modules/pkg");
+  expect(await readlink(dest)).toBe("../vendor/pkg");
+  expect(await realpath(dest)).toBe(await realpath(join(bundle, "vendor/pkg")));
+  expect(await readFile(join(dest, "index.js"), "utf8")).toBe(
+    "module.exports = 1",
+  );
+});
+
+test("copies a symlink asset whose in-repo target the trace never carried", async () => {
+  const { projectDir, args } = await synthProject();
+  await withNodeModules(projectDir);
+  const pkgDir = await withVendorPackage(projectDir);
+  const link = join(projectDir, "node_modules/pkg");
+  await symlink(pkgDir, link);
+  args.outputs.appRoutes[0]!.assets = { "node_modules/pkg": link };
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const bundle = join(functionsDir(projectDir), "bundle-0.func");
+  const dest = join(bundle, "node_modules/pkg");
+  expect((await lstat(dest)).isDirectory()).toBe(true);
+  expect(await readFile(join(dest, "index.js"), "utf8")).toBe(
+    "module.exports = 1",
+  );
+  expect(await exists(join(bundle, "vendor/pkg"))).toBe(false);
+});
+
+test("dereferences a symlink asset whose target leaves the repo root", async () => {
+  const { projectDir, args } = await synthProject();
+  const outside = await mkdtemp(join(tmpdir(), "ocel-outside-"));
+  await mkdir(join(outside, "pkg"), { recursive: true });
+  await writeFile(join(outside, "pkg/index.js"), "module.exports = 2");
+  await writeFile(join(outside, "data.txt"), "OUT");
+  await withNodeModules(projectDir);
+  const dirLink = join(projectDir, "node_modules/pkg");
+  const fileLink = join(projectDir, "node_modules/data.txt");
+  await symlink(join(outside, "pkg"), dirLink);
+  await symlink(join(outside, "data.txt"), fileLink);
+  args.outputs.appRoutes[0]!.assets = {
+    "node_modules/pkg": dirLink,
+    "node_modules/data.txt": fileLink,
+  };
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const bundle = join(functionsDir(projectDir), "bundle-0.func");
+  expect((await lstat(join(bundle, "node_modules/pkg"))).isDirectory()).toBe(
+    true,
+  );
+  expect((await lstat(join(bundle, "node_modules/data.txt"))).isFile()).toBe(
+    true,
+  );
+  expect(
+    await readFile(join(bundle, "node_modules/pkg/index.js"), "utf8"),
+  ).toBe("module.exports = 2");
+  expect(await readFile(join(bundle, "node_modules/data.txt"), "utf8")).toBe(
+    "OUT",
+  );
 });
