@@ -318,7 +318,7 @@ export default {
       pointer = target.pointer;
       app = target.app;
     }
-    if (!app && !global) return deploymentNotFoundResponse();
+    if (!slug) return deploymentNotFoundResponse();
 
     const serveRequest = await resolveServe(
       { binding: env.DEPLOYMENTS, slug, host, app, pointer },
