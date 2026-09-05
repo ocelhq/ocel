@@ -244,10 +244,10 @@ describe("the gap list", () => {
     }
   });
 
-  it("lists dev at up and destroy on both buckets, and the upload row on the sdk one alone", () => {
+  it("lists dev at destroy on both buckets, and up and the upload row on the sdk one alone", () => {
     const listed = expectationsFor("dev");
     for (const [name, cell] of Object.entries(listed)) {
-      assert.deepEqual(issues(listed, name, UP_TITLE), [881], name);
+      assert.deepEqual(issues(listed, name, UP_TITLE), name.startsWith("sdk/") ? [881] : [], name);
       assert.deepEqual(issues(listed, name, DESTROY_TITLE), [877], name);
       assert.ok(!(contractTitle("redeploy", UPLOAD) in cell), name);
     }
@@ -300,7 +300,13 @@ describe("the gap list", () => {
       "deploy/hono-api-gateway",
       "deploy/fastify-api-gateway",
     ]);
-    assert.deepEqual(alive("dev"), []);
+    assert.deepEqual(alive("dev"), [
+      "deploy/express",
+      "deploy/hono",
+      "deploy/fastify",
+      "deploy/next",
+      "deploy/workspace",
+    ]);
     assert.deepEqual(alive("vps"), [
       "deploy/express",
       "deploy/hono",

@@ -23,14 +23,6 @@ async function openSqlite() {
   return new Database(":memory:");
 }
 
-function greeting(): string {
-  return process.env.GREETING ?? "hello";
-}
-
-function hasSecret(): boolean {
-  return (process.env.SECRET_TOKEN ?? "").length > 0;
-}
-
 function parseBody(text: string): unknown {
   if (text.length === 0) {
     return null;
@@ -43,10 +35,6 @@ function parseBody(text: string): unknown {
 }
 
 export const probes: Hono = new Hono();
-
-probes.get("/env", (c) =>
-  c.json({ greeting: greeting(), hasSecret: hasSecret(), arch: process.arch }),
-);
 
 probes.get("/native", async (c) => {
   const db = await openSqlite();

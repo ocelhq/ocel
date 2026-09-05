@@ -10,7 +10,7 @@ import type { ExpectationEnvironment } from "../expectations/types";
 import { appHostname, HARNESS_PREFIX } from "../identity";
 import { cellEnv, exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
-import { migrates } from "../rows";
+import { migrates, setsEnv } from "../rows";
 import type { Leg } from "../spec";
 import { migrateCommand, setAppNames, setSiteHostnames } from "../workspace";
 import { type Gateway, openGateway } from "./gateway";
@@ -309,8 +309,10 @@ async function up(cell: CellContext): Promise<Deployment> {
   const started = await standingFor(cell);
   const drive = driving(cell, started, "up");
 
-  await drive("env-greeting", ["env", "set", "GREETING", INITIAL_GREETING]);
-  await drive("env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN]);
+  if (setsEnv(cell.fixture.rows)) {
+    await drive("env-greeting", ["env", "set", "GREETING", INITIAL_GREETING]);
+    await drive("env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN]);
+  }
   await setAppNames(cell.fixture, drive);
   await setSiteHostnames(cell.fixture, hostnamesOf(cell), drive);
   await drive("deploy", ["deploy", "--yes"]);
@@ -325,7 +327,9 @@ async function redeploy(cell: CellContext, greeting: string): Promise<Deployment
   const started = await standingFor(cell);
   const drive = driving(cell, started, "redeploy");
 
-  await drive("env-greeting", ["env", "set", "GREETING", greeting]);
+  if (setsEnv(cell.fixture.rows)) {
+    await drive("env-greeting", ["env", "set", "GREETING", greeting]);
+  }
   await drive("deploy", ["deploy", "--yes"]);
   return deployment(cell, started);
 }

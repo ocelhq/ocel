@@ -1,6 +1,7 @@
 import type { Compute } from "ocel/config";
 import type { ContractContext, ContractRow } from "./contract";
 import {
+  envRows,
   healthRows,
   linkRows,
   nextCacheRows,
@@ -76,7 +77,7 @@ export const groups: Group[] = [
 ];
 
 const SERVED = [...healthRows, ...staticRows, ...probeRows];
-const STORED = [...healthRows, ...staticRows, ...productRows, ...probeRows];
+const STORED = [...healthRows, ...staticRows, ...productRows, ...probeRows, ...envRows];
 const NEXT_SERVED = [...nextRoutingRows, ...nextCacheRows];
 const NEXT_STORED = [...nextStateRows, ...nextDataCacheRows];
 const LADDER = [...healthRows, ...staticRows, ...linkRows];

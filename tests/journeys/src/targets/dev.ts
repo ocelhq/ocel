@@ -13,7 +13,7 @@ import type { ExpectationEnvironment } from "../expectations/types";
 import { JOURNEY_CONFIG } from "../config";
 import { cellEnv, runOcel, treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
-import { migrates } from "../rows";
+import { migrates, setsEnv } from "../rows";
 import { appCommand, appHomes, migrateCommand, stateComplaint } from "../workspace";
 import type { CellContext, Deployment, Target } from "./types";
 
@@ -158,8 +158,10 @@ async function up(cell: CellContext): Promise<Deployment> {
   const env = { ...childEnv(token, cell), OCEL_CONFIG: path.join(dir, JOURNEY_CONFIG) };
 
   await runOcel(cell, dir, "up", "console-link", ["console", "link", "--create", cell.slug], env);
-  await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
-  await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
+  if (setsEnv(cell.fixture.rows)) {
+    await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
+    await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
+  }
   if (migrates(cell.fixture.rows)) {
     await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
   }

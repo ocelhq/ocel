@@ -20,14 +20,6 @@ async function openSqlite() {
   return new Database(":memory:");
 }
 
-function greeting(): string {
-  return process.env.GREETING ?? "hello";
-}
-
-function hasSecret(): boolean {
-  return (process.env.SECRET_TOKEN ?? "").length > 0;
-}
-
 function echoBody(body: unknown): unknown {
   if (body === undefined || body === null) {
     return null;
@@ -50,12 +42,6 @@ export async function probes(app: FastifyInstance): Promise<void> {
   app.addContentTypeParser("*", { parseAs: "buffer", bodyLimit: MAX_BODY }, (_req, body, done) => {
     done(null, body);
   });
-
-  app.get("/env", async () => ({
-    greeting: greeting(),
-    hasSecret: hasSecret(),
-    arch: process.arch,
-  }));
 
   app.get("/native", async () => {
     const db = await openSqlite();

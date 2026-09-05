@@ -20,14 +20,6 @@ async function openSqlite() {
   return new Database(":memory:");
 }
 
-function greeting(): string {
-  return process.env.GREETING ?? "hello";
-}
-
-function hasSecret(): boolean {
-  return (process.env.SECRET_TOKEN ?? "").length > 0;
-}
-
 function json(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
     ...init,
@@ -45,10 +37,6 @@ async function echoBody(request: Request): Promise<unknown> {
   } catch {
     return text;
   }
-}
-
-async function envProbe(): Promise<Response> {
-  return json({ greeting: greeting(), hasSecret: hasSecret(), arch: process.arch });
 }
 
 async function nativeProbe(): Promise<Response> {
@@ -149,9 +137,6 @@ async function handle(request: Request): Promise<Response> {
     return echoProbe(request, url);
   }
   if (request.method === "GET") {
-    if (head === "env") {
-      return envProbe();
-    }
     if (head === "native") {
       return nativeProbe();
     }

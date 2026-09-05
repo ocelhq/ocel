@@ -1,4 +1,5 @@
 import type { ContractRow } from "../contract";
+import { envRows } from "./env";
 import { healthRows } from "./health";
 import { linkRows } from "./links";
 import { nextCacheRows, nextDataCacheRows } from "./nextCache";
@@ -7,6 +8,7 @@ import { probeRows } from "./probes";
 import { productRows } from "./product";
 import { staticRows } from "./static";
 
+export { ENV_ROW, envRows, setsEnv } from "./env";
 export { healthRows } from "./health";
 export { LINK_QUERY_ROW, LINK_ROW, linkRows } from "./links";
 export { EDGE_ISR_TITLE, nextCacheRows, nextDataCacheRows } from "./nextCache";
@@ -20,6 +22,7 @@ export const everyRow: ContractRow[] = [
   ...staticRows,
   ...productRows,
   ...probeRows,
+  ...envRows,
   ...linkRows,
   ...nextRoutingRows,
   ...nextStateRows,

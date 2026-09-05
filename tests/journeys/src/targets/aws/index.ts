@@ -7,7 +7,7 @@ import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { cellEnv, configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
-import { migrates } from "../../rows";
+import { migrates, setsEnv } from "../../rows";
 import type { PrepareFailures } from "../../prepare";
 import { cellsOf, type Leg, specForTarget, variantNameOf } from "../../spec";
 import { copyTree } from "../../tree";
@@ -183,8 +183,10 @@ async function up(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
   const env = childEnv(cell, dir);
 
-  await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
-  await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
+  if (setsEnv(cell.fixture.rows)) {
+    await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
+    await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
+  }
   await setAppNames(cell.fixture, (name, args) => runOcel(cell, dir, "up", name, args, env));
   await setSiteHostnames(cell.fixture, hostnames(cell), (name, args) =>
     runOcel(cell, dir, "up", name, args, env),
@@ -221,7 +223,9 @@ async function up(cell: CellContext): Promise<Deployment> {
 async function redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
   const dir = await cellTree(cell);
   const env = childEnv(cell, dir);
-  await runOcel(cell, dir, "redeploy", "env-greeting", ["env", "set", "GREETING", greeting], env);
+  if (setsEnv(cell.fixture.rows)) {
+    await runOcel(cell, dir, "redeploy", "env-greeting", ["env", "set", "GREETING", greeting], env);
+  }
   await runOcel(cell, dir, "redeploy", "deploy", ["deploy", "--yes"], env);
   const deployed = deployment(cell, await dispatcher());
   await awaitEdge(cell, "redeploy", deployed);
