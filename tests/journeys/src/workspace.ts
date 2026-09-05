@@ -33,27 +33,6 @@ export async function setAppNames(
   }
 }
 
-export async function setSiteHostnames(
-  fixture: FixtureSpec,
-  hostnames: Map<string, string>,
-  run: (name: string, args: string[]) => Promise<unknown>,
-): Promise<void> {
-  for (const app of fixture.apps) {
-    const hostname = hostnames.get(app);
-    if (!hostname) {
-      continue;
-    }
-    const folder = appFolder(fixture, app);
-    await run(`env-site-${app}`, [
-      "env",
-      "set",
-      "SITE_HOSTNAME",
-      hostname,
-      ...(folder ? ["--folder", folder] : []),
-    ]);
-  }
-}
-
 export function migrateCommand(): string[] {
   return ["pnpm", "run", "migrate"];
 }

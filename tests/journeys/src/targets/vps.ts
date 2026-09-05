@@ -12,7 +12,7 @@ import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
 import { migrates, setsEnv } from "../rows";
 import type { Leg } from "../spec";
-import { migrateCommand, setAppNames, setSiteHostnames } from "../workspace";
+import { migrateCommand, setAppNames } from "../workspace";
 import { type Gateway, openGateway } from "./gateway";
 import type { CellContext, Deployment, Target } from "./types";
 
@@ -310,7 +310,6 @@ async function up(cell: CellContext): Promise<Deployment> {
     await drive("env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN]);
   }
   await setAppNames(cell.fixture, drive);
-  await setSiteHostnames(cell.fixture, hostnamesOf(cell), drive);
   await drive("deploy", ["deploy", "--yes"]);
   await bindDomains(cell, started);
   if (migrates(cell.fixture.rows)) {

@@ -11,7 +11,7 @@ import { migrates, setsEnv } from "../../rows";
 import type { PrepareFailures } from "../../prepare";
 import { type Cell, cellsOf, type Leg, specForTarget, variantNameOf } from "../../spec";
 import { copyTree } from "../../tree";
-import { migrateCommand, setAppNames, setSiteHostnames } from "../../workspace";
+import { migrateCommand, setAppNames } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
 import { authoritativeFetch, emulatorFetch } from "./dispatch";
 import { pulumiSweep } from "./ladder-pulumi";
@@ -183,9 +183,6 @@ async function up(cell: CellContext): Promise<Deployment> {
     await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
   }
   await setAppNames(cell.fixture, (name, args) => runOcel(cell, dir, "up", name, args, env));
-  await setSiteHostnames(cell.fixture, hostnames(cell), (name, args) =>
-    runOcel(cell, dir, "up", name, args, env),
-  );
   await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
   await runOcel(cell, dir, "up", "domain-add", ["domain", "add"], env);
   await runOcel(cell, dir, "up", "deploy-bound", ["deploy", "--yes"], env);

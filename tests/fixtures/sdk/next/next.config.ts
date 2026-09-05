@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 
-// The hostname this app is served on, so the optimizer takes absolute urls to its own images.
-const site = process.env.SITE_HOSTNAME;
+const site = new URL(process.env.OCEL_URL!).hostname;
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
@@ -13,7 +12,7 @@ const nextConfig: NextConfig = {
     deviceSizes: [640, 1080],
     imageSizes: [64],
     minimumCacheTTL: 60,
-    remotePatterns: site ? [{ protocol: "https", hostname: site }] : [],
+    remotePatterns: [{ protocol: "https", hostname: site }],
   },
 
   async headers() {

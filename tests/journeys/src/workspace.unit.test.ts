@@ -5,7 +5,6 @@ import {
   appFolder,
   appHomes,
   migrateCommand,
-  setSiteHostnames,
   stateComplaint,
 } from "./workspace";
 
@@ -39,18 +38,6 @@ describe("a multi-app row", () => {
     expect(appHomes(composite)).toEqual([]);
   });
 
-  it("tells each app its own hostname, in its own folder, and skips an app that has none", async () => {
-    const ran: string[][] = [];
-    const run = async (_name: string, args: string[]) => {
-      ran.push(args);
-    };
-    await setSiteHostnames(workspace, new Map([["next", "next-j.zone"]]), run);
-    await setSiteHostnames(composite, new Map([["web", "web-j.zone"]]), run);
-    expect(ran).toEqual([
-      ["env", "set", "SITE_HOSTNAME", "next-j.zone", "--folder", "/next"],
-      ["env", "set", "SITE_HOSTNAME", "web-j.zone"],
-    ]);
-  });
 });
 
 describe("the state a workspace writes", () => {
