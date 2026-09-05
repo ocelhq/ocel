@@ -200,18 +200,18 @@ describe("the headers a viewer cannot forge past the resolver", () => {
 });
 
 describe("the cache key the resolver computes", () => {
-  for (const testCase of fixture.cases.filter((c) => c.variantStatic !== null)) {
+  for (const testCase of fixture.cases.filter((c) => c.variantPrerendered !== null)) {
     it(testCase.name, async () => {
       const draft = testCase.draft ? ".draft" : "";
 
-      expect(await keyFor(testCase)).toBe(`${RELEASE}${testCase.variantStatic}${draft}`);
+      expect(await keyFor(testCase)).toBe(`${RELEASE}${testCase.variantPrerendered}${draft}`);
     });
   }
 });
 
 describe("the resolver reads no routing manifest, so it keys every route as if it were static", () => {
   const diverging = fixture.cases.filter(
-    (c) => c.variantStatic !== c.variantPartiallyStatic && c.variantStatic !== null,
+    (c) => c.variantPrerendered !== c.variantPartiallyStatic && c.variantPrerendered !== null,
   );
 
   it("has cases the two rendering modes disagree about", () => {
@@ -223,13 +223,13 @@ describe("the resolver reads no routing manifest, so it keys every route as if i
       const draft = testCase.draft ? ".draft" : "";
 
       expect(testCase.variantPartiallyStatic).toBeNull();
-      expect(await keyFor(testCase)).toBe(`${RELEASE}${testCase.variantStatic}${draft}`);
+      expect(await keyFor(testCase)).toBe(`${RELEASE}${testCase.variantPrerendered}${draft}`);
     });
   }
 });
 
 describe("the keys the resolver gives requests the shared fixture records no cacheable variant for", () => {
-  const uncacheable = fixture.cases.filter((c) => c.variantStatic === null);
+  const uncacheable = fixture.cases.filter((c) => c.variantPrerendered === null);
 
   it("gives every one of them a key of its own", async () => {
     const keys = await Promise.all(uncacheable.map(keyFor));
