@@ -9,7 +9,7 @@ import (
 func TestServeDescriptorRoundTripsNeeds(t *testing.T) {
 	t.Parallel()
 
-	raw := `{"framework":"next","buildId":"b1","edgeRouting":true,"needs":{` +
+	raw := `{"runtime":"next","buildId":"b1","edgeRouting":true,"needs":{` +
 		`"edge-middleware":{"count":1,"matchers":["^/dashboard(?:/(.*))?$"]},` +
 		`"edge-runtime":{"count":2,"routes":["/edgy","/api/stream"]},` +
 		`"ppr-resume":{"count":1,"routes":["/"]},` +
@@ -22,7 +22,7 @@ func TestServeDescriptorRoundTripsNeeds(t *testing.T) {
 	}
 
 	want := ServeDescriptor{
-		Framework:   "next",
+		Runtime:     "next",
 		BuildID:     "b1",
 		EdgeRouting: true,
 		Needs: map[Need]NeedDetail{
@@ -54,7 +54,7 @@ func TestServeDescriptorKeepsAnUnknownNeedName(t *testing.T) {
 	t.Parallel()
 
 	var descriptor ServeDescriptor
-	if err := json.Unmarshal([]byte(`{"framework":"next","needs":{"time-travel":{"count":1}}}`), &descriptor); err != nil {
+	if err := json.Unmarshal([]byte(`{"runtime":"next","needs":{"time-travel":{"count":1}}}`), &descriptor); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if _, ok := descriptor.Needs["time-travel"]; !ok {

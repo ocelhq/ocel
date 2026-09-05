@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { detectFramework, resolveFramework } from "./registry.js";
+import { detectRuntime, resolveRuntime } from "./registry.js";
 
 const roots: string[] = [];
 afterAll(() => roots.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -14,28 +14,33 @@ function dirWith(deps: Record<string, string>): string {
   return dir;
 }
 
-describe("resolveFramework", () => {
-  it("resolves a known key", () => expect(resolveFramework("express").name).toBe("express"));
-  it("resolves hono", () => expect(resolveFramework("hono").name).toBe("hono"));
-  it("throws naming known frameworks for an unknown key", () => {
-    expect(() => resolveFramework("svelte")).toThrow(/unknown framework "svelte".*next/s);
+function emptyDir(): string {
+  const dir = mkdtempSync(path.join(tmpdir(), "registry-"));
+  roots.push(dir);
+  return dir;
+}
+
+describe("resolveRuntime", () => {
+  it("resolves a known key", () => expect(resolveRuntime("node").name).toBe("node"));
+  it("resolves next", () => expect(resolveRuntime("next").name).toBe("next"));
+  it("throws naming known runtimes for an unknown key", () => {
+    expect(() => resolveRuntime("svelte")).toThrow(/unknown runtime "svelte".*next.*node/s);
   });
 });
 
-describe("detectFramework", () => {
-  it("detects each framework by its dep", () => {
-    expect(detectFramework(dirWith({ express: "5" }))?.name).toBe("express");
-    expect(detectFramework(dirWith({ fastify: "5" }))?.name).toBe("fastify");
-    expect(detectFramework(dirWith({ next: "16" }))?.name).toBe("next");
-    expect(detectFramework(dirWith({ hono: "4" }))?.name).toBe("hono");
+describe("detectRuntime", () => {
+  it("reads next off the app's dependencies", () => {
+    expect(detectRuntime(dirWith({ next: "16" }))?.name).toBe("next");
   });
-  it("prefers next over express when both are present", () => {
-    expect(detectFramework(dirWith({ next: "16", express: "5" }))?.name).toBe("next");
+  it("falls back to node for any other package.json", () => {
+    expect(detectRuntime(dirWith({ express: "5" }))?.name).toBe("node");
+    expect(detectRuntime(dirWith({ lodash: "4" }))?.name).toBe("node");
+    expect(detectRuntime(dirWith({}))?.name).toBe("node");
   });
-  it("prefers next over hono when both are present", () => {
-    expect(detectFramework(dirWith({ next: "16", hono: "4" }))?.name).toBe("next");
+  it("prefers next over a plain node app when next is a dependency", () => {
+    expect(detectRuntime(dirWith({ next: "16", express: "5" }))?.name).toBe("next");
   });
-  it("returns undefined when nothing matches", () => {
-    expect(detectFramework(dirWith({ lodash: "4" }))).toBeUndefined();
+  it("returns undefined for a directory with no package.json", () => {
+    expect(detectRuntime(emptyDir())).toBeUndefined();
   });
 });

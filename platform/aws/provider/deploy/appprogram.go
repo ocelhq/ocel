@@ -83,7 +83,10 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 	logical := make([]string, 0, len(app.Functions))
 	vpcAccess := false
 	for _, spec := range app.Functions {
-		declared := transformed.forSpec(app.Framework, spec)
+		declared, err := transformed.forSpec(app.Runtime, spec)
+		if err != nil {
+			return nil, err
+		}
 		args[spec.Name] = declared
 		vpcAccess = vpcAccess || declared.VPC.placed()
 		functions = append(functions, appFunction{Logical: spec.Name, RouteID: spec.Route})
@@ -132,7 +135,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 
 	r.served.plan(r, app.App, logical, bytecode)
 
-	sets, delivery, err := r.assetSets(plan, app.App, app.Framework, bundle, cache)
+	sets, delivery, err := r.assetSets(plan, app.App, app.Runtime, bundle, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -163,13 +166,13 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 	}, nil
 }
 
-func (t *transformedArgs) forSpec(framework string, spec providerkit.FunctionSpec) functionArgs {
+func (t *transformedArgs) forSpec(runtime string, spec providerkit.FunctionSpec) (functionArgs, error) {
 	if t != nil {
 		if args, ok := t.functions[spec.Name]; ok {
-			return args
+			return args, nil
 		}
 	}
-	return translateFunctionSpec(framework, spec)
+	return translateFunctionSpec(runtime, spec)
 }
 
 func (r *release) artifactAt(ref providerkit.ArtifactRef) (artifactRef, error) {

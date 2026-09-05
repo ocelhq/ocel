@@ -39,11 +39,11 @@ describe("issuedByTheBox", () => {
 
 describe("recordFile", () => {
   it("names the record a slug of plain characters is kept in", () => {
-    expect(recordFile("j-local-ada-express")).toBe("j-local-ada-express.rec");
+    expect(recordFile("j-local-ada-node")).toBe("j-local-ada-node.rec");
   });
 
   it("percent-encodes what the records tier cannot keep in a file name", () => {
-    expect(recordFile("j-local-ada/express")).toBe("j-local-ada%2Fexpress.rec");
+    expect(recordFile("j-local-ada/node")).toBe("j-local-ada%2Fnode.rec");
   });
 
   it("encodes a leading dot so no record hides itself", () => {
@@ -53,8 +53,8 @@ describe("recordFile", () => {
 
 describe("slugsOf", () => {
   it("names one project per record the box holds", () => {
-    expect(slugsOf("/records/projects/production/j-local-ada-express.rec\n")).toEqual([
-      "j-local-ada-express",
+    expect(slugsOf("/records/projects/production/j-local-ada-node.rec\n")).toEqual([
+      "j-local-ada-node",
     ]);
   });
 
@@ -63,7 +63,7 @@ describe("slugsOf", () => {
   });
 
   it("reads back a slug the records tier percent-encoded", () => {
-    expect(slugsOf("j-local-ada%2Fexpress.rec")).toEqual(["j-local-ada/express"]);
+    expect(slugsOf("j-local-ada%2Fnode.rec")).toEqual(["j-local-ada/node"]);
   });
 
   it("refuses to read a box with no records tier as a box holding nothing", () => {
@@ -74,21 +74,21 @@ describe("slugsOf", () => {
 });
 
 describe("strandedSlugs", () => {
-  const slugs = ["ocelhq", "j-local-ada-express", "j-42-express", "j-4242-express"];
+  const slugs = ["ocelhq", "j-local-ada-node", "j-42-node", "j-4242-node"];
 
   it("leaves projects that are not the harness's alone", () => {
     expect(strandedSlugs(slugs, "42")).not.toContain("ocelhq");
   });
 
   it("leaves this run's own projects standing", () => {
-    expect(strandedSlugs(slugs, "42")).toEqual(["j-local-ada-express", "j-4242-express"]);
+    expect(strandedSlugs(slugs, "42")).toEqual(["j-local-ada-node", "j-4242-node"]);
   });
 
   it("takes every harness project when the run identity matches none", () => {
     expect(strandedSlugs(slugs, "local-bob")).toEqual([
-      "j-local-ada-express",
-      "j-42-express",
-      "j-4242-express",
+      "j-local-ada-node",
+      "j-42-node",
+      "j-4242-node",
     ]);
   });
 });

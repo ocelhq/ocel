@@ -8,8 +8,8 @@ import (
 )
 
 var testCatalogue = []Feature{
-	{Name: "isr", Summary: "incremental regeneration", Needs: []string{NeedsFrameworkPrefix + "next"}},
-	{Name: "image-optimization", Summary: "image optimizer", Needs: []string{NeedsFrameworkPrefix + "next"}},
+	{Name: "isr", Summary: "incremental regeneration", Needs: []string{NeedsRuntimePrefix + "next"}},
+	{Name: "image-optimization", Summary: "image optimizer", Needs: []string{NeedsRuntimePrefix + "next"}},
 	{Name: "cloudflare-edge", Summary: "cloudflare front", DependsOn: []string{"isr"}, Needs: []string{NeedsEdgePrefix + "cloudflare"}},
 }
 
@@ -210,16 +210,16 @@ func TestRequiredFeatures(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name       string
-		frameworks []string
-		edge       string
-		want       []string
+		name     string
+		runtimes []string
+		edge     string
+		want     []string
 	}{
 		{name: "a project needing nothing needs no feature"},
 		{
-			name:       "a framework pulls the features that name it",
-			frameworks: []string{"next"},
-			want:       []string{"isr", "image-optimization"},
+			name:     "a runtime pulls the features that name it",
+			runtimes: []string{"next"},
+			want:     []string{"isr", "image-optimization"},
 		},
 		{
 			name: "an edge pulls the feature that names it, and what it depends on",
@@ -227,25 +227,25 @@ func TestRequiredFeatures(t *testing.T) {
 			want: []string{"isr", "cloudflare-edge"},
 		},
 		{
-			name:       "frameworks and edge together are one set",
-			frameworks: []string{"next"},
-			edge:       "cloudflare",
-			want:       []string{"isr", "image-optimization", "cloudflare-edge"},
+			name:     "runtimes and edge together are one set",
+			runtimes: []string{"next"},
+			edge:     "cloudflare",
+			want:     []string{"isr", "image-optimization", "cloudflare-edge"},
 		},
 		{
-			name:       "a framework no feature names pulls nothing",
-			frameworks: []string{"astro"},
+			name:     "a runtime no feature names pulls nothing",
+			runtimes: []string{"astro"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := RequiredFeatures(testCatalogue, tc.frameworks, tc.edge)
+			got, err := RequiredFeatures(testCatalogue, tc.runtimes, tc.edge)
 			if err != nil {
 				t.Fatalf("RequiredFeatures() = %v", err)
 			}
 			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("RequiredFeatures(%v, %q) = %v, want %v", tc.frameworks, tc.edge, got, tc.want)
+				t.Errorf("RequiredFeatures(%v, %q) = %v, want %v", tc.runtimes, tc.edge, got, tc.want)
 			}
 		})
 	}

@@ -17,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
+const archX8664 = "x86_64"
+
 const (
 	defaultFunctionRuntime = "nodejs24.x"
 
@@ -34,7 +36,7 @@ const (
 	membraneLayerLocalName = "membrane"
 
 	membraneLayerRuntime      = "nodejs24.x"
-	membraneLayerArchitecture = "x86_64"
+	membraneLayerArchitecture = archX8664
 
 	maxLayerNameLen = 64
 

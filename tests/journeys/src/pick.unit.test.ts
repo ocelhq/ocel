@@ -60,28 +60,26 @@ describe("picking one member of a group", () => {
   });
 
   it("runs the member the diff touches, and leaves the preferred one out", () => {
-    const { chosen, leftOut } = pickFixtures(spec, { seed: "7", touched: ["sdk/fastify"] });
-    expect(names(chosen)).toContain("sdk/fastify");
-    expect(names(leftOut)).toEqual(
-      expect.arrayContaining(["sdk/express", "sdk/hono", PREFERRED]),
-    );
+    const { chosen, leftOut } = pickFixtures(spec, { seed: "7", touched: ["sdk/node"] });
+    expect(names(chosen)).toContain("sdk/node");
+    expect(names(leftOut)).toEqual(expect.arrayContaining([PREFERRED]));
   });
 
   it("runs every member the diff touches", () => {
     const { chosen, leftOut } = pickFixtures(spec, {
       seed: "7",
-      touched: ["sdk/express", "sdk/hono"],
+      touched: ["sdk/node", "deploy/node"],
     });
-    expect(names(chosen)).toContain("sdk/express");
-    expect(names(chosen)).toContain("sdk/hono");
-    expect(names(leftOut)).toContain("sdk/fastify");
+    expect(names(chosen)).toContain("sdk/node");
+    expect(names(chosen)).toContain("deploy/node");
     expect(names(leftOut)).toContain(PREFERRED);
+    expect(names(leftOut)).toContain("deploy/workspace");
   });
 
   it("keeps the spec's order in what it chose", () => {
     const { chosen } = pickFixtures(spec, {
       seed: "1",
-      touched: ["sdk/express", "sdk/fastify"],
+      touched: ["sdk/node", "deploy/node"],
     });
     expect(names(chosen)).toEqual(names(spec.filter((row) => chosen.includes(row))));
   });
@@ -177,10 +175,10 @@ describe("covering the variants a group lists, one member each", () => {
   });
 
   it("runs every cell of a fixture the diff touches", () => {
-    const covered = coverCells(ROWS, onAws, "covering", seeded("7", ["sdk/hono"]));
-    expect(covered.get("sdk/hono")).toEqual(onAws(specByName("sdk", "hono")));
-    expect((covered.get("sdk/express") ?? []).length).toBeLessThan(
-      onAws(specByName("sdk", "express")).length,
+    const covered = coverCells(ROWS, onAws, "covering", seeded("7", ["sdk/node"]));
+    expect(covered.get("sdk/node")).toEqual(onAws(specByName("sdk", "node")));
+    expect((covered.get("deploy/node") ?? []).length).toBeLessThan(
+      onAws(specByName("deploy", "node")).length,
     );
   });
 
@@ -201,12 +199,12 @@ describe("covering the variants a group lists, one member each", () => {
   it("hands a variant only to a member that has a cell for it", () => {
     const skipping: CellsFor = (fixture) =>
       onAws(fixture).filter(
-        (cell) => !(fixture.name === "express" && cell.variant?.name === "container"),
+        (cell) => !(fixture.name === "node" && cell.variant?.name === "container"),
       );
     for (const seed of SEEDS) {
       const covered = coverCells(NODE_HTTP, skipping, "covering", seeded(seed));
       expect(
-        covered.get("sdk/express")?.some((cell) => cell.name === "sdk/express-container"),
+        covered.get("sdk/node")?.some((cell) => cell.name === "sdk/node-container"),
       ).toBe(false);
       expect(variantsCovered(NODE_HTTP, skipping, seeded(seed))).toContain("container");
     }

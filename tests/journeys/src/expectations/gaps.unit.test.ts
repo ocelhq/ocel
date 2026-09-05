@@ -76,7 +76,7 @@ describe("the gap list", () => {
 
   it("lists the container gap at up on every aws container cell, and nowhere else", () => {
     const containers = cellsOfVariant("container");
-    assert.ok(containers.includes("deploy/express-container/web"));
+    assert.ok(containers.includes("deploy/node-container/web"));
     assert.ok(containers.includes("sdk/with-transforms-container/web"));
     for (const environment of ["aws", "aws.floci"] as const) {
       const listed = expectationsFor(environment);
@@ -108,9 +108,7 @@ describe("the gap list", () => {
 
   it("lists the same real-world up on every serverless edge for the sdk cells that fail everywhere", () => {
     const everywhere: Record<string, number[]> = {
-      "sdk/express/web": [911],
-      "sdk/hono/web": [911],
-      "sdk/fastify/web": [911],
+      "sdk/node/web": [911],
       "sdk/next/web": [849],
       "sdk/workspace/next": [849],
       "sdk/workspace/express": [849],
@@ -132,7 +130,7 @@ describe("the gap list", () => {
     for (const cell of ["deploy/next/web", "deploy/workspace/next", "deploy/workspace/express"]) {
       assert.deepEqual(issues(listed, on("api-gateway", cell), UP_TITLE), [906], cell);
     }
-    assert.equal(listed["deploy/express-api-gateway/web"], undefined);
+    assert.equal(listed["deploy/node-api-gateway/web"], undefined);
     assert.deepEqual(
       Object.fromEntries(
         Object.entries(listed["sdk/with-transforms-api-gateway/web"] ?? {}).map(
@@ -152,9 +150,7 @@ describe("the gap list", () => {
   it("lists every deploy cell and the with-transforms edges at up under the edge's own issue", () => {
     const listed = expectationsFor("aws");
     for (const cell of [
-      "deploy/express/web",
-      "deploy/hono/web",
-      "deploy/fastify/web",
+      "deploy/node/web",
       "deploy/next/web",
       "deploy/workspace/next",
       "deploy/workspace/express",
@@ -179,15 +175,11 @@ describe("the gap list", () => {
   it("lists every contract title on floci api-gateway, and up under the master-secret issue", () => {
     const listed = expectationsFor("aws.floci");
     assert.deepEqual(upIssues(listed, cellsOfVariant("api-gateway")), {
-      "deploy/express-api-gateway/web": [],
-      "deploy/fastify-api-gateway/web": [],
-      "deploy/hono-api-gateway/web": [],
+      "deploy/node-api-gateway/web": [],
       "deploy/next-api-gateway/web": [906],
       "deploy/workspace-api-gateway/express": [906],
       "deploy/workspace-api-gateway/next": [906],
-      "sdk/express-api-gateway/web": [884],
-      "sdk/fastify-api-gateway/web": [884],
-      "sdk/hono-api-gateway/web": [884],
+      "sdk/node-api-gateway/web": [884],
       "sdk/next-api-gateway/web": [849],
       "sdk/with-pulumi-api-gateway/web": [856],
       "sdk/with-sst-api-gateway/web": [857],
@@ -195,11 +187,11 @@ describe("the gap list", () => {
       "sdk/workspace-api-gateway/express": [849],
       "sdk/workspace-api-gateway/next": [849],
     });
-    const express = "sdk/express-api-gateway/web";
-    assert.deepEqual(issues(listed, express, HEALTH), [854]);
-    assert.deepEqual(issues(listed, express, contractTitle("redeploy", HEALTH)), [854]);
-    assert.deepEqual(issues(listed, express, STREAM), [851]);
-    assert.deepEqual(issues(listed, "deploy/express-api-gateway/web", HEALTH), [854]);
+    const node = "sdk/node-api-gateway/web";
+    assert.deepEqual(issues(listed, node, HEALTH), [854]);
+    assert.deepEqual(issues(listed, node, contractTitle("redeploy", HEALTH)), [854]);
+    assert.deepEqual(issues(listed, node, STREAM), [851]);
+    assert.deepEqual(issues(listed, "deploy/node-api-gateway/web", HEALTH), [854]);
     for (const row of nextCacheRows) {
       const issue = row.title === EDGE_ISR_TITLE ? 899 : 854;
       for (const leg of CONTRACT_LEGS) {
@@ -233,7 +225,7 @@ describe("the gap list", () => {
         assert.deepEqual(Object.keys(cell), [UP_TITLE], name);
       }
       assert.deepEqual(
-        issues(listed, on(variant, "deploy/express/web"), UP_TITLE),
+        issues(listed, on(variant, "deploy/node/web"), UP_TITLE),
         [issue],
         variant,
       );
@@ -251,8 +243,8 @@ describe("the gap list", () => {
       assert.deepEqual(issues(listed, name, DESTROY_TITLE), [877], name);
       assert.ok(!(contractTitle("redeploy", UPLOAD) in cell), name);
     }
-    assert.deepEqual(issues(listed, "sdk/express/web", UPLOAD), [882]);
-    assert.deepEqual(issues(listed, "deploy/express/web", UPLOAD), []);
+    assert.deepEqual(issues(listed, "sdk/node/web", UPLOAD), [882]);
+    assert.deepEqual(issues(listed, "deploy/node/web", UPLOAD), []);
     for (const cell of ["sdk/next/web", "deploy/next/web"]) {
       assert.deepEqual(issues(listed, cell, nextCacheRows[0]?.title ?? ""), [898], cell);
     }
@@ -264,9 +256,7 @@ describe("the gap list", () => {
     assert.deepEqual(vps, expectationsFor("vps.incus"));
     assert.deepEqual(upIssues(vps, Object.keys(vps)), {
       "deploy/next/web": [],
-      "sdk/express/web": [918],
-      "sdk/fastify/web": [918],
-      "sdk/hono/web": [918],
+      "sdk/node/web": [918],
       "sdk/next/web": [918],
       "sdk/workspace/express": [918],
       "sdk/workspace/next": [918],
@@ -280,37 +270,27 @@ describe("the gap list", () => {
         );
       }
     }
-    assert.equal(vps["deploy/express/web"], undefined);
+    assert.equal(vps["deploy/node/web"], undefined);
   });
 
   it("skips every cell that is listed dead at up, and leaves the live ones to run", () => {
     assert.deepEqual(alive("aws"), [
-      "deploy/express-api-gateway",
-      "deploy/express-cloudflare",
-      "deploy/hono-api-gateway",
-      "deploy/hono-cloudflare",
-      "deploy/fastify-api-gateway",
-      "deploy/fastify-cloudflare",
+      "deploy/node-api-gateway",
+      "deploy/node-cloudflare",
       "deploy/next-cloudflare",
       "deploy/workspace-cloudflare",
       "sdk/with-transforms-api-gateway",
     ]);
     assert.deepEqual(alive("aws.floci"), [
-      "deploy/express-api-gateway",
-      "deploy/hono-api-gateway",
-      "deploy/fastify-api-gateway",
+      "deploy/node-api-gateway",
     ]);
     assert.deepEqual(alive("dev"), [
-      "deploy/express",
-      "deploy/hono",
-      "deploy/fastify",
+      "deploy/node",
       "deploy/next",
       "deploy/workspace",
     ]);
     assert.deepEqual(alive("vps"), [
-      "deploy/express",
-      "deploy/hono",
-      "deploy/fastify",
+      "deploy/node",
       "deploy/next",
       "deploy/workspace",
     ]);

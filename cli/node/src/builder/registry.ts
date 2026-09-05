@@ -1,16 +1,14 @@
 import { bundleSummary } from "./bundle.js";
-import { hasDep } from "./detect.js";
+import { hasDep, hasPackageJson } from "./detect.js";
 import { buildNext } from "./next.js";
 import { traceBuild } from "./trace.js";
-import type { AppInput, BuildOptions, FrameworkSpec, FunctionSummary } from "./types.js";
+import type { AppInput, BuildOptions, FunctionSummary, RuntimeSpec } from "./types.js";
 
-export interface Framework {
+export interface Runtime {
   name: string;
   detect(dir: string): boolean;
   build(input: AppInput, options: BuildOptions): Promise<FunctionSummary[]>;
 }
-
-const RUNTIME = "nodejs24.x";
 
 const NODE_ENTRYPOINTS = [
   "src/server.ts", "src/server.js", "src/index.ts", "src/index.js",
@@ -18,40 +16,36 @@ const NODE_ENTRYPOINTS = [
   "server.ts", "server.js", "app.ts", "app.js",
 ];
 
-function nodeFramework(name: string, dep: string): Framework {
-  const spec: FrameworkSpec = { name, runtime: RUNTIME, entrypointCandidates: NODE_ENTRYPOINTS };
-  return {
-    name,
-    detect: (dir) => hasDep(dir, dep),
-    build: async (input, options) => [
-      process.env.OCEL_BUILD_PREFER_TRACING === "1"
-        ? await traceBuild(input, options, spec)
-        : bundleSummary(input, spec),
-    ],
-  };
-}
+const nodeSpec: RuntimeSpec = { name: "node", entrypointCandidates: NODE_ENTRYPOINTS };
 
-export const express = nodeFramework("express", "express");
-export const fastify = nodeFramework("fastify", "fastify");
-export const hono = nodeFramework("hono", "hono");
-export const next: Framework = {
+export const node: Runtime = {
+  name: "node",
+  detect: hasPackageJson,
+  build: async (input, options) => [
+    process.env.OCEL_BUILD_PREFER_TRACING === "1"
+      ? await traceBuild(input, options, nodeSpec)
+      : bundleSummary(input, nodeSpec),
+  ],
+};
+
+export const next: Runtime = {
   name: "next",
   detect: (dir) => hasDep(dir, "next"),
   build: buildNext,
 };
 
-export const REGISTRY: Framework[] = [next, express, fastify, hono];
+export const REGISTRY: Runtime[] = [next, node];
 
-const byName = new Map(REGISTRY.map((fw) => [fw.name, fw]));
+const byName = new Map(REGISTRY.map((rt) => [rt.name, rt]));
 
-export function resolveFramework(key: string): Framework {
-  const fw = byName.get(key);
-  if (!fw) {
-    throw new Error(`ocel: unknown framework "${key}"; known: ${[...byName.keys()].join(", ")}`);
+export function resolveRuntime(key: string): Runtime {
+  const rt = byName.get(key);
+  if (!rt) {
+    throw new Error(`ocel: unknown runtime "${key}"; known: ${[...byName.keys()].join(", ")}`);
   }
-  return fw;
+  return rt;
 }
 
-export function detectFramework(dir: string): Framework | undefined {
-  return REGISTRY.find((fw) => fw.detect(dir));
+export function detectRuntime(dir: string): Runtime | undefined {
+  return REGISTRY.find((rt) => rt.detect(dir));
 }

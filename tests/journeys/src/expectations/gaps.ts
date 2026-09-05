@@ -11,8 +11,8 @@ import {
 } from "../rows";
 import type { Gap } from "./types";
 
-const DEPLOY_NODE_HTTP = ["deploy/express/web", "deploy/hono/web", "deploy/fastify/web"];
-const SDK_NODE_HTTP = ["sdk/express/web", "sdk/hono/web", "sdk/fastify/web"];
+const DEPLOY_NODE_HTTP = ["deploy/node/web"];
+const SDK_NODE_HTTP = ["sdk/node/web"];
 const DEPLOY_WORKSPACE = ["deploy/workspace/next", "deploy/workspace/express"];
 const SDK_WORKSPACE = ["sdk/workspace/next", "sdk/workspace/express"];
 const DEPLOY_CELLS = [...DEPLOY_NODE_HTTP, "deploy/next/web", ...DEPLOY_WORKSPACE];

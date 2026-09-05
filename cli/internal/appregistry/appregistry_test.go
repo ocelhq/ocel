@@ -138,7 +138,7 @@ func TestAProviderThatFailsTheResolveFailsTheDeploy(t *testing.T) {
 func TestAProjectPushingNoImageAsksTheProviderForNoRegistry(t *testing.T) {
 	native := hosting()
 	cfg := project(nil)
-	cfg.Apps = []projectconfig.App{{Name: "api", Compute: "serverless", Framework: "express"}}
+	cfg.Apps = []projectconfig.App{{Name: "api", Compute: "serverless"}}
 
 	target, named, err := Resolve(context.Background(), cfg, native)
 	if err != nil {
@@ -193,7 +193,7 @@ func TestAProjectWithNoRegistryIsAskedForNoSecret(t *testing.T) {
 func TestTheRepositoriesADeployPushesAreItsContainerApps(t *testing.T) {
 	cfg := project(nil)
 	cfg.Apps = append(cfg.Apps,
-		projectconfig.App{Name: "api", Compute: "serverless", Framework: "express"},
+		projectconfig.App{Name: "api", Compute: "serverless"},
 		projectconfig.App{Name: "Worker Queue", Compute: "container"},
 	)
 

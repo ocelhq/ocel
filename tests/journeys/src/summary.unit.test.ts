@@ -7,14 +7,14 @@ const GAP = { id: "no-streamed-body", reason: "the body never arrives", issue: 8
 describe("summary table", () => {
   const report = reconcile({
     planned: [
-      { cell: "express/web", title: "up", leg: "up" },
-      { cell: "express/web", title: "GET /health | answers", leg: "contract" },
+      { cell: "node/web", title: "up", leg: "up" },
+      { cell: "node/web", title: "GET /health | answers", leg: "contract" },
     ],
     results: [
-      { cell: "express/web", title: "up", outcome: "passed" },
-      { cell: "express/web", title: "GET /health | answers", outcome: "failed" },
+      { cell: "node/web", title: "up", outcome: "passed" },
+      { cell: "node/web", title: "GET /health | answers", outcome: "failed" },
     ],
-    expectations: { "express/web": { "GET /health | answers": [GAP] } },
+    expectations: { "node/web": { "GET /health | answers": [GAP] } },
   });
   const table = summaryTable(report, {
     target: "dev",
@@ -28,7 +28,7 @@ describe("summary table", () => {
   });
 
   it("carries one markdown row per planned test", () => {
-    const rows = table.split("\n").filter((line) => line.startsWith("| express/web"));
+    const rows = table.split("\n").filter((line) => line.startsWith("| node/web"));
     expect(rows).toHaveLength(2);
   });
 
@@ -49,11 +49,11 @@ describe("summary table", () => {
       target: "dev",
       environment: "dev",
       runId: "local-ada",
-      leftOut: ["hono", "fastify"],
+      leftOut: ["sdk/next", "sdk/workspace"],
     });
     const lines = said.split("\n");
-    expect(lines[2]).toBe("left out this pass: hono, fastify");
-    expect(lines.indexOf("left out this pass: hono, fastify")).toBeLessThan(
+    expect(lines[2]).toBe("left out this pass: sdk/next, sdk/workspace");
+    expect(lines.indexOf("left out this pass: sdk/next, sdk/workspace")).toBeLessThan(
       lines.findIndex((line) => line.includes("green")),
     );
   });
@@ -61,8 +61,8 @@ describe("summary table", () => {
 
 describe("journey verdict", () => {
   const green = reconcile({
-    planned: [{ cell: "express/web", title: "up", leg: "up" }],
-    results: [{ cell: "express/web", title: "up", outcome: "passed" }],
+    planned: [{ cell: "node/web", title: "up", leg: "up" }],
+    results: [{ cell: "node/web", title: "up", outcome: "passed" }],
     expectations: {},
   });
 
@@ -78,8 +78,8 @@ describe("journey verdict", () => {
 
   it("names the unreconciled rows alongside what threw", () => {
     const red = reconcile({
-      planned: [{ cell: "express/web", title: "up", leg: "up" }],
-      results: [{ cell: "express/web", title: "up", outcome: "failed" }],
+      planned: [{ cell: "node/web", title: "up", leg: "up" }],
+      results: [{ cell: "node/web", title: "up", outcome: "failed" }],
       expectations: {},
     });
     const verdict = journeyVerdict(red, ["Error: unhandled"]);

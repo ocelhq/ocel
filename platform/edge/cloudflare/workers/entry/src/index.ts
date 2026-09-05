@@ -186,7 +186,7 @@ export async function resolveRouteDeps(
   if (record instanceof Response) return record;
 
   const runtime = runtimeFor(record);
-  if (!runtime.routeDeps) return unroutedFrameworkResponse(record.framework);
+  if (!runtime.routeDeps) return unroutedRuntimeResponse(record.runtime);
 
   return runtime.routeDeps(record, deployments, base);
 }
@@ -263,8 +263,8 @@ function deploymentNotFoundResponse(): Response {
   });
 }
 
-function unroutedFrameworkResponse(framework: string): Response {
-  return new Response(`"${framework}" is served without edge routing.`, {
+function unroutedRuntimeResponse(runtime: string): Response {
+  return new Response(`the "${runtime}" runtime is served without edge routing.`, {
     status: 501,
     headers: {
       "content-type": "text/plain; charset=utf-8",

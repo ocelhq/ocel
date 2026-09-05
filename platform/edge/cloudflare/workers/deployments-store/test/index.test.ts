@@ -40,7 +40,7 @@ function authedReq(path: string, init: RequestInit = {}) {
 function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "web",
-    framework: "next",
+    runtime: "next",
     identity: "deploy-1",
     deploymentId: "deploy-1",
     buildId: "build-1",

@@ -15,7 +15,7 @@ export default defineConfig({
   apps: [
     {
       name: "next",
-      framework: "next",
+      runtime: "next",
       path: "./apps/next",
       folder: "/next",
       // Serverless unless told otherwise; a container is one image serving every route:
@@ -25,7 +25,6 @@ export default defineConfig({
     },
     {
       name: "express",
-      framework: "express",
       path: "./apps/express",
       folder: "/express",
       // Serverless unless told otherwise; a container is one image serving every route:

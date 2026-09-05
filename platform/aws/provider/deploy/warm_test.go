@@ -103,8 +103,8 @@ func TestWarmTargets(t *testing.T) {
 		manifest := &contractv1.Manifest{
 			Slug: "proj",
 			Functions: []*contractv1.ManifestFunction{
-				{LogicalName: "web_index", Framework: "next", App: "web"},
-				{LogicalName: "web_api", Framework: "next", App: "web"},
+				{LogicalName: "web_index", Runtime: &contractv1.Runtime{Name: "next"}, App: "web"},
+				{LogicalName: "web_api", Runtime: &contractv1.Runtime{Name: "next"}, App: "web"},
 				{LogicalName: "api_handler", App: "api"},
 			},
 		}
@@ -124,11 +124,11 @@ func TestWarmTargets(t *testing.T) {
 		}
 	})
 
-	t.Run("takes a node framework function", func(t *testing.T) {
+	t.Run("takes a node runtime function", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "1")
 		manifest := &contractv1.Manifest{
 			Slug:      "proj",
-			Functions: []*contractv1.ManifestFunction{{LogicalName: "api_handler", Framework: "express", App: "api"}},
+			Functions: []*contractv1.ManifestFunction{{LogicalName: "api_handler", Runtime: &contractv1.Runtime{Name: "node"}, App: "api"}},
 		}
 		bytecode := map[string]*bytecodeConfig{"api": {Prefix: "prod/proj/api/API1/bytecode"}}
 

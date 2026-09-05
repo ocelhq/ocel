@@ -8,7 +8,7 @@ import (
 var imageOptimizationFeature = feature{
 	name:       FeatureImageOptimization,
 	summary:    "one shared image transform every front calls",
-	needs:      []string{needsFrameworkPrefix + "next"},
+	needs:      []string{needsRuntimePrefix + "next"},
 	template:   imageOptimizationTemplate,
 	payloads:   imageOptimizationPayloads,
 	placements: imageOptimizationPlacements,

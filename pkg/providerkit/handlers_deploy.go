@@ -147,7 +147,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
-	features, err := RequiredFeatures(gate.Bootstrapper.Catalogue(), frameworksOf(req.GetManifest()), string(gate.Edge))
+	features, err := RequiredFeatures(gate.Bootstrapper.Catalogue(), runtimesOf(req.GetManifest()), string(gate.Edge))
 	if err != nil {
 		return nil, RefusalError(err)
 	}
@@ -701,7 +701,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 				Links:   r.reader(),
 				App: &AppPlan{
 					App:             entry.App,
-					Framework:       entry.Manifest.GetFramework(),
+					Runtime:         entry.Manifest.GetRuntime().GetName(),
 					Entry:           entryLogicalName(r.manifest, entry.App, facts.Entry),
 					Deployment:      entry.Build.DeploymentID(),
 					Compute:         entry.Compute(),
@@ -782,7 +782,7 @@ func (r *deployRun) serving(entry AppEntry) (ServingFacts, error) {
 		Root:              ArtifactRoot(),
 		Project:           naming.Sanitize(r.plan.Slug),
 		App:               entry.App,
-		Framework:         entry.Manifest.GetFramework(),
+		Runtime:           entry.Manifest.GetRuntime().GetName(),
 		Stack:             entry.Stack,
 		Coordinate:        r.plan.coordinate(entry.App, entry.Build.Release()),
 		EdgeRunsCode:      r.front.Facts().RunsCode,
@@ -914,7 +914,7 @@ func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 			Name:     fn.GetLogicalName(),
 			Route:    fn.GetRouteId(),
 			Handler:  fn.GetHandler(),
-			Runtime:  fn.GetRuntime(),
+			Runtime:  Runtime{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()},
 			Artifact: artifact,
 			URL:      true,
 		})
@@ -922,15 +922,15 @@ func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 	return specs
 }
 
-func frameworksOf(manifest *contractv1.Manifest) []string {
-	var frameworks []string
+func runtimesOf(manifest *contractv1.Manifest) []string {
+	var runtimes []string
 	for _, app := range manifest.GetApps() {
-		if name := app.GetFramework(); name != "" && !slices.Contains(frameworks, name) {
-			frameworks = append(frameworks, name)
+		if name := app.GetRuntime().GetName(); name != "" && !slices.Contains(runtimes, name) {
+			runtimes = append(runtimes, name)
 		}
 	}
-	slices.Sort(frameworks)
-	return frameworks
+	slices.Sort(runtimes)
+	return runtimes
 }
 
 func entryLogicalName(manifest *contractv1.Manifest, app, entry string) string {
@@ -1017,7 +1017,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 	record := edge.DeploymentRecord{
 		RoutingManifest:  routing,
 		App:              entry.App,
-		Framework:        entry.Manifest.GetFramework(),
+		Runtime:          entry.Manifest.GetRuntime().GetName(),
 		Identity:         r.plan.Builds[entry.App],
 		DeploymentID:     entry.Build.DeploymentID(),
 		Entry:            facts.Entry,

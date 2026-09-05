@@ -21,7 +21,6 @@ export default defineConfig({
   apps: [
     {
       name: "web",
-      framework: "next",
       path: ".",
       compute: "container",
       health: { path: "/health" },

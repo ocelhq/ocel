@@ -62,7 +62,7 @@ func planUnderTransform() providerkit.StackPlan {
 		},
 		App: &providerkit.AppPlan{
 			App:       "api",
-			Framework: "next",
+			Runtime:   "next",
 			Functions: []providerkit.FunctionSpec{{Name: "fn--api--users"}},
 		},
 	}

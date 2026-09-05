@@ -74,7 +74,7 @@ func TestPublishingAssetsSharesOneBudgetAcrossTheAppsUploadingAtOnce(t *testing.
 		go func() {
 			defer group.Done()
 			coord := storageCoordinate("prod", "shop", app, fixedRelease(t))
-			failures[slot] = pushStaticAssetSet(context.Background(), cfg, app, frameworkNext, coord)
+			failures[slot] = pushStaticAssetSet(context.Background(), cfg, app, runtimeNext, coord)
 		}()
 	}
 

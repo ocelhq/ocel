@@ -48,13 +48,12 @@ type buildPlan struct {
 }
 
 type functionSummary struct {
-	Name         string `json:"name"`
-	Runtime      string `json:"runtime"`
-	Handler      string `json:"handler"`
-	ArtifactPath string `json:"artifactPath"`
-	Framework    string `json:"framework"`
-	Strategy     string `json:"strategy"`
-	Entrypoint   string `json:"entrypoint,omitempty"`
+	Name         string             `json:"name"`
+	Runtime      appbundler.Runtime `json:"runtime"`
+	Handler      string             `json:"handler"`
+	ArtifactPath string             `json:"artifactPath"`
+	Strategy     string             `json:"strategy"`
+	Entrypoint   string             `json:"entrypoint,omitempty"`
 }
 
 type builderRequest struct {
@@ -69,17 +68,28 @@ type appInput struct {
 	Name       string            `json:"name"`
 	Cwd        string            `json:"cwd"`
 	Entrypoint string            `json:"entrypoint,omitempty"`
-	Framework  string            `json:"framework,omitempty"`
+	Runtime    *runtimeInput     `json:"runtime,omitempty"`
 	Env        map[string]string `json:"env,omitempty"`
 	Folder     string            `json:"folder,omitempty"`
 }
 
+func runtimeInputOf(runtime projectconfig.Runtime) *runtimeInput {
+	if runtime.Name == "" && runtime.Arch == "" {
+		return nil
+	}
+	return &runtimeInput{Name: runtime.Name, Arch: runtime.Arch}
+}
+
+type runtimeInput struct {
+	Name string `json:"name,omitempty"`
+	Arch string `json:"arch,omitempty"`
+}
+
 type functionConfig struct {
-	Runtime   string `json:"runtime"`
-	Handler   string `json:"handler"`
-	Framework string `json:"framework"`
-	App       string `json:"app"`
-	ID        string `json:"id,omitempty"`
+	Runtime appbundler.Runtime `json:"runtime"`
+	Handler string             `json:"handler"`
+	App     string             `json:"app"`
+	ID      string             `json:"id,omitempty"`
 }
 
 const adapterPathEnv = "NEXT_ADAPTER_PATH"
@@ -182,7 +192,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 			Name:       a.Name,
 			Cwd:        filepath.Join(cfg.Dir, a.Path),
 			Entrypoint: a.Entrypoint,
-			Framework:  a.Framework,
+			Runtime:    runtimeInputOf(a.Runtime),
 			Env:        withDeploymentID(envByApp[a.Name], deploymentIDs[a.Name]),
 			Folder:     a.Folder,
 		})
@@ -281,7 +291,6 @@ func bundlePlanned(outputDir string, stderr io.Writer) error {
 		}
 		if err := appbundler.Bundle(appbundler.Target{
 			App:        filepath.Base(appDir),
-			Framework:  fn.Framework,
 			Runtime:    fn.Runtime,
 			Entrypoint: fn.Entrypoint,
 			FuncDir:    funcDir,
@@ -439,16 +448,15 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 	if err := json.Unmarshal(data, &fc); err != nil {
 		return manifestbuilder.Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, configFileName, err)
 	}
-	if fc.Runtime == "" || fc.Handler == "" || fc.Framework == "" || fc.App == "" {
-		return manifestbuilder.Function{}, fmt.Errorf("%s: %s requires runtime, handler, framework, and app", configPath, configFileName)
+	if fc.Runtime.Name == "" || fc.Handler == "" || fc.App == "" {
+		return manifestbuilder.Function{}, fmt.Errorf("%s: %s requires runtime, handler, and app", configPath, configFileName)
 	}
 
 	return manifestbuilder.Function{
 		Route:        route,
-		Runtime:      fc.Runtime,
+		Runtime:      manifestbuilder.Runtime{Name: fc.Runtime.Name, Arch: fc.Runtime.Arch},
 		Handler:      fc.Handler,
 		ArtifactPath: filepath.ToSlash(artifactRel),
-		Framework:    fc.Framework,
 		RouteID:      fc.ID,
 		App:          fc.App,
 	}, nil

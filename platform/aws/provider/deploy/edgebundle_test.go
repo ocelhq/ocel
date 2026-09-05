@@ -165,10 +165,10 @@ func edgeVarsManifest(variables ...*contractv1.ManifestVariable) *contractv1.Man
 	return &contractv1.Manifest{
 		Slug: "proj",
 		Apps: []*contractv1.ManifestApp{
-			{Name: "web", Framework: frameworkNext, Folder: "/shop", Variables: variables},
+			{Name: "web", Runtime: &contractv1.Runtime{Name: runtimeNext}, Folder: "/shop", Variables: variables},
 		},
 		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "web_index", Framework: "next", App: "web"},
+			{LogicalName: "web_index", Runtime: &contractv1.Runtime{Name: "next"}, App: "web"},
 		},
 	}
 }

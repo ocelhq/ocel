@@ -5,13 +5,13 @@ import { exitCodeFor, reconcile, type TestOutcome, type TestResult } from "./rec
 const GAP = { id: "no-streamed-body", reason: "the body never arrives", issue: 851 };
 
 const planned = [
-  { cell: "express/web", title: UP_TITLE, leg: "up" as const },
-  { cell: "express/web", title: "GET /health answers", leg: "contract" as const },
-  { cell: "express/web", title: "destroy", leg: "destroy" as const },
+  { cell: "node/web", title: UP_TITLE, leg: "up" as const },
+  { cell: "node/web", title: "GET /health answers", leg: "contract" as const },
+  { cell: "node/web", title: "destroy", leg: "destroy" as const },
 ];
 
 function result(title: string, outcome: TestOutcome): TestResult {
-  return { cell: "express/web", title, outcome };
+  return { cell: "node/web", title, outcome };
 }
 
 function allRan(outcome: TestOutcome = "passed"): TestResult[] {
@@ -31,7 +31,7 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results,
-      expectations: { "express/web": { "GET /health answers": [GAP] } },
+      expectations: { "node/web": { "GET /health answers": [GAP] } },
     });
     expect(report.failed).toBe(false);
     const row = report.rows.find((entry) => entry.title === "GET /health answers");
@@ -42,7 +42,7 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results: allRan(),
-      expectations: { "express/web": { "GET /health answers": [GAP] } },
+      expectations: { "node/web": { "GET /health answers": [GAP] } },
     });
     expect(report.failed).toBe(true);
     expect(report.failures.map((row) => row.verdict)).toContain("listed-and-passed");
@@ -62,7 +62,7 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results,
-      expectations: { "express/web": { "GET /health answers": [GAP] } },
+      expectations: { "node/web": { "GET /health answers": [GAP] } },
     });
     expect(report.failed).toBe(true);
   });
@@ -85,7 +85,7 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results: [result(UP_TITLE, "failed")],
-      expectations: { "express/web": { [UP_TITLE]: [GAP] } },
+      expectations: { "node/web": { [UP_TITLE]: [GAP] } },
     });
     expect(report.failed).toBe(false);
     expect(report.rows.map((row) => row.verdict)).toEqual([
@@ -101,7 +101,7 @@ describe("reconciliation", () => {
       result("destroy", "failed"),
       result(UP_TITLE, "failed"),
     ];
-    const expectations = { "express/web": { [UP_TITLE]: [GAP] } };
+    const expectations = { "node/web": { [UP_TITLE]: [GAP] } };
     for (const ordered of [results, [...results].reverse()]) {
       const report = reconcile({ planned, results: ordered, expectations });
       expect(report.rows.map((row) => row.verdict)).toEqual([
@@ -143,7 +143,7 @@ describe("reconciliation", () => {
       const blocked = reconcile({
         planned,
         results: [result(UP_TITLE, "failed"), result("GET /health answers", outcome)],
-        expectations: { "express/web": { [UP_TITLE]: [GAP] } },
+        expectations: { "node/web": { [UP_TITLE]: [GAP] } },
       });
       expect(blocked.failures.map((row) => row.verdict)).toEqual(["disabled"]);
       expect(exitCodeFor(blocked.rows.map((row) => row.verdict))).toBe(1);
@@ -166,7 +166,7 @@ describe("reconciliation", () => {
 });
 
 describe("a multi-app cell", () => {
-  const apps = ["next", "express", "hono"];
+  const apps = ["next", "node", "worker"];
   const workspacePlan = apps.flatMap((app) => [
     { cell: `workspace/${app}`, title: UP_TITLE, leg: "up" as const },
     { cell: `workspace/${app}`, title: "GET /health answers", leg: "contract" as const },
@@ -182,8 +182,8 @@ describe("a multi-app cell", () => {
       results: [
         ...apps.map((app) => ran(app, UP_TITLE, "passed")),
         ran("next", "GET /health answers", "failed"),
-        ran("express", "GET /health answers", "passed"),
-        ran("hono", "GET /health answers", "passed"),
+        ran("node", "GET /health answers", "passed"),
+        ran("worker", "GET /health answers", "passed"),
       ],
       expectations: {},
     });
@@ -205,8 +205,8 @@ describe("a multi-app cell", () => {
       results: [
         ...apps.map((app) => ran(app, UP_TITLE, "passed")),
         ran("next", "GET /health answers", "failed"),
-        ran("express", "GET /health answers", "passed"),
-        ran("hono", "GET /health answers", "passed"),
+        ran("node", "GET /health answers", "passed"),
+        ran("worker", "GET /health answers", "passed"),
       ],
       expectations: { "workspace/next": { "GET /health answers": [GAP] } },
     });

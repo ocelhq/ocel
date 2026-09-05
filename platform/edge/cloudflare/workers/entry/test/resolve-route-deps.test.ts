@@ -6,7 +6,7 @@ import type { DeploymentRecord, DeploymentsBinding } from "../src/deployments";
 function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "web",
-    framework: "next",
+    runtime: "next",
     identity: "deploy-1",
     deploymentId: "deploy-1",
     buildId: "build-1",
@@ -115,7 +115,7 @@ describe("resolveRouteDeps", () => {
   });
 
   it("returns 501 for a Deployment that ships no routing manifest", async () => {
-    const record = makeRecord({ framework: "express", routingManifest: undefined });
+    const record = makeRecord({ runtime: "node", routingManifest: undefined });
     const deps = await resolveRouteDeps(
       { binding: bindingReturning("deploy-1", record), app: "web" },
       { assetStore },
@@ -124,7 +124,7 @@ describe("resolveRouteDeps", () => {
     expect(deps).toBeInstanceOf(Response);
     const response = deps as Response;
     expect(response.status).toBe(501);
-    expect(await response.text()).toMatch(/express/);
+    expect(await response.text()).toMatch(/node/);
   });
 
   it("returns 503 when the store is unreachable on a cold isolate", async () => {

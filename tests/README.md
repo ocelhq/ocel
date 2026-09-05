@@ -14,7 +14,7 @@ provider packages alone. Both run from the provider workflows.
 ## Running one journey locally
 
 A cell is one fixture on one target, named in `journeys/src/spec.ts`. A fixture belongs to
-one concern: `deploy` asks whether a framework runs on a target at all, and its apps under
+one concern: `deploy` asks whether a runtime runs on a target at all, and its apps under
 `fixtures/deploy/` declare no resources; `sdk` asks whether what an app declares is
 provisioned, linked and usable, from `fixtures/sdk/`. The harness starts nothing but the
 `ocel` binary; bring up what the target needs first. For `dev` that is postgres, the
@@ -30,7 +30,7 @@ pnpm --filter @console/web dev
 Then run one cell:
 
 ```
-pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture express --target dev
+pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture node --target dev
 ```
 
 For `aws` that is a floci emulator and the endpoint it prints:
@@ -38,7 +38,7 @@ For `aws` that is a floci emulator and the endpoint it prints:
 ```
 scripts/floci.sh create ocel-journeys
 export AWS_ENDPOINT_URL=http://localhost.localstack.cloud:<the port it printed>
-pnpm --filter @ocel-tests/journeys cell --concern sdk --fixture express --target aws
+pnpm --filter @ocel-tests/journeys cell --concern sdk --fixture node --target aws
 scripts/floci.sh destroy ocel-journeys
 ```
 
@@ -62,7 +62,7 @@ node scripts/build-native.mjs --host --target provider-vps
 scripts/incus.sh create journey
 eval "$(scripts/incus.sh info journey)"
 export OCEL_VPS_HOST=$OCEL_INCUS_ADDR OCEL_VPS_USER=$OCEL_INCUS_USER OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY
-pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture express --target vps
+pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture node --target vps
 ```
 
 `scripts/ec2.sh` is the same box on a real EC2 instance, for when the deploy has to face a
@@ -73,7 +73,7 @@ destroy it when the run ends:
 scripts/ec2.sh create journey
 eval "$(scripts/ec2.sh info journey)"
 export OCEL_VPS_HOST=$OCEL_EC2_ADDR OCEL_VPS_USER=$OCEL_EC2_USER OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY
-pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture express --target vps
+pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture node --target vps
 scripts/ec2.sh destroy journey
 ```
 

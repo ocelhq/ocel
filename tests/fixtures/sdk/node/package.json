@@ -1,9 +1,10 @@
 {
-  "name": "@ocel-fixtures/deploy-express",
+  "name": "@ocel-fixtures/sdk-node",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "migrate": "tsx scripts/migrate.ts",
     "start": "tsx src/server.ts",
     "dev": "tsx src/server.ts",
     "typecheck": "tsc --noEmit"
@@ -14,12 +15,14 @@
     "better-sqlite3": "^13.0.3",
     "express": "~5.0.0",
     "ocel": "workspace:^",
+    "pg": "^8.22.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "~5.0.0",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.19.2",
     "typescript": "^5"
   }

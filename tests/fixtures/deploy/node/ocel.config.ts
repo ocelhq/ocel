@@ -2,7 +2,7 @@ import awsProvider from "@ocel/provider-aws";
 import { defineConfig } from "ocel/config";
 
 export default defineConfig({
-  slug: "express",
+  slug: "node",
   provider: awsProvider(),
 
   // The provider fronts the deployment with its own default edge. Name one instead:
@@ -15,7 +15,6 @@ export default defineConfig({
   apps: [
     {
       name: "web",
-      framework: "express",
       path: ".",
       // Serverless unless told otherwise; a container is one image serving every route:
       // compute: "container",

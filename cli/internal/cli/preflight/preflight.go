@@ -16,8 +16,8 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func Run(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
-	resp, err := announce(ctx, rep, runner, cfg, required, slug, domains, frameworks)
+func Run(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, runtimes []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
+	resp, err := announce(ctx, rep, runner, cfg, required, slug, domains, runtimes)
 	if err != nil {
 		return nil, err
 	}
@@ -31,11 +31,11 @@ func Run(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *
 }
 
 func Announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier) error {
-	_, err := announce(ctx, rep, runner, cfg, required, cfg.Slug, nil, Frameworks(cfg))
+	_, err := announce(ctx, rep, runner, cfg, required, cfg.Slug, nil, Runtimes(cfg))
 	return err
 }
 
-func announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string) (*contractv1.PreflightResponse, error) {
+func announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, runtimes []string) (*contractv1.PreflightResponse, error) {
 	client, err := runner.Client()
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, 
 		RequiredTier: required,
 		Slug:         slug,
 		Domains:      domains,
-		Frameworks:   frameworks,
+		Runtimes:     runtimes,
 		Edge:         edgewire.Selection(cfg),
 	})
 	spinner.Stop()
@@ -65,15 +65,15 @@ func Credentials(ctx context.Context, rep runui.Reporter, runner *provider.Runne
 	return err
 }
 
-func Frameworks(cfg *projectconfig.Config) []string {
-	var frameworks []string
+func Runtimes(cfg *projectconfig.Config) []string {
+	var runtimes []string
 	for _, app := range cfg.Apps {
-		if app.Framework != "" {
-			frameworks = append(frameworks, app.Framework)
+		if app.Runtime.Name != "" {
+			runtimes = append(runtimes, app.Runtime.Name)
 		}
 	}
-	slices.Sort(frameworks)
-	return slices.Compact(frameworks)
+	slices.Sort(runtimes)
+	return slices.Compact(runtimes)
 }
 
 type Hostname struct {

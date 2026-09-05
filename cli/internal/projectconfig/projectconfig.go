@@ -66,10 +66,20 @@ type Health struct {
 	Path string
 }
 
+const (
+	ArchX8664 = "x86_64"
+	ArchARM64 = "arm64"
+)
+
+type Runtime struct {
+	Name string
+	Arch string
+}
+
 type App struct {
 	Name       string
 	Path       string
-	Framework  string
+	Runtime    Runtime
 	Entrypoint string
 	Domains    map[string][]string
 	Compute    string
@@ -119,7 +129,7 @@ type rawConfig struct {
 	Apps []struct {
 		Name       string     `json:"name"`
 		Path       string     `json:"path"`
-		Framework  string     `json:"framework"`
+		Runtime    rawRuntime `json:"runtime"`
 		Compute    string     `json:"compute"`
 		Entrypoint string     `json:"entrypoint"`
 		Folder     string     `json:"folder"`
@@ -148,6 +158,41 @@ type rawConfig struct {
 type rawDomains struct {
 	Production stringOrList `json:"production"`
 	Preview    string       `json:"preview"`
+}
+
+type rawRuntime struct {
+	Named bool
+	Name  string
+	Arch  string
+}
+
+func (r *rawRuntime) UnmarshalJSON(b []byte) error {
+	if isAbsent(b) {
+		*r = rawRuntime{}
+		return nil
+	}
+	trimmed := bytes.TrimSpace(b)
+	if trimmed[0] == '{' {
+		var object struct {
+			Name string `json:"name"`
+			Arch string `json:"arch"`
+		}
+		if err := json.Unmarshal(b, &object); err != nil {
+			return err
+		}
+		*r = rawRuntime{Named: true, Name: object.Name, Arch: object.Arch}
+		return nil
+	}
+	var one string
+	if err := json.Unmarshal(b, &one); err != nil {
+		return err
+	}
+	if one == "" {
+		*r = rawRuntime{}
+		return nil
+	}
+	*r = rawRuntime{Named: true, Name: one}
+	return nil
 }
 
 type stringOrList []string
@@ -579,6 +624,10 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("app %q: %w", a.Name, err)
 		}
+		runtime, err := normalizeRuntime(a.Name, a.Runtime)
+		if err != nil {
+			return nil, err
+		}
 		var build *Build
 		if a.Build != nil {
 			dockerfile := strings.TrimSpace(a.Build.Dockerfile)
@@ -609,7 +658,7 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 		apps = append(apps, App{
 			Name:       a.Name,
 			Path:       a.Path,
-			Framework:  a.Framework,
+			Runtime:    runtime,
 			Entrypoint: a.Entrypoint,
 			Domains:    domains,
 			Compute:    a.Compute,
@@ -620,6 +669,24 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 	}
 
 	return apps, nil
+}
+
+func normalizeRuntime(app string, raw rawRuntime) (Runtime, error) {
+	if !raw.Named {
+		return Runtime{}, nil
+	}
+	name := strings.TrimSpace(raw.Name)
+	if name == "" {
+		return Runtime{}, fmt.Errorf("app %q declares a runtime with no name: give it `runtime: %q` or `runtime: %q`, or drop runtime to have it read from the app's package.json", app, providerkit.RuntimeNode, providerkit.RuntimeNext)
+	}
+	if name != providerkit.RuntimeNode && name != providerkit.RuntimeNext {
+		return Runtime{}, fmt.Errorf("app %q declares runtime %q, which nothing runs: the runtimes are %q and %q", app, name, providerkit.RuntimeNode, providerkit.RuntimeNext)
+	}
+	arch := strings.TrimSpace(raw.Arch)
+	if arch != "" && arch != ArchX8664 && arch != ArchARM64 {
+		return Runtime{}, fmt.Errorf("app %q declares runtime.arch %q, which names no architecture: the architectures are %q and %q", app, arch, ArchX8664, ArchARM64)
+	}
+	return Runtime{Name: name, Arch: arch}, nil
 }
 
 var reportedErrorKinds = []string{"BuildEnvError", "EnvDefinitionError"}

@@ -29,7 +29,7 @@ func plannedAppStack(t *testing.T) (Config, providerkit.StackPlan) {
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &providerkit.AppPlan{
 			App:        "web",
-			Framework:  frameworkNext,
+			Runtime:    runtimeNext,
 			Entry:      "fn--web--entry",
 			Deployment: "d1",
 			Functions: []providerkit.FunctionSpec{

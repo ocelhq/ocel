@@ -156,19 +156,19 @@ func TestAssembleApp(t *testing.T) {
 		}
 	})
 
-	t.Run("a node framework assembles with no routing module", func(t *testing.T) {
+	t.Run("a node runtime assembles with no routing module", func(t *testing.T) {
 		t.Parallel()
 
-		src := writeDescribedApp(t, "express", false)
+		src := writeDescribedApp(t, "node", false)
 		src.Routes = []string{"/"}
 		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
 
 		w, err := assembleFor(t)(src, r)
 		if err != nil {
-			t.Fatalf("a node framework emits no routing manifest and must still assemble: %v", err)
+			t.Fatalf("a node runtime emits no routing manifest and must still assemble: %v", err)
 		}
 		if len(w.Modules) != 0 {
-			t.Errorf("Modules = %v, want none for a node framework", w.Modules)
+			t.Errorf("Modules = %v, want none for a node runtime", w.Modules)
 		}
 		if string(w.Main.Content) != "export default {}" {
 			t.Errorf("Main = %q", w.Main.Content)
@@ -220,7 +220,7 @@ func TestAssembleApp(t *testing.T) {
 	t.Run("an unrouted build naming no entry is an error", func(t *testing.T) {
 		t.Parallel()
 
-		src := writeDescribedApp(t, "express", false)
+		src := writeDescribedApp(t, "node", false)
 		src.Entry = ""
 		src.Routes = []string{"/"}
 		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
@@ -259,10 +259,10 @@ func TestAssembleApp(t *testing.T) {
 	})
 }
 
-func writeDescribedApp(t *testing.T, framework string, edgeRouting bool) edge.WorkerSource {
+func writeDescribedApp(t *testing.T, runtime string, edgeRouting bool) edge.WorkerSource {
 	t.Helper()
 	root := t.TempDir()
-	descriptor := fmt.Sprintf(`{"framework":%q,"buildId":"b1","edgeRouting":%t,"entry":"/"}`, framework, edgeRouting)
+	descriptor := fmt.Sprintf(`{"runtime":%q,"buildId":"b1","edgeRouting":%t,"entry":"/"}`, runtime, edgeRouting)
 	if err := os.WriteFile(filepath.Join(root, edge.ServeDescriptorFile), []byte(descriptor), 0o644); err != nil {
 		t.Fatal(err)
 	}

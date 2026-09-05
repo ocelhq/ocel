@@ -65,7 +65,7 @@ type LinkReader interface {
 
 type AppPlan struct {
 	App        string
-	Framework  string
+	Runtime    string
 	Entry      string
 	Deployment string
 	Compute    Compute
@@ -159,11 +159,16 @@ type SecretRef struct {
 	Folder string
 }
 
+type Runtime struct {
+	Name string
+	Arch string
+}
+
 type FunctionSpec struct {
 	Name     string
 	Route    string
 	Handler  string
-	Runtime  string
+	Runtime  Runtime
 	Artifact ArtifactRef
 	Env      map[string]string
 	Memory   int

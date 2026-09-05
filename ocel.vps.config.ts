@@ -17,5 +17,5 @@ export default defineConfig({
       identityFile: ssh.OCEL_VPS_IDENTITY_FILE,
     },
   }),
-  apps: [{ name: "express", framework: "express", path: "./tests/fixtures/sdk/express" }],
+  apps: [{ name: "node", path: "./tests/fixtures/sdk/node" }],
 });

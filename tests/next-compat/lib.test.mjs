@@ -191,7 +191,7 @@ describe("renderOcelConfig", () => {
 
   it("declares one app explicitly, under the constant app name", () => {
     expect(APP_NAME).toBe("app");
-    expect(config).toContain(`apps: [{ name: "app", path: ".", framework: "next" }]`);
+    expect(config).toContain(`apps: [{ name: "app", path: ".", runtime: "next" }]`);
   });
 
   it("is pure, so cleanup and teardown re-render byte-for-byte what deploy wrote", () => {

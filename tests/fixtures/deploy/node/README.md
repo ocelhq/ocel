@@ -1,7 +1,7 @@
-# fastify
+# node
 
-A Fastify 5 app that declares no resources at all, so a journey can ask whether the
-framework runs on a target at all.
+A Node app, served by Express 5, that declares no resources at all, so a journey can ask
+whether a node runtime runs on a target at all.
 
 ## Run it
 

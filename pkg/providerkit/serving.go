@@ -17,7 +17,10 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const FrameworkNext = "next"
+const (
+	RuntimeNode = "node"
+	RuntimeNext = "next"
+)
 
 const MembranePrefix = "ocel-membrane-layer"
 
@@ -29,7 +32,7 @@ type ServingQuery struct {
 	Root              string
 	Project           string
 	App               string
-	Framework         string
+	Runtime           string
 	Stack             naming.StackName
 	Coordinate        naming.Coordinate
 	EdgeRunsCode      bool
@@ -58,7 +61,7 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 	if present {
 		facts.Entry = desc.Entry
 	}
-	if q.Framework == FrameworkNext {
+	if q.Runtime == RuntimeNext {
 		facts.ISR = &ISRPlan{
 			Prefix:       withoutSlash(q.Coordinate.ISRPrefix()),
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),

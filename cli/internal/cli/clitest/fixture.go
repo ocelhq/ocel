@@ -56,11 +56,10 @@ func WritePrebuiltFunction(t *testing.T, root, app, route string) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	config, err := json.Marshal(map[string]string{
-		"runtime":   "nodejs24.x",
-		"handler":   "index.handler",
-		"framework": "express",
-		"app":       app,
+	config, err := json.Marshal(map[string]any{
+		"runtime": map[string]string{"name": "node"},
+		"handler": "index.handler",
+		"app":     app,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -221,7 +220,7 @@ export default {
   slug: "`+FixtureSlug+`",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "express" }],
+  apps: [{ name: "api", path: "apps/api", runtime: "node" }],
 };
 `)
 	WriteFile(t, filepath.Join(root, "ocel", "main.ts"), `
@@ -278,7 +277,7 @@ export default {
   slug: "`+FixtureSlug+`",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "express" }],
+  apps: [{ name: "api", path: "apps/api", runtime: "node" }],
 `+declaration+`};
 `)
 }
@@ -312,7 +311,7 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, d
 	deps = NewDeps()
 	SetLoggedIn(&deps)
 	StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+		{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	return root, journal, deps
 }

@@ -116,9 +116,9 @@ func isrPlan(app, prefix string) providerkit.StackPlan {
 		Ref:  providerkit.StackRef{Project: "proj", Class: providerkit.ClassProduction, Name: naming.AppStack("prod", app, releaseOf(deployedAs(testDeploymentID)))},
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
-			App:       app,
-			Framework: frameworkNext,
-			ISR:       &providerkit.ISRPlan{Prefix: prefix, TagNamespace: "tag:proj"},
+			App:     app,
+			Runtime: runtimeNext,
+			ISR:     &providerkit.ISRPlan{Prefix: prefix, TagNamespace: "tag:proj"},
 		},
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/appbundler"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -118,8 +119,8 @@ func TestBuild(t *testing.T) {
 		cfg := &projectconfig.Config{
 			Dir: root,
 			Apps: []projectconfig.App{
-				{Name: "api", Path: "apps/api", Framework: "express", Entrypoint: "src/server.ts"},
-				{Name: "worker", Path: "apps/worker", Framework: "express"},
+				{Name: "api", Path: "apps/api", Entrypoint: "src/server.ts", Runtime: projectconfig.Runtime{Name: "node"}},
+				{Name: "worker", Path: "apps/worker"},
 			},
 		}
 
@@ -132,11 +133,11 @@ func TestBuild(t *testing.T) {
 			if err := json.Unmarshal(request, &gotReq); err != nil {
 				return err
 			}
-			writeFuncConfig(t, gotReq.OutDir, "api", "index.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "api"})
-			writeFuncConfig(t, gotReq.OutDir, "worker", "index.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "worker"})
+			writeFuncConfig(t, gotReq.OutDir, "api", "index.func", functionConfig{Runtime: appbundler.Runtime{Name: "node"}, Handler: "index.handler", App: "api"})
+			writeFuncConfig(t, gotReq.OutDir, "worker", "index.func", functionConfig{Runtime: appbundler.Runtime{Name: "node"}, Handler: "index.handler", App: "worker"})
 			writePlan(t, gotReq.OutDir,
-				functionSummary{Name: "api", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: filepath.Join("apps", "api", "functions", "index.func"), Framework: "express", Strategy: traceStrategy},
-				functionSummary{Name: "worker", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: filepath.Join("apps", "worker", "functions", "index.func"), Framework: "express", Strategy: traceStrategy})
+				functionSummary{Name: "api", Runtime: appbundler.Runtime{Name: "node"}, Handler: "index.handler", ArtifactPath: filepath.Join("apps", "api", "functions", "index.func"), Strategy: traceStrategy},
+				functionSummary{Name: "worker", Runtime: appbundler.Runtime{Name: "node"}, Handler: "index.handler", ArtifactPath: filepath.Join("apps", "worker", "functions", "index.func"), Strategy: traceStrategy})
 			return nil
 		}}
 
@@ -150,8 +151,8 @@ func TestBuild(t *testing.T) {
 		}
 
 		assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{
-			{Route: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/api/functions/index.func", Framework: "express", App: "api"},
-			{Route: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/worker/functions/index.func", Framework: "express", App: "worker"},
+			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/api/functions/index.func", App: "api"},
+			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/worker/functions/index.func", App: "worker"},
 		})
 
 		if got, want := gotReq.OutDir, filepath.Join(root, ".ocel", "output"); got != want {
@@ -169,8 +170,11 @@ func TestBuild(t *testing.T) {
 		if got, want := gotReq.Apps[0].Entrypoint, "src/server.ts"; got != want {
 			t.Errorf("app[0].entrypoint = %q, want %q", got, want)
 		}
-		if got, want := gotReq.Apps[0].Framework, "express"; got != want {
-			t.Errorf("app[0].framework = %q, want %q", got, want)
+		if got := gotReq.Apps[0].Runtime; got == nil || got.Name != "node" || got.Arch != "" {
+			t.Errorf("app[0].runtime = %+v, want the node runtime with no arch", got)
+		}
+		if gotReq.Apps[1].Runtime != nil {
+			t.Errorf("app[1].runtime = %+v, want the key left out when the app declares none", gotReq.Apps[1].Runtime)
 		}
 		if gotReq.Apps[1].Entrypoint != "" {
 			t.Errorf("app[1].entrypoint = %q, want empty", gotReq.Apps[1].Entrypoint)
@@ -190,7 +194,7 @@ func TestBuild(t *testing.T) {
 		root := t.TempDir()
 		cfg := &projectconfig.Config{
 			Dir:  root,
-			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express"}},
+			Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
 		}
 
 		err := Build(context.Background(), cfg, nil, io.Discard)
@@ -208,7 +212,7 @@ func TestBuild(t *testing.T) {
 		root := t.TempDir()
 		writeBuilder(t, root)
 		writeFuncConfig(t, filepath.Join(root, ".ocel", "output"), "stale", "index.func",
-			functionConfig{Runtime: "nodejs24.x", Handler: "h", Framework: "express", App: "stale"})
+			functionConfig{Runtime: appbundler.Runtime{Name: "node"}, Handler: "h", App: "stale"})
 
 		var gotReq builderRequest
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
@@ -248,7 +252,7 @@ func TestBuild(t *testing.T) {
 		writeBuilder(t, root)
 		cfg := &projectconfig.Config{
 			Dir:  root,
-			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express"}},
+			Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
 		}
 
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
@@ -301,8 +305,8 @@ func TestBuild(t *testing.T) {
 		cfg := &projectconfig.Config{
 			Dir: root,
 			Apps: []projectconfig.App{
-				{Name: "storefront", Path: "apps/storefront", Framework: "next", Folder: "/storefront"},
-				{Name: "admin", Path: "apps/admin", Framework: "next", Folder: "/admin"},
+				{Name: "storefront", Path: "apps/storefront", Folder: "/storefront"},
+				{Name: "admin", Path: "apps/admin", Folder: "/admin"},
 			},
 		}
 		vars := map[string]map[string]string{
@@ -338,8 +342,8 @@ func TestBuild(t *testing.T) {
 		cfg := &projectconfig.Config{
 			Dir: root,
 			Apps: []projectconfig.App{
-				{Name: "web", Path: "apps/web", Framework: "next", Folder: "/web"},
-				{Name: "admin", Path: "apps/admin", Framework: "next", Folder: "/admin"},
+				{Name: "web", Path: "apps/web", Folder: "/web"},
+				{Name: "admin", Path: "apps/admin", Folder: "/admin"},
 			},
 		}
 		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
@@ -373,7 +377,7 @@ func TestBuild(t *testing.T) {
 
 				cfg := &projectconfig.Config{
 					Dir:  root,
-					Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}},
+					Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}},
 				}
 				vars := map[string]map[string]string{"web": {name: "hijacked"}}
 				err := builder.Build(context.Background(), cfg, vars, io.Discard)
@@ -404,7 +408,7 @@ func TestBuild(t *testing.T) {
 
 		cfg := &projectconfig.Config{
 			Dir:  root,
-			Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next", Folder: "/web"}},
+			Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Folder: "/web"}},
 		}
 		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
@@ -435,10 +439,9 @@ func TestBuild(t *testing.T) {
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
 			writePlan(t, filepath.Join(root, scratchDirName, outputDirName), functionSummary{
 				Name:         "api",
-				Runtime:      "nodejs24.x",
+				Runtime:      appbundler.Runtime{Name: "node"},
 				Handler:      "index.mjs",
 				ArtifactPath: filepath.Join("apps", "api", "functions", "index.func"),
-				Framework:    "express",
 				Strategy:     bundleStrategy,
 				Entrypoint:   entrypoint,
 			})
@@ -447,7 +450,7 @@ func TestBuild(t *testing.T) {
 
 		cfg := &projectconfig.Config{
 			Dir:  root,
-			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express"}},
+			Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
 		}
 		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
@@ -458,7 +461,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("CollectFunctions: %v", err)
 		}
 		assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{
-			{Route: "index", Runtime: "nodejs24.x", Handler: "index.mjs", ArtifactPath: "apps/api/functions/index.func", Framework: "express", RouteID: "/", App: "api"},
+			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
 
 		bundle := filepath.Join(root, scratchDirName, outputDirName, appsDirName, "api", functionsDirName, "index.func", "index.mjs")
@@ -479,13 +482,12 @@ func TestBuild(t *testing.T) {
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
 			outDir := filepath.Join(root, scratchDirName, outputDirName)
 			writeFuncConfig(t, outDir, "web", "index.func",
-				functionConfig{Runtime: "nodejs24.x", Handler: "server.js", Framework: "next", App: "web"})
+				functionConfig{Runtime: appbundler.Runtime{Name: "next"}, Handler: "server.js", App: "web"})
 			writePlan(t, outDir, functionSummary{
 				Name:         "web",
-				Runtime:      "nodejs24.x",
+				Runtime:      appbundler.Runtime{Name: "next"},
 				Handler:      "server.js",
 				ArtifactPath: filepath.Join("apps", "web", "functions", "index.func"),
-				Framework:    "next",
 				Strategy:     traceStrategy,
 			})
 			return nil
@@ -493,7 +495,7 @@ func TestBuild(t *testing.T) {
 
 		cfg := &projectconfig.Config{
 			Dir:  root,
-			Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}},
+			Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}},
 		}
 		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
@@ -531,21 +533,21 @@ func TestBuild(t *testing.T) {
 		{
 			name: "a strategy this build does not know",
 			plan: func(t *testing.T, outDir string) {
-				writePlan(t, outDir, functionSummary{Name: "api", Runtime: "nodejs24.x", ArtifactPath: "apps/api/functions/index.func", Framework: "express", Strategy: "teleport"})
+				writePlan(t, outDir, functionSummary{Name: "api", Runtime: appbundler.Runtime{Name: "node"}, ArtifactPath: "apps/api/functions/index.func", Strategy: "teleport"})
 			},
 			wants: []string{"teleport"},
 		},
 		{
 			name: "a bundle with no entrypoint",
 			plan: func(t *testing.T, outDir string) {
-				writePlan(t, outDir, functionSummary{Name: "api", Runtime: "nodejs24.x", ArtifactPath: "apps/api/functions/index.func", Framework: "express", Strategy: bundleStrategy})
+				writePlan(t, outDir, functionSummary{Name: "api", Runtime: appbundler.Runtime{Name: "node"}, ArtifactPath: "apps/api/functions/index.func", Strategy: bundleStrategy})
 			},
 			wants: []string{"entrypoint"},
 		},
 		{
 			name: "a bundle aimed outside the app layout",
 			plan: func(t *testing.T, outDir string) {
-				writePlan(t, outDir, functionSummary{Name: "api", Runtime: "nodejs24.x", ArtifactPath: "elsewhere/index.func", Framework: "express", Strategy: bundleStrategy, Entrypoint: filepath.Join(outDir, "server.js")})
+				writePlan(t, outDir, functionSummary{Name: "api", Runtime: appbundler.Runtime{Name: "node"}, ArtifactPath: "elsewhere/index.func", Strategy: bundleStrategy, Entrypoint: filepath.Join(outDir, "server.js")})
 			},
 			wants: []string{"elsewhere"},
 		},
@@ -567,7 +569,7 @@ func TestBuild(t *testing.T) {
 
 			cfg := &projectconfig.Config{
 				Dir:  root,
-				Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express"}},
+				Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
 			}
 			err := builder.Build(context.Background(), cfg, nil, io.Discard)
 			if err == nil {
@@ -589,7 +591,7 @@ func TestBuild(t *testing.T) {
 		fixtureRoot := expressFixture(t)
 		cfg := &projectconfig.Config{
 			Dir:  fixtureRoot,
-			Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: "express"}},
+			Apps: []projectconfig.App{{Name: "api", Path: "."}},
 		}
 
 		var stderr bytes.Buffer
@@ -606,10 +608,9 @@ func TestBuild(t *testing.T) {
 		}
 		want := manifestbuilder.Function{
 			Route:        "index",
-			Runtime:      "nodejs24.x",
+			Runtime:      manifestbuilder.Runtime{Name: "node"},
 			Handler:      "index.mjs",
 			ArtifactPath: "apps/api/functions/index.func",
-			Framework:    "express",
 			RouteID:      "/",
 			App:          "api",
 		}
@@ -640,8 +641,8 @@ func TestBuild(t *testing.T) {
 		if len(fns) != 1 {
 			t.Fatalf("CollectFunctions returned %d functions, want 1: %+v", len(fns), fns)
 		}
-		if fns[0].Route != "index" || fns[0].Framework != "express" {
-			t.Errorf("detected function = %+v, want route index framework express", fns[0])
+		if fns[0].Route != "index" || fns[0].Runtime.Name != "node" {
+			t.Errorf("detected function = %+v, want route index runtime node", fns[0])
 		}
 		if fns[0].App != "express-app" {
 			t.Errorf("detected function app = %q, want %q", fns[0].App, "express-app")
@@ -668,7 +669,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 		{
 			name: "a project naming no edge names none to the builder either",
 			cfg: func(root string) *projectconfig.Config {
-				return &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}}}
+				return &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}}}
 			},
 			wantKind: "",
 		},
@@ -679,7 +680,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 					Dir:           root,
 					Edge:          &projectconfig.EdgeDescriptor{Kind: "cloudflare"},
 					AllowDegraded: []string{"edge-middleware", "edge-runtime"},
-					Apps:          []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}},
+					Apps:          []projectconfig.App{{Name: "web", Path: "apps/web"}},
 				}
 			},
 			wantKind:     "cloudflare",
@@ -692,7 +693,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 					Dir:           root,
 					Edge:          &projectconfig.EdgeDescriptor{Kind: "api-gateway"},
 					AllowDegraded: []string{"edge-middleware"},
-					Apps:          []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}},
+					Apps:          []projectconfig.App{{Name: "web", Path: "apps/web"}},
 				}
 			},
 			wantKind:     "api-gateway",
@@ -737,15 +738,15 @@ func TestBuildID(t *testing.T) {
 		want     string
 	}{
 		{
-			name:     "reads the serve descriptor every framework writes",
+			name:     "reads the serve descriptor every runtime writes",
 			app:      "api",
-			contents: map[string]string{"api/" + edge.ServeDescriptorFile: `{"framework":"express","buildId":"0123456789abcdef"}`},
+			contents: map[string]string{"api/" + edge.ServeDescriptorFile: `{"runtime":"node","buildId":"0123456789abcdef"}`},
 			want:     "0123456789abcdef",
 		},
 		{
 			name:     "next states its own build id there too",
 			app:      "web",
-			contents: map[string]string{"web/" + edge.ServeDescriptorFile: `{"framework":"next","buildId":"UxK1p2"}`},
+			contents: map[string]string{"web/" + edge.ServeDescriptorFile: `{"runtime":"next","buildId":"UxK1p2"}`},
 			want:     "UxK1p2",
 		},
 		{
@@ -789,12 +790,12 @@ func TestEdgeApps(t *testing.T) {
 
 		root := t.TempDir()
 		writeAppFile(t, root, "web/"+edge.ServeDescriptorFile,
-			[]byte(`{"framework":"next","needs":{"edge-runtime":{"count":1,"routes":["/edgy"]}}}`))
+			[]byte(`{"runtime":"next","needs":{"edge-runtime":{"count":1,"routes":["/edgy"]}}}`))
 		writeAppFile(t, root, "admin/"+edge.ServeDescriptorFile,
-			[]byte(`{"framework":"next","needs":{"edge-middleware":{"count":1,"matchers":[]}}}`))
+			[]byte(`{"runtime":"next","needs":{"edge-middleware":{"count":1,"matchers":[]}}}`))
 		writeAppFile(t, root, "docs/"+edge.ServeDescriptorFile,
-			[]byte(`{"framework":"next","needs":{"edge-cache":{"count":4},"streaming":{"count":2}}}`))
-		writeAppFile(t, root, "api/"+edge.ServeDescriptorFile, []byte(`{"framework":"express","needs":{}}`))
+			[]byte(`{"runtime":"next","needs":{"edge-cache":{"count":4},"streaming":{"count":2}}}`))
+		writeAppFile(t, root, "api/"+edge.ServeDescriptorFile, []byte(`{"runtime":"node","needs":{}}`))
 
 		apps := EdgeApps(root)
 		if !slices.Equal(apps, []string{"admin", "web"}) {
@@ -807,7 +808,7 @@ func TestEdgeApps(t *testing.T) {
 
 		root := t.TempDir()
 		writeAppFile(t, root, "web/"+edge.AppBundleFile, []byte(`{"version":2}`))
-		writeAppFile(t, root, "web/"+edge.ServeDescriptorFile, []byte(`{"framework":"next","needs":{}}`))
+		writeAppFile(t, root, "web/"+edge.ServeDescriptorFile, []byte(`{"runtime":"next","needs":{}}`))
 
 		if apps := EdgeApps(root); len(apps) != 0 {
 			t.Errorf("EdgeApps = %v, want the needs to decide, not the bundle", apps)
@@ -875,9 +876,9 @@ func TestCollectFunctions(t *testing.T) {
 		root := t.TempDir()
 		outDir := filepath.Join(root, scratchDirName, outputDirName)
 		writeFuncConfig(t, outDir, "web", "index.func",
-			functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
+			functionConfig{Runtime: appbundler.Runtime{Name: "next"}, Handler: "index.handler", App: "web"})
 		writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),
-			functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
+			functionConfig{Runtime: appbundler.Runtime{Name: "next"}, Handler: "index.handler", App: "web"})
 
 		fns, err := CollectFunctions(root)
 		if err != nil {
@@ -885,8 +886,8 @@ func TestCollectFunctions(t *testing.T) {
 		}
 
 		assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{
-			{Route: "api/todos/[id]", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", Framework: "next", App: "web"},
-			{Route: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", Framework: "next", App: "web"},
+			{Route: "api/todos/[id]", Runtime: manifestbuilder.Runtime{Name: "next"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
+			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "next"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
 		})
 	})
 
@@ -911,16 +912,16 @@ func TestCollectFunctions(t *testing.T) {
 			name: "nested routes are collected without descending into a function's own tree",
 			setup: func(t *testing.T, outDir string) {
 				writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),
-					functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
+					functionConfig{Runtime: appbundler.Runtime{Name: "next"}, Handler: "index.handler", App: "web"})
 				writeFuncConfig(t, outDir, "web", "index.func",
-					functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
+					functionConfig{Runtime: appbundler.Runtime{Name: "next"}, Handler: "index.handler", App: "web"})
 				if err := os.MkdirAll(filepath.Join(outDir, appsDirName, "web", "functions", "index.func", "node_modules", "dep"), 0o755); err != nil {
 					t.Fatal(err)
 				}
 			},
 			want: []manifestbuilder.Function{
-				{Route: "api/todos/[id]", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", Framework: "next", App: "web"},
-				{Route: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", Framework: "next", App: "web"},
+				{Route: "api/todos/[id]", Runtime: manifestbuilder.Runtime{Name: "next"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", App: "web"},
+				{Route: "index", Runtime: manifestbuilder.Runtime{Name: "next"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", App: "web"},
 			},
 		},
 		{
@@ -928,12 +929,12 @@ func TestCollectFunctions(t *testing.T) {
 			setup: func(t *testing.T, outDir string) {
 				for _, app := range []string{"admin", "storefront"} {
 					writeFuncConfig(t, outDir, app, filepath.Join("api", "documents.func"),
-						functionConfig{Runtime: "nodejs24.x", Handler: "route.js", Framework: "next", ID: "/api/documents", App: app})
+						functionConfig{Runtime: appbundler.Runtime{Name: "next"}, Handler: "route.js", ID: "/api/documents", App: app})
 				}
 			},
 			want: []manifestbuilder.Function{
-				{Route: "api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "apps/admin/functions/api/documents.func", Framework: "next", RouteID: "/api/documents", App: "admin"},
-				{Route: "api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "apps/storefront/functions/api/documents.func", Framework: "next", RouteID: "/api/documents", App: "storefront"},
+				{Route: "api/documents", Runtime: manifestbuilder.Runtime{Name: "next"}, Handler: "route.js", ArtifactPath: "apps/admin/functions/api/documents.func", RouteID: "/api/documents", App: "admin"},
+				{Route: "api/documents", Runtime: manifestbuilder.Runtime{Name: "next"}, Handler: "route.js", ArtifactPath: "apps/storefront/functions/api/documents.func", RouteID: "/api/documents", App: "storefront"},
 			},
 		},
 	}
@@ -957,7 +958,7 @@ func TestCollectFunctions(t *testing.T) {
 
 		outDir := t.TempDir()
 		writeFuncConfig(t, outDir, "web", filepath.Join("api", "documents.func"),
-			functionConfig{Runtime: "nodejs24.x", Handler: "route.js", Framework: "next", ID: "/api/documents", App: "web"})
+			functionConfig{Runtime: appbundler.Runtime{Name: "next"}, Handler: "route.js", ID: "/api/documents", App: "web"})
 
 		fns, err := collectFunctions(outDir)
 		if err != nil {
@@ -976,7 +977,7 @@ func TestCollectFunctions(t *testing.T) {
 
 		outDir := t.TempDir()
 		writeFuncConfig(t, outDir, "storefront", "index.func",
-			functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "storefront"})
+			functionConfig{Runtime: appbundler.Runtime{Name: "node"}, Handler: "index.handler", App: "storefront"})
 
 		fns, err := collectFunctions(outDir)
 		if err != nil {
@@ -1006,22 +1007,22 @@ func TestCollectFunctions(t *testing.T) {
 			wantMsg:   "want it to name the offending .func and config.json",
 		},
 		{
-			name: "a config missing framework errors",
+			name: "a config missing its runtime errors",
 			setup: func(t *testing.T, outDir string) {
-				writeFuncConfig(t, outDir, "web", "api.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", App: "web"})
+				writeFuncConfig(t, outDir, "web", "api.func", functionConfig{Handler: "index.handler", App: "web"})
 			},
-			succeeded: "collectFunctions succeeded on config missing framework, want error",
-			wants:     []string{"requires runtime, handler, framework, and app"},
+			succeeded: "collectFunctions succeeded on config missing its runtime, want error",
+			wants:     []string{"requires runtime, handler, and app"},
 			wantMsg:   "want it to explain the required fields",
 		},
 		{
 			name: "a config missing app errors",
 			setup: func(t *testing.T, outDir string) {
 				writeFuncConfig(t, outDir, "web", "index.func",
-					functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express"})
+					functionConfig{Runtime: appbundler.Runtime{Name: "node"}, Handler: "index.handler"})
 			},
 			succeeded: "collectFunctions succeeded on config missing app, want error",
-			wants:     []string{"requires runtime, handler, framework, and app"},
+			wants:     []string{"requires runtime, handler, and app"},
 			wantMsg:   "want it to explain the required fields",
 		},
 		{

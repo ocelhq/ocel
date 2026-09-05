@@ -320,9 +320,8 @@ const adapter = {
         await writeFile(
           join(funcDir, "config.json"),
           JSON.stringify({
-            runtime: "nodejs24.x",
+            runtime: { name: "next" },
             handler: launcherRel,
-            framework: "next",
             id: bundle.name,
             app: appName,
           }),
@@ -601,7 +600,7 @@ const adapter = {
     };
 
     const serve: ServeDescriptor = {
-      framework: "next",
+      runtime: "next",
       buildId,
       edgeRouting: true,
       entry,

@@ -25,7 +25,7 @@ func TestAContainerAppIsCarriedAsASiblingJoinedToItByName(t *testing.T) {
 
 	manifest, err := Build("proj-1", nil, []App{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
-		{Name: "web", Compute: "serverless", Framework: "express"},
+		{Name: "web", Compute: "serverless"},
 	}, "serverless", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -74,7 +74,7 @@ func TestAnAppOnlyTheBuildNamesCannotLandOnContainerCompute(t *testing.T) {
 	t.Parallel()
 
 	_, err := Build("proj-1", nil, nil, "container", nil, nil, []Function{
-		{App: "api", Route: "index", Runtime: "nodejs22.x", Handler: "index.handler", ArtifactPath: "apps/api/functions/index"},
+		{App: "api", Route: "index", Runtime: Runtime{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
 		t.Fatal("Build() landed an app the config never names on container compute, and nothing would have told a provider what image to run")
@@ -112,8 +112,8 @@ func TestAnImageCarriesADigestAndNeverATag(t *testing.T) {
 func TestAServerlessAppIsCarriedAsNoContainerAtAll(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express"}}, "serverless", nil, nil, []Function{
-		{App: "web", Route: "index", Runtime: "nodejs22.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/index"},
+	manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, "serverless", nil, nil, []Function{
+		{App: "web", Route: "index", Runtime: Runtime{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/index"},
 	}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -129,7 +129,7 @@ func TestACallerThatPacksAContainerAppIsRefusedByTheBuilder(t *testing.T) {
 	_, err := Build("proj-1", nil, []App{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
 	}, "container", nil, nil, []Function{
-		{App: "api", Route: "index", Runtime: "nodejs22.x", Handler: "index.handler", ArtifactPath: "apps/api/functions/index"},
+		{App: "api", Route: "index", Runtime: Runtime{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
 		t.Fatal("Build() carried both a container and a function for one app, so routing would have two answers for the same request")

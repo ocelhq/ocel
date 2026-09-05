@@ -17,6 +17,13 @@ import (
 
 const HandlerFile = "index.mjs"
 
+var engine = api.Engine{Name: api.EngineNode, Version: "24"}
+
+type Runtime struct {
+	Name string `json:"name"`
+	Arch string `json:"arch,omitempty"`
+}
+
 const configFileName = "config.json"
 
 const entryRouteID = "/"
@@ -36,8 +43,7 @@ const banner = `import { createRequire as __ocelCreateRequire } from "node:modul
 
 type Target struct {
 	App        string
-	Framework  string
-	Runtime    string
+	Runtime    Runtime
 	Entrypoint string
 	FuncDir    string
 	AppDir     string
@@ -45,22 +51,16 @@ type Target struct {
 }
 
 type functionConfig struct {
-	Runtime   string `json:"runtime"`
-	Handler   string `json:"handler"`
-	Framework string `json:"framework"`
-	ID        string `json:"id"`
-	App       string `json:"app"`
+	Runtime Runtime `json:"runtime"`
+	Handler string  `json:"handler"`
+	ID      string  `json:"id"`
+	App     string  `json:"app"`
 }
 
 func Bundle(t Target) error {
 	if err := t.validate(); err != nil {
 		return err
 	}
-	engine, err := nodeEngine(t.Runtime)
-	if err != nil {
-		return err
-	}
-
 	if err := os.RemoveAll(t.FuncDir); err != nil {
 		return fmt.Errorf("reset %s: %w", t.FuncDir, err)
 	}
@@ -104,11 +104,10 @@ func Bundle(t Target) error {
 		return err
 	}
 	if err := writeJSON(filepath.Join(t.FuncDir, configFileName), functionConfig{
-		Runtime:   t.Runtime,
-		Handler:   HandlerFile,
-		Framework: t.Framework,
-		ID:        entryRouteID,
-		App:       t.App,
+		Runtime: t.Runtime,
+		Handler: HandlerFile,
+		ID:      entryRouteID,
+		App:     t.App,
 	}); err != nil {
 		return err
 	}
@@ -118,10 +117,10 @@ func Bundle(t Target) error {
 		return err
 	}
 	return writeJSON(filepath.Join(t.AppDir, edge.ServeDescriptorFile), edge.ServeDescriptor{
-		Framework: t.Framework,
-		BuildID:   buildID,
-		Entry:     entryRouteID,
-		Needs:     map[edge.Need]edge.NeedDetail{},
+		Runtime: t.Runtime.Name,
+		BuildID: buildID,
+		Entry:   entryRouteID,
+		Needs:   map[edge.Need]edge.NeedDetail{},
 	})
 }
 
@@ -133,9 +132,8 @@ func (t Target) validate() error {
 		{"app", t.App},
 		{"appDir", t.AppDir},
 		{"entrypoint", t.Entrypoint},
-		{"framework", t.Framework},
+		{"runtime", t.Runtime.Name},
 		{"funcDir", t.FuncDir},
-		{"runtime", t.Runtime},
 	}
 	var missing []string
 	for _, field := range stated {
@@ -152,16 +150,6 @@ func (t Target) validate() error {
 		return fmt.Errorf("entrypoint %s for app %q is a directory", t.Entrypoint, t.App)
 	}
 	return nil
-}
-
-var runtimeVersion = regexp.MustCompile(`^nodejs(\d+)(?:\.\d+)?\.x$`)
-
-func nodeEngine(runtime string) (api.Engine, error) {
-	match := runtimeVersion.FindStringSubmatch(runtime)
-	if match == nil {
-		return api.Engine{}, fmt.Errorf("cannot bundle for runtime %q: only nodejs<major>.x runtimes are bundled", runtime)
-	}
-	return api.Engine{Name: api.EngineNode, Version: match[1]}, nil
 }
 
 func writeJSON(dest string, value any) error {

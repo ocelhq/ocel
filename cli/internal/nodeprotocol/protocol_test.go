@@ -209,7 +209,7 @@ func TestProcessorRecoversARecordGluedToAPrecedingUnterminatedLine(t *testing.T)
 		t.Errorf("Err() = %q, want %q (a record led by its own newline must survive a preceding partial line)", got, want)
 	}
 	if !strings.Contains(out.String(), "Compiling...") {
-		t.Errorf("forwarded output = %q, want the framework's partial line preserved", out.String())
+		t.Errorf("forwarded output = %q, want the builder's partial line preserved", out.String())
 	}
 }
 
@@ -296,7 +296,7 @@ func TestProcessorWorksWithNoRun(t *testing.T) {
 	var out strings.Builder
 	p := &Processor{Forward: &out}
 
-	line := "plain framework output"
+	line := "plain builder output"
 	protocolLine := Prefix + `{"type":"span_start","id":"1","app":"api","stage":"build"}`
 	p.Scan(context.Background(), strings.NewReader(line+"\n"+protocolLine+"\n"))
 

@@ -155,6 +155,40 @@ func TestAnAppThatFallsBackToServerlessIsRefusedItsBuildToo(t *testing.T) {
 	}
 }
 
+func TestAContainerAppThatDeclaresARuntimeFailsThePlanByName(t *testing.T) {
+	t.Parallel()
+
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+		{Name: "web"},
+		{Name: "api", Compute: "container", Runtime: projectconfig.Runtime{Name: "next"}},
+	}}
+
+	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "aws")
+	if err == nil {
+		t.Fatal("ResolveComputes() admitted a runtime on a container app, which runs the image it is given, so config that can do nothing would look like it might")
+	}
+	for _, want := range []string{`"api"`, "runtime", "serverless"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("ResolveComputes() error = %q, want it to name %s", err, want)
+		}
+	}
+	if cfg.Apps[0].Compute != "" {
+		t.Errorf("app %q resolved to compute %q, want the apps before the offending one left alone", cfg.Apps[0].Name, cfg.Apps[0].Compute)
+	}
+}
+
+func TestAnAppThatFallsBackToContainerIsRefusedItsRuntimeToo(t *testing.T) {
+	t.Parallel()
+
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+		{Name: "api", Runtime: projectconfig.Runtime{Name: "node"}},
+	}}
+
+	if _, err := ResolveComputes(cfg, []string{"container"}, "vps"); err == nil {
+		t.Fatal("ResolveComputes() admitted a runtime on an app its provider runs in a container, so the refusal turns on what the app runs on rather than on what the config says")
+	}
+}
+
 func TestAServerlessAppThatConfiguresAHealthCheckFailsThePlanByName(t *testing.T) {
 	t.Parallel()
 

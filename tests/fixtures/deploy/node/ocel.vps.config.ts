@@ -10,7 +10,7 @@ const ssh = buildEnv({
 });
 
 export default defineConfig({
-  slug: "express",
+  slug: "node",
   provider: vpsProvider({
     ssh: {
       host: ssh.OCEL_VPS_HOST,
@@ -21,7 +21,6 @@ export default defineConfig({
   apps: [
     {
       name: "web",
-      framework: "express",
       path: ".",
       compute: "container",
       health: { path: "/health" },

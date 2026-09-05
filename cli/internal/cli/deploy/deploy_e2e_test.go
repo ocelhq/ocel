@@ -112,7 +112,7 @@ func setUpRealProviderExpressFixture(t *testing.T) (root, binPath, funcLogicalNa
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
-  apps: [{ name: %q, path: %q, framework: "express" }],
+  apps: [{ name: %q, path: %q, runtime: "node" }],
 };
 `, appName, filepath.ToSlash(appPath)))
 

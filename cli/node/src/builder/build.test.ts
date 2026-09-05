@@ -71,17 +71,15 @@ describe("buildApp", () => {
 
     const config = JSON.parse(readFileSync(path.join(funcDir, "config.json"), "utf8"));
     expect(config).toEqual({
-      runtime: "nodejs24.x",
+      runtime: { name: "node" },
       handler: "src/server.js",
-      framework: "express",
       id: NODE_ENTRY_ROUTE_ID,
       app: "api",
     });
 
     expect(summary.name).toBe("api");
-    expect(summary.runtime).toBe("nodejs24.x");
+    expect(summary.runtime).toEqual({ name: "node" });
     expect(summary.handler).toBe("src/server.js");
-    expect(summary.framework).toBe("express");
     expect(summary.artifactPath).toBe(path.join("apps", "api", "functions", "index.func"));
     expect(summary.strategy).toBe("trace");
     expect(summary.entrypoint).toBeUndefined();
@@ -312,13 +310,13 @@ describe("serve descriptor", () => {
     );
   }
 
-  it("names the framework and an artifact hash at the app artifact root", async () => {
+  it("names the runtime and an artifact hash at the app artifact root", async () => {
     const outDir = freshOut();
     dirs.push(outDir);
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
     expect(readServe(outDir, "api")).toEqual({
-      framework: "express",
+      runtime: "node",
       edgeRouting: false,
       entry: NODE_ENTRY_ROUTE_ID,
       needs: {},
@@ -346,33 +344,47 @@ describe("serve descriptor", () => {
   });
 });
 
-describe("a node framework is one server behind one origin", () => {
-  for (const framework of ["express", "fastify", "hono"]) {
-    it(`${framework} emits exactly one function when tracing, so the edge has one origin to pick`, async () => {
-      const outDir = freshOut();
-      dirs.push(outDir);
+describe("a node app is one server behind one origin", () => {
+  it("emits exactly one function when tracing, so the edge has one origin to pick", async () => {
+    const outDir = freshOut();
+    dirs.push(outDir);
 
-      const summaries = await buildApp({ name: "api", cwd: nodeApp(framework) }, { outDir });
+    const summaries = await buildApp({ name: "api", cwd: nodeApp("express") }, { outDir });
 
-      expect(summaries).toHaveLength(1);
-      expect(summaries[0]?.framework).toBe(framework);
-      expect(summaries[0]?.strategy).toBe("trace");
-      expect(readdirSync(path.join(appOutDir(outDir, "api"), "functions"))).toEqual(["index.func"]);
-    });
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]?.runtime).toEqual({ name: "node" });
+    expect(summaries[0]?.strategy).toBe("trace");
+    expect(readdirSync(path.join(appOutDir(outDir, "api"), "functions"))).toEqual(["index.func"]);
+  });
 
-    it(`${framework} emits exactly one function when bundling, so the edge has one origin to pick`, async () => {
-      vi.stubEnv("OCEL_BUILD_PREFER_TRACING", undefined);
-      const outDir = freshOut();
-      dirs.push(outDir);
+  it("emits exactly one function when bundling, so the edge has one origin to pick", async () => {
+    vi.stubEnv("OCEL_BUILD_PREFER_TRACING", undefined);
+    const outDir = freshOut();
+    dirs.push(outDir);
 
-      const summaries = await buildApp({ name: "api", cwd: nodeApp(framework) }, { outDir });
+    const summaries = await buildApp({ name: "api", cwd: nodeApp("hono") }, { outDir });
 
-      expect(summaries).toHaveLength(1);
-      expect(summaries[0]?.framework).toBe(framework);
-      expect(summaries[0]?.strategy).toBe("bundle");
-      expect(summaries[0]?.artifactPath).toBe(path.join("apps", "api", "functions", "index.func"));
-    });
-  }
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]?.runtime).toEqual({ name: "node" });
+    expect(summaries[0]?.strategy).toBe("bundle");
+    expect(summaries[0]?.artifactPath).toBe(path.join("apps", "api", "functions", "index.func"));
+  });
+
+  it("carries the architecture the app asked for into the summary and its config", async () => {
+    const outDir = freshOut();
+    dirs.push(outDir);
+
+    const [summary] = await buildApp(
+      { name: "api", cwd: fixtureDir, runtime: { name: "node", arch: "arm64" } },
+      { outDir },
+    );
+
+    expect(summary?.runtime).toEqual({ name: "node", arch: "arm64" });
+    const config = JSON.parse(
+      readFileSync(path.join(appFuncDir(outDir, "api"), "config.json"), "utf8"),
+    );
+    expect(config.runtime).toEqual({ name: "node", arch: "arm64" });
+  });
 });
 
 describe("writeBuildPlan", () => {
@@ -388,10 +400,9 @@ describe("writeBuildPlan", () => {
       functions: [
         {
           name: "api",
-          runtime: "nodejs24.x",
+          runtime: { name: "node" },
           handler: BUNDLE_HANDLER,
           artifactPath: path.join("apps", "api", "functions", "index.func"),
-          framework: "express",
           strategy: "bundle",
           entrypoint: path.join(cwd, "src", "server.ts"),
         },
@@ -411,10 +422,9 @@ describe("build strategy", () => {
 
     expect(summary).toEqual({
       name: "api",
-      runtime: "nodejs24.x",
+      runtime: { name: "node" },
       handler: BUNDLE_HANDLER,
       artifactPath: path.join("apps", "api", "functions", "index.func"),
-      framework: "hono",
       strategy: "bundle",
       entrypoint: path.join(cwd, "src", "server.ts"),
     });
@@ -450,26 +460,28 @@ describe("build strategy", () => {
   });
 });
 
-describe("framework resolution", () => {
-  it("throws when a configured app's framework can't be detected", async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "nb-nofw-"));
+describe("runtime resolution", () => {
+  it("throws when a configured app's runtime can't be detected", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "nb-nort-"));
     dirs.push(dir);
-    writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { lodash: "4" } }));
-    await expect(buildApp({ name: "x", cwd: dir }, { outDir: dir })).rejects.toThrow(/could not detect a framework/);
+    await expect(buildApp({ name: "x", cwd: dir }, { outDir: dir })).rejects.toThrow(/could not detect a runtime/);
   });
 });
 
 describe("detectApp", () => {
-  it("synthesizes a single app named from the dir with the detected framework", () => {
+  it("synthesizes a single app named from the dir with the detected runtime", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "nb-detect-"));
     dirs.push(dir);
     writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { express: "5" } }));
-    expect(detectApp(dir)).toEqual({ name: sanitizeName(path.basename(dir)), cwd: dir, framework: "express" });
+    expect(detectApp(dir)).toEqual({
+      name: sanitizeName(path.basename(dir)),
+      cwd: dir,
+      runtime: { name: "node" },
+    });
   });
-  it("returns undefined when no framework is detected", () => {
+  it("returns undefined when no runtime is detected", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "nb-nodetect-"));
     dirs.push(dir);
-    writeFileSync(path.join(dir, "package.json"), JSON.stringify({}));
     expect(detectApp(dir)).toBeUndefined();
   });
 });

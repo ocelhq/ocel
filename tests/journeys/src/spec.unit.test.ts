@@ -19,19 +19,19 @@ import { apiGateway, cloudflare, container } from "./variants";
 
 const rows: FixtureSpec[] = [
   {
-    name: "express",
+    name: "node",
     concern: "deploy",
-    dir: "deploy/express",
-    framework: "express",
+    dir: "deploy/node",
+    runtime: "node",
     kind: "composite",
     rows: [],
     apps: [],
   },
   {
-    name: "express",
+    name: "node",
     concern: "sdk",
-    dir: "sdk/express",
-    framework: "express",
+    dir: "sdk/node",
+    runtime: "node",
     kind: "composite",
     rows: [],
     apps: [],
@@ -69,73 +69,73 @@ describe("fixtures named in the environment", () => {
   });
 
   it("names a fixture by its concern and its name, so the two buckets never collide", () => {
-    expect(fixturesNamed(rows, "sdk/express").map((row) => row.dir)).toEqual(["sdk/express"]);
-    expect(fixturesNamed(rows, "deploy/express").map((row) => row.dir)).toEqual([
-      "deploy/express",
+    expect(fixturesNamed(rows, "sdk/node").map((row) => row.dir)).toEqual(["sdk/node"]);
+    expect(fixturesNamed(rows, "deploy/node").map((row) => row.dir)).toEqual([
+      "deploy/node",
     ]);
   });
 
   it("keeps spec order, not the order it was named in", () => {
-    expect(fixturesNamed(rows, "sdk/express,deploy/express").map((row) => row.dir)).toEqual([
-      "deploy/express",
-      "sdk/express",
+    expect(fixturesNamed(rows, "sdk/node,deploy/node").map((row) => row.dir)).toEqual([
+      "deploy/node",
+      "sdk/node",
     ]);
   });
 
   it("tolerates surrounding whitespace", () => {
-    expect(fixturesNamed(rows, " sdk/express ").map((row) => row.dir)).toEqual(["sdk/express"]);
+    expect(fixturesNamed(rows, " sdk/node ").map((row) => row.dir)).toEqual(["sdk/node"]);
   });
 
   it("refuses a name this target does not run", () => {
-    expect(() => fixturesNamed(rows, "deploy/express,sdk/next")).toThrow(
+    expect(() => fixturesNamed(rows, "deploy/node,sdk/next")).toThrow(
       /no fixture named sdk\/next/,
     );
   });
 });
 
 describe("the variants a fixture lists", () => {
-  const express = specByName("sdk", "express");
+  const node = specByName("sdk", "node");
   const transforms = specByName("sdk", "with-transforms");
 
   it("is none for a row that lists none", () => {
     expect(variantsOf(rows[0] as FixtureSpec, "aws")).toEqual([]);
-    expect(names(rows[0] as FixtureSpec, "aws")).toEqual(["deploy/express"]);
+    expect(names(rows[0] as FixtureSpec, "aws")).toEqual(["deploy/node"]);
   });
 
   it("is what the row lists and the target runs", () => {
-    expect(variantsOf(express, "aws")).toEqual([container, apiGateway, cloudflare]);
-    expect(variantsOf(express, "vps")).toEqual([]);
-    expect(variantsOf(express, "dev")).toEqual([]);
+    expect(variantsOf(node, "aws")).toEqual([container, apiGateway, cloudflare]);
+    expect(variantsOf(node, "vps")).toEqual([]);
+    expect(variantsOf(node, "dev")).toEqual([]);
     expect(variantsOf(transforms, "aws")).toEqual([container, apiGateway, cloudflare]);
   });
 
   it("refuses a row that lists one variant twice", () => {
-    const twice: FixtureSpec = { ...express, variants: [container, apiGateway, container] };
+    const twice: FixtureSpec = { ...node, variants: [container, apiGateway, container] };
     expect(() => variantsOf(twice, "aws")).toThrow(/lists the container variant twice/);
   });
 
   it("names a cell after its concern, its fixture and its variant", () => {
-    expect(fixtureNameOf(express)).toBe("sdk/express");
-    expect(cellNameOf(express, undefined)).toBe("sdk/express");
-    expect(cellNameOf(express, container)).toBe("sdk/express-container");
+    expect(fixtureNameOf(node)).toBe("sdk/node");
+    expect(cellNameOf(node, undefined)).toBe("sdk/node");
+    expect(cellNameOf(node, container)).toBe("sdk/node-container");
     expect(cellNameOf(specByName("deploy", "workspace"), apiGateway)).toBe(
       "deploy/workspace-api-gateway",
     );
   });
 
   it("lists the base cell first, then one cell per variant in the order listed", () => {
-    expect(names(express, "aws")).toEqual([
-      "sdk/express",
-      "sdk/express-container",
-      "sdk/express-api-gateway",
-      "sdk/express-cloudflare",
+    expect(names(node, "aws")).toEqual([
+      "sdk/node",
+      "sdk/node-container",
+      "sdk/node-api-gateway",
+      "sdk/node-cloudflare",
     ]);
-    expect(names(express, "vps")).toEqual(["sdk/express"]);
-    expect(names(express, "dev")).toEqual(["sdk/express"]);
+    expect(names(node, "vps")).toEqual(["sdk/node"]);
+    expect(names(node, "dev")).toEqual(["sdk/node"]);
   });
 
   it("calls the base cell's variant base", () => {
-    expect(cellsOf(express, "aws").map(variantNameOf)).toEqual([
+    expect(cellsOf(node, "aws").map(variantNameOf)).toEqual([
       "base",
       "container",
       "api-gateway",

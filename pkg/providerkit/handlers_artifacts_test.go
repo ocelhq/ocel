@@ -125,7 +125,7 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 		LogicalName:  "feed",
 		App:          "web",
 		RouteId:      "feed",
-		Runtime:      "nodejs22.x",
+		Runtime:      &contractv1.Runtime{Name: "next"},
 		Handler:      "index.handler",
 		ArtifactPath: adminArtifactPath,
 	})
@@ -275,7 +275,7 @@ func TestAnAppsFunctionsAreUploadedTogether(t *testing.T) {
 			LogicalName:  route,
 			App:          "web",
 			RouteId:      route,
-			Runtime:      "nodejs22.x",
+			Runtime:      &contractv1.Runtime{Name: "next"},
 			Handler:      "index.handler",
 			ArtifactPath: builtFunction(t, route),
 		})

@@ -22,7 +22,7 @@ export default {
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
   links: [`+links+`],
-  apps: [{ name: "api", path: "apps/api", framework: "express" }],
+  apps: [{ name: "api", path: "apps/api", runtime: "node" }],
 };
 `)
 }
@@ -33,7 +33,7 @@ func deployLinked(t *testing.T, links string) (root string, stdout, stderr bytes
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+		{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	root, _ = clitest.SetUpDeployFixture(t)
 	writeLinkedMonorepo(t, root, links)

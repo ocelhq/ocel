@@ -69,14 +69,14 @@ describe("emulatorFetch", () => {
 
   it("dials the emulator for a hostname nothing resolves, keeping the request intact", async () => {
     const dispatch = emulatorFetch(endpoint);
-    const res = await dispatch("https://web-j-1-express.journey.test/api/probes/echo?one=1", {
+    const res = await dispatch("https://web-j-1-node.journey.test/api/probes/echo?one=1", {
       method: "POST",
       headers: { "x-ocel-probe": "probe-value" },
       body: "payload",
     });
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), {
-      host: "web-j-1-express.journey.test",
+      host: "web-j-1-node.journey.test",
       probe: "probe-value",
       url: "/api/probes/echo?one=1",
       method: "POST",

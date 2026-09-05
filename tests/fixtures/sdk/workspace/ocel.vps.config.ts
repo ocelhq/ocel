@@ -21,7 +21,6 @@ export default defineConfig({
   apps: [
     {
       name: "next",
-      framework: "next",
       path: "./apps/next",
       folder: "/next",
       compute: "container",
@@ -31,7 +30,6 @@ export default defineConfig({
     },
     {
       name: "express",
-      framework: "express",
       path: "./apps/express",
       folder: "/express",
       compute: "container",

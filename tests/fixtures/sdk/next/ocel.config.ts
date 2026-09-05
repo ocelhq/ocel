@@ -15,7 +15,7 @@ export default defineConfig({
   apps: [
     {
       name: "web",
-      framework: "next",
+      runtime: "next",
       path: ".",
       // Serverless unless told otherwise; a container is one image serving every route:
       // compute: "container",

@@ -42,19 +42,19 @@ func FeatureLevels(catalogue []Feature, names []string) ([][]string, error) {
 	return levels, nil
 }
 
-func RequiredFeatures(catalogue []Feature, frameworks []string, edgeKind string) ([]string, error) {
+func RequiredFeatures(catalogue []Feature, runtimes []string, edgeKind string) ([]string, error) {
 	var needed []string
 	for _, f := range catalogue {
-		if featureNeeded(f, frameworks, edgeKind) {
+		if featureNeeded(f, runtimes, edgeKind) {
 			needed = append(needed, f.Name)
 		}
 	}
 	return featureClosure(catalogue, needed)
 }
 
-func featureNeeded(f Feature, frameworks []string, edgeKind string) bool {
+func featureNeeded(f Feature, runtimes []string, edgeKind string) bool {
 	for _, need := range f.Needs {
-		if id, ok := strings.CutPrefix(need, NeedsFrameworkPrefix); ok && slices.Contains(frameworks, id) {
+		if id, ok := strings.CutPrefix(need, NeedsRuntimePrefix); ok && slices.Contains(runtimes, id) {
 			return true
 		}
 		if kind, ok := strings.CutPrefix(need, NeedsEdgePrefix); ok && kind == edgeKind && edgeKind != "" {

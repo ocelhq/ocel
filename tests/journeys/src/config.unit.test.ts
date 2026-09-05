@@ -48,46 +48,46 @@ describe("shapeFor", () => {
   });
 
   it("takes the compute a container variant names", () => {
-    expect(shapeFor(cell("deploy", "express", container), "aws", {})).toEqual({
+    expect(shapeFor(cell("deploy", "node", container), "aws", {})).toEqual({
       base: AWS_BASE,
-      slug: "j-1-deploy-express",
+      slug: "j-1-deploy-node",
       compute: "container",
     });
   });
 
   it("leaves the fixture's config alone for a base cell, and dns alone off a real zone", () => {
-    expect(shapeFor(cell("deploy", "express"), "aws", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
+    expect(shapeFor(cell("deploy", "node"), "aws", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
       base: AWS_BASE,
-      slug: "j-1-deploy-express",
-      hostnames: { web: "web-j-1-deploy-express.j.example" },
+      slug: "j-1-deploy-node",
+      hostnames: { web: "web-j-1-deploy-node.j.example" },
     });
   });
 
   it("hangs a vps cell's hostnames under the box's zone", () => {
-    expect(shapeFor(cell("deploy", "express"), "vps", {})).toEqual({
+    expect(shapeFor(cell("deploy", "node"), "vps", {})).toEqual({
       base: VPS_BASE,
-      slug: "j-1-deploy-express",
-      hostnames: { web: "web-j-1-deploy-express.localhost" },
+      slug: "j-1-deploy-node",
+      hostnames: { web: "web-j-1-deploy-node.localhost" },
     });
   });
 
   it("renames a dev cell and nothing else", () => {
-    expect(shapeFor(cell("deploy", "express"), "dev", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
+    expect(shapeFor(cell("deploy", "node"), "dev", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
       base: AWS_BASE,
-      slug: "j-1-deploy-express",
+      slug: "j-1-deploy-node",
     });
   });
 });
 
 describe("renderConfig", () => {
   it("spreads the fixture's own config under the cell's slug", () => {
-    expect(renderConfig({ base: AWS_BASE, slug: "j-1-express" })).toBe(
+    expect(renderConfig({ base: AWS_BASE, slug: "j-1-node" })).toBe(
       `import { defineConfig } from "ocel/config";
 import base from "./ocel.config.ts";
 
 export default defineConfig({
   ...base,
-  slug: "j-1-express",
+  slug: "j-1-node",
 });
 `,
     );
@@ -109,11 +109,11 @@ export default defineConfig({
     expect(
       renderConfig({
         base: AWS_BASE,
-        slug: "j-1-express",
+        slug: "j-1-node",
         compute: "container",
         edge: "cloudflare",
         dns: "cloudflare",
-        hostnames: { web: "web-j-1-express.j.example" },
+        hostnames: { web: "web-j-1-node.j.example" },
       }),
     ).toBe(
       `import { defineConfig } from "ocel/config";
@@ -121,11 +121,11 @@ import { cloudflare } from "ocel/edge";
 import { cloudflareDns } from "ocel/dns";
 import base from "./ocel.config.ts";
 
-const hostnames: Record<string, string> = {"web":"web-j-1-express.j.example"};
+const hostnames: Record<string, string> = {"web":"web-j-1-node.j.example"};
 
 export default defineConfig({
   ...base,
-  slug: "j-1-express",
+  slug: "j-1-node",
   edge: cloudflare(),
   dns: cloudflareDns(),
   apps: base.apps?.map((app) => ({

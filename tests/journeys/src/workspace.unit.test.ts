@@ -10,7 +10,7 @@ import {
 } from "./workspace";
 
 const workspace = specByName("sdk", "workspace");
-const composite = specByName("sdk", "express");
+const composite = specByName("sdk", "node");
 
 describe("a multi-app row", () => {
   it("reaches each app under apps/, and a single app where the config sits", () => {

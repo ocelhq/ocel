@@ -70,6 +70,12 @@ func RunsAContainer(cfg *projectconfig.Config, computes []string) bool {
 
 func containerOnly(app projectconfig.App, compute string) error {
 	if compute == string(providerkit.ComputeContainer) {
+		if app.Runtime.Name != "" {
+			return fmt.Errorf(
+				"app %q declares runtime %q, and it runs on %q compute, which runs the image it is given: a runtime names what a serverless app's functions run on and nothing else — give %q `compute: \"serverless\"`, or remove its `runtime`",
+				app.Name, app.Runtime.Name, compute, app.Name,
+			)
+		}
 		return nil
 	}
 	if app.Build != nil {

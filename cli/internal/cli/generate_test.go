@@ -57,7 +57,7 @@ func TestRunGenerate(t *testing.T) {
 		root := setUpGenerateFixture(t, `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: ".", framework: "next" }],
+  apps: [{ name: "web", path: ".", runtime: "next" }],
 };
 `, "{\n  \"compilerOptions\": {}\n}\n")
 

@@ -398,9 +398,11 @@ func entrypointPath() string {
 		return nodeEntry
 	}
 	var cfg struct {
-		Framework string `json:"framework"`
+		Runtime struct {
+			Name string `json:"name"`
+		} `json:"runtime"`
 	}
-	if json.Unmarshal(data, &cfg) == nil && cfg.Framework == "next" {
+	if json.Unmarshal(data, &cfg) == nil && cfg.Runtime.Name == "next" {
 		return "/opt/ocel/next/entrypoint.mjs"
 	}
 	return nodeEntry

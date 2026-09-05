@@ -48,7 +48,10 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 	if app := plan.App; app != nil {
 		for _, spec := range app.Functions {
 			name := spec.Name
-			args := translateFunctionSpec(app.Framework, spec)
+			args, err := translateFunctionSpec(app.Runtime, spec)
+			if err != nil {
+				return nil, err
+			}
 			req.Resources = append(req.Resources, transform.Resource{
 				Type: "function", Name: name, App: app.App, Surfaces: functionSurfaces(args),
 			})
@@ -91,24 +94,24 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 	return out, nil
 }
 
-func translateFunctionSpec(framework string, spec providerkit.FunctionSpec) functionArgs {
-	runtime := defaultFunctionRuntime
-	if spec.Runtime != "" {
-		runtime = spec.Runtime
+func translateFunctionSpec(runtime string, spec providerkit.FunctionSpec) (functionArgs, error) {
+	lambdaRuntime, err := lambdaRuntimeFor(spec.Runtime)
+	if err != nil {
+		return functionArgs{}, err
 	}
 	handler := defaultFunctionEntry
 	if spec.Handler != "" {
 		handler = spec.Handler
 	}
 	memoryMB := defaultFunctionMemoryMB
-	if framework == frameworkNext {
+	if runtime == runtimeNext {
 		memoryMB = nextBundleFunctionMemoryMB
 	}
 	if spec.Memory > 0 {
 		memoryMB = spec.Memory
 	}
 	args := functionArgs{
-		Runtime:        runtime,
+		Runtime:        lambdaRuntime,
 		Handler:        handler,
 		MemorySizeMB:   memoryMB,
 		TimeoutSeconds: defaultFunctionTimeoutSeconds,
@@ -117,7 +120,23 @@ func translateFunctionSpec(framework string, spec providerkit.FunctionSpec) func
 	if spec.Timeout > 0 {
 		args.TimeoutSeconds = int(spec.Timeout.Seconds())
 	}
-	return args
+	return args, nil
+}
+
+func lambdaRuntimeFor(runtime providerkit.Runtime) (string, error) {
+	switch runtime.Arch {
+	case "", archX8664:
+	default:
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"this provider runs functions on %s only, and %q asks for %s: the membrane layer is built for %s",
+			archX8664, runtime.Name, runtime.Arch, archX8664)
+	}
+	switch runtime.Name {
+	case "", providerkit.RuntimeNode, providerkit.RuntimeNext:
+		return defaultFunctionRuntime, nil
+	default:
+		return "", providerkit.Refuse(providerkit.CodeInvalid, "this provider has no runtime named %q", runtime.Name)
+	}
 }
 
 func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candidates []transformCandidate, results []transform.Result) ([]placedOutput, error) {

@@ -23,7 +23,7 @@ func TestTheManifestCarriesEveryAppsCompute(t *testing.T) {
 		cfg := &projectconfig.Config{
 			Dir:  root,
 			Slug: "prebuilt",
-			Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: "express", Compute: "container"}},
+			Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "container"}},
 		}
 		clitest.StubAppImages(&deps, "api")
 		manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless")
@@ -76,7 +76,7 @@ func computeOf(t *testing.T, manifest *contractv1.Manifest, app string) string {
 	return ""
 }
 
-func TestAContainerAppThatNamesNoFrameworkStillReachesTheProvider(t *testing.T) {
+func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	root := t.TempDir()
 	clitest.WritePrebuiltFunction(t, root, "api", "index")
 	deps := clitest.NewDeps()
@@ -92,7 +92,7 @@ func TestAContainerAppThatNamesNoFrameworkStillReachesTheProvider(t *testing.T) 
 
 	manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "container")
 	if err != nil {
-		t.Fatalf("collectAndBuildManifest over a container app with no framework: %v", err)
+		t.Fatalf("collectAndBuildManifest over a container app with no runtime: %v", err)
 	}
 	if got := computeOf(t, manifest, "api"); got != "container" {
 		t.Errorf("manifest app %q compute = %q, want %q", "api", got, "container")

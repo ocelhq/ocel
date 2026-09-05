@@ -1303,7 +1303,7 @@ test("writes the bundle name into its config.json", async () => {
 
   expect(config.id).toBe("bundle-0");
   expect(config.handler).toBe("__next_launcher.cjs");
-  expect(config.framework).toBe("next");
+  expect(config.runtime).toEqual({ name: "next" });
 });
 
 test("records the owning app in each function's config.json", async () => {
@@ -1768,7 +1768,7 @@ test("writes every output under OCEL_OUTPUT_DIR when the builder sets it", async
   expect(await exists(join(projectDir, ".ocel/output"))).toBe(false);
 });
 
-test("states the framework and next's own build id in serve.json", async () => {
+test("states the runtime and next's own build id in serve.json", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1779,7 +1779,7 @@ test("states the framework and next's own build id in serve.json", async () => {
   );
   const manifest = await readManifest(projectDir);
   expect(serve).toEqual({
-    framework: "next",
+    runtime: "next",
     buildId: args.buildId,
     edgeRouting: true,
     entry: manifest.entry,

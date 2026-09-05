@@ -2,14 +2,13 @@ export interface AppInput {
   name: string;
   cwd: string;
   entrypoint?: string;
-  framework?: string;
+  runtime?: { name?: string; arch?: string };
   env?: Record<string, string>;
   folder?: string;
 }
 
-export interface FrameworkSpec {
+export interface RuntimeSpec {
   name: string;
-  runtime: string;
   entrypointCandidates: string[];
 }
 
@@ -21,10 +20,9 @@ export interface BuildOptions {
 
 export interface FunctionSummary {
   name: string;
-  runtime: string;
+  runtime: { name: string; arch?: string };
   handler: string;
   artifactPath: string;
-  framework: string;
   strategy: "trace" | "bundle";
   entrypoint?: string;
 }

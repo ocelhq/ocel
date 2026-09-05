@@ -38,12 +38,12 @@ func servingRoot(t *testing.T, app string, desc edge.ServeDescriptor, manifest [
 	return root
 }
 
-func servingQuery(root, app, framework string) providerkit.ServingQuery {
+func servingQuery(root, app, runtime string) providerkit.ServingQuery {
 	return providerkit.ServingQuery{
 		Root:       root,
 		Project:    "shop",
 		App:        app,
-		Framework:  framework,
+		Runtime:    runtime,
 		Stack:      naming.AppStack("production", app, naming.NewRelease("dep1", "fp1")),
 		Coordinate: naming.Coordinate{Project: "shop", Env: "production", App: app, Release: naming.NewRelease("dep1", "fp1")},
 	}
@@ -69,7 +69,7 @@ func TestEveryAppCarriesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T)
 }
 
 func TestOnlyNextAsksForAnISRLedger(t *testing.T) {
-	next, err := providerkit.ServingFactsFor(servingQuery(t.TempDir(), "web", providerkit.FrameworkNext))
+	next, err := providerkit.ServingFactsFor(servingQuery(t.TempDir(), "web", providerkit.RuntimeNext))
 	if err != nil {
 		t.Fatalf("ServingFactsFor() = %v", err)
 	}
@@ -81,7 +81,7 @@ func TestOnlyNextAsksForAnISRLedger(t *testing.T) {
 		t.Fatalf("ServingFactsFor() = %v", err)
 	}
 	if other.ISR != nil {
-		t.Errorf("ISR = %+v for a framework that revalidates nothing, want none", other.ISR)
+		t.Errorf("ISR = %+v for a runtime that revalidates nothing, want none", other.ISR)
 	}
 }
 
@@ -89,7 +89,7 @@ func TestAnAppRoutingAtItsOriginCarriesTheManifestItRoutesBy(t *testing.T) {
 	manifest := []byte(`{"routes":[]}`)
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, manifest)
 
-	facts, err := providerkit.ServingFactsFor(servingQuery(root, "web", providerkit.FrameworkNext))
+	facts, err := providerkit.ServingFactsFor(servingQuery(root, "web", providerkit.RuntimeNext))
 	if err != nil {
 		t.Fatalf("ServingFactsFor() = %v", err)
 	}
@@ -107,7 +107,7 @@ func TestAnAppRoutingAtItsOriginCarriesTheManifestItRoutesBy(t *testing.T) {
 func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveRoutedBy(t *testing.T) {
 	manifest := []byte(`{"routes":[]}`)
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, manifest)
-	query := servingQuery(root, "web", providerkit.FrameworkNext)
+	query := servingQuery(root, "web", providerkit.RuntimeNext)
 	query.EdgeRunsCode = true
 
 	facts, err := providerkit.ServingFactsFor(query)
@@ -125,7 +125,7 @@ func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveRoutedBy(t *testing
 func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToRouteBy(t *testing.T) {
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, []byte(`{}`))
 
-	facts, err := providerkit.ServingFactsFor(servingQuery(root, "web", providerkit.FrameworkNext))
+	facts, err := providerkit.ServingFactsFor(servingQuery(root, "web", providerkit.RuntimeNext))
 	if err != nil {
 		t.Fatalf("ServingFactsFor() = %v", err)
 	}
@@ -137,7 +137,7 @@ func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToRouteBy(t *testing.T) {
 func TestAnAppThatRoutesAtItsOriginAndWroteNoManifestIsRefused(t *testing.T) {
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, nil)
 
-	_, err := providerkit.ServingFactsFor(servingQuery(root, "web", providerkit.FrameworkNext))
+	_, err := providerkit.ServingFactsFor(servingQuery(root, "web", providerkit.RuntimeNext))
 	if err == nil || !strings.Contains(err.Error(), edge.RoutingManifestFile) {
 		t.Fatalf("ServingFactsFor() = %v, want a refusal naming %s", err, edge.RoutingManifestFile)
 	}
@@ -146,7 +146,7 @@ func TestAnAppThatRoutesAtItsOriginAndWroteNoManifestIsRefused(t *testing.T) {
 func TestAnAppThatRoutesAtItsOriginAndNamesNoEntryIsRefused(t *testing.T) {
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true}, []byte(`{}`))
 
-	_, err := providerkit.ServingFactsFor(servingQuery(root, "web", providerkit.FrameworkNext))
+	_, err := providerkit.ServingFactsFor(servingQuery(root, "web", providerkit.RuntimeNext))
 	if err == nil || !strings.Contains(err.Error(), "entry route") {
 		t.Fatalf("ServingFactsFor() = %v, want a refusal naming the missing entry route", err)
 	}
