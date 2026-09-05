@@ -2711,3 +2711,60 @@ describe("nested dynamic params with a prefix-colliding name", () => {
     expect(invoked?.searchParams.get("nxtPid2")).toBe("b");
   });
 });
+
+describe("the tier a dispatched render carries", () => {
+  it("stamps a lambda render a MISS and passes the origin's cache-control through", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/profile": { kind: "lambda", id: "/profile" } },
+      },
+      functionUrls: { "/profile": "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("from-lambda", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60, stale-while-revalidate" },
+        })) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/profile", invocationTarget: { pathname: "/profile" } },
+      new Request("https://app.example/profile"),
+      deps,
+    );
+
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate");
+    expect(await res.text()).toBe("from-lambda");
+  });
+
+  it("stamps an edge render a MISS and passes the origin's cache-control through", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/live": { kind: "edge", entryKey: "page_app/live" } },
+      },
+      edge: async () =>
+        new Response("from-edge", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=30, stale-while-revalidate" },
+        }),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/live", invocationTarget: { pathname: "/live" } },
+      new Request("https://app.example/live"),
+      deps,
+    );
+
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(res.headers.get("cache-control")).toBe("s-maxage=30, stale-while-revalidate");
+    expect(await res.text()).toBe("from-edge");
+  });
+});

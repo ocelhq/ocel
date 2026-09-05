@@ -247,6 +247,12 @@ export const gaps: Gap[] = [
         variants: ["api-gateway"],
         tests: [{ row: EDGE_ISR_TITLE }],
       },
+      {
+        on: ["aws"],
+        cells: ["deploy/next/web"],
+        variants: ["cloudflare"],
+        tests: [{ row: EDGE_ISR_TITLE }],
+      },
     ],
   },
   {

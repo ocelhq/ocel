@@ -1,10 +1,12 @@
 export const CACHE_HEADER = "x-ocel-cache";
 
-export const ONE_YEAR_SECONDS = 31536000;
+const ONE_YEAR_SECONDS = 31536000;
 
 export const DYNAMIC_CACHE_CONTROL = "private, no-cache, no-store, max-age=0, must-revalidate";
 
 export const IMMUTABLE_CACHE_CONTROL = `public, max-age=${ONE_YEAR_SECONDS}, immutable`;
+
+export const SERVED_CACHE_CONTROL = "public, max-age=0, must-revalidate";
 
 export const ROUTER_VARY = [
   "RSC",
@@ -22,15 +24,7 @@ export const CACHED: Tier[] = ["HIT", "STALE", "PRERENDER"];
 export const UNCACHED: Tier[] = ["MISS", "BYPASS"];
 
 export function cacheControlFor(revalidate: number | false): string {
-  if (revalidate === 0) {
-    return DYNAMIC_CACHE_CONTROL;
-  }
-  const seconds = revalidate === false ? ONE_YEAR_SECONDS : revalidate;
-  const swr =
-    seconds < ONE_YEAR_SECONDS
-      ? `, stale-while-revalidate=${ONE_YEAR_SECONDS - seconds}`
-      : "";
-  return `s-maxage=${seconds}${swr}`;
+  return revalidate === 0 ? DYNAMIC_CACHE_CONTROL : SERVED_CACHE_CONTROL;
 }
 
 export function imageCacheControl(seconds: number): string {
