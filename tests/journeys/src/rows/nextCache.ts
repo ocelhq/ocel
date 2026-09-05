@@ -7,6 +7,7 @@ import {
   imageCacheControl,
   IMMUTABLE_CACHE_CONTROL,
   ROUTER_VARY,
+  sameDirectives,
   type Tier,
   tierOf,
   UNCACHED,
@@ -37,7 +38,11 @@ function tierIs(res: Response, allowed: Tier[], what: string) {
 }
 
 function cacheControlIs(res: Response, expected: string, what: string) {
-  assert.equal(res.headers.get("cache-control"), expected, `${what} carried the wrong cache-control`);
+  const carried = res.headers.get("cache-control");
+  assert.ok(
+    sameDirectives(carried, expected),
+    `${what} carried cache-control ${carried}, not the directives of ${expected}`,
+  );
 }
 
 async function cachedHalf(ctx: ContractContext, path: string, scope: string): Promise<string> {
